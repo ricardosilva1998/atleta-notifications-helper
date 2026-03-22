@@ -1,0 +1,20 @@
+{
+  "name": "vilela-notifications",
+  "version": "1.0.0",
+  "description": "Discord bot that notifies when andre_vilela_ goes live, posts clips, or uploads videos",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --env-file=.env src/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.0",
+    "fast-xml-parser": "^5.5.8"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.0"
+  }
+}
