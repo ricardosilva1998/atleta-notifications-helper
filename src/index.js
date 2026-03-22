@@ -10,7 +10,8 @@ client.once('ready', async () => {
   console.log(`Bot online as ${client.user.tag}`);
   console.log(`Monitoring: Twitch=${config.twitch.username}`);
   if (config.youtube.enabled) console.log(`Monitoring: YouTube=${config.youtube.channelId}`);
-  console.log(`Posting to channel: ${config.discord.channelId}`);
+  console.log(`Posting Twitch to channel: ${config.discord.twitchChannelId}`);
+  if (config.youtube.enabled) console.log(`Posting YouTube to channel: ${config.discord.youtubeChannelId}`);
 
   try {
     // Initialize all pollers (sets correct state to avoid false notifications)

@@ -27,7 +27,7 @@ async function poll() {
         footer: { text: 'YouTube Live' },
         timestamp: new Date(),
       });
-      await sendNotification(embed);
+      await sendNotification(config.discord.youtubeChannelId, embed);
       console.log(`[YouTubeLive] Sent live notification: ${liveVideo.title}`);
     } else if (!liveVideo && appState.youtubeIsLive) {
       appState.youtubeIsLive = false;

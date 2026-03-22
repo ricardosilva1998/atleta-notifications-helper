@@ -3,10 +3,10 @@ const config = require('./config');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-async function sendNotification(embed) {
-  const channel = await client.channels.fetch(config.discord.channelId);
+async function sendNotification(channelId, embed) {
+  const channel = await client.channels.fetch(channelId);
   if (!channel) {
-    console.error(`Channel ${config.discord.channelId} not found`);
+    console.error(`Channel ${channelId} not found`);
     return;
   }
   await channel.send({ embeds: [embed] });

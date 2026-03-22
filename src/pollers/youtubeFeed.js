@@ -24,7 +24,7 @@ async function poll() {
         footer: { text: 'YouTube' },
         timestamp: video.published,
       });
-      await sendNotification(embed);
+      await sendNotification(config.discord.youtubeChannelId, embed);
       console.log(`[YouTubeFeed] Sent video notification: ${video.title}`);
     }
 

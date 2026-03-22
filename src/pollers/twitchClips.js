@@ -34,7 +34,7 @@ async function poll() {
           footer: { text: 'Twitch Clip' },
           timestamp: clip.created_at,
         });
-        await sendNotification(embed);
+        await sendNotification(config.discord.twitchChannelId, embed);
         console.log(`[TwitchClips] Sent clip notification: ${clip.title}`);
       }
     }
