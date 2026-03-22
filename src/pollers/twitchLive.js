@@ -47,9 +47,9 @@ function start(sharedState) {
 
 async function init(sharedState) {
   appState = sharedState;
-  const stream = await getStream(config.twitch.username);
-  appState.twitchIsLive = !!stream;
-  console.log(`[TwitchLive] Initial state: ${appState.twitchIsLive ? 'LIVE' : 'offline'}`);
+  // Always start as offline so the first poll triggers a notification if already live
+  appState.twitchIsLive = false;
+  console.log('[TwitchLive] Initialized (will notify on first poll if live)');
 }
 
 module.exports = { start, init };
