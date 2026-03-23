@@ -12,6 +12,20 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// --- Migration: drop old schema if it doesn't have discord_user_id ---
+try {
+  const cols = db.prepare("PRAGMA table_info(streamers)").all();
+  if (cols.length > 0 && !cols.find((c) => c.name === 'discord_user_id')) {
+    console.log('[DB] Old schema detected, dropping all tables for migration...');
+    db.exec('DROP TABLE IF EXISTS sessions');
+    db.exec('DROP TABLE IF EXISTS user_links');
+    db.exec('DROP TABLE IF EXISTS poller_state');
+    db.exec('DROP TABLE IF EXISTS guilds');
+    db.exec('DROP TABLE IF EXISTS streamers');
+    console.log('[DB] Old tables dropped, will recreate with new schema');
+  }
+} catch {}
+
 // --- Schema ---
 
 db.exec(`
