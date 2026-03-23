@@ -158,9 +158,9 @@ function getActiveStreamers() {
 async function pollAllSubSync() {
   const active = getActiveStreamers();
   const withToken = active.filter((s) => s.broadcaster_access_token);
-  if (!pollAllSubSync._logged) {
-    console.log(`[SubSync] ${active.length} active streamers, ${withToken.length} with broadcaster token`);
-    pollAllSubSync._logged = true;
+  console.log(`[SubSync] Poll: ${active.length} active streamers, ${withToken.length} with broadcaster token`);
+  if (active.length > 0 && withToken.length === 0) {
+    console.log(`[SubSync] Active streamer IDs: ${active.map(s => `${s.id}(twitch=${s.twitch_username},token=${!!s.broadcaster_access_token})`).join(', ')}`);
   }
   for (const streamer of withToken) {
     try {
