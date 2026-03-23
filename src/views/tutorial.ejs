@@ -132,18 +132,36 @@
   <div class="step-content">
     <h3>Enable Subscriber Role Sync (Optional)</h3>
     <p>This feature automatically gives a Discord role to your Twitch subscribers:</p>
-    <ul>
-      <li>Click <strong>"Enable Sub Sync"</strong> from the dashboard — this authorizes the bot to read your subscriber list</li>
-      <li>In your server settings, toggle on <strong>Subscriber Role Sync</strong> and select a role</li>
-      <li>Your community members type <code>/link</code> in Discord to connect their Twitch account</li>
-      <li>The bot checks every 10 minutes and assigns or removes the role automatically</li>
-    </ul>
+    <ol style="color: #adadb8; font-size: 14px; line-height: 1.7; padding-left: 20px; margin-top: 6px;">
+      <li>First, link your Twitch account and click <strong>"Enable Sub Sync"</strong> from the dashboard — this authorizes the bot to read your subscriber list</li>
+    </ol>
     <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Server Settings — Subscriber Role Sync section</div>
-      <div>Screenshot coming soon</div>
+      <img src="/screenshots/step-8.png" alt="Dashboard showing Enable Sub Sync button">
     </div>
-    <div class="tip">Make sure the bot's role is <strong>above</strong> the subscriber role in your server's role list (Server Settings &rarr; Roles). The bot can only assign roles lower than its own.</div>
+
+    <ol start="2" style="color: #adadb8; font-size: 14px; line-height: 1.7; padding-left: 20px; margin-top: 6px;">
+      <li>In your Discord server, go to <strong>Server Settings &rarr; Roles &rarr; Atleta</strong> and make sure the <strong>Administrator</strong> permission is enabled</li>
+    </ol>
+    <div class="screenshot">
+      <img src="/screenshots/step-8.1.png" alt="Atleta role with Administrator permission enabled">
+    </div>
+
+    <ol start="3" style="color: #adadb8; font-size: 14px; line-height: 1.7; padding-left: 20px; margin-top: 6px;">
+      <li>Make sure the <strong>Atleta role is above</strong> the subscriber role in the roles list. If it's not, drag it above — the bot can only assign roles lower than its own</li>
+    </ol>
+    <div class="screenshot">
+      <img src="/screenshots/step-8.2.png" alt="Atleta role positioned above Sub Role in the roles list">
+    </div>
+
+    <ol start="4" style="color: #adadb8; font-size: 14px; line-height: 1.7; padding-left: 20px; margin-top: 6px;">
+      <li>In the Atleta dashboard, go to your server <strong>Settings</strong>, toggle on <strong>Subscriber Role Sync</strong> and select the role</li>
+      <li>Your community members type <code>/link</code> in Discord to connect their Twitch account</li>
+    </ol>
+    <div class="screenshot">
+      <img src="/screenshots/step-8.3.png" alt="Discord showing /link command in a channel">
+    </div>
+
+    <div class="tip">The bot checks every 10 minutes and assigns or removes the role automatically. Subscribers need to use <code>/link</code> once to connect their Twitch and Discord accounts.</div>
   </div>
 </div>
 
