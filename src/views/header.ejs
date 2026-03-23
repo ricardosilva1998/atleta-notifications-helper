@@ -447,6 +447,35 @@
       color: white;
     }
 
+    /* Stat card with tooltip */
+    .stat-card {
+      background: var(--bg-base); border-radius: var(--radius-sm);
+      padding: 10px 12px; border: 1px solid var(--border);
+      position: relative; cursor: default;
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .stat-card:hover { border-color: rgba(255,255,255,0.12); background: var(--bg-elevated); }
+    .stat-value {
+      font-size: 18px; font-weight: 700; font-family: var(--font-display);
+    }
+    .stat-label {
+      font-size: 10px; color: var(--text-muted); margin-top: 2px;
+    }
+    .stat-tooltip {
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%); background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 14px; font-size: 12px; color: var(--text-secondary);
+      line-height: 1.5; white-space: nowrap; z-index: 50;
+      box-shadow: var(--shadow-elevated); pointer-events: none;
+    }
+    .stat-tooltip::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%); border: 5px solid transparent;
+      border-top-color: var(--border);
+    }
+    .stat-card:hover .stat-tooltip { display: block; }
+
     /* Tabs */
     .tab-bar {
       display: flex; gap: 4px; margin-bottom: 24px; padding: 4px;
