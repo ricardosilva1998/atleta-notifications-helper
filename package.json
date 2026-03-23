@@ -1,7 +1,7 @@
 {
-  "name": "vilela-notifications",
-  "version": "1.0.0",
-  "description": "Discord bot that notifies when andre_vilela_ goes live, posts clips, or uploads videos",
+  "name": "atleta-notifications-helper",
+  "version": "2.0.0",
+  "description": "Self-service Discord notification bot for streamers - Twitch live, clips, YouTube, welcome messages, and sub sync",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

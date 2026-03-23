@@ -26,6 +26,7 @@ module.exports = {
     url: (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, ''),
     port: parseInt(process.env.PORT) || 3000,
     sessionSecret: process.env.SESSION_SECRET || 'change-me-in-production',
+    adminPassword: process.env.ADMIN_PASSWORD || null,
   },
   intervals: {
     twitchLive: parseInt(process.env.TWITCH_POLL_INTERVAL) || 60_000,

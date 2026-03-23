@@ -1,0 +1,65 @@
+<%- include('header', { title: 'Admin Dashboard', streamer: null }) %>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+  <h2>Admin Dashboard</h2>
+  <div>
+    <a href="/admin/streamers" class="btn btn-secondary">Manage Streamers</a>
+    <a href="/admin/logout" class="btn btn-secondary" style="margin-left: 8px;">Logout</a>
+  </div>
+</div>
+
+<div class="features-grid" style="margin-bottom: 24px;">
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 32px; font-weight: 700; color: #9146ff;"><%= stats.total_streamers %></div>
+    <p style="color: #adadb8; font-size: 14px;">Total Streamers (<%= stats.active_streamers %> active)</p>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 32px; font-weight: 700; color: #5865F2;"><%= stats.total_guilds %></div>
+    <p style="color: #adadb8; font-size: 14px;">Total Servers</p>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 32px; font-weight: 700; color: #00b894;"><%= stats.notifications_today %></div>
+    <p style="color: #adadb8; font-size: 14px;">Notifications Today</p>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 32px; font-weight: 700; color: #efeff1;"><%= stats.total_notifications %></div>
+    <p style="color: #adadb8; font-size: 14px;">Total Notifications</p>
+  </div>
+</div>
+
+<h3 class="section-title">Recent Notifications</h3>
+
+<% if (recentNotifications.length === 0) { %>
+  <p style="color: #adadb8;">No notifications sent yet.</p>
+<% } else { %>
+  <div class="card" style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid #303032; text-align: left;">
+          <th style="padding: 8px; color: #adadb8;">Time</th>
+          <th style="padding: 8px; color: #adadb8;">Streamer</th>
+          <th style="padding: 8px; color: #adadb8;">Type</th>
+          <th style="padding: 8px; color: #adadb8;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const n of recentNotifications) { %>
+          <tr style="border-bottom: 1px solid #1a1a1d;">
+            <td style="padding: 8px; color: #adadb8;"><%= n.created_at %></td>
+            <td style="padding: 8px;"><%= n.twitch_username || n.discord_username %></td>
+            <td style="padding: 8px;"><%= n.type %></td>
+            <td style="padding: 8px;">
+              <% if (n.success) { %>
+                <span style="color: #00b894;">OK</span>
+              <% } else { %>
+                <span style="color: #e74c3c;">Failed</span>
+              <% } %>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+<% } %>
+
+<%- include('footer') %>

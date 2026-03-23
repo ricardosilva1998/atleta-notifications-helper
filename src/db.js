@@ -12,7 +12,9 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// --- Migration: drop old schema if it doesn't have discord_user_id ---
+// --- Migrations ---
+
+// Migration 1: drop old schema if it doesn't have discord_user_id
 try {
   const cols = db.prepare("PRAGMA table_info(streamers)").all();
   if (cols.length > 0 && !cols.find((c) => c.name === 'discord_user_id')) {
@@ -23,6 +25,16 @@ try {
     db.exec('DROP TABLE IF EXISTS guilds');
     db.exec('DROP TABLE IF EXISTS streamers');
     console.log('[DB] Old tables dropped, will recreate with new schema');
+  }
+} catch {}
+
+// Migration 2: add enabled/admin_note columns if missing
+try {
+  const cols = db.prepare("PRAGMA table_info(streamers)").all();
+  if (cols.length > 0 && !cols.find((c) => c.name === 'enabled')) {
+    db.exec('ALTER TABLE streamers ADD COLUMN enabled INTEGER DEFAULT 1');
+    db.exec('ALTER TABLE streamers ADD COLUMN admin_note TEXT');
+    console.log('[DB] Added enabled/admin_note columns to streamers');
   }
 } catch {}
 
@@ -43,6 +55,8 @@ db.exec(`
     broadcaster_token_expires_at INTEGER DEFAULT 0,
     youtube_channel_id TEXT,
     youtube_api_key TEXT,
+    enabled INTEGER DEFAULT 1,
+    admin_note TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -90,6 +104,18 @@ db.exec(`
     streamer_id INTEGER NOT NULL REFERENCES streamers(id),
     expires_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS notification_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
+    guild_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    success INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_notification_log_streamer ON notification_log(streamer_id);
+  CREATE INDEX IF NOT EXISTS idx_notification_log_created ON notification_log(created_at);
 `);
 
 // --- Streamers ---
@@ -300,6 +326,73 @@ function cleanExpiredSessions() {
   _cleanExpiredSessions.run(Date.now());
 }
 
+// --- Notification Logging ---
+
+const _logNotification = db.prepare(`
+  INSERT INTO notification_log (streamer_id, guild_id, type, success) VALUES (?, ?, ?, ?)
+`);
+
+function logNotification(streamerId, guildId, type, success) {
+  _logNotification.run(streamerId, guildId, type, success ? 1 : 0);
+}
+
+// --- Admin ---
+
+const _disableStreamer = db.prepare('UPDATE streamers SET enabled = 0, admin_note = ? WHERE id = ?');
+const _enableStreamer = db.prepare('UPDATE streamers SET enabled = 1, admin_note = NULL WHERE id = ?');
+const _deleteStreamer = db.prepare('DELETE FROM streamers WHERE id = ?');
+
+const _getAllStreamersAdmin = db.prepare(`
+  SELECT s.*,
+    (SELECT COUNT(*) FROM guilds WHERE streamer_id = s.id) AS guild_count,
+    (SELECT COUNT(*) FROM notification_log WHERE streamer_id = s.id) AS total_notifications,
+    (SELECT COUNT(*) FROM notification_log WHERE streamer_id = s.id AND created_at > datetime('now', '-1 day')) AS notifications_today
+  FROM streamers s
+  ORDER BY s.created_at DESC
+`);
+
+const _getGlobalStats = db.prepare(`
+  SELECT
+    (SELECT COUNT(*) FROM streamers) AS total_streamers,
+    (SELECT COUNT(*) FROM streamers WHERE enabled = 1) AS active_streamers,
+    (SELECT COUNT(*) FROM guilds) AS total_guilds,
+    (SELECT COUNT(*) FROM notification_log) AS total_notifications,
+    (SELECT COUNT(*) FROM notification_log WHERE created_at > datetime('now', '-1 day')) AS notifications_today,
+    (SELECT COUNT(*) FROM notification_log WHERE created_at > datetime('now', '-7 days')) AS notifications_week
+`);
+
+const _getRecentNotifications = db.prepare(`
+  SELECT nl.*, s.twitch_username, s.discord_username
+  FROM notification_log nl
+  JOIN streamers s ON nl.streamer_id = s.id
+  ORDER BY nl.created_at DESC
+  LIMIT 50
+`);
+
+function disableStreamer(id, note) {
+  _disableStreamer.run(note || null, id);
+}
+
+function enableStreamer(id) {
+  _enableStreamer.run(id);
+}
+
+function deleteStreamer(id) {
+  _deleteStreamer.run(id);
+}
+
+function getAllStreamersAdmin() {
+  return _getAllStreamersAdmin.all();
+}
+
+function getGlobalStats() {
+  return _getGlobalStats.get();
+}
+
+function getRecentNotifications() {
+  return _getRecentNotifications.all();
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -324,4 +417,11 @@ module.exports = {
   getSession,
   deleteSession,
   cleanExpiredSessions,
+  logNotification,
+  disableStreamer,
+  enableStreamer,
+  deleteStreamer,
+  getAllStreamersAdmin,
+  getGlobalStats,
+  getRecentNotifications,
 };

@@ -1,6 +1,6 @@
-# Stream Notifications Bot
+# Atleta Notifications Helper
 
-A self-service Discord notification bot for Twitch streamers. Any streamer can sign up, add the bot to their Discord, and configure notifications — no code changes needed.
+A self-service Discord notification bot for streamers. Any streamer can sign up, add the bot to their Discord, and configure notifications — no code changes needed.
 
 ## Features
 

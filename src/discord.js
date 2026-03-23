@@ -3,18 +3,20 @@ const config = require('./config');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers] });
 
-async function sendNotification(channelId, embed) {
+async function sendNotification(channelId, embed, meta) {
+  const db = require('./db');
   try {
     const channel = await client.channels.fetch(channelId);
     if (!channel) {
       console.error(`Channel ${channelId} not found`);
+      if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, false);
       return;
     }
-    console.log(`Sending notification to channel ${channel.name} (${channelId})`);
     await channel.send({ embeds: [embed] });
-    console.log('Notification sent successfully');
+    if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, true);
   } catch (error) {
     console.error(`Discord send error: ${error.message} (code: ${error.code}, status: ${error.status})`);
+    if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, false);
     throw error;
   }
 }
