@@ -3,7 +3,7 @@ const config = require('../config');
 const db = require('../db');
 const { client } = require('../discord');
 const { getUserProfile } = require('../services/twitch');
-const { resolveChannelId, getLatestVideos } = require('../services/youtube');
+const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
 
 const router = Router();
 
@@ -178,10 +178,24 @@ router.get('/guild/:guildId', async (req, res) => {
 
   const watchedYoutubeChannels = db.getWatchedYoutubeChannelsForGuild(guildId, req.streamer.id);
 
-  // Enrich YouTube channels with live status
+  // Enrich YouTube channels with live status and backfill profile images + names
   for (const wc of watchedYoutubeChannels) {
     const state = db.getYoutubeChannelState(wc.youtube_channel_id);
     wc.is_live = state?.is_live === 1;
+    if (!wc.profile_image_url || !wc.youtube_channel_name) {
+      try {
+        const info = await getChannelInfo(wc.youtube_channel_id);
+        if (info) {
+          if (info.profileImageUrl || info.channelName) {
+            db.updateWatchedYoutubeChannelInfo(wc.id, info.profileImageUrl, info.channelName);
+            wc.profile_image_url = info.profileImageUrl || wc.profile_image_url;
+            wc.youtube_channel_name = info.channelName || wc.youtube_channel_name;
+          }
+        }
+      } catch (e) {
+        // Skip — will retry on next page load
+      }
+    }
   }
   const { tier, limits } = getTierLimits(req.streamer.id);
 
@@ -319,7 +333,7 @@ router.post('/guild/:guildId/youtube', async (req, res) => {
   }
 
   // Resolve @handle or channel ID
-  let ytChannelId, ytChannelName;
+  let ytChannelId, ytChannelName, ytProfileImage;
   try {
     const resolved = await resolveChannelId(input);
     if (!resolved) {
@@ -327,6 +341,7 @@ router.post('/guild/:guildId/youtube', async (req, res) => {
     }
     ytChannelId = resolved.channelId;
     ytChannelName = resolved.channelName || input;
+    ytProfileImage = resolved.profileImageUrl || null;
   } catch (e) {
     console.error(`[Dashboard] YouTube resolve error: ${e.message}`);
     return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=yt_not_found`);
@@ -352,6 +367,14 @@ router.post('/guild/:guildId/youtube', async (req, res) => {
   }
 
   db.addWatchedYoutubeChannel(guildId, req.streamer.id, ytChannelId, ytChannelName, videosChannelId, liveChannelId, knownVideoIds);
+
+  // Save profile image if available
+  if (ytProfileImage) {
+    const added = db.getWatchedYoutubeChannelsForGuild(guildId, req.streamer.id);
+    const match = added.find(c => c.youtube_channel_id === ytChannelId);
+    if (match) db.updateWatchedYoutubeChannelInfo(match.id, ytProfileImage, ytChannelName);
+  }
+
   console.log(`[Dashboard] Added YouTube channel ${ytChannelId} (${ytChannelName}) for guild ${guildId}`);
   res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=added`);
 });

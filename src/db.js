@@ -82,6 +82,15 @@ try {
   }
 } catch {}
 
+// Migration 7: add profile_image_url to watched_youtube_channels
+try {
+  const cols = db.prepare("PRAGMA table_info(watched_youtube_channels)").all();
+  if (cols.length > 0 && !cols.find((c) => c.name === 'profile_image_url')) {
+    db.exec('ALTER TABLE watched_youtube_channels ADD COLUMN profile_image_url TEXT');
+    console.log('[DB] Added profile_image_url column to watched_youtube_channels');
+  }
+} catch {}
+
 // --- Schema ---
 
 db.exec(`
@@ -957,6 +966,15 @@ function addWatchedYoutubeChannel(guildId, streamerId, ytChannelId, ytChannelNam
   }
 }
 
+const _updateWatchedYoutubeChannelInfo = db.prepare(`
+  UPDATE watched_youtube_channels SET profile_image_url = ?, youtube_channel_name = COALESCE(?, youtube_channel_name)
+  WHERE id = ?
+`);
+
+function updateWatchedYoutubeChannelInfo(id, profileImageUrl, channelName) {
+  _updateWatchedYoutubeChannelInfo.run(profileImageUrl || null, channelName || null, id);
+}
+
 function removeWatchedYoutubeChannel(id, streamerId) {
   _removeWatchedYoutubeChannel.run(id, streamerId);
 }
@@ -1241,4 +1259,5 @@ module.exports = {
   updateWatchedChannelProfileImage,
   updateWatchedChannel,
   updateWatchedYoutubeChannel,
+  updateWatchedYoutubeChannelInfo,
 };
