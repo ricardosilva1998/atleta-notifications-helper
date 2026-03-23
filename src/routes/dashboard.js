@@ -142,7 +142,7 @@ router.get('/guild/:guildId/stats', (req, res) => {
 });
 
 // Guild config page
-router.get('/guild/:guildId', (req, res) => {
+router.get('/guild/:guildId', async (req, res) => {
   const { guildId } = req.params;
   const guildConfig = db.getGuildConfig(guildId, req.streamer.id);
   if (!guildConfig) return res.redirect('/dashboard');
@@ -157,6 +157,21 @@ router.get('/guild/:guildId', (req, res) => {
     : [];
 
   const watchedTwitchChannels = db.getWatchedChannelsForGuild(guildId, req.streamer.id);
+
+  // Backfill missing profile images
+  for (const wc of watchedTwitchChannels) {
+    if (!wc.profile_image_url) {
+      try {
+        const profile = await getUserProfile(wc.twitch_username);
+        if (profile?.profile_image_url) {
+          db.updateWatchedChannelProfileImage(wc.id, profile.profile_image_url);
+          wc.profile_image_url = profile.profile_image_url;
+        }
+      } catch (e) {
+        // Silently skip — will retry next page load
+      }
+    }
+  }
   const watchedYoutubeChannels = db.getWatchedYoutubeChannelsForGuild(guildId, req.streamer.id);
   const { tier, limits } = getTierLimits(req.streamer.id);
 

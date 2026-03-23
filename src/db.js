@@ -713,6 +713,7 @@ const _addWatchedChannel = db.prepare(`
   INSERT OR IGNORE INTO watched_channels (guild_id, streamer_id, twitch_username, live_channel_id, clips_channel_id, notify_live, notify_clips, profile_image_url)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
+const _updateWatchedChannelProfileImage = db.prepare('UPDATE watched_channels SET profile_image_url = ? WHERE id = ?');
 const _removeWatchedChannel = db.prepare('DELETE FROM watched_channels WHERE id = ? AND streamer_id = ?');
 const _getWatchedChannelsForGuild = db.prepare('SELECT * FROM watched_channels WHERE guild_id = ? AND streamer_id = ?');
 const _getAllUniqueWatchedChannels = db.prepare('SELECT DISTINCT twitch_username FROM watched_channels WHERE enabled = 1');
@@ -743,6 +744,10 @@ function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, c
   _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl);
   // Ensure channel_state row exists
   _upsertChannelState.run(twitchUsername.toLowerCase());
+}
+
+function updateWatchedChannelProfileImage(id, profileImageUrl) {
+  _updateWatchedChannelProfileImage.run(profileImageUrl, id);
 }
 
 function removeWatchedChannel(id, streamerId) {
@@ -1197,4 +1202,5 @@ module.exports = {
   getGuildStatsByPeriod,
   getGuildNotificationsOverTime,
   getGuildNotificationsByTypeOverTime,
+  updateWatchedChannelProfileImage,
 };
