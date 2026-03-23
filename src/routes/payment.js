@@ -63,13 +63,12 @@ router.get('/', (req, res) => {
 router.post('/create', (req, res) => {
   if (!req.streamer) return res.redirect('/auth/login');
 
-  const { tier, discount_code, billing } = req.body;
+  const { tier, discount_code } = req.body;
   const tierConfig = config.tiers[tier];
   if (!tierConfig || tier === 'free') return res.redirect('/pricing');
 
-  const isAnnual = billing !== 'monthly';
-  let price = isAnnual ? tierConfig.priceAnnual : tierConfig.priceMonthly;
-  const durationDays = isAnnual ? 365 : 30;
+  let price = tierConfig.price;
+  const durationDays = 365;
   let discountPercent = 0;
   let discountCodeUsed = null;
 
@@ -98,8 +97,7 @@ router.post('/create', (req, res) => {
     httpOnly: true, maxAge: 30 * 60 * 1000, // 30 minutes
   });
 
-  const billingLabel = isAnnual ? 'Annual' : 'Monthly';
-  createPayPalOrder(price, `Atleta ${tierConfig.name} - ${billingLabel} Subscription`)
+  createPayPalOrder(price, `Atleta ${tierConfig.name} - Annual Subscription`)
     .then((order) => {
       const approveLink = order.links?.find((l) => l.rel === 'approve');
       if (approveLink) {

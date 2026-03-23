@@ -48,8 +48,7 @@ module.exports = {
   tiers: {
     free: {
       name: 'Free',
-      priceMonthly: 0,
-      priceAnnual: 0,
+      price: 0,
       maxGuilds: 1,
       maxTwitchChannels: 2,
       maxYoutubeChannels: 0,
@@ -67,8 +66,7 @@ module.exports = {
     },
     starter: {
       name: 'Starter',
-      priceMonthly: 5,
-      priceAnnual: 50,
+      price: 5,
       maxGuilds: 3,
       maxTwitchChannels: 10,
       maxYoutubeChannels: 3,
@@ -86,8 +84,7 @@ module.exports = {
     },
     pro: {
       name: 'Pro',
-      priceMonthly: 12,
-      priceAnnual: 120,
+      price: 10,
       maxGuilds: 10,
       maxTwitchChannels: 50,
       maxYoutubeChannels: 20,
@@ -105,8 +102,7 @@ module.exports = {
     },
     enterprise: {
       name: 'Enterprise',
-      priceMonthly: 25,
-      priceAnnual: 250,
+      price: 25,
       maxGuilds: -1,
       maxTwitchChannels: -1,
       maxYoutubeChannels: -1,
