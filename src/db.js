@@ -189,6 +189,7 @@ const _upsertStreamerDiscord = db.prepare(`
     discord_avatar = excluded.discord_avatar
   RETURNING *
 `);
+const _clearOldTwitchLink = db.prepare('UPDATE streamers SET twitch_user_id = NULL, twitch_username = NULL, twitch_display_name = NULL WHERE twitch_user_id = ?');
 const _linkTwitch = db.prepare(`
   UPDATE streamers SET
     twitch_user_id = ?,
@@ -228,6 +229,7 @@ function upsertStreamerDiscord(discordUserId, discordUsername, discordDisplayNam
 }
 
 function linkTwitch(streamerId, twitchUserId, twitchUsername, twitchDisplayName) {
+  _clearOldTwitchLink.run(twitchUserId); // clear if another streamer had this Twitch linked
   _linkTwitch.run(twitchUserId, twitchUsername, twitchDisplayName, streamerId);
 }
 
