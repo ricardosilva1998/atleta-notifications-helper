@@ -7,24 +7,12 @@
   </div>
 </div>
 
-<% if (msg === 'guild_removed') { %>
-  <div class="alert alert-success"><%= t('dashboard.guildRemoved') %></div>
-<% } %>
-<% if (msg === 'twitch_linked') { %>
-  <div class="alert alert-success"><%= t('dashboard.twitchLinked') %></div>
-<% } %>
-<% if (msg === 'broadcaster_authorized') { %>
-  <div class="alert alert-success"><%= t('dashboard.broadcasterAuthorized') %></div>
-<% } %>
-<% if (msg === 'youtube_saved') { %>
-  <div class="alert alert-success"><%= t('dashboard.youtubeSaved') %></div>
-<% } %>
-<% if (msg === 'guild_limit') { %>
-  <div class="alert alert-warning"><%= t('dashboard.guildLimit') %></div>
-<% } %>
-<% if (msg === 'already_claimed') { %>
-  <div class="alert alert-danger"><%= t('dashboard.alreadyClaimed') %></div>
-<% } %>
+<% if (msg === 'guild_removed') { %><div class="alert alert-success"><%= t('dashboard.guildRemoved') %></div><% } %>
+<% if (msg === 'twitch_linked') { %><div class="alert alert-success"><%= t('dashboard.twitchLinked') %></div><% } %>
+<% if (msg === 'broadcaster_authorized') { %><div class="alert alert-success"><%= t('dashboard.broadcasterAuthorized') %></div><% } %>
+<% if (msg === 'youtube_saved') { %><div class="alert alert-success"><%= t('dashboard.youtubeSaved') %></div><% } %>
+<% if (msg === 'guild_limit') { %><div class="alert alert-warning"><%= t('dashboard.guildLimit') %></div><% } %>
+<% if (msg === 'already_claimed') { %><div class="alert alert-danger"><%= t('dashboard.alreadyClaimed') %></div><% } %>
 
 <!-- Quick Links -->
 <div style="display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap;" class="animate-in animate-in-delay-1">
@@ -63,39 +51,31 @@
 
 <div style="display: grid; gap: 16px;">
   <% guilds.forEach(function(g, i) { %>
-    <div class="card animate-in" style="animation-delay: <%= 0.1 + i * 0.05 %>s; padding: 20px;">
+    <div class="card animate-in" style="animation-delay: <%= 0.1 + i * 0.05 %>s; padding: 20px;" id="guild-<%= g.guild_id %>">
       <!-- Server Header -->
       <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
         <div class="guild-icon">
-          <% if (g.icon) { %>
-            <img src="<%= g.icon %>" alt="">
-          <% } else { %>
-            <%= g.name.charAt(0) %>
-          <% } %>
+          <% if (g.icon) { %><img src="<%= g.icon %>" alt=""><% } else { %><%= g.name.charAt(0) %><% } %>
         </div>
         <div style="flex: 1; min-width: 0;">
           <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><%= g.name %></h4>
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 12px; color: var(--text-secondary);">
-              <% if (g.botPresent) { %>
-                <span class="status-dot online"></span><%= t('dashboard.active') %>
-              <% } else { %>
-                <span class="status-dot offline"></span><%= t('dashboard.offline') %>
-              <% } %>
+              <% if (g.botPresent) { %><span class="status-dot online"></span><%= t('dashboard.active') %><% } else { %><span class="status-dot offline"></span><%= t('dashboard.offline') %><% } %>
             </span>
             <span style="font-size: 11px; color: var(--text-muted);"><%= g.twitchCount %> Twitch &middot; <%= g.youtubeCount %> YouTube</span>
           </div>
         </div>
         <div style="display: flex; gap: 6px; flex-shrink: 0;">
-          <a href="/dashboard/guild/<%= g.guild_id %>/stats" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;">
+          <button onclick="toggleStats('<%= g.guild_id %>')" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;" id="stats-btn-<%= g.guild_id %>">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             Stats
-          </a>
+          </button>
           <a href="/dashboard/guild/<%= g.guild_id %>" class="btn btn-primary" style="padding: 7px 12px; font-size: 12px;"><%= t('dashboard.configure') %></a>
         </div>
       </div>
 
-      <!-- Metrics -->
+      <!-- Summary Metrics (always visible) -->
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
         <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 10px 12px; border: 1px solid var(--border);">
           <div style="font-size: 18px; font-weight: 700; font-family: var(--font-display); color: var(--accent);"><%= g.stats.live_count %></div>
@@ -115,24 +95,54 @@
         </div>
       </div>
 
-      <% if (g.stats.recap_count > 0 || g.stats.milestone_count > 0 || g.stats.digest_count > 0) { %>
-        <div style="display: flex; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-          <% if (g.stats.recap_count > 0) { %>
-            <span style="font-size: 11px; color: var(--text-muted);"><span style="color: #6d28d9; font-weight: 600;"><%= g.stats.recap_count %></span> Recaps</span>
+      <!-- Expandable Detailed Stats -->
+      <div class="guild-stats-expanded" id="stats-<%= g.guild_id %>" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); animation: fadeUp 0.3s ease-out;">
+
+        <!-- Chart: Last 30 days -->
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; font-family: var(--font-display); font-weight: 600;">Last 30 Days</div>
+          <% if (g.chartData.length === 0) { %>
+            <div style="text-align: center; padding: 20px 0; color: var(--text-muted); font-size: 13px;">No notifications yet</div>
+          <% } else { %>
+            <div style="display: flex; align-items: flex-end; gap: 2px; height: 80px;">
+              <% const maxC = Math.max(...g.chartData.map(d => d.count), 1); %>
+              <% g.chartData.forEach(function(d) { %>
+                <div style="flex: 1;" title="<%= d.period %>: <%= d.count %>">
+                  <div style="width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; height: <%= Math.max((d.count / maxC) * 100, 2) %>%; opacity: <%= d.count > 0 ? 1 : 0.15 %>;"></div>
+                </div>
+              <% }); %>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+              <span style="font-size: 9px; color: var(--text-muted);"><%= g.chartData[0].period %></span>
+              <span style="font-size: 9px; color: var(--text-muted);"><%= g.chartData[g.chartData.length - 1].period %></span>
+            </div>
           <% } %>
-          <% if (g.stats.milestone_count > 0) { %>
-            <span style="font-size: 11px; color: var(--text-muted);"><span style="color: #f1c40f; font-weight: 600;"><%= g.stats.milestone_count %></span> Milestones</span>
-          <% } %>
-          <% if (g.stats.digest_count > 0) { %>
-            <span style="font-size: 11px; color: var(--text-muted);"><span style="color: #3498db; font-weight: 600;"><%= g.stats.digest_count %></span> Digests</span>
-          <% } %>
-          <span style="font-size: 11px; color: var(--text-muted); margin-left: auto;"><span style="color: var(--success); font-weight: 600;"><%= g.stats.week_total %></span> this week</span>
         </div>
-      <% } else { %>
-        <div style="display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-          <span style="font-size: 11px; color: var(--text-muted);"><span style="color: var(--success); font-weight: 600;"><%= g.stats.week_total %></span> this week</span>
+
+        <!-- Detailed Breakdown -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <!-- Twitch -->
+          <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px; font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Twitch</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div><div style="font-size: 16px; font-weight: 700; color: var(--accent);"><%= g.stats.live_count %></div><div style="font-size: 10px; color: var(--text-muted);">Live</div></div>
+              <div><div style="font-size: 16px; font-weight: 700; color: #bf94ff;"><%= g.stats.clip_count %></div><div style="font-size: 10px; color: var(--text-muted);">Clips</div></div>
+              <div><div style="font-size: 16px; font-weight: 700; color: #6d28d9;"><%= g.stats.recap_count %></div><div style="font-size: 10px; color: var(--text-muted);">Recaps</div></div>
+              <div><div style="font-size: 16px; font-weight: 700; color: #f1c40f;"><%= g.stats.milestone_count %></div><div style="font-size: 10px; color: var(--text-muted);">Milestones</div></div>
+            </div>
+          </div>
+          <!-- YouTube + Community -->
+          <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px; font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">YouTube & Community</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div><div style="font-size: 16px; font-weight: 700; color: #f04438;"><%= g.stats.youtube_video_count %></div><div style="font-size: 10px; color: var(--text-muted);">Videos</div></div>
+              <div><div style="font-size: 16px; font-weight: 700; color: #ff6b6b;"><%= g.stats.youtube_live_count %></div><div style="font-size: 10px; color: var(--text-muted);">YT Live</div></div>
+              <div><div style="font-size: 16px; font-weight: 700; color: #3498db;"><%= g.stats.digest_count %></div><div style="font-size: 10px; color: var(--text-muted);">Digests</div></div>
+              <div><div style="font-size: 16px; font-weight: 700; color: var(--success);"><%= g.stats.week_total %></div><div style="font-size: 10px; color: var(--text-muted);">This Week</div></div>
+            </div>
+          </div>
         </div>
-      <% } %>
+      </div>
     </div>
   <% }); %>
 </div>
@@ -144,11 +154,7 @@
     <% unclaimedGuilds.forEach(function(g, i) { %>
       <div class="card guild-card animate-in" style="animation-delay: <%= 0.05 + i * 0.05 %>s;">
         <div class="guild-icon">
-          <% if (g.icon) { %>
-            <img src="<%= g.icon %>" alt="">
-          <% } else { %>
-            <%= g.name.charAt(0) %>
-          <% } %>
+          <% if (g.icon) { %><img src="<%= g.icon %>" alt=""><% } else { %><%= g.name.charAt(0) %><% } %>
         </div>
         <div class="guild-info">
           <h4><%= g.name %></h4>
@@ -162,9 +168,22 @@
   </div>
 <% } %>
 
+<script>
+function toggleStats(guildId) {
+  const panel = document.getElementById('stats-' + guildId);
+  const btn = document.getElementById('stats-btn-' + guildId);
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  btn.classList.toggle('active', !isOpen);
+  btn.style.background = isOpen ? '' : 'var(--accent)';
+  btn.style.color = isOpen ? '' : 'white';
+}
+</script>
+
 <style>
   @media (max-width: 520px) {
     div[style*="grid-template-columns: repeat(4, 1fr)"] { grid-template-columns: repeat(2, 1fr) !important; }
+    div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
   }
 </style>
 
