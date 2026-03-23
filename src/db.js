@@ -750,6 +750,34 @@ function updateWatchedChannelProfileImage(id, profileImageUrl) {
   _updateWatchedChannelProfileImage.run(profileImageUrl, id);
 }
 
+const _updateWatchedChannel = db.prepare(`
+  UPDATE watched_channels SET live_channel_id = ?, clips_channel_id = ?,
+    notify_live = ?, notify_clips = ?
+  WHERE id = ? AND streamer_id = ?
+`);
+
+function updateWatchedChannel(id, streamerId, liveChannelId, clipsChannelId) {
+  _updateWatchedChannel.run(
+    liveChannelId || null, clipsChannelId || null,
+    liveChannelId ? 1 : 0, clipsChannelId ? 1 : 0,
+    id, streamerId
+  );
+}
+
+const _updateWatchedYoutubeChannel = db.prepare(`
+  UPDATE watched_youtube_channels SET videos_channel_id = ?, live_channel_id = ?,
+    notify_videos = ?, notify_live = ?
+  WHERE id = ? AND streamer_id = ?
+`);
+
+function updateWatchedYoutubeChannel(id, streamerId, videosChannelId, liveChannelId) {
+  _updateWatchedYoutubeChannel.run(
+    videosChannelId || null, liveChannelId || null,
+    videosChannelId ? 1 : 0, liveChannelId ? 1 : 0,
+    id, streamerId
+  );
+}
+
 function removeWatchedChannel(id, streamerId) {
   _removeWatchedChannel.run(id, streamerId);
 }
@@ -1203,4 +1231,6 @@ module.exports = {
   getGuildNotificationsOverTime,
   getGuildNotificationsByTypeOverTime,
   updateWatchedChannelProfileImage,
+  updateWatchedChannel,
+  updateWatchedYoutubeChannel,
 };

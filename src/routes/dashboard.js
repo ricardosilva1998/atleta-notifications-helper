@@ -274,6 +274,14 @@ router.post('/guild/:guildId/channels/:channelId/remove', (req, res) => {
   res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=removed`);
 });
 
+router.post('/guild/:guildId/channels/:channelId/edit', (req, res) => {
+  const { guildId, channelId } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  db.updateWatchedChannel(parseInt(channelId), req.streamer.id, req.body.live_channel_id, req.body.clips_channel_id);
+  console.log(`[Dashboard] Updated Twitch channel ${channelId} for guild ${guildId}`);
+  res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=updated`);
+});
+
 // --- Watched YouTube Channels ---
 
 router.get('/guild/:guildId/youtube', (req, res) => {
@@ -315,6 +323,14 @@ router.post('/guild/:guildId/youtube/:channelId/remove', (req, res) => {
   const { guildId, channelId } = req.params;
   db.removeWatchedYoutubeChannel(parseInt(channelId), req.streamer.id);
   res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=removed`);
+});
+
+router.post('/guild/:guildId/youtube/:channelId/edit', (req, res) => {
+  const { guildId, channelId } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  db.updateWatchedYoutubeChannel(parseInt(channelId), req.streamer.id, req.body.videos_channel_id, req.body.live_channel_id);
+  console.log(`[Dashboard] Updated YouTube channel ${channelId} for guild ${guildId}`);
+  res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=updated`);
 });
 
 // --- Report an Issue ---

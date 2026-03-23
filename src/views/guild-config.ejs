@@ -13,6 +13,9 @@
 <% if (msg === 'added') { %>
   <div class="alert alert-success">Channel added! Notifications will start shortly.</div>
 <% } %>
+<% if (msg === 'updated') { %>
+  <div class="alert alert-success">Channel updated!</div>
+<% } %>
 <% if (msg === 'removed') { %>
   <div class="alert alert-success">Channel removed.</div>
 <% } %>
@@ -84,28 +87,66 @@
     </div>
   <% } else { %>
     <% for (const wc of watchedTwitchChannels) { %>
-      <div class="card" style="display: flex; align-items: center; gap: 16px;">
-        <% if (wc.profile_image_url) { %>
-          <img src="<%= wc.profile_image_url %>" alt="" style="width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;">
-        <% } else { %>
-          <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--accent-glow); display: flex; align-items: center; justify-content: center;">
-            <span style="color: var(--accent); font-family: var(--font-display); font-weight: 700; font-size: 16px;"><%= wc.twitch_username.charAt(0).toUpperCase() %></span>
+      <div class="card" style="padding: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <% if (wc.profile_image_url) { %>
+            <img src="<%= wc.profile_image_url %>" alt="" style="width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;">
+          <% } else { %>
+            <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--accent-glow); display: flex; align-items: center; justify-content: center;">
+              <span style="color: var(--accent); font-family: var(--font-display); font-weight: 700; font-size: 16px;"><%= wc.twitch_username.charAt(0).toUpperCase() %></span>
+            </div>
+          <% } %>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600;">
+              <a href="https://twitch.tv/<%= wc.twitch_username %>" target="_blank" style="color: var(--text-primary);"><%= wc.twitch_username %></a>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              <% if (wc.live_channel_id) { %>
+                Live: #<%= channels.find(c => c.id === wc.live_channel_id)?.name || 'unknown' %>
+              <% } %>
+              <% if (wc.live_channel_id && wc.clips_channel_id) { %> &middot; <% } %>
+              <% if (wc.clips_channel_id) { %>
+                Clips: #<%= channels.find(c => c.id === wc.clips_channel_id)?.name || 'unknown' %>
+              <% } %>
+              <% if (!wc.live_channel_id && !wc.clips_channel_id) { %>No notifications configured<% } %>
+            </div>
           </div>
-        <% } %>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-weight: 600;">
-            <a href="https://twitch.tv/<%= wc.twitch_username %>" target="_blank" style="color: var(--text-primary);"><%= wc.twitch_username %></a>
-          </div>
-          <div style="font-size: 12px; color: var(--text-secondary);">
-            <% if (wc.live_channel_id) { %>Live<% } %>
-            <% if (wc.live_channel_id && wc.clips_channel_id) { %> &middot; <% } %>
-            <% if (wc.clips_channel_id) { %>Clips<% } %>
-            <% if (!wc.live_channel_id && !wc.clips_channel_id) { %>No notifications configured<% } %>
+          <div style="display: flex; gap: 6px;">
+            <button onclick="toggleEdit('twitch-<%= wc.id %>')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Edit</button>
+            <form method="POST" action="/dashboard/guild/<%= guildId %>/channels/<%= wc.id %>/remove" style="margin: 0;">
+              <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Remove</button>
+            </form>
           </div>
         </div>
-        <form method="POST" action="/dashboard/guild/<%= guildId %>/channels/<%= wc.id %>/remove" style="margin: 0;">
-          <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Remove</button>
-        </form>
+        <!-- Edit form (hidden by default) -->
+        <div id="edit-twitch-<%= wc.id %>" style="display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+          <form method="POST" action="/dashboard/guild/<%= guildId %>/channels/<%= wc.id %>/edit">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label>Live Notifications Channel</label>
+                <select name="live_channel_id">
+                  <option value="">-- Disabled --</option>
+                  <% for (const c of channels) { %>
+                    <option value="<%= c.id %>" <%= wc.live_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                  <% } %>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label>Clip Notifications Channel</label>
+                <select name="clips_channel_id">
+                  <option value="">-- Disabled --</option>
+                  <% for (const c of channels) { %>
+                    <option value="<%= c.id %>" <%= wc.clips_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                  <% } %>
+                </select>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="submit" class="btn btn-success" style="padding: 7px 16px; font-size: 12px;">Save Changes</button>
+              <button type="button" onclick="toggleEdit('twitch-<%= wc.id %>')" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;">Cancel</button>
+            </div>
+          </form>
+        </div>
       </div>
     <% } %>
   <% } %>
@@ -165,24 +206,62 @@
     </div>
   <% } else { %>
     <% for (const wc of watchedYoutubeChannels) { %>
-      <div class="card" style="display: flex; align-items: center; gap: 16px;">
-        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: rgba(240,68,56,0.1); display: flex; align-items: center; justify-content: center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f04438" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="#f04438"/></svg>
-        </div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-weight: 600; color: var(--text-primary);">
-            <%= wc.youtube_channel_name || wc.youtube_channel_id %>
+      <div class="card" style="padding: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: rgba(240,68,56,0.1); display: flex; align-items: center; justify-content: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f04438" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="#f04438"/></svg>
           </div>
-          <div style="font-size: 12px; color: var(--text-secondary);">
-            <% if (wc.videos_channel_id) { %>Videos<% } %>
-            <% if (wc.videos_channel_id && wc.live_channel_id) { %> &middot; <% } %>
-            <% if (wc.live_channel_id) { %>Live<% } %>
-            <% if (!wc.videos_channel_id && !wc.live_channel_id) { %>No notifications configured<% } %>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; color: var(--text-primary);">
+              <%= wc.youtube_channel_name || wc.youtube_channel_id %>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              <% if (wc.videos_channel_id) { %>
+                Videos: #<%= channels.find(c => c.id === wc.videos_channel_id)?.name || 'unknown' %>
+              <% } %>
+              <% if (wc.videos_channel_id && wc.live_channel_id) { %> &middot; <% } %>
+              <% if (wc.live_channel_id) { %>
+                Live: #<%= channels.find(c => c.id === wc.live_channel_id)?.name || 'unknown' %>
+              <% } %>
+              <% if (!wc.videos_channel_id && !wc.live_channel_id) { %>No notifications configured<% } %>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button onclick="toggleEdit('youtube-<%= wc.id %>')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Edit</button>
+            <form method="POST" action="/dashboard/guild/<%= guildId %>/youtube/<%= wc.id %>/remove" style="margin: 0;">
+              <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Remove</button>
+            </form>
           </div>
         </div>
-        <form method="POST" action="/dashboard/guild/<%= guildId %>/youtube/<%= wc.id %>/remove" style="margin: 0;">
-          <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Remove</button>
-        </form>
+        <!-- Edit form (hidden by default) -->
+        <div id="edit-youtube-<%= wc.id %>" style="display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+          <form method="POST" action="/dashboard/guild/<%= guildId %>/youtube/<%= wc.id %>/edit">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label>Videos/Shorts Notifications</label>
+                <select name="videos_channel_id">
+                  <option value="">-- Disabled --</option>
+                  <% for (const c of channels) { %>
+                    <option value="<%= c.id %>" <%= wc.videos_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                  <% } %>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label>Live Notifications</label>
+                <select name="live_channel_id">
+                  <option value="">-- Disabled --</option>
+                  <% for (const c of channels) { %>
+                    <option value="<%= c.id %>" <%= wc.live_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                  <% } %>
+                </select>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="submit" class="btn btn-success" style="padding: 7px 16px; font-size: 12px;">Save Changes</button>
+              <button type="button" onclick="toggleEdit('youtube-<%= wc.id %>')" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;">Cancel</button>
+            </div>
+          </form>
+        </div>
       </div>
     <% } %>
   <% } %>
@@ -313,6 +392,11 @@
   }
   tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   switchTab('<%= activeTab || "twitch" %>');
+
+  function toggleEdit(id) {
+    var el = document.getElementById('edit-' + id);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
 </script>
 
 <%- include('footer') %>
