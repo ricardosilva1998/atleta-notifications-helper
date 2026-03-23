@@ -20,7 +20,7 @@ All features are set-and-forget: toggle on in the dashboard, no further configur
 
 ### Behavior
 
-When a monitored Twitch channel goes offline, the bot posts a recap embed to the same channel where go-live notifications are sent.
+When a monitored Twitch channel goes offline, the bot posts a recap embed. Recaps follow the existing watcher fan-out pattern in `manager.js`: for each watcher of that channel, if the guild has `recap_enabled` and the streamer's tier includes `recaps`, post to the watcher's `watched_channels.live_channel_id` (the per-channel notification channel, not the guild-level `twitch_live_channel_id`).
 
 ### Embed Content
 
@@ -34,20 +34,20 @@ When a monitored Twitch channel goes offline, the bot posts a recap embed to the
 - Hook into the existing `twitchLive` poller's offline transition (state change: live → offline).
 - On offline detection:
   1. Calculate stream duration from the stored `started_at` timestamp to now.
-  2. Fetch clips from the Twitch Helix API filtered to the stream's time window (`started_at` to now). Select top 3 by `view_count`.
+  2. Fetch clips from the Twitch Helix API filtered to the stream's time window (`started_at` to offline time, using both `started_at` and `ended_at` params). Select top 3 by `view_count`.
   3. Compose a Discord embed with the recap data.
-  4. Post to the configured notification channel for that watcher.
-- Store stream session data (start time, title, category, thumbnail URL) in poller state when the channel goes live, so it's available at offline time.
+  4. Fan out to all watchers: for each watcher row returned by a new `getWatchersForChannelWithFeatures` query (joins `watched_channels` → `guilds` → `streamers`), check `guilds.recap_enabled` and the streamer's tier. Post to `watched_channels.live_channel_id`. The per-watcher tier lookup is acceptable — popular channels rarely have more than a handful of watchers.
+- Store stream session data (start time, title, category, thumbnail URL) in `channel_state` when the channel goes live, so it's available at offline time. The Twitch API `started_at` is authoritative; the stored value serves as a fallback for bot-restart scenarios.
 
 ### Data Changes
 
-- Extend `channel_state` (or `poller_state`) to store `stream_title`, `stream_category`, `stream_thumbnail_url`, and `stream_started_at` when a channel goes live.
+- Extend `channel_state` to add `stream_title`, `stream_category`, `stream_thumbnail_url`, and `stream_started_at` columns.
 
 ### Edge Cases
 
 - If no clips were created during the stream, omit the clips section from the embed.
 - If the stream was very short (under 5 minutes), skip the recap to avoid noise from test/accidental streams.
-- If the bot was restarted mid-stream, the start time may be missing. In that case, use the Twitch API's `started_at` field from the last known stream.
+- If the bot was restarted mid-stream, the start time may be missing. In that case, use the Twitch API's `started_at` field from the most recent archived video.
 
 ### Tier Gating
 
@@ -72,11 +72,12 @@ Every Monday at 09:00 UTC, the bot posts a weekly digest embed to each configure
 - New poller: `src/pollers/weeklyDigest.js`
 - Runs on a 1-hour interval, but only triggers the digest when the current time crosses Monday 09:00 UTC and the digest hasn't been posted for the current week yet.
 - On trigger:
-  1. For each guild with weekly highlights enabled, look up all watched Twitch channels.
-  2. Query Twitch API for videos (type: archive) from the past 7 days per channel.
-  3. Query Twitch API for clips from the past 7 days per channel, pick the one with the most views.
-  4. Aggregate: count streams, sum durations, collect unique categories.
-  5. Compose and post the digest embed to the configured notification channel.
+  1. Build a channel data cache (`Map<twitch_username, {videos, topClip}>`) to avoid duplicate API calls when multiple guilds watch the same channel.
+  2. For each guild with weekly highlights enabled, look up all watched Twitch channels.
+  3. For each unique channel, query Twitch API for videos (type: archive) from the past 7 days and clips from the past 7 days.
+  4. Cache results per channel. Reuse cached data when the same channel appears in multiple guilds.
+  5. Per guild: aggregate across all its watched channels — count streams, sum durations, collect unique categories, pick the top clip.
+  6. Compose and post the digest embed. For the posting channel: use the `live_channel_id` from the guild's first watcher row (since the digest aggregates all channels, there's no single "correct" channel — the first watcher's notification channel is a reasonable default).
 - Track last digest date in a new `weekly_digest_state` table to prevent duplicate posts.
 
 ### Data Changes
@@ -87,9 +88,10 @@ Every Monday at 09:00 UTC, the bot posts a weekly digest embed to each configure
 
 ### Edge Cases
 
-- If no streams happened that week, post a short "No streams this week" message or skip entirely (skip is simpler and less noisy — go with skip).
+- If no streams happened that week, skip the digest for that guild (less noisy than posting "nothing happened").
 - If a guild was just added mid-week, wait until the next Monday.
-- Rate limits: batch API calls and respect Twitch rate limits. For guilds watching the same channel, reuse cached API responses.
+- Rate limits: the per-channel cache ensures each Twitch channel is queried at most once per digest run, regardless of how many guilds watch it.
+- If the bot is down during the Monday 09:00 UTC window, it will trigger the digest when it next polls (later that Monday, or missed entirely if down all day Monday — acceptable for v1).
 
 ### Tier Gating
 
@@ -101,7 +103,11 @@ Pro and above.
 
 ### Behavior
 
-When a monitored Twitch channel crosses a follower or subscriber milestone, the bot posts a celebratory embed.
+When a monitored Twitch channel crosses a follower or subscriber milestone, the bot posts a celebratory embed to all watchers of that channel (where the guild has `milestones_enabled` and the streamer's tier includes `milestones`), posting to `watched_channels.live_channel_id`.
+
+### API Requirement
+
+Both follower and subscriber counts require a **broadcaster OAuth token** (the Twitch `Get Channel Followers` endpoint requires broadcaster/moderator auth since 2023). If the streamer has not linked their Twitch broadcaster token, milestone celebrations are disabled entirely for their channels. The dashboard should show a prompt to link their Twitch account to enable this feature.
 
 ### Milestones
 
@@ -116,33 +122,47 @@ When a monitored Twitch channel crosses a follower or subscriber milestone, the 
 ### Implementation
 
 - New table: `channel_milestones`
-  - `channel_id` TEXT (Twitch channel ID)
+  - `twitch_username` TEXT PRIMARY KEY (matches `channel_state` key convention)
   - `last_follower_count` INTEGER
   - `last_subscriber_count` INTEGER
   - `last_follower_milestone` INTEGER (last milestone that was announced)
   - `last_subscriber_milestone` INTEGER
 - Check milestones during the `twitchLive` poller cycle (piggyback on existing polling, no new poller needed).
-- On each poll, fetch the channel's current follower count from the Twitch API.
-- Compare against `last_follower_milestone`. If a new milestone was crossed, post a celebration embed to all guilds watching that channel (that have milestones enabled).
-- Subscriber counts: only available if the streamer has linked their Twitch broadcaster token (existing flow). Use the subscriptions API endpoint.
+- On each poll, if a broadcaster token is available, fetch the channel's current follower count via `Get Channel Followers` (total only) and subscriber count via existing `getSubscribers`.
+- Compare against `last_follower_milestone` / `last_subscriber_milestone`. If a new milestone was crossed, fan out to all guilds watching that channel with milestones enabled and appropriate tier.
+- If no broadcaster token is linked, skip milestone checks for that channel entirely.
 
 ### Embed Content
 
 - Celebration message (e.g., "Channel X just hit 500 followers!")
 - Current count
-- A fun visual (use colored embed + party-themed description)
+- Colored embed with party-themed description
 
 ### Edge Cases
 
 - If a channel jumps over multiple milestones between polls (e.g., a raid), only announce the highest one reached.
-- If follower count drops below a milestone and comes back, don't re-announce.
-- Subscriber count requires broadcaster token — if not linked, only track follower milestones.
+- If follower count drops below a milestone and comes back, don't re-announce (tracked via `last_follower_milestone`).
+- If broadcaster token is revoked after being linked, gracefully skip milestones and log a warning.
 
 ### Tier Gating
 
 Starter and above.
 
 ---
+
+## Config Changes
+
+Add the following feature flags to each tier in `src/config.js`:
+
+| Property | Free | Starter | Pro | Enterprise |
+|---|---|---|---|---|
+| `recaps` | `false` | `true` | `true` | `true` |
+| `milestones` | `false` | `true` | `true` | `true` |
+| `weeklyHighlights` | `false` | `false` | `true` | `true` |
+
+These are new properties, separate from the existing `streamSummaries` flag (which remains unchanged).
+
+Add `weeklyDigest` to `config.intervals` with a default of `3_600_000` (1 hour).
 
 ## Tier Distribution
 
@@ -156,25 +176,38 @@ Starter and above.
 
 Add a new "Activity Feed" section to the guild configuration page with three toggles:
 - Stream Recaps (on/off)
-- Milestone Celebrations (on/off)
+- Milestone Celebrations (on/off) — if no broadcaster token is linked, show a prompt to link Twitch account
 - Weekly Highlights (on/off, shown only for Pro+ tiers)
 
 Each toggle shows a brief description of what it does. Disabled toggles for insufficient tiers show an "Upgrade" link.
 
 ## Database Changes Summary
 
-1. Extend `channel_state` or `poller_state`: add `stream_title`, `stream_category`, `stream_thumbnail_url`, `stream_started_at` columns.
-2. New table: `weekly_digest_state` (guild_id, last_digest_date).
-3. New table: `channel_milestones` (channel_id, last_follower_count, last_subscriber_count, last_follower_milestone, last_subscriber_milestone).
-4. Extend `guilds` or create `guild_features` table with boolean columns: `recap_enabled`, `milestones_enabled`, `weekly_highlights_enabled`.
+1. Extend `channel_state`: add `stream_title` TEXT, `stream_category` TEXT, `stream_thumbnail_url` TEXT, `stream_started_at` TEXT columns.
+2. New table: `weekly_digest_state` (`guild_id` TEXT PK, `last_digest_date` TEXT).
+3. New table: `channel_milestones` (`twitch_username` TEXT PK, `last_follower_count` INTEGER, `last_subscriber_count` INTEGER, `last_follower_milestone` INTEGER, `last_subscriber_milestone` INTEGER).
+4. Add columns to `guilds` table: `recap_enabled` INTEGER DEFAULT 0, `milestones_enabled` INTEGER DEFAULT 0, `weekly_highlights_enabled` INTEGER DEFAULT 0. Update `updateGuildConfig` in `db.js` and the dashboard POST handler in `routes/dashboard.js` to include these new columns.
 
 ## Files Changed / Created
 
 - **Modified:** `src/pollers/twitchLive.js` — add recap posting on offline transition, milestone checking on each poll
-- **Modified:** `src/db.js` — new tables, migrations, query functions
-- **Modified:** `src/config.js` — add new feature flags to tier definitions
+- **Modified:** `src/db.js` — new tables, migrations, query functions for all three features; extend `updateGuildConfig`; add `getWatchersForChannelWithFeatures` query (joins `watched_channels` → `guilds` → `streamers` to include feature toggles and tier info)
+- **Modified:** `src/config.js` — add `recaps`, `milestones`, `weeklyHighlights` flags to each tier
 - **Modified:** `src/discord.js` — new embed builder functions for recaps, digests, milestones
-- **Modified:** `src/routes/dashboard.js` — activity feed toggle endpoints
-- **Modified:** `src/views/guild-config.ejs` — activity feed toggle UI
+- **Modified:** `src/services/twitch.js` — add `getVideos(broadcasterId, period)` and `getFollowerCount(broadcasterId, accessToken)` functions
+- **Modified:** `src/routes/dashboard.js` — activity feed toggle endpoints; extend POST handler for new guild columns
+- **Modified:** `src/views/guild-config.ejs` — activity feed toggle UI with tier gating and broadcaster token prompt
 - **Modified:** `src/pollers/manager.js` — register weekly digest poller
 - **Created:** `src/pollers/weeklyDigest.js` — weekly digest poller
+
+## Notification Log Types
+
+New `type` values for the `notification_log` table:
+- `'twitch_recap'` — stream recap embeds
+- `'weekly_digest'` — weekly highlight digests
+- `'twitch_milestone'` — follower/subscriber milestone celebrations
+
+## Future Enhancements (Out of Scope)
+
+- Configurable digest day/time (currently hardcoded to Monday 09:00 UTC)
+- Dedicated milestone notification channel (currently uses `live_channel_id`)
