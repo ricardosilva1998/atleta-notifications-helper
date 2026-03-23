@@ -183,6 +183,7 @@ function startAll() {
   // First poll immediately
   pollAllTwitchLive();
   pollAllTwitchClips();
+  pollAllSubSync();
 }
 
 module.exports = { startAll };
