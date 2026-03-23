@@ -12,11 +12,12 @@ async function sendNotification(channelId, embed, meta) {
       if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, false);
       return;
     }
-    // Send clip URL first (for playable preview), then embed separately
-    if (meta?.content) {
-      await channel.send(meta.content);
+    if (meta?.contentOnly) {
+      await channel.send(meta.contentOnly);
+    } else {
+      const payload = { embeds: [embed] };
+      await channel.send(payload);
     }
-    await channel.send({ embeds: [embed] });
     if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, true);
   } catch (error) {
     console.error(`Discord send error: ${error.message} (code: ${error.code}, status: ${error.status})`);
