@@ -2,6 +2,9 @@
 
 <h2 style="margin-bottom: 20px;">Dashboard</h2>
 
+<% if (msg === 'guild_removed') { %>
+  <div class="alert alert-success">Server removed from your account.</div>
+<% } %>
 <% if (msg === 'twitch_linked') { %>
   <div class="alert alert-success">Twitch account linked successfully!</div>
 <% } %>

@@ -107,4 +107,12 @@
   <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px; font-size: 16px;">Save Configuration</button>
 </form>
 
+<div class="card" style="margin-top: 24px; border-color: #e74c3c44;">
+  <h3 style="color: #e74c3c;">Danger Zone</h3>
+  <p style="color: #adadb8; font-size: 14px; margin-bottom: 12px;">Remove this server from your account. All notification settings will be deleted.</p>
+  <form method="POST" action="/dashboard/guild/<%= guild.guild_id %>/remove" onsubmit="return confirm('Are you sure? This will remove all notification settings for this server.')">
+    <button type="submit" class="btn btn-danger">Remove Server</button>
+  </form>
+</div>
+
 <%- include('footer') %>

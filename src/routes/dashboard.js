@@ -114,6 +114,14 @@ router.post('/guild/:guildId', (req, res) => {
   res.redirect(`/dashboard/guild/${guildId}?saved=1`);
 });
 
+// Remove a guild from this streamer's config
+router.post('/guild/:guildId/remove', (req, res) => {
+  const { guildId } = req.params;
+  db.deleteGuild(guildId, req.streamer.id);
+  console.log(`[Dashboard] ${req.streamer.discord_username} removed guild ${guildId}`);
+  res.redirect('/dashboard?msg=guild_removed');
+});
+
 // YouTube settings
 router.get('/youtube', (req, res) => {
   res.render('youtube-config', { streamer: req.streamer });
