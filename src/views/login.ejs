@@ -1,13 +1,41 @@
 <% var body = `
-  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center;">
+  <div style="text-align: center; margin-bottom: 32px;">
     <h1 style="font-size: 32px; margin-bottom: 8px;">Stream Notifications Bot</h1>
-    <p style="color: #adadb8; margin-bottom: 32px; max-width: 500px;">
+    <p style="color: #adadb8; max-width: 560px; margin: 0 auto;">
       Get automatic Discord notifications when you go live, get clipped, upload videos, and more. Free and self-service.
     </p>
-    <a href="/auth/login" class="btn btn-primary" style="font-size: 16px; padding: 14px 28px;">
-      Log in with Twitch
-    </a>
-    <p style="color: #666; margin-top: 16px; font-size: 13px;">Sign in to configure the bot for your Discord server</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 32px;">
+    <div class="card" style="text-align: center;">
+      <div style="font-size: 28px; margin-bottom: 8px;">📡</div>
+      <h3 style="font-size: 16px; margin-bottom: 6px;">Twitch Live & Clips</h3>
+      <p style="color: #adadb8; font-size: 13px;">Notify your Discord when you go live or get clipped</p>
+    </div>
+    <div class="card" style="text-align: center;">
+      <div style="font-size: 28px; margin-bottom: 8px;">🎬</div>
+      <h3 style="font-size: 16px; margin-bottom: 6px;">YouTube Videos & Live</h3>
+      <p style="color: #adadb8; font-size: 13px;">Announce new uploads and YouTube live streams</p>
+    </div>
+    <div class="card" style="text-align: center;">
+      <div style="font-size: 28px; margin-bottom: 8px;">👋</div>
+      <h3 style="font-size: 16px; margin-bottom: 6px;">Welcome Messages</h3>
+      <p style="color: #adadb8; font-size: 13px;">Greet new members with a custom message</p>
+    </div>
+    <div class="card" style="text-align: center;">
+      <div style="font-size: 28px; margin-bottom: 8px;">⭐</div>
+      <h3 style="font-size: 16px; margin-bottom: 6px;">Sub Role Sync</h3>
+      <p style="color: #adadb8; font-size: 13px;">Auto-assign a Discord role to Twitch subscribers</p>
+    </div>
+  </div>
+
+  <div class="card" style="text-align: center; padding: 28px;">
+    <h3 style="margin-bottom: 6px;">Ready to set it up?</h3>
+    <p style="color: #adadb8; margin-bottom: 16px; font-size: 14px;">Read the setup guide first, or log in to get started right away.</p>
+    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <a href="/tutorial" class="btn btn-secondary" style="font-size: 15px; padding: 12px 24px;">Setup Guide</a>
+      <a href="/auth/login" class="btn btn-primary" style="font-size: 15px; padding: 12px 24px;">Log in with Twitch</a>
+    </div>
   </div>
 `; %>
 <%- include('layout', { body, title: 'Stream Notifications Bot' }) %>
