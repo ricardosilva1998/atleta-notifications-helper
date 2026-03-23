@@ -38,6 +38,18 @@ try {
   }
 } catch {}
 
+// Migration 3: rename discord_channel_id to live_channel_id + add clips_channel_id
+try {
+  const cols = db.prepare("PRAGMA table_info(watched_channels)").all();
+  if (cols.length > 0 && cols.find((c) => c.name === 'discord_channel_id')) {
+    db.exec('ALTER TABLE watched_channels RENAME COLUMN discord_channel_id TO live_channel_id');
+    db.exec('ALTER TABLE watched_channels ADD COLUMN clips_channel_id TEXT');
+    // Copy live_channel_id to clips_channel_id for existing rows
+    db.exec('UPDATE watched_channels SET clips_channel_id = live_channel_id');
+    console.log('[DB] Migrated watched_channels: split discord_channel_id into live_channel_id + clips_channel_id');
+  }
+} catch {}
+
 // --- Schema ---
 
 db.exec(`
@@ -123,7 +135,8 @@ db.exec(`
     streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
     twitch_username TEXT NOT NULL,
     twitch_broadcaster_id TEXT,
-    discord_channel_id TEXT NOT NULL,
+    live_channel_id TEXT,
+    clips_channel_id TEXT,
     notify_live INTEGER DEFAULT 1,
     notify_clips INTEGER DEFAULT 1,
     enabled INTEGER DEFAULT 1,
@@ -417,8 +430,8 @@ function getRecentNotifications() {
 // --- Watched Channels ---
 
 const _addWatchedChannel = db.prepare(`
-  INSERT OR IGNORE INTO watched_channels (guild_id, streamer_id, twitch_username, discord_channel_id, notify_live, notify_clips)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT OR IGNORE INTO watched_channels (guild_id, streamer_id, twitch_username, live_channel_id, clips_channel_id, notify_live, notify_clips)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 const _removeWatchedChannel = db.prepare('DELETE FROM watched_channels WHERE id = ? AND streamer_id = ?');
 const _getWatchedChannelsForGuild = db.prepare('SELECT * FROM watched_channels WHERE guild_id = ? AND streamer_id = ?');
@@ -442,8 +455,8 @@ const _updateChannelState = db.prepare(`
   WHERE twitch_username = ?
 `);
 
-function addWatchedChannel(guildId, streamerId, twitchUsername, discordChannelId, notifyLive, notifyClips) {
-  _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), discordChannelId, notifyLive ? 1 : 0, notifyClips ? 1 : 0);
+function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, clipsChannelId, notifyLive, notifyClips) {
+  _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0);
   // Ensure channel_state row exists
   _upsertChannelState.run(twitchUsername.toLowerCase());
 }

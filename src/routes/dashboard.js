@@ -158,9 +158,10 @@ router.post('/guild/:guildId/channels', (req, res) => {
   if (!guildConfig) return res.redirect('/dashboard');
 
   const twitchUsername = (req.body.twitch_username || '').trim().toLowerCase();
-  const discordChannelId = req.body.discord_channel_id;
+  const liveChannelId = req.body.live_channel_id;
+  const clipsChannelId = req.body.clips_channel_id;
 
-  if (!twitchUsername || !discordChannelId) {
+  if (!twitchUsername || (!liveChannelId && !clipsChannelId)) {
     return res.redirect(`/dashboard/guild/${guildId}/channels?msg=missing_fields`);
   }
 
@@ -168,9 +169,10 @@ router.post('/guild/:guildId/channels', (req, res) => {
     guildId,
     req.streamer.id,
     twitchUsername,
-    discordChannelId,
-    req.body.notify_live !== 'off',
-    req.body.notify_clips !== 'off'
+    liveChannelId,
+    clipsChannelId,
+    !!liveChannelId,
+    !!clipsChannelId
   );
 
   console.log(`[Dashboard] Added watched channel ${twitchUsername} for guild ${guildId}`);

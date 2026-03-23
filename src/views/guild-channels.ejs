@@ -10,37 +10,38 @@
   <div class="alert alert-success">Channel removed.</div>
 <% } %>
 <% if (msg === 'missing_fields') { %>
-  <div class="alert" style="background: #e74c3c33; border: 1px solid #e74c3c;">Please fill in all fields.</div>
+  <div class="alert" style="background: #e74c3c33; border: 1px solid #e74c3c;">Please enter a username and select at least one notification channel.</div>
 <% } %>
 
 <div class="card">
   <h3>Add a Twitch Channel</h3>
   <p style="color: #adadb8; font-size: 14px; margin-bottom: 16px;">
-    Enter any Twitch username to get notified when they go live or get clipped.
+    Enter any Twitch username. Choose separate Discord channels for live alerts and clips, or leave one blank to disable it.
   </p>
   <form method="POST" action="/dashboard/guild/<%= guildId %>/channels">
+    <div class="form-group">
+      <label>Twitch Username</label>
+      <input type="text" name="twitch_username" placeholder="e.g. shroud" required>
+    </div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
       <div class="form-group">
-        <label>Twitch Username</label>
-        <input type="text" name="twitch_username" placeholder="e.g. shroud" required>
-      </div>
-      <div class="form-group">
-        <label>Send Notifications To</label>
-        <select name="discord_channel_id" required>
-          <option value="">-- Select channel --</option>
+        <label>📡 Live Notifications Channel</label>
+        <select name="live_channel_id">
+          <option value="">-- Disabled --</option>
           <% for (const c of channels) { %>
             <option value="<%= c.id %>">#<%= c.name %></option>
           <% } %>
         </select>
       </div>
-    </div>
-    <div style="display: flex; gap: 16px; margin-bottom: 16px;">
-      <label style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #adadb8;">
-        <input type="checkbox" name="notify_live" checked style="accent-color: #9146ff;"> Live notifications
-      </label>
-      <label style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #adadb8;">
-        <input type="checkbox" name="notify_clips" checked style="accent-color: #9146ff;"> Clip notifications
-      </label>
+      <div class="form-group">
+        <label>🎬 Clip Notifications Channel</label>
+        <select name="clips_channel_id">
+          <option value="">-- Disabled --</option>
+          <% for (const c of channels) { %>
+            <option value="<%= c.id %>">#<%= c.name %></option>
+          <% } %>
+        </select>
+      </div>
     </div>
     <button type="submit" class="btn btn-primary">Add Channel</button>
   </form>
@@ -64,9 +65,10 @@
           <a href="https://twitch.tv/<%= wc.twitch_username %>" target="_blank" style="color: #efeff1;"><%= wc.twitch_username %></a>
         </div>
         <div style="font-size: 12px; color: #adadb8;">
-          <% if (wc.notify_live) { %>Live<% } %>
-          <% if (wc.notify_live && wc.notify_clips) { %> &middot; <% } %>
-          <% if (wc.notify_clips) { %>Clips<% } %>
+          <% if (wc.live_channel_id) { %>📡 Live<% } %>
+          <% if (wc.live_channel_id && wc.clips_channel_id) { %> &middot; <% } %>
+          <% if (wc.clips_channel_id) { %>🎬 Clips<% } %>
+          <% if (!wc.live_channel_id && !wc.clips_channel_id) { %>No notifications configured<% } %>
         </div>
       </div>
       <form method="POST" action="/dashboard/guild/<%= guildId %>/channels/<%= wc.id %>/remove" style="margin: 0;">

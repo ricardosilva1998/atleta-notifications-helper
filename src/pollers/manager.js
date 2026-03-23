@@ -24,10 +24,10 @@ async function pollAllTwitchLive() {
       if (result.stateUpdate) db.updateChannelState(twitch_username, result.stateUpdate);
 
       if (result.notify) {
-        const watchers = db.getWatchersForChannel(twitch_username).filter((w) => w.notify_live);
+        const watchers = db.getWatchersForChannel(twitch_username).filter((w) => w.notify_live && w.live_channel_id);
         for (const w of watchers) {
           try {
-            await sendNotification(w.discord_channel_id, result.embed, {
+            await sendNotification(w.live_channel_id, result.embed, {
               streamerId: w.streamer_id,
               guildId: w.guild_id,
               type: 'twitch_live',
@@ -57,15 +57,12 @@ async function pollAllTwitchClips() {
       }
 
       if (result.notify && result.embeds) {
-        const allWatchers = db.getWatchersForChannel(twitch_username);
-        console.log(`[TwitchClips] ${twitch_username}: ${allWatchers.length} total watchers, notify_clips values: ${JSON.stringify(allWatchers.map(w => ({ notify_clips: w.notify_clips, discord_channel_id: w.discord_channel_id })))}`);
-        const watchers = allWatchers.filter((w) => w.notify_clips);
+        const watchers = db.getWatchersForChannel(twitch_username).filter((w) => w.notify_clips && w.clips_channel_id);
         console.log(`[TwitchClips] ${twitch_username}: ${watchers.length} watchers with clips enabled`);
         for (const w of watchers) {
           for (const embed of result.embeds) {
             try {
-              console.log(`[TwitchClips] Sending clip for ${twitch_username} to channel ${w.discord_channel_id} in guild ${w.guild_id}`);
-              await sendNotification(w.discord_channel_id, embed, {
+              await sendNotification(w.clips_channel_id, embed, {
                 streamerId: w.streamer_id,
                 guildId: w.guild_id,
                 type: 'twitch_clip',
