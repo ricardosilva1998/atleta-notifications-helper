@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= typeof title !== 'undefined' ? title : 'Atleta' %></title>
+  <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0e0e10; color: #efeff1; min-height: 100vh; }
@@ -56,7 +57,7 @@
 </head>
 <body>
   <nav class="nav">
-    <a href="/" class="nav-brand">Atleta</a>
+    <a href="/" class="nav-brand" style="display: flex; align-items: center; gap: 8px;"><img src="/app-icon/honest_graphic-running-athlete-9715727.png" alt="" style="width: 28px; height: 28px; border-radius: 6px;">Atleta</a>
     <div class="nav-user">
       <a href="/tutorial" style="color: #adadb8; font-size: 14px; margin-right: 8px;">Setup Guide</a>
       <% if (typeof streamer !== 'undefined' && streamer) { %>

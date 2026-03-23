@@ -7,33 +7,26 @@
   <div class="step-number">1</div>
   <div class="step-content">
     <h3>Log in with Discord</h3>
-    <p>Click <strong>"Log in with Discord"</strong> on the home page. This creates your account using your Discord identity.</p>
+    <p>Click <strong>"Get Started with Discord"</strong> on the home page. This creates your account using your Discord identity.</p>
     <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Home page — "Log in with Discord" button</div>
-      <div>Screenshot coming soon</div>
+      <img src="/screenshots/step-1.png" alt="Atleta home page with Get Started with Discord button">
     </div>
-    <div class="tip">The bot only reads your Discord username and avatar — no access to your messages or servers.</div>
+    <p>You'll be redirected to Discord to authorize. The bot only reads your username and avatar.</p>
+    <div class="screenshot">
+      <img src="/screenshots/step-1.1.png" alt="Discord authorization page">
+    </div>
+    <div class="tip">Click <strong>"Authorize"</strong> to continue. No special permissions are needed — the bot only reads your public profile.</div>
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">2</div>
   <div class="step-content">
-    <h3>Link Your Twitch Account</h3>
-    <p>From the dashboard, click <strong>"Link Twitch Account"</strong>. This tells the bot which Twitch channel to monitor for live streams and clips.</p>
+    <h3>Link Your Twitch Account (Optional)</h3>
+    <p>From the dashboard, click <strong>"Link Twitch Account"</strong> if you want to enable subscriber role sync for your own channel. This step is optional — you can watch any Twitch channel without linking.</p>
     <div class="screenshot">
       <div class="icon">📸</div>
       <div class="label">Dashboard — "Link Twitch Account" button</div>
-      <div>Screenshot coming soon</div>
-    </div>
-    <ul>
-      <li>You'll be redirected to Twitch to authorize</li>
-      <li>The bot only reads your public profile — no special permissions needed</li>
-    </ul>
-    <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Twitch authorization page</div>
       <div>Screenshot coming soon</div>
     </div>
   </div>
@@ -43,22 +36,19 @@
   <div class="step-number">3</div>
   <div class="step-content">
     <h3>Add the Bot to Your Discord Server</h3>
-    <p>Click <strong>"Add Bot to a Server"</strong> from the dashboard. This opens Discord's authorization page in a new tab where you select which server to add the bot to.</p>
+    <p>Click <strong>"+ Add Bot to Server"</strong> from the dashboard. This opens Discord's authorization page in a new tab.</p>
     <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Dashboard — "Add Bot to Server" button</div>
-      <div>Screenshot coming soon</div>
+      <img src="/screenshots/step-3.png" alt="Dashboard with Add Bot to Server button">
+    </div>
+    <p>Select which server you want to add the bot to and click <strong>"Continue"</strong>.</p>
+    <div class="screenshot">
+      <img src="/screenshots/step-3.1.png" alt="Discord — Select a server to add the bot">
     </div>
     <ul>
       <li>You need <strong>Manage Server</strong> permission in the Discord server</li>
       <li>The bot will request permissions to send messages, embed links, and manage roles</li>
       <li>After authorizing, go back to the dashboard</li>
     </ul>
-    <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Discord — Select a server to add the bot</div>
-      <div>Screenshot coming soon</div>
-    </div>
   </div>
 </div>
 
@@ -68,9 +58,11 @@
     <h3>Claim Your Server</h3>
     <p>After adding the bot, your server will appear under <strong>"Available Servers"</strong> on the dashboard. Click <strong>"Claim"</strong> to link it to your account.</p>
     <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Dashboard — Available Servers section with "Claim" button</div>
-      <div>Screenshot coming soon</div>
+      <img src="/screenshots/step-4.png" alt="Dashboard showing Available Servers with Claim button">
+    </div>
+    <p>Once claimed, you'll see the server settings page where you can configure welcome messages, subscriber role sync, and more.</p>
+    <div class="screenshot">
+      <img src="/screenshots/step-4.1.png" alt="Server settings page with Twitch Channels and YouTube Channels buttons">
     </div>
     <div class="tip">Each server can only be claimed by one user. If someone else has already set up the bot on that server, you won't see it in the list.</div>
   </div>
@@ -80,16 +72,21 @@
   <div class="step-number">5</div>
   <div class="step-content">
     <h3>Add Twitch Channels to Watch</h3>
-    <p>Click <strong>"Channels"</strong> on your server, then add any Twitch username you want to monitor. For each channel you can choose:</p>
-    <ul>
-      <li><strong>Live Notifications Channel</strong> — where to send "X is live" alerts</li>
-      <li><strong>Clip Notifications Channel</strong> — where to send new clip alerts</li>
-    </ul>
-    <p style="margin-top: 8px;">You can set different Discord channels for live and clips, or leave one disabled.</p>
+    <p>Click the <strong>"Twitch Channels"</strong> button on your server to manage which Twitch streamers you want notifications for.</p>
     <div class="screenshot">
-      <div class="icon">📸</div>
-      <div class="label">Twitch Channels page — Add a channel form + watched list</div>
-      <div>Screenshot coming soon</div>
+      <img src="/screenshots/step-5.png" alt="Server settings showing Twitch Channels and YouTube Channels buttons">
+    </div>
+    <p>You'll see the Twitch Channels page. Enter any Twitch username and choose which Discord channels should receive live and clip notifications.</p>
+    <div class="screenshot">
+      <img src="/screenshots/step-5.1.png" alt="Twitch Channels page — empty state with add form">
+    </div>
+    <p>Fill in a Twitch username and select the notification channels. You can set different Discord channels for live alerts and clips, or leave one disabled.</p>
+    <div class="screenshot">
+      <img src="/screenshots/step-5.2.png" alt="Filling in a Twitch username with notification channels selected">
+    </div>
+    <p>Click <strong>"Add Channel"</strong> and you're done! The channel will appear in your watched list and notifications will start within a minute.</p>
+    <div class="screenshot">
+      <img src="/screenshots/step-5.3.png" alt="Channel added successfully with watched channels list showing">
     </div>
   </div>
 </div>
@@ -98,7 +95,7 @@
   <div class="step-number">6</div>
   <div class="step-content">
     <h3>Add YouTube Channels (Optional)</h3>
-    <p>Click <strong>"YouTube Channels"</strong> on your server settings to add YouTube channels:</p>
+    <p>Click the <strong>"YouTube Channels"</strong> button on your server settings to add YouTube channels:</p>
     <ul>
       <li>Enter a <strong>YouTube Channel ID</strong> (starts with <code>UC</code>). Find any channel ID at <a href="https://commentpicker.com/youtube-channel-id.php" target="_blank">commentpicker.com</a></li>
       <li>Choose separate Discord channels for <strong>video/shorts notifications</strong> and <strong>live notifications</strong></li>
@@ -108,7 +105,7 @@
       <div class="label">YouTube Channels page — Add a YouTube channel form</div>
       <div>Screenshot coming soon</div>
     </div>
-    <div class="tip">Video/shorts notifications use the free YouTube RSS feed and don't need an API key. Live detection requires a YouTube Data API key set in your account settings.</div>
+    <div class="tip">Video/shorts notifications use the free YouTube RSS feed and don't need an API key. Live detection requires a YouTube Data API key.</div>
   </div>
 </div>
 
