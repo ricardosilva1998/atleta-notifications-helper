@@ -17,8 +17,12 @@ db.pragma('foreign_keys = ON');
 db.exec(`
   CREATE TABLE IF NOT EXISTS streamers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    twitch_user_id TEXT UNIQUE NOT NULL,
-    twitch_username TEXT NOT NULL,
+    discord_user_id TEXT UNIQUE NOT NULL,
+    discord_username TEXT NOT NULL,
+    discord_display_name TEXT,
+    discord_avatar TEXT,
+    twitch_user_id TEXT UNIQUE,
+    twitch_username TEXT,
     twitch_display_name TEXT,
     broadcaster_access_token TEXT,
     broadcaster_refresh_token TEXT,
@@ -76,16 +80,25 @@ db.exec(`
 
 // --- Streamers ---
 
+const _getStreamerByDiscordId = db.prepare('SELECT * FROM streamers WHERE discord_user_id = ?');
 const _getStreamerByTwitchId = db.prepare('SELECT * FROM streamers WHERE twitch_user_id = ?');
 const _getStreamerById = db.prepare('SELECT * FROM streamers WHERE id = ?');
-const _getAllStreamers = db.prepare('SELECT * FROM streamers');
-const _upsertStreamer = db.prepare(`
-  INSERT INTO streamers (twitch_user_id, twitch_username, twitch_display_name)
-  VALUES (?, ?, ?)
-  ON CONFLICT(twitch_user_id) DO UPDATE SET
-    twitch_username = excluded.twitch_username,
-    twitch_display_name = excluded.twitch_display_name
+const _getAllStreamers = db.prepare('SELECT * FROM streamers WHERE twitch_user_id IS NOT NULL');
+const _upsertStreamerDiscord = db.prepare(`
+  INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, discord_avatar)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(discord_user_id) DO UPDATE SET
+    discord_username = excluded.discord_username,
+    discord_display_name = excluded.discord_display_name,
+    discord_avatar = excluded.discord_avatar
   RETURNING *
+`);
+const _linkTwitch = db.prepare(`
+  UPDATE streamers SET
+    twitch_user_id = ?,
+    twitch_username = ?,
+    twitch_display_name = ?
+  WHERE id = ?
 `);
 const _updateStreamerBroadcasterTokens = db.prepare(`
   UPDATE streamers SET
@@ -97,6 +110,10 @@ const _updateStreamerBroadcasterTokens = db.prepare(`
 const _updateStreamerYoutube = db.prepare(`
   UPDATE streamers SET youtube_channel_id = ?, youtube_api_key = ? WHERE id = ?
 `);
+
+function getStreamerByDiscordId(discordUserId) {
+  return _getStreamerByDiscordId.get(discordUserId);
+}
 
 function getStreamerByTwitchId(twitchUserId) {
   return _getStreamerByTwitchId.get(twitchUserId);
@@ -110,8 +127,12 @@ function getAllStreamers() {
   return _getAllStreamers.all();
 }
 
-function upsertStreamer(twitchUserId, twitchUsername, twitchDisplayName) {
-  return _upsertStreamer.get(twitchUserId, twitchUsername, twitchDisplayName || twitchUsername);
+function upsertStreamerDiscord(discordUserId, discordUsername, discordDisplayName, discordAvatar) {
+  return _upsertStreamerDiscord.get(discordUserId, discordUsername, discordDisplayName, discordAvatar);
+}
+
+function linkTwitch(streamerId, twitchUserId, twitchUsername, twitchDisplayName) {
+  _linkTwitch.run(twitchUserId, twitchUsername, twitchDisplayName, streamerId);
 }
 
 function updateStreamerBroadcasterTokens(streamerId, accessToken, refreshToken, expiresAt) {
@@ -207,7 +228,7 @@ const _updatePollerState = db.prepare(`
 `);
 
 function getPollerState(streamerId) {
-  _upsertPollerState.run(streamerId); // ensure row exists
+  _upsertPollerState.run(streamerId);
   return _getPollerState.get(streamerId);
 }
 
@@ -265,101 +286,26 @@ function cleanExpiredSessions() {
   _cleanExpiredSessions.run(Date.now());
 }
 
-// --- Migration from old env/JSON files ---
-
-function migrateFromLegacy() {
-  const oldStatePath = path.join(__dirname, '..', 'data', 'state.json');
-  const oldAuthPath = path.join(__dirname, '..', 'data', 'auth.json');
-  const oldLinksPath = path.join(__dirname, '..', 'data', 'links.json');
-
-  // Only migrate if TWITCH_USERNAME env var exists and no streamers in DB yet
-  const twitchUsername = process.env.TWITCH_USERNAME;
-  if (!twitchUsername) return;
-  if (getAllStreamers().length > 0) return;
-
-  console.log('[DB] Migrating from legacy env vars...');
-
-  const broadcasterId = process.env.TWITCH_BROADCASTER_ID || null;
-  const streamer = upsertStreamer(broadcasterId || 'legacy', twitchUsername, twitchUsername);
-
-  // Import YouTube config
-  if (process.env.YOUTUBE_CHANNEL_ID) {
-    updateStreamerYoutube(streamer.id, process.env.YOUTUBE_CHANNEL_ID, process.env.YOUTUBE_API_KEY);
-  }
-
-  // Import broadcaster tokens from auth.json
-  try {
-    const auth = JSON.parse(fs.readFileSync(oldAuthPath, 'utf-8'));
-    if (auth.broadcasterAccessToken) {
-      updateStreamerBroadcasterTokens(
-        streamer.id,
-        auth.broadcasterAccessToken,
-        auth.broadcasterRefreshToken,
-        auth.broadcasterTokenExpiresAt
-      );
-    }
-  } catch {}
-
-  // Import poller state
-  try {
-    const state = JSON.parse(fs.readFileSync(oldStatePath, 'utf-8'));
-    _upsertPollerState.run(streamer.id);
-    updatePollerState(streamer.id, {
-      twitch_is_live: state.twitchIsLive ? 1 : 0,
-      twitch_broadcaster_id: state.twitchBroadcasterId || broadcasterId,
-      last_clip_created_at: state.lastClipCreatedAt,
-      known_video_ids: JSON.stringify(state.knownVideoIds || []),
-      youtube_is_live: state.youtubeIsLive ? 1 : 0,
-      youtube_live_video_id: state.youtubeLiveVideoId,
-    });
-  } catch {}
-
-  // Create guild records from env var channel IDs
-  const twitchLiveChannel = process.env.DISCORD_TWITCH_LIVE_CHANNEL_ID;
-  const twitchClipsChannel = process.env.DISCORD_TWITCH_CLIPS_CHANNEL_ID;
-  const welcomeChannel = process.env.DISCORD_WELCOME_CHANNEL_ID;
-  const subRoleId = process.env.DISCORD_SUB_ROLE_ID;
-
-  // We don't know the guild ID from env vars alone, so we'll skip guild migration
-  // The streamer will need to re-add the bot via the dashboard
-  console.log('[DB] Legacy migration complete. Streamer record created.');
-  console.log('[DB] Guild configuration must be done via the dashboard.');
-
-  // Import user links
-  try {
-    const links = JSON.parse(fs.readFileSync(oldLinksPath, 'utf-8'));
-    for (const [discordId, data] of Object.entries(links)) {
-      linkUser(streamer.id, discordId, data.twitchUserId, data.twitchUsername);
-    }
-  } catch {}
-}
-
-// Run migration on module load
-migrateFromLegacy();
-
 module.exports = {
   db,
-  // Streamers
+  getStreamerByDiscordId,
   getStreamerByTwitchId,
   getStreamerById,
   getAllStreamers,
-  upsertStreamer,
+  upsertStreamerDiscord,
+  linkTwitch,
   updateStreamerBroadcasterTokens,
   updateStreamerYoutube,
-  // Guilds
   getGuildsForStreamer,
   getGuildConfig,
   getGuildConfigsByGuildId,
   upsertGuild,
   updateGuildConfig,
   deleteGuild,
-  // Poller State
   getPollerState,
   updatePollerState,
-  // User Links
   getLinkedUsers,
   linkUser,
-  // Sessions
   createSession,
   getSession,
   deleteSession,

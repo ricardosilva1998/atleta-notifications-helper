@@ -5,20 +5,20 @@ const db = require('../db');
 
 const router = Router();
 
-// --- Dashboard Login (Twitch OAuth) ---
+// --- Discord OAuth Login ---
 
 router.get('/login', (req, res) => {
   const state = crypto.randomUUID();
   res.cookie('oauth_state', state, { httpOnly: true, maxAge: 600_000 });
 
   const params = new URLSearchParams({
-    client_id: config.twitch.clientId,
+    client_id: config.discord.clientId,
     redirect_uri: `${config.app.url}/auth/login/callback`,
     response_type: 'code',
-    scope: '',
+    scope: 'identify',
     state,
   });
-  res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
+  res.redirect(`https://discord.com/oauth2/authorize?${params}`);
 });
 
 router.get('/login/callback', async (req, res) => {
@@ -32,11 +32,12 @@ router.get('/login/callback', async (req, res) => {
 
   try {
     // Exchange code for token
-    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: config.twitch.clientId,
-        client_secret: config.twitch.clientSecret,
+        client_id: config.discord.clientId,
+        client_secret: config.discord.clientSecret,
         code,
         grant_type: 'authorization_code',
         redirect_uri: `${config.app.url}/auth/login/callback`,
@@ -46,31 +47,36 @@ router.get('/login/callback', async (req, res) => {
     if (!tokenRes.ok) throw new Error('Token exchange failed');
     const tokenData = await tokenRes.json();
 
-    // Get Twitch user identity
-    const userRes = await fetch('https://api.twitch.tv/helix/users', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-        'Client-Id': config.twitch.clientId,
-      },
+    // Get Discord user identity
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
 
     if (!userRes.ok) throw new Error('Failed to get user info');
-    const userData = await userRes.json();
-    const twitchUser = userData.data[0];
+    const user = await userRes.json();
+
+    const avatar = user.avatar
+      ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
+      : null;
 
     // Create/update streamer record
-    const streamer = db.upsertStreamer(twitchUser.id, twitchUser.login, twitchUser.display_name);
+    const streamer = db.upsertStreamerDiscord(
+      user.id,
+      user.username,
+      user.global_name || user.username,
+      avatar
+    );
 
     // Create session
     const sid = crypto.randomUUID();
-    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
+    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
     db.createSession(sid, streamer.id, expiresAt);
     res.cookie('session', sid, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
-    console.log(`[Auth] Streamer logged in: ${twitchUser.display_name} (${twitchUser.id})`);
+    console.log(`[Auth] Discord login: ${user.username} (${user.id})`);
     res.redirect('/dashboard');
   } catch (error) {
-    console.error(`[Auth] Login error: ${error.message}`);
+    console.error(`[Auth] Discord login error: ${error.message}`);
     res.status(500).send('Login failed. Please try again.');
   }
 });
@@ -80,6 +86,61 @@ router.get('/logout', (req, res) => {
   if (sid) db.deleteSession(sid);
   res.clearCookie('session');
   res.redirect('/');
+});
+
+// --- Twitch Account Linking ---
+
+router.get('/twitch', (req, res) => {
+  if (!req.streamer) return res.redirect('/auth/login');
+
+  const params = new URLSearchParams({
+    client_id: config.twitch.clientId,
+    redirect_uri: `${config.app.url}/auth/twitch/callback`,
+    response_type: 'code',
+    scope: '',
+    state: String(req.streamer.id),
+  });
+  res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
+});
+
+router.get('/twitch/callback', async (req, res) => {
+  const { code, state: streamerId } = req.query;
+  if (!code || !streamerId) return res.status(400).send('Missing parameters');
+
+  try {
+    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
+      body: new URLSearchParams({
+        client_id: config.twitch.clientId,
+        client_secret: config.twitch.clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: `${config.app.url}/auth/twitch/callback`,
+      }),
+    });
+
+    if (!tokenRes.ok) throw new Error('Token exchange failed');
+    const tokenData = await tokenRes.json();
+
+    const userRes = await fetch('https://api.twitch.tv/helix/users', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        'Client-Id': config.twitch.clientId,
+      },
+    });
+
+    if (!userRes.ok) throw new Error('Failed to get Twitch user info');
+    const userData = await userRes.json();
+    const twitchUser = userData.data[0];
+
+    db.linkTwitch(parseInt(streamerId), twitchUser.id, twitchUser.login, twitchUser.display_name);
+    console.log(`[Auth] Twitch linked: streamer ${streamerId} -> ${twitchUser.login}`);
+
+    res.redirect('/dashboard?msg=twitch_linked');
+  } catch (error) {
+    console.error(`[Auth] Twitch link error: ${error.message}`);
+    res.status(500).send('Twitch linking failed. Please try again.');
+  }
 });
 
 // --- Broadcaster Auth (for sub sync) ---
@@ -131,7 +192,7 @@ router.get('/broadcaster/callback', async (req, res) => {
   }
 });
 
-// --- User Linking (for sub sync) ---
+// --- User Linking (community members link Twitch for sub sync) ---
 
 router.get('/link', (req, res) => {
   const { streamer_id, discord_id } = req.query;

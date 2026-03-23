@@ -1,13 +1,22 @@
 <% var body = `
   <h2 style="margin-bottom: 20px;">Dashboard</h2>
 
+  ${msg === 'twitch_linked' ? '<div class="alert alert-success">Twitch account linked successfully!</div>' : ''}
   ${msg === 'broadcaster_authorized' ? '<div class="alert alert-success">Broadcaster authorized! Sub sync is now available.</div>' : ''}
   ${msg === 'youtube_saved' ? '<div class="alert alert-success">YouTube settings saved.</div>' : ''}
 
-  <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+  ${!streamer.twitch_user_id ? \`
+    <div class="alert alert-info">
+      <strong>Step 1:</strong> Link your Twitch account to enable live and clip notifications.
+      <a href="/auth/twitch" class="btn btn-primary" style="margin-left: 12px; padding: 6px 16px; font-size: 13px;">Link Twitch Account</a>
+    </div>
+  \` : ''}
+
+  <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
     <a href="${botInviteUrl}" class="btn btn-primary">Add Bot to a Server</a>
+    ${streamer.twitch_user_id ? '<a href="/auth/twitch" class="btn btn-secondary">Twitch: ' + streamer.twitch_username + '</a>' : ''}
     <a href="/dashboard/youtube" class="btn btn-secondary">YouTube Settings</a>
-    ${!streamer.broadcaster_access_token ? '<a href="/auth/broadcaster" class="btn btn-secondary">Enable Sub Sync</a>' : ''}
+    ${streamer.twitch_user_id && !streamer.broadcaster_access_token ? '<a href="/auth/broadcaster" class="btn btn-secondary">Enable Sub Sync</a>' : ''}
   </div>
 
   <h3 class="section-title">Your Servers</h3>

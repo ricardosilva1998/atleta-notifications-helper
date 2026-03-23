@@ -1,5 +1,7 @@
 const required = [
   'DISCORD_TOKEN',
+  'DISCORD_CLIENT_ID',
+  'DISCORD_CLIENT_SECRET',
   'TWITCH_CLIENT_ID',
   'TWITCH_CLIENT_SECRET',
 ];
@@ -13,6 +15,8 @@ if (missing.length > 0) {
 module.exports = {
   discord: {
     token: process.env.DISCORD_TOKEN,
+    clientId: process.env.DISCORD_CLIENT_ID,
+    clientSecret: process.env.DISCORD_CLIENT_SECRET,
   },
   twitch: {
     clientId: process.env.TWITCH_CLIENT_ID,

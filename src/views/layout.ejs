@@ -57,7 +57,7 @@
     <div class="nav-user">
       <a href="/tutorial" style="color: #adadb8; font-size: 14px; margin-right: 8px;">Setup Guide</a>
       <% if (typeof streamer !== 'undefined' && streamer) { %>
-        <span><%= streamer.twitch_display_name %></span>
+        <span><%= streamer.discord_display_name || streamer.discord_username %></span>
         <a href="/auth/logout" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Logout</a>
       <% } %>
     </div>
