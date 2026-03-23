@@ -1,5 +1,4 @@
 const { getLatestVideos } = require('../services/youtube');
-const { buildEmbed } = require('../discord');
 
 async function check(youtubeChannelId, channelState) {
   const videos = await getLatestVideos(youtubeChannelId);
@@ -19,21 +18,15 @@ async function check(youtubeChannelId, channelState) {
     return null;
   }
 
-  const embeds = newVideos.map((video) =>
-    buildEmbed({
-      color: 0xff0000,
-      author: { name: `${video.author || 'New'} uploaded a new video!` },
-      title: video.title,
-      url: video.url,
-      image: `https://i.ytimg.com/vi/${video.id}/maxresdefault.jpg`,
-      footer: { text: 'YouTube' },
-      timestamp: video.published,
-    })
-  );
+  // Send as plain text messages so Discord auto-generates the video player
+  const videoData = newVideos.map((video) => {
+    const message = `**${video.author || 'New'} uploaded a new video!** — ${video.title}\n${video.url}`;
+    return { message };
+  });
 
   return {
     notify: true,
-    embeds,
+    videoData,
     stateUpdate: { known_video_ids: JSON.stringify(allIds) },
   };
 }

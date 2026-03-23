@@ -247,18 +247,19 @@ async function pollAllYouTubeFeed() {
 
       if (result.stateUpdate) db.updateYoutubeChannelState(youtube_channel_id, result.stateUpdate);
 
-      if (result.notify && result.embeds) {
-        console.log(`[YouTubeFeed] ${youtube_channel_id}: ${result.embeds.length} new video(s) to notify`);
+      if (result.notify && result.videoData) {
+        console.log(`[YouTubeFeed] ${youtube_channel_id}: ${result.videoData.length} new video(s) to notify`);
         const watchers = db.getYoutubeWatchersForChannel(youtube_channel_id)
           .filter((w) => w.notify_videos && w.videos_channel_id);
         console.log(`[YouTubeFeed] ${youtube_channel_id}: ${watchers.length} watcher(s) with videos_channel_id`);
         for (const w of watchers) {
-          for (const embed of result.embeds) {
+          for (const video of result.videoData) {
             try {
-              await sendNotification(w.videos_channel_id, embed, {
+              await sendNotification(w.videos_channel_id, null, {
                 streamerId: w.streamer_id,
                 guildId: w.guild_id,
                 type: 'youtube_video',
+                contentOnly: video.message,
               });
             } catch (e) {
               console.error(`[YouTubeFeed] Send failed for ${youtube_channel_id} to ${w.guild_id}: ${e.message}`);
