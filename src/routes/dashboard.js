@@ -158,8 +158,10 @@ router.get('/guild/:guildId', async (req, res) => {
 
   const watchedTwitchChannels = db.getWatchedChannelsForGuild(guildId, req.streamer.id);
 
-  // Backfill missing profile images
+  // Enrich Twitch channels with live status and backfill profile images
   for (const wc of watchedTwitchChannels) {
+    const state = db.getChannelState(wc.twitch_username);
+    wc.is_live = state?.is_live === 1;
     if (!wc.profile_image_url) {
       try {
         const profile = await getUserProfile(wc.twitch_username);
@@ -172,7 +174,14 @@ router.get('/guild/:guildId', async (req, res) => {
       }
     }
   }
+
   const watchedYoutubeChannels = db.getWatchedYoutubeChannelsForGuild(guildId, req.streamer.id);
+
+  // Enrich YouTube channels with live status
+  for (const wc of watchedYoutubeChannels) {
+    const state = db.getYoutubeChannelState(wc.youtube_channel_id);
+    wc.is_live = state?.is_live === 1;
+  }
   const { tier, limits } = getTierLimits(req.streamer.id);
 
   res.render('guild-config', {
