@@ -37,6 +37,10 @@ app.get('/', (req, res) => {
   res.render('login', { streamer: null });
 });
 
+app.get('/tutorial', (req, res) => {
+  res.render('tutorial', { streamer: req.streamer || null });
+});
+
 app.use('/auth', authRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/api', apiRoutes);
