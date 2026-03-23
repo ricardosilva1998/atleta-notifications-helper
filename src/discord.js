@@ -12,9 +12,11 @@ async function sendNotification(channelId, embed, meta) {
       if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, false);
       return;
     }
-    const payload = { embeds: [embed] };
-    if (meta?.content) payload.content = meta.content;
-    await channel.send(payload);
+    // Send clip URL first (for playable preview), then embed separately
+    if (meta?.content) {
+      await channel.send(meta.content);
+    }
+    await channel.send({ embeds: [embed] });
     if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, true);
   } catch (error) {
     console.error(`Discord send error: ${error.message} (code: ${error.code}, status: ${error.status})`);
