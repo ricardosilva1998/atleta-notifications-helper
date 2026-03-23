@@ -277,7 +277,10 @@ router.post('/guild/:guildId/channels/:channelId/remove', (req, res) => {
 router.post('/guild/:guildId/channels/:channelId/edit', (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  db.updateWatchedChannel(parseInt(channelId), req.streamer.id, req.body.live_channel_id, req.body.clips_channel_id);
+  const liveChannelId = req.body.live_channel_id || null;
+  const clipsChannelId = req.body.clips_channel_id || null;
+  console.log(`[Dashboard] Editing Twitch channel ${channelId}: live=${liveChannelId}, clips=${clipsChannelId}`);
+  db.updateWatchedChannel(parseInt(channelId), req.streamer.id, liveChannelId, clipsChannelId);
   console.log(`[Dashboard] Updated Twitch channel ${channelId} for guild ${guildId}`);
   res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=updated`);
 });
