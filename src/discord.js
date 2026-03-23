@@ -1,15 +1,22 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const config = require('./config');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
 async function sendNotification(channelId, embed) {
-  const channel = await client.channels.fetch(channelId);
-  if (!channel) {
-    console.error(`Channel ${channelId} not found`);
-    return;
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel) {
+      console.error(`Channel ${channelId} not found`);
+      return;
+    }
+    console.log(`Sending notification to channel ${channel.name} (${channelId})`);
+    await channel.send({ embeds: [embed] });
+    console.log('Notification sent successfully');
+  } catch (error) {
+    console.error(`Discord send error: ${error.message} (code: ${error.code}, status: ${error.status})`);
+    throw error;
   }
-  await channel.send({ embeds: [embed] });
 }
 
 function buildEmbed({ color, author, title, url, description, image, fields, footer, timestamp }) {
