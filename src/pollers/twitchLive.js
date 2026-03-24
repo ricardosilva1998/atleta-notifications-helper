@@ -62,6 +62,7 @@ async function check(twitchUsername, channelState, broadcasterToken) {
         let clips = [];
         let vodUrl = null;
         let followerCount = null;
+        let thumbnailFromVod = null;
         const broadcasterId = channelState.twitch_broadcaster_id;
 
         if (broadcasterId) {
@@ -75,11 +76,20 @@ async function check(twitchUsername, channelState, broadcasterToken) {
             console.error(`[TwitchLive] Failed to fetch recap clips for ${twitchUsername}: ${e.message}`);
           }
 
-          // Fetch the VOD (most recent archived video)
+          // Fetch the VOD (most recent archived video) + its thumbnail
           try {
             const videos = await getVideos(broadcasterId);
             if (videos.length > 0) {
               vodUrl = videos[0].url;
+              // VOD thumbnails use %{width} and %{height} placeholders
+              if (videos[0].thumbnail_url) {
+                const vodThumb = videos[0].thumbnail_url
+                  .replace('%{width}', '1280').replace('%{height}', '720')
+                  .replace('{width}', '1280').replace('{height}', '720');
+                if (vodThumb && !vodThumb.includes('_404')) {
+                  thumbnailFromVod = vodThumb;
+                }
+              }
             }
           } catch (e) {
             console.error(`[TwitchLive] Failed to fetch VOD for ${twitchUsername}: ${e.message}`);
@@ -99,7 +109,7 @@ async function check(twitchUsername, channelState, broadcasterToken) {
           twitchUsername,
           title: channelState.stream_title,
           category: channelState.stream_category,
-          thumbnailUrl: channelState.stream_thumbnail_url,
+          thumbnailUrl: thumbnailFromVod || channelState.stream_thumbnail_url,
           duration: durationSec,
           peakViewers: channelState.peak_viewers || 0,
           followerCount,

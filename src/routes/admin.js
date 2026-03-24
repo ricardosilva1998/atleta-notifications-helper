@@ -151,10 +151,18 @@ router.post('/test/recap/:username', requireAdmin, async (req, res) => {
       const allClips = await getClips(broadcasterId, since);
       clips = allClips.sort((a, b) => b.view_count - a.view_count).slice(0, 3);
 
-      // Fetch most recent VOD
+      // Fetch most recent VOD + thumbnail
+      let vodThumbnail = null;
       try {
         const videos = await getVideos(broadcasterId);
-        if (videos.length > 0) vodUrl = videos[0].url;
+        if (videos.length > 0) {
+          vodUrl = videos[0].url;
+          if (videos[0].thumbnail_url) {
+            vodThumbnail = videos[0].thumbnail_url
+              .replace('%{width}', '1280').replace('%{height}', '720')
+              .replace('{width}', '1280').replace('{height}', '720');
+          }
+        }
       } catch (e) {}
 
       // Fetch followers if broadcaster token available
@@ -172,7 +180,7 @@ router.post('/test/recap/:username', requireAdmin, async (req, res) => {
       twitchUsername: username,
       title: state?.stream_title || 'Stream Recap (Test)',
       category: state?.stream_category || 'Just Chatting',
-      thumbnailUrl: state?.stream_thumbnail_url || null,
+      thumbnailUrl: vodThumbnail || state?.stream_thumbnail_url || null,
       duration: 7200,
       peakViewers: state?.peak_viewers || 0,
       followerCount,
