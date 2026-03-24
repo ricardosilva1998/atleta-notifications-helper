@@ -1,12 +1,15 @@
 const db = require('../db');
 const config = require('../config');
-const { sendNotification, buildRecapEmbed, buildMilestoneEmbed } = require('../discord');
+const { sendNotification, buildRecapEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed } = require('../discord');
 const twitchLive = require('./twitchLive');
 const twitchClips = require('./twitchClips');
 const youtubeFeed = require('./youtubeFeed');
 const youtubeLive = require('./youtubeLive');
 const subSync = require('./subSync');
 const { pollWeeklyDigest } = require('./weeklyDigest');
+const instagramFeed = require('./instagramFeed');
+const tiktokFeed = require('./tiktokFeed');
+const twitterFeed = require('./twitterFeed');
 const { getFollowerCount, getSubscribers } = require('../services/twitch');
 
 // --- Twitch polling (channel-centric) ---
@@ -330,6 +333,149 @@ async function pollAllSubSync() {
   }
 }
 
+// --- Social media polling (account-centric) ---
+
+async function pollAllInstagram() {
+  const accounts = db.getAllUniqueWatchedInstagram();
+  if (accounts.length > 0 && !pollAllInstagram._logged) {
+    console.log(`[Instagram] Polling ${accounts.length} accounts`);
+    pollAllInstagram._logged = true;
+  }
+  for (const { instagram_username } of accounts) {
+    try {
+      const state = db.getInstagramState(instagram_username);
+      const result = await instagramFeed.check(instagram_username, state);
+      if (!result) continue;
+      if (result.stateUpdate) db.updateInstagramState(instagram_username, result.stateUpdate);
+      if (result.notify && result.items) {
+        const watchers = db.getInstagramWatchersForAccount(instagram_username)
+          .filter(w => w.notify_channel_id);
+        for (const w of watchers) {
+          const tier = db.getStreamerTier(w.streamer_id);
+          const tierConfig = config.tiers[tier] || config.tiers.free;
+          if (!tierConfig.instagram) continue;
+          for (const item of result.items) {
+            try {
+              const embed = buildInstagramEmbed({
+                username: instagram_username,
+                displayName: w.display_name || instagram_username,
+                profileImageUrl: w.profile_image_url,
+                caption: item.caption,
+                postUrl: item.url,
+                imageUrl: item.imageUrl,
+                timestamp: item.timestamp,
+              });
+              await sendNotification(w.notify_channel_id, embed, {
+                streamerId: w.streamer_id, guildId: w.guild_id, type: 'instagram_post',
+              });
+            } catch (e) {
+              console.error(`[Instagram] Send failed for ${instagram_username} to ${w.guild_id}: ${e.message}`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Instagram] Error for ${instagram_username}: ${error.message}`);
+    }
+    // Rate limit: 2s between accounts
+    if (accounts.length > 1) await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+async function pollAllTikTok() {
+  const accounts = db.getAllUniqueWatchedTikTok();
+  if (accounts.length > 0 && !pollAllTikTok._logged) {
+    console.log(`[TikTok] Polling ${accounts.length} accounts`);
+    pollAllTikTok._logged = true;
+  }
+  for (const { tiktok_username } of accounts) {
+    try {
+      const state = db.getTikTokState(tiktok_username);
+      const result = await tiktokFeed.check(tiktok_username, state);
+      if (!result) continue;
+      if (result.stateUpdate) db.updateTikTokState(tiktok_username, result.stateUpdate);
+      if (result.notify && result.items) {
+        const watchers = db.getTikTokWatchersForAccount(tiktok_username)
+          .filter(w => w.notify_channel_id);
+        for (const w of watchers) {
+          const tier = db.getStreamerTier(w.streamer_id);
+          const tierConfig = config.tiers[tier] || config.tiers.free;
+          if (!tierConfig.tiktok) continue;
+          for (const item of result.items) {
+            try {
+              const embed = buildTikTokEmbed({
+                username: tiktok_username,
+                displayName: w.display_name || tiktok_username,
+                profileImageUrl: w.profile_image_url,
+                description: item.description,
+                videoUrl: item.url,
+                thumbnailUrl: item.thumbnailUrl,
+                timestamp: item.timestamp,
+              });
+              await sendNotification(w.notify_channel_id, embed, {
+                streamerId: w.streamer_id, guildId: w.guild_id, type: 'tiktok_video',
+              });
+            } catch (e) {
+              console.error(`[TikTok] Send failed for ${tiktok_username} to ${w.guild_id}: ${e.message}`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[TikTok] Error for ${tiktok_username}: ${error.message}`);
+    }
+    // Rate limit: 2s between accounts
+    if (accounts.length > 1) await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+async function pollAllTwitter() {
+  const accounts = db.getAllUniqueWatchedTwitter();
+  if (accounts.length > 0 && !pollAllTwitter._logged) {
+    console.log(`[Twitter] Polling ${accounts.length} accounts`);
+    pollAllTwitter._logged = true;
+  }
+  for (const { twitter_username } of accounts) {
+    try {
+      const state = db.getTwitterState(twitter_username);
+      const result = await twitterFeed.check(twitter_username, state);
+      if (!result) continue;
+      if (result.stateUpdate) db.updateTwitterState(twitter_username, result.stateUpdate);
+      if (result.notify && result.items) {
+        const watchers = db.getTwitterWatchersForAccount(twitter_username)
+          .filter(w => w.notify_channel_id);
+        for (const w of watchers) {
+          const tier = db.getStreamerTier(w.streamer_id);
+          const tierConfig = config.tiers[tier] || config.tiers.free;
+          if (!tierConfig.twitter) continue;
+          for (const item of result.items) {
+            try {
+              const embed = buildTwitterEmbed({
+                username: twitter_username,
+                displayName: w.display_name || twitter_username,
+                profileImageUrl: w.profile_image_url,
+                text: item.text,
+                tweetUrl: item.url,
+                mediaUrl: item.mediaUrl,
+                timestamp: item.timestamp,
+              });
+              await sendNotification(w.notify_channel_id, embed, {
+                streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitter_tweet',
+              });
+            } catch (e) {
+              console.error(`[Twitter] Send failed for ${twitter_username} to ${w.guild_id}: ${e.message}`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Twitter] Error for ${twitter_username}: ${error.message}`);
+    }
+    // Rate limit: 2s between accounts
+    if (accounts.length > 1) await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
 function startAll() {
   setInterval(pollAllTwitchLive, config.intervals.twitchLive);
   setInterval(pollAllTwitchClips, config.intervals.twitchClips);
@@ -337,6 +483,9 @@ function startAll() {
   setInterval(pollAllYouTubeLive, config.intervals.youtubeLive);
   setInterval(pollAllSubSync, config.intervals.subSync);
   setInterval(pollWeeklyDigest, config.intervals.weeklyDigest);
+  setInterval(pollAllInstagram, config.intervals.instagramFeed);
+  setInterval(pollAllTikTok, config.intervals.tiktokFeed);
+  setInterval(pollAllTwitter, config.intervals.twitterFeed);
 
   console.log('[Manager] All pollers started');
 

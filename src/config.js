@@ -48,6 +48,9 @@ module.exports = {
     youtubeLive: parseInt(process.env.YOUTUBE_LIVE_INTERVAL) || 120_000,
     subSync: parseInt(process.env.SUB_SYNC_INTERVAL) || 600_000,
     weeklyDigest: parseInt(process.env.WEEKLY_DIGEST_INTERVAL) || 3_600_000,
+    instagramFeed: parseInt(process.env.INSTAGRAM_FEED_INTERVAL) || 600_000,
+    tiktokFeed: parseInt(process.env.TIKTOK_FEED_INTERVAL) || 600_000,
+    twitterFeed: parseInt(process.env.TWITTER_FEED_INTERVAL) || 600_000,
   },
   tiers: {
     free: {
@@ -70,6 +73,10 @@ module.exports = {
       recaps: false,
       milestones: false,
       weeklyHighlights: false,
+      instagram: false,
+      tiktok: false,
+      twitter: false,
+      maxSocialAccounts: 0,
     },
     starter: {
       name: 'Starter',
@@ -91,6 +98,10 @@ module.exports = {
       recaps: true,
       milestones: true,
       weeklyHighlights: false,
+      instagram: true,
+      tiktok: true,
+      twitter: true,
+      maxSocialAccounts: 3,
     },
     pro: {
       name: 'Pro',
@@ -112,6 +123,10 @@ module.exports = {
       recaps: true,
       milestones: true,
       weeklyHighlights: true,
+      instagram: true,
+      tiktok: true,
+      twitter: true,
+      maxSocialAccounts: 20,
     },
     enterprise: {
       name: 'Enterprise',
@@ -133,6 +148,10 @@ module.exports = {
       recaps: true,
       milestones: true,
       weeklyHighlights: true,
+      instagram: true,
+      tiktok: true,
+      twitter: true,
+      maxSocialAccounts: -1,
     },
   },
 };

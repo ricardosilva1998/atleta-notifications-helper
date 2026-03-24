@@ -104,4 +104,40 @@ function buildMilestoneEmbed({ twitchUsername, milestoneType, count }) {
   });
 }
 
-module.exports = { client, sendNotification, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed };
+function buildInstagramEmbed({ username, displayName, profileImageUrl, caption, postUrl, imageUrl, timestamp }) {
+  return buildEmbed({
+    color: 0xE1306C,
+    author: { name: `${displayName || username} posted on Instagram`, iconURL: profileImageUrl || undefined },
+    title: caption ? caption.slice(0, 100) : 'New post',
+    url: postUrl,
+    image: imageUrl || undefined,
+    footer: { text: 'Instagram' },
+    timestamp,
+  });
+}
+
+function buildTikTokEmbed({ username, displayName, profileImageUrl, description, videoUrl, thumbnailUrl, timestamp }) {
+  return buildEmbed({
+    color: 0x010101,
+    author: { name: `${displayName || username} posted on TikTok`, iconURL: profileImageUrl || undefined },
+    title: description ? description.slice(0, 100) : 'New video',
+    url: videoUrl,
+    image: thumbnailUrl || undefined,
+    footer: { text: 'TikTok' },
+    timestamp,
+  });
+}
+
+function buildTwitterEmbed({ username, displayName, profileImageUrl, text, tweetUrl, mediaUrl, timestamp }) {
+  return buildEmbed({
+    color: 0x1DA1F2,
+    author: { name: `${displayName || username} tweeted`, iconURL: profileImageUrl || undefined },
+    description: text,
+    url: tweetUrl,
+    image: mediaUrl || undefined,
+    footer: { text: 'Twitter' },
+    timestamp,
+  });
+}
+
+module.exports = { client, sendNotification, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed };

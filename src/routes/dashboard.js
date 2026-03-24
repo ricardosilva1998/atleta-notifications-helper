@@ -4,6 +4,9 @@ const db = require('../db');
 const { client } = require('../discord');
 const { getUserProfile } = require('../services/twitch');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
+const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPosts } = require('../services/instagram');
+const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
+const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
 
 const router = Router();
 
@@ -205,6 +208,10 @@ router.get('/guild/:guildId', async (req, res) => {
       }
     }
   }
+  const watchedInstagramAccounts = db.getWatchedInstagramForGuild(guildId, req.streamer.id);
+  const watchedTikTokAccounts = db.getWatchedTikTokForGuild(guildId, req.streamer.id);
+  const watchedTwitterAccounts = db.getWatchedTwitterForGuild(guildId, req.streamer.id);
+
   const { tier, limits } = getTierLimits(req.streamer.id);
 
   res.render('guild-config', {
@@ -216,6 +223,9 @@ router.get('/guild/:guildId', async (req, res) => {
     roles,
     watchedTwitchChannels,
     watchedYoutubeChannels,
+    watchedInstagramAccounts,
+    watchedTikTokAccounts,
+    watchedTwitterAccounts,
     hasBroadcasterToken: !!req.streamer.broadcaster_access_token,
     broadcasterAuthUrl: `${config.app.url}/auth/broadcaster`,
     tier,
@@ -247,6 +257,9 @@ router.post('/guild/:guildId', (req, res) => {
     recap_enabled: req.body.recap_enabled === 'on',
     milestones_enabled: req.body.milestones_enabled === 'on',
     weekly_highlights_enabled: req.body.weekly_highlights_enabled === 'on',
+    instagram_enabled: req.body.instagram_enabled === 'on',
+    tiktok_enabled: req.body.tiktok_enabled === 'on',
+    twitter_enabled: req.body.twitter_enabled === 'on',
   });
 
   console.log(`[Dashboard] Guild ${guildId} config updated by ${req.streamer.discord_username}`);
@@ -399,6 +412,153 @@ router.post('/guild/:guildId/youtube/:channelId/edit', (req, res) => {
   db.updateWatchedYoutubeChannel(parseInt(channelId), req.streamer.id, req.body.videos_channel_id, req.body.live_channel_id);
   console.log(`[Dashboard] Updated YouTube channel ${channelId} for guild ${guildId}`);
   res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=updated`);
+});
+
+// --- Instagram ---
+router.post('/guild/:guildId/instagram', async (req, res) => {
+  const { guildId } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  const { limits } = getTierLimits(req.streamer.id);
+  if (!limits.instagram) return res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=upgrade_social`);
+
+  const input = (req.body.instagram_username || '').trim();
+  const notifyChannelId = req.body.notify_channel_id;
+  if (!input || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=missing_fields`);
+
+  // Check social account limit
+  if (limits.maxSocialAccounts !== -1) {
+    const igCount = db.getWatchedInstagramForGuild(guildId, req.streamer.id).length;
+    const ttCount = db.getWatchedTikTokForGuild(guildId, req.streamer.id).length;
+    const twCount = db.getWatchedTwitterForGuild(guildId, req.streamer.id).length;
+    if (igCount + ttCount + twCount >= limits.maxSocialAccounts) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=social_limit`);
+    }
+  }
+
+  const profile = await resolveInstagram(input);
+  const username = profile?.username || input.replace(/^@/, '').toLowerCase();
+
+  // Pre-populate known posts
+  let knownPostIds = null;
+  try {
+    const posts = await getLatestInstagramPosts(username);
+    if (posts && posts.length > 0) knownPostIds = JSON.stringify(posts.map(p => p.id));
+  } catch (e) { console.warn(`[Dashboard] Instagram pre-populate failed: ${e.message}`); }
+
+  db.addWatchedInstagram(guildId, req.streamer.id, username, profile?.displayName, profile?.profileImageUrl, notifyChannelId, knownPostIds);
+  console.log(`[Dashboard] Added Instagram account ${username} for guild ${guildId}`);
+  res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=added`);
+});
+
+router.post('/guild/:guildId/instagram/:id/edit', (req, res) => {
+  const { guildId, id } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  db.updateWatchedInstagramChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=updated`);
+});
+
+router.post('/guild/:guildId/instagram/:id/remove', (req, res) => {
+  const { guildId, id } = req.params;
+  db.removeWatchedInstagram(parseInt(id), req.streamer.id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=removed`);
+});
+
+// --- TikTok ---
+router.post('/guild/:guildId/tiktok', async (req, res) => {
+  const { guildId } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  const { limits } = getTierLimits(req.streamer.id);
+  if (!limits.tiktok) return res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=upgrade_social`);
+
+  const input = (req.body.tiktok_username || '').trim();
+  const notifyChannelId = req.body.notify_channel_id;
+  if (!input || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=missing_fields`);
+
+  // Check social account limit
+  if (limits.maxSocialAccounts !== -1) {
+    const igCount = db.getWatchedInstagramForGuild(guildId, req.streamer.id).length;
+    const ttCount = db.getWatchedTikTokForGuild(guildId, req.streamer.id).length;
+    const twCount = db.getWatchedTwitterForGuild(guildId, req.streamer.id).length;
+    if (igCount + ttCount + twCount >= limits.maxSocialAccounts) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=social_limit`);
+    }
+  }
+
+  const profile = await resolveTikTok(input);
+  const username = profile?.username || input.replace(/^@/, '').toLowerCase();
+
+  // Pre-populate known videos
+  let knownVideoIds = null;
+  try {
+    const videos = await getLatestTikTokVideos(username);
+    if (videos && videos.length > 0) knownVideoIds = JSON.stringify(videos.map(v => v.id));
+  } catch (e) { console.warn(`[Dashboard] TikTok pre-populate failed: ${e.message}`); }
+
+  db.addWatchedTikTok(guildId, req.streamer.id, username, profile?.displayName, profile?.profileImageUrl, notifyChannelId, knownVideoIds);
+  console.log(`[Dashboard] Added TikTok account ${username} for guild ${guildId}`);
+  res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=added`);
+});
+
+router.post('/guild/:guildId/tiktok/:id/edit', (req, res) => {
+  const { guildId, id } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  db.updateWatchedTikTokChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=updated`);
+});
+
+router.post('/guild/:guildId/tiktok/:id/remove', (req, res) => {
+  const { guildId, id } = req.params;
+  db.removeWatchedTikTok(parseInt(id), req.streamer.id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=removed`);
+});
+
+// --- Twitter ---
+router.post('/guild/:guildId/twitter', async (req, res) => {
+  const { guildId } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  const { limits } = getTierLimits(req.streamer.id);
+  if (!limits.twitter) return res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=upgrade_social`);
+
+  const input = (req.body.twitter_username || '').trim();
+  const notifyChannelId = req.body.notify_channel_id;
+  if (!input || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=missing_fields`);
+
+  // Check social account limit
+  if (limits.maxSocialAccounts !== -1) {
+    const igCount = db.getWatchedInstagramForGuild(guildId, req.streamer.id).length;
+    const ttCount = db.getWatchedTikTokForGuild(guildId, req.streamer.id).length;
+    const twCount = db.getWatchedTwitterForGuild(guildId, req.streamer.id).length;
+    if (igCount + ttCount + twCount >= limits.maxSocialAccounts) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=social_limit`);
+    }
+  }
+
+  const profile = await resolveTwitter(input);
+  const username = profile?.username || input.replace(/^@/, '').toLowerCase();
+
+  // Pre-populate known tweets
+  let knownTweetIds = null;
+  try {
+    const tweets = await getLatestTweets(username);
+    if (tweets && tweets.length > 0) knownTweetIds = JSON.stringify(tweets.map(t => t.id));
+  } catch (e) { console.warn(`[Dashboard] Twitter pre-populate failed: ${e.message}`); }
+
+  db.addWatchedTwitter(guildId, req.streamer.id, username, profile?.displayName, profile?.profileImageUrl, notifyChannelId, knownTweetIds);
+  console.log(`[Dashboard] Added Twitter account ${username} for guild ${guildId}`);
+  res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=added`);
+});
+
+router.post('/guild/:guildId/twitter/:id/edit', (req, res) => {
+  const { guildId, id } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  db.updateWatchedTwitterChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=updated`);
+});
+
+router.post('/guild/:guildId/twitter/:id/remove', (req, res) => {
+  const { guildId, id } = req.params;
+  db.removeWatchedTwitter(parseInt(id), req.streamer.id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=removed`);
 });
 
 // --- Report an Issue ---

@@ -91,6 +91,17 @@ try {
   }
 } catch {}
 
+// Migration 8: add social media toggle columns to guilds
+try {
+  const cols = db.prepare("PRAGMA table_info(guilds)").all();
+  if (cols.length > 0 && !cols.find((c) => c.name === 'instagram_enabled')) {
+    db.exec('ALTER TABLE guilds ADD COLUMN instagram_enabled INTEGER DEFAULT 0');
+    db.exec('ALTER TABLE guilds ADD COLUMN tiktok_enabled INTEGER DEFAULT 0');
+    db.exec('ALTER TABLE guilds ADD COLUMN twitter_enabled INTEGER DEFAULT 0');
+    console.log('[DB] Added social media toggle columns to guilds');
+  }
+} catch {}
+
 // --- Schema ---
 
 db.exec(`
@@ -273,6 +284,66 @@ db.exec(`
     last_follower_milestone INTEGER DEFAULT 0,
     last_subscriber_milestone INTEGER DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS watched_instagram_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
+    instagram_username TEXT NOT NULL,
+    display_name TEXT,
+    profile_image_url TEXT,
+    notify_channel_id TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(guild_id, streamer_id, instagram_username)
+  );
+
+  CREATE TABLE IF NOT EXISTS watched_tiktok_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
+    tiktok_username TEXT NOT NULL,
+    display_name TEXT,
+    profile_image_url TEXT,
+    notify_channel_id TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(guild_id, streamer_id, tiktok_username)
+  );
+
+  CREATE TABLE IF NOT EXISTS watched_twitter_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
+    twitter_username TEXT NOT NULL,
+    display_name TEXT,
+    profile_image_url TEXT,
+    notify_channel_id TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(guild_id, streamer_id, twitter_username)
+  );
+
+  CREATE TABLE IF NOT EXISTS instagram_account_state (
+    instagram_username TEXT PRIMARY KEY,
+    known_post_ids TEXT DEFAULT '[]',
+    last_checked TEXT,
+    available INTEGER DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS tiktok_account_state (
+    tiktok_username TEXT PRIMARY KEY,
+    known_video_ids TEXT DEFAULT '[]',
+    last_checked TEXT,
+    available INTEGER DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS twitter_account_state (
+    twitter_username TEXT PRIMARY KEY,
+    known_tweet_ids TEXT DEFAULT '[]',
+    last_checked TEXT,
+    available INTEGER DEFAULT 1
+  );
 `);
 
 // --- Seed: ensure enterprise subscriptions for specific users ---
@@ -384,7 +455,10 @@ const _updateGuildConfig = db.prepare(`
     sub_sync_enabled = ?,
     recap_enabled = ?,
     milestones_enabled = ?,
-    weekly_highlights_enabled = ?
+    weekly_highlights_enabled = ?,
+    instagram_enabled = ?,
+    tiktok_enabled = ?,
+    twitter_enabled = ?
   WHERE guild_id = ? AND streamer_id = ?
 `);
 const _deleteGuild = db.prepare('DELETE FROM guilds WHERE guild_id = ? AND streamer_id = ?');
@@ -427,6 +501,9 @@ function updateGuildConfig(guildId, streamerId, config) {
     config.recap_enabled ? 1 : 0,
     config.milestones_enabled ? 1 : 0,
     config.weekly_highlights_enabled ? 1 : 0,
+    config.instagram_enabled ? 1 : 0,
+    config.tiktok_enabled ? 1 : 0,
+    config.twitter_enabled ? 1 : 0,
     guildId,
     streamerId
   );
@@ -567,6 +644,9 @@ const _getGuildNotificationStats = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'youtube_live' THEN 1 ELSE 0 END), 0) AS youtube_live_count,
     COALESCE(SUM(CASE WHEN type = 'twitch_milestone' THEN 1 ELSE 0 END), 0) AS milestone_count,
     COALESCE(SUM(CASE WHEN type = 'weekly_digest' THEN 1 ELSE 0 END), 0) AS digest_count,
+    COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
+    COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
+    COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 ELSE 0 END), 0) AS week_total
   FROM notification_log WHERE streamer_id = ? AND guild_id = ?
@@ -585,6 +665,9 @@ const _getGuildStatsByPeriod = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'youtube_live' THEN 1 ELSE 0 END), 0) AS youtube_live_count,
     COALESCE(SUM(CASE WHEN type = 'twitch_milestone' THEN 1 ELSE 0 END), 0) AS milestone_count,
     COALESCE(SUM(CASE WHEN type = 'weekly_digest' THEN 1 ELSE 0 END), 0) AS digest_count,
+    COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
+    COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
+    COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_count,
     COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS fail_count
@@ -600,6 +683,9 @@ const _getGuildStatsLifetime = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'youtube_live' THEN 1 ELSE 0 END), 0) AS youtube_live_count,
     COALESCE(SUM(CASE WHEN type = 'twitch_milestone' THEN 1 ELSE 0 END), 0) AS milestone_count,
     COALESCE(SUM(CASE WHEN type = 'weekly_digest' THEN 1 ELSE 0 END), 0) AS digest_count,
+    COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
+    COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
+    COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_count,
     COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS fail_count
@@ -1008,6 +1094,267 @@ function updateYoutubeChannelState(ytChannelId, updates) {
   );
 }
 
+// --- Watched Instagram Accounts ---
+
+const _addWatchedInstagram = db.prepare(`
+  INSERT OR IGNORE INTO watched_instagram_accounts (guild_id, streamer_id, instagram_username, display_name, profile_image_url, notify_channel_id)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+const _removeWatchedInstagram = db.prepare('DELETE FROM watched_instagram_accounts WHERE id = ? AND streamer_id = ?');
+const _getWatchedInstagramForGuild = db.prepare('SELECT * FROM watched_instagram_accounts WHERE guild_id = ? AND streamer_id = ?');
+const _getAllUniqueWatchedInstagram = db.prepare('SELECT DISTINCT instagram_username FROM watched_instagram_accounts WHERE enabled = 1');
+const _getInstagramWatchersForAccount = db.prepare(`
+  SELECT wia.*, s.id AS owner_id, s.enabled AS streamer_enabled
+  FROM watched_instagram_accounts wia
+  JOIN streamers s ON wia.streamer_id = s.id
+  WHERE wia.instagram_username = ? AND wia.enabled = 1 AND s.enabled = 1
+`);
+const _getInstagramState = db.prepare('SELECT * FROM instagram_account_state WHERE instagram_username = ?');
+const _upsertInstagramState = db.prepare(`
+  INSERT INTO instagram_account_state (instagram_username) VALUES (?)
+  ON CONFLICT(instagram_username) DO NOTHING
+`);
+const _upsertInstagramStateWithPosts = db.prepare(`
+  INSERT INTO instagram_account_state (instagram_username, known_post_ids) VALUES (?, ?)
+  ON CONFLICT(instagram_username) DO NOTHING
+`);
+const _updateInstagramState = db.prepare(`
+  UPDATE instagram_account_state SET
+    known_post_ids = COALESCE(?, known_post_ids),
+    last_checked = COALESCE(?, last_checked),
+    available = COALESCE(?, available)
+  WHERE instagram_username = ?
+`);
+const _updateWatchedInstagramInfo = db.prepare(`
+  UPDATE watched_instagram_accounts SET profile_image_url = ?, display_name = COALESCE(?, display_name)
+  WHERE id = ?
+`);
+const _updateWatchedInstagramChannel = db.prepare(`
+  UPDATE watched_instagram_accounts SET notify_channel_id = ?
+  WHERE id = ? AND streamer_id = ?
+`);
+
+function addWatchedInstagram(guildId, streamerId, instagramUsername, displayName, profileImageUrl, notifyChannelId, knownPostIds) {
+  _addWatchedInstagram.run(guildId, streamerId, instagramUsername.toLowerCase(), displayName || null, profileImageUrl || null, notifyChannelId || null);
+  if (knownPostIds) {
+    _upsertInstagramStateWithPosts.run(instagramUsername.toLowerCase(), knownPostIds);
+  } else {
+    _upsertInstagramState.run(instagramUsername.toLowerCase());
+  }
+}
+
+function removeWatchedInstagram(id, streamerId) {
+  _removeWatchedInstagram.run(id, streamerId);
+}
+
+function getWatchedInstagramForGuild(guildId, streamerId) {
+  return _getWatchedInstagramForGuild.all(guildId, streamerId);
+}
+
+function getAllUniqueWatchedInstagram() {
+  return _getAllUniqueWatchedInstagram.all();
+}
+
+function getInstagramWatchersForAccount(instagramUsername) {
+  return _getInstagramWatchersForAccount.all(instagramUsername.toLowerCase());
+}
+
+function getInstagramState(instagramUsername) {
+  _upsertInstagramState.run(instagramUsername.toLowerCase());
+  return _getInstagramState.get(instagramUsername.toLowerCase());
+}
+
+function updateInstagramState(instagramUsername, updates) {
+  _updateInstagramState.run(
+    updates.known_post_ids ?? null,
+    updates.last_checked ?? null,
+    updates.available ?? null,
+    instagramUsername.toLowerCase()
+  );
+}
+
+function updateWatchedInstagramInfo(id, profileImageUrl, displayName) {
+  _updateWatchedInstagramInfo.run(profileImageUrl || null, displayName || null, id);
+}
+
+function updateWatchedInstagramChannel(id, streamerId, notifyChannelId) {
+  _updateWatchedInstagramChannel.run(notifyChannelId || null, id, streamerId);
+}
+
+// --- Watched TikTok Accounts ---
+
+const _addWatchedTikTok = db.prepare(`
+  INSERT OR IGNORE INTO watched_tiktok_accounts (guild_id, streamer_id, tiktok_username, display_name, profile_image_url, notify_channel_id)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+const _removeWatchedTikTok = db.prepare('DELETE FROM watched_tiktok_accounts WHERE id = ? AND streamer_id = ?');
+const _getWatchedTikTokForGuild = db.prepare('SELECT * FROM watched_tiktok_accounts WHERE guild_id = ? AND streamer_id = ?');
+const _getAllUniqueWatchedTikTok = db.prepare('SELECT DISTINCT tiktok_username FROM watched_tiktok_accounts WHERE enabled = 1');
+const _getTikTokWatchersForAccount = db.prepare(`
+  SELECT wta.*, s.id AS owner_id, s.enabled AS streamer_enabled
+  FROM watched_tiktok_accounts wta
+  JOIN streamers s ON wta.streamer_id = s.id
+  WHERE wta.tiktok_username = ? AND wta.enabled = 1 AND s.enabled = 1
+`);
+const _getTikTokState = db.prepare('SELECT * FROM tiktok_account_state WHERE tiktok_username = ?');
+const _upsertTikTokState = db.prepare(`
+  INSERT INTO tiktok_account_state (tiktok_username) VALUES (?)
+  ON CONFLICT(tiktok_username) DO NOTHING
+`);
+const _upsertTikTokStateWithVideos = db.prepare(`
+  INSERT INTO tiktok_account_state (tiktok_username, known_video_ids) VALUES (?, ?)
+  ON CONFLICT(tiktok_username) DO NOTHING
+`);
+const _updateTikTokState = db.prepare(`
+  UPDATE tiktok_account_state SET
+    known_video_ids = COALESCE(?, known_video_ids),
+    last_checked = COALESCE(?, last_checked),
+    available = COALESCE(?, available)
+  WHERE tiktok_username = ?
+`);
+const _updateWatchedTikTokInfo = db.prepare(`
+  UPDATE watched_tiktok_accounts SET profile_image_url = ?, display_name = COALESCE(?, display_name)
+  WHERE id = ?
+`);
+const _updateWatchedTikTokChannel = db.prepare(`
+  UPDATE watched_tiktok_accounts SET notify_channel_id = ?
+  WHERE id = ? AND streamer_id = ?
+`);
+
+function addWatchedTikTok(guildId, streamerId, tiktokUsername, displayName, profileImageUrl, notifyChannelId, knownVideoIds) {
+  _addWatchedTikTok.run(guildId, streamerId, tiktokUsername.toLowerCase(), displayName || null, profileImageUrl || null, notifyChannelId || null);
+  if (knownVideoIds) {
+    _upsertTikTokStateWithVideos.run(tiktokUsername.toLowerCase(), knownVideoIds);
+  } else {
+    _upsertTikTokState.run(tiktokUsername.toLowerCase());
+  }
+}
+
+function removeWatchedTikTok(id, streamerId) {
+  _removeWatchedTikTok.run(id, streamerId);
+}
+
+function getWatchedTikTokForGuild(guildId, streamerId) {
+  return _getWatchedTikTokForGuild.all(guildId, streamerId);
+}
+
+function getAllUniqueWatchedTikTok() {
+  return _getAllUniqueWatchedTikTok.all();
+}
+
+function getTikTokWatchersForAccount(tiktokUsername) {
+  return _getTikTokWatchersForAccount.all(tiktokUsername.toLowerCase());
+}
+
+function getTikTokState(tiktokUsername) {
+  _upsertTikTokState.run(tiktokUsername.toLowerCase());
+  return _getTikTokState.get(tiktokUsername.toLowerCase());
+}
+
+function updateTikTokState(tiktokUsername, updates) {
+  _updateTikTokState.run(
+    updates.known_video_ids ?? null,
+    updates.last_checked ?? null,
+    updates.available ?? null,
+    tiktokUsername.toLowerCase()
+  );
+}
+
+function updateWatchedTikTokInfo(id, profileImageUrl, displayName) {
+  _updateWatchedTikTokInfo.run(profileImageUrl || null, displayName || null, id);
+}
+
+function updateWatchedTikTokChannel(id, streamerId, notifyChannelId) {
+  _updateWatchedTikTokChannel.run(notifyChannelId || null, id, streamerId);
+}
+
+// --- Watched Twitter Accounts ---
+
+const _addWatchedTwitter = db.prepare(`
+  INSERT OR IGNORE INTO watched_twitter_accounts (guild_id, streamer_id, twitter_username, display_name, profile_image_url, notify_channel_id)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+const _removeWatchedTwitter = db.prepare('DELETE FROM watched_twitter_accounts WHERE id = ? AND streamer_id = ?');
+const _getWatchedTwitterForGuild = db.prepare('SELECT * FROM watched_twitter_accounts WHERE guild_id = ? AND streamer_id = ?');
+const _getAllUniqueWatchedTwitter = db.prepare('SELECT DISTINCT twitter_username FROM watched_twitter_accounts WHERE enabled = 1');
+const _getTwitterWatchersForAccount = db.prepare(`
+  SELECT wta.*, s.id AS owner_id, s.enabled AS streamer_enabled
+  FROM watched_twitter_accounts wta
+  JOIN streamers s ON wta.streamer_id = s.id
+  WHERE wta.twitter_username = ? AND wta.enabled = 1 AND s.enabled = 1
+`);
+const _getTwitterState = db.prepare('SELECT * FROM twitter_account_state WHERE twitter_username = ?');
+const _upsertTwitterState = db.prepare(`
+  INSERT INTO twitter_account_state (twitter_username) VALUES (?)
+  ON CONFLICT(twitter_username) DO NOTHING
+`);
+const _upsertTwitterStateWithTweets = db.prepare(`
+  INSERT INTO twitter_account_state (twitter_username, known_tweet_ids) VALUES (?, ?)
+  ON CONFLICT(twitter_username) DO NOTHING
+`);
+const _updateTwitterState = db.prepare(`
+  UPDATE twitter_account_state SET
+    known_tweet_ids = COALESCE(?, known_tweet_ids),
+    last_checked = COALESCE(?, last_checked),
+    available = COALESCE(?, available)
+  WHERE twitter_username = ?
+`);
+const _updateWatchedTwitterInfo = db.prepare(`
+  UPDATE watched_twitter_accounts SET profile_image_url = ?, display_name = COALESCE(?, display_name)
+  WHERE id = ?
+`);
+const _updateWatchedTwitterChannel = db.prepare(`
+  UPDATE watched_twitter_accounts SET notify_channel_id = ?
+  WHERE id = ? AND streamer_id = ?
+`);
+
+function addWatchedTwitter(guildId, streamerId, twitterUsername, displayName, profileImageUrl, notifyChannelId, knownTweetIds) {
+  _addWatchedTwitter.run(guildId, streamerId, twitterUsername.toLowerCase(), displayName || null, profileImageUrl || null, notifyChannelId || null);
+  if (knownTweetIds) {
+    _upsertTwitterStateWithTweets.run(twitterUsername.toLowerCase(), knownTweetIds);
+  } else {
+    _upsertTwitterState.run(twitterUsername.toLowerCase());
+  }
+}
+
+function removeWatchedTwitter(id, streamerId) {
+  _removeWatchedTwitter.run(id, streamerId);
+}
+
+function getWatchedTwitterForGuild(guildId, streamerId) {
+  return _getWatchedTwitterForGuild.all(guildId, streamerId);
+}
+
+function getAllUniqueWatchedTwitter() {
+  return _getAllUniqueWatchedTwitter.all();
+}
+
+function getTwitterWatchersForAccount(twitterUsername) {
+  return _getTwitterWatchersForAccount.all(twitterUsername.toLowerCase());
+}
+
+function getTwitterState(twitterUsername) {
+  _upsertTwitterState.run(twitterUsername.toLowerCase());
+  return _getTwitterState.get(twitterUsername.toLowerCase());
+}
+
+function updateTwitterState(twitterUsername, updates) {
+  _updateTwitterState.run(
+    updates.known_tweet_ids ?? null,
+    updates.last_checked ?? null,
+    updates.available ?? null,
+    twitterUsername.toLowerCase()
+  );
+}
+
+function updateWatchedTwitterInfo(id, profileImageUrl, displayName) {
+  _updateWatchedTwitterInfo.run(profileImageUrl || null, displayName || null, id);
+}
+
+function updateWatchedTwitterChannel(id, streamerId, notifyChannelId) {
+  _updateWatchedTwitterChannel.run(notifyChannelId || null, id, streamerId);
+}
+
 // --- Subscriptions ---
 
 const _getSubscription = db.prepare("SELECT * FROM subscriptions WHERE streamer_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1");
@@ -1263,4 +1610,31 @@ module.exports = {
   updateWatchedChannel,
   updateWatchedYoutubeChannel,
   updateWatchedYoutubeChannelInfo,
+  addWatchedInstagram,
+  removeWatchedInstagram,
+  getWatchedInstagramForGuild,
+  getAllUniqueWatchedInstagram,
+  getInstagramWatchersForAccount,
+  getInstagramState,
+  updateInstagramState,
+  updateWatchedInstagramInfo,
+  updateWatchedInstagramChannel,
+  addWatchedTikTok,
+  removeWatchedTikTok,
+  getWatchedTikTokForGuild,
+  getAllUniqueWatchedTikTok,
+  getTikTokWatchersForAccount,
+  getTikTokState,
+  updateTikTokState,
+  updateWatchedTikTokInfo,
+  updateWatchedTikTokChannel,
+  addWatchedTwitter,
+  removeWatchedTwitter,
+  getWatchedTwitterForGuild,
+  getAllUniqueWatchedTwitter,
+  getTwitterWatchersForAccount,
+  getTwitterState,
+  updateTwitterState,
+  updateWatchedTwitterInfo,
+  updateWatchedTwitterChannel,
 };
