@@ -6,6 +6,8 @@
 <% if (msg === 'removed') { %><div class="alert alert-success">User removed.</div><% } %>
 <% if (msg === 'tier_updated') { %><div class="alert alert-success">Subscription tier updated.</div><% } %>
 <% if (msg === 'created') { %><div class="alert alert-success">Created successfully.</div><% } %>
+<% if (msg && msg.startsWith('recap_sent_')) { %><div class="alert alert-success">Test recap sent to <%= msg.split('_')[2] %> channel(s).</div><% } %>
+<% if (msg === 'recap_error') { %><div class="alert alert-danger">Recap test failed. Check logs.</div><% } %>
 
 <!-- Tab Bar -->
 <div class="tab-bar animate-in animate-in-delay-1">
@@ -113,6 +115,19 @@
         <div style="font-size: 10px; color: var(--text-muted);">Database Size</div>
       </div>
     </div>
+  </div>
+
+  <!-- Test Tools -->
+  <div class="card" style="padding: 20px; margin-top: 16px;">
+    <h3 style="font-size: 15px; margin-bottom: 16px;">Test Tools</h3>
+    <form method="POST" action="" id="recap-form" style="display: flex; gap: 8px; align-items: flex-end;">
+      <div class="form-group" style="margin: 0; flex: 1;">
+        <label>Test Stream Recap</label>
+        <input type="text" id="recap-username" placeholder="Twitch username (e.g. andre_vilela_)" style="width: 100%;">
+      </div>
+      <button type="submit" class="btn btn-primary" style="padding: 10px 20px; white-space: nowrap;" onclick="document.getElementById('recap-form').action='/admin/test-recap/' + document.getElementById('recap-username').value; return true;">Send Test Recap</button>
+    </form>
+    <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Sends a recap embed to all guilds watching this channel. Uses recent clips from the last 7 days.</p>
   </div>
 </div>
 

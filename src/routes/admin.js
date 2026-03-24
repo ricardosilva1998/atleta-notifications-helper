@@ -123,6 +123,66 @@ router.post('/issues/:id', requireAdmin, (req, res) => {
   res.redirect('/admin/dashboard?tab=issues&msg=updated');
 });
 
+// --- Test Recap ---
+
+router.post('/test-recap/:username', requireAdmin, async (req, res) => {
+  const username = req.params.username.toLowerCase();
+  const { getUserId, getClips } = require('../services/twitch');
+  const { buildRecapEmbed } = require('../discord');
+  const { sendNotification } = require('../discord');
+
+  try {
+    // Get broadcaster ID
+    let state = db.getChannelState(username);
+    let broadcasterId = state?.twitch_broadcaster_id;
+    if (!broadcasterId) {
+      broadcasterId = await getUserId(username);
+      if (broadcasterId) db.updateChannelState(username, { twitch_broadcaster_id: broadcasterId });
+    }
+
+    // Fetch recent clips
+    let clips = [];
+    if (broadcasterId) {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const allClips = await getClips(broadcasterId, since);
+      clips = allClips.sort((a, b) => b.view_count - a.view_count).slice(0, 3);
+    }
+
+    const recapData = {
+      twitchUsername: username,
+      title: 'Stream Recap (Test)',
+      category: 'Just Chatting',
+      thumbnailUrl: null,
+      duration: 7200,
+      clips,
+    };
+
+    const embed = buildRecapEmbed(recapData);
+
+    // Send to all watchers with a live_channel_id
+    const watchers = db.getWatchersForChannel(username).filter(w => w.live_channel_id);
+    let sent = 0;
+    for (const w of watchers) {
+      try {
+        await sendNotification(w.live_channel_id, embed, {
+          streamerId: w.streamer_id,
+          guildId: w.guild_id,
+          type: 'twitch_recap',
+        });
+        sent++;
+      } catch (e) {
+        console.error(`[TestRecap] Send failed: ${e.message}`);
+      }
+    }
+
+    console.log(`[Admin] Test recap for ${username}: ${sent} sent to ${watchers.length} watchers`);
+    res.redirect(`/admin/dashboard?tab=stats&msg=recap_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test recap error: ${e.message}`);
+    res.redirect('/admin/dashboard?tab=stats&msg=recap_error');
+  }
+});
+
 // --- Discounts ---
 
 router.post('/discounts', requireAdmin, (req, res) => {
