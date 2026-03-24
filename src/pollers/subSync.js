@@ -72,6 +72,10 @@ async function checkStreamer(streamer) {
   const subscriberTwitchIds = new Set(subscribers.map((s) => s.user_id));
   const linkedUsers = db.getLinkedUsers(streamer.id);
   console.log(`[SubSync] ${streamer.twitch_username}: ${linkedUsers.length} linked users`);
+  linkedUsers.forEach(l => {
+    const isSub = subscriberTwitchIds.has(l.twitch_user_id);
+    console.log(`[SubSync]   linked: discord=${l.discord_user_id} twitch=${l.twitch_username} (${l.twitch_user_id}) isSub=${isSub}`);
+  });
 
   const allGuilds = db.getGuildsForStreamer(streamer.id);
   console.log(`[SubSync] ${streamer.twitch_username}: ${allGuilds.length} guilds total, checking sub_sync_enabled + sub_role_id`);
