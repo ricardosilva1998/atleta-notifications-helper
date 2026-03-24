@@ -47,22 +47,36 @@ function formatDuration(seconds) {
   return `${minutes}m`;
 }
 
-function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailUrl, clips }) {
+function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailUrl, clips, peakViewers, followerCount, vodUrl }) {
   const fields = [
     { name: 'Category', value: category || 'Unknown', inline: true },
     { name: 'Duration', value: formatDuration(duration), inline: true },
   ];
+
+  if (peakViewers > 0) {
+    fields.push({ name: 'Peak Viewers', value: peakViewers.toLocaleString(), inline: true });
+  }
+
+  if (followerCount !== null && followerCount !== undefined) {
+    fields.push({ name: 'Followers', value: followerCount.toLocaleString(), inline: true });
+  }
+
+  if (vodUrl) {
+    fields.push({ name: 'Watch VOD', value: `[Click to watch the full stream](${vodUrl})` });
+  }
+
   if (clips && clips.length > 0) {
     const clipList = clips
       .map((clip, i) => `${i + 1}. [${clip.title}](${clip.url}) (${clip.view_count || 0} views)`)
       .join('\n');
     fields.push({ name: 'Top Clips', value: clipList });
   }
+
   return buildEmbed({
     color: 0x9146ff,
     author: { name: `${twitchUsername} stream recap` },
-    title,
-    url: `https://twitch.tv/${twitchUsername}`,
+    title: title || 'Stream ended',
+    url: vodUrl || `https://twitch.tv/${twitchUsername}`,
     image: thumbnailUrl || undefined,
     fields,
     footer: { text: 'Stream Recap' },

@@ -23,7 +23,19 @@ async function pollAllTwitchLive() {
   for (const { twitch_username } of channels) {
     try {
       const state = db.getChannelState(twitch_username);
-      const result = await twitchLive.check(twitch_username, state);
+
+      // Find a broadcaster token from any watcher of this channel
+      let broadcasterToken = null;
+      const channelWatchers = db.getWatchersForChannel(twitch_username);
+      for (const w of channelWatchers) {
+        const streamer = db.getStreamerById(w.streamer_id);
+        if (streamer?.broadcaster_access_token) {
+          broadcasterToken = streamer.broadcaster_access_token;
+          break;
+        }
+      }
+
+      const result = await twitchLive.check(twitch_username, state, broadcasterToken);
       if (!result) {
         // Channel is still in same state — check milestones if live
         if (state.is_live) {

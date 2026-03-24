@@ -1,11 +1,11 @@
-const { getStream, getClips } = require('../services/twitch');
+const { getStream, getClips, getVideos, getFollowerCount } = require('../services/twitch');
 const { buildEmbed } = require('../discord');
 
 function formatThumbnail(url) {
   return url.replace('{width}', '1280').replace('{height}', '720');
 }
 
-async function check(twitchUsername, channelState) {
+async function check(twitchUsername, channelState, broadcasterToken) {
   const stream = await getStream(twitchUsername);
 
   // Channel just went LIVE
@@ -30,6 +30,20 @@ async function check(twitchUsername, channelState) {
         stream_category: stream.game_name || 'Unknown',
         stream_thumbnail_url: formatThumbnail(stream.thumbnail_url),
         stream_started_at: stream.started_at,
+        peak_viewers: stream.viewer_count || 0,
+      },
+    };
+  }
+
+  // Channel is STILL LIVE — update peak viewers and current info
+  if (stream && channelState.is_live) {
+    return {
+      notify: false,
+      stateUpdate: {
+        peak_viewers: stream.viewer_count || 0,
+        stream_title: stream.title,
+        stream_category: stream.game_name || 'Unknown',
+        stream_thumbnail_url: formatThumbnail(stream.thumbnail_url),
       },
     };
   }
@@ -46,8 +60,12 @@ async function check(twitchUsername, channelState) {
       // Skip recap for very short streams (under 5 minutes)
       if (durationSec >= 300) {
         let clips = [];
+        let vodUrl = null;
+        let followerCount = null;
         const broadcasterId = channelState.twitch_broadcaster_id;
+
         if (broadcasterId) {
+          // Fetch top clips from the stream
           try {
             const allClips = await getClips(broadcasterId, channelState.stream_started_at, now.toISOString());
             clips = allClips
@@ -55,6 +73,25 @@ async function check(twitchUsername, channelState) {
               .slice(0, 3);
           } catch (e) {
             console.error(`[TwitchLive] Failed to fetch recap clips for ${twitchUsername}: ${e.message}`);
+          }
+
+          // Fetch the VOD (most recent archived video)
+          try {
+            const videos = await getVideos(broadcasterId);
+            if (videos.length > 0) {
+              vodUrl = videos[0].url;
+            }
+          } catch (e) {
+            console.error(`[TwitchLive] Failed to fetch VOD for ${twitchUsername}: ${e.message}`);
+          }
+
+          // Fetch follower count if broadcaster token available
+          if (broadcasterToken) {
+            try {
+              followerCount = await getFollowerCount(broadcasterId, broadcasterToken);
+            } catch (e) {
+              // Silently skip
+            }
           }
         }
 
@@ -64,6 +101,9 @@ async function check(twitchUsername, channelState) {
           category: channelState.stream_category,
           thumbnailUrl: channelState.stream_thumbnail_url,
           duration: durationSec,
+          peakViewers: channelState.peak_viewers || 0,
+          followerCount,
+          vodUrl,
           clips,
         };
       }

@@ -127,9 +127,8 @@ router.post('/issues/:id', requireAdmin, (req, res) => {
 
 router.post('/test-recap/:username', requireAdmin, async (req, res) => {
   const username = req.params.username.toLowerCase();
-  const { getUserId, getClips } = require('../services/twitch');
-  const { buildRecapEmbed } = require('../discord');
-  const { sendNotification } = require('../discord');
+  const { getUserId, getClips, getVideos, getFollowerCount } = require('../services/twitch');
+  const { buildRecapEmbed, sendNotification } = require('../discord');
 
   try {
     // Get broadcaster ID
@@ -142,18 +141,39 @@ router.post('/test-recap/:username', requireAdmin, async (req, res) => {
 
     // Fetch recent clips
     let clips = [];
+    let vodUrl = null;
+    let followerCount = null;
     if (broadcasterId) {
       const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const allClips = await getClips(broadcasterId, since);
       clips = allClips.sort((a, b) => b.view_count - a.view_count).slice(0, 3);
+
+      // Fetch most recent VOD
+      try {
+        const videos = await getVideos(broadcasterId);
+        if (videos.length > 0) vodUrl = videos[0].url;
+      } catch (e) {}
+
+      // Fetch followers if broadcaster token available
+      const watchers = db.getWatchersForChannel(username);
+      for (const w of watchers) {
+        const streamer = db.getStreamerById(w.streamer_id);
+        if (streamer?.broadcaster_access_token) {
+          try { followerCount = await getFollowerCount(broadcasterId, streamer.broadcaster_access_token); } catch (e) {}
+          break;
+        }
+      }
     }
 
     const recapData = {
       twitchUsername: username,
-      title: 'Stream Recap (Test)',
-      category: 'Just Chatting',
-      thumbnailUrl: null,
+      title: state?.stream_title || 'Stream Recap (Test)',
+      category: state?.stream_category || 'Just Chatting',
+      thumbnailUrl: state?.stream_thumbnail_url || null,
       duration: 7200,
+      peakViewers: state?.peak_viewers || 0,
+      followerCount,
+      vodUrl,
       clips,
     };
 

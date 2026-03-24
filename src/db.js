@@ -73,6 +73,15 @@ try {
   }
 } catch {}
 
+// Migration 9: add peak_viewers to channel_state
+try {
+  const cols = db.prepare("PRAGMA table_info(channel_state)").all();
+  if (cols.length > 0 && !cols.find((c) => c.name === 'peak_viewers')) {
+    db.exec('ALTER TABLE channel_state ADD COLUMN peak_viewers INTEGER DEFAULT 0');
+    console.log('[DB] Added peak_viewers column to channel_state');
+  }
+} catch {}
+
 // Migration 6: add profile_image_url to watched_channels
 try {
   const cols = db.prepare("PRAGMA table_info(watched_channels)").all();
@@ -855,7 +864,8 @@ const _updateChannelState = db.prepare(`
     stream_title = COALESCE(?, stream_title),
     stream_category = COALESCE(?, stream_category),
     stream_thumbnail_url = COALESCE(?, stream_thumbnail_url),
-    stream_started_at = COALESCE(?, stream_started_at)
+    stream_started_at = COALESCE(?, stream_started_at),
+    peak_viewers = CASE WHEN ? > COALESCE(peak_viewers, 0) THEN ? ELSE peak_viewers END
   WHERE twitch_username = ?
 `);
 
@@ -919,6 +929,7 @@ function getChannelState(twitchUsername) {
 }
 
 function updateChannelState(twitchUsername, updates) {
+  const peakViewers = updates.peak_viewers ?? 0;
   _updateChannelState.run(
     updates.twitch_broadcaster_id ?? null,
     updates.is_live ?? null,
@@ -927,6 +938,7 @@ function updateChannelState(twitchUsername, updates) {
     updates.stream_category ?? null,
     updates.stream_thumbnail_url ?? null,
     updates.stream_started_at ?? null,
+    peakViewers, peakViewers, // twice for the CASE WHEN comparison
     twitchUsername.toLowerCase()
   );
 }
@@ -1027,7 +1039,8 @@ const _clearStreamSession = db.prepare(`
     stream_title = NULL,
     stream_category = NULL,
     stream_thumbnail_url = NULL,
-    stream_started_at = NULL
+    stream_started_at = NULL,
+    peak_viewers = 0
   WHERE twitch_username = ?
 `);
 
