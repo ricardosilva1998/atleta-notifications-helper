@@ -6,8 +6,9 @@
 <% if (msg === 'removed') { %><div class="alert alert-success">User removed.</div><% } %>
 <% if (msg === 'tier_updated') { %><div class="alert alert-success">Subscription tier updated.</div><% } %>
 <% if (msg === 'created') { %><div class="alert alert-success">Created successfully.</div><% } %>
-<% if (msg && msg.startsWith('recap_sent_')) { %><div class="alert alert-success">Test recap sent to <%= msg.split('_')[2] %> channel(s).</div><% } %>
-<% if (msg === 'recap_error') { %><div class="alert alert-danger">Recap test failed. Check logs.</div><% } %>
+<% if (msg && msg.startsWith('test_sent_')) { %><div class="alert alert-success">Test notification sent to <%= msg.split('_')[2] %> channel(s).</div><% } %>
+<% if (msg === 'test_error') { %><div class="alert alert-danger">Test failed. Check logs or verify the username exists.</div><% } %>
+<% if (msg === 'test_no_data') { %><div class="alert alert-warning">No data found for this channel (no clips, videos, etc.).</div><% } %>
 
 <!-- Tab Bar -->
 <div class="tab-bar animate-in animate-in-delay-1">
@@ -30,6 +31,10 @@
   <button class="tab-btn admin-tab-discounts" data-tab="discounts">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
     Discounts
+  </button>
+  <button class="tab-btn admin-tab-testing" data-tab="testing">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+    Testing
   </button>
 </div>
 
@@ -117,18 +122,6 @@
     </div>
   </div>
 
-  <!-- Test Tools -->
-  <div class="card" style="padding: 20px; margin-top: 16px;">
-    <h3 style="font-size: 15px; margin-bottom: 16px;">Test Tools</h3>
-    <form method="POST" action="" id="recap-form" style="display: flex; gap: 8px; align-items: flex-end;">
-      <div class="form-group" style="margin: 0; flex: 1;">
-        <label>Test Stream Recap</label>
-        <input type="text" id="recap-username" placeholder="Twitch username (e.g. andre_vilela_)" style="width: 100%;">
-      </div>
-      <button type="submit" class="btn btn-primary" style="padding: 10px 20px; white-space: nowrap;" onclick="document.getElementById('recap-form').action='/admin/test-recap/' + document.getElementById('recap-username').value; return true;">Send Test Recap</button>
-    </form>
-    <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Sends a recap embed to all guilds watching this channel. Uses recent clips from the last 7 days.</p>
-  </div>
 </div>
 
 <!-- ==================== USERS TAB ==================== -->
@@ -277,6 +270,113 @@
       </div>
     <% } %>
   <% } %>
+</div>
+
+<!-- ==================== TESTING TAB ==================== -->
+<div class="tab-content" id="tab-testing">
+  <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+    Send test notifications to Discord channels. Enter a Twitch/YouTube username and the notification will be sent to all guilds watching that channel.
+  </p>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+
+    <!-- Stream Recap -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: var(--accent);">&#9654;</span> Stream Recap
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts a recap embed with VOD link, peak viewers, clips, and stats.</p>
+      <form method="POST" action="" id="form-recap" style="display: flex; gap: 8px;">
+        <input type="text" id="input-recap" placeholder="Twitch username" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/recap/' + document.getElementById('input-recap').value; return !!document.getElementById('input-recap').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- Milestone Celebration -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: #f1c40f;">&#9733;</span> Milestone Celebration
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts a follower milestone embed for the channel.</p>
+      <form method="POST" action="" id="form-milestone" style="display: flex; gap: 8px;">
+        <input type="text" id="input-milestone" placeholder="Twitch username" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/milestone/' + document.getElementById('input-milestone').value; return !!document.getElementById('input-milestone').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- Twitch Go-Live -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: var(--accent);">&#9679;</span> Twitch Go-Live
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts a go-live notification embed for the channel.</p>
+      <form method="POST" action="" id="form-twitch-live" style="display: flex; gap: 8px;">
+        <input type="text" id="input-twitch-live" placeholder="Twitch username" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/twitch-live/' + document.getElementById('input-twitch-live').value; return !!document.getElementById('input-twitch-live').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- Twitch Clip -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: #bf94ff;">&#127916;</span> Twitch Clip
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts the most recent clip from the channel.</p>
+      <form method="POST" action="" id="form-twitch-clip" style="display: flex; gap: 8px;">
+        <input type="text" id="input-twitch-clip" placeholder="Twitch username" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/twitch-clip/' + document.getElementById('input-twitch-clip').value; return !!document.getElementById('input-twitch-clip').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- YouTube Video/Short -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: #f04438;">&#9654;</span> YouTube Video/Short
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts the most recent video from a YouTube channel.</p>
+      <form method="POST" action="" id="form-yt-video" style="display: flex; gap: 8px;">
+        <input type="text" id="input-yt-video" placeholder="YouTube @username or channel ID" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/youtube-video/' + encodeURIComponent(document.getElementById('input-yt-video').value); return !!document.getElementById('input-yt-video').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- YouTube Live -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: #ff4444;">&#128308;</span> YouTube Live
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts a YouTube live notification if the channel is currently live.</p>
+      <form method="POST" action="" id="form-yt-live" style="display: flex; gap: 8px;">
+        <input type="text" id="input-yt-live" placeholder="YouTube @username or channel ID" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/youtube-live/' + encodeURIComponent(document.getElementById('input-yt-live').value); return !!document.getElementById('input-yt-live').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- Weekly Digest -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: #3498db;">&#128197;</span> Weekly Highlights
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts a weekly digest embed for a Twitch channel.</p>
+      <form method="POST" action="" id="form-digest" style="display: flex; gap: 8px;">
+        <input type="text" id="input-digest" placeholder="Twitch username" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;" onclick="this.form.action='/admin/test/weekly-digest/' + document.getElementById('input-digest').value; return !!document.getElementById('input-digest').value;">Send</button>
+      </form>
+    </div>
+
+    <!-- Welcome Message -->
+    <div class="card" style="padding: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+        <span style="color: var(--success);">&#128075;</span> Welcome Message
+      </h3>
+      <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Posts a welcome message to the configured welcome channel.</p>
+      <form method="POST" action="/admin/test/welcome" style="display: flex; gap: 8px;">
+        <input type="text" name="guild_id" placeholder="Discord Guild/Server ID" style="flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;">Send</button>
+      </form>
+    </div>
+
+  </div>
 </div>
 
 <script>

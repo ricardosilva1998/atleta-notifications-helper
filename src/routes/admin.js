@@ -123,12 +123,15 @@ router.post('/issues/:id', requireAdmin, (req, res) => {
   res.redirect('/admin/dashboard?tab=issues&msg=updated');
 });
 
-// --- Test Recap ---
+// --- Testing Tools ---
 
-router.post('/test-recap/:username', requireAdmin, async (req, res) => {
+const { getUserId, getClips, getVideos, getFollowerCount, getStream } = require('../services/twitch');
+const { buildRecapEmbed, buildMilestoneEmbed, buildWeeklyDigestEmbed, buildEmbed, sendNotification } = require('../discord');
+const { getLatestVideos, resolveChannelId } = require('../services/youtube');
+
+// Test: Stream Recap
+router.post('/test/recap/:username', requireAdmin, async (req, res) => {
   const username = req.params.username.toLowerCase();
-  const { getUserId, getClips, getVideos, getFollowerCount } = require('../services/twitch');
-  const { buildRecapEmbed, sendNotification } = require('../discord');
 
   try {
     // Get broadcaster ID
@@ -196,10 +199,220 @@ router.post('/test-recap/:username', requireAdmin, async (req, res) => {
     }
 
     console.log(`[Admin] Test recap for ${username}: ${sent} sent to ${watchers.length} watchers`);
-    res.redirect(`/admin/dashboard?tab=stats&msg=recap_sent_${sent}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
-    console.error(`[Admin] Test recap error: ${e.message}`);
-    res.redirect('/admin/dashboard?tab=stats&msg=recap_error');
+    console.error(`[Admin] Test error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: Milestone Celebration
+router.post('/test/milestone/:username', requireAdmin, async (req, res) => {
+  const username = req.params.username.toLowerCase();
+  try {
+    let broadcasterId = db.getChannelState(username)?.twitch_broadcaster_id;
+    if (!broadcasterId) {
+      broadcasterId = await getUserId(username);
+      if (broadcasterId) db.updateChannelState(username, { twitch_broadcaster_id: broadcasterId });
+    }
+
+    let followerCount = 500;
+    const watchers = db.getWatchersForChannel(username);
+    for (const w of watchers) {
+      const streamer = db.getStreamerById(w.streamer_id);
+      if (streamer?.broadcaster_access_token) {
+        try { followerCount = await getFollowerCount(broadcasterId, streamer.broadcaster_access_token); } catch (e) {}
+        break;
+      }
+    }
+
+    const embed = buildMilestoneEmbed({ twitchUsername: username, milestoneType: 'follower', count: followerCount });
+    let sent = 0;
+    for (const w of watchers.filter(w => w.live_channel_id)) {
+      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_milestone' }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test milestone error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: Twitch Go-Live
+router.post('/test/twitch-live/:username', requireAdmin, async (req, res) => {
+  const username = req.params.username.toLowerCase();
+  try {
+    const stream = await getStream(username);
+    const embed = buildEmbed({
+      color: 0x9146ff,
+      author: { name: `${stream?.user_name || username} is live on Twitch!` },
+      title: stream?.title || 'Test Stream',
+      url: `https://twitch.tv/${username}`,
+      description: `Playing **${stream?.game_name || 'Just Chatting'}**`,
+      image: stream?.thumbnail_url ? stream.thumbnail_url.replace('{width}', '1280').replace('{height}', '720') : undefined,
+      footer: { text: 'Twitch' },
+      timestamp: new Date(),
+    });
+
+    const watchers = db.getWatchersForChannel(username).filter(w => w.live_channel_id);
+    let sent = 0;
+    for (const w of watchers) {
+      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_live' }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test twitch-live error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: Twitch Clip
+router.post('/test/twitch-clip/:username', requireAdmin, async (req, res) => {
+  const username = req.params.username.toLowerCase();
+  try {
+    let broadcasterId = db.getChannelState(username)?.twitch_broadcaster_id;
+    if (!broadcasterId) {
+      broadcasterId = await getUserId(username);
+      if (broadcasterId) db.updateChannelState(username, { twitch_broadcaster_id: broadcasterId });
+    }
+    if (!broadcasterId) return res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const clips = await getClips(broadcasterId, since);
+    if (clips.length === 0) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
+
+    const clip = clips.sort((a, b) => b.view_count - a.view_count)[0];
+    const message = `**New clip by ${clip.creator_name}** — ${clip.title}\n📊 ${clip.view_count} views · ⏱️ ${Math.round(clip.duration)}s\n${clip.url}`;
+
+    const watchers = db.getWatchersForChannel(username).filter(w => w.clips_channel_id);
+    let sent = 0;
+    for (const w of watchers) {
+      try { await sendNotification(w.clips_channel_id, null, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_clip', contentOnly: message }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test twitch-clip error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: YouTube Video/Short
+router.post('/test/youtube-video/:input', requireAdmin, async (req, res) => {
+  const input = decodeURIComponent(req.params.input);
+  try {
+    const resolved = await resolveChannelId(input);
+    if (!resolved) return res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+    const channelId = resolved.channelId;
+
+    const videos = await getLatestVideos(channelId);
+    if (videos.length === 0) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
+
+    const video = videos[0];
+    const message = `🎬 **${video.author || resolved.channelName || 'New'} uploaded a new video!** — ${video.title}\n${video.url}`;
+
+    const ytWatchers = db.db.prepare('SELECT wyc.*, s.enabled AS streamer_enabled FROM watched_youtube_channels wyc JOIN streamers s ON wyc.streamer_id = s.id WHERE wyc.youtube_channel_id = ? AND wyc.enabled = 1 AND s.enabled = 1').all(channelId);
+    let sent = 0;
+    for (const w of ytWatchers.filter(w => w.videos_channel_id)) {
+      try { await sendNotification(w.videos_channel_id, null, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'youtube_video', contentOnly: message }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test youtube-video error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: YouTube Live
+router.post('/test/youtube-live/:input', requireAdmin, async (req, res) => {
+  const input = decodeURIComponent(req.params.input);
+  try {
+    const resolved = await resolveChannelId(input);
+    if (!resolved) return res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+
+    const embed = buildEmbed({
+      color: 0xff0000,
+      author: { name: `${resolved.channelName || input} is live on YouTube!` },
+      title: 'Live Stream (Test)',
+      url: `https://youtube.com/channel/${resolved.channelId}/live`,
+      footer: { text: 'YouTube Live' },
+      timestamp: new Date(),
+    });
+
+    const ytWatchers = db.db.prepare('SELECT wyc.*, s.enabled AS streamer_enabled FROM watched_youtube_channels wyc JOIN streamers s ON wyc.streamer_id = s.id WHERE wyc.youtube_channel_id = ? AND wyc.enabled = 1 AND s.enabled = 1').all(resolved.channelId);
+    let sent = 0;
+    for (const w of ytWatchers.filter(w => w.live_channel_id)) {
+      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'youtube_live' }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test youtube-live error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: Weekly Digest
+router.post('/test/weekly-digest/:username', requireAdmin, async (req, res) => {
+  const username = req.params.username.toLowerCase();
+  try {
+    let broadcasterId = db.getChannelState(username)?.twitch_broadcaster_id;
+    if (!broadcasterId) {
+      broadcasterId = await getUserId(username);
+      if (broadcasterId) db.updateChannelState(username, { twitch_broadcaster_id: broadcasterId });
+    }
+
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    let streamCount = 0, totalHours = 0;
+    const categories = [];
+    let topClip = null;
+
+    if (broadcasterId) {
+      const videos = await getVideos(broadcasterId, since);
+      streamCount = videos.length;
+      for (const v of videos) {
+        const match = v.duration?.match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/);
+        if (match) totalHours += ((parseInt(match[1]||0)*3600) + (parseInt(match[2]||0)*60) + parseInt(match[3]||0)) / 3600;
+      }
+      const clips = await getClips(broadcasterId, since);
+      if (clips.length > 0) {
+        topClip = clips.sort((a,b) => b.view_count - a.view_count)[0];
+        topClip = { title: topClip.title, url: topClip.url, view_count: topClip.view_count };
+      }
+    }
+
+    const embed = buildWeeklyDigestEmbed({
+      streamCount, totalHours, categories,
+      topClip,
+    });
+
+    const watchers = db.getWatchersForChannel(username).filter(w => w.live_channel_id);
+    let sent = 0;
+    for (const w of watchers) {
+      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'weekly_digest' }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test weekly-digest error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: Welcome Message
+router.post('/test/welcome', requireAdmin, async (req, res) => {
+  const guildId = req.body.guild_id;
+  if (!guildId) return res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+
+  try {
+    const guildConfigs = db.db.prepare('SELECT * FROM guilds WHERE guild_id = ? AND welcome_enabled = 1').all(guildId);
+    let sent = 0;
+    for (const gc of guildConfigs) {
+      if (!gc.welcome_channel_id) continue;
+      const message = gc.welcome_message || 'Welcome to the server! 👋';
+      try { await sendNotification(gc.welcome_channel_id, null, { streamerId: gc.streamer_id, guildId, type: 'welcome', contentOnly: `**Test Welcome Message**\n${message}` }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test welcome error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
   }
 });
 
