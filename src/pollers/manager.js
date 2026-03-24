@@ -337,15 +337,14 @@ async function pollAllSubSync() {
 
 async function pollAllInstagram() {
   const accounts = db.getAllUniqueWatchedInstagram();
-  if (accounts.length > 0 && !pollAllInstagram._logged) {
-    console.log(`[Instagram] Polling ${accounts.length} accounts`);
-    pollAllInstagram._logged = true;
+  if (accounts.length > 0) {
+    console.log(`[Instagram] Polling ${accounts.length} accounts: ${accounts.map(a => a.instagram_username).join(', ')}`);
   }
   for (const { instagram_username } of accounts) {
     try {
       const state = db.getInstagramState(instagram_username);
       const result = await instagramFeed.check(instagram_username, state);
-      if (!result) continue;
+      if (!result) { console.log(`[Instagram] ${instagram_username}: no changes`); continue; }
       if (result.stateUpdate) db.updateInstagramState(instagram_username, result.stateUpdate);
       if (result.notify && result.items) {
         const watchers = db.getInstagramWatchersForAccount(instagram_username)
@@ -384,15 +383,14 @@ async function pollAllInstagram() {
 
 async function pollAllTikTok() {
   const accounts = db.getAllUniqueWatchedTikTok();
-  if (accounts.length > 0 && !pollAllTikTok._logged) {
-    console.log(`[TikTok] Polling ${accounts.length} accounts`);
-    pollAllTikTok._logged = true;
+  if (accounts.length > 0) {
+    console.log(`[TikTok] Polling ${accounts.length} accounts: ${accounts.map(a => a.tiktok_username).join(', ')}`);
   }
   for (const { tiktok_username } of accounts) {
     try {
       const state = db.getTikTokState(tiktok_username);
       const result = await tiktokFeed.check(tiktok_username, state);
-      if (!result) continue;
+      if (!result) { console.log(`[TikTok] ${tiktok_username}: no changes`); continue; }
       if (result.stateUpdate) db.updateTikTokState(tiktok_username, result.stateUpdate);
       if (result.notify && result.items) {
         const watchers = db.getTikTokWatchersForAccount(tiktok_username)
@@ -431,15 +429,15 @@ async function pollAllTikTok() {
 
 async function pollAllTwitter() {
   const accounts = db.getAllUniqueWatchedTwitter();
-  if (accounts.length > 0 && !pollAllTwitter._logged) {
-    console.log(`[Twitter] Polling ${accounts.length} accounts`);
-    pollAllTwitter._logged = true;
+  if (accounts.length > 0) {
+    console.log(`[Twitter] Polling ${accounts.length} accounts: ${accounts.map(a => a.twitter_username).join(', ')}`);
   }
   for (const { twitter_username } of accounts) {
     try {
       const state = db.getTwitterState(twitter_username);
+      console.log(`[Twitter] Checking ${twitter_username}, known tweets: ${(JSON.parse(state.known_tweet_ids || '[]')).length}`);
       const result = await twitterFeed.check(twitter_username, state);
-      if (!result) continue;
+      if (!result) { console.log(`[Twitter] ${twitter_username}: no changes`); continue; }
       if (result.stateUpdate) db.updateTwitterState(twitter_username, result.stateUpdate);
       if (result.notify && result.items) {
         const watchers = db.getTwitterWatchersForAccount(twitter_username)
