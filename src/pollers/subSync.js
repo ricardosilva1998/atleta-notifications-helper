@@ -73,12 +73,16 @@ async function checkStreamer(streamer) {
   const linkedUsers = db.getLinkedUsers(streamer.id);
   console.log(`[SubSync] ${streamer.twitch_username}: ${linkedUsers.length} linked users`);
 
-  const guilds = db.getGuildsForStreamer(streamer.id).filter(
+  const allGuilds = db.getGuildsForStreamer(streamer.id);
+  console.log(`[SubSync] ${streamer.twitch_username}: ${allGuilds.length} guilds total, checking sub_sync_enabled + sub_role_id`);
+  allGuilds.forEach(g => console.log(`[SubSync]   guild ${g.guild_id}: sub_sync_enabled=${g.sub_sync_enabled}, sub_role_id=${g.sub_role_id || 'NONE'}`));
+
+  const guilds = allGuilds.filter(
     (g) => g.sub_sync_enabled && g.sub_role_id
   );
 
   if (guilds.length === 0) {
-    console.log(`[SubSync] ${streamer.twitch_username}: no guilds with sub sync enabled`);
+    console.log(`[SubSync] ${streamer.twitch_username}: no guilds with sub sync enabled AND role set`);
     return;
   }
 
