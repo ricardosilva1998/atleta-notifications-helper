@@ -9,23 +9,23 @@
 
 <!-- Tab Bar -->
 <div class="tab-bar animate-in animate-in-delay-1">
-  <button class="tab-btn" data-tab="stats">
+  <button class="tab-btn admin-tab-stats" data-tab="stats">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Stats
   </button>
-  <button class="tab-btn" data-tab="users">
+  <button class="tab-btn admin-tab-users" data-tab="users">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Users
   </button>
-  <button class="tab-btn" data-tab="issues">
+  <button class="tab-btn admin-tab-issues" data-tab="issues">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
     Issues (<%= issues.filter(i => i.status === 'open').length %>)
   </button>
-  <button class="tab-btn" data-tab="feedback">
+  <button class="tab-btn admin-tab-feedback" data-tab="feedback">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     Feedback (<%= feedback.length %>)
   </button>
-  <button class="tab-btn" data-tab="discounts">
+  <button class="tab-btn admin-tab-discounts" data-tab="discounts">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
     Discounts
   </button>
