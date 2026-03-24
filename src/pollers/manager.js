@@ -491,6 +491,9 @@ function startAll() {
   pollAllTwitchLive();
   pollAllTwitchClips();
   pollAllSubSync();
+  pollAllInstagram();
+  pollAllTikTok();
+  pollAllTwitter();
 }
 
 module.exports = { startAll };
