@@ -103,6 +103,15 @@ async function sendRecaps(twitchUsername, recapData) {
         guildId: w.guild_id,
         type: 'twitch_recap',
       });
+      // Send VOD link as plain text so Discord auto-generates the video player
+      if (recapData.vodUrl) {
+        await sendNotification(w.live_channel_id, null, {
+          streamerId: w.streamer_id,
+          guildId: w.guild_id,
+          type: 'twitch_recap',
+          contentOnly: `📺 **Watch the full VOD:** ${recapData.vodUrl}`,
+        });
+      }
     } catch (e) {
       console.error(`[Recap] Send failed for ${twitchUsername} to ${w.guild_id}: ${e.message}`);
     }

@@ -61,10 +61,6 @@ function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailU
     fields.push({ name: 'Followers', value: followerCount.toLocaleString(), inline: true });
   }
 
-  if (vodUrl) {
-    fields.push({ name: 'Watch VOD', value: `[Click to watch the full stream](${vodUrl})` });
-  }
-
   if (clips && clips.length > 0) {
     const clipList = clips
       .map((clip, i) => `${i + 1}. [${clip.title}](${clip.url}) (${clip.view_count || 0} views)`)

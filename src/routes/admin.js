@@ -192,6 +192,15 @@ router.post('/test/recap/:username', requireAdmin, async (req, res) => {
           guildId: w.guild_id,
           type: 'twitch_recap',
         });
+        // Send VOD as plain text for Discord video player
+        if (recapData.vodUrl) {
+          await sendNotification(w.live_channel_id, null, {
+            streamerId: w.streamer_id,
+            guildId: w.guild_id,
+            type: 'twitch_recap',
+            contentOnly: `📺 **Watch the full VOD:** ${recapData.vodUrl}`,
+          });
+        }
         sent++;
       } catch (e) {
         console.error(`[TestRecap] Send failed: ${e.message}`);
