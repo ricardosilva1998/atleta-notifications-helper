@@ -126,7 +126,8 @@ router.post('/issues/:id', requireAdmin, (req, res) => {
 // --- Testing Tools ---
 
 const { getUserId, getClips, getVideos, getFollowerCount, getStream } = require('../services/twitch');
-const { buildRecapEmbed, buildMilestoneEmbed, buildWeeklyDigestEmbed, buildEmbed, sendNotification } = require('../discord');
+const { buildRecapEmbed, buildMilestoneEmbed, buildWeeklyDigestEmbed, buildIracingResultEmbed, buildEmbed, sendNotification } = require('../discord');
+const iracing = require('../services/iracing');
 const { getLatestVideos, resolveChannelId } = require('../services/youtube');
 
 // Test: Stream Recap
@@ -431,6 +432,59 @@ router.post('/test/welcome', requireAdmin, async (req, res) => {
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
     console.error(`[Admin] Test welcome error: ${e.message}`);
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+  }
+});
+
+// Test: iRacing Race Result
+router.post('/test/iracing/:customerId', requireAdmin, async (req, res) => {
+  const customerId = req.params.customerId;
+  try {
+    if (!iracing.isConfigured()) return res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
+
+    const recentRaces = await iracing.getRecentRaces(customerId);
+    if (!recentRaces || recentRaces.length === 0) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
+
+    const result = await iracing.getRaceResult(recentRaces[0].subsession_id);
+    if (!result) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
+
+    let driverResult = null;
+    for (const session of (result.session_results || [])) {
+      const found = (session.results || []).find(r => r.cust_id === parseInt(customerId));
+      if (found) { driverResult = found; break; }
+    }
+    if (!driverResult) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
+
+    const raceData = {
+      subsession_id: String(recentRaces[0].subsession_id),
+      customer_id: customerId,
+      driver_name: driverResult.display_name || 'Unknown',
+      series_name: result.series_name || 'Unknown Series',
+      track_name: result.track?.track_name || 'Unknown Track',
+      car_name: driverResult.car_name || 'Unknown Car',
+      category: result.license_category || 'road',
+      finish_position: (driverResult.finish_position || 0) + 1,
+      starting_position: (driverResult.starting_position || 0) + 1,
+      incidents: driverResult.incidents || 0,
+      irating_change: (driverResult.newi_rating || 0) - (driverResult.oldi_rating || 0),
+      new_irating: driverResult.newi_rating || 0,
+      laps_completed: driverResult.laps_complete || 0,
+      fastest_lap_time: driverResult.best_lap_time > 0 ? driverResult.best_lap_time / 10000 : null,
+      qualifying_time: driverResult.best_qual_lap_time > 0 ? driverResult.best_qual_lap_time / 10000 : null,
+      field_size: result.num_drivers || 0,
+      strength_of_field: result.event_strength_of_field || 0,
+      race_date: result.start_time || new Date().toISOString(),
+    };
+
+    const embed = buildIracingResultEmbed(raceData);
+    const watchers = db.getIracingWatchersForDriver(customerId).filter(w => w.notify_channel_id);
+    let sent = 0;
+    for (const w of watchers) {
+      try { await sendNotification(w.notify_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'iracing_result' }); sent++; } catch (e) {}
+    }
+    res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
+  } catch (e) {
+    console.error(`[Admin] Test iRacing error: ${e.message}`);
     res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
   }
 });

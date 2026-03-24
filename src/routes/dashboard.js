@@ -7,6 +7,7 @@ const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../servic
 const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPosts } = require('../services/instagram');
 const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
 const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
+const iracing = require('../services/iracing');
 
 const router = Router();
 
@@ -212,6 +213,7 @@ router.get('/guild/:guildId', async (req, res) => {
   const watchedInstagramAccounts = db.getWatchedInstagramForGuild(guildId, req.streamer.id);
   const watchedTikTokAccounts = db.getWatchedTikTokForGuild(guildId, req.streamer.id);
   const watchedTwitterAccounts = db.getWatchedTwitterForGuild(guildId, req.streamer.id);
+  const watchedIracingDrivers = db.getWatchedIracingDriversForGuild(guildId, req.streamer.id);
 
   const { tier, limits } = getTierLimits(req.streamer.id);
 
@@ -227,6 +229,7 @@ router.get('/guild/:guildId', async (req, res) => {
     watchedInstagramAccounts,
     watchedTikTokAccounts,
     watchedTwitterAccounts,
+    watchedIracingDrivers,
     hasBroadcasterToken: !!req.streamer.broadcaster_access_token,
     broadcasterAuthUrl: `${config.app.url}/auth/broadcaster`,
     tier,
@@ -261,6 +264,7 @@ router.post('/guild/:guildId', (req, res) => {
     instagram_enabled: req.body.instagram_enabled === 'on',
     tiktok_enabled: req.body.tiktok_enabled === 'on',
     twitter_enabled: req.body.twitter_enabled === 'on',
+    iracing_enabled: req.body.iracing_enabled === 'on',
   });
 
   console.log(`[Dashboard] Guild ${guildId} config updated by ${req.streamer.discord_username}`);
@@ -560,6 +564,89 @@ router.post('/guild/:guildId/twitter/:id/remove', (req, res) => {
   const { guildId, id } = req.params;
   db.removeWatchedTwitter(parseInt(id), req.streamer.id);
   res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=removed`);
+});
+
+// --- iRacing ---
+
+router.post('/guild/:guildId/iracing', async (req, res) => {
+  const { guildId } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  const { limits } = getTierLimits(req.streamer.id);
+  if (!limits.iracing) return res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=upgrade_iracing`);
+
+  const customerId = (req.body.customer_id || '').trim();
+  const notifyChannelId = req.body.notify_channel_id;
+  if (!customerId || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=missing_fields`);
+
+  // Check driver limit
+  if (limits.maxIracingDrivers !== -1) {
+    const existing = db.getWatchedIracingDriversForGuild(guildId, req.streamer.id);
+    if (existing.length >= limits.maxIracingDrivers) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=iracing_limit`);
+    }
+  }
+
+  // Resolve driver name from iRacing API
+  let driverName = customerId;
+  if (iracing.isConfigured()) {
+    try {
+      const profile = await iracing.getDriverProfile(customerId);
+      if (profile?.displayName) driverName = profile.displayName;
+    } catch (e) {
+      console.warn(`[Dashboard] iRacing profile resolve failed: ${e.message}`);
+    }
+  }
+
+  db.addWatchedIracingDriver(guildId, req.streamer.id, customerId, driverName, notifyChannelId);
+
+  // Pre-populate known races to avoid old result spam
+  if (iracing.isConfigured()) {
+    try {
+      const recentRaces = await iracing.getRecentRaces(customerId);
+      if (recentRaces) {
+        for (const race of recentRaces.slice(0, 10)) {
+          db.upsertIracingRaceCache({
+            subsession_id: String(race.subsession_id),
+            customer_id: customerId,
+            driver_name: driverName,
+            series_name: 'Pre-populated',
+            track_name: '',
+            car_name: '',
+            category: '',
+            finish_position: 0,
+            starting_position: 0,
+            incidents: 0,
+            irating_change: 0,
+            new_irating: 0,
+            laps_completed: 0,
+            fastest_lap_time: null,
+            qualifying_time: null,
+            field_size: 0,
+            strength_of_field: 0,
+            race_date: race.start_time || new Date().toISOString(),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn(`[Dashboard] iRacing pre-populate failed: ${e.message}`);
+    }
+  }
+
+  console.log(`[Dashboard] Added iRacing driver ${customerId} (${driverName}) for guild ${guildId}`);
+  res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=added`);
+});
+
+router.post('/guild/:guildId/iracing/:id/edit', (req, res) => {
+  const { guildId, id } = req.params;
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  db.updateWatchedIracingDriverChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=updated`);
+});
+
+router.post('/guild/:guildId/iracing/:id/remove', (req, res) => {
+  const { guildId, id } = req.params;
+  db.removeWatchedIracingDriver(parseInt(id), req.streamer.id);
+  res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=removed`);
 });
 
 // --- Feedback ---

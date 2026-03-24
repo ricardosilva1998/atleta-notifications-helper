@@ -1,6 +1,6 @@
 const db = require('../db');
 const config = require('../config');
-const { sendNotification, buildRecapEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed } = require('../discord');
+const { sendNotification, buildRecapEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed } = require('../discord');
 const twitchLive = require('./twitchLive');
 const twitchClips = require('./twitchClips');
 const youtubeFeed = require('./youtubeFeed');
@@ -10,6 +10,8 @@ const { pollWeeklyDigest } = require('./weeklyDigest');
 const instagramFeed = require('./instagramFeed');
 const tiktokFeed = require('./tiktokFeed');
 const twitterFeed = require('./twitterFeed');
+const iracingResults = require('./iracingResults');
+const iracing = require('../services/iracing');
 const { getFollowerCount, getSubscribers } = require('../services/twitch');
 
 // --- Twitch polling (channel-centric) ---
@@ -505,6 +507,50 @@ async function pollAllTwitter() {
   }
 }
 
+// --- iRacing polling ---
+
+async function pollAllIracingResults() {
+  if (!iracing.isConfigured()) return;
+  const drivers = db.getAllUniqueWatchedIracingDrivers();
+  if (drivers.length > 0) {
+    console.log(`[iRacing] Polling ${drivers.length} drivers: ${drivers.map(d => d.customer_id).join(', ')}`);
+  }
+  for (const { customer_id } of drivers) {
+    try {
+      const result = await iracingResults.check(customer_id, db);
+      if (!result || !result.notify) continue;
+
+      for (const race of result.races) {
+        // Cache the race
+        db.upsertIracingRaceCache(race);
+
+        // Fan out notifications
+        const watchers = db.getIracingWatchersForDriver(customer_id)
+          .filter(w => w.notify_channel_id);
+        for (const w of watchers) {
+          const tier = db.getStreamerTier(w.streamer_id);
+          const tierConfig = config.tiers[tier] || config.tiers.free;
+          if (!tierConfig.iracing) continue;
+
+          try {
+            const embed = buildIracingResultEmbed(race);
+            await sendNotification(w.notify_channel_id, embed, {
+              streamerId: w.streamer_id,
+              guildId: w.guild_id,
+              type: 'iracing_result',
+            });
+          } catch (e) {
+            console.error(`[iRacing] Send failed for ${customer_id} to ${w.guild_id}: ${e.message}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[iRacing] Error for ${customer_id}: ${error.message}`);
+    }
+    if (drivers.length > 1) await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
 function startAll() {
   setInterval(pollAllTwitchLive, config.intervals.twitchLive);
   setInterval(pollAllTwitchClips, config.intervals.twitchClips);
@@ -517,6 +563,7 @@ function startAll() {
   // setInterval(pollAllTikTok, config.intervals.tiktokFeed);
   // Twitter disabled — no free API tier available
   // setInterval(pollAllTwitter, config.intervals.twitterFeed);
+  setInterval(pollAllIracingResults, config.intervals.iracingResults);
 
   console.log('[Manager] All pollers started');
 

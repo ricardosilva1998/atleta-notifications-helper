@@ -111,6 +111,15 @@ try {
   }
 } catch {}
 
+// Migration 10: add iracing_enabled to guilds
+try {
+  const cols = db.prepare("PRAGMA table_info(guilds)").all();
+  if (cols.length > 0 && !cols.find((c) => c.name === 'iracing_enabled')) {
+    db.exec('ALTER TABLE guilds ADD COLUMN iracing_enabled INTEGER DEFAULT 0');
+    console.log('[DB] Added iracing_enabled column to guilds');
+  }
+} catch {}
+
 // --- Schema ---
 
 db.exec(`
@@ -363,6 +372,59 @@ db.exec(`
     status TEXT DEFAULT 'new',
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS watched_iracing_drivers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
+    customer_id TEXT NOT NULL,
+    driver_name TEXT,
+    notify_channel_id TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(guild_id, streamer_id, customer_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS iracing_driver_state (
+    customer_id TEXT PRIMARY KEY,
+    last_checked TEXT,
+    irating_road INTEGER DEFAULT 0,
+    irating_oval INTEGER DEFAULT 0,
+    irating_dirt_road INTEGER DEFAULT 0,
+    irating_dirt_oval INTEGER DEFAULT 0,
+    safety_rating_road REAL DEFAULT 0,
+    safety_rating_oval REAL DEFAULT 0,
+    safety_rating_dirt_road REAL DEFAULT 0,
+    safety_rating_dirt_oval REAL DEFAULT 0,
+    license_class TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS iracing_race_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subsession_id TEXT NOT NULL,
+    customer_id TEXT NOT NULL,
+    driver_name TEXT,
+    series_name TEXT,
+    track_name TEXT,
+    car_name TEXT,
+    category TEXT,
+    finish_position INTEGER,
+    starting_position INTEGER,
+    incidents INTEGER,
+    irating_change INTEGER,
+    new_irating INTEGER,
+    laps_completed INTEGER,
+    fastest_lap_time REAL,
+    qualifying_time REAL,
+    field_size INTEGER,
+    strength_of_field INTEGER,
+    race_date TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(subsession_id, customer_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_iracing_cache_qualifying ON iracing_race_cache(category, qualifying_time);
+  CREATE INDEX IF NOT EXISTS idx_iracing_cache_customer ON iracing_race_cache(customer_id, race_date DESC);
 `);
 
 // --- Seed: ensure enterprise subscriptions for specific users ---
@@ -488,7 +550,8 @@ const _updateGuildConfig = db.prepare(`
     weekly_highlights_enabled = ?,
     instagram_enabled = ?,
     tiktok_enabled = ?,
-    twitter_enabled = ?
+    twitter_enabled = ?,
+    iracing_enabled = ?
   WHERE guild_id = ? AND streamer_id = ?
 `);
 const _deleteGuild = db.prepare('DELETE FROM guilds WHERE guild_id = ? AND streamer_id = ?');
@@ -534,6 +597,7 @@ function updateGuildConfig(guildId, streamerId, config) {
     config.instagram_enabled ? 1 : 0,
     config.tiktok_enabled ? 1 : 0,
     config.twitter_enabled ? 1 : 0,
+    config.iracing_enabled ? 1 : 0,
     guildId,
     streamerId
   );
@@ -677,6 +741,7 @@ const _getGuildNotificationStats = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
     COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
     COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
+    COALESCE(SUM(CASE WHEN type = 'iracing_result' THEN 1 ELSE 0 END), 0) AS iracing_result_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 ELSE 0 END), 0) AS week_total
   FROM notification_log WHERE streamer_id = ? AND guild_id = ?
@@ -698,6 +763,7 @@ const _getGuildStatsByPeriod = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
     COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
     COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
+    COALESCE(SUM(CASE WHEN type = 'iracing_result' THEN 1 ELSE 0 END), 0) AS iracing_result_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_count,
     COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS fail_count
@@ -716,6 +782,7 @@ const _getGuildStatsLifetime = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
     COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
     COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
+    COALESCE(SUM(CASE WHEN type = 'iracing_result' THEN 1 ELSE 0 END), 0) AS iracing_result_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_count,
     COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS fail_count
@@ -1389,6 +1456,149 @@ function updateWatchedTwitterChannel(id, streamerId, notifyChannelId) {
   _updateWatchedTwitterChannel.run(notifyChannelId || null, id, streamerId);
 }
 
+// --- Watched iRacing Drivers ---
+
+const _addWatchedIracingDriver = db.prepare(`
+  INSERT OR IGNORE INTO watched_iracing_drivers (guild_id, streamer_id, customer_id, driver_name, notify_channel_id)
+  VALUES (?, ?, ?, ?, ?)
+`);
+const _removeWatchedIracingDriver = db.prepare('DELETE FROM watched_iracing_drivers WHERE id = ? AND streamer_id = ?');
+const _getWatchedIracingDriversForGuild = db.prepare('SELECT * FROM watched_iracing_drivers WHERE guild_id = ? AND streamer_id = ?');
+const _getAllUniqueWatchedIracingDrivers = db.prepare('SELECT DISTINCT customer_id FROM watched_iracing_drivers WHERE enabled = 1');
+const _getIracingWatchersForDriver = db.prepare(`
+  SELECT wid.*, s.id AS owner_id, s.enabled AS streamer_enabled
+  FROM watched_iracing_drivers wid
+  JOIN streamers s ON wid.streamer_id = s.id
+  WHERE wid.customer_id = ? AND wid.enabled = 1 AND s.enabled = 1
+`);
+const _getIracingDriverState = db.prepare('SELECT * FROM iracing_driver_state WHERE customer_id = ?');
+const _upsertIracingDriverState = db.prepare(`
+  INSERT INTO iracing_driver_state (customer_id) VALUES (?)
+  ON CONFLICT(customer_id) DO NOTHING
+`);
+const _updateIracingDriverState = db.prepare(`
+  UPDATE iracing_driver_state SET
+    last_checked = COALESCE(?, last_checked),
+    irating_road = COALESCE(?, irating_road),
+    irating_oval = COALESCE(?, irating_oval),
+    irating_dirt_road = COALESCE(?, irating_dirt_road),
+    irating_dirt_oval = COALESCE(?, irating_dirt_oval),
+    safety_rating_road = COALESCE(?, safety_rating_road),
+    safety_rating_oval = COALESCE(?, safety_rating_oval),
+    safety_rating_dirt_road = COALESCE(?, safety_rating_dirt_road),
+    safety_rating_dirt_oval = COALESCE(?, safety_rating_dirt_oval),
+    license_class = COALESCE(?, license_class)
+  WHERE customer_id = ?
+`);
+const _upsertIracingRaceCache = db.prepare(`
+  INSERT OR IGNORE INTO iracing_race_cache (subsession_id, customer_id, driver_name, series_name, track_name, car_name, category, finish_position, starting_position, incidents, irating_change, new_irating, laps_completed, fastest_lap_time, qualifying_time, field_size, strength_of_field, race_date)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const _isRaceCached = db.prepare('SELECT 1 FROM iracing_race_cache WHERE subsession_id = ? AND customer_id = ?');
+const _getIracingRaceHistory = db.prepare('SELECT * FROM iracing_race_cache WHERE customer_id = ? ORDER BY race_date DESC LIMIT ?');
+const _searchIracingQualifying = db.prepare('SELECT * FROM iracing_race_cache WHERE qualifying_time IS NOT NULL AND qualifying_time > 0 ORDER BY qualifying_time ASC');
+const _searchIracingQualifyingByCategory = db.prepare('SELECT * FROM iracing_race_cache WHERE qualifying_time IS NOT NULL AND qualifying_time > 0 AND category = ? ORDER BY qualifying_time ASC');
+const _getIracingDriverStats = db.prepare(`
+  SELECT
+    COUNT(*) AS race_count,
+    COALESCE(SUM(CASE WHEN finish_position = 1 THEN 1 ELSE 0 END), 0) AS wins,
+    ROUND(AVG(finish_position), 1) AS avg_finish,
+    ROUND(AVG(incidents), 1) AS avg_incidents,
+    MIN(finish_position) AS best_finish
+  FROM iracing_race_cache WHERE customer_id = ?
+`);
+const _updateWatchedIracingDriverChannel = db.prepare(`
+  UPDATE watched_iracing_drivers SET notify_channel_id = ?
+  WHERE id = ? AND streamer_id = ?
+`);
+
+function addWatchedIracingDriver(guildId, streamerId, customerId, driverName, notifyChannelId) {
+  _addWatchedIracingDriver.run(guildId, streamerId, customerId, driverName || null, notifyChannelId || null);
+}
+
+function removeWatchedIracingDriver(id, streamerId) {
+  _removeWatchedIracingDriver.run(id, streamerId);
+}
+
+function getWatchedIracingDriversForGuild(guildId, streamerId) {
+  return _getWatchedIracingDriversForGuild.all(guildId, streamerId);
+}
+
+function getAllUniqueWatchedIracingDrivers() {
+  return _getAllUniqueWatchedIracingDrivers.all();
+}
+
+function getIracingWatchersForDriver(customerId) {
+  return _getIracingWatchersForDriver.all(customerId);
+}
+
+function getIracingDriverState(customerId) {
+  _upsertIracingDriverState.run(customerId);
+  return _getIracingDriverState.get(customerId);
+}
+
+function updateIracingDriverState(customerId, updates) {
+  _updateIracingDriverState.run(
+    updates.last_checked ?? null,
+    updates.irating_road ?? null,
+    updates.irating_oval ?? null,
+    updates.irating_dirt_road ?? null,
+    updates.irating_dirt_oval ?? null,
+    updates.safety_rating_road ?? null,
+    updates.safety_rating_oval ?? null,
+    updates.safety_rating_dirt_road ?? null,
+    updates.safety_rating_dirt_oval ?? null,
+    updates.license_class ?? null,
+    customerId
+  );
+}
+
+function upsertIracingRaceCache(raceData) {
+  _upsertIracingRaceCache.run(
+    raceData.subsession_id,
+    raceData.customer_id,
+    raceData.driver_name || null,
+    raceData.series_name || null,
+    raceData.track_name || null,
+    raceData.car_name || null,
+    raceData.category || null,
+    raceData.finish_position ?? null,
+    raceData.starting_position ?? null,
+    raceData.incidents ?? null,
+    raceData.irating_change ?? null,
+    raceData.new_irating ?? null,
+    raceData.laps_completed ?? null,
+    raceData.fastest_lap_time ?? null,
+    raceData.qualifying_time ?? null,
+    raceData.field_size ?? null,
+    raceData.strength_of_field ?? null,
+    raceData.race_date || null
+  );
+}
+
+function isRaceCached(subsessionId, customerId) {
+  return !!_isRaceCached.get(subsessionId, customerId);
+}
+
+function getIracingRaceHistory(customerId, limit = 50) {
+  return _getIracingRaceHistory.all(customerId, limit);
+}
+
+function searchIracingQualifying(category) {
+  if (category) {
+    return _searchIracingQualifyingByCategory.all(category);
+  }
+  return _searchIracingQualifying.all();
+}
+
+function getIracingDriverStats(customerId) {
+  return _getIracingDriverStats.get(customerId);
+}
+
+function updateWatchedIracingDriverChannel(id, streamerId, notifyChannelId) {
+  _updateWatchedIracingDriverChannel.run(notifyChannelId || null, id, streamerId);
+}
+
 // --- Subscriptions ---
 
 const _getSubscription = db.prepare("SELECT * FROM subscriptions WHERE streamer_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1");
@@ -1686,4 +1896,17 @@ module.exports = {
   isAdmin,
   createFeedback,
   getAllFeedback,
+  addWatchedIracingDriver,
+  removeWatchedIracingDriver,
+  getWatchedIracingDriversForGuild,
+  getAllUniqueWatchedIracingDrivers,
+  getIracingWatchersForDriver,
+  getIracingDriverState,
+  updateIracingDriverState,
+  upsertIracingRaceCache,
+  isRaceCached,
+  getIracingRaceHistory,
+  searchIracingQualifying,
+  getIracingDriverStats,
+  updateWatchedIracingDriverChannel,
 };

@@ -51,6 +51,7 @@ module.exports = {
     instagramFeed: parseInt(process.env.INSTAGRAM_FEED_INTERVAL) || 600_000,
     tiktokFeed: parseInt(process.env.TIKTOK_FEED_INTERVAL) || 600_000,
     twitterFeed: parseInt(process.env.TWITTER_FEED_INTERVAL) || 600_000,
+    iracingResults: parseInt(process.env.IRACING_POLL_INTERVAL) || 1_800_000,
   },
   tiers: {
     free: {
@@ -77,6 +78,8 @@ module.exports = {
       tiktok: false,
       twitter: false,
       maxSocialAccounts: 0,
+      iracing: false,
+      maxIracingDrivers: 0,
     },
     starter: {
       name: 'Starter',
@@ -102,6 +105,8 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: 3,
+      iracing: true,
+      maxIracingDrivers: 10,
     },
     pro: {
       name: 'Pro',
@@ -127,6 +132,8 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: 20,
+      iracing: true,
+      maxIracingDrivers: 50,
     },
     enterprise: {
       name: 'Enterprise',
@@ -152,6 +159,8 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: -1,
+      iracing: true,
+      maxIracingDrivers: -1,
     },
   },
 };
