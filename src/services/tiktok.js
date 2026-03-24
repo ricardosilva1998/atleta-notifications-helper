@@ -1,7 +1,8 @@
 const { XMLParser } = require('fast-xml-parser');
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
-const RSSHUB_INSTANCES = ['https://rsshub.app', 'https://rsshub.rssforever.com', 'https://rsshub-instance.zeabur.app'];
+const SELF_HOSTED = process.env.RSSHUB_URL;
+const RSSHUB_INSTANCES = [SELF_HOSTED, 'https://rsshub.app', 'https://rsshub.rssforever.com'].filter(Boolean);
 
 async function resolveProfile(username) {
   const clean = username.replace(/^@/, '').trim().toLowerCase();
