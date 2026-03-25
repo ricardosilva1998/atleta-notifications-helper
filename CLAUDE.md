@@ -55,10 +55,12 @@ src/
     ├── login.ejs         # Landing page with feature cards
     ├── dashboard.ejs     # Server list with inline expandable stats per guild
     ├── account.ejs       # User profile, metrics charts, subscription, language, logout
-    ├── guild-config.ejs  # Tabbed UI: Twitch | YouTube | Discord | Settings
+    ├── guild-config.ejs  # Tabbed UI: Twitch | YouTube | Discord | iRacing (coming soon) | Settings
     ├── guild-stats.ejs   # Per-server stats with period selector (24h/7d/30d/year/lifetime)
-    ├── pricing.ejs       # 4-tier pricing grid
+    ├── donate.ejs        # Donation page (Buy me a coffee)
+    ├── pricing.ejs       # Legacy pricing grid
     ├── subscription.ejs  # Subscription management
+    ├── link-result.ejs   # Styled /link callback page
     ├── tutorial.ejs      # 8-step setup guide
     ├── report-issue.ejs  # Bug report form
     └── admin-*.ejs       # Admin panel views
@@ -67,12 +69,17 @@ src/
 ## Key Architecture
 
 - **Polling-based:** Pollers run on intervals, detect state changes, and send Discord notifications
-- **Tier system:** Free / Starter (€5/yr) / Pro (€10/yr) / Enterprise (€25/yr) — defined in `src/config.js`
-- **Activity Feed:** Stream Recaps (Starter+), Milestone Celebrations (Starter+), Weekly Highlights (Pro+)
+- **Free for all:** All features are free and unlimited for every user — no tier gating
+- **Donations:** PayPal.me donation page at `/donate` (Buy me a coffee or candy)
+- **Activity Feed:** Stream Recaps, Milestone Celebrations, Weekly Highlights — all free
 - **Auth flow:** Discord OAuth login → Twitch linking → bot invite → tabbed channel config
-- **DB migrations:** 7 migrations auto-run on startup in `src/db.js`
+- **YouTube Shorts:** Detected via YouTube Data API duration check (≤60s), separate notification format
+- **User feedback:** Star rating + message on account page, visible in admin Feedback tab
+- **Admin panel:** User-based access (specific Discord users), tabbed UI with Stats/Users/Issues/Feedback/Discounts/Testing
+- **iRacing (coming soon):** Full integration built but disabled — waiting for iRacing OAuth credentials
+- **DB migrations:** 10 migrations auto-run on startup in `src/db.js`
 - **DB seeds:** Enterprise subscriptions granted to specific users on startup
-- **No ORM:** All SQL is raw in `db.js` (~1200 lines)
+- **No ORM:** All SQL is raw in `db.js`
 - **i18n:** `t(lang, key, params)` helper via `res.locals.t` — cookie-based language preference
 - **YouTube setup:** Accepts @username or channel ID, resolves via page scraping, pre-populates known videos to avoid spam
 - **Twitch profiles:** Fetched via `/users` API on channel add, cached in DB, backfilled on page load

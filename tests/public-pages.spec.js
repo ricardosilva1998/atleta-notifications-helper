@@ -114,9 +114,9 @@ test.describe('Public Pages', () => {
     // Open sidebar
     await page.locator('.hamburger').click();
 
-    // Click pricing link
-    await page.locator('.sidebar-link', { hasText: 'Pricing' }).click();
-    await expect(page).toHaveURL(/pricing/);
+    // Click donate link
+    await page.locator('.sidebar-link', { hasText: 'Buy me a coffee' }).click();
+    await expect(page).toHaveURL(/donate/);
 
     // Open sidebar again
     await page.locator('.hamburger').click();

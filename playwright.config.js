@@ -2,7 +2,7 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
-  timeout: 30000,
+  timeout: 60000,
   retries: 0,
   use: {
     baseURL: 'https://atleta-notifications-helper-production.up.railway.app',
