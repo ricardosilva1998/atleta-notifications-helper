@@ -57,6 +57,10 @@ app.get('/tutorial', (req, res) => {
   res.render('tutorial', { streamer: req.streamer || null });
 });
 
+app.get('/donate', (req, res) => {
+  res.render('donate', { streamer: req.streamer || null });
+});
+
 app.get('/pricing', (req, res) => {
   res.render('pricing', {
     streamer: req.streamer || null,
