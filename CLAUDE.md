@@ -1,6 +1,6 @@
 # Atleta Notifications Helper
 
-Self-service Discord notification bot for streamers. Monitors Twitch (live streams, clips, recaps, milestones), YouTube (videos, shorts, livestreams), and provides welcome messages, subscriber role sync, and weekly digests. Streamers configure everything through a web dashboard with multi-language support.
+Self-service Discord notification bot for streamers. Monitors Twitch (live streams, clips, recaps, milestones), YouTube (videos, shorts, livestreams), and provides welcome messages, subscriber role sync, and weekly digests. Includes a Twitch chatbot (Atleta) for customizable thank-you messages and custom commands, plus an OBS overlay with racing-themed animated notification banners. Streamers configure everything through a web dashboard with multi-language support.
 
 ## Tech Stack
 
@@ -8,7 +8,8 @@ Self-service Discord notification bot for streamers. Monitors Twitch (live strea
 - **Backend:** Express v5, EJS templates (server-rendered)
 - **Database:** SQLite via better-sqlite3 (WAL mode, foreign keys)
 - **Bot:** discord.js v14
-- **External APIs:** Twitch Helix, YouTube Data API v3 + RSS feeds, PayPal
+- **External APIs:** Twitch Helix, Twitch EventSub (WebSocket), StreamElements (socket.io), YouTube Data API v3 + RSS feeds, PayPal
+- **Chatbot:** tmi.js (Twitch IRC) — single shared connection for all channels
 - **i18n:** Custom JSON-based translation system (7 languages)
 - **Deployment:** Docker on Railway with persistent volume at `/app/data`
 
@@ -41,11 +42,16 @@ src/
 │   ├── weeklyDigest.js   # Weekly highlights digest (Monday 09:00 UTC)
 │   └── subSync.js        # Twitch sub role sync (10min)
 ├── services/
-│   ├── twitch.js         # Twitch Helix API (streams, clips, users, followers, videos, games)
-│   └── youtube.js        # YouTube API + RSS + channel resolver (@handle → channel ID)
+│   ├── twitch.js         # Twitch Helix API + broadcaster/bot token refresh
+│   ├── youtube.js        # YouTube API + RSS + channel resolver (@handle → channel ID)
+│   ├── eventsub.js       # Twitch EventSub WebSocket (per-streamer connections for overlay/chat events)
+│   ├── streamelements.js # StreamElements socket.io (per-streamer, donation tips)
+│   ├── twitchChat.js     # Shared tmi.js chatbot — single connection, joins all enabled channels
+│   └── overlayBus.js     # EventEmitter singleton — routes events to overlay SSE + chat
 ├── routes/
 │   ├── auth.js           # Discord + Twitch OAuth
-│   ├── dashboard.js      # Dashboard, account, guild config (tabbed), stats, channel CRUD
+│   ├── overlay.js        # OBS overlay SSE endpoint + overlay HTML page
+│   ├── dashboard.js      # Dashboard, account, guild config (tabbed), stats, channel CRUD, overlay config, chatbot config
 │   ├── api.js            # API endpoints
 │   ├── admin.js          # Admin panel
 │   └── payment.js        # PayPal subscriptions
@@ -56,6 +62,8 @@ src/
     ├── dashboard.ejs     # Server list with inline expandable stats per guild
     ├── account.ejs       # User profile, metrics charts, subscription, language, logout
     ├── guild-config.ejs  # Tabbed UI: Twitch | YouTube | Discord | iRacing (coming soon) | Settings
+    ├── overlay-config.ejs # OBS overlay settings — event toggles, durations, volume, overlay URL
+    ├── chatbot-config.ejs # Chatbot settings — tabbed: Connection | Event Messages | Custom Commands
     ├── guild-stats.ejs   # Per-server stats with period selector (24h/7d/30d/year/lifetime)
     ├── donate.ejs        # Donation page (Buy me a coffee)
     ├── pricing.ejs       # Legacy pricing grid
@@ -64,11 +72,18 @@ src/
     ├── tutorial.ejs      # 8-step setup guide
     ├── report-issue.ejs  # Bug report form
     └── admin-*.ejs       # Admin panel views
+public/
+├── overlay/
+│   ├── overlay.css       # Racing-themed banner animations (follow, sub, bits, donation, raid)
+│   ├── overlay.js        # Client-side SSE connection, event queue, banner rendering
+│   └── sounds/           # User-provided notification sound files
 ```
 
 ## Key Architecture
 
 - **Polling-based:** Pollers run on intervals, detect state changes, and send Discord notifications
+- **OBS Overlay:** EventSub receives Twitch events → overlayBus EventEmitter → SSE push to OBS browser source. Racing-themed animated banners per event type. StreamElements donations via socket.io.
+- **Chatbot (Atleta):** Single shared tmi.js connection (env var credentials) joins all enabled channels. EventSub/StreamElements events trigger customizable thank-you messages. Custom `!commands` stored per-streamer in `chat_commands` table.
 - **Free for all:** All features are free and unlimited for every user — no tier gating
 - **Donations:** PayPal.me donation page at `/donate` (Buy me a coffee or candy)
 - **Activity Feed:** Stream Recaps, Milestone Celebrations, Weekly Highlights — all free
@@ -77,7 +92,7 @@ src/
 - **User feedback:** Star rating + message on account page, visible in admin Feedback tab
 - **Admin panel:** User-based access (specific Discord users), tabbed UI with Stats/Users/Issues/Feedback/Discounts/Testing
 - **iRacing (coming soon):** Full integration built but disabled — waiting for iRacing OAuth credentials
-- **DB migrations:** 10 migrations auto-run on startup in `src/db.js`
+- **DB migrations:** Auto-run on startup in `src/db.js`
 - **DB seeds:** Enterprise subscriptions granted to specific users on startup
 - **No ORM:** All SQL is raw in `db.js`
 - **i18n:** `t(lang, key, params)` helper via `res.locals.t` — cookie-based language preference
@@ -94,6 +109,7 @@ Required:
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`
 
 Optional:
+- `BOT_TWITCH_USERNAME`, `BOT_TWITCH_TOKEN` — chatbot credentials (shared single connection)
 - `YOUTUBE_API_KEY` — global key for YouTube live detection
 - `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE`
 - `APP_URL`, `PORT`, `SESSION_SECRET`, `ADMIN_PASSWORD`
