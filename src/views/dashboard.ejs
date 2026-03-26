@@ -44,20 +44,6 @@
 
 <!-- Quick Links -->
 <div style="display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap;" class="animate-in animate-in-delay-1">
-  <% if (!streamer.twitch_user_id) { %>
-    <a href="/auth/twitch" class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></svg>
-      <%= t('dashboard.linkTwitch') %>
-    </a>
-  <% } else { %>
-    <span class="btn btn-secondary" style="cursor: default; padding: 8px 16px; font-size: 13px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      Twitch: <%= streamer.twitch_username %>
-    </span>
-  <% } %>
-  <% if (streamer.twitch_user_id && !streamer.broadcaster_access_token) { %>
-    <a href="/auth/broadcaster" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;"><%= t('dashboard.enableSubSync') %></a>
-  <% } %>
   <a href="<%= botInviteUrl %>" target="_blank" rel="noopener" class="btn btn-discord" style="padding: 8px 16px; font-size: 13px;">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     <%= t('dashboard.addBot') %>
@@ -285,6 +271,25 @@
 </div><!-- end tab-discord -->
 
 <div class="tab-content" id="tab-twitch">
+
+  <!-- Twitch Account -->
+  <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+    <% if (!streamer.twitch_user_id) { %>
+      <a href="/auth/twitch" class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></svg>
+        <%= t('dashboard.linkTwitch') %>
+      </a>
+    <% } else { %>
+      <span class="btn btn-secondary" style="cursor: default; padding: 8px 16px; font-size: 13px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Twitch: <%= streamer.twitch_username %>
+      </span>
+    <% } %>
+    <% if (streamer.twitch_user_id && !streamer.broadcaster_access_token) { %>
+      <a href="/auth/broadcaster" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;"><%= t('dashboard.enableSubSync') %></a>
+    <% } %>
+  </div>
+
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
 
     <!-- Overlay Card -->
