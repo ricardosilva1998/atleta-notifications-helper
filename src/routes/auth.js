@@ -257,6 +257,64 @@ router.get('/youtube/callback', async (req, res) => {
   }
 });
 
+// --- Spotify OAuth (streamer links their Spotify account) ---
+
+router.get('/spotify', (req, res) => {
+  if (!req.streamer) return res.redirect('/auth/login');
+  const { clientId } = config.spotify;
+  if (!clientId) return res.status(500).send('Spotify not configured');
+
+  const redirectUri = `${config.app.url}/auth/spotify/callback`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'code',
+    redirect_uri: redirectUri,
+    scope: 'user-read-currently-playing',
+    state: String(req.streamer.id),
+  });
+  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
+});
+
+router.get('/spotify/callback', async (req, res) => {
+  const { code, state: streamerId, error } = req.query;
+  if (error) return res.redirect('/dashboard?msg=spotify_error');
+  if (!code || !streamerId) return res.redirect('/dashboard?msg=spotify_error');
+
+  try {
+    const { clientId, clientSecret } = config.spotify;
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const redirectUri = `${config.app.url}/auth/spotify/callback`;
+
+    const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+      }),
+    });
+
+    if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status}`);
+    const tokenData = await tokenRes.json();
+
+    db.updateSpotifyTokens(
+      parseInt(streamerId),
+      tokenData.access_token,
+      tokenData.refresh_token,
+      Date.now() + tokenData.expires_in * 1000 - 60000
+    );
+
+    res.redirect('/dashboard?msg=spotify_connected');
+  } catch (err) {
+    console.error('[Auth] Spotify OAuth error:', err.message);
+    res.redirect('/dashboard?msg=spotify_error');
+  }
+});
+
 // --- User Linking (community members link Twitch for sub sync) ---
 
 router.get('/link', (req, res) => {
