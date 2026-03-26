@@ -3,6 +3,40 @@ let overlayConfig = {};
 const queue = [];
 let isPlaying = false;
 
+// Synthesized notification sounds using Web Audio API
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTone(frequencies, durations, type = 'sine', vol = 0.3) {
+  const volume = (overlayConfig.volume || 0.8) * vol;
+  let time = audioCtx.currentTime;
+  frequencies.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + (durations[i] || 0.2));
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + (durations[i] || 0.2));
+    time += (durations[i] || 0.2) * 0.8;
+  });
+}
+
+const soundEffects = {
+  // Twitch
+  follow:       () => playTone([880, 1100], [0.1, 0.15], 'sine'),
+  subscription: () => playTone([660, 880, 1100], [0.12, 0.12, 0.2], 'sine'),
+  bits:         () => playTone([1200, 1400, 1600, 1400], [0.08, 0.08, 0.08, 0.12], 'square', 0.15),
+  donation:     () => playTone([523, 659, 784, 1047], [0.15, 0.15, 0.15, 0.25], 'sine'),
+  raid:         () => playTone([440, 550, 660, 880, 1100], [0.1, 0.1, 0.1, 0.1, 0.2], 'sawtooth', 0.12),
+  // YouTube
+  yt_superchat:   () => playTone([784, 988, 1175], [0.15, 0.15, 0.25], 'sine'),
+  yt_member:      () => playTone([660, 784, 988], [0.12, 0.12, 0.2], 'triangle'),
+  yt_giftmember:  () => playTone([880, 1047, 1175, 1319], [0.1, 0.1, 0.1, 0.2], 'sine'),
+};
+
 // Connect to SSE
 const evtSource = new EventSource(`/overlay/events/${window.OVERLAY_TOKEN}`);
 
@@ -38,24 +72,10 @@ function showNotification(event) {
   const typeConfig = overlayConfig[event.type] || {};
   const duration = (typeConfig.duration || 5) * 1000;
 
-  // Play sound — uses default sound files from /overlay/sounds/{type}.mp3
-  // Users can replace these files with custom sounds
-  const soundMap = {
-    follow: '/overlay/sounds/follow.mp3',
-    subscription: '/overlay/sounds/sub.mp3',
-    bits: '/overlay/sounds/bits.mp3',
-    donation: '/overlay/sounds/donation.mp3',
-    raid: '/overlay/sounds/raid.mp3',
-    yt_superchat: '/overlay/sounds/yt_superchat.mp3',
-    yt_member: '/overlay/sounds/yt_member.mp3',
-    yt_giftmember: '/overlay/sounds/yt_giftmember.mp3',
-  };
-  const soundUrl = soundMap[event.type];
-  if (soundUrl) {
-    const audio = new Audio(soundUrl);
-    audio.volume = overlayConfig.volume || 0.8;
-    audio.play().catch(() => {}); // Fails silently if file doesn't exist
-  }
+  // Play notification sound
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const playSound = soundEffects[event.type];
+  if (playSound) playSound();
 
   const banner = document.createElement('div');
   banner.className = `banner banner-${event.type} engine-idle`;
