@@ -924,27 +924,26 @@ router.post('/youtube-chatbot/test/:eventType', (req, res) => {
   res.json({ ok: true });
 });
 
-// Connect to YouTube live stream manually
+// Connect to YouTube live stream
 router.post('/youtube-chatbot/connect', async (req, res) => {
-  const { video_url } = req.body;
-  if (!video_url) return res.redirect('/dashboard/youtube-chatbot?error=No video URL provided');
-
   try {
-    // Extract video ID from URL or raw ID
-    let videoId = video_url.trim();
-    const urlMatch = videoId.match(/(?:v=|youtu\.be\/|\/live\/)([a-zA-Z0-9_-]{11})/);
-    if (urlMatch) videoId = urlMatch[1];
+    const { getLiveChatId, findActiveLiveStream } = require('../services/youtube');
+    const appConfig = require('../config');
 
-    if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-      return res.redirect('/dashboard/youtube-chatbot?error=Invalid video URL or ID');
+    // Find the streamer's active live stream
+    const channelId = req.streamer.youtube_channel_id;
+    if (!channelId) {
+      return res.redirect('/dashboard/youtube-chatbot?error=No YouTube channel linked. Set your YouTube channel ID in your account settings.');
     }
 
-    const { getLiveChatId } = require('../services/youtube');
-    const appConfig = require('../config');
-    const liveChatId = await getLiveChatId(videoId, appConfig.youtube.apiKey);
+    const videoId = await findActiveLiveStream(channelId, appConfig.youtube.apiKey);
+    if (!videoId) {
+      return res.redirect('/dashboard/youtube-chatbot?error=No active live stream found on your YouTube channel.');
+    }
 
+    const liveChatId = await getLiveChatId(videoId, appConfig.youtube.apiKey);
     if (!liveChatId) {
-      return res.redirect('/dashboard/youtube-chatbot?error=Could not find live chat. Make sure the stream is live.');
+      return res.redirect('/dashboard/youtube-chatbot?error=Could not find live chat for your stream.');
     }
 
     const { youtubeChatManager } = require('../services/youtubeLiveChat');
@@ -952,7 +951,7 @@ router.post('/youtube-chatbot/connect', async (req, res) => {
 
     res.redirect('/dashboard/youtube-chatbot?connected=1');
   } catch (e) {
-    console.error('[YT Chat] Manual connect error:', e.message);
+    console.error('[YT Chat] Connect error:', e.message);
     res.redirect('/dashboard/youtube-chatbot?error=' + encodeURIComponent(e.message));
   }
 });

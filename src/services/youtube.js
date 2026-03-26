@@ -212,4 +212,24 @@ async function fetchLiveChatMessages(liveChatId, pageToken, apiKey) {
   return res.json();
 }
 
-module.exports = { getLatestVideos, checkLiveStatus, getVideoDetails, resolveChannelId, getChannelInfo, getLiveChatId, refreshYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages };
+async function findActiveLiveStream(channelId, apiKey) {
+  if (!channelId || !apiKey) return null;
+
+  const params = new URLSearchParams({
+    part: 'id',
+    channelId,
+    type: 'video',
+    eventType: 'live',
+    key: apiKey,
+  });
+
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  if (!data.items || data.items.length === 0) return null;
+
+  return data.items[0].id.videoId;
+}
+
+module.exports = { getLatestVideos, checkLiveStatus, getVideoDetails, resolveChannelId, getChannelInfo, getLiveChatId, refreshYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages, findActiveLiveStream };

@@ -44,14 +44,20 @@
     </form>
   <% } else { %>
     <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-      Paste your YouTube live stream URL to connect the bot to your chat. The bot will also connect automatically when your stream is detected.
+      Connect the bot to your active YouTube live stream. It will automatically detect your stream and start polling chat.
     </p>
-    <form method="POST" action="/dashboard/youtube-chatbot/connect" style="display: flex; gap: 8px; align-items: center;">
-      <input type="text" name="video_url" placeholder="https://youtube.com/live/... or video ID" required
-        style="flex: 1; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px; outline: none;"
-        onfocus="this.style.borderColor='var(--border-focus)'" onblur="this.style.borderColor='var(--border)'">
-      <button type="submit" class="btn btn-primary" style="font-size: 13px; padding: 10px 20px; white-space: nowrap;">Connect to Stream</button>
-    </form>
+    <% if (!streamer.youtube_channel_id) { %>
+      <p style="color: var(--warning, #f7c948); font-size: 13px; margin-bottom: 12px;">
+        ⚠️ No YouTube channel linked. Set your YouTube channel in the guild config first.
+      </p>
+    <% } else { %>
+      <form method="POST" action="/dashboard/youtube-chatbot/connect">
+        <button type="submit" class="btn btn-primary" style="font-size: 13px; padding: 10px 20px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Connect to My Live Stream
+        </button>
+      </form>
+    <% } %>
   <% } %>
 </div>
 
