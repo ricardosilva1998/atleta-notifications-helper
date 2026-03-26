@@ -6,35 +6,167 @@ let isPlaying = false;
 // Synthesized notification sounds using Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-function playTone(frequencies, durations, type = 'sine', vol = 0.3) {
-  const volume = (overlayConfig.volume || 0.8) * vol;
-  let time = audioCtx.currentTime;
-  frequencies.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(volume, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + (durations[i] || 0.2));
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(time);
-    osc.stop(time + (durations[i] || 0.2));
-    time += (durations[i] || 0.2) * 0.8;
-  });
+// Racing-themed sound synthesis
+function createNoise(duration, vol) {
+  const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const gain = audioCtx.createGain();
+  gain.gain.value = vol;
+  source.connect(gain);
+  return { source, gain };
+}
+
+function engineRev(startFreq, endFreq, duration, vol) {
+  const masterVol = (overlayConfig.volume || 0.8) * vol;
+  const t = audioCtx.currentTime;
+
+  // Engine oscillator (sawtooth for gritty engine sound)
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'sawtooth';
+  osc1.frequency.setValueAtTime(startFreq, t);
+  osc1.frequency.exponentialRampToValueAtTime(endFreq, t + duration * 0.7);
+  osc1.frequency.exponentialRampToValueAtTime(endFreq * 0.8, t + duration);
+
+  // Sub-harmonic for rumble
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sawtooth';
+  osc2.frequency.setValueAtTime(startFreq / 2, t);
+  osc2.frequency.exponentialRampToValueAtTime(endFreq / 2, t + duration * 0.7);
+  osc2.frequency.exponentialRampToValueAtTime(endFreq * 0.4, t + duration);
+
+  // Distortion for engine grit
+  const distortion = audioCtx.createWaveShaper();
+  const curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = (i * 2) / 256 - 1;
+    curve[i] = (Math.PI + 3.4) * x / (Math.PI + 3.4 * Math.abs(x));
+  }
+  distortion.curve = curve;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(masterVol, t);
+  gain.gain.setValueAtTime(masterVol, t + duration * 0.8);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+  osc1.connect(distortion);
+  osc2.connect(distortion);
+  distortion.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc1.start(t); osc1.stop(t + duration);
+  osc2.start(t); osc2.stop(t + duration);
+}
+
+function turboBlowoff(vol) {
+  const masterVol = (overlayConfig.volume || 0.8) * vol;
+  const t = audioCtx.currentTime;
+
+  // Turbo spool (rising whine)
+  const spool = audioCtx.createOscillator();
+  spool.type = 'sine';
+  spool.frequency.setValueAtTime(2000, t);
+  spool.frequency.exponentialRampToValueAtTime(6000, t + 0.3);
+
+  const spoolGain = audioCtx.createGain();
+  spoolGain.gain.setValueAtTime(masterVol * 0.3, t);
+  spoolGain.gain.setValueAtTime(masterVol * 0.3, t + 0.25);
+  spoolGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+  spool.connect(spoolGain);
+  spoolGain.connect(audioCtx.destination);
+  spool.start(t); spool.stop(t + 0.35);
+
+  // Blow-off valve (filtered noise burst)
+  const { source: noise, gain: noiseGain } = createNoise(0.25, masterVol * 0.4);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(4000, t + 0.3);
+  filter.frequency.exponentialRampToValueAtTime(800, t + 0.55);
+  filter.Q.value = 2;
+
+  noiseGain.disconnect();
+  noise.connect(noiseGain);
+  noiseGain.connect(filter);
+
+  const noiseEnv = audioCtx.createGain();
+  noiseEnv.gain.setValueAtTime(masterVol * 0.5, t + 0.3);
+  noiseEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  filter.connect(noiseEnv);
+  noiseEnv.connect(audioCtx.destination);
+
+  noise.start(t + 0.3); noise.stop(t + 0.55);
+}
+
+function tireScreech(vol) {
+  const masterVol = (overlayConfig.volume || 0.8) * vol;
+  const t = audioCtx.currentTime;
+  const { source: noise, gain: noiseGain } = createNoise(0.3, masterVol * 0.3);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(3000, t);
+  filter.frequency.exponentialRampToValueAtTime(6000, t + 0.15);
+  filter.frequency.exponentialRampToValueAtTime(2000, t + 0.3);
+  filter.Q.value = 8;
+
+  noiseGain.disconnect();
+  noise.connect(noiseGain);
+  noiseGain.connect(filter);
+
+  const env = audioCtx.createGain();
+  env.gain.setValueAtTime(masterVol * 0.35, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  filter.connect(env);
+  env.connect(audioCtx.destination);
+
+  noise.start(t); noise.stop(t + 0.3);
 }
 
 const soundEffects = {
-  // Twitch
-  follow:       () => playTone([880, 1100], [0.1, 0.15], 'sine'),
-  subscription: () => playTone([660, 880, 1100], [0.12, 0.12, 0.2], 'sine'),
-  bits:         () => playTone([1200, 1400, 1600, 1400], [0.08, 0.08, 0.08, 0.12], 'square', 0.15),
-  donation:     () => playTone([523, 659, 784, 1047], [0.15, 0.15, 0.15, 0.25], 'sine'),
-  raid:         () => playTone([440, 550, 660, 880, 1100], [0.1, 0.1, 0.1, 0.1, 0.2], 'sawtooth', 0.12),
-  // YouTube
-  yt_superchat:   () => playTone([784, 988, 1175], [0.15, 0.15, 0.25], 'sine'),
-  yt_member:      () => playTone([660, 784, 988], [0.12, 0.12, 0.2], 'triangle'),
-  yt_giftmember:  () => playTone([880, 1047, 1175, 1319], [0.1, 0.1, 0.1, 0.2], 'sine'),
+  // Follow: tire screech + short engine rev
+  follow: () => {
+    tireScreech(0.3);
+    setTimeout(() => engineRev(80, 200, 0.4, 0.2), 200);
+  },
+  // Subscription: turbo spool + blow-off valve + engine rev
+  subscription: () => {
+    engineRev(60, 180, 0.6, 0.15);
+    turboBlowoff(0.25);
+  },
+  // Bits: rapid engine revs (nitro boost)
+  bits: () => {
+    engineRev(100, 400, 0.15, 0.2);
+    setTimeout(() => engineRev(200, 600, 0.15, 0.25), 120);
+    setTimeout(() => engineRev(300, 800, 0.2, 0.3), 240);
+  },
+  // Donation: engine start + rev up
+  donation: () => {
+    engineRev(40, 60, 0.3, 0.15);
+    setTimeout(() => engineRev(60, 300, 0.5, 0.25), 250);
+  },
+  // Raid: multiple engines approaching
+  raid: () => {
+    engineRev(50, 150, 0.6, 0.12);
+    setTimeout(() => engineRev(60, 180, 0.5, 0.15), 100);
+    setTimeout(() => engineRev(70, 200, 0.5, 0.18), 200);
+    setTimeout(() => tireScreech(0.2), 500);
+  },
+  // YouTube Super Chat: engine rev + turbo
+  yt_superchat: () => {
+    engineRev(80, 250, 0.5, 0.2);
+    setTimeout(() => turboBlowoff(0.2), 300);
+  },
+  // YouTube Member: smooth engine purr + rev
+  yt_member: () => {
+    engineRev(50, 150, 0.6, 0.15);
+  },
+  // YouTube Gift: double rev burst
+  yt_giftmember: () => {
+    engineRev(80, 300, 0.3, 0.2);
+    setTimeout(() => engineRev(100, 400, 0.3, 0.25), 250);
+  },
 };
 
 // Connect to SSE
