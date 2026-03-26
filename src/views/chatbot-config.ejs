@@ -31,6 +31,16 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       Connected as <strong><%= streamer.bot_username %></strong>
     </p>
+    <% if (streamer.twitch_username) { %>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">
+        Bot will join channel: <strong style="color: var(--accent);">#<%= streamer.twitch_username %></strong>
+      </p>
+    <% } else { %>
+      <p style="color: var(--warning, #f7c948); font-size: 13px; margin-top: 8px;">
+        ⚠️ No Twitch account linked. The bot needs your Twitch username to know which channel to join.
+        <a href="/auth/twitch" style="color: var(--accent);">Link your Twitch account</a>
+      </p>
+    <% } %>
     <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
       To switch bots, <a href="/auth/bot" style="color: var(--accent);">re-authenticate with a different account</a>.
     </p>
