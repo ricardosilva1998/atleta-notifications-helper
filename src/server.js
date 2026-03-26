@@ -21,6 +21,8 @@ app.use(express.json());
 
 // Static files
 app.use(express.static(path.join(__dirname, '..', 'public')));
+// Serve custom sounds from persistent data volume (survives deploys)
+app.use('/overlay/sounds', express.static(path.join(__dirname, '..', 'data', 'sounds')));
 
 // EJS setup
 app.set('view engine', 'ejs');
