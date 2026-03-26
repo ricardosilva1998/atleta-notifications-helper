@@ -751,8 +751,10 @@ router.post('/overlay/test/:eventType', (req, res) => {
 // Chatbot config page
 router.get('/chatbot', (req, res) => {
   const streamer = req.streamer;
+  const commands = db.getChatCommands(req.streamer.id);
   res.render('chatbot-config', {
     streamer,
+    commands,
     bot_linked: req.query.bot_linked || null,
     bot_error: req.query.bot_error || null,
   });
@@ -792,25 +794,19 @@ router.post('/chatbot', (req, res) => {
   res.redirect('/dashboard/chatbot');
 });
 
-// Custom commands page
-router.get('/chatbot/commands', (req, res) => {
-  const commands = db.getChatCommands(req.streamer.id);
-  res.render('chatbot-commands', { streamer: req.streamer, commands });
-});
-
 // Add command
 router.post('/chatbot/commands', (req, res) => {
   const { command, response, cooldown } = req.body;
-  if (!command || !response) return res.redirect('/dashboard/chatbot/commands');
+  if (!command || !response) return res.redirect('/dashboard/chatbot');
   const cleanCmd = command.replace(/^!/, '').toLowerCase().trim();
-  if (!cleanCmd || !/^[a-z0-9_]+$/.test(cleanCmd)) return res.redirect('/dashboard/chatbot/commands');
+  if (!cleanCmd || !/^[a-z0-9_]+$/.test(cleanCmd)) return res.redirect('/dashboard/chatbot');
 
   try {
     db.addChatCommand(req.streamer.id, cleanCmd, response, parseInt(cooldown) || 5);
   } catch (err) {
     console.log(`[Dashboard] Command !${cleanCmd} already exists`);
   }
-  res.redirect('/dashboard/chatbot/commands');
+  res.redirect('/dashboard/chatbot');
 });
 
 // Update command
@@ -825,13 +821,13 @@ router.post('/chatbot/commands/:id/update', (req, res) => {
     enabled ? 1 : 0,
     parseInt(cooldown) || 5
   );
-  res.redirect('/dashboard/chatbot/commands');
+  res.redirect('/dashboard/chatbot');
 });
 
 // Delete command
 router.post('/chatbot/commands/:id/delete', (req, res) => {
   db.deleteChatCommand(parseInt(req.params.id), req.streamer.id);
-  res.redirect('/dashboard/chatbot/commands');
+  res.redirect('/dashboard/chatbot');
 });
 
 // --- Report an Issue ---
