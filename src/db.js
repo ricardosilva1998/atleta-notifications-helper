@@ -144,6 +144,62 @@ try {
   }
 }
 
+// Migration: Add chatbot columns to streamers
+{
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('bot_access_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN bot_access_token TEXT;
+      ALTER TABLE streamers ADD COLUMN bot_refresh_token TEXT;
+      ALTER TABLE streamers ADD COLUMN bot_token_expires_at INTEGER;
+      ALTER TABLE streamers ADD COLUMN bot_username TEXT;
+      ALTER TABLE streamers ADD COLUMN chatbot_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN chat_follow_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_sub_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_giftsub_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_bits_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_donation_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_raid_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_follow_template TEXT DEFAULT 'Welcome to the pit crew, {username}! 🏎️';
+      ALTER TABLE streamers ADD COLUMN chat_sub_template TEXT DEFAULT '{username} just joined the podium! Tier {tier} for {months} months! 🏆';
+      ALTER TABLE streamers ADD COLUMN chat_giftsub_template TEXT DEFAULT '{username} gifted {amount} subs! What a sponsor! 🎁';
+      ALTER TABLE streamers ADD COLUMN chat_bits_template TEXT DEFAULT '{username} fueled up {amount} bits! 🔥';
+      ALTER TABLE streamers ADD COLUMN chat_donation_template TEXT DEFAULT '{username} sponsored the team with {amount}! 💰';
+      ALTER TABLE streamers ADD COLUMN chat_raid_template TEXT DEFAULT '{username} is raiding with {viewers} viewers! Welcome racers! 🏁';
+    `);
+    console.log('[DB] Added chatbot columns to streamers');
+  }
+}
+
+// Migration: Create chat_commands table
+{
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_commands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      command TEXT NOT NULL,
+      response TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      cooldown INTEGER DEFAULT 5,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id),
+      UNIQUE(streamer_id, command)
+    )
+  `);
+}
+
+// Migration: Add overlay raid columns
+{
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('overlay_raid_enabled')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN overlay_raid_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN overlay_raid_duration INTEGER DEFAULT 7;
+    `);
+    console.log('[DB] Added overlay raid columns');
+  }
+}
+
 // --- Schema ---
 
 db.exec(`
@@ -1823,6 +1879,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_follow_duration', 'overlay_sub_duration',
   'overlay_bits_duration', 'overlay_donation_duration',
   'overlay_volume', 'streamelements_jwt',
+  'overlay_raid_enabled', 'overlay_raid_duration',
 ]);
 
 function updateOverlayConfig(streamerId, config) {
@@ -1846,6 +1903,65 @@ function generateOverlayToken(streamerId) {
 
 function updateBroadcasterScopes(streamerId, scopes) {
   db.prepare('UPDATE streamers SET broadcaster_scopes = ? WHERE id = ?').run(scopes, streamerId);
+}
+
+function updateBotTokens(streamerId, accessToken, refreshToken, expiresAt, username) {
+  db.prepare(`
+    UPDATE streamers SET bot_access_token = ?, bot_refresh_token = ?, bot_token_expires_at = ?, bot_username = ?
+    WHERE id = ?
+  `).run(accessToken, refreshToken, expiresAt, username, streamerId);
+}
+
+function getChatbotEnabledStreamers() {
+  return db.prepare(`
+    SELECT * FROM streamers
+    WHERE chatbot_enabled = 1
+    AND bot_access_token IS NOT NULL
+    AND bot_access_token != ''
+    AND twitch_username IS NOT NULL
+  `).all();
+}
+
+function getChatCommands(streamerId) {
+  return db.prepare('SELECT * FROM chat_commands WHERE streamer_id = ? ORDER BY command').all(streamerId);
+}
+
+function getChatCommand(streamerId, command) {
+  return db.prepare('SELECT * FROM chat_commands WHERE streamer_id = ? AND command = ? AND enabled = 1').get(streamerId, command);
+}
+
+function addChatCommand(streamerId, command, response, cooldown) {
+  return db.prepare('INSERT INTO chat_commands (streamer_id, command, response, cooldown) VALUES (?, ?, ?, ?)').run(streamerId, command, response, cooldown || 5);
+}
+
+function updateChatCommand(id, streamerId, command, response, enabled, cooldown) {
+  db.prepare('UPDATE chat_commands SET command = ?, response = ?, enabled = ?, cooldown = ? WHERE id = ? AND streamer_id = ?')
+    .run(command, response, enabled, cooldown, id, streamerId);
+}
+
+function deleteChatCommand(id, streamerId) {
+  db.prepare('DELETE FROM chat_commands WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+}
+
+const CHATBOT_COLUMNS = new Set([
+  'chatbot_enabled',
+  'chat_follow_enabled', 'chat_sub_enabled', 'chat_giftsub_enabled',
+  'chat_bits_enabled', 'chat_donation_enabled', 'chat_raid_enabled',
+  'chat_follow_template', 'chat_sub_template', 'chat_giftsub_template',
+  'chat_bits_template', 'chat_donation_template', 'chat_raid_template',
+]);
+
+function updateChatbotConfig(streamerId, config) {
+  const fields = [];
+  const values = [];
+  for (const [key, value] of Object.entries(config)) {
+    if (!CHATBOT_COLUMNS.has(key)) continue;
+    fields.push(`${key} = ?`);
+    values.push(value);
+  }
+  if (fields.length === 0) return;
+  values.push(streamerId);
+  db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
 module.exports = {
@@ -1984,4 +2100,12 @@ module.exports = {
   updateOverlayConfig,
   generateOverlayToken,
   updateBroadcasterScopes,
+  updateBotTokens,
+  getChatbotEnabledStreamers,
+  getChatCommands,
+  getChatCommand,
+  addChatCommand,
+  updateChatCommand,
+  deleteChatCommand,
+  updateChatbotConfig,
 };
