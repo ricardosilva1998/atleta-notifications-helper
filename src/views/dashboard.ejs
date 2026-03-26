@@ -325,8 +325,8 @@
         <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(145,71,255,0.15); display: flex; align-items: center; justify-content: center;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
-        <div>
-          <h3 style="font-size: 16px; font-weight: 700;">Chatbot</h3>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Chatbot</h3>
           <% if (botConnected && streamer.chatbot_enabled) { %>
             <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Online<%= botUsername ? ' as ' + botUsername : '' %></span>
           <% } else if (botConnected && !streamer.chatbot_enabled) { %>
@@ -351,18 +351,20 @@
 
 <div class="tab-content" id="tab-youtube">
   <div class="card" style="text-align: center; padding: 48px 24px;">
-    <div style="font-size: 48px; margin-bottom: 16px;">🎬</div>
-    <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">YouTube</h3>
-    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 4px;">Coming Soon</p>
+    <div style="margin-bottom: 16px;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="#ff0000"><path d="M22.5 7.7a2.8 2.8 0 0 0-2-2C18.9 5 12 5 12 5s-6.9 0-8.5.7a2.8 2.8 0 0 0-2 2A29 29 0 0 0 1 12a29 29 0 0 0 .5 4.3 2.8 2.8 0 0 0 2 2c1.6.7 8.5.7 8.5.7s6.9 0 8.5-.7a2.8 2.8 0 0 0 2-2A29 29 0 0 0 23 12a29 29 0 0 0-.5-4.3z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="#fff"/></svg>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;">Coming Soon</p>
     <p style="color: var(--text-muted); font-size: 13px;">Chatbot and overlay support for YouTube live streams is on the way.</p>
   </div>
 </div>
 
 <div class="tab-content" id="tab-kick">
   <div class="card" style="text-align: center; padding: 48px 24px;">
-    <div style="font-size: 48px; margin-bottom: 16px;">⚡</div>
-    <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">Kick</h3>
-    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 4px;">Coming Soon</p>
+    <div style="margin-bottom: 16px;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="#53fc18"><path d="M4 2h4v7.2L12.4 4h5.2l-6 7 6.4 9h-5.2L8 13v7H4V2z"/></svg>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;">Coming Soon</p>
     <p style="color: var(--text-muted); font-size: 13px;">Kick.com integration with chatbot and overlay support is coming.</p>
   </div>
 </div>
