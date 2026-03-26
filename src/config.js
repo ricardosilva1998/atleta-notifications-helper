@@ -22,6 +22,10 @@ module.exports = {
     clientId: process.env.TWITCH_CLIENT_ID,
     clientSecret: process.env.TWITCH_CLIENT_SECRET,
   },
+  bot: {
+    twitchUsername: process.env.BOT_TWITCH_USERNAME || '',
+    twitchToken: process.env.BOT_TWITCH_TOKEN || '',
+  },
   youtube: {
     apiKey: process.env.YOUTUBE_API_KEY || '',
   },
