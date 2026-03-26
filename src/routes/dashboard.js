@@ -669,37 +669,10 @@ router.post('/feedback', (req, res) => {
   res.redirect('/dashboard/account?feedback=submitted');
 });
 
-// --- Platform landing pages ---
-
-router.get('/twitch', (req, res) => {
-  let botConnected = false;
-  let botUsername = '';
-  try {
-    const { chatManager } = require('../services/twitchChat');
-    botConnected = chatManager.isConnected();
-    botUsername = require('../config').bot.twitchUsername;
-  } catch (e) {}
-  res.render('twitch-landing', { streamer: req.streamer, botConnected, botUsername });
-});
-
-router.get('/discord', (req, res) => res.redirect('/dashboard'));
-
-router.get('/youtube', (req, res) => {
-  res.render('platform-coming-soon', { streamer: req.streamer, platformName: 'YouTube' });
-});
-
-router.get('/kick', (req, res) => {
-  res.render('platform-coming-soon', { streamer: req.streamer, platformName: 'Kick' });
-});
-
-// Backward compatibility redirects
-router.get('/overlay', (req, res) => res.redirect('/dashboard/twitch/overlay'));
-router.get('/chatbot', (req, res) => res.redirect('/dashboard/twitch/chatbot'));
-
 // --- Overlay Config ---
 
 // Overlay config page
-router.get('/twitch/overlay', (req, res) => {
+router.get('/overlay', (req, res) => {
   const streamer = req.streamer;
   const appUrl = config.app.url || `${req.protocol}://${req.get('host')}`;
   const overlayUrl = streamer.overlay_token ? `${appUrl}/overlay/${streamer.overlay_token}` : null;
@@ -716,7 +689,7 @@ router.get('/twitch/overlay', (req, res) => {
 });
 
 // Save overlay settings
-router.post('/twitch/overlay', (req, res) => {
+router.post('/overlay', (req, res) => {
   const b = req.body;
   db.updateOverlayConfig(req.streamer.id, {
     overlay_enabled: b.overlay_enabled ? 1 : 0,
@@ -746,17 +719,17 @@ router.post('/twitch/overlay', (req, res) => {
     // EventSub/StreamElements services not yet available
   }
 
-  res.redirect('/dashboard/twitch/overlay');
+  res.redirect('/dashboard/overlay');
 });
 
 // Generate overlay token
-router.post('/twitch/overlay/generate-token', (req, res) => {
+router.post('/overlay/generate-token', (req, res) => {
   db.generateOverlayToken(req.streamer.id);
-  res.redirect('/dashboard/twitch/overlay');
+  res.redirect('/dashboard/overlay');
 });
 
 // Test notification
-router.post('/twitch/overlay/test/:eventType', (req, res) => {
+router.post('/overlay/test/:eventType', (req, res) => {
   const bus = require('../services/overlayBus');
   const type = req.params.eventType;
   const testEvents = {
@@ -776,7 +749,7 @@ router.post('/twitch/overlay/test/:eventType', (req, res) => {
 // --- Chatbot Config ---
 
 // Chatbot config page
-router.get('/twitch/chatbot', (req, res) => {
+router.get('/chatbot', (req, res) => {
   const streamer = req.streamer;
   const commands = db.getChatCommands(req.streamer.id);
   let botConnected = false;
@@ -790,7 +763,7 @@ router.get('/twitch/chatbot', (req, res) => {
 });
 
 // Save chatbot settings
-router.post('/twitch/chatbot', (req, res) => {
+router.post('/chatbot', (req, res) => {
   const b = req.body;
   db.updateChatbotConfig(req.streamer.id, {
     chatbot_enabled: b.chatbot_enabled ? 1 : 0,
@@ -820,26 +793,26 @@ router.post('/twitch/chatbot', (req, res) => {
     console.error('[Dashboard] Chatbot start/stop error:', e.message);
   }
 
-  res.redirect('/dashboard/twitch/chatbot');
+  res.redirect('/dashboard/chatbot');
 });
 
 // Add command
-router.post('/twitch/chatbot/commands', (req, res) => {
+router.post('/chatbot/commands', (req, res) => {
   const { command, response, cooldown } = req.body;
-  if (!command || !response) return res.redirect('/dashboard/twitch/chatbot');
+  if (!command || !response) return res.redirect('/dashboard/chatbot');
   const cleanCmd = command.replace(/^!/, '').toLowerCase().trim();
-  if (!cleanCmd || !/^[a-z0-9_]+$/.test(cleanCmd)) return res.redirect('/dashboard/twitch/chatbot');
+  if (!cleanCmd || !/^[a-z0-9_]+$/.test(cleanCmd)) return res.redirect('/dashboard/chatbot');
 
   try {
     db.addChatCommand(req.streamer.id, cleanCmd, response, parseInt(cooldown) || 5);
   } catch (err) {
     console.log(`[Dashboard] Command !${cleanCmd} already exists`);
   }
-  res.redirect('/dashboard/twitch/chatbot');
+  res.redirect('/dashboard/chatbot');
 });
 
 // Update command
-router.post('/twitch/chatbot/commands/:id/update', (req, res) => {
+router.post('/chatbot/commands/:id/update', (req, res) => {
   const { command, response, enabled, cooldown } = req.body;
   const cleanCmd = (command || '').replace(/^!/, '').toLowerCase().trim();
   db.updateChatCommand(
@@ -850,13 +823,13 @@ router.post('/twitch/chatbot/commands/:id/update', (req, res) => {
     enabled ? 1 : 0,
     parseInt(cooldown) || 5
   );
-  res.redirect('/dashboard/twitch/chatbot');
+  res.redirect('/dashboard/chatbot');
 });
 
 // Delete command
-router.post('/twitch/chatbot/commands/:id/delete', (req, res) => {
+router.post('/chatbot/commands/:id/delete', (req, res) => {
   db.deleteChatCommand(parseInt(req.params.id), req.streamer.id);
-  res.redirect('/dashboard/twitch/chatbot');
+  res.redirect('/dashboard/chatbot');
 });
 
 // --- Report an Issue ---
