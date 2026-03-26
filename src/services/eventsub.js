@@ -3,6 +3,7 @@ const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
 const { refreshBroadcasterToken } = require('./twitch');
+const { chatManager } = require('./twitchChat');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 
@@ -12,6 +13,7 @@ const SUBSCRIPTION_TYPES = [
   { type: 'channel.subscription.gift', version: '1' },
   { type: 'channel.subscription.message', version: '1' },
   { type: 'channel.cheer', version: '1' },
+  { type: 'channel.raid', version: '1', conditionKey: 'to_broadcaster_user_id' },
 ];
 
 class EventSubClient {
@@ -86,11 +88,17 @@ class EventSubClient {
         const normalized = this.normalizeEvent(subType, event);
         if (normalized) {
           const streamer = db.getStreamerById(this.streamerId);
-          const typeMap = { follow: 'follow', subscription: 'sub', bits: 'bits', donation: 'donation' };
-          const enabledKey = `overlay_${typeMap[normalized.type] || normalized.type}_enabled`;
+
+          // Emit to overlay — giftsub shows as subscription banner
+          const overlayType = normalized.type === 'giftsub' ? 'subscription' : normalized.type;
+          const typeMap = { follow: 'follow', subscription: 'sub', giftsub: 'sub', bits: 'bits', donation: 'donation', raid: 'raid' };
+          const enabledKey = `overlay_${typeMap[overlayType] || overlayType}_enabled`;
           if (streamer && streamer[enabledKey]) {
-            bus.emit(`overlay:${this.streamerId}`, normalized);
+            bus.emit(`overlay:${this.streamerId}`, { ...normalized, type: overlayType });
           }
+
+          // Emit to chat service
+          chatManager.sendEventMessage(this.streamerId, normalized.type, normalized.data);
         }
         break;
       }
@@ -124,7 +132,8 @@ class EventSubClient {
     let streamer = db.getStreamerById(this.streamerId);
     let token = streamer.broadcaster_access_token;
 
-    const condition = { broadcaster_user_id: streamer.twitch_user_id };
+    const conditionKey = subType.conditionKey || 'broadcaster_user_id';
+    const condition = { [conditionKey]: streamer.twitch_user_id };
     if (subType.needsModerator) {
       condition.moderator_user_id = streamer.twitch_user_id;
     }
@@ -193,11 +202,11 @@ class EventSubClient {
 
       case 'channel.subscription.gift':
         return {
-          type: 'subscription',
+          type: 'giftsub',
           data: {
             username: event.is_anonymous ? 'Anonymous' : event.user_name,
             tier: event.tier === '1000' ? '1' : event.tier === '2000' ? '2' : '3',
-            months: null,
+            amount: event.total,
             message: `Gifted ${event.total} sub${event.total > 1 ? 's' : ''}!`,
           },
         };
@@ -220,6 +229,15 @@ class EventSubClient {
             username: event.is_anonymous ? 'Anonymous' : event.user_name,
             amount: event.bits,
             message: event.message || null,
+          },
+        };
+
+      case 'channel.raid':
+        return {
+          type: 'raid',
+          data: {
+            username: event.from_broadcaster_user_name,
+            viewers: event.viewers,
           },
         };
 
