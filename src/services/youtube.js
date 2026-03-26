@@ -195,7 +195,9 @@ async function sendYoutubeChatMessage(liveChatId, message, accessToken) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    console.error('[YouTube] Failed to send chat message:', err.error?.message || res.status);
+    console.error('[YouTube] Failed to send chat message:', res.status, JSON.stringify(err.error || err));
+  } else {
+    console.log('[YouTube] Chat message sent successfully');
   }
 }
 
