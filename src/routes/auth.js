@@ -152,7 +152,7 @@ router.get('/broadcaster', (req, res) => {
     client_id: config.twitch.clientId,
     redirect_uri: `${config.app.url}/auth/broadcaster/callback`,
     response_type: 'code',
-    scope: 'channel:read:subscriptions',
+    scope: 'channel:read:subscriptions moderator:read:followers bits:read',
     state: String(req.streamer.id),
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
@@ -183,6 +183,8 @@ router.get('/broadcaster/callback', async (req, res) => {
       data.refresh_token,
       Date.now() + data.expires_in * 1000 - 60_000
     );
+
+    db.updateBroadcasterScopes(parseInt(streamerId), 'channel:read:subscriptions moderator:read:followers bits:read');
 
     console.log(`[Auth] Broadcaster ${streamerId} authorized for sub sync`);
     res.redirect('/dashboard?msg=broadcaster_authorized');
