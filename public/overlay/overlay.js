@@ -200,6 +200,22 @@ function playNext() {
   showNotification(event);
 }
 
+// ─── Card class mapping ────────────────────────────────────────
+function getCardClass(type) {
+  const map = {
+    follow:        'follow-card',
+    subscription:  'sub-card',
+    bits:          'bits-card',
+    donation:      'donation-card',
+    raid:          'raid-card',
+    yt_superchat:  'yt-superchat-card',
+    yt_member:     'yt-member-card',
+    yt_giftmember: 'yt-giftmember-card',
+  };
+  return map[type] || 'follow-card';
+}
+
+// ─── Show notification ─────────────────────────────────────────
 function showNotification(event) {
   const typeConfig = overlayConfig[event.type] || {};
   const duration = (typeConfig.duration || 5) * 1000;
@@ -217,131 +233,276 @@ function showNotification(event) {
     if (playSound) playSound();
   });
 
-  const banner = document.createElement('div');
-  banner.className = `banner banner-${event.type} engine-idle`;
-  banner.innerHTML = buildBannerContent(event);
-  container.appendChild(banner);
+  // Build card
+  const cardClass = getCardClass(event.type);
+  const isSubLike = event.type === 'subscription' || event.type === 'yt_member';
+  const card = document.createElement('div');
+  card.className = `alert-card ${cardClass}${isSubLike ? ' sub-shake' : ''} entering`;
+  card.innerHTML = buildBannerContent(event);
+  container.appendChild(card);
 
+  // Spawn full-screen effects
+  spawnEffects(event.type);
+
+  // Dismiss after duration
   setTimeout(() => {
-    banner.classList.add('dismissing');
-    banner.addEventListener('animationend', () => {
-      banner.remove();
-      setTimeout(playNext, 500); // Gap between notifications
+    card.classList.remove('entering');
+    card.classList.add('dismissing');
+
+    // Clean up screen effects
+    document.querySelectorAll('.screen-effect').forEach(e => {
+      e.style.animation = 'none';
+      e.style.opacity = '0';
+      setTimeout(() => e.remove(), 100);
     });
+
+    card.addEventListener('animationend', () => {
+      card.remove();
+      setTimeout(playNext, 500);
+    }, { once: true });
   }, duration);
 }
 
+// ─── Build card HTML per event type ───────────────────────────
 function buildBannerContent(event) {
-  const checkers = '<div class="checker-top"></div><div class="checker-bottom"></div>';
-
   switch (event.type) {
     case 'follow':
-      return `${checkers}
-        <div class="follow-car">🏎️</div>
-        <div class="banner-content"><div style="text-align:center">
-          <div class="banner-title">New Pit Crew Member!</div>
-          <div class="banner-name">${esc(event.data.username)}</div>
-          <div class="banner-sub">just joined the race 🏁</div>
-        </div></div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="event-label">New Pit Crew Member</div>
+          <div class="username">${esc(event.data.username)}</div>
+          <div class="detail">just joined the race 🏁</div>
+        </div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="speed-dot fsd1"></div>
+          <div class="speed-dot fsd2"></div>
+          <div class="speed-dot fsd3"></div>
+          <div class="track-car">🏎️</div>
+        </div>`;
 
     case 'subscription': {
       const d = event.data;
       const detail = d.months && d.months > 1
-        ? `Subscribed for <span style="color:#00ff88;font-weight:bold">${d.months} months</span> — Tier ${d.tier || '1'}`
-        : d.message ? esc(d.message) : `Tier ${d.tier || '1'} subscriber!`;
-      return `${checkers}
-        <div class="sub-car-left">🏎️</div>
-        <div class="sub-car-right">🏎️</div>
-        <div class="banner-content">
-          <div class="banner-emoji">🏆</div>
-          <div style="text-align:center">
-            <div class="banner-title">Podium Finish!</div>
-            <div class="banner-name">${esc(d.username)}</div>
-            <div class="banner-sub">${detail}</div>
+        ? `Subscribed for <b>${d.months} months</b> — Tier ${d.tier || '1'} 🥇`
+        : d.message ? esc(d.message) : `Tier ${d.tier || '1'} subscriber! 🥇`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="cup-row">
+            <span class="cup">🏆</span>
+            <div class="card-inner">
+              <div class="event-label">Podium Finish</div>
+              <div class="username">${esc(d.username)}</div>
+              <div class="detail">${detail}</div>
+            </div>
+            <span class="cup">🏆</span>
           </div>
-          <div class="banner-emoji">🏆</div>
         </div>`;
     }
 
     case 'bits':
-      return `${checkers}
-        <div class="burnout-car-right">🏎️</div>
-        <div class="fire-single fire-behind-right">🔥</div>
-        <div class="burnout-car-left">🏎️</div>
-        <div class="fire-single fire-behind-left">🔥</div>
-        <div class="tire-smoke ts-1">💨</div><div class="tire-smoke ts-2">💨</div>
-        <div class="tire-smoke ts-3">💨</div><div class="tire-smoke ts-4">💨</div>
-        <div class="banner-content"><div style="text-align:center">
-          <div class="banner-title">Nitro Boost!</div>
-          <div class="banner-name">${esc(event.data.username)}</div>
-          <div class="banner-sub">fueled up <span style="color:#f7c948;font-weight:bold">${event.data.amount} bits</span> of nitro! 🔥</div>
-        </div></div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="event-label">Nitro Boost</div>
+          <div class="username">${esc(event.data.username)}</div>
+          <div class="detail">fueled up <b>${event.data.amount} bits</b> of nitro! 🔥</div>
+        </div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="track-car">🏎️</div>
+        </div>`;
 
     case 'donation':
-      return `${checkers}
-        <div class="sponsor-car">🏎️</div>
-        <div class="speed-line sl-1"></div><div class="speed-line sl-2"></div>
-        <div class="speed-line sl-3"></div><div class="speed-line sl-4"></div>
-        <div class="banner-content">
-          <div class="banner-emoji">🛞</div>
-          <div style="text-align:center">
-            <div class="banner-title">Sponsor Alert!</div>
-            <div class="banner-name">${esc(event.data.username)}</div>
-            <div class="banner-sub">sponsored the team with <span style="color:#bf00ff;font-weight:bold">$${event.data.amount}</span> 💸</div>
-          </div>
-          <div class="banner-emoji">🛞</div>
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="event-label">Sponsor Alert</div>
+          <div class="username">${esc(event.data.username)}</div>
+          <div class="detail">sponsored the team with <b>$${event.data.amount}</b> 💸</div>
+        </div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="speed-dot dsd1"></div>
+          <div class="speed-dot dsd2"></div>
+          <div class="speed-dot dsd3"></div>
+          <div class="track-car donation-car">🏎️</div>
         </div>`;
 
-    case 'raid':
-      return `${checkers}
-    <div class="raid-car-1">🏎️</div>
-    <div class="raid-car-2">🏎️</div>
-    <div class="raid-car-3">🏎️</div>
-    <div class="banner-content"><div style="text-align:center">
-      <div class="banner-title">Incoming Raid!</div>
-      <div class="banner-name">${esc(event.data.username)}</div>
-      <div class="banner-sub">raiding with <span style="color:#ff4444;font-weight:bold">${event.data.viewers} viewers</span>! 🏁</div>
-    </div></div>`;
+    case 'raid': {
+      const viewers = event.data.viewers || '??';
+      const row1 = '<span class="person">👤</span><span class="person">🧑</span><span class="person">👨</span><span class="person">👩</span><span class="person">🧔</span><span class="person">👱</span><span class="person">🧑</span><span class="person">👤</span><span class="person">👨</span><span class="person">👩</span><span class="person">🧔</span><span class="person">👱</span><span class="person">🧑</span><span class="person">👤</span>';
+      const row2 = '<span class="person">🧑</span><span class="person">👤</span><span class="person">👩</span><span class="person">🧔</span><span class="person">👨</span><span class="person">👱</span><span class="person">👤</span><span class="person">🧑</span><span class="person">👩</span><span class="person">👨</span><span class="person">🧔</span><span class="person">👱</span>';
+      const row3 = '<span class="person">👤</span><span class="person">👨</span><span class="person">🧑</span><span class="person">👩</span><span class="person">👱</span><span class="person">🧔</span><span class="person">👤</span><span class="person">👨</span><span class="person">🧑</span><span class="person">👩</span>';
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="event-label">Incoming Raid</div>
+          <div class="username">${esc(event.data.username)}</div>
+          <div class="detail">raiding with <b>${viewers} viewers</b>! 🏁</div>
+        </div>
+        <div class="crowd-section">
+          <div class="crowd-row">${row1}</div>
+          <div class="crowd-row">${row2}</div>
+          <div class="crowd-row">${row3}</div>
+          <div class="viewer-count">${viewers} VIEWERS INCOMING</div>
+        </div>`;
+    }
 
     case 'yt_superchat':
-      return `${checkers}
-        <div class="follow-car">🏎️</div>
-        <div class="banner-content"><div style="text-align:center">
-          <div class="banner-title">Super Chat!</div>
-          <div class="banner-name">${esc(event.data.username)}</div>
-          <div class="banner-sub">sent <span style="color:#ff4444;font-weight:bold">${esc(event.data.amount)}</span>${event.data.message ? ' — ' + esc(event.data.message) : ''}</div>
-        </div></div>`;
-
-    case 'yt_member':
-      return `${checkers}
-        <div class="sub-car-left">🏎️</div>
-        <div class="sub-car-right">🏎️</div>
-        <div class="banner-content">
-          <div class="banner-emoji">⭐</div>
-          <div style="text-align:center">
-            <div class="banner-title">New Member!</div>
-            <div class="banner-name">${esc(event.data.username)}</div>
-            <div class="banner-sub">just became a ${esc(event.data.level || 'member')}!</div>
-          </div>
-          <div class="banner-emoji">⭐</div>
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="event-label">Super Chat</div>
+          <div class="username">${esc(event.data.username)}</div>
+          <div class="detail">sent <b>${esc(event.data.amount)}</b>${event.data.message ? ' — ' + esc(event.data.message) : ''} 🔥</div>
+        </div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="track-car">🏎️</div>
         </div>`;
 
+    case 'yt_member': {
+      const d = event.data;
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="cup-row">
+            <span class="cup">⭐</span>
+            <div class="card-inner">
+              <div class="event-label">New Member</div>
+              <div class="username">${esc(d.username)}</div>
+              <div class="detail">just became a <b>${esc(d.level || 'member')}</b>! 🥇</div>
+            </div>
+            <span class="cup">⭐</span>
+          </div>
+        </div>`;
+    }
+
     case 'yt_giftmember':
-      return `${checkers}
-        <div class="burnout-car-right">🏎️</div>
-        <div class="fire-single fire-behind-right">🔥</div>
-        <div class="burnout-car-left">🏎️</div>
-        <div class="fire-single fire-behind-left">🔥</div>
-        <div class="banner-content"><div style="text-align:center">
-          <div class="banner-title">Gift Alert!</div>
-          <div class="banner-name">${esc(event.data.username)}</div>
-          <div class="banner-sub">gifted <span style="color:#4285f4;font-weight:bold">${event.data.amount} memberships</span>!</div>
-        </div></div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">
+          <div class="event-label">Gift Alert</div>
+          <div class="username">${esc(event.data.username)}</div>
+          <div class="detail">gifted <b>${event.data.amount} memberships</b>! 🎁</div>
+        </div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="track-car">🏎️</div>
+        </div>`;
 
     default: return '';
   }
 }
 
+// ─── Full-screen effects ───────────────────────────────────────
+function spawnEffects(type) {
+  // Remove any lingering effects from previous notification
+  document.querySelectorAll('.screen-effect').forEach(e => e.remove());
+
+  switch (type) {
+    case 'follow':                         spawnTireMarks();           break;
+    case 'subscription': case 'yt_member': spawnConfettiAndFlashes();  break;
+    case 'bits':         case 'yt_superchat': spawnGoldRain();         break;
+    case 'donation':     case 'yt_giftmember': spawnMoneyRain();       break;
+    case 'raid':                           spawnRobots();              break;
+  }
+}
+
+function spawnTireMarks() {
+  // Two tire-mark streaks across the middle
+  ['tire-mark-1', 'tire-mark-2'].forEach(cls => {
+    const el = document.createElement('div');
+    el.className = `screen-effect tire-mark ${cls}`;
+    container.appendChild(el);
+  });
+
+  // 12 sparks scattered around the mid-screen area
+  for (let i = 0; i < 12; i++) {
+    const sp = document.createElement('div');
+    sp.className = 'screen-effect tire-spark';
+    const x = Math.random() * 100;
+    const y = 35 + Math.random() * 20;
+    sp.style.left = `${x}vw`;
+    sp.style.top  = `${y}vh`;
+    const angle = Math.random() * 360;
+    const dist  = 20 + Math.random() * 60;
+    const sx = Math.cos(angle * Math.PI / 180) * dist;
+    const sy = Math.sin(angle * Math.PI / 180) * dist;
+    sp.style.setProperty('--sx', `${sx}px`);
+    sp.style.setProperty('--sy', `${sy}px`);
+    sp.style.animationDelay    = `${Math.random() * 0.4}s`;
+    sp.style.animationDuration = `${0.5 + Math.random() * 0.4}s`;
+    container.appendChild(sp);
+  }
+}
+
+function spawnConfettiAndFlashes() {
+  const colors = ['#ff4444','#00ff88','#f7c948','#4285f4','#ff88cc','#ffffff','#bf00ff','#00ccff'];
+
+  // 60 confetti pieces
+  for (let i = 0; i < 60; i++) {
+    const el = document.createElement('div');
+    el.className = 'screen-effect confetti';
+    el.style.left            = `${Math.random() * 100}vw`;
+    el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    el.style.width           = `${6 + Math.random() * 8}px`;
+    el.style.height          = `${8 + Math.random() * 10}px`;
+    el.style.animationDelay    = `${Math.random() * 1.5}s`;
+    el.style.animationDuration = `${2 + Math.random() * 2}s`;
+    container.appendChild(el);
+  }
+
+  // 5 camera flashes staggered
+  for (let i = 0; i < 5; i++) {
+    const fl = document.createElement('div');
+    fl.className = 'screen-effect cam-flash';
+    fl.style.animationDelay    = `${i * 0.35}s`;
+    fl.style.animationDuration = '0.18s';
+    container.appendChild(fl);
+  }
+}
+
+function spawnGoldRain() {
+  const items = ['🪙','💎','⭐','🏆','✨','💰','🥇'];
+  for (let i = 0; i < 35; i++) {
+    const el = document.createElement('div');
+    el.className   = 'screen-effect gold-item';
+    el.textContent = items[Math.floor(Math.random() * items.length)];
+    el.style.left            = `${Math.random() * 100}vw`;
+    el.style.animationDelay    = `${Math.random() * 2}s`;
+    el.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+    container.appendChild(el);
+  }
+}
+
+function spawnMoneyRain() {
+  const items = ['💵','💰','💲','🪙','💸','💎'];
+  for (let i = 0; i < 30; i++) {
+    const el = document.createElement('div');
+    el.className   = 'screen-effect money-item';
+    el.textContent = items[Math.floor(Math.random() * items.length)];
+    el.style.left            = `${Math.random() * 100}vw`;
+    el.style.animationDelay    = `${Math.random() * 2}s`;
+    el.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+    container.appendChild(el);
+  }
+}
+
+function spawnRobots() {
+  // 30 falling robots
+  for (let i = 0; i < 30; i++) {
+    const el = document.createElement('div');
+    el.className   = 'screen-effect robot';
+    el.textContent = '🤖';
+    el.style.left            = `${Math.random() * 100}vw`;
+    el.style.animationDelay    = `${Math.random() * 2.5}s`;
+    el.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+    container.appendChild(el);
+  }
+
+  // Red edge glow
+  const glow = document.createElement('div');
+  glow.className = 'screen-effect edge-glow';
+  container.appendChild(glow);
+}
+
+// ─── Utilities ─────────────────────────────────────────────────
 function esc(text) {
   const d = document.createElement('div');
   d.textContent = text || '';
