@@ -1,0 +1,139 @@
+const container = document.getElementById('notification-container');
+let overlayConfig = {};
+const queue = [];
+let isPlaying = false;
+
+// Connect to SSE
+const evtSource = new EventSource(`/overlay/events/${window.OVERLAY_TOKEN}`);
+
+evtSource.onmessage = (e) => {
+  const data = JSON.parse(e.data);
+
+  if (data.type === 'config') {
+    overlayConfig = data.config;
+    return;
+  }
+
+  // Check if event type is enabled
+  const eventType = data.type;
+  const typeConfig = overlayConfig[eventType];
+  if (typeConfig && !typeConfig.enabled) return;
+
+  queue.push(data);
+  if (!isPlaying) playNext();
+};
+
+evtSource.onerror = () => {
+  console.log('SSE connection lost, reconnecting...');
+};
+
+function playNext() {
+  if (queue.length === 0) { isPlaying = false; return; }
+  isPlaying = true;
+  const event = queue.shift();
+  showNotification(event);
+}
+
+function showNotification(event) {
+  const typeConfig = overlayConfig[event.type] || {};
+  const duration = (typeConfig.duration || 5) * 1000;
+
+  // Play sound — uses default sound files from /overlay/sounds/{type}.mp3
+  // Users can replace these files with custom sounds
+  const soundMap = {
+    follow: '/overlay/sounds/follow.mp3',
+    subscription: '/overlay/sounds/sub.mp3',
+    bits: '/overlay/sounds/bits.mp3',
+    donation: '/overlay/sounds/donation.mp3',
+  };
+  const soundUrl = soundMap[event.type];
+  if (soundUrl) {
+    const audio = new Audio(soundUrl);
+    audio.volume = overlayConfig.volume || 0.8;
+    audio.play().catch(() => {}); // Fails silently if file doesn't exist
+  }
+
+  const banner = document.createElement('div');
+  banner.className = `banner banner-${event.type} engine-idle`;
+  banner.innerHTML = buildBannerContent(event);
+  container.appendChild(banner);
+
+  setTimeout(() => {
+    banner.classList.add('dismissing');
+    banner.addEventListener('animationend', () => {
+      banner.remove();
+      setTimeout(playNext, 500); // Gap between notifications
+    });
+  }, duration);
+}
+
+function buildBannerContent(event) {
+  const checkers = '<div class="checker-top"></div><div class="checker-bottom"></div>';
+
+  switch (event.type) {
+    case 'follow':
+      return `${checkers}
+        <div class="follow-car">🏎️</div>
+        <div class="banner-content"><div style="text-align:center">
+          <div class="banner-title">New Pit Crew Member!</div>
+          <div class="banner-name">${esc(event.data.username)}</div>
+          <div class="banner-sub">just joined the race 🏁</div>
+        </div></div>`;
+
+    case 'subscription': {
+      const d = event.data;
+      const detail = d.months && d.months > 1
+        ? `Subscribed for <span style="color:#00ff88;font-weight:bold">${d.months} months</span> — Tier ${d.tier || '1'}`
+        : d.message ? esc(d.message) : `Tier ${d.tier || '1'} subscriber!`;
+      return `${checkers}
+        <div class="sub-car-left">🏎️</div>
+        <div class="sub-car-right">🏎️</div>
+        <div class="banner-content">
+          <div class="banner-emoji">🏆</div>
+          <div style="text-align:center">
+            <div class="banner-title">Podium Finish!</div>
+            <div class="banner-name">${esc(d.username)}</div>
+            <div class="banner-sub">${detail}</div>
+          </div>
+          <div class="banner-emoji">🏆</div>
+        </div>`;
+    }
+
+    case 'bits':
+      return `${checkers}
+        <div class="burnout-car-right">🏎️</div>
+        <div class="fire-single fire-behind-right">🔥</div>
+        <div class="burnout-car-left">🏎️</div>
+        <div class="fire-single fire-behind-left">🔥</div>
+        <div class="tire-smoke ts-1">💨</div><div class="tire-smoke ts-2">💨</div>
+        <div class="tire-smoke ts-3">💨</div><div class="tire-smoke ts-4">💨</div>
+        <div class="banner-content"><div style="text-align:center">
+          <div class="banner-title">Nitro Boost!</div>
+          <div class="banner-name">${esc(event.data.username)}</div>
+          <div class="banner-sub">fueled up <span style="color:#f7c948;font-weight:bold">${event.data.amount} bits</span> of nitro! 🔥</div>
+        </div></div>`;
+
+    case 'donation':
+      return `${checkers}
+        <div class="sponsor-car">🏎️</div>
+        <div class="speed-line sl-1"></div><div class="speed-line sl-2"></div>
+        <div class="speed-line sl-3"></div><div class="speed-line sl-4"></div>
+        <div class="banner-content">
+          <div class="banner-emoji">🛞</div>
+          <div style="text-align:center">
+            <div class="banner-title">Sponsor Alert!</div>
+            <div class="banner-name">${esc(event.data.username)}</div>
+            <div class="banner-sub">sponsored the team with <span style="color:#bf00ff;font-weight:bold">$${event.data.amount}</span> 💸</div>
+          </div>
+          <div class="banner-emoji">🛞</div>
+        </div>`;
+
+    default: return '';
+  }
+}
+
+function esc(text) {
+  const d = document.createElement('div');
+  d.textContent = text || '';
+  return d.innerHTML;
+}

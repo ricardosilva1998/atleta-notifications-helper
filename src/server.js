@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const paymentRoutes = require('./routes/payment');
+const overlayRoutes = require('./routes/overlay');
 
 const app = express();
 
@@ -75,6 +76,7 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/payment', paymentRoutes);
 app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
+app.use('/overlay', overlayRoutes);
 
 // Language switch
 app.post('/set-language', (req, res) => {
