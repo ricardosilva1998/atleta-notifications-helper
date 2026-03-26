@@ -752,12 +752,14 @@ router.post('/overlay/test/:eventType', (req, res) => {
 router.get('/chatbot', (req, res) => {
   const streamer = req.streamer;
   const commands = db.getChatCommands(req.streamer.id);
-  res.render('chatbot-config', {
-    streamer,
-    commands,
-    bot_linked: req.query.bot_linked || null,
-    bot_error: req.query.bot_error || null,
-  });
+  let botConnected = false;
+  let botUsername = '';
+  try {
+    const { chatManager } = require('../services/twitchChat');
+    botConnected = chatManager.isConnected();
+    botUsername = require('../config').bot.twitchUsername;
+  } catch (e) {}
+  res.render('chatbot-config', { streamer, commands, botConnected, botUsername });
 });
 
 // Save chatbot settings
