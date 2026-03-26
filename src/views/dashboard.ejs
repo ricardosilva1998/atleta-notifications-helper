@@ -5,6 +5,7 @@
   .tab-twitch.active { background: #9146ff; }
   .tab-youtube.active { background: #ff0000; }
   .tab-kick.active { background: #53fc18; color: #000; }
+  .tab-admin.active { background: #e74c3c; }
 </style>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px;" class="animate-in">
@@ -38,6 +39,12 @@
   <button class="tab-btn tab-kick" data-tab="kick">
     <svg width="30" height="10" viewBox="0 0 78 26" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0307312H8.34073V5.79423H11.1163V2.91248H13.8919V0.0307312H22.2326V8.69274H19.457V11.5745H16.6815V14.4562H19.457V17.338H22.2326V26H13.8919V23.1182H11.1163V20.2365H8.34073V26H0V0.0307312ZM55.6444 0.0307312H63.9852V5.79423H66.7608V2.91248H69.5363V0.0307312H77.8771V8.69274H75.1015V11.5745H72.3259V14.4562H75.1015V17.338H77.8771V26H69.5363V23.1182H66.7608V20.2365H63.9852V26H55.6444V0.0307312ZM25.039 0.0307312H33.3797V26H25.039V0.0307312ZM38.9462 0.0307312V2.91248H36.1706V23.1029H38.9462V25.9846H52.8535V17.3226H44.5128V8.66061H52.8535V0H38.9462V0.0307312Z"/></svg>
   </button>
+  <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+  <button class="tab-btn tab-admin" data-tab="admin">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+    Admin
+  </button>
+  <% } %>
 </div>
 
 <div class="tab-content active" id="tab-discord">
@@ -48,12 +55,6 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     <%= t('dashboard.addBot') %>
   </a>
-  <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
-    <a href="/admin" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-      Admin Panel
-    </a>
-  <% } %>
 </div>
 
 <h3 class="section-title animate-in animate-in-delay-2" style="display: flex; align-items: center; gap: 10px;">
@@ -378,6 +379,19 @@
     <p style="color: var(--text-muted); font-size: 13px;">Kick.com integration with chatbot and overlay support is coming.</p>
   </div>
 </div>
+
+<% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+<div class="tab-content" id="tab-admin">
+  <div class="card" style="text-align: center; padding: 48px 24px;">
+    <div style="margin-bottom: 16px;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="var(--text-muted)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 12px;">Admin Panel</p>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">Manage users, view stats, handle issues, and configure the platform.</p>
+    <a href="/admin" class="btn btn-primary" style="font-size: 14px; padding: 10px 24px; text-decoration: none;">Open Admin Panel</a>
+  </div>
+</div>
+<% } %>
 
 <script>
 function toggleStats(guildId) {
