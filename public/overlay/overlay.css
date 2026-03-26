@@ -165,3 +165,38 @@ body {
   0% { opacity: 0; transform: translateX(0); } 50% { opacity: 0.8; }
   100% { opacity: 0; transform: translateX(100px); }
 }
+
+/* Raid: multiple cars zoom in from left */
+.banner-raid { background: linear-gradient(90deg, #2e0a0a, #4a1a1a 50%, #2e0a0a); }
+.banner-raid .checker-top { background: repeating-linear-gradient(90deg, #ff4444 0px, #ff4444 8px, #661111 8px, #661111 16px); }
+.banner-raid .checker-bottom { background: repeating-linear-gradient(90deg, #661111 0px, #661111 8px, #ff4444 8px, #ff4444 16px); }
+.banner-raid .banner-title { color: #ff4444; }
+
+.raid-car-1 {
+  position: absolute; font-size: 28px; z-index: 10; top: 25%;
+  transform: translateY(-50%) scaleX(-1);
+  animation: raidDrive1 2s ease-out infinite;
+}
+.raid-car-2 {
+  position: absolute; font-size: 28px; z-index: 10; top: 50%;
+  transform: translateY(-50%) scaleX(-1);
+  animation: raidDrive2 2s ease-out 0.3s infinite;
+}
+.raid-car-3 {
+  position: absolute; font-size: 28px; z-index: 10; top: 75%;
+  transform: translateY(-50%) scaleX(-1);
+  animation: raidDrive3 2s ease-out 0.6s infinite;
+}
+
+@keyframes raidDrive1 {
+  0% { left: -50px; opacity: 0; } 20% { left: 5%; opacity: 1; }
+  80% { left: 5%; opacity: 1; } 100% { left: -50px; opacity: 0; }
+}
+@keyframes raidDrive2 {
+  0% { left: -50px; opacity: 0; } 20% { left: 3%; opacity: 1; }
+  80% { left: 3%; opacity: 1; } 100% { left: -50px; opacity: 0; }
+}
+@keyframes raidDrive3 {
+  0% { left: -50px; opacity: 0; } 20% { left: 7%; opacity: 1; }
+  80% { left: 7%; opacity: 1; } 100% { left: -50px; opacity: 0; }
+}

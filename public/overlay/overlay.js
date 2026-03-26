@@ -45,6 +45,7 @@ function showNotification(event) {
     subscription: '/overlay/sounds/sub.mp3',
     bits: '/overlay/sounds/bits.mp3',
     donation: '/overlay/sounds/donation.mp3',
+    raid: '/overlay/sounds/raid.mp3',
   };
   const soundUrl = soundMap[event.type];
   if (soundUrl) {
@@ -127,6 +128,17 @@ function buildBannerContent(event) {
           </div>
           <div class="banner-emoji">🛞</div>
         </div>`;
+
+    case 'raid':
+      return `${checkers}
+    <div class="raid-car-1">🏎️</div>
+    <div class="raid-car-2">🏎️</div>
+    <div class="raid-car-3">🏎️</div>
+    <div class="banner-content"><div style="text-align:center">
+      <div class="banner-title">Incoming Raid!</div>
+      <div class="banner-name">${esc(event.data.username)}</div>
+      <div class="banner-sub">raiding with <span style="color:#ff4444;font-weight:bold">${event.data.viewers} viewers</span>! 🏁</div>
+    </div></div>`;
 
     default: return '';
   }
