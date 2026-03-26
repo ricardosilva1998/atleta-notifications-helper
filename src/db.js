@@ -200,6 +200,29 @@ try {
   }
 }
 
+// Migration: Add YouTube chatbot/overlay columns to streamers
+{
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('yt_chatbot_enabled')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN yt_chatbot_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN yt_chat_superchat_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_chat_member_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_chat_giftmember_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_chat_superchat_template TEXT DEFAULT '{username} sent a Super Chat of {amount}! {message}';
+      ALTER TABLE streamers ADD COLUMN yt_chat_member_template TEXT DEFAULT 'Welcome to the team, {username}! Thanks for becoming a member!';
+      ALTER TABLE streamers ADD COLUMN yt_chat_giftmember_template TEXT DEFAULT '{username} gifted {amount} memberships! What a legend!';
+      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_member_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_duration INTEGER DEFAULT 6;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_member_duration INTEGER DEFAULT 5;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_duration INTEGER DEFAULT 6;
+    `);
+    console.log('[DB] Added YouTube chatbot/overlay columns to streamers');
+  }
+}
+
 // --- Schema ---
 
 db.exec(`
@@ -1964,6 +1987,36 @@ function updateChatbotConfig(streamerId, config) {
   db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
+const YT_CHATBOT_COLUMNS = new Set([
+  'yt_chatbot_enabled',
+  'yt_chat_superchat_enabled', 'yt_chat_member_enabled', 'yt_chat_giftmember_enabled',
+  'yt_chat_superchat_template', 'yt_chat_member_template', 'yt_chat_giftmember_template',
+  'yt_overlay_superchat_enabled', 'yt_overlay_member_enabled', 'yt_overlay_giftmember_enabled',
+  'yt_overlay_superchat_duration', 'yt_overlay_member_duration', 'yt_overlay_giftmember_duration',
+]);
+
+function updateYoutubeChatbotConfig(streamerId, config) {
+  const fields = [];
+  const values = [];
+  for (const [key, value] of Object.entries(config)) {
+    if (!YT_CHATBOT_COLUMNS.has(key)) continue;
+    fields.push(`${key} = ?`);
+    values.push(value);
+  }
+  if (fields.length === 0) return;
+  values.push(streamerId);
+  db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
+function getYoutubeChatbotEnabledStreamers() {
+  return db.prepare(`
+    SELECT * FROM streamers
+    WHERE yt_chatbot_enabled = 1
+    AND youtube_channel_id IS NOT NULL
+    AND youtube_channel_id != ''
+  `).all();
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -2108,4 +2161,6 @@ module.exports = {
   updateChatCommand,
   deleteChatCommand,
   updateChatbotConfig,
+  updateYoutubeChatbotConfig,
+  getYoutubeChatbotEnabledStreamers,
 };
