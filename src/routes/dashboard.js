@@ -881,10 +881,21 @@ router.get('/youtube-chatbot', (req, res) => {
     const { youtubeChatManager } = require('../services/youtubeLiveChat');
     ytPolling = youtubeChatManager.isPolling(req.streamer.id);
   } catch (e) {}
+  // Check if streamer has a YouTube channel linked (directly or via watched channels)
+  let hasYoutubeChannel = !!req.streamer.youtube_channel_id;
+  if (!hasYoutubeChannel) {
+    const guilds = db.getGuildsForStreamer(req.streamer.id);
+    for (const g of guilds) {
+      const ytChannels = db.getWatchedYoutubeChannelsForGuild(g.guild_id, req.streamer.id);
+      if (ytChannels.length > 0) { hasYoutubeChannel = true; break; }
+    }
+  }
+
   res.render('youtube-chatbot-config', {
     streamer: req.streamer,
     commands,
     ytPolling,
+    hasYoutubeChannel,
     connected: req.query.connected,
     disconnected: req.query.disconnected,
     error: req.query.error,
@@ -930,10 +941,23 @@ router.post('/youtube-chatbot/connect', async (req, res) => {
     const { getLiveChatId, findActiveLiveStream } = require('../services/youtube');
     const appConfig = require('../config');
 
-    // Find the streamer's active live stream
-    const channelId = req.streamer.youtube_channel_id;
+    // Find the streamer's YouTube channel
+    let channelId = req.streamer.youtube_channel_id;
     if (!channelId) {
-      return res.redirect('/dashboard/youtube-chatbot?error=No YouTube channel linked. Set your YouTube channel ID in your account settings.');
+      // Fallback: find from watched YouTube channels
+      const allWatched = db.getAllUniqueWatchedYoutubeChannels();
+      // Get guilds for this streamer to find their channels
+      const guilds = db.getGuildsForStreamer(req.streamer.id);
+      for (const g of guilds) {
+        const ytChannels = db.getWatchedYoutubeChannelsForGuild(g.guild_id, req.streamer.id);
+        if (ytChannels.length > 0) {
+          channelId = ytChannels[0].youtube_channel_id;
+          break;
+        }
+      }
+    }
+    if (!channelId) {
+      return res.redirect('/dashboard/youtube-chatbot?error=No YouTube channel linked. Add a YouTube channel in your guild config first.');
     }
 
     const videoId = await findActiveLiveStream(channelId, appConfig.youtube.apiKey);

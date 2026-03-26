@@ -46,7 +46,7 @@
     <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
       Connect the bot to your active YouTube live stream. It will automatically detect your stream and start polling chat.
     </p>
-    <% if (!streamer.youtube_channel_id) { %>
+    <% if (!hasYoutubeChannel) { %>
       <p style="color: var(--warning, #f7c948); font-size: 13px; margin-bottom: 12px;">
         ⚠️ No YouTube channel linked. Set your YouTube channel in the guild config first.
       </p>
