@@ -17,14 +17,15 @@
   .alert-card-icon { font-size: 20px; }
   .alert-card-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
   .alert-card-desc { font-size: 11px; color: var(--text-muted); }
-  .alert-card-controls { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .alert-card-controls { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 14px; margin-top: auto; border-top: 1px solid var(--border); }
   .alert-ctrl { display: flex; align-items: center; gap: 6px; }
   .alert-ctrl-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
   .alert-ctrl input[type=number] { width: 56px; padding: 5px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; outline: none; text-align: center; }
   .alert-ctrl input[type=range] { width: 90px; accent-color: var(--accent); cursor: pointer; }
   .alert-ctrl .vol-val { font-size: 12px; color: var(--text-muted); min-width: 30px; }
-  .alert-card-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 12px; }
-  .sound-row { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+  .alert-card-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+  .sound-row { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+  .sound-row .btn { font-size: 13px !important; padding: 7px 14px !important; }
   .sound-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: var(--bg-elevated); color: var(--text-muted); font-weight: 600; }
   .sound-badge.custom { background: rgba(145,71,255,0.15); color: #9146ff; }
 
@@ -163,9 +164,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-follow">Default</span>
-          <button type="button" onclick="previewSound('follow')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('follow')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('follow')" class="btn btn-secondary" id="remove-btn-follow" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('follow')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('follow')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('follow')" class="btn btn-secondary" id="remove-btn-follow" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -206,9 +207,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-subscription">Default</span>
-          <button type="button" onclick="previewSound('subscription')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('subscription')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('subscription')" class="btn btn-secondary" id="remove-btn-subscription" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('subscription')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('subscription')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('subscription')" class="btn btn-secondary" id="remove-btn-subscription" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -249,9 +250,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-bits">Default</span>
-          <button type="button" onclick="previewSound('bits')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('bits')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('bits')" class="btn btn-secondary" id="remove-btn-bits" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('bits')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('bits')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('bits')" class="btn btn-secondary" id="remove-btn-bits" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -292,9 +293,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-donation">Default</span>
-          <button type="button" onclick="previewSound('donation')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('donation')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('donation')" class="btn btn-secondary" id="remove-btn-donation" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('donation')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('donation')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('donation')" class="btn btn-secondary" id="remove-btn-donation" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -335,9 +336,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-raid">Default</span>
-          <button type="button" onclick="previewSound('raid')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('raid')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('raid')" class="btn btn-secondary" id="remove-btn-raid" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('raid')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('raid')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('raid')" class="btn btn-secondary" id="remove-btn-raid" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -378,9 +379,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-yt_superchat">Default</span>
-          <button type="button" onclick="previewSound('yt_superchat')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('yt_superchat')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('yt_superchat')" class="btn btn-secondary" id="remove-btn-yt_superchat" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('yt_superchat')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('yt_superchat')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('yt_superchat')" class="btn btn-secondary" id="remove-btn-yt_superchat" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -421,9 +422,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-yt_member">Default</span>
-          <button type="button" onclick="previewSound('yt_member')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('yt_member')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('yt_member')" class="btn btn-secondary" id="remove-btn-yt_member" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('yt_member')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('yt_member')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('yt_member')" class="btn btn-secondary" id="remove-btn-yt_member" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
@@ -464,9 +465,9 @@
         </div>
         <div class="sound-row" style="margin-left: auto;">
           <span class="sound-badge" id="sound-status-yt_giftmember">Default</span>
-          <button type="button" onclick="previewSound('yt_giftmember')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">▶</button>
-          <button type="button" onclick="openTrimModal('yt_giftmember')" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">Upload</button>
-          <button type="button" onclick="removeSound('yt_giftmember')" class="btn btn-secondary" id="remove-btn-yt_giftmember" style="font-size: 11px; padding: 4px 10px; color: var(--danger); display: none;">✕</button>
+          <button type="button" onclick="previewSound('yt_giftmember')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('yt_giftmember')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('yt_giftmember')" class="btn btn-secondary" id="remove-btn-yt_giftmember" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
         </div>
       </div>
       <% if (overlayUrl) { %>
