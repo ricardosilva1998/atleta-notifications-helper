@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overlay Builder — Atleta</title>
+  <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link id="google-fonts-base" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link id="google-fonts-custom" href="" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0c0d14;
+      --bg-surface: #141520;
+      --bg-elevated: #1a1b2e;
+      --bg-hover: #1f2037;
+      --border: rgba(255,255,255,0.06);
+      --border-focus: rgba(145,70,255,0.4);
+      --text-primary: #e8e6f0;
+      --text-secondary: #8b8a9e;
+      --text-muted: #5c5b6e;
+      --accent: #9146ff;
+      --accent-glow: rgba(145,70,255,0.15);
+      --accent-hover: #a56bff;
+      --discord: #5865F2;
+      --success: #3ecf8e;
+      --danger: #f04438;
+      --warning: #f79009;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --font-display: 'Outfit', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --panel-width: 340px;
+      --header-height: 56px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); letter-spacing: -0.02em; }
+
+    /* ── Top nav ── */
+    .top-nav {
+      height: var(--header-height);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      background: var(--bg-surface);
+      flex-shrink: 0;
+      z-index: 100;
+    }
+    .top-nav .back-link {
+      display: flex; align-items: center; gap: 6px;
+      color: var(--text-secondary); text-decoration: none;
+      font-size: 13px; font-family: var(--font-display); font-weight: 500;
+      transition: color 0.2s;
+    }
+    .top-nav .back-link:hover { color: var(--text-primary); }
+    .top-nav .sep { color: var(--text-muted); }
+    .top-nav h1 { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .top-nav .spacer { flex: 1; }
+    .top-nav .overlay-url-row { display: flex; align-items: center; gap: 8px; }
+    .top-nav .overlay-url-row input {
+      width: 280px; padding: 6px 10px; font-size: 11px; font-family: monospace;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text-secondary);
+    }
+    .top-nav .overlay-url-row .copy-btn {
+      padding: 6px 12px; font-size: 12px; font-family: var(--font-display);
+      font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer;
+      transition: all 0.2s;
+    }
+    .top-nav .overlay-url-row .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Layout ── */
+    .builder-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    .left-panel {
+      width: var(--panel-width);
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Event tabs */
+    .event-tabs {
+      padding: 12px 12px 0;
+      flex-shrink: 0;
+    }
+    .event-tabs-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--text-muted); font-weight: 700; margin-bottom: 8px;
+      font-family: var(--font-display);
+    }
+    .event-tabs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    .event-tab {
+      padding: 6px 4px; font-size: 11px; font-weight: 600;
+      font-family: var(--font-display); cursor: pointer;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text-secondary);
+      text-align: center; transition: all 0.15s; user-select: none;
+    }
+    .event-tab:hover { border-color: rgba(145,70,255,0.3); color: var(--text-primary); }
+    .event-tab.active {
+      background: rgba(145,70,255,0.15); border-color: rgba(145,70,255,0.5);
+      color: var(--accent);
+    }
+
+    /* Panel scrollable area */
+    .panel-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 12px 12px;
+    }
+    .panel-scroll::-webkit-scrollbar { width: 4px; }
+    .panel-scroll::-webkit-scrollbar-track { background: transparent; }
+    .panel-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Sections */
+    .section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; cursor: pointer; user-select: none;
+      background: var(--bg-elevated); transition: background 0.15s;
+    }
+    .section-header:hover { background: var(--bg-hover); }
+    .section-title {
+      font-size: 12px; font-weight: 700; font-family: var(--font-display);
+      color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .section-chevron {
+      color: var(--text-muted); transition: transform 0.2s; font-size: 10px;
+    }
+    .section.collapsed .section-chevron { transform: rotate(-90deg); }
+    .section-body {
+      padding: 12px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+    }
+    .section.collapsed .section-body { display: none; }
+
+    /* Controls */
+    .ctrl-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .ctrl-row:last-child { margin-bottom: 0; }
+    .ctrl-label {
+      font-size: 11px; font-weight: 600; color: var(--text-secondary);
+      font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .ctrl-label small { display: block; font-size: 10px; color: var(--text-muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+    input[type="color"] {
+      width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+      cursor: pointer; background: none; padding: 2px;
+    }
+    input[type="range"] {
+      accent-color: var(--accent); cursor: pointer; width: 100%;
+    }
+    input[type="text"], select {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      color: var(--text-primary); border-radius: var(--radius-sm);
+      padding: 6px 8px; font-size: 12px; outline: none;
+      transition: border-color 0.2s; font-family: var(--font-body);
+    }
+    input[type="text"]:focus, select:focus { border-color: var(--border-focus); }
+    select { cursor: pointer; }
+
+    .range-row { margin-bottom: 10px; }
+    .range-row:last-child { margin-bottom: 0; }
+    .range-header {
+      display: flex; justify-content: space-between; margin-bottom: 4px;
+    }
+    .range-val {
+      font-size: 11px; font-family: var(--font-display); font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* Color swatch row */
+    .color-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 0;
+    }
+    .color-item {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .color-item-label {
+      font-size: 11px; color: var(--text-muted); font-family: var(--font-display);
+    }
+
+    /* Position grid */
+    .position-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .pos-cell {
+      aspect-ratio: 1.5; border-radius: 4px; cursor: pointer;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+    }
+    .pos-cell:hover { border-color: rgba(145,70,255,0.4); }
+    .pos-cell.active {
+      background: rgba(145,70,255,0.2); border-color: rgba(145,70,255,0.7);
+    }
+    .pos-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .pos-cell.active .pos-dot { background: var(--accent); }
+
+    /* ── Right preview ── */
+    .right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    /* Toolbar */
+    .preview-toolbar {
+      height: 48px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .toolbar-btn {
+      padding: 6px 14px; font-size: 12px; font-weight: 600;
+      font-family: var(--font-display); border-radius: var(--radius-sm);
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--bg-elevated); color: var(--text-secondary);
+      transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+    }
+    .toolbar-btn:hover { border-color: rgba(145,70,255,0.4); color: var(--accent); }
+    .toolbar-btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .toolbar-btn.primary:hover { background: var(--accent-hover); }
+    .toolbar-spacer { flex: 1; }
+    .toolbar-hint {
+      font-size: 11px; color: var(--text-muted); font-family: var(--font-display);
+    }
+
+    /* Preview canvas */
+    .preview-canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: hidden;
+    }
+    .preview-screen {
+      width: 100%;
+      max-width: 960px;
+      aspect-ratio: 16/9;
+      background: #080a10;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+    }
+
+    /* Fake stream elements */
+    .fake-webcam {
+      position: absolute; bottom: 0; right: 0;
+      width: 22%; aspect-ratio: 16/9;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px 0 0 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; color: rgba(255,255,255,0.15);
+    }
+    .fake-game-bg {
+      position: absolute; inset: 0;
+      background: linear-gradient(160deg, #0a0e1a 0%, #0d1220 50%, #080b15 100%);
+    }
+    .fake-hud-tl {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; padding: 8px 12px;
+    }
+    .fake-hud-tl .hud-label { font-size: 8px; color: rgba(255,255,255,0.4); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 1px; }
+    .fake-hud-tl .hud-val { font-size: 14px; color: #fff; font-family: 'Roboto Mono', monospace; font-weight: 700; }
+    .fake-chat {
+      position: absolute; right: 0; top: 0; bottom: 24%;
+      width: 22%; background: rgba(0,0,0,0.45); padding: 8px;
+      display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+    }
+    .fake-chat-msg {
+      font-size: 8px; color: rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.04); border-radius: 3px;
+      padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .fake-chat-msg .chat-user { font-weight: 700; }
+    .fake-chat-msg.c1 .chat-user { color: #9146ff; }
+    .fake-chat-msg.c2 .chat-user { color: #00ff88; }
+    .fake-chat-msg.c3 .chat-user { color: #f7c948; }
+    .fake-chat-msg.c4 .chat-user { color: #ff8800; }
+    .fake-chat-msg.c5 .chat-user { color: #4285f4; }
+    .fake-stream-label {
+      position: absolute; bottom: 8px; left: 12px;
+      font-size: 8px; color: rgba(255,255,255,0.2);
+      font-family: var(--font-display);
+    }
+    .fake-live-badge {
+      position: absolute; top: 10px; right: 24%;
+      background: #e00; border-radius: 3px;
+      font-size: 8px; font-weight: 800; color: #fff;
+      padding: 2px 5px; font-family: var(--font-display); letter-spacing: 1px;
+    }
+
+    /* The preview card container — positions it in the screen */
+    .preview-card-container {
+      position: absolute;
+      pointer-events: none;
+      transition: all 0.3s ease;
+    }
+
+    /* Preview alert card (mirrors overlay.css structure) */
+    .preview-alert-card {
+      width: 420px;
+      border-radius: 16px;
+      border: 1px solid;
+      overflow: visible;
+      box-shadow: 0 8px 32px rgba(136,136,204,0.25);
+      transform-origin: top center;
+    }
+    .preview-alert-card .top-accent {
+      height: 3px; border-radius: 16px 16px 0 0;
+    }
+    .preview-alert-card .card-body {
+      padding: 14px 20px 12px;
+    }
+    .preview-alert-card .event-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 2px;
+      font-weight: 700; margin-bottom: 4px;
+    }
+    .preview-alert-card .username {
+      font-size: 22px; font-weight: 800; color: #fff; line-height: 1.1;
+    }
+    .preview-alert-card .detail {
+      font-size: 13px; color: #ccc; margin-top: 4px;
+    }
+    .preview-alert-card .detail b { color: #fff; font-weight: 700; }
+    .preview-alert-card .car-track {
+      height: 44px; position: relative; overflow: hidden;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      border-radius: 0 0 16px 16px;
+    }
+    .preview-alert-card .race-line {
+      position: absolute; top: 50%; left: 0; right: 0;
+      height: 1px; background: rgba(255,255,255,0.08); transform: translateY(-50%);
+    }
+    .preview-alert-card .track-car {
+      position: absolute; top: 50%;
+      transform: translateY(-50%) scaleX(-1); font-size: 22px;
+      animation: previewCarZoom 2.8s linear infinite; z-index: 5;
+    }
+    @keyframes previewCarZoom {
+      0%   { left: -40px; opacity: 1; }
+      80%  { left: 105%;  opacity: 1; }
+      81%  { opacity: 0; left: -40px; }
+      100% { opacity: 0; left: -40px; }
+    }
+    .preview-alert-card .cup-row {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .preview-alert-card .cup {
+      font-size: 26px;
+      animation: cupBounce 0.6s ease-in-out infinite alternate;
+    }
+    @keyframes cupBounce {
+      from { transform: translateY(0) scale(1); }
+      to   { transform: translateY(-4px) scale(1.08); }
+    }
+    .preview-alert-card .card-inner { flex: 1; min-width: 0; }
+
+    /* Entrance animations */
+    @keyframes anim-slideDown {
+      from { transform: translateY(-120%) scale(0.95); opacity: 0; }
+      to   { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    @keyframes anim-slideUp {
+      from { transform: translateY(120%) scale(0.95); opacity: 0; }
+      to   { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    @keyframes anim-slideLeft {
+      from { transform: translateX(120%) scale(0.95); opacity: 0; }
+      to   { transform: translateX(0) scale(1); opacity: 1; }
+    }
+    @keyframes anim-slideRight {
+      from { transform: translateX(-120%) scale(0.95); opacity: 0; }
+      to   { transform: translateX(0) scale(1); opacity: 1; }
+    }
+    @keyframes anim-zoomIn {
+      from { transform: scale(0.3); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    @keyframes anim-fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .anim-playing { animation-fill-mode: both; animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    /* ── Save bar ── */
+    .save-bar {
+      height: 56px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-surface);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .save-bar .event-badge {
+      font-size: 12px; font-family: var(--font-display); font-weight: 700;
+      color: var(--text-secondary); background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 4px 10px;
+    }
+    .save-bar .spacer { flex: 1; }
+    .save-status {
+      font-size: 12px; color: var(--success); font-family: var(--font-display);
+      font-weight: 600; opacity: 0; transition: opacity 0.3s;
+    }
+    .save-status.visible { opacity: 1; }
+    .btn {
+      padding: 8px 18px; font-size: 13px; font-weight: 600;
+      font-family: var(--font-display); border-radius: var(--radius-sm);
+      cursor: pointer; border: 1px solid var(--border);
+      transition: all 0.15s; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-secondary {
+      background: var(--bg-elevated); color: var(--text-secondary);
+    }
+    .btn-secondary:hover { border-color: rgba(145,70,255,0.4); color: var(--accent); }
+    .btn-primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-danger {
+      background: rgba(240,68,56,0.1); border-color: rgba(240,68,56,0.3); color: var(--danger);
+    }
+    .btn-danger:hover { background: rgba(240,68,56,0.2); border-color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<!-- Top nav -->
+<nav class="top-nav">
+  <a href="/dashboard" class="back-link">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Dashboard
+  </a>
+  <span class="sep">/</span>
+  <h1>Overlay Builder</h1>
+  <span class="sep">/</span>
+  <a href="/dashboard/overlay" style="font-size:13px;color:var(--text-secondary);font-family:var(--font-display);font-weight:500;">Settings &amp; Sounds</a>
+  <div class="spacer"></div>
+  <% if (overlayUrl) { %>
+  <div class="overlay-url-row">
+    <input type="text" value="<%= overlayUrl %>" readonly id="overlay-url-input">
+    <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('overlay-url-input').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy URL',1500);">Copy URL</button>
+  </div>
+  <% } %>
+</nav>
+
+<!-- Main layout -->
+<div class="builder-layout">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="event-tabs">
+      <div class="event-tabs-label">Event Type</div>
+      <div class="event-tabs-grid" id="event-tabs">
+        <div class="event-tab active" data-type="follow">Follow</div>
+        <div class="event-tab" data-type="subscription">Sub</div>
+        <div class="event-tab" data-type="bits">Bits</div>
+        <div class="event-tab" data-type="donation">Donation</div>
+        <div class="event-tab" data-type="raid">Raid</div>
+        <div class="event-tab" data-type="yt_superchat">SC</div>
+        <div class="event-tab" data-type="yt_member">Member</div>
+        <div class="event-tab" data-type="yt_giftmember">Gift</div>
+      </div>
+    </div>
+
+    <div class="panel-scroll">
+
+      <!-- Theme Section -->
+      <div class="section" id="section-theme">
+        <div class="section-header" onclick="toggleSection('theme')">
+          <span class="section-title">🎨 Theme</span>
+          <span class="section-chevron">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="color-row">
+            <div class="color-item">
+              <input type="color" id="ctrl-bg-color" value="#1a1a3e">
+              <span class="color-item-label">Background</span>
+            </div>
+            <div class="color-item">
+              <input type="color" id="ctrl-accent-color" value="#8888cc">
+              <span class="color-item-label">Accent</span>
+            </div>
+            <div class="color-item">
+              <input type="color" id="ctrl-border-color" value="#8888cc">
+              <span class="color-item-label">Border</span>
+            </div>
+            <div class="color-item">
+              <input type="color" id="ctrl-text-color" value="#ffffff">
+              <span class="color-item-label">Text</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text Section -->
+      <div class="section" id="section-text">
+        <div class="section-header" onclick="toggleSection('text')">
+          <span class="section-title">✏️ Text &amp; Font</span>
+          <span class="section-chevron">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
+            <div class="ctrl-label" style="margin-bottom:4px;">Event Label</div>
+            <input type="text" id="ctrl-event-label" placeholder="e.g. New Pit Crew Member" style="width:100%;">
+          </div>
+          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
+            <div class="ctrl-label" style="margin-bottom:4px;">Detail Text <small style="display:inline;text-transform:none;font-size:10px;color:var(--text-muted);">(optional override)</small></div>
+            <input type="text" id="ctrl-detail-text" placeholder="just joined the race 🏁" style="width:100%;">
+          </div>
+          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
+            <div class="ctrl-label" style="margin-bottom:4px;">Font Family</div>
+            <select id="ctrl-font-family" style="width:100%;">
+              <option value="System Default">System Default</option>
+              <option value="Outfit">Outfit</option>
+              <option value="Inter">Inter</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Roboto Mono">Roboto Mono</option>
+              <option value="Press Start 2P">Press Start 2P</option>
+            </select>
+          </div>
+          <div class="range-row">
+            <div class="range-header">
+              <span class="ctrl-label">Username Size</span>
+              <span class="range-val" id="val-username-size">24px</span>
+            </div>
+            <input type="range" id="ctrl-username-size" min="14" max="42" step="1" value="24">
+          </div>
+        </div>
+      </div>
+
+      <!-- Animation Section -->
+      <div class="section" id="section-animation">
+        <div class="section-header" onclick="toggleSection('animation')">
+          <span class="section-title">⚡ Animation</span>
+          <span class="section-chevron">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
+            <div class="ctrl-label" style="margin-bottom:4px;">Entrance</div>
+            <select id="ctrl-entrance-animation" style="width:100%;">
+              <option value="slideDown">Slide Down</option>
+              <option value="slideUp">Slide Up</option>
+              <option value="slideLeft">Slide Left</option>
+              <option value="slideRight">Slide Right</option>
+              <option value="zoomIn">Zoom In</option>
+              <option value="fadeIn">Fade In</option>
+            </select>
+          </div>
+          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
+            <div class="ctrl-label" style="margin-bottom:4px;">Car Animation</div>
+            <select id="ctrl-car-animation" style="width:100%;">
+              <option value="zoomLR">Zoom L→R</option>
+              <option value="zoomRL">Zoom R→L</option>
+              <option value="bounce">Bounce</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
+            <div class="ctrl-label" style="margin-bottom:4px;">Screen Effect</div>
+            <select id="ctrl-screen-effect" style="width:100%;">
+              <option value="default">Default (per event)</option>
+              <option value="none">None</option>
+              <option value="confetti">Confetti</option>
+              <option value="goldRain">Gold Rain</option>
+              <option value="moneyRain">Money Rain</option>
+              <option value="tireMarks">Tire Marks</option>
+            </select>
+          </div>
+          <div class="range-row">
+            <div class="range-header">
+              <span class="ctrl-label">Speed</span>
+              <span class="range-val" id="val-animation-speed">1.0×</span>
+            </div>
+            <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Size &amp; Position Section -->
+      <div class="section" id="section-size">
+        <div class="section-header" onclick="toggleSection('size')">
+          <span class="section-title">📐 Size &amp; Position</span>
+          <span class="section-chevron">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="range-row">
+            <div class="range-header">
+              <span class="ctrl-label">Card Width</span>
+              <span class="range-val" id="val-card-width">420px</span>
+            </div>
+            <input type="range" id="ctrl-card-width" min="280" max="700" step="10" value="420">
+          </div>
+          <div class="range-row" style="margin-bottom:10px;">
+            <div class="range-header">
+              <span class="ctrl-label">Border Radius</span>
+              <span class="range-val" id="val-border-radius">16px</span>
+            </div>
+            <input type="range" id="ctrl-border-radius" min="0" max="32" step="2" value="16">
+          </div>
+          <div class="ctrl-label" style="margin-bottom:6px;">Position</div>
+          <div class="position-grid" id="position-grid">
+            <div class="pos-cell" data-pos="top-left"><span class="pos-dot"></span></div>
+            <div class="pos-cell active" data-pos="top-center"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="top-right"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="mid-left"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="mid-center"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="mid-right"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="bot-left"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="bot-center"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="bot-right"><span class="pos-dot"></span></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end panel-scroll -->
+  </div><!-- end left-panel -->
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <!-- Toolbar -->
+    <div class="preview-toolbar">
+      <button class="toolbar-btn" id="btn-play-anim" onclick="playPreviewAnimation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Play Animation
+      </button>
+      <div class="toolbar-spacer"></div>
+      <span class="toolbar-hint" id="toolbar-hint">Editing: <strong id="toolbar-event-name">Follow</strong></span>
+    </div>
+
+    <!-- Preview canvas -->
+    <div class="preview-canvas-wrap">
+      <div class="preview-screen" id="preview-screen">
+        <!-- Fake game background -->
+        <div class="fake-game-bg"></div>
+
+        <!-- HUD top-left -->
+        <div class="fake-hud-tl">
+          <div class="hud-label">Speed</div>
+          <div class="hud-val">247 km/h</div>
+        </div>
+
+        <!-- Live badge -->
+        <div class="fake-live-badge">● LIVE</div>
+
+        <!-- Fake chat -->
+        <div class="fake-chat">
+          <div class="fake-chat-msg c1"><span class="chat-user">RaceKing_99</span>: LET'S GOOOO!</div>
+          <div class="fake-chat-msg c2"><span class="chat-user">TurboFan23</span>: PogChamp</div>
+          <div class="fake-chat-msg c3"><span class="chat-user">NitroQueen</span>: what a lap!</div>
+          <div class="fake-chat-msg c4"><span class="chat-user">SpeedDemon</span>: POG</div>
+          <div class="fake-chat-msg c5"><span class="chat-user">PitCrew42</span>: insane!</div>
+          <div class="fake-chat-msg c1"><span class="chat-user">RaceKing_99</span>: vroom vroom</div>
+          <div class="fake-chat-msg c3"><span class="chat-user">NitroQueen</span>: F1 vibes</div>
+        </div>
+
+        <!-- Fake webcam -->
+        <div class="fake-webcam">👤</div>
+
+        <!-- Stream label -->
+        <div class="fake-stream-label">Stream preview — alerts will appear here</div>
+
+        <!-- ALERT CARD PREVIEW (positioned dynamically) -->
+        <div class="preview-card-container" id="preview-card-container">
+          <div class="preview-alert-card" id="preview-card">
+            <div class="top-accent" id="preview-top-accent"></div>
+            <div class="card-body">
+              <div class="event-label" id="preview-event-label">New Pit Crew Member</div>
+              <div class="username" id="preview-username">StreamerFan99</div>
+              <div class="detail" id="preview-detail">just joined the race 🏁</div>
+            </div>
+            <div class="car-track" id="preview-car-track">
+              <div class="race-line"></div>
+              <div class="track-car" id="preview-car">🏎️</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save bar -->
+    <div class="save-bar">
+      <span class="event-badge" id="save-event-badge">Follow</span>
+      <div class="spacer"></div>
+      <span class="save-status" id="save-status">Saved!</span>
+      <button class="btn btn-danger" onclick="resetCurrentDesign()">Reset to Default</button>
+      <button class="btn btn-secondary" onclick="discardChanges()">Discard</button>
+      <button class="btn btn-primary" onclick="saveCurrentDesign()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save
+      </button>
+    </div>
+
+  </div><!-- end right-panel -->
+</div><!-- end builder-layout -->
+
+<script>
+// ─── Data setup ───────────────────────────────────────────────────────────────
+const SAVED_DESIGNS = {};
+const SERVER_DESIGNS = <%- designs %>;
+SERVER_DESIGNS.forEach(d => { SAVED_DESIGNS[d.event_type] = d; });
+
+const EVENT_DEFAULTS = {
+  follow:        { bg_color:'#1a1a3e', accent_color:'#8888cc', border_color:'#8888cc', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Pit Crew Member', detail_text:'just joined the race 🏁', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  subscription:  { bg_color:'#061a10', accent_color:'#00ff88', border_color:'#00ff88', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Podium Finish',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  bits:          { bg_color:'#1c1200', accent_color:'#f7c948', border_color:'#f7c948', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Nitro Boost',          detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  donation:      { bg_color:'#110022', accent_color:'#bf00ff', border_color:'#bf00ff', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Sponsor Alert',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  raid:          { bg_color:'#1c0505', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Incoming Raid',        detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  yt_superchat:  { bg_color:'#200808', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Super Chat',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  yt_member:     { bg_color:'#041a0c', accent_color:'#0f9d58', border_color:'#0f9d58', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Member',           detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  yt_giftmember: { bg_color:'#060e20', accent_color:'#4285f4', border_color:'#4285f4', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Gift Alert',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+};
+
+const EVENT_NAMES = {
+  follow:'Follow', subscription:'Subscription', bits:'Bits', donation:'Donation',
+  raid:'Raid', yt_superchat:'YT Super Chat', yt_member:'YT Member', yt_giftmember:'YT Gift Member',
+};
+
+const PREVIEW_USERNAMES = {
+  follow:'StreamerFan99', subscription:'ProRacer_24', bits:'NitroQueen',
+  donation:'SpeedSponsor', raid:'RaidLeader', yt_superchat:'YoutubeViewer',
+  yt_member:'NewMember42', yt_giftmember:'GenerousGifter',
+};
+
+// In-memory designs (working copy for current session)
+const workingDesigns = {};
+Object.keys(EVENT_DEFAULTS).forEach(t => {
+  workingDesigns[t] = Object.assign({}, EVENT_DEFAULTS[t], SAVED_DESIGNS[t] || {});
+});
+
+let currentType = 'follow';
+let unsavedChanges = false;
+
+// ─── Section collapse ─────────────────────────────────────────────────────────
+function toggleSection(id) {
+  const sec = document.getElementById('section-' + id);
+  sec.classList.toggle('collapsed');
+}
+
+// ─── Google Fonts loader ──────────────────────────────────────────────────────
+const FONT_URLS = {
+  'Inter': 'Inter:wght@400;600;700;800',
+  'Poppins': 'Poppins:wght@400;600;700;800',
+  'Roboto Mono': 'Roboto+Mono:wght@400;700',
+  'Press Start 2P': 'Press+Start+2P',
+  'Outfit': 'Outfit:wght@400;600;700;800',
+};
+function loadGoogleFont(name) {
+  const key = FONT_URLS[name];
+  if (!key) return;
+  const el = document.getElementById('google-fonts-custom');
+  el.href = `https://fonts.googleapis.com/css2?family=${key}&display=swap`;
+}
+
+// ─── Controls → design ───────────────────────────────────────────────────────
+function getControlValues() {
+  return {
+    bg_color: document.getElementById('ctrl-bg-color').value,
+    accent_color: document.getElementById('ctrl-accent-color').value,
+    border_color: document.getElementById('ctrl-border-color').value,
+    text_color: document.getElementById('ctrl-text-color').value,
+    font_family: document.getElementById('ctrl-font-family').value,
+    username_size: parseInt(document.getElementById('ctrl-username-size').value),
+    event_label: document.getElementById('ctrl-event-label').value,
+    detail_text: document.getElementById('ctrl-detail-text').value,
+    entrance_animation: document.getElementById('ctrl-entrance-animation').value,
+    car_animation: document.getElementById('ctrl-car-animation').value,
+    screen_effect: document.getElementById('ctrl-screen-effect').value,
+    animation_speed: parseFloat(document.getElementById('ctrl-animation-speed').value),
+    card_width: parseInt(document.getElementById('ctrl-card-width').value),
+    card_position: document.querySelector('.pos-cell.active')?.dataset.pos || 'top-center',
+    border_radius: parseInt(document.getElementById('ctrl-border-radius').value),
+  };
+}
+
+function setControlValues(d) {
+  document.getElementById('ctrl-bg-color').value = d.bg_color;
+  document.getElementById('ctrl-accent-color').value = d.accent_color;
+  document.getElementById('ctrl-border-color').value = d.border_color;
+  document.getElementById('ctrl-text-color').value = d.text_color;
+  document.getElementById('ctrl-font-family').value = d.font_family;
+  document.getElementById('ctrl-username-size').value = d.username_size;
+  document.getElementById('val-username-size').textContent = d.username_size + 'px';
+  document.getElementById('ctrl-event-label').value = d.event_label || '';
+  document.getElementById('ctrl-detail-text').value = d.detail_text || '';
+  document.getElementById('ctrl-entrance-animation').value = d.entrance_animation;
+  document.getElementById('ctrl-car-animation').value = d.car_animation;
+  document.getElementById('ctrl-screen-effect').value = d.screen_effect;
+  document.getElementById('ctrl-animation-speed').value = d.animation_speed;
+  document.getElementById('val-animation-speed').textContent = parseFloat(d.animation_speed).toFixed(1) + '×';
+  document.getElementById('ctrl-card-width').value = d.card_width;
+  document.getElementById('val-card-width').textContent = d.card_width + 'px';
+  document.getElementById('ctrl-border-radius').value = d.border_radius;
+  document.getElementById('val-border-radius').textContent = d.border_radius + 'px';
+
+  // Position grid
+  document.querySelectorAll('.pos-cell').forEach(c => c.classList.remove('active'));
+  const cell = document.querySelector(`.pos-cell[data-pos="${d.card_position}"]`);
+  if (cell) cell.classList.add('active');
+}
+
+// ─── Darken helper ────────────────────────────────────────────────────────────
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+function darken(hex, factor=0.35) {
+  const [r,g,b] = hexToRgb(hex);
+  return `rgb(${Math.round(r*factor)},${Math.round(g*factor)},${Math.round(b*factor)})`;
+}
+
+// ─── Update preview card ──────────────────────────────────────────────────────
+function updatePreview() {
+  const d = getControlValues();
+  workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], d);
+
+  const card = document.getElementById('preview-card');
+  const accent = document.getElementById('preview-top-accent');
+  const track = document.getElementById('preview-car-track');
+  const labelEl = document.getElementById('preview-event-label');
+  const usernameEl = document.getElementById('preview-username');
+  const detailEl = document.getElementById('preview-detail');
+
+  // Background gradient
+  const dark = darken(d.bg_color);
+  card.style.background = `linear-gradient(160deg, ${dark}, ${d.bg_color} 40%, ${dark})`;
+
+  // Border
+  card.style.borderColor = hexToRgba(d.border_color, 0.5);
+  card.style.boxShadow = `0 8px 32px ${hexToRgba(d.border_color, 0.25)}, 0 4px 24px rgba(0,0,0,0.6)`;
+  card.style.borderRadius = d.border_radius + 'px';
+  card.style.width = d.card_width + 'px';
+
+  // Top accent
+  const accentDark = darken(d.accent_color, 0.6);
+  accent.style.background = `linear-gradient(90deg, ${accentDark}, ${d.accent_color}, ${accentDark})`;
+  accent.style.borderRadius = d.border_radius + 'px ' + d.border_radius + 'px 0 0';
+
+  // Car track background
+  track.style.background = hexToRgba(d.accent_color, 0.06);
+
+  // Label color = accent
+  labelEl.style.color = d.accent_color;
+  labelEl.textContent = d.event_label || EVENT_DEFAULTS[currentType].event_label;
+
+  // Username
+  const ff = d.font_family === 'System Default' ? '-apple-system, BlinkMacSystemFont, sans-serif' : d.font_family;
+  usernameEl.style.fontFamily = ff;
+  usernameEl.style.fontSize = d.username_size + 'px';
+  usernameEl.style.color = d.text_color;
+  card.style.fontFamily = ff;
+
+  // Detail
+  const detailDefault = getDetailPreviewText(currentType);
+  detailEl.textContent = d.detail_text || detailDefault;
+
+  // Car animation
+  const carEl = document.getElementById('preview-car');
+  if (d.car_animation === 'none') {
+    carEl.style.animation = 'none';
+    carEl.style.left = '50%';
+    carEl.style.transform = 'translateY(-50%) scaleX(-1)';
+  } else if (d.car_animation === 'zoomRL') {
+    carEl.style.animation = `previewCarZoomRL ${2.8 / d.animation_speed}s linear infinite`;
+  } else if (d.car_animation === 'bounce') {
+    carEl.style.animation = `previewCarBounce ${1.2 / d.animation_speed}s ease-in-out infinite`;
+  } else {
+    carEl.style.animation = `previewCarZoom ${2.8 / d.animation_speed}s linear infinite`;
+  }
+
+  // Position card in the preview screen
+  positionCard(d.card_position, d.card_width);
+
+  // Load font if needed
+  if (d.font_family !== 'System Default') loadGoogleFont(d.font_family);
+}
+
+function hexToRgba(hex, alpha) {
+  const [r,g,b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function getDetailPreviewText(type) {
+  const map = {
+    follow: 'just joined the race 🏁',
+    subscription: 'Subscribed for 3 months — Tier 1 🥇',
+    bits: 'fueled up 500 bits of nitro! 🔥',
+    donation: 'sponsored the team with $10 💸',
+    raid: 'raiding with 42 viewers! 🏁',
+    yt_superchat: 'sent $5.00 — Love the stream! 🔥',
+    yt_member: 'just became a member! 🥇',
+    yt_giftmember: 'gifted 5 memberships! 🎁',
+  };
+  return map[type] || '';
+}
+
+// Position card in screen based on card_position
+function positionCard(pos, cardWidth) {
+  const container = document.getElementById('preview-card-container');
+  const screen = document.getElementById('preview-screen');
+  const screenW = screen.offsetWidth;
+  const screenH = screen.offsetHeight;
+
+  // Scale factor (card is designed for 1920px wide streams, preview is smaller)
+  const scale = screenW / 1920;
+  const scaledW = cardWidth * scale;
+  container.style.transform = `scale(${scale})`;
+  container.style.transformOrigin = 'top left';
+
+  const [vPos, hPos] = pos.split('-');
+  const margin = 16; // px in screen space (pre-scale)
+
+  let left, top;
+  const unscaledW = cardWidth;
+  const unscaledH = 120; // approx card height in native px
+
+  // Horizontal
+  if (hPos === 'left') left = margin / scale;
+  else if (hPos === 'right') left = (screenW - scaledW - margin) / scale;
+  else left = (screenW - scaledW) / 2 / scale; // center
+
+  // Vertical
+  if (vPos === 'top') top = margin / scale;
+  else if (vPos === 'bot') top = (screenH - unscaledH * scale - margin) / scale;
+  else top = (screenH / 2 - (unscaledH * scale) / 2) / scale;
+
+  container.style.left = left + 'px';
+  container.style.top = top + 'px';
+}
+
+// ─── Play animation ───────────────────────────────────────────────────────────
+function playPreviewAnimation() {
+  const d = workingDesigns[currentType];
+  const card = document.getElementById('preview-card');
+  const speed = d.animation_speed || 1.0;
+  const animName = `anim-${d.entrance_animation || 'slideDown'}`;
+  const dur = (0.5 / speed).toFixed(2) + 's';
+
+  card.style.opacity = '0';
+  card.style.animation = 'none';
+
+  setTimeout(() => {
+    card.style.opacity = '';
+    card.style.animation = `${animName} ${dur} cubic-bezier(0.34, 1.56, 0.64, 1) both`;
+    setTimeout(() => { card.style.animation = 'none'; }, parseFloat(dur) * 1000 + 100);
+  }, 50);
+}
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(type) {
+  // Save current working values before switching
+  workingDesigns[currentType] = getControlValues();
+
+  currentType = type;
+
+  // Update tab UI
+  document.querySelectorAll('.event-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.type === type);
+  });
+
+  // Update badges
+  const name = EVENT_NAMES[type] || type;
+  document.getElementById('toolbar-event-name').textContent = name;
+  document.getElementById('save-event-badge').textContent = name;
+
+  // Update preview username text
+  document.getElementById('preview-username').textContent = PREVIEW_USERNAMES[type] || 'StreamerFan99';
+
+  // Load controls for this type
+  setControlValues(workingDesigns[type]);
+  updatePreview();
+}
+
+// ─── Position grid ────────────────────────────────────────────────────────────
+document.getElementById('position-grid').addEventListener('click', e => {
+  const cell = e.target.closest('.pos-cell');
+  if (!cell) return;
+  document.querySelectorAll('.pos-cell').forEach(c => c.classList.remove('active'));
+  cell.classList.add('active');
+  updatePreview();
+});
+
+// ─── Event tabs ──────────────────────────────────────────────────────────────
+document.getElementById('event-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.event-tab');
+  if (!tab) return;
+  switchTab(tab.dataset.type);
+});
+
+// ─── Range display updates ────────────────────────────────────────────────────
+document.getElementById('ctrl-username-size').addEventListener('input', function() {
+  document.getElementById('val-username-size').textContent = this.value + 'px';
+  updatePreview();
+});
+document.getElementById('ctrl-animation-speed').addEventListener('input', function() {
+  document.getElementById('val-animation-speed').textContent = parseFloat(this.value).toFixed(1) + '×';
+  updatePreview();
+});
+document.getElementById('ctrl-card-width').addEventListener('input', function() {
+  document.getElementById('val-card-width').textContent = this.value + 'px';
+  updatePreview();
+});
+document.getElementById('ctrl-border-radius').addEventListener('input', function() {
+  document.getElementById('val-border-radius').textContent = this.value + 'px';
+  updatePreview();
+});
+
+// ─── All other controls: attach change listeners ──────────────────────────────
+['ctrl-bg-color','ctrl-accent-color','ctrl-border-color','ctrl-text-color',
+ 'ctrl-font-family','ctrl-event-label','ctrl-detail-text',
+ 'ctrl-entrance-animation','ctrl-car-animation','ctrl-screen-effect'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', updatePreview);
+  el.addEventListener('change', updatePreview);
+});
+
+// ─── Save ────────────────────────────────────────────────────────────────────
+async function saveCurrentDesign() {
+  const design = getControlValues();
+  workingDesigns[currentType] = design;
+
+  try {
+    const resp = await fetch('/dashboard/overlay-builder/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType: currentType, design }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      SAVED_DESIGNS[currentType] = Object.assign({}, design);
+      const status = document.getElementById('save-status');
+      status.textContent = 'Saved!';
+      status.classList.add('visible');
+      setTimeout(() => status.classList.remove('visible'), 2000);
+    }
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+
+// ─── Discard ──────────────────────────────────────────────────────────────────
+function discardChanges() {
+  const saved = Object.assign({}, EVENT_DEFAULTS[currentType], SAVED_DESIGNS[currentType] || {});
+  workingDesigns[currentType] = saved;
+  setControlValues(saved);
+  updatePreview();
+}
+
+// ─── Reset to default ─────────────────────────────────────────────────────────
+async function resetCurrentDesign() {
+  if (!confirm('Reset "' + EVENT_NAMES[currentType] + '" to default settings?')) return;
+  try {
+    await fetch('/dashboard/overlay-builder/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType: currentType }),
+    });
+  } catch(e) {}
+
+  delete SAVED_DESIGNS[currentType];
+  workingDesigns[currentType] = Object.assign({}, EVENT_DEFAULTS[currentType]);
+  setControlValues(workingDesigns[currentType]);
+  updatePreview();
+
+  const status = document.getElementById('save-status');
+  status.textContent = 'Reset to default';
+  status.classList.add('visible');
+  setTimeout(() => status.classList.remove('visible'), 2000);
+}
+
+// ─── Initial render ───────────────────────────────────────────────────────────
+setControlValues(workingDesigns['follow']);
+updatePreview();
+
+// Re-position card on window resize
+window.addEventListener('resize', () => {
+  const d = workingDesigns[currentType];
+  positionCard(d.card_position, d.card_width);
+});
+</script>
+
+</body>
+</html>
