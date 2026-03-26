@@ -406,16 +406,21 @@ body {
   100% { transform: translateY(110vh)   rotate(720deg);  opacity: 0; }
 }
 
-/* Camera flash */
+/* Camera flash — localized bursts, not full-screen */
 .cam-flash {
-  inset: 0;
-  background: rgba(255,255,255,0.85);
+  width: 100%; height: 100%; inset: 0;
+  background: radial-gradient(circle at var(--fx, 50%) var(--fy, 50%), rgba(255,255,255,0.3), transparent 25%);
   border-radius: 0;
-  animation: camFlash 0.2s ease-out forwards;
+  pointer-events: none;
+  animation: camFlash 3s ease-out infinite;
 }
 
 @keyframes camFlash {
-  0%   { opacity: 0.85; }
+  0% { opacity: 0; }  2% { opacity: 1; }  5% { opacity: 0; }
+  15% { opacity: 0; } 17% { opacity: 0.7; } 20% { opacity: 0; }
+  35% { opacity: 0; } 37% { opacity: 0.5; } 40% { opacity: 0; }
+  55% { opacity: 0; } 57% { opacity: 0.4; } 60% { opacity: 0; }
+  75% { opacity: 0; } 76% { opacity: 0.3; } 78% { opacity: 0; }
   100% { opacity: 0; }
 }
 

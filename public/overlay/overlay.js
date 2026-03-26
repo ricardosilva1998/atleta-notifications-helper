@@ -448,12 +448,13 @@ function spawnConfettiAndFlashes() {
     container.appendChild(el);
   }
 
-  // 5 camera flashes staggered
+  // 5 camera flashes at random positions
   for (let i = 0; i < 5; i++) {
     const fl = document.createElement('div');
     fl.className = 'screen-effect cam-flash';
-    fl.style.animationDelay    = `${i * 0.35}s`;
-    fl.style.animationDuration = '0.18s';
+    fl.style.setProperty('--fx', `${15 + Math.random() * 70}%`);
+    fl.style.setProperty('--fy', `${20 + Math.random() * 50}%`);
+    fl.style.animationDelay = `${i * 0.5}s`;
     container.appendChild(fl);
   }
 }
