@@ -265,8 +265,13 @@ async function getActiveBroadcast(accessToken) {
   const res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet&broadcastStatus=active&mine=true', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    console.error(`[YouTube] liveBroadcasts.list failed: ${res.status}`, err);
+    return null;
+  }
   const data = await res.json();
+  console.log(`[YouTube] liveBroadcasts.list: ${data.items?.length || 0} active broadcasts`);
   if (!data.items || data.items.length === 0) return null;
   return {
     liveChatId: data.items[0].snippet.liveChatId,

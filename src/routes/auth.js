@@ -203,7 +203,7 @@ router.get('/youtube', (req, res) => {
     client_id: config.youtube.botClientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/youtube.readonly',
+    scope: 'https://www.googleapis.com/auth/youtube',
     access_type: 'offline',
     prompt: 'consent',
     state: String(req.streamer.id),
