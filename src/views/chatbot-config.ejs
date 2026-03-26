@@ -123,6 +123,7 @@
           ><%= streamer.chat_follow_template || '' %></textarea>
         </div>
         <p style="font-size: 12px; color: var(--text-muted);">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code></p>
+        <button type="button" onclick="testChat('follow', this)" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; margin-top: 8px;">Test in chat</button>
       </div>
 
       <!-- Subscription -->
@@ -144,6 +145,7 @@
           ><%= streamer.chat_sub_template || '' %></textarea>
         </div>
         <p style="font-size: 12px; color: var(--text-muted);">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{tier}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{months}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{message}</code></p>
+        <button type="button" onclick="testChat('sub', this)" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; margin-top: 8px;">Test in chat</button>
       </div>
 
       <!-- Gift Sub -->
@@ -165,6 +167,7 @@
           ><%= streamer.chat_giftsub_template || '' %></textarea>
         </div>
         <p style="font-size: 12px; color: var(--text-muted);">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{tier}</code></p>
+        <button type="button" onclick="testChat('giftsub', this)" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; margin-top: 8px;">Test in chat</button>
       </div>
 
       <!-- Bits -->
@@ -186,6 +189,7 @@
           ><%= streamer.chat_bits_template || '' %></textarea>
         </div>
         <p style="font-size: 12px; color: var(--text-muted);">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{message}</code></p>
+        <button type="button" onclick="testChat('bits', this)" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; margin-top: 8px;">Test in chat</button>
       </div>
 
       <!-- Donation -->
@@ -207,6 +211,7 @@
           ><%= streamer.chat_donation_template || '' %></textarea>
         </div>
         <p style="font-size: 12px; color: var(--text-muted);">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{currency}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{message}</code></p>
+        <button type="button" onclick="testChat('donation', this)" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; margin-top: 8px;">Test in chat</button>
       </div>
 
       <!-- Raid -->
@@ -228,6 +233,7 @@
           ><%= streamer.chat_raid_template || '' %></textarea>
         </div>
         <p style="font-size: 12px; color: var(--text-muted);">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{viewers}</code></p>
+        <button type="button" onclick="testChat('raid', this)" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; margin-top: 8px;">Test in chat</button>
       </div>
     </div>
 
@@ -241,23 +247,6 @@
 
   </form>
 
-  <!-- Test Chat Messages -->
-  <div class="card animate-in" style="margin-top: 16px;">
-    <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      Test Chat Messages
-    </h3>
-    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">Send a test message to your Twitch chat to preview each event template.</p>
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-      <button type="button" onclick="testChat('follow', this)" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">🏁 Follow</button>
-      <button type="button" onclick="testChat('sub', this)" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">🏆 Sub</button>
-      <button type="button" onclick="testChat('giftsub', this)" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">🎁 Gift Sub</button>
-      <button type="button" onclick="testChat('bits', this)" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">⛽ Bits</button>
-      <button type="button" onclick="testChat('donation', this)" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">💰 Donation</button>
-      <button type="button" onclick="testChat('raid', this)" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">🏎️ Raid</button>
-    </div>
-    <p id="chat-test-result" style="color: var(--success); font-size: 13px; margin-top: 10px; display: none;"></p>
-  </div>
 
 </div>
 
@@ -432,19 +421,7 @@
     try {
       const res = await fetch('/dashboard/chatbot/test/' + type, { method: 'POST' });
       const data = await res.json();
-      if (data.ok) {
-        btn.textContent = 'Sent!';
-        const result = document.getElementById('chat-test-result');
-        result.textContent = 'Test message sent to your Twitch chat!';
-        result.style.display = 'block';
-        result.style.color = 'var(--success)';
-      } else {
-        btn.textContent = 'Failed';
-        const result = document.getElementById('chat-test-result');
-        result.textContent = data.error || 'Failed to send test message';
-        result.style.display = 'block';
-        result.style.color = 'var(--danger)';
-      }
+      btn.textContent = data.ok ? 'Sent!' : 'Failed';
     } catch (e) {
       btn.textContent = 'Error';
     }
