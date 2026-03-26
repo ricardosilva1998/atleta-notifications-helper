@@ -785,7 +785,9 @@ router.post('/chatbot', (req, res) => {
     } else {
       chatManager.stopForStreamer(req.streamer.id);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('[Dashboard] Chatbot start/stop error:', e.message);
+  }
 
   res.redirect('/dashboard/chatbot');
 });
@@ -801,7 +803,7 @@ router.post('/chatbot/commands', (req, res) => {
   const { command, response, cooldown } = req.body;
   if (!command || !response) return res.redirect('/dashboard/chatbot/commands');
   const cleanCmd = command.replace(/^!/, '').toLowerCase().trim();
-  if (!cleanCmd) return res.redirect('/dashboard/chatbot/commands');
+  if (!cleanCmd || !/^[a-z0-9_]+$/.test(cleanCmd)) return res.redirect('/dashboard/chatbot/commands');
 
   try {
     db.addChatCommand(req.streamer.id, cleanCmd, response, parseInt(cooldown) || 5);

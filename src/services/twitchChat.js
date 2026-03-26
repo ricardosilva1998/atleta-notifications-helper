@@ -93,12 +93,16 @@ class TwitchChatClient {
     const streamer = db.getStreamerById(this.streamerId);
     if (!streamer || !streamer.chatbot_enabled) return;
 
+    // Map event types to DB column names (subscription -> sub)
+    const chatTypeMap = { subscription: 'sub', follow: 'follow', giftsub: 'giftsub', bits: 'bits', donation: 'donation', raid: 'raid' };
+    const mappedType = chatTypeMap[eventType] || eventType;
+
     // Check if this event type is enabled
-    const enabledKey = `chat_${eventType}_enabled`;
+    const enabledKey = `chat_${mappedType}_enabled`;
     if (!streamer[enabledKey]) return;
 
     // Get template
-    const templateKey = `chat_${eventType}_template`;
+    const templateKey = `chat_${mappedType}_template`;
     const template = streamer[templateKey];
     if (!template) return;
 
