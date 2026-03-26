@@ -118,6 +118,18 @@ router.get('/', (req, res) => {
   const botInviteUrl = `https://discord.com/oauth2/authorize?client_id=${client.application.id}&permissions=8&scope=bot%20applications.commands&state=${req.streamer.id}`;
   const { tier, limits } = getTierLimits(req.streamer.id);
 
+  // Twitch tab data
+  let botConnected = false;
+  let botUsername = '';
+  try {
+    const { chatManager } = require('../services/twitchChat');
+    botConnected = chatManager.isConnected();
+    botUsername = require('../config').bot.twitchUsername;
+  } catch (e) {}
+  const overlayUrl = req.streamer.overlay_token
+    ? `${config.app.url}/overlay/${req.streamer.overlay_token}`
+    : null;
+
   res.render('dashboard', {
     streamer: req.streamer,
     guilds: enrichedGuilds,
@@ -126,6 +138,9 @@ router.get('/', (req, res) => {
     msg,
     tier,
     limits,
+    botConnected,
+    botUsername,
+    overlayUrl,
   });
 });
 

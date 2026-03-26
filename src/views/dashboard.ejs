@@ -36,7 +36,7 @@
     YouTube
   </button>
   <button class="tab-btn tab-kick" data-tab="kick">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 2h4v7.2L12.4 4h5.2l-6 7 6.4 9h-5.2L8 13v7H4V2z"/></svg>
     Kick
   </button>
 </div>
@@ -294,12 +294,29 @@
         <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(145,71,255,0.15); display: flex; align-items: center; justify-content: center;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
-        <h3 style="font-size: 16px; font-weight: 700;">OBS Overlay</h3>
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700;">OBS Overlay</h3>
+          <% if (streamer.overlay_enabled) { %>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Enabled</span>
+          <% } else { %>
+            <span style="color: var(--text-muted); font-size: 12px;">● Not configured</span>
+          <% } %>
+        </div>
       </div>
-      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
-        Configure animated notification banners for follows, subs, bits, donations, and raids in your OBS stream.
-      </p>
-      <a href="/dashboard/overlay" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;">Configure Overlay</a>
+      <% if (overlayUrl) { %>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 6px;">OBS Browser Source URL</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" value="<%= overlayUrl %>" readonly id="overlay-url-copy" style="flex: 1; background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 10px; border-radius: var(--radius-sm); font-size: 12px; font-family: monospace;">
+            <button onclick="navigator.clipboard.writeText(document.getElementById('overlay-url-copy').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1500);" class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px; white-space: nowrap;">Copy</button>
+          </div>
+        </div>
+      <% } else { %>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          Configure animated notification banners for follows, subs, bits, donations, and raids in your OBS stream.
+        </p>
+      <% } %>
+      <a href="/dashboard/overlay" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= overlayUrl ? 'Overlay Settings' : 'Configure Overlay' %></a>
     </div>
 
     <!-- Chatbot Card -->
@@ -308,12 +325,25 @@
         <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(145,71,255,0.15); display: flex; align-items: center; justify-content: center;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
-        <h3 style="font-size: 16px; font-weight: 700;">Chatbot</h3>
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700;">Chatbot</h3>
+          <% if (botConnected && streamer.chatbot_enabled) { %>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Online<%= botUsername ? ' as ' + botUsername : '' %></span>
+          <% } else if (botConnected && !streamer.chatbot_enabled) { %>
+            <span style="color: var(--text-muted); font-size: 12px;">● Bot available — not enabled</span>
+          <% } else { %>
+            <span style="color: var(--text-muted); font-size: 12px;">● Not configured</span>
+          <% } %>
+        </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
-        Manage your Twitch chatbot — thank-you messages for events and custom chat commands.
+        <% if (streamer.chatbot_enabled) { %>
+          Chatbot is active on <strong>#<%= streamer.twitch_username %></strong> — manage thank-you messages and custom commands.
+        <% } else { %>
+          Set up a chatbot for your Twitch channel with thank-you messages and custom commands.
+        <% } %>
       </p>
-      <a href="/dashboard/chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;">Configure Chatbot</a>
+      <a href="/dashboard/chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= streamer.chatbot_enabled ? 'Chatbot Settings' : 'Configure Chatbot' %></a>
     </div>
 
   </div>
