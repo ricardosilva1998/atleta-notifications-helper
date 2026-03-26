@@ -1,6 +1,7 @@
 const io = require('socket.io-client');
 const db = require('../db');
 const bus = require('./overlayBus');
+const { chatManager } = require('./twitchChat');
 
 class StreamElementsClient {
   constructor(streamerId) {
@@ -48,6 +49,12 @@ class StreamElementsClient {
               message: event.data.message || null,
               currency: event.data.currency || 'USD',
             },
+          });
+          chatManager.sendEventMessage(this.streamerId, 'donation', {
+            username: event.data.username,
+            amount: event.data.amount,
+            currency: event.data.currency || 'USD',
+            message: event.data.message || '',
           });
         }
       }
