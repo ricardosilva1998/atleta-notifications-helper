@@ -143,8 +143,9 @@
       </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_superchat', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Event</button>
-        <button type="button" onclick="previewMessage('superchat')" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Preview Message</button>
+        <button type="button" onclick="testEvent('yt_superchat', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Overlay</button>
+        <button type="button" onclick="testChatOnly('superchat', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Test in Chat</button>
+        <button type="button" onclick="previewMessage('superchat')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Preview</button>
       </div>
     </div>
 
@@ -180,8 +181,9 @@
       </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_member', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Event</button>
-        <button type="button" onclick="previewMessage('member')" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Preview Message</button>
+        <button type="button" onclick="testEvent('yt_member', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Overlay</button>
+        <button type="button" onclick="testChatOnly('member', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Test in Chat</button>
+        <button type="button" onclick="previewMessage('member')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Preview</button>
       </div>
     </div>
 
@@ -217,8 +219,9 @@
       </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_giftmember', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Event</button>
-        <button type="button" onclick="previewMessage('giftmember')" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Preview Message</button>
+        <button type="button" onclick="testEvent('yt_giftmember', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Overlay</button>
+        <button type="button" onclick="testChatOnly('giftmember', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Test in Chat</button>
+        <button type="button" onclick="previewMessage('giftmember')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Preview</button>
       </div>
     </div>
 
@@ -248,6 +251,25 @@ async function testEvent(eventType, btn) {
       btn.textContent = 'Overlay sent!';
     } else {
       btn.textContent = 'Error';
+    }
+  } catch (e) {
+    btn.textContent = 'Error';
+  }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
+}
+
+async function testChatOnly(type, btn) {
+  const orig = btn.textContent;
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/dashboard/youtube-chatbot/test-chat/${type}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Sent to chat!';
+    } else {
+      btn.textContent = data.error ? 'Error' : 'Failed';
+      if (data.error) alert(data.error);
     }
   } catch (e) {
     btn.textContent = 'Error';
