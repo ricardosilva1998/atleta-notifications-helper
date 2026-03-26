@@ -210,8 +210,15 @@ router.get('/bot', (req, res) => {
 });
 
 router.get('/bot/callback', async (req, res) => {
-  const { code, state: streamerId } = req.query;
-  if (!code || !streamerId) return res.status(400).send('Missing parameters');
+  const { code, state: streamerId, error, error_description } = req.query;
+  if (error) {
+    console.error(`[Auth] Bot OAuth denied: ${error} - ${error_description}`);
+    return res.redirect('/dashboard/chatbot?bot_error=' + encodeURIComponent(error_description || error));
+  }
+  if (!code || !streamerId) {
+    console.error('[Auth] Bot callback missing params. Query:', req.query);
+    return res.status(400).send('Missing parameters. Please try again from the <a href="/dashboard/chatbot">chatbot settings</a> page.');
+  }
 
   try {
     const redirectUri = `${config.app.url}/auth/bot/callback`;
