@@ -702,21 +702,19 @@ function showSponsorImage(data) {
   img.src = data.imageUrl;
   img.alt = data.name || 'Sponsor';
   img.style.display = 'block';
-  img.style.width = '100%';
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '80vh';
   img.style.height = 'auto';
   img.style.objectFit = 'contain';
   const imgScale = data.imageScale != null ? data.imageScale : 1.0;
   if (imgScale < 1) {
-    img.style.width = (imgScale * 100) + '%';
+    img.style.maxWidth = (imgScale * 100) + '%';
     img.style.margin = '0 auto'; // center scaled image
   }
   banner.appendChild(img);
 
-  // Position — use custom x/y if dragged, otherwise grid position
-  if (design && design.card_custom_x != null && design.card_custom_y != null) {
-    banner.style.left = (design.card_custom_x * 100) + '%';
-    banner.style.top = (design.card_custom_y * 100) + '%';
-  } else {
+  // Position — use grid position (custom x/y from drag is unreliable for sponsor banners)
+  {
     const pos = design ? (design.card_position || 'bot-center') : 'bot-center';
     const [vPos, hPos] = pos.split('-');
     let transform = '';
