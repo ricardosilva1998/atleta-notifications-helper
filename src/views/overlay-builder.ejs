@@ -1638,9 +1638,10 @@ function renderSponsorList() {
       <button class="sp-del" onclick="deleteSponsor(${s.id})" title="Delete">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <div class="sp-scale-row">
+      <div class="sp-scale-row" onmousedown="event.stopPropagation()" ondragstart="event.preventDefault(); event.stopPropagation();">
         <span>Scale</span>
         <input type="range" min="0.3" max="1" step="0.05" value="${s.image_scale != null ? s.image_scale : 1.0}"
+               draggable="false"
                oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'; updateSponsorScale(${s.id}, this.value)">
         <span>${Math.round((s.image_scale != null ? s.image_scale : 1.0) * 100)}%</span>
       </div>
@@ -1816,13 +1817,8 @@ function showSponsorInPreview(sponsor) {
   const d = workingDesigns['timed'];
   const anim = d.sponsor_animation || 'fade';
 
-  // Remove old image with exit animation
-  const oldWrap = container.querySelector('.preview-sponsor-wrap');
-  if (oldWrap) {
-    oldWrap.style.opacity = '0';
-    oldWrap.style.transition = 'opacity 0.3s ease-in';
-    setTimeout(() => oldWrap.remove(), 300);
-  }
+  // Remove old image immediately to avoid two showing at once
+  container.querySelectorAll('.preview-sponsor-wrap').forEach(el => el.remove());
 
   // Create wrapper div (acts like the banner — fixed size, clips content)
   const wrap = document.createElement('div');
