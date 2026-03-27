@@ -104,6 +104,10 @@ const chatManager = {
       console.log(`[Chat] Bot disconnected: ${reason}`);
     });
 
+    client.on('notice', (channel, msgid, message) => {
+      console.log(`[Chat] Notice in ${channel}: [${msgid}] ${message}`);
+    });
+
     client.on('join', (channel, username, self) => {
       if (self) console.log(`[Chat] Joined ${channel}`);
     });
@@ -147,7 +151,10 @@ const chatManager = {
   },
 
   isConnected() {
-    return client !== null && client.readyState() === 'OPEN';
+    if (!client) return false;
+    const state = client.readyState();
+    console.log(`[Chat] readyState check: ${state}`);
+    return state === 'OPEN';
   },
 
   getJoinedChannels() {
