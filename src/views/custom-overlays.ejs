@@ -1,0 +1,1183 @@
+<%- include('header', { title: 'Custom Overlays', streamer: streamer }) %>
+
+<style>
+  /* ── Page Layout ── */
+  .co-back { color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; transition: color 0.2s; }
+  .co-back:hover { color: var(--text-primary); }
+
+  /* ── OBS URLs Card ── */
+  .obs-urls-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; margin-bottom: 24px; }
+  .obs-urls-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); font-family: var(--font-display); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .obs-url-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .obs-url-row:last-child { margin-bottom: 0; }
+  .obs-url-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-family: var(--font-display); width: 100px; flex-shrink: 0; }
+  .obs-url-input { flex: 1; padding: 7px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); font-family: monospace; font-size: 11px; outline: none; }
+  .obs-copy-btn { padding: 6px 12px; font-size: 11px; font-family: var(--font-display); font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .obs-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .obs-copy-btn.copied { border-color: var(--success); color: var(--success); }
+
+  /* ── Table ── */
+  .co-table-wrap { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 24px; }
+  .co-table { width: 100%; border-collapse: collapse; }
+  .co-table th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); font-family: var(--font-display); padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+  .co-table td { padding: 13px 16px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .co-table tbody tr:last-child td { border-bottom: none; }
+  .co-table tbody tr.clickable-row { cursor: pointer; transition: background 0.15s; }
+  .co-table tbody tr.clickable-row:hover { background: var(--bg-hover); }
+  .co-type-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.5px; }
+  .co-type-scene { background: rgba(145,70,255,0.15); color: #a56bff; }
+  .co-type-bar { background: rgba(62,207,142,0.12); color: #3ecf8e; }
+  .co-type-custom-alert { background: rgba(247,144,9,0.12); color: #f79009; }
+  .co-cmd { font-family: monospace; font-size: 12px; color: var(--accent); background: rgba(145,70,255,0.08); padding: 2px 7px; border-radius: 5px; }
+  .co-name-cell { font-weight: 600; color: var(--text-primary); }
+
+  /* Toggle pill */
+  .toggle-pill { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+  .toggle-pill input { opacity: 0; width: 0; height: 0; }
+  .toggle-pill-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: 0.2s; }
+  .toggle-pill-slider:before { position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+  .toggle-pill input:checked + .toggle-pill-slider { background: var(--success); }
+  .toggle-pill input:checked + .toggle-pill-slider:before { transform: translateX(18px); }
+
+  .co-del-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 5px; border-radius: var(--radius-sm); transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+  .co-del-btn:hover { color: var(--danger); background: rgba(240,68,56,0.1); }
+
+  .co-empty { text-align: center; padding: 56px 24px; }
+  .co-empty-icon { width: 56px; height: 56px; margin: 0 auto 16px; background: var(--bg-elevated); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .co-empty h4 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .co-empty p { font-size: 14px; color: var(--text-muted); }
+
+  /* ── Modal ── */
+  .co-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; }
+  .co-modal-overlay.open { display: flex; }
+  .co-modal { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 95vw; max-width: 960px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,0.6); overflow: hidden; }
+  .co-modal-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; background: var(--bg-elevated); }
+  .co-modal-title { font-size: 16px; font-weight: 700; font-family: var(--font-display); flex: 1; }
+  .co-modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+  .co-modal-close:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .co-modal-body { flex: 1; overflow-y: auto; min-height: 0; }
+  .co-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; background: var(--bg-elevated); }
+
+  /* Steps */
+  .co-steps { display: flex; align-items: center; gap: 0; padding: 16px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .co-step { display: flex; align-items: center; gap: 8px; font-size: 13px; font-family: var(--font-display); font-weight: 600; color: var(--text-muted); position: relative; }
+  .co-step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-elevated); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; transition: all 0.2s; flex-shrink: 0; }
+  .co-step.active { color: var(--text-primary); }
+  .co-step.active .co-step-num { background: var(--accent); border-color: var(--accent); color: white; }
+  .co-step.done { color: var(--success); }
+  .co-step.done .co-step-num { background: rgba(62,207,142,0.15); border-color: var(--success); color: var(--success); }
+  .co-step-sep { flex: 1; height: 1px; background: var(--border); margin: 0 8px; min-width: 20px; }
+
+  /* Step panels */
+  .co-step-panel { display: none; padding: 24px; }
+  .co-step-panel.active { display: block; }
+
+  /* Template type tabs */
+  .co-type-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg-base); border-radius: var(--radius-sm); padding: 4px; }
+  .co-type-tab { flex: 1; padding: 8px 12px; font-size: 13px; font-family: var(--font-display); font-weight: 600; border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm); transition: all 0.2s; text-align: center; }
+  .co-type-tab.active { background: var(--bg-elevated); color: var(--text-primary); }
+
+  /* Template cards */
+  .co-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .co-tpl-card { background: var(--bg-elevated); border: 2px solid var(--border); border-radius: var(--radius-md); padding: 16px 12px; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .co-tpl-card:hover { border-color: rgba(145,70,255,0.4); background: var(--bg-hover); }
+  .co-tpl-card.selected { border-color: var(--accent); background: rgba(145,70,255,0.06); }
+  .co-tpl-icon { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--bg-surface); }
+  .co-tpl-name { font-size: 13px; font-weight: 700; font-family: var(--font-display); margin-bottom: 4px; }
+  .co-tpl-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+  /* Step 2: customize */
+  .co-customize-wrap { display: flex; gap: 20px; min-height: 380px; }
+  .co-customize-fields { flex: 0 0 340px; min-width: 0; }
+  .co-preview-wrap { flex: 1; min-width: 0; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; position: relative; min-height: 240px; }
+  .co-preview-label { position: absolute; top: 8px; left: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; color: var(--text-muted); font-family: var(--font-display); z-index: 2; }
+  .co-preview-iframe { width: 100%; height: 100%; border: none; }
+
+  /* Form helpers */
+  .co-field-group { margin-bottom: 16px; }
+  .co-field-group:last-child { margin-bottom: 0; }
+  .co-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.5px; }
+  .co-input { width: 100%; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color 0.2s; }
+  .co-input:focus { border-color: var(--accent); }
+  .co-input::placeholder { color: var(--text-muted); }
+  .co-select { width: 100%; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color 0.2s; appearance: none; cursor: pointer; }
+  .co-select:focus { border-color: var(--accent); }
+  .co-color-row { display: flex; gap: 8px; align-items: center; }
+  .co-color-swatch { width: 34px; height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer; overflow: hidden; flex-shrink: 0; }
+  .co-color-swatch input[type=color] { width: 200%; height: 200%; margin: -50%; border: none; cursor: pointer; background: none; }
+  .co-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .co-check-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .co-check-row input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+  .co-check-row span { font-size: 13px; color: var(--text-primary); }
+
+  /* File upload */
+  .co-upload-area { border: 1.5px dashed var(--border); border-radius: var(--radius-sm); padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
+  .co-upload-area:hover { border-color: var(--accent); background: rgba(145,70,255,0.04); }
+  .co-upload-area.has-file { border-color: var(--success); background: rgba(62,207,142,0.04); }
+  .co-upload-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .co-upload-text { font-size: 12px; color: var(--text-muted); }
+  .co-upload-preview { max-height: 60px; max-width: 100%; margin-top: 6px; border-radius: 4px; }
+
+  /* Social links */
+  .co-social-links { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .co-social-link-row { display: flex; gap: 6px; align-items: center; }
+  .co-social-link-row .co-input { flex: 1; }
+  .co-social-link-row select { width: 110px; flex-shrink: 0; }
+  .co-link-del { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; transition: color 0.15s; }
+  .co-link-del:hover { color: var(--danger); }
+  .co-add-link { background: none; border: 1px dashed var(--border); color: var(--text-muted); font-size: 12px; font-family: var(--font-display); font-weight: 600; padding: 7px 14px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s; }
+  .co-add-link:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Step 3 */
+  .co-step3-inner { max-width: 480px; }
+  .co-cmd-prefix { background: var(--bg-elevated); border: 1px solid var(--border); border-right: none; border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 9px 10px; color: var(--text-muted); font-family: monospace; font-size: 14px; line-height: 1; display: flex; align-items: center; }
+  .co-cmd-input-wrap { display: flex; }
+  .co-cmd-input-wrap .co-input { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+  /* Status msg */
+  .co-status { display: none; padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+  .co-status.success { display: block; background: rgba(62,207,142,0.1); color: var(--success); border: 1px solid rgba(62,207,142,0.25); }
+  .co-status.error { display: block; background: rgba(240,68,56,0.1); color: var(--danger); border: 1px solid rgba(240,68,56,0.25); }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius-sm); font-size: 13px; font-family: var(--font-display); font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; text-decoration: none; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); }
+  .btn-secondary:hover { border-color: rgba(145,70,255,0.4); color: var(--text-primary); }
+  .btn-danger { background: rgba(240,68,56,0.12); border: 1px solid rgba(240,68,56,0.25); color: var(--danger); }
+  .btn-danger:hover { background: rgba(240,68,56,0.2); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .spacer { flex: 1; }
+
+  .section-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .section-hdr h3 { font-size: 16px; font-weight: 700; }
+  .tpl-type-section { display: none; }
+  .tpl-type-section.active { display: block; }
+</style>
+
+<!-- Back link -->
+<a href="/dashboard" class="co-back">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  Back to Dashboard
+</a>
+
+<div style="margin: 16px 0 6px; display: flex; align-items: center; gap: 12px;" class="animate-in">
+  <h2 style="font-size: 24px; font-weight: 700;">Custom Overlays</h2>
+</div>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 28px;">
+  Create and manage custom OBS overlays with live preview. Trigger them via chat commands or keep them always on.
+</p>
+
+<div id="co-status" class="co-status"></div>
+
+<!-- OBS URLs Card -->
+<div class="obs-urls-card animate-in">
+  <div class="obs-urls-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    OBS Browser Source URLs
+  </div>
+  <div class="obs-url-row">
+    <span class="obs-url-label">Scenes</span>
+    <input class="obs-url-input" readonly value="<%= appUrl %>/overlay/scenes/<%= overlayToken %>">
+    <button class="obs-copy-btn" onclick="copyUrl(this)">Copy</button>
+  </div>
+  <div class="obs-url-row">
+    <span class="obs-url-label">Info Bar</span>
+    <input class="obs-url-input" readonly value="<%= appUrl %>/overlay/bar/<%= overlayToken %>">
+    <button class="obs-copy-btn" onclick="copyUrl(this)">Copy</button>
+  </div>
+  <div class="obs-url-row">
+    <span class="obs-url-label">Custom Alerts</span>
+    <input class="obs-url-input" readonly value="<%= appUrl %>/overlay/custom-alerts/<%= overlayToken %>">
+    <button class="obs-copy-btn" onclick="copyUrl(this)">Copy</button>
+  </div>
+</div>
+
+<!-- Overlays Table -->
+<div class="section-hdr animate-in">
+  <h3>Your Overlays</h3>
+  <span id="co-count-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 8px; border-radius: 6px; background: var(--accent); color: white; font-size: 12px; font-weight: 700; font-family: var(--font-display);"><%= overlays.length %></span>
+  <button class="btn btn-primary" style="margin-left: auto;" onclick="openCreateModal()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    New Overlay
+  </button>
+</div>
+
+<div class="co-table-wrap animate-in" id="co-table-wrap">
+  <% if (overlays.length === 0) { %>
+  <div class="co-empty" id="co-empty">
+    <div class="co-empty-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+    </div>
+    <h4>No overlays yet</h4>
+    <p>Create your first custom overlay to get started.</p>
+  </div>
+  <% } else { %>
+  <table class="co-table" id="co-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Command</th>
+        <th>Always On</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="co-tbody">
+      <% overlays.forEach(function(ov) { %>
+      <tr class="clickable-row" data-id="<%= ov.id %>" onclick="openEditModal(<%= ov.id %>)">
+        <td class="co-name-cell"><%= ov.name %></td>
+        <td><span class="co-type-badge co-type-<%= ov.type %>"><%= ov.type %></span></td>
+        <td><% if (ov.chat_command) { %><span class="co-cmd">!<%= ov.chat_command %></span><% } else { %><span style="color:var(--text-muted);font-size:12px;">—</span><% } %></td>
+        <td><% if (ov.always_on) { %><span style="font-size:12px;color:var(--success);">Yes</span><% } else { %><span style="font-size:12px;color:var(--text-muted);">No</span><% } %></td>
+        <td>
+          <label class="toggle-pill" onclick="event.stopPropagation()">
+            <input type="checkbox" <%= ov.is_active ? 'checked' : '' %> onchange="toggleOverlay(<%= ov.id %>, this)">
+            <span class="toggle-pill-slider"></span>
+          </label>
+        </td>
+        <td>
+          <button class="co-del-btn" title="Delete" onclick="event.stopPropagation(); deleteOverlay(<%= ov.id %>)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </td>
+      </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<!-- ── Create / Edit Modal ── -->
+<div class="co-modal-overlay" id="co-modal">
+  <div class="co-modal">
+    <div class="co-modal-header">
+      <div class="co-modal-title" id="modal-title">New Overlay</div>
+      <button class="co-modal-close" onclick="closeModal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Step indicators -->
+    <div class="co-steps" id="co-steps">
+      <div class="co-step active" id="step-ind-1">
+        <div class="co-step-num">1</div>
+        <span>Choose Template</span>
+      </div>
+      <div class="co-step-sep"></div>
+      <div class="co-step" id="step-ind-2">
+        <div class="co-step-num">2</div>
+        <span>Customize</span>
+      </div>
+      <div class="co-step-sep"></div>
+      <div class="co-step" id="step-ind-3">
+        <div class="co-step-num">3</div>
+        <span>Set Command</span>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="co-modal-body">
+
+      <!-- Step 1: Choose template -->
+      <div class="co-step-panel active" id="panel-1">
+        <!-- Type tabs -->
+        <div class="co-type-tabs">
+          <button class="co-type-tab active" data-type="scene" onclick="switchTypeTab('scene', this)">Scenes</button>
+          <button class="co-type-tab" data-type="bar" onclick="switchTypeTab('bar', this)">Info Bars</button>
+          <button class="co-type-tab" data-type="custom-alert" onclick="switchTypeTab('custom-alert', this)">Alerts</button>
+        </div>
+
+        <!-- Scenes templates -->
+        <div class="tpl-type-section active" id="tpl-scene">
+          <div class="co-tpl-grid">
+            <div class="co-tpl-card" data-template="centered-text" onclick="selectTemplate('centered-text', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="8" y1="15" x2="16" y2="15"/></svg>
+              </div>
+              <div class="co-tpl-name">Centered Text</div>
+              <div class="co-tpl-desc">Large heading with subtext, gradient background</div>
+            </div>
+            <div class="co-tpl-card" data-template="split-layout" onclick="selectTemplate('split-layout', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+              </div>
+              <div class="co-tpl-name">Split Layout</div>
+              <div class="co-tpl-desc">Text on one side, image on the other</div>
+            </div>
+            <div class="co-tpl-card" data-template="full-image" onclick="selectTemplate('full-image', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+              <div class="co-tpl-name">Full Image</div>
+              <div class="co-tpl-desc">Full-screen image with optional overlay text</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bar templates -->
+        <div class="tpl-type-section" id="tpl-bar">
+          <div class="co-tpl-grid">
+            <div class="co-tpl-card" data-template="social-bar" onclick="selectTemplate('social-bar', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/></svg>
+              </div>
+              <div class="co-tpl-name">Social Bar</div>
+              <div class="co-tpl-desc">Show social media handles & icons</div>
+            </div>
+            <div class="co-tpl-card" data-template="ticker" onclick="selectTemplate('ticker', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </div>
+              <div class="co-tpl-name">Ticker</div>
+              <div class="co-tpl-desc">Scrolling text ticker bar</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alert templates -->
+        <div class="tpl-type-section" id="tpl-custom-alert">
+          <div class="co-tpl-grid">
+            <div class="co-tpl-card" data-template="image-popup" onclick="selectTemplate('image-popup', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+              <div class="co-tpl-name">Image Popup</div>
+              <div class="co-tpl-desc">Animated image alert with optional sound</div>
+            </div>
+            <div class="co-tpl-card" data-template="text-popup" onclick="selectTemplate('text-popup', this)">
+              <div class="co-tpl-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>
+              </div>
+              <div class="co-tpl-name">Text Popup</div>
+              <div class="co-tpl-desc">Animated text alert with style options</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Customize -->
+      <div class="co-step-panel" id="panel-2">
+        <div class="co-customize-wrap">
+          <!-- Fields -->
+          <div class="co-customize-fields" id="co-config-fields">
+            <!-- Populated by JS -->
+          </div>
+          <!-- Preview -->
+          <div class="co-preview-wrap" id="co-preview-wrap">
+            <div class="co-preview-label">Live Preview</div>
+            <div id="co-preview-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;min-height:240px;">
+              <span style="color:var(--text-muted);font-size:13px;">Select a template to preview</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Set Command -->
+      <div class="co-step-panel" id="panel-3">
+        <div class="co-step3-inner">
+          <div class="co-field-group">
+            <label class="co-label">Overlay Name *</label>
+            <input class="co-input" id="co-name" type="text" placeholder="e.g. BRB Scene">
+          </div>
+          <div class="co-field-group">
+            <label class="co-label">Chat Command (optional)</label>
+            <div class="co-cmd-input-wrap">
+              <div class="co-cmd-prefix">!</div>
+              <input class="co-input" id="co-command" type="text" placeholder="brb" style="border-radius:0 var(--radius-sm) var(--radius-sm) 0;">
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:5px;">Leave blank for always-on or manual overlays.</p>
+          </div>
+          <div class="co-field-group">
+            <label class="co-check-row">
+              <input type="checkbox" id="co-always-on">
+              <span>Always On — show this overlay without a command</span>
+            </label>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:5px;padding-left:23px;">For scenes and bars that should be permanently visible.</p>
+          </div>
+          <div id="modal-error" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(240,68,56,0.1);border:1px solid rgba(240,68,56,0.25);border-radius:var(--radius-sm);font-size:13px;color:var(--danger);"></div>
+        </div>
+      </div>
+
+    </div><!-- /modal-body -->
+
+    <!-- Footer -->
+    <div class="co-modal-footer">
+      <button class="btn btn-secondary" id="btn-back" onclick="modalBack()" style="display:none;">Back</button>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="btn-next" onclick="modalNext()">Next</button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveOverlay()" style="display:none;">Save Overlay</button>
+    </div>
+  </div>
+</div>
+
+<%- include('footer') %>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  var currentStep = 1;
+  var editingId = null;
+  var selectedType = 'scene';
+  var selectedTemplate = null;
+  var uploadedFiles = {}; // { fieldName: url }
+
+  // ── Template config definitions ──
+  var TEMPLATES = {
+    'centered-text': {
+      type: 'scene',
+      fields: [
+        { id: 'heading', label: 'Heading', type: 'text', placeholder: 'Be Right Back' },
+        { id: 'subtext', label: 'Subtext', type: 'text', placeholder: 'Back soon...' },
+        { id: 'font', label: 'Font', type: 'select', options: ['Outfit','Bangers','Oswald','Rajdhani','Russo One','Press Start 2P','Montserrat'] },
+        { id: 'textColor', label: 'Text Color', type: 'color', default: '#ffffff' },
+        { id: 'bgColor1', label: 'Background Color 1', type: 'color', default: '#1a1a2e' },
+        { id: 'bgColor2', label: 'Background Color 2', type: 'color', default: '#16213e' },
+        { id: 'bgImage', label: 'Background Image', type: 'upload', accept: 'image/*', ext: 'png' },
+        { id: 'showCountdown', label: 'Show Countdown Timer', type: 'checkbox' },
+        { id: 'countdownMinutes', label: 'Countdown Minutes', type: 'number', placeholder: '5', depends: 'showCountdown' },
+      ]
+    },
+    'split-layout': {
+      type: 'scene',
+      fields: [
+        { id: 'heading', label: 'Heading', type: 'text', placeholder: 'Starting Soon' },
+        { id: 'subtext', label: 'Subtext', type: 'text', placeholder: 'Get ready...' },
+        { id: 'font', label: 'Font', type: 'select', options: ['Outfit','Bangers','Oswald','Rajdhani','Russo One','Press Start 2P','Montserrat'] },
+        { id: 'textColor', label: 'Text Color', type: 'color', default: '#ffffff' },
+        { id: 'bgColor', label: 'Background Color', type: 'color', default: '#1a1a2e' },
+        { id: 'image', label: 'Side Image', type: 'upload', accept: 'image/*', ext: 'png' },
+        { id: 'imageSide', label: 'Image Side', type: 'select', options: ['left','right'] },
+        { id: 'showCountdown', label: 'Show Countdown Timer', type: 'checkbox' },
+        { id: 'countdownMinutes', label: 'Countdown Minutes', type: 'number', placeholder: '5', depends: 'showCountdown' },
+      ]
+    },
+    'full-image': {
+      type: 'scene',
+      fields: [
+        { id: 'image', label: 'Background Image', type: 'upload', accept: 'image/*', ext: 'png' },
+        { id: 'overlayText', label: 'Overlay Text (optional)', type: 'text', placeholder: '' },
+        { id: 'textColor', label: 'Text Color', type: 'color', default: '#ffffff' },
+        { id: 'textPosition', label: 'Text Position', type: 'select', options: ['top','center','bottom'] },
+      ]
+    },
+    'social-bar': {
+      type: 'bar',
+      fields: [
+        { id: 'links', label: 'Social Links', type: 'social-links' },
+        { id: 'bgColor', label: 'Background Color', type: 'color', default: '#1a1a2e' },
+        { id: 'textColor', label: 'Text Color', type: 'color', default: '#ffffff' },
+        { id: 'font', label: 'Font', type: 'select', options: ['Outfit','Bangers','Oswald','Rajdhani','Russo One','Montserrat'] },
+        { id: 'position', label: 'Bar Position', type: 'select', options: ['top','bottom'] },
+        { id: 'scrolling', label: 'Scrolling Animation', type: 'checkbox' },
+      ]
+    },
+    'ticker': {
+      type: 'bar',
+      fields: [
+        { id: 'text', label: 'Ticker Text', type: 'textarea', placeholder: 'Follow on Twitch: @channel | Discord: discord.gg/...' },
+        { id: 'bgColor', label: 'Background Color', type: 'color', default: '#9146ff' },
+        { id: 'textColor', label: 'Text Color', type: 'color', default: '#ffffff' },
+        { id: 'font', label: 'Font', type: 'select', options: ['Outfit','Bangers','Oswald','Rajdhani','Russo One','Montserrat'] },
+        { id: 'scrollSpeed', label: 'Scroll Speed', type: 'select', options: ['slow','normal','fast'] },
+        { id: 'position', label: 'Bar Position', type: 'select', options: ['top','bottom'] },
+      ]
+    },
+    'image-popup': {
+      type: 'custom-alert',
+      fields: [
+        { id: 'image', label: 'Alert Image', type: 'upload', accept: 'image/*', ext: 'png' },
+        { id: 'sound', label: 'Alert Sound (optional)', type: 'upload', accept: 'audio/*', ext: 'mp3' },
+        { id: 'duration', label: 'Duration (seconds)', type: 'number', placeholder: '5' },
+        { id: 'animation', label: 'Animation', type: 'select', options: ['fade','slide-up','slide-down','bounce','zoom'] },
+        { id: 'volume', label: 'Sound Volume', type: 'range', min: 0, max: 100, default: 80 },
+      ]
+    },
+    'text-popup': {
+      type: 'custom-alert',
+      fields: [
+        { id: 'text', label: 'Alert Text', type: 'text', placeholder: 'Thanks for the raid!' },
+        { id: 'font', label: 'Font', type: 'select', options: ['Outfit','Bangers','Oswald','Rajdhani','Russo One','Press Start 2P','Montserrat'] },
+        { id: 'textColor', label: 'Text Color', type: 'color', default: '#ffffff' },
+        { id: 'fontSize', label: 'Font Size', type: 'select', options: ['small','medium','large','xlarge'] },
+        { id: 'bgColor', label: 'Background Color', type: 'color', default: '#9146ff' },
+        { id: 'duration', label: 'Duration (seconds)', type: 'number', placeholder: '5' },
+        { id: 'animation', label: 'Animation', type: 'select', options: ['fade','slide-up','slide-down','bounce','zoom'] },
+        { id: 'sound', label: 'Alert Sound (optional)', type: 'upload', accept: 'audio/*', ext: 'mp3' },
+        { id: 'volume', label: 'Sound Volume', type: 'range', min: 0, max: 100, default: 80 },
+      ]
+    },
+  };
+
+  // ── Helpers ──
+  function showStatus(msg, type) {
+    var el = document.getElementById('co-status');
+    el.textContent = msg;
+    el.className = 'co-status ' + type;
+    setTimeout(function() { el.className = 'co-status'; }, 4000);
+  }
+
+  function copyUrl(btn) {
+    var input = btn.previousElementSibling;
+    input.select();
+    input.setSelectionRange(0, 99999);
+    try { document.execCommand('copy'); } catch(e) { navigator.clipboard && navigator.clipboard.writeText(input.value); }
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  }
+  window.copyUrl = copyUrl;
+
+  // ── Table rebuild ──
+  function rebuildTable(overlays) {
+    var badge = document.getElementById('co-count-badge');
+    if (badge) badge.textContent = overlays.length;
+
+    var wrap = document.getElementById('co-table-wrap');
+    if (overlays.length === 0) {
+      wrap.innerHTML = '<div class="co-empty" id="co-empty"><div class="co-empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg></div><h4>No overlays yet</h4><p>Create your first custom overlay to get started.</p></div>';
+      return;
+    }
+
+    var rows = overlays.map(function(ov) {
+      var typeCls = 'co-type-' + ov.type;
+      var cmdHtml = ov.chat_command
+        ? '<span class="co-cmd">!' + escHtml(ov.chat_command) + '</span>'
+        : '<span style="color:var(--text-muted);font-size:12px;">—</span>';
+      var alwaysHtml = ov.always_on
+        ? '<span style="font-size:12px;color:var(--success);">Yes</span>'
+        : '<span style="font-size:12px;color:var(--text-muted);">No</span>';
+      var checked = ov.is_active ? 'checked' : '';
+      return '<tr class="clickable-row" data-id="' + ov.id + '" onclick="openEditModal(' + ov.id + ')">'
+        + '<td class="co-name-cell">' + escHtml(ov.name) + '</td>'
+        + '<td><span class="co-type-badge ' + typeCls + '">' + escHtml(ov.type) + '</span></td>'
+        + '<td>' + cmdHtml + '</td>'
+        + '<td>' + alwaysHtml + '</td>'
+        + '<td><label class="toggle-pill" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleOverlay(' + ov.id + ', this)"><span class="toggle-pill-slider"></span></label></td>'
+        + '<td><button class="co-del-btn" title="Delete" onclick="event.stopPropagation();deleteOverlay(' + ov.id + ')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button></td>'
+        + '</tr>';
+    }).join('');
+
+    wrap.innerHTML = '<table class="co-table" id="co-table"><thead><tr><th>Name</th><th>Type</th><th>Command</th><th>Always On</th><th>Status</th><th></th></tr></thead><tbody id="co-tbody">' + rows + '</tbody></table>';
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Toggle ──
+  function toggleOverlay(id, checkbox) {
+    fetch('/dashboard/custom-overlays/' + id + '/toggle', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok) { showStatus('Failed to toggle', 'error'); checkbox.checked = !checkbox.checked; }
+      })
+      .catch(function() { showStatus('Network error', 'error'); checkbox.checked = !checkbox.checked; });
+  }
+  window.toggleOverlay = toggleOverlay;
+
+  // ── Delete ──
+  function deleteOverlay(id) {
+    if (!confirm('Delete this overlay? This cannot be undone.')) return;
+    fetch('/dashboard/custom-overlays/' + id + '/delete', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          showStatus('Overlay deleted.', 'success');
+          loadOverlays();
+        } else {
+          showStatus(data.error || 'Delete failed', 'error');
+        }
+      })
+      .catch(function() { showStatus('Network error', 'error'); });
+  }
+  window.deleteOverlay = deleteOverlay;
+
+  function loadOverlays() {
+    fetch(window.location.href, { headers: { 'Accept': 'text/html' } })
+      .then(function() {
+        // Just reload for simplicity
+        location.reload();
+      });
+  }
+
+  // ── Modal open/close ──
+  function openCreateModal() {
+    editingId = null;
+    uploadedFiles = {};
+    document.getElementById('modal-title').textContent = 'New Overlay';
+    document.getElementById('co-name').value = '';
+    document.getElementById('co-command').value = '';
+    document.getElementById('co-always-on').checked = false;
+    document.getElementById('modal-error').style.display = 'none';
+    selectedTemplate = null;
+    selectedType = 'scene';
+    // Reset type tabs
+    document.querySelectorAll('.co-type-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelector('[data-type="scene"]').classList.add('active');
+    document.querySelectorAll('.tpl-type-section').forEach(function(s) { s.classList.remove('active'); });
+    document.getElementById('tpl-scene').classList.add('active');
+    // Deselect template cards
+    document.querySelectorAll('.co-tpl-card').forEach(function(c) { c.classList.remove('selected'); });
+    goToStep(1);
+    document.getElementById('co-modal').classList.add('open');
+  }
+  window.openCreateModal = openCreateModal;
+
+  function openEditModal(id) {
+    fetch('/dashboard/custom-overlays/' + id + '/get')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        editingId = id;
+        uploadedFiles = {};
+        document.getElementById('modal-title').textContent = 'Edit Overlay';
+        document.getElementById('co-name').value = data.name || '';
+        document.getElementById('co-command').value = data.chat_command || '';
+        document.getElementById('co-always-on').checked = !!data.always_on;
+        document.getElementById('modal-error').style.display = 'none';
+
+        selectedType = data.type || 'scene';
+        selectedTemplate = data.template || null;
+
+        // Switch type tab
+        document.querySelectorAll('.co-type-tab').forEach(function(t) {
+          t.classList.toggle('active', t.dataset.type === selectedType);
+        });
+        document.querySelectorAll('.tpl-type-section').forEach(function(s) { s.classList.remove('active'); });
+        var secId = 'tpl-' + selectedType;
+        var sec = document.getElementById(secId);
+        if (sec) sec.classList.add('active');
+
+        // Select template card
+        document.querySelectorAll('.co-tpl-card').forEach(function(c) {
+          c.classList.toggle('selected', c.dataset.template === selectedTemplate);
+        });
+
+        // Skip to step 2 if we have a template
+        if (selectedTemplate) {
+          buildConfigFields(selectedTemplate, data.config || {});
+          goToStep(2);
+        } else {
+          goToStep(1);
+        }
+
+        document.getElementById('co-modal').classList.add('open');
+      })
+      .catch(function() { showStatus('Failed to load overlay', 'error'); });
+  }
+  window.openEditModal = openEditModal;
+
+  function closeModal() {
+    document.getElementById('co-modal').classList.remove('open');
+    editingId = null;
+    selectedTemplate = null;
+  }
+  window.closeModal = closeModal;
+
+  // Close on overlay click
+  document.getElementById('co-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // ── Step navigation ──
+  function goToStep(n) {
+    currentStep = n;
+    [1,2,3].forEach(function(i) {
+      document.getElementById('panel-' + i).classList.toggle('active', i === n);
+      var ind = document.getElementById('step-ind-' + i);
+      ind.className = 'co-step' + (i === n ? ' active' : (i < n ? ' done' : ''));
+    });
+    var btnBack = document.getElementById('btn-back');
+    var btnNext = document.getElementById('btn-next');
+    var btnSave = document.getElementById('btn-save');
+    btnBack.style.display = n > 1 ? '' : 'none';
+    btnNext.style.display = n < 3 ? '' : 'none';
+    btnSave.style.display = n === 3 ? '' : 'none';
+  }
+
+  function modalNext() {
+    if (currentStep === 1) {
+      if (!selectedTemplate) { alert('Please select a template.'); return; }
+      goToStep(2);
+    } else if (currentStep === 2) {
+      goToStep(3);
+    }
+  }
+  window.modalNext = modalNext;
+
+  function modalBack() {
+    if (currentStep === 2) goToStep(1);
+    else if (currentStep === 3) goToStep(2);
+  }
+  window.modalBack = modalBack;
+
+  // ── Type tab switch ──
+  function switchTypeTab(type, btn) {
+    selectedType = type;
+    selectedTemplate = null;
+    document.querySelectorAll('.co-type-tab').forEach(function(t) { t.classList.remove('active'); });
+    btn.classList.add('active');
+    document.querySelectorAll('.tpl-type-section').forEach(function(s) { s.classList.remove('active'); });
+    document.getElementById('tpl-' + type).classList.add('active');
+    document.querySelectorAll('.co-tpl-card').forEach(function(c) { c.classList.remove('selected'); });
+  }
+  window.switchTypeTab = switchTypeTab;
+
+  // ── Template selection ──
+  function selectTemplate(tpl, card) {
+    selectedTemplate = tpl;
+    document.querySelectorAll('.co-tpl-card').forEach(function(c) { c.classList.remove('selected'); });
+    card.classList.add('selected');
+  }
+  window.selectTemplate = selectTemplate;
+
+  // ── Config fields builder ──
+  function buildConfigFields(template, existingConfig) {
+    var def = TEMPLATES[template];
+    if (!def) return;
+    var container = document.getElementById('co-config-fields');
+    container.innerHTML = '';
+
+    def.fields.forEach(function(field) {
+      var group = document.createElement('div');
+      group.className = 'co-field-group';
+      group.dataset.field = field.id;
+
+      if (field.depends) {
+        var depVal = existingConfig[field.depends];
+        if (!depVal) group.style.display = 'none';
+      }
+
+      var label = document.createElement('label');
+      label.className = 'co-label';
+      label.textContent = field.label;
+      group.appendChild(label);
+
+      var val = existingConfig[field.id] !== undefined ? existingConfig[field.id] : (field.default || '');
+
+      if (field.type === 'text') {
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'co-input';
+        inp.id = 'cfg-' + field.id;
+        inp.value = val;
+        if (field.placeholder) inp.placeholder = field.placeholder;
+        group.appendChild(inp);
+
+      } else if (field.type === 'textarea') {
+        var ta = document.createElement('textarea');
+        ta.className = 'co-input';
+        ta.id = 'cfg-' + field.id;
+        ta.value = val;
+        ta.rows = 3;
+        if (field.placeholder) ta.placeholder = field.placeholder;
+        ta.style.resize = 'vertical';
+        group.appendChild(ta);
+
+      } else if (field.type === 'number') {
+        var ninp = document.createElement('input');
+        ninp.type = 'number';
+        ninp.className = 'co-input';
+        ninp.id = 'cfg-' + field.id;
+        ninp.value = val;
+        if (field.placeholder) ninp.placeholder = field.placeholder;
+        group.appendChild(ninp);
+
+      } else if (field.type === 'select') {
+        var sel = document.createElement('select');
+        sel.className = 'co-select';
+        sel.id = 'cfg-' + field.id;
+        field.options.forEach(function(opt) {
+          var o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === val) o.selected = true;
+          sel.appendChild(o);
+        });
+        group.appendChild(sel);
+
+      } else if (field.type === 'color') {
+        var colorVal = val || field.default || '#ffffff';
+        var crow = document.createElement('div');
+        crow.className = 'co-color-row';
+        var swatch = document.createElement('label');
+        swatch.className = 'co-color-swatch';
+        swatch.style.background = colorVal;
+        var cinp = document.createElement('input');
+        cinp.type = 'color';
+        cinp.id = 'cfg-' + field.id;
+        cinp.value = colorVal;
+        cinp.addEventListener('input', function() { swatch.style.background = this.value; });
+        swatch.appendChild(cinp);
+        var ctxt = document.createElement('input');
+        ctxt.type = 'text';
+        ctxt.className = 'co-input';
+        ctxt.value = colorVal;
+        ctxt.style.fontFamily = 'monospace';
+        cinp.addEventListener('input', function() { ctxt.value = this.value; });
+        ctxt.addEventListener('input', function() { cinp.value = this.value; swatch.style.background = this.value; });
+        crow.appendChild(swatch);
+        crow.appendChild(ctxt);
+        group.appendChild(crow);
+
+      } else if (field.type === 'checkbox') {
+        var cb = document.createElement('label');
+        cb.className = 'co-check-row';
+        var cbinp = document.createElement('input');
+        cbinp.type = 'checkbox';
+        cbinp.id = 'cfg-' + field.id;
+        cbinp.checked = !!val;
+        // Show/hide dependent fields
+        cbinp.addEventListener('change', function() {
+          def.fields.forEach(function(f) {
+            if (f.depends === field.id) {
+              var depGroup = container.querySelector('[data-field="' + f.id + '"]');
+              if (depGroup) depGroup.style.display = cbinp.checked ? '' : 'none';
+            }
+          });
+        });
+        var cbspan = document.createElement('span');
+        cbspan.textContent = field.label;
+        label.textContent = '';
+        cb.appendChild(cbinp);
+        cb.appendChild(cbspan);
+        group.appendChild(cb);
+
+      } else if (field.type === 'upload') {
+        var area = document.createElement('div');
+        area.className = 'co-upload-area' + (val ? ' has-file' : '');
+        area.dataset.fieldId = field.id;
+        var uinp = document.createElement('input');
+        uinp.type = 'file';
+        uinp.className = 'co-upload-input';
+        uinp.accept = field.accept || '*/*';
+        var utxt = document.createElement('div');
+        utxt.className = 'co-upload-text';
+        if (val) {
+          // Show existing file
+          if (field.accept && field.accept.startsWith('image')) {
+            var prev = document.createElement('img');
+            prev.src = val;
+            prev.className = 'co-upload-preview';
+            area.appendChild(uinp);
+            area.appendChild(utxt);
+            area.appendChild(prev);
+          } else {
+            utxt.textContent = 'File uploaded. Click to replace.';
+            area.appendChild(uinp);
+            area.appendChild(utxt);
+          }
+          uploadedFiles[field.id] = val;
+        } else {
+          utxt.textContent = 'Click to upload ' + field.label;
+          area.appendChild(uinp);
+          area.appendChild(utxt);
+        }
+        uinp.addEventListener('change', function(e) {
+          handleFileUpload(e.target.files[0], field, area);
+        });
+        group.appendChild(area);
+
+      } else if (field.type === 'range') {
+        var rinp = document.createElement('input');
+        rinp.type = 'range';
+        rinp.id = 'cfg-' + field.id;
+        rinp.min = field.min || 0;
+        rinp.max = field.max || 100;
+        rinp.value = val !== '' ? val : (field.default || 80);
+        rinp.style.width = '100%';
+        var rlabel = document.createElement('div');
+        rlabel.style.fontSize = '11px';
+        rlabel.style.color = 'var(--text-muted)';
+        rlabel.style.marginTop = '4px';
+        rlabel.textContent = rinp.value + '%';
+        rinp.addEventListener('input', function() { rlabel.textContent = this.value + '%'; });
+        group.appendChild(rinp);
+        group.appendChild(rlabel);
+
+      } else if (field.type === 'social-links') {
+        var linksWrap = document.createElement('div');
+        linksWrap.id = 'co-social-links';
+        linksWrap.className = 'co-social-links';
+        var linksArr = Array.isArray(existingConfig.links) ? existingConfig.links : [];
+        linksArr.forEach(function(lk) { addSocialLinkRow(linksWrap, lk); });
+        group.appendChild(linksWrap);
+        var addLinkBtn = document.createElement('button');
+        addLinkBtn.type = 'button';
+        addLinkBtn.className = 'co-add-link';
+        addLinkBtn.textContent = '+ Add Social Link';
+        addLinkBtn.onclick = function() { addSocialLinkRow(linksWrap, null); };
+        group.appendChild(addLinkBtn);
+      }
+
+      container.appendChild(group);
+    });
+  }
+
+  function addSocialLinkRow(wrap, data) {
+    var row = document.createElement('div');
+    row.className = 'co-social-link-row';
+    var platSel = document.createElement('select');
+    platSel.className = 'co-select';
+    platSel.style.width = '110px';
+    ['twitch','twitter','instagram','youtube','discord','tiktok','website'].forEach(function(p) {
+      var o = document.createElement('option');
+      o.value = p; o.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+      if (data && data.platform === p) o.selected = true;
+      platSel.appendChild(o);
+    });
+    var valInp = document.createElement('input');
+    valInp.type = 'text';
+    valInp.className = 'co-input';
+    valInp.placeholder = 'username or URL';
+    valInp.value = data ? (data.value || '') : '';
+    var delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'co-link-del';
+    delBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    delBtn.onclick = function() { wrap.removeChild(row); };
+    row.appendChild(platSel);
+    row.appendChild(valInp);
+    row.appendChild(delBtn);
+    wrap.appendChild(row);
+  }
+
+  // ── File upload ──
+  function handleFileUpload(file, field, area) {
+    if (!file) return;
+    var ext = file.name.split('.').pop().toLowerCase();
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var dataUrl = e.target.result;
+      // If we have an editing id, upload immediately
+      if (editingId) {
+        doFileUpload(file, field, area, editingId, ext);
+      } else {
+        // Store as data URL temporarily; will upload after create
+        uploadedFiles[field.id] = { pending: true, file: file, dataUrl: dataUrl, ext: ext };
+        area.classList.add('has-file');
+        if (field.accept && field.accept.startsWith('image')) {
+          var prev = area.querySelector('.co-upload-preview');
+          if (!prev) { prev = document.createElement('img'); prev.className = 'co-upload-preview'; area.appendChild(prev); }
+          prev.src = dataUrl;
+        }
+        var txt = area.querySelector('.co-upload-text');
+        if (txt) txt.textContent = file.name;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function doFileUpload(file, field, area, overlayId, ext) {
+    var url = '/dashboard/custom-overlays/' + overlayId + '/upload?field=' + encodeURIComponent(field.id) + '&ext=' + encodeURIComponent(ext);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var buf = e.target.result;
+      fetch(url, { method: 'POST', body: buf })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            uploadedFiles[field.id] = data.url;
+            area.classList.add('has-file');
+            if (field.accept && field.accept.startsWith('image')) {
+              var prev = area.querySelector('.co-upload-preview');
+              if (!prev) { prev = document.createElement('img'); prev.className = 'co-upload-preview'; area.appendChild(prev); }
+              prev.src = data.url;
+            }
+            var txt = area.querySelector('.co-upload-text');
+            if (txt) txt.textContent = file.name + ' uploaded';
+          } else {
+            alert('Upload failed: ' + (data.error || 'Unknown error'));
+          }
+        });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ── Collect config ──
+  function collectConfig() {
+    var def = TEMPLATES[selectedTemplate];
+    if (!def) return {};
+    var config = {};
+    def.fields.forEach(function(field) {
+      if (field.type === 'social-links') {
+        var wrap = document.getElementById('co-social-links');
+        if (!wrap) return;
+        var links = [];
+        wrap.querySelectorAll('.co-social-link-row').forEach(function(row) {
+          var selEl = row.querySelector('select');
+          var valEl = row.querySelector('input[type=text]');
+          if (selEl && valEl && valEl.value.trim()) {
+            links.push({ platform: selEl.value, value: valEl.value.trim() });
+          }
+        });
+        config.links = links;
+        return;
+      }
+      if (field.type === 'upload') {
+        if (uploadedFiles[field.id] && !uploadedFiles[field.id].pending) {
+          config[field.id] = uploadedFiles[field.id];
+        }
+        return;
+      }
+      var el = document.getElementById('cfg-' + field.id);
+      if (!el) return;
+      if (field.type === 'checkbox') {
+        config[field.id] = el.checked;
+      } else if (field.type === 'color') {
+        config[field.id] = el.value;
+      } else {
+        config[field.id] = el.value;
+      }
+    });
+    return config;
+  }
+
+  // ── Upload pending files ──
+  function uploadPendingFiles(overlayId) {
+    var def = TEMPLATES[selectedTemplate];
+    if (!def) return Promise.resolve();
+    var promises = [];
+    def.fields.forEach(function(field) {
+      if (field.type === 'upload' && uploadedFiles[field.id] && uploadedFiles[field.id].pending) {
+        var entry = uploadedFiles[field.id];
+        var ext = entry.ext;
+        var fid = field.id;
+        var promise = new Promise(function(resolve) {
+          var url = '/dashboard/custom-overlays/' + overlayId + '/upload?field=' + encodeURIComponent(fid) + '&ext=' + encodeURIComponent(ext);
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            fetch(url, { method: 'POST', body: e.target.result })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.ok) { uploadedFiles[fid] = data.url; }
+                resolve();
+              })
+              .catch(function() { resolve(); });
+          };
+          reader.readAsArrayBuffer(entry.file);
+        });
+        promises.push(promise);
+      }
+    });
+    return Promise.all(promises);
+  }
+
+  // ── Save ──
+  function saveOverlay() {
+    var name = document.getElementById('co-name').value.trim();
+    var command = document.getElementById('co-command').value.trim().replace(/^!+/, '');
+    var alwaysOn = document.getElementById('co-always-on').checked;
+    var errEl = document.getElementById('modal-error');
+
+    if (!name) { errEl.textContent = 'Please enter a name.'; errEl.style.display = ''; return; }
+    if (!selectedTemplate) { errEl.textContent = 'Please select a template.'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+
+    var config = collectConfig();
+    var type = TEMPLATES[selectedTemplate] ? TEMPLATES[selectedTemplate].type : selectedType;
+
+    var saveBtn = document.getElementById('btn-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    var doSave = function() {
+      config = collectConfig();
+      var body = new URLSearchParams({
+        type: type,
+        name: name,
+        template: selectedTemplate,
+        chat_command: command,
+        always_on: alwaysOn ? '1' : '0',
+        config: JSON.stringify(config),
+      });
+
+      var url = editingId
+        ? '/dashboard/custom-overlays/' + editingId + '/update'
+        : '/dashboard/custom-overlays/create';
+
+      return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() })
+        .then(function(r) { return r.json(); });
+    };
+
+    var saveFlow;
+    if (!editingId) {
+      // Create first (to get an id), then upload pending files, then update with correct config
+      var tempBody = new URLSearchParams({
+        type: type, name: name, template: selectedTemplate,
+        chat_command: command, always_on: alwaysOn ? '1' : '0',
+        config: JSON.stringify(config),
+      });
+      saveFlow = fetch('/dashboard/custom-overlays/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: tempBody.toString()
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.ok) return Promise.reject(new Error(data.error || 'Create failed'));
+          editingId = data.overlay.id;
+          return uploadPendingFiles(editingId);
+        })
+        .then(function() {
+          // Update with upload URLs in config
+          config = collectConfig();
+          var upBody = new URLSearchParams({
+            type: type, name: name, template: selectedTemplate,
+            chat_command: command, always_on: alwaysOn ? '1' : '0',
+            config: JSON.stringify(config),
+          });
+          return fetch('/dashboard/custom-overlays/' + editingId + '/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: upBody.toString()
+          }).then(function(r) { return r.json(); });
+        });
+    } else {
+      saveFlow = uploadPendingFiles(editingId).then(function() { return doSave(); });
+    }
+
+    saveFlow
+      .then(function(data) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Overlay';
+        if (data && data.ok) {
+          closeModal();
+          showStatus('Overlay saved!', 'success');
+          setTimeout(function() { location.reload(); }, 800);
+        } else {
+          errEl.textContent = (data && data.error) ? data.error : 'Save failed. Please try again.';
+          errEl.style.display = '';
+        }
+      })
+      .catch(function(err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Overlay';
+        errEl.textContent = err.message || 'Network error. Please try again.';
+        errEl.style.display = '';
+      });
+  }
+  window.saveOverlay = saveOverlay;
+
+  // ── On step 2 enter: build fields ──
+  var origGoToStep = goToStep;
+  // Patch to build fields on step 2
+  (function() {
+    var _goToStep = goToStep;
+    goToStep = function(n) {
+      _goToStep(n);
+      if (n === 2 && selectedTemplate) {
+        buildConfigFields(selectedTemplate, {});
+      }
+    };
+  })();
+
+  // Expose for ESM/non-module usage
+  window.goToStep = goToStep;
+
+})();
+</script>
