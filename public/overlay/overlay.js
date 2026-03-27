@@ -200,11 +200,13 @@ function connectSSE() {
     }
 
     if (data.type === 'timed') {
+      console.log('[Overlay] Timed notification received:', data.data);
       showTimedNotification(data.data);
       return;
     }
 
     if (data.type === 'sponsor') {
+      console.log('[Overlay] Sponsor image received:', data.data);
       showSponsorImage(data.data);
       return;
     }
@@ -695,12 +697,13 @@ function showSponsorImage(data) {
   img.src = data.imageUrl;
   img.alt = data.name || 'Sponsor';
   img.style.objectFit = 'contain';
-  img.style.width = '100%';
-  img.style.height = '100%';
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '40vh';
+  img.style.height = 'auto';
   const imgScale = data.imageScale != null ? data.imageScale : 1.0;
   if (imgScale < 1) {
-    img.style.width = (imgScale * 100) + '%';
-    img.style.height = (imgScale * 100) + '%';
+    img.style.maxWidth = (imgScale * 100) + '%';
+    img.style.maxHeight = (imgScale * 40) + 'vh';
   }
   banner.appendChild(img);
 

@@ -7,29 +7,7 @@ const bus = require('../services/overlayBus');
 // Unique ID per server process — changes on every restart/deploy
 const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
 
-// Serve overlay page
-router.get('/:token', (req, res) => {
-  const streamer = db.getStreamerByOverlayToken(req.params.token);
-  if (!streamer) return res.status(404).send('Invalid overlay token');
-
-  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Stream Overlay</title>
-  <link rel="stylesheet" href="/overlay/overlay.css">
-</head>
-<body>
-  <div id="notification-container"></div>
-  <div id="timed-container"></div>
-  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
-  <script src="/overlay/overlay.js"></script>
-</body>
-</html>`);
-});
-
-// SSE endpoint
+// SSE endpoint — MUST be before /:token to avoid being caught by the wildcard
 router.get('/events/:token', (req, res) => {
   const streamer = db.getStreamerByOverlayToken(req.params.token);
   if (!streamer) return res.status(404).send('Invalid overlay token');
@@ -72,6 +50,28 @@ router.get('/events/:token', (req, res) => {
     clearInterval(heartbeat);
     bus.off(`overlay:${streamer.id}`, listener);
   });
+});
+
+// Serve overlay page — AFTER /events/:token so the wildcard doesn't catch SSE requests
+router.get('/:token', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stream Overlay</title>
+  <link rel="stylesheet" href="/overlay/overlay.css">
+</head>
+<body>
+  <div id="notification-container"></div>
+  <div id="timed-container"></div>
+  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script src="/overlay/overlay.js"></script>
+</body>
+</html>`);
 });
 
 module.exports = router;
