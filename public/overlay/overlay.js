@@ -1,3 +1,5 @@
+console.log('[Overlay] Script loaded, OVERLAY_TOKEN:', window.OVERLAY_TOKEN ? 'present' : 'MISSING');
+
 const container = document.getElementById('notification-container');
 let overlayConfig = {};
 let overlayDesigns = {};
@@ -181,9 +183,16 @@ function connectSSE() {
     evtSource = null;
   }
 
-  evtSource = new EventSource(`/overlay/events/${window.OVERLAY_TOKEN}`);
+  const sseUrl = `/overlay/events/${window.OVERLAY_TOKEN}`;
+  console.log('[Overlay] Connecting SSE to:', sseUrl);
+  evtSource = new EventSource(sseUrl);
+
+  evtSource.onopen = () => {
+    console.log('[Overlay] SSE connection established');
+  };
 
   evtSource.onmessage = (e) => {
+    console.log('[Overlay] SSE message received:', e.data.substring(0, 100));
     const data = JSON.parse(e.data);
 
     if (data.type === 'config') {
