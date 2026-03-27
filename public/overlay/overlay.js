@@ -674,11 +674,9 @@ function esc(text) {
 
 // ─── Sponsor image banner ───────────────────────────────────────
 function showSponsorImage(data) {
-  // Remove any existing sponsor banners with fade-out
-  document.querySelectorAll('.sponsor-banner').forEach(el => {
-    el.classList.add('dismissing');
-    setTimeout(() => el.remove(), 400);
-  });
+  console.log('[Overlay] showSponsorImage called:', data.name, 'duration:', data.displayDuration);
+  // Remove any existing sponsor banners immediately (new one replaces old)
+  document.querySelectorAll('.sponsor-banner').forEach(el => el.remove());
 
   const design = overlayDesigns['timed']; // Use timed design for position/size
 

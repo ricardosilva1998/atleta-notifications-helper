@@ -505,7 +505,7 @@ body {
 .sponsor-banner {
   position: absolute;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   display: flex;
   align-items: center;
