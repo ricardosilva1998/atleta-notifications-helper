@@ -33,6 +33,7 @@ function scheduleNextImage(streamerId) {
       imageUrl: `/sponsors/${streamerId}/${img.filename}`,
       name: img.display_name,
       displayDuration: img.display_duration || 30,
+      imageScale: img.image_scale != null ? img.image_scale : 1.0,
     },
   });
 

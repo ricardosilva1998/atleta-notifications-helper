@@ -2230,6 +2230,15 @@ function deleteOverlayDesign(streamerId, eventType) {
   }
 }
 
+// Migration: Add image_scale to sponsor_images
+{
+  const cols = db.pragma('table_info(sponsor_images)').map(c => c.name);
+  if (!cols.includes('image_scale')) {
+    db.exec(`ALTER TABLE sponsor_images ADD COLUMN image_scale REAL DEFAULT 1.0`);
+    console.log('[DB] Added image_scale to sponsor_images');
+  }
+}
+
 // Migration: Create sponsor_messages table
 {
   db.exec(`
@@ -2288,9 +2297,9 @@ function getEnabledSponsorImages(streamerId) {
 function addSponsorImage(streamerId, filename, displayName, chatMessage, displayDuration) {
   return db.prepare('INSERT INTO sponsor_images (streamer_id, filename, display_name, chat_message, display_duration) VALUES (?, ?, ?, ?, ?)').run(streamerId, filename, displayName, chatMessage || null, displayDuration || 30);
 }
-function updateSponsorImage(id, streamerId, displayName, chatMessage, enabled, displayDuration) {
-  db.prepare('UPDATE sponsor_images SET display_name = ?, chat_message = ?, enabled = ?, display_duration = ? WHERE id = ? AND streamer_id = ?')
-    .run(displayName, chatMessage || null, enabled ? 1 : 0, displayDuration || 30, id, streamerId);
+function updateSponsorImage(id, streamerId, displayName, chatMessage, enabled, displayDuration, imageScale) {
+  db.prepare('UPDATE sponsor_images SET display_name = ?, chat_message = ?, enabled = ?, display_duration = ?, image_scale = ? WHERE id = ? AND streamer_id = ?')
+    .run(displayName, chatMessage || null, enabled ? 1 : 0, displayDuration || 30, imageScale != null ? imageScale : 1.0, id, streamerId);
 }
 function deleteSponsorImage(id, streamerId) {
   return db.prepare('DELETE FROM sponsor_images WHERE id = ? AND streamer_id = ?').run(id, streamerId);

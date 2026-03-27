@@ -558,12 +558,18 @@
 
     .sponsor-list { margin-bottom: 10px; }
     .sp-item {
-      display: flex; align-items: center; gap: 6px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
       padding: 6px 8px; margin-bottom: 4px;
       background: var(--bg-elevated); border: 1px solid var(--border);
       border-radius: var(--radius-sm); cursor: grab;
       transition: border-color 0.15s;
     }
+    .sp-scale-row {
+      width: 100%; display: flex; align-items: center; gap: 6px;
+      padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px;
+    }
+    .sp-scale-row span { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+    .sp-scale-row input[type=range] { flex: 1; height: 14px; }
     .sp-item:hover { border-color: rgba(145,70,255,0.3); }
     .sp-item.dragging { opacity: 0.5; border-color: var(--accent); }
     .sp-item.drag-over { border-top: 2px solid var(--accent); }
@@ -632,6 +638,13 @@
       max-width: 100%; max-height: 100%;
       object-fit: contain; border-radius: inherit;
     }
+    @keyframes sponsorPreviewFadeIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+    @keyframes sponsorPreviewSlideLeft { from { opacity:0; transform:translateX(-60px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes sponsorPreviewSlideRight { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes sponsorPreviewSlideUp { from { opacity:0; transform:translateY(40px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes sponsorPreviewDropDown { from { opacity:0; transform:translateY(-40px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes sponsorPreviewZoomIn { from { opacity:0; transform:scale(0.3); } to { opacity:1; transform:scale(1); } }
+    @keyframes sponsorPreviewOut { from { opacity:1; } to { opacity:0; transform:scale(0.9); } }
 
     /* ── Overlay border guide ── */
     .overlay-guide {
@@ -763,7 +776,7 @@
 
             <div class="sp-anim-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
               <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">Animation</span>
-              <select id="ctrl-sponsor-animation" style="flex:1;padding:4px 8px;font-size:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);" onchange="updatePreview();">
+              <select id="ctrl-sponsor-animation" style="flex:1;padding:4px 8px;font-size:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);" onchange="updatePreview(); replaySponsorAnimation();">
                 <option value="fade">Fade</option>
                 <option value="slide-left">Slide Left</option>
                 <option value="slide-right">Slide Right</option>
@@ -772,12 +785,6 @@
                 <option value="zoom">Zoom In</option>
                 <option value="none">None</option>
               </select>
-            </div>
-
-            <div class="sp-scale-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">Image Scale</span>
-              <input type="range" id="ctrl-image-scale" min="0.3" max="1" step="0.05" value="1" style="flex:1;" oninput="document.getElementById('val-image-scale').textContent=Math.round(this.value*100)+'%'; updatePreview();">
-              <span id="val-image-scale" style="font-size:11px;color:var(--text-muted);min-width:32px;">100%</span>
             </div>
 
             <div class="sponsor-list" id="sponsor-list">
@@ -1105,7 +1112,6 @@ function getControlValues() {
     card_custom_x: workingDesigns[currentType]?.card_custom_x != null ? workingDesigns[currentType].card_custom_x : null,
     card_custom_y: workingDesigns[currentType]?.card_custom_y != null ? workingDesigns[currentType].card_custom_y : null,
     border_radius: parseInt(document.getElementById('ctrl-border-radius').value),
-    card_image_scale: parseFloat(document.getElementById('ctrl-image-scale').value),
     sponsor_animation: document.getElementById('ctrl-sponsor-animation').value,
   };
 }
@@ -1136,9 +1142,6 @@ function setControlValues(d) {
   document.getElementById('val-card-width').textContent = d.card_width + 'px';
   document.getElementById('ctrl-border-radius').value = d.border_radius;
   document.getElementById('val-border-radius').textContent = d.border_radius + 'px';
-  const imgScale = d.card_image_scale != null ? d.card_image_scale : 1.0;
-  document.getElementById('ctrl-image-scale').value = imgScale;
-  document.getElementById('val-image-scale').textContent = Math.round(imgScale * 100) + '%';
   document.getElementById('ctrl-sponsor-animation').value = d.sponsor_animation || 'fade';
   // Update theme button swatches
   document.getElementById('swatch-bg').style.background = d.bg_color;
@@ -1635,6 +1638,12 @@ function renderSponsorList() {
       <button class="sp-del" onclick="deleteSponsor(${s.id})" title="Delete">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
+      <div class="sp-scale-row">
+        <span>Scale</span>
+        <input type="range" min="0.3" max="1" step="0.05" value="${s.image_scale != null ? s.image_scale : 1.0}"
+               oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'; updateSponsorScale(${s.id}, this.value)">
+        <span>${Math.round((s.image_scale != null ? s.image_scale : 1.0) * 100)}%</span>
+      </div>
     </div>
   `).join('');
   attachSponsorDragHandlers();
@@ -1692,7 +1701,7 @@ async function updateSponsorDuration(id, duration) {
   if (img) img.display_duration = duration;
   await fetch(`/dashboard/sponsors/${id}/update`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: duration }),
+    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: duration, image_scale: img?.image_scale != null ? img.image_scale : 1.0 }),
   });
 }
 
@@ -1701,9 +1710,20 @@ async function updateSponsorEnabled(id, enabled) {
   if (img) img.enabled = enabled ? 1 : 0;
   await fetch(`/dashboard/sponsors/${id}/update`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: enabled ? '1' : '', display_duration: img?.display_duration || 30 }),
+    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: img?.image_scale != null ? img.image_scale : 1.0 }),
   });
   updateSponsorPreview();
+}
+
+async function updateSponsorScale(id, scale) {
+  scale = Math.max(0.3, Math.min(1, parseFloat(scale) || 1.0));
+  const img = sponsorImages.find(s => s.id === id);
+  if (img) img.image_scale = scale;
+  updateSponsorPreview();
+  await fetch(`/dashboard/sponsors/${id}/update`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: scale }),
+  });
 }
 
 async function deleteSponsor(id) {
@@ -1787,16 +1807,54 @@ function updateSponsorPreview() {
 
 function showSponsorInPreview(sponsor) {
   const container = document.getElementById('preview-card-container');
-  let img = container.querySelector('.preview-sponsor-img');
-  if (!img) { img = document.createElement('img'); img.className = 'preview-sponsor-img'; container.appendChild(img); }
+  const d = workingDesigns['timed'];
+  const anim = d.sponsor_animation || 'fade';
+
+  // Remove old image with exit animation
+  const oldImg = container.querySelector('.preview-sponsor-img');
+  if (oldImg) {
+    oldImg.style.animation = 'sponsorPreviewOut 0.3s ease-in forwards';
+    setTimeout(() => oldImg.remove(), 300);
+  }
+
+  // Create new image with entrance animation
+  const img = document.createElement('img');
+  img.className = 'preview-sponsor-img';
   img.src = `/sponsors/${STREAMER_ID}/${sponsor.filename}`;
   img.alt = sponsor.display_name || 'Sponsor';
-  const d = workingDesigns['timed'];
-  const scale = d.card_image_scale != null ? d.card_image_scale : 1.0;
-  img.style.width = ((d.card_width || 500) * scale) + 'px';
+  const containerWidth = d.card_width || 500;
+  img.style.width = containerWidth + 'px';
   img.style.maxHeight = '200px';
   img.style.borderRadius = (d.border_radius || 12) + 'px';
+
+  // Per-image scale
+  const scale = sponsor.image_scale != null ? sponsor.image_scale : 1.0;
+  if (scale < 1) {
+    img.style.width = (containerWidth * scale) + 'px';
+  }
+
+  // Apply entrance animation
+  const animMap = {
+    'fade': 'sponsorPreviewFadeIn 0.4s ease-out',
+    'slide-left': 'sponsorPreviewSlideLeft 0.4s ease-out',
+    'slide-right': 'sponsorPreviewSlideRight 0.4s ease-out',
+    'slide-up': 'sponsorPreviewSlideUp 0.4s ease-out',
+    'drop-down': 'sponsorPreviewDropDown 0.4s ease-out',
+    'zoom': 'sponsorPreviewZoomIn 0.4s ease-out',
+    'none': 'none',
+  };
+  img.style.animation = animMap[anim] || animMap['fade'];
+
+  container.appendChild(img);
   setTimeout(() => updateOverlayGuide(), 100);
+}
+
+function replaySponsorAnimation() {
+  if (currentType !== 'timed') return;
+  const enabled = sponsorImages.filter(s => s.enabled);
+  if (enabled.length === 0) return;
+  const idx = sponsorPreviewIndex % enabled.length;
+  showSponsorInPreview(enabled[idx]);
 }
 
 function stopSponsorPreview() {

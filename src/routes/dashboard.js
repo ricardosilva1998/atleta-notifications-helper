@@ -1188,7 +1188,8 @@ router.post('/sponsors/:id/update', (req, res) => {
   db.updateSponsorImage(
     parseInt(req.params.id), req.streamer.id,
     req.body.display_name, req.body.chat_message,
-    req.body.enabled, parseInt(req.body.display_duration) || 30
+    req.body.enabled, parseInt(req.body.display_duration) || 30,
+    req.body.image_scale != null ? parseFloat(req.body.image_scale) : 1.0
   );
   try {
     const { timedNotificationManager } = require('../services/timedNotifications');

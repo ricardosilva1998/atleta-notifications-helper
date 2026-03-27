@@ -642,7 +642,7 @@ function showSponsorImage(data) {
   const img = document.createElement('img');
   img.src = data.imageUrl;
   img.alt = data.name || 'Sponsor';
-  const imgScale = design && design.card_image_scale != null ? design.card_image_scale : 1.0;
+  const imgScale = data.imageScale != null ? data.imageScale : 1.0;
   if (imgScale < 1) {
     img.style.maxWidth = (imgScale * 100) + '%';
     img.style.margin = '0 auto';
