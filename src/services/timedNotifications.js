@@ -49,10 +49,16 @@ function scheduleNextImage(streamerId) {
 function startRotation(streamerId) {
   stopRotation(streamerId);
   const streamer = db.getStreamerById(streamerId);
-  if (!streamer || !streamer.sponsor_rotation_enabled) return;
+  if (!streamer || !streamer.sponsor_rotation_enabled) {
+    console.log(`[Sponsor] Rotation NOT started for ${streamerId}: enabled=${streamer?.sponsor_rotation_enabled}`);
+    return;
+  }
 
   const images = db.getEnabledSponsorImages(streamerId);
-  if (images.length === 0) return;
+  if (images.length === 0) {
+    console.log(`[Sponsor] Rotation NOT started for ${streamerId}: no enabled images`);
+    return;
+  }
 
   activeRotations.set(streamerId, { handle: null, currentIndex: 0 });
   scheduleNextImage(streamerId);
@@ -110,9 +116,11 @@ function startChatRotation(streamerId) {
 const timedNotificationManager = {
   startAll() {
     const streamers = db.getOverlayEnabledStreamers();
+    console.log(`[Sponsor] startAll: found ${streamers.length} overlay-enabled streamers`);
     let imgCount = 0;
     let chatCount = 0;
     for (const s of streamers) {
+      console.log(`[Sponsor] Streamer ${s.id}: rotation_enabled=${s.sponsor_rotation_enabled}, send_chat=${s.sponsor_send_chat}`);
       if (s.sponsor_rotation_enabled) {
         startRotation(s.id);
         imgCount++;
