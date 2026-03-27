@@ -19,8 +19,14 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Static files
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// Static files — no-cache for overlay assets so OBS gets fresh JS/CSS after deploy
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.includes('/overlay/')) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 // Serve custom sounds from persistent data volume (survives deploys)
 app.use('/overlay/sounds', express.static(path.join(__dirname, '..', 'data', 'sounds')));
 // Serve sponsor images from persistent data volume

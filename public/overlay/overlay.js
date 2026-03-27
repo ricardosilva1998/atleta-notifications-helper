@@ -1,6 +1,7 @@
 const container = document.getElementById('notification-container');
 let overlayConfig = {};
 let overlayDesigns = {};
+let serverVersion = null;
 const queue = [];
 let isPlaying = false;
 
@@ -170,40 +171,68 @@ const soundEffects = {
   },
 };
 
-// Connect to SSE
-const evtSource = new EventSource(`/overlay/events/${window.OVERLAY_TOKEN}`);
+// Connect to SSE with robust reconnection for OBS browser source
+let evtSource = null;
+let reconnectTimer = null;
 
-evtSource.onmessage = (e) => {
-  const data = JSON.parse(e.data);
-
-  if (data.type === 'config') {
-    overlayConfig = data.config;
-    if (data.designs) overlayDesigns = data.designs;
-    return;
+function connectSSE() {
+  if (evtSource) {
+    evtSource.close();
+    evtSource = null;
   }
 
-  if (data.type === 'timed') {
-    showTimedNotification(data.data);
-    return;
-  }
+  evtSource = new EventSource(`/overlay/events/${window.OVERLAY_TOKEN}`);
 
-  if (data.type === 'sponsor') {
-    showSponsorImage(data.data);
-    return;
-  }
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
 
-  // Check if event type is enabled
-  const eventType = data.type;
-  const typeConfig = overlayConfig[eventType];
-  if (typeConfig && !typeConfig.enabled) return;
+    if (data.type === 'config') {
+      // If server restarted (deploy), reload to get fresh JS/CSS
+      if (serverVersion && data.serverVersion && data.serverVersion !== serverVersion) {
+        console.log('Server restarted, reloading overlay...');
+        location.reload();
+        return;
+      }
+      serverVersion = data.serverVersion;
+      overlayConfig = data.config;
+      if (data.designs) overlayDesigns = data.designs;
+      return;
+    }
 
-  queue.push(data);
-  if (!isPlaying) playNext();
-};
+    if (data.type === 'timed') {
+      showTimedNotification(data.data);
+      return;
+    }
 
-evtSource.onerror = () => {
-  console.log('SSE connection lost, reconnecting...');
-};
+    if (data.type === 'sponsor') {
+      showSponsorImage(data.data);
+      return;
+    }
+
+    // Check if event type is enabled
+    const eventType = data.type;
+    const typeConfig = overlayConfig[eventType];
+    if (typeConfig && !typeConfig.enabled) return;
+
+    queue.push(data);
+    if (!isPlaying) playNext();
+  };
+
+  evtSource.onerror = () => {
+    console.log('SSE connection lost, will retry...');
+    evtSource.close();
+    evtSource = null;
+    // Retry after 5s — handles deploy downtime
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectSSE();
+      }, 5000);
+    }
+  };
+}
+
+connectSSE();
 
 function playNext() {
   if (queue.length === 0) { isPlaying = false; return; }

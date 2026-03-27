@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const db = require('../db');
 const bus = require('../services/overlayBus');
+
+// Unique ID per server process — changes on every restart/deploy
+const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
 
 // Serve overlay page
 router.get('/:token', (req, res) => {
@@ -49,7 +53,12 @@ router.get('/events/:token', (req, res) => {
   const designMap = {};
   designs.forEach(d => { designMap[d.event_type] = d; });
 
-  res.write(`data: ${JSON.stringify({ type: 'config', config, designs: designMap })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: 'config', config, designs: designMap, serverVersion: SERVER_INSTANCE_ID })}\n\n`);
+
+  // Heartbeat every 30s to keep connection alive in OBS browser source
+  const heartbeat = setInterval(() => {
+    res.write(`:heartbeat\n\n`);
+  }, 30000);
 
   // Listen for events on the bus
   const listener = (event) => {
@@ -59,6 +68,7 @@ router.get('/events/:token', (req, res) => {
   bus.on(`overlay:${streamer.id}`, listener);
 
   req.on('close', () => {
+    clearInterval(heartbeat);
     bus.off(`overlay:${streamer.id}`, listener);
   });
 });
