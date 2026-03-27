@@ -1,94 +1,84 @@
 const db = require('../db');
 const bus = require('./overlayBus');
 
-const activeTimers = new Map(); // notificationId -> intervalHandle
+const activeRotations = new Map(); // streamerId -> { handle, currentIndex }
 
-function fireNotification(notification) {
-  const streamer = db.getStreamerById(notification.streamer_id);
-  if (!streamer) return;
-
-  // Send to Twitch chat
-  if (notification.send_to_twitch && streamer.twitch_username) {
-    try {
-      const { chatManager } = require('./twitchChat');
-      chatManager.sendRawMessage(streamer.twitch_username, notification.message);
-    } catch (e) {
-      console.error('[Timed] Failed to send Twitch message:', e.message);
-    }
+function stopRotation(streamerId) {
+  const existing = activeRotations.get(streamerId);
+  if (existing) {
+    clearInterval(existing.handle);
+    activeRotations.delete(streamerId);
   }
+}
 
-  // Send to YouTube chat (only if live/polling)
-  if (notification.send_to_youtube) {
-    try {
-      const { youtubeChatManager } = require('./youtubeLiveChat');
-      if (youtubeChatManager.isPolling(notification.streamer_id)) {
-        const { refreshYoutubeBotToken, sendYoutubeChatMessage } = require('./youtube');
-        const liveChatId = youtubeChatManager.getLiveChatId(notification.streamer_id);
-        if (liveChatId) {
-          refreshYoutubeBotToken().then(token => {
-            if (token) sendYoutubeChatMessage(liveChatId, notification.message, token);
-          }).catch(() => {});
-        }
-      }
-    } catch (e) {}
-  }
+function startRotation(streamerId) {
+  stopRotation(streamerId);
+  const streamer = db.getStreamerById(streamerId);
+  if (!streamer || !streamer.sponsor_rotation_enabled) return;
 
-  // Show overlay
-  if (notification.show_overlay) {
-    bus.emit(`overlay:${notification.streamer_id}`, {
-      type: 'timed',
+  const images = db.getEnabledSponsorImages(streamerId);
+  if (images.length === 0) return;
+
+  const intervalMs = (streamer.sponsor_interval_seconds || 30) * 1000;
+  let currentIndex = 0;
+
+  const handle = setInterval(() => {
+    const imgs = db.getEnabledSponsorImages(streamerId);
+    if (imgs.length === 0) return;
+    currentIndex = currentIndex % imgs.length;
+    const img = imgs[currentIndex];
+
+    // Show on overlay
+    bus.emit(`overlay:${streamerId}`, {
+      type: 'sponsor',
       data: {
-        message: notification.overlay_text || notification.message,
-        name: notification.name,
-        position: notification.overlay_position || 'bot-center',
-        duration: notification.overlay_duration || 8,
-        bgColor: notification.overlay_bg_color || '#1a1a2e',
-        textColor: notification.overlay_text_color || '#ffffff',
+        imageUrl: `/sponsors/${streamerId}/${img.filename}`,
+        name: img.display_name,
       },
     });
-  }
 
-  console.log(`[Timed] Fired "${notification.name}" for streamer ${notification.streamer_id}`);
+    // Send chat message if enabled
+    const currentStreamer = db.getStreamerById(streamerId);
+    if (currentStreamer && currentStreamer.sponsor_send_chat && img.chat_message) {
+      try {
+        const { chatManager } = require('./twitchChat');
+        chatManager.sendRawMessage(currentStreamer.twitch_username, img.chat_message);
+      } catch(e) {
+        console.error('[Sponsor] Failed to send chat message:', e.message);
+      }
+    }
+
+    currentIndex++;
+    console.log(`[Sponsor] Rotated to "${img.display_name}" for streamer ${streamerId}`);
+  }, intervalMs);
+
+  activeRotations.set(streamerId, { handle, currentIndex: 0 });
+  console.log(`[Sponsor] Started rotation for streamer ${streamerId} (${images.length} images, every ${streamer.sponsor_interval_seconds}s)`);
 }
 
 const timedNotificationManager = {
   startAll() {
-    const notifications = db.getEnabledTimedNotifications();
-    for (const n of notifications) {
-      this.startOne(n);
+    const streamers = db.getOverlayEnabledStreamers();
+    let count = 0;
+    for (const s of streamers) {
+      if (s.sponsor_rotation_enabled) {
+        startRotation(s.id);
+        count++;
+      }
     }
-    console.log(`[Timed] Started ${notifications.length} timed notifications`);
-  },
-
-  startOne(notification) {
-    this.stopOne(notification.id);
-    const intervalMs = (notification.interval_minutes || 15) * 60 * 1000;
-    const handle = setInterval(() => fireNotification(notification), intervalMs);
-    activeTimers.set(notification.id, handle);
-  },
-
-  stopOne(notificationId) {
-    const handle = activeTimers.get(notificationId);
-    if (handle) {
-      clearInterval(handle);
-      activeTimers.delete(notificationId);
-    }
+    console.log(`[Sponsor] Started rotations for ${count} streamers`);
   },
 
   restartForStreamer(streamerId) {
-    // Stop all for this streamer
-    const all = db.getTimedNotifications(streamerId);
-    for (const n of all) this.stopOne(n.id);
-    // Start enabled ones
-    const enabled = all.filter(n => n.enabled);
-    for (const n of enabled) this.startOne(n);
+    stopRotation(streamerId);
+    startRotation(streamerId);
   },
 
   stopAll() {
-    for (const [id, handle] of activeTimers) {
-      clearInterval(handle);
+    for (const [, rotation] of activeRotations) {
+      clearInterval(rotation.handle);
     }
-    activeTimers.clear();
+    activeRotations.clear();
   },
 };
 

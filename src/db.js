@@ -2170,6 +2170,36 @@ function deleteOverlayDesign(streamerId, eventType) {
     .run(streamerId, eventType);
 }
 
+// Migration: Create sponsor_images table
+{
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sponsor_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      display_name TEXT,
+      chat_message TEXT,
+      sort_order INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+}
+
+// Migration: Add sponsor rotation columns to streamers
+{
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('sponsor_rotation_enabled')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN sponsor_rotation_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN sponsor_interval_seconds INTEGER DEFAULT 30;
+      ALTER TABLE streamers ADD COLUMN sponsor_send_chat INTEGER DEFAULT 0;
+    `);
+    console.log('[DB] Added sponsor rotation columns to streamers');
+  }
+}
+
 // Migration: Create timed_notifications table
 {
   db.exec(`
@@ -2192,6 +2222,25 @@ function deleteOverlayDesign(streamerId, eventType) {
       FOREIGN KEY (streamer_id) REFERENCES streamers(id)
     )
   `);
+}
+
+function getSponsorImages(streamerId) {
+  return db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? ORDER BY sort_order, id').all(streamerId);
+}
+function getEnabledSponsorImages(streamerId) {
+  return db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? AND enabled = 1 ORDER BY sort_order, id').all(streamerId);
+}
+function addSponsorImage(streamerId, filename, displayName, chatMessage) {
+  return db.prepare('INSERT INTO sponsor_images (streamer_id, filename, display_name, chat_message) VALUES (?, ?, ?, ?)').run(streamerId, filename, displayName, chatMessage || null);
+}
+function updateSponsorImage(id, streamerId, displayName, chatMessage, enabled) {
+  db.prepare('UPDATE sponsor_images SET display_name = ?, chat_message = ?, enabled = ? WHERE id = ? AND streamer_id = ?').run(displayName, chatMessage || null, enabled ? 1 : 0, id, streamerId);
+}
+function deleteSponsorImage(id, streamerId) {
+  return db.prepare('DELETE FROM sponsor_images WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+}
+function updateSponsorSettings(streamerId, enabled, intervalSeconds, sendChat) {
+  db.prepare('UPDATE streamers SET sponsor_rotation_enabled = ?, sponsor_interval_seconds = ?, sponsor_send_chat = ? WHERE id = ?').run(enabled ? 1 : 0, intervalSeconds, sendChat ? 1 : 0, streamerId);
 }
 
 function getTimedNotifications(streamerId) {
@@ -2381,6 +2430,12 @@ module.exports = {
   getAllOverlayDesigns,
   saveOverlayDesign,
   deleteOverlayDesign,
+  getSponsorImages,
+  getEnabledSponsorImages,
+  addSponsorImage,
+  updateSponsorImage,
+  deleteSponsorImage,
+  updateSponsorSettings,
   getTimedNotifications,
   getEnabledTimedNotifications,
   addTimedNotification,

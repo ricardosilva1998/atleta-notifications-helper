@@ -500,3 +500,22 @@ body {
   border-color: rgba(247,144,9,0.3);
   box-shadow: 0 4px 20px rgba(247,144,9,0.15);
 }
+
+/* Sponsor banner */
+.sponsor-banner {
+  position: absolute;
+  border-radius: 8px;
+  overflow: hidden;
+  animation: sponsorFadeIn 0.5s ease-out forwards;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.sponsor-banner.dismissing { animation: sponsorFadeOut 0.4s ease-in forwards; }
+.sponsor-banner img { display: block; max-width: 100%; height: auto; }
+@keyframes sponsorFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes sponsorFadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.95); }
+}

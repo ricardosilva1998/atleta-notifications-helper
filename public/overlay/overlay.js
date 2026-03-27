@@ -187,6 +187,11 @@ evtSource.onmessage = (e) => {
     return;
   }
 
+  if (data.type === 'sponsor') {
+    showSponsorImage(data.data);
+    return;
+  }
+
   // Check if event type is enabled
   const eventType = data.type;
   const typeConfig = overlayConfig[eventType];
@@ -611,6 +616,60 @@ function esc(text) {
   const d = document.createElement('div');
   d.textContent = text || '';
   return d.innerHTML;
+}
+
+// ─── Sponsor image banner ───────────────────────────────────────
+function showSponsorImage(data) {
+  // Remove any existing sponsor banners with fade-out
+  document.querySelectorAll('.sponsor-banner').forEach(el => {
+    el.classList.add('dismissing');
+    setTimeout(() => el.remove(), 400);
+  });
+
+  const design = overlayDesigns['timed']; // Use timed design for position/size
+
+  const banner = document.createElement('div');
+  banner.className = 'sponsor-banner';
+
+  // Apply width from design
+  if (design && design.card_width) {
+    banner.style.width = design.card_width + 'px';
+  } else {
+    banner.style.maxWidth = '420px';
+  }
+
+  const img = document.createElement('img');
+  img.src = data.imageUrl;
+  img.alt = data.name || 'Sponsor';
+  banner.appendChild(img);
+
+  // Position — use custom x/y if dragged, otherwise grid position
+  if (design && design.card_custom_x != null && design.card_custom_y != null) {
+    banner.style.left = (design.card_custom_x * 100) + '%';
+    banner.style.top = (design.card_custom_y * 100) + '%';
+  } else {
+    const pos = design ? (design.card_position || 'bot-center') : 'bot-center';
+    const [vPos, hPos] = pos.split('-');
+    let transform = '';
+    if (vPos === 'top') { banner.style.top = '16px'; banner.style.bottom = ''; }
+    else if (vPos === 'bot') { banner.style.bottom = '16px'; banner.style.top = ''; }
+    else { banner.style.top = '50%'; transform += 'translateY(-50%) '; }
+
+    if (hPos === 'center' || !hPos) {
+      banner.style.left = '50%';
+      banner.style.right = '';
+      transform += 'translateX(-50%)';
+    } else if (hPos === 'left') {
+      banner.style.left = '16px';
+      banner.style.right = '';
+    } else {
+      banner.style.right = '16px';
+      banner.style.left = '';
+    }
+    if (transform) banner.style.transform = transform.trim();
+  }
+
+  container.appendChild(banner);
 }
 
 // ─── Timed notification banner ─────────────────────────────────

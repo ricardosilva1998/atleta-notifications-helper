@@ -23,6 +23,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 // Serve custom sounds from persistent data volume (survives deploys)
 app.use('/overlay/sounds', express.static(path.join(__dirname, '..', 'data', 'sounds')));
+// Serve sponsor images from persistent data volume
+app.use('/sponsors', express.static(path.join(__dirname, '..', 'data', 'sponsors')));
 
 // EJS setup
 app.set('view engine', 'ejs');
