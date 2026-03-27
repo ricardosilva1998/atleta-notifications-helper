@@ -34,6 +34,15 @@ router.get('/events/:token', (req, res) => {
 
   res.write(`data: ${JSON.stringify({ type: 'config', config, designs: designMap, serverVersion: SERVER_INSTANCE_ID })}\n\n`);
 
+  // Replay current sponsor image so new clients see it immediately
+  try {
+    const { timedNotificationManager } = require('../services/timedNotifications');
+    const currentSponsor = timedNotificationManager.getCurrentSponsor(streamer.id);
+    if (currentSponsor) {
+      res.write(`data: ${JSON.stringify(currentSponsor)}\n\n`);
+    }
+  } catch (e) { /* timedNotifications not yet initialized */ }
+
   // Heartbeat every 30s to keep connection alive in OBS browser source
   const heartbeat = setInterval(() => {
     try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }

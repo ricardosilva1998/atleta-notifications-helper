@@ -3,6 +3,7 @@ const bus = require('./overlayBus');
 
 const activeRotations = new Map(); // streamerId -> { handle, currentIndex }
 const activeChatRotations = new Map(); // streamerId -> { handle, currentIndex }
+const currentSponsorEvent = new Map(); // streamerId -> last emitted sponsor event
 
 // ── Image Rotation (per-image duration via setTimeout chaining) ──
 
@@ -27,7 +28,7 @@ function scheduleNextImage(streamerId) {
   const idx = state.currentIndex % imgs.length;
   const img = imgs[idx];
 
-  bus.emit(`overlay:${streamerId}`, {
+  const sponsorEvent = {
     type: 'sponsor',
     data: {
       imageUrl: `/sponsors/${streamerId}/${img.filename}`,
@@ -35,7 +36,9 @@ function scheduleNextImage(streamerId) {
       displayDuration: img.display_duration || 30,
       imageScale: img.image_scale != null ? img.image_scale : 1.0,
     },
-  });
+  };
+  currentSponsorEvent.set(streamerId, sponsorEvent);
+  bus.emit(`overlay:${streamerId}`, sponsorEvent);
 
   const durationMs = (img.display_duration || 30) * 1000;
   state.handle = setTimeout(() => {
@@ -152,6 +155,10 @@ const timedNotificationManager = {
       clearInterval(rotation.handle);
     }
     activeChatRotations.clear();
+  },
+
+  getCurrentSponsor(streamerId) {
+    return currentSponsorEvent.get(streamerId) || null;
   },
 };
 
