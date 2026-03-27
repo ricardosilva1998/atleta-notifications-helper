@@ -173,15 +173,6 @@
       <textarea name="message" class="tn-input" rows="2" placeholder="Message to send in chat..." required></textarea>
     </div>
 
-    <!-- Overlay Text -->
-    <div style="margin-bottom: 20px;">
-      <label class="tn-label">
-        Overlay Text
-        <span style="color: var(--text-muted); font-weight: 400; font-size: 12px; margin-left: 4px;">optional — leave blank to use chat message</span>
-      </label>
-      <textarea name="overlay_text" class="tn-input" rows="2" placeholder="Text shown on the stream overlay (optional)…"></textarea>
-    </div>
-
     <!-- Platform pills -->
     <div style="margin-bottom: 20px;">
       <div class="section-label">Send To</div>
@@ -256,7 +247,6 @@
           <form method="POST" action="/dashboard/timed-notifications/<%= n.id %>/update" style="display: contents;">
             <input type="hidden" name="name" value="<%= n.name %>">
             <input type="hidden" name="message" value="<%= n.message %>">
-            <input type="hidden" name="overlay_text" value="<%= n.overlay_text || '' %>">
             <input type="hidden" name="interval_minutes" value="<%= n.interval_minutes %>">
             <input type="hidden" name="send_to_twitch" value="<%= n.send_to_twitch ? '1' : '' %>">
             <input type="hidden" name="send_to_youtube" value="<%= n.send_to_youtube ? '1' : '' %>">
@@ -355,15 +345,6 @@
             <div style="margin-bottom: 16px;">
               <label class="tn-label">Chat Message</label>
               <textarea name="message" class="tn-input" rows="2" required><%= n.message %></textarea>
-            </div>
-
-            <!-- Overlay Text -->
-            <div style="margin-bottom: 20px;">
-              <label class="tn-label">
-                Overlay Text
-                <span style="color: var(--text-muted); font-weight: 400; font-size: 12px; margin-left: 4px;">optional</span>
-              </label>
-              <textarea name="overlay_text" class="tn-input" rows="2"><%= n.overlay_text || '' %></textarea>
             </div>
 
             <!-- Platform pills -->
