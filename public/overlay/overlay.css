@@ -507,23 +507,23 @@ body {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.sponsor-banner.anim-fade { animation: sponsorFadeIn 0.5s ease-out forwards; }
-.sponsor-banner.anim-slide-left { animation: sponsorSlideLeft 0.5s ease-out forwards; }
-.sponsor-banner.anim-slide-right { animation: sponsorSlideRight 0.5s ease-out forwards; }
-.sponsor-banner.anim-slide-up { animation: sponsorSlideUp 0.5s ease-out forwards; }
-.sponsor-banner.anim-drop-down { animation: sponsorDropDown 0.5s ease-out forwards; }
-.sponsor-banner.anim-zoom { animation: sponsorZoomIn 0.4s ease-out forwards; }
-.sponsor-banner.anim-none { opacity: 1; }
-.sponsor-banner.dismissing { animation: sponsorFadeOut 0.4s ease-in forwards; }
+.sponsor-banner.dismissing { opacity: 0; transition: opacity 0.4s ease-in; }
 .sponsor-banner img { display: block; max-width: 100%; height: auto; }
+/* Animations apply to the img INSIDE the banner, not the banner itself */
+.sponsor-banner.anim-fade img { animation: sponsorFadeIn 0.5s ease-out forwards; }
+.sponsor-banner.anim-slide-left img { animation: sponsorSlideLeft 0.5s ease-out forwards; }
+.sponsor-banner.anim-slide-right img { animation: sponsorSlideRight 0.5s ease-out forwards; }
+.sponsor-banner.anim-slide-up img { animation: sponsorSlideUp 0.5s ease-out forwards; }
+.sponsor-banner.anim-drop-down img { animation: sponsorDropDown 0.5s ease-out forwards; }
+.sponsor-banner.anim-zoom img { animation: sponsorZoomIn 0.4s ease-out forwards; }
+.sponsor-banner.anim-none img { opacity: 1; }
 @keyframes sponsorFadeIn {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
-}
-@keyframes sponsorFadeOut {
-  from { opacity: 1; transform: scale(1); }
-  to   { opacity: 0; transform: scale(0.95); }
 }
 @keyframes sponsorSlideLeft {
   from { opacity: 0; transform: translateX(-100%); }

@@ -1243,8 +1243,8 @@ function updateOverlayGuide() {
   const container = document.getElementById('preview-card-container');
   const guide = document.getElementById('overlay-guide');
   const card = document.getElementById('preview-card');
-  const sponsorImg = container.querySelector('.preview-sponsor-img');
-  const target = (sponsorImg && sponsorImg.style.display !== 'none') ? sponsorImg : card;
+  const sponsorWrap = container.querySelector('.preview-sponsor-wrap');
+  const target = (sponsorWrap && sponsorWrap.style.display !== 'none') ? sponsorWrap : card;
 
   // Wait a frame so layout is computed
   requestAnimationFrame(() => {
@@ -1797,7 +1797,7 @@ function updateSponsorPreview() {
   const enabled = sponsorImages.filter(s => s.enabled);
   if (!sponsorRotationEnabled || enabled.length === 0) {
     card.style.display = '';
-    container.querySelector('.preview-sponsor-img')?.remove();
+    container.querySelector('.preview-sponsor-wrap')?.remove();
     return;
   }
   card.style.display = 'none';
@@ -1817,29 +1817,37 @@ function showSponsorInPreview(sponsor) {
   const anim = d.sponsor_animation || 'fade';
 
   // Remove old image with exit animation
-  const oldImg = container.querySelector('.preview-sponsor-img');
-  if (oldImg) {
-    oldImg.style.animation = 'sponsorPreviewOut 0.3s ease-in forwards';
-    setTimeout(() => oldImg.remove(), 300);
+  const oldWrap = container.querySelector('.preview-sponsor-wrap');
+  if (oldWrap) {
+    oldWrap.style.opacity = '0';
+    oldWrap.style.transition = 'opacity 0.3s ease-in';
+    setTimeout(() => oldWrap.remove(), 300);
   }
 
-  // Create new image with entrance animation
+  // Create wrapper div (acts like the banner — full width, overflow hidden)
+  const wrap = document.createElement('div');
+  wrap.className = 'preview-sponsor-wrap';
+  const containerWidth = d.card_width || 500;
+  wrap.style.width = containerWidth + 'px';
+  wrap.style.maxHeight = '200px';
+  wrap.style.borderRadius = (d.border_radius || 12) + 'px';
+  wrap.style.overflow = 'hidden';
+  wrap.style.display = 'flex';
+  wrap.style.alignItems = 'center';
+  wrap.style.justifyContent = 'center';
+
+  // Create image inside wrapper
   const img = document.createElement('img');
   img.className = 'preview-sponsor-img';
   img.src = `/sponsors/${STREAMER_ID}/${sponsor.filename}`;
   img.alt = sponsor.display_name || 'Sponsor';
-  const containerWidth = d.card_width || 500;
-  img.style.width = containerWidth + 'px';
-  img.style.maxHeight = '200px';
-  img.style.borderRadius = (d.border_radius || 12) + 'px';
 
-  // Per-image scale
+  // Per-image scale — scales the image within the fixed-size container
   const scale = sponsor.image_scale != null ? sponsor.image_scale : 1.0;
-  if (scale < 1) {
-    img.style.width = (containerWidth * scale) + 'px';
-  }
+  img.style.maxWidth = (scale * 100) + '%';
+  img.style.height = 'auto';
 
-  // Apply entrance animation
+  // Apply entrance animation to the img (not the wrapper, so position isn't affected)
   const animMap = {
     'fade': 'sponsorPreviewFadeIn 0.4s ease-out',
     'slide-left': 'sponsorPreviewSlideLeft 0.4s ease-out',
@@ -1851,7 +1859,8 @@ function showSponsorInPreview(sponsor) {
   };
   img.style.animation = animMap[anim] || animMap['fade'];
 
-  container.appendChild(img);
+  wrap.appendChild(img);
+  container.appendChild(wrap);
   setTimeout(() => updateOverlayGuide(), 100);
 }
 
@@ -1940,9 +1949,9 @@ document.addEventListener('mousemove', e => {
 
     // Update visible element width
     const card = document.getElementById('preview-card');
-    const sponsorImg = dragTarget.querySelector('.preview-sponsor-img');
+    const sponsorWrap = dragTarget.querySelector('.preview-sponsor-wrap');
     card.style.width = newWidth + 'px';
-    if (sponsorImg) sponsorImg.style.width = newWidth + 'px';
+    if (sponsorWrap) sponsorWrap.style.width = newWidth + 'px';
 
     updateOverlayGuide();
     return;
