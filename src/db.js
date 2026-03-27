@@ -2152,6 +2152,65 @@ function deleteOverlayDesign(streamerId, eventType) {
     .run(streamerId, eventType);
 }
 
+// Migration: Create timed_notifications table
+{
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS timed_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      overlay_text TEXT,
+      interval_minutes INTEGER DEFAULT 15,
+      send_to_twitch INTEGER DEFAULT 1,
+      send_to_youtube INTEGER DEFAULT 0,
+      show_overlay INTEGER DEFAULT 0,
+      overlay_position TEXT DEFAULT 'bot-center',
+      overlay_duration INTEGER DEFAULT 8,
+      overlay_bg_color TEXT DEFAULT '#1a1a2e',
+      overlay_text_color TEXT DEFAULT '#ffffff',
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+}
+
+function getTimedNotifications(streamerId) {
+  return db.prepare('SELECT * FROM timed_notifications WHERE streamer_id = ? ORDER BY created_at').all(streamerId);
+}
+
+function getEnabledTimedNotifications() {
+  return db.prepare('SELECT * FROM timed_notifications WHERE enabled = 1').all();
+}
+
+function addTimedNotification(streamerId, data) {
+  return db.prepare(`INSERT INTO timed_notifications (streamer_id, name, message, overlay_text, interval_minutes, send_to_twitch, send_to_youtube, show_overlay, overlay_position, overlay_duration, overlay_bg_color, overlay_text_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    streamerId, data.name, data.message, data.overlay_text || null, data.interval_minutes,
+    data.send_to_twitch ? 1 : 0, data.send_to_youtube ? 1 : 0, data.show_overlay ? 1 : 0,
+    data.overlay_position || 'bot-center', data.overlay_duration || 8,
+    data.overlay_bg_color || '#1a1a2e', data.overlay_text_color || '#ffffff'
+  );
+}
+
+function updateTimedNotification(id, streamerId, data) {
+  db.prepare(`UPDATE timed_notifications SET name=?, message=?, overlay_text=?, interval_minutes=?, send_to_twitch=?, send_to_youtube=?, show_overlay=?, overlay_position=?, overlay_duration=?, overlay_bg_color=?, overlay_text_color=?, enabled=? WHERE id=? AND streamer_id=?`).run(
+    data.name, data.message, data.overlay_text || null, data.interval_minutes,
+    data.send_to_twitch ? 1 : 0, data.send_to_youtube ? 1 : 0, data.show_overlay ? 1 : 0,
+    data.overlay_position || 'bot-center', data.overlay_duration || 8,
+    data.overlay_bg_color || '#1a1a2e', data.overlay_text_color || '#ffffff',
+    data.enabled ? 1 : 0, id, streamerId
+  );
+}
+
+function deleteTimedNotification(id, streamerId) {
+  db.prepare('DELETE FROM timed_notifications WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+}
+
+function toggleTimedNotification(id, streamerId, enabled) {
+  db.prepare('UPDATE timed_notifications SET enabled = ? WHERE id = ? AND streamer_id = ?').run(enabled ? 1 : 0, id, streamerId);
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -2304,4 +2363,10 @@ module.exports = {
   getAllOverlayDesigns,
   saveOverlayDesign,
   deleteOverlayDesign,
+  getTimedNotifications,
+  getEnabledTimedNotifications,
+  addTimedNotification,
+  updateTimedNotification,
+  deleteTimedNotification,
+  toggleTimedNotification,
 };
