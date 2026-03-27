@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link id="google-fonts-base" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <link id="google-fonts-custom" href="" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit&family=Inter&family=Poppins&family=Roboto+Mono&family=Press+Start+2P&family=Permanent+Marker&family=Bangers&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-base: #0c0d14;
@@ -104,26 +105,19 @@
 
     /* Event tabs */
     .event-tabs {
-      padding: 12px 12px 0;
       flex-shrink: 0;
     }
-    .event-tabs-label {
-      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
-      color: var(--text-muted); font-weight: 700; margin-bottom: 8px;
-      font-family: var(--font-display);
-    }
-    .event-tabs-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-      margin-bottom: 12px;
-    }
+    .event-tabs-section { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.2); }
+    .event-tabs-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #666; margin-bottom: 6px; margin-top: 10px; font-family: var(--font-display); }
+    .event-tabs-label:first-child { margin-top: 0; }
+    .event-tabs-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 4px; }
     .event-tab {
       padding: 6px 4px; font-size: 11px; font-weight: 600;
       font-family: var(--font-display); cursor: pointer;
       background: var(--bg-elevated); border: 1px solid var(--border);
       border-radius: var(--radius-sm); color: var(--text-secondary);
       text-align: center; transition: all 0.15s; user-select: none;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
     }
     .event-tab:hover { border-color: rgba(145,70,255,0.3); color: var(--text-primary); }
     .event-tab.active {
@@ -312,12 +306,8 @@
       background: linear-gradient(160deg, #0a0e1a 0%, #0d1220 50%, #080b15 100%);
     }
     .fake-hud-tl {
-      position: absolute; top: 12px; left: 12px;
-      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 6px; padding: 8px 12px;
+      display: none;
     }
-    .fake-hud-tl .hud-label { font-size: 8px; color: rgba(255,255,255,0.4); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 1px; }
-    .fake-hud-tl .hud-val { font-size: 14px; color: #fff; font-family: 'Roboto Mono', monospace; font-weight: 700; }
     .fake-chat {
       position: absolute; right: 0; bottom: 0;
       width: 22%; height: 40%; background: rgba(0,0,0,0.45); padding: 8px;
@@ -341,7 +331,7 @@
       font-family: var(--font-display);
     }
     .fake-live-badge {
-      position: absolute; top: 10px; right: 24%;
+      position: absolute; top: 10px; right: 10px;
       background: #e00; border-radius: 3px;
       font-size: 8px; font-weight: 800; color: #fff;
       padding: 2px 5px; font-family: var(--font-display); letter-spacing: 1px;
@@ -481,6 +471,29 @@
       background: rgba(240,68,56,0.1); border-color: rgba(240,68,56,0.3); color: var(--danger);
     }
     .btn-danger:hover { background: rgba(240,68,56,0.2); border-color: var(--danger); }
+
+    /* Font picker */
+    .font-picker { position: relative; min-width: 150px; width: 100%; }
+    .font-picker-selected {
+      padding: 6px 10px; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+      color: #ccc; font-size: 12px; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .font-picker-selected:hover { border-color: var(--border-focus); }
+    .font-picker-arrow { font-size: 10px; color: #666; }
+    .font-picker-dropdown {
+      display: none; position: absolute; top: 100%; left: 0; right: 0;
+      background: #1a1a1e; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; margin-top: 4px; z-index: 100;
+      max-height: 200px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .font-picker-dropdown.open { display: block; }
+    .font-option {
+      padding: 8px 12px; cursor: pointer; font-size: 14px; color: #ccc;
+      transition: background 0.15s;
+    }
+    .font-option:hover { background: rgba(145,71,255,0.1); }
   </style>
 </head>
 <body>
@@ -510,16 +523,22 @@
   <!-- LEFT PANEL -->
   <div class="left-panel">
     <div class="event-tabs">
-      <div class="event-tabs-label">Event Type</div>
-      <div class="event-tabs-grid" id="event-tabs">
-        <div class="event-tab active" data-type="follow"><span style="font-size:16px;">🏁</span><span style="font-size:10px;">Follow</span></div>
-        <div class="event-tab" data-type="subscription"><span style="font-size:16px;">🏆</span><span style="font-size:10px;">Sub</span></div>
-        <div class="event-tab" data-type="bits"><span style="font-size:16px;">⛽</span><span style="font-size:10px;">Bits</span></div>
-        <div class="event-tab" data-type="donation"><span style="font-size:16px;">💰</span><span style="font-size:10px;">Donation</span></div>
-        <div class="event-tab" data-type="raid"><span style="font-size:16px;">🤖</span><span style="font-size:10px;">Raid</span></div>
-        <div class="event-tab" data-type="yt_superchat"><span style="font-size:16px;">💬</span><span style="font-size:10px;">YT Super</span></div>
-        <div class="event-tab" data-type="yt_member"><span style="font-size:16px;">⭐</span><span style="font-size:10px;">YT Member</span></div>
-        <div class="event-tab" data-type="yt_giftmember"><span style="font-size:16px;">🎁</span><span style="font-size:10px;">YT Gift</span></div>
+      <div class="event-tabs-section">
+        <div class="event-tabs-label">Twitch</div>
+        <div class="event-tabs-row">
+          <div class="event-tab active" data-type="follow"><span style="font-size:16px;">🏁</span><span style="font-size:10px;">Follow</span></div>
+          <div class="event-tab" data-type="subscription"><span style="font-size:16px;">🏆</span><span style="font-size:10px;">Sub</span></div>
+          <div class="event-tab" data-type="bits"><span style="font-size:16px;">⛽</span><span style="font-size:10px;">Bits</span></div>
+          <div class="event-tab" data-type="donation"><span style="font-size:16px;">💰</span><span style="font-size:10px;">Donation</span></div>
+          <div class="event-tab" data-type="raid"><span style="font-size:16px;">🤖</span><span style="font-size:10px;">Raid</span></div>
+        </div>
+        <div class="event-tabs-label">YouTube</div>
+        <div class="event-tabs-row">
+          <div class="event-tab" data-type="yt_superchat"><span style="font-size:16px;">💬</span><span style="font-size:10px;">Super Chat</span></div>
+          <div class="event-tab" data-type="yt_member"><span style="font-size:16px;">⭐</span><span style="font-size:10px;">Member</span></div>
+          <div class="event-tab" data-type="yt_giftmember"><span style="font-size:16px;">🎁</span><span style="font-size:10px;">Gift</span></div>
+        </div>
+        <div class="event-tabs-label" style="color: #555;">Kick (coming soon)</div>
       </div>
     </div>
 
@@ -532,21 +551,30 @@
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
+          <div style="display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;">
+            <button type="button" class="theme-preset" data-bg="#1a1a3e" data-accent="#8888cc" data-border="#8888cc" data-text="#ffffff" title="Default Blue" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a3e,#8888cc);cursor:pointer;"></button>
+            <button type="button" class="theme-preset" data-bg="#061a10" data-accent="#00ff88" data-border="#00ff88" data-text="#ffffff" title="Green" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#061a10,#00ff88);cursor:pointer;"></button>
+            <button type="button" class="theme-preset" data-bg="#1c1200" data-accent="#f7c948" data-border="#f7c948" data-text="#ffffff" title="Gold" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c1200,#f7c948);cursor:pointer;"></button>
+            <button type="button" class="theme-preset" data-bg="#110022" data-accent="#bf00ff" data-border="#bf00ff" data-text="#ffffff" title="Purple" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#110022,#bf00ff);cursor:pointer;"></button>
+            <button type="button" class="theme-preset" data-bg="#1c0505" data-accent="#ff4444" data-border="#ff4444" data-text="#ffffff" title="Red" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c0505,#ff4444);cursor:pointer;"></button>
+            <button type="button" class="theme-preset" data-bg="#0a1520" data-accent="#00b4d8" data-border="#00b4d8" data-text="#ffffff" title="Cyan" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0a1520,#00b4d8);cursor:pointer;"></button>
+            <button type="button" class="theme-preset" data-bg="#1a0a00" data-accent="#ff6b35" data-border="#ff6b35" data-text="#ffffff" title="Orange" style="width:28px;height:28px;border-radius:6px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0a00,#ff6b35);cursor:pointer;"></button>
+          </div>
           <div class="color-row">
             <div class="color-item">
-              <input type="color" id="ctrl-bg-color" value="#1a1a3e">
+              <input type="color" id="ctrl-bg-color" value="#1a1a3e" style="width:36px;height:36px;border-radius:8px;">
               <span class="color-item-label">Background</span>
             </div>
             <div class="color-item">
-              <input type="color" id="ctrl-accent-color" value="#8888cc">
+              <input type="color" id="ctrl-accent-color" value="#8888cc" style="width:36px;height:36px;border-radius:8px;">
               <span class="color-item-label">Accent</span>
             </div>
             <div class="color-item">
-              <input type="color" id="ctrl-border-color" value="#8888cc">
+              <input type="color" id="ctrl-border-color" value="#8888cc" style="width:36px;height:36px;border-radius:8px;">
               <span class="color-item-label">Border</span>
             </div>
             <div class="color-item">
-              <input type="color" id="ctrl-text-color" value="#ffffff">
+              <input type="color" id="ctrl-text-color" value="#ffffff" style="width:36px;height:36px;border-radius:8px;">
               <span class="color-item-label">Text</span>
             </div>
           </div>
@@ -570,14 +598,22 @@
           </div>
           <div class="ctrl-row" style="display:block;margin-bottom:10px;">
             <div class="ctrl-label" style="margin-bottom:4px;">Font Family</div>
-            <select id="ctrl-font-family" style="width:100%;">
-              <option value="System Default">System Default</option>
-              <option value="Outfit">Outfit</option>
-              <option value="Inter">Inter</option>
-              <option value="Poppins">Poppins</option>
-              <option value="Roboto Mono">Roboto Mono</option>
-              <option value="Press Start 2P">Press Start 2P</option>
-            </select>
+            <div class="font-picker" id="font-picker">
+              <div class="font-picker-selected" id="font-picker-selected" onclick="toggleFontPicker()">
+                <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif;">System Default</span>
+                <span class="font-picker-arrow">▾</span>
+              </div>
+              <div class="font-picker-dropdown" id="font-picker-dropdown">
+                <div class="font-option" data-font="System Default" style="font-family: -apple-system, BlinkMacSystemFont, sans-serif;">System Default</div>
+                <div class="font-option" data-font="Outfit" style="font-family: 'Outfit', sans-serif;">Outfit</div>
+                <div class="font-option" data-font="Inter" style="font-family: 'Inter', sans-serif;">Inter</div>
+                <div class="font-option" data-font="Poppins" style="font-family: 'Poppins', sans-serif;">Poppins</div>
+                <div class="font-option" data-font="Roboto Mono" style="font-family: 'Roboto Mono', monospace;">Roboto Mono</div>
+                <div class="font-option" data-font="Press Start 2P" style="font-family: 'Press Start 2P', cursive;">Press Start 2P</div>
+                <div class="font-option" data-font="Permanent Marker" style="font-family: 'Permanent Marker', cursive;">Permanent Marker</div>
+                <div class="font-option" data-font="Bangers" style="font-family: 'Bangers', cursive;">Bangers</div>
+              </div>
+            </div>
           </div>
           <div class="range-row">
             <div class="range-header">
@@ -622,9 +658,10 @@
               <option value="default">Default (per event)</option>
               <option value="none">None</option>
               <option value="confetti">Confetti</option>
-              <option value="goldRain">Gold Rain</option>
-              <option value="moneyRain">Money Rain</option>
-              <option value="tireMarks">Tire Marks</option>
+              <option value="gold">Gold Rain</option>
+              <option value="money">Money Rain</option>
+              <option value="robots">Robots</option>
+              <option value="tiremarks">Tire Marks</option>
             </select>
           </div>
           <div class="range-row">
@@ -694,12 +731,6 @@
       <div class="preview-screen" id="preview-screen">
         <!-- Fake game background -->
         <div class="fake-game-bg"></div>
-
-        <!-- HUD top-left -->
-        <div class="fake-hud-tl">
-          <div class="hud-label">Speed</div>
-          <div class="hud-val">247 km/h</div>
-        </div>
 
         <!-- Live badge -->
         <div class="fake-live-badge">● LIVE</div>
@@ -820,7 +851,7 @@ function getControlValues() {
     accent_color: document.getElementById('ctrl-accent-color').value,
     border_color: document.getElementById('ctrl-border-color').value,
     text_color: document.getElementById('ctrl-text-color').value,
-    font_family: document.getElementById('ctrl-font-family').value,
+    font_family: document.getElementById('font-picker-selected').querySelector('span').textContent,
     username_size: parseInt(document.getElementById('ctrl-username-size').value),
     event_label: document.getElementById('ctrl-event-label').value,
     detail_text: document.getElementById('ctrl-detail-text').value,
@@ -839,7 +870,14 @@ function setControlValues(d) {
   document.getElementById('ctrl-accent-color').value = d.accent_color;
   document.getElementById('ctrl-border-color').value = d.border_color;
   document.getElementById('ctrl-text-color').value = d.text_color;
-  document.getElementById('ctrl-font-family').value = d.font_family;
+  const fontSpan = document.getElementById('font-picker-selected').querySelector('span');
+  fontSpan.textContent = d.font_family;
+  if (d.font_family !== 'System Default') {
+    fontSpan.style.fontFamily = d.font_family;
+    loadGoogleFont(d.font_family);
+  } else {
+    fontSpan.style.fontFamily = '-apple-system, BlinkMacSystemFont, sans-serif';
+  }
   document.getElementById('ctrl-username-size').value = d.username_size;
   document.getElementById('val-username-size').textContent = d.username_size + 'px';
   document.getElementById('ctrl-event-label').value = d.event_label || '';
@@ -946,7 +984,17 @@ function renderScreenEffect(effect) {
   // Remove old effects
   screen.querySelectorAll('.preview-fx').forEach(e => e.remove());
 
-  if (!effect || effect === 'default' || effect === 'none') return;
+  // Resolve 'default' to the natural effect for the current event type
+  if (effect === 'default') {
+    const defaultEffects = {
+      follow: 'tiremarks', subscription: 'confetti', bits: 'gold',
+      donation: 'money', raid: 'robots',
+      yt_superchat: 'gold', yt_member: 'confetti', yt_giftmember: 'money'
+    };
+    effect = defaultEffects[currentType] || 'none';
+  }
+
+  if (!effect || effect === 'none') return;
 
   const fxContainer = document.createElement('div');
   fxContainer.className = 'preview-fx';
@@ -1128,7 +1176,7 @@ document.getElementById('position-grid').addEventListener('click', e => {
 });
 
 // ─── Event tabs ──────────────────────────────────────────────────────────────
-document.getElementById('event-tabs').addEventListener('click', e => {
+document.querySelector('.event-tabs-section').addEventListener('click', e => {
   const tab = e.target.closest('.event-tab');
   if (!tab) return;
   switchTab(tab.dataset.type);
@@ -1154,7 +1202,7 @@ document.getElementById('ctrl-border-radius').addEventListener('input', function
 
 // ─── All other controls: attach change listeners ──────────────────────────────
 ['ctrl-bg-color','ctrl-accent-color','ctrl-border-color','ctrl-text-color',
- 'ctrl-font-family','ctrl-event-label','ctrl-detail-text',
+ 'ctrl-event-label','ctrl-detail-text',
  'ctrl-entrance-animation','ctrl-car-animation','ctrl-screen-effect'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
@@ -1215,6 +1263,38 @@ async function resetCurrentDesign() {
   status.classList.add('visible');
   setTimeout(() => status.classList.remove('visible'), 2000);
 }
+
+// ─── Theme presets ────────────────────────────────────────────────────────────
+document.querySelectorAll('.theme-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('ctrl-bg-color').value = btn.dataset.bg;
+    document.getElementById('ctrl-accent-color').value = btn.dataset.accent;
+    document.getElementById('ctrl-border-color').value = btn.dataset.border;
+    document.getElementById('ctrl-text-color').value = btn.dataset.text;
+    updatePreview();
+  });
+});
+
+// ─── Font picker ──────────────────────────────────────────────────────────────
+function toggleFontPicker() {
+  document.getElementById('font-picker-dropdown').classList.toggle('open');
+}
+document.querySelectorAll('.font-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    const font = opt.dataset.font;
+    const selectedSpan = document.getElementById('font-picker-selected').querySelector('span');
+    selectedSpan.textContent = font;
+    selectedSpan.style.fontFamily = opt.style.fontFamily;
+    document.getElementById('font-picker-dropdown').classList.remove('open');
+    if (font !== 'System Default') loadGoogleFont(font);
+    updatePreview();
+  });
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.font-picker')) {
+    document.getElementById('font-picker-dropdown').classList.remove('open');
+  }
+});
 
 // ─── Initial render ───────────────────────────────────────────────────────────
 setControlValues(workingDesigns['follow']);
