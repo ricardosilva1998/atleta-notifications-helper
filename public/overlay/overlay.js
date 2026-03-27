@@ -642,8 +642,14 @@ function showSponsorImage(data) {
   const img = document.createElement('img');
   img.src = data.imageUrl;
   img.alt = data.name || 'Sponsor';
+  img.style.objectFit = 'contain';
+  img.style.width = '100%';
+  img.style.height = '100%';
   const imgScale = data.imageScale != null ? data.imageScale : 1.0;
-  img.style.maxWidth = (imgScale * 100) + '%';
+  if (imgScale < 1) {
+    img.style.width = (imgScale * 100) + '%';
+    img.style.height = (imgScale * 100) + '%';
+  }
   banner.appendChild(img);
 
   // Position — use custom x/y if dragged, otherwise grid position

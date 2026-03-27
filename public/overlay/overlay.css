@@ -510,9 +510,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  max-height: 40vh;
 }
 .sponsor-banner.dismissing { opacity: 0; transition: opacity 0.4s ease-in; }
-.sponsor-banner img { display: block; max-width: 100%; height: auto; }
+.sponsor-banner img { display: block; object-fit: contain; }
 /* Animations apply to the img INSIDE the banner, not the banner itself */
 .sponsor-banner.anim-fade img { animation: sponsorFadeIn 0.5s ease-out forwards; }
 .sponsor-banner.anim-slide-left img { animation: sponsorSlideLeft 0.5s ease-out forwards; }

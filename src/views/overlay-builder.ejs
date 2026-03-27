@@ -1824,28 +1824,34 @@ function showSponsorInPreview(sponsor) {
     setTimeout(() => oldWrap.remove(), 300);
   }
 
-  // Create wrapper div (acts like the banner — full width, overflow hidden)
+  // Create wrapper div (acts like the banner — fixed size, clips content)
   const wrap = document.createElement('div');
   wrap.className = 'preview-sponsor-wrap';
   const containerWidth = d.card_width || 500;
   wrap.style.width = containerWidth + 'px';
-  wrap.style.maxHeight = '200px';
+  wrap.style.height = '180px';
   wrap.style.borderRadius = (d.border_radius || 12) + 'px';
   wrap.style.overflow = 'hidden';
   wrap.style.display = 'flex';
   wrap.style.alignItems = 'center';
   wrap.style.justifyContent = 'center';
+  wrap.style.background = 'rgba(0,0,0,0.2)';
 
   // Create image inside wrapper
   const img = document.createElement('img');
   img.className = 'preview-sponsor-img';
   img.src = `/sponsors/${STREAMER_ID}/${sponsor.filename}`;
   img.alt = sponsor.display_name || 'Sponsor';
+  img.style.objectFit = 'contain';
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '100%';
 
   // Per-image scale — scales the image within the fixed-size container
   const scale = sponsor.image_scale != null ? sponsor.image_scale : 1.0;
-  img.style.maxWidth = (scale * 100) + '%';
-  img.style.height = 'auto';
+  if (scale < 1) {
+    img.style.maxWidth = (scale * 100) + '%';
+    img.style.maxHeight = (scale * 100) + '%';
+  }
 
   // Apply entrance animation to the img (not the wrapper, so position isn't affected)
   const animMap = {
