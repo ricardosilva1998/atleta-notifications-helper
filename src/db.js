@@ -2179,6 +2179,8 @@ function saveOverlayDesign(streamerId, eventType, design) {
     detail_color: design.detail_color || null,
     text_align: design.text_align || 'center',
     card_side_icon: design.card_side_icon || null,
+    effect_amount: design.effect_amount != null ? design.effect_amount : 1.0,
+    effect_size: design.effect_size != null ? design.effect_size : 1.0,
   };
   db.prepare(`
     INSERT OR REPLACE INTO overlay_designs
@@ -2189,8 +2191,8 @@ function saveOverlayDesign(streamerId, eventType, design) {
        label_font_family, label_font_size, label_font_weight, label_color,
        username_font_family, username_font_weight, username_color,
        detail_font_family, detail_font_size, detail_font_weight, detail_color,
-       text_align, card_side_icon)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       text_align, card_side_icon, effect_amount, effect_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     streamerId, eventType,
     row.bg_color, row.accent_color, row.border_color, row.text_color,
@@ -2203,6 +2205,7 @@ function saveOverlayDesign(streamerId, eventType, design) {
     row.username_font_family, row.username_font_weight, row.username_color,
     row.detail_font_family, row.detail_font_size, row.detail_font_weight, row.detail_color,
     row.text_align, row.card_side_icon,
+    row.effect_amount, row.effect_size,
   );
 }
 
@@ -2257,6 +2260,18 @@ function deleteOverlayDesign(streamerId, eventType) {
   if (!cols.includes('card_side_icon')) {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN card_side_icon TEXT`);
     console.log('[DB] Added card_side_icon to overlay_designs');
+  }
+}
+
+// Migration: Add effect_amount and effect_size to overlay_designs
+{
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  if (!cols.includes('effect_amount')) {
+    db.exec(`
+      ALTER TABLE overlay_designs ADD COLUMN effect_amount REAL DEFAULT 1.0;
+      ALTER TABLE overlay_designs ADD COLUMN effect_size REAL DEFAULT 1.0;
+    `);
+    console.log('[DB] Added effect_amount and effect_size to overlay_designs');
   }
 }
 

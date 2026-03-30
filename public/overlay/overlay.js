@@ -530,112 +530,132 @@ function buildBannerContent(event) {
 
 // ─── Full-screen effects ───────────────────────────────────────
 function spawnEffects(type) {
-  // Remove any lingering effects from previous notification
   document.querySelectorAll('.screen-effect').forEach(e => e.remove());
 
-  switch (type) {
-    case 'follow':                         spawnTireMarks();           break;
-    case 'subscription': case 'yt_member': spawnConfettiAndFlashes();  break;
-    case 'bits':         case 'yt_superchat': spawnGoldRain();         break;
-    case 'donation':     case 'yt_giftmember': spawnMoneyRain();       break;
-    case 'raid':                           spawnRobots();              break;
+  const design = overlayDesigns[type] || {};
+  const speed = design.animation_speed || 1.0;
+  const amount = design.effect_amount || 1.0;
+  const size = design.effect_size || 1.0;
+
+  // Use custom screen_effect if set, otherwise default per event type
+  let effect = design.screen_effect || 'default';
+  if (effect === 'default') {
+    const defaults = {
+      follow: 'tiremarks', subscription: 'confetti', yt_member: 'confetti',
+      bits: 'gold', yt_superchat: 'gold',
+      donation: 'money', yt_giftmember: 'money',
+      raid: 'robots',
+    };
+    effect = defaults[type] || 'none';
+  }
+  if (effect === 'none') return;
+
+  switch (effect) {
+    case 'tiremarks':  spawnTireMarks(speed, amount, size);           break;
+    case 'confetti':   spawnConfettiAndFlashes(speed, amount, size);  break;
+    case 'gold':       spawnGoldRain(speed, amount, size);            break;
+    case 'money':      spawnMoneyRain(speed, amount, size);           break;
+    case 'robots':     spawnRobots(speed, amount, size);              break;
   }
 }
 
-function spawnTireMarks() {
-  // Two tire-mark streaks across the middle
-  ['tire-mark-1', 'tire-mark-2'].forEach(cls => {
+function spawnTireMarks(speed, amount, size) {
+  const count = Math.round(2 * amount);
+  for (let i = 0; i < count; i++) {
     const el = document.createElement('div');
-    el.className = `screen-effect tire-mark ${cls}`;
+    el.className = `screen-effect tire-mark tire-mark-${(i % 2) + 1}`;
+    el.style.animationDuration = `${3.5 / speed}s`;
     container.appendChild(el);
-  });
+  }
 
-  // 12 sparks scattered around the mid-screen area
-  for (let i = 0; i < 12; i++) {
+  const sparkCount = Math.round(12 * amount);
+  for (let i = 0; i < sparkCount; i++) {
     const sp = document.createElement('div');
     sp.className = 'screen-effect tire-spark';
-    const x = Math.random() * 100;
-    const y = 35 + Math.random() * 20;
-    sp.style.left = `${x}vw`;
-    sp.style.top  = `${y}vh`;
+    sp.style.width = `${4 * size}px`;
+    sp.style.height = `${4 * size}px`;
+    sp.style.left = `${Math.random() * 100}vw`;
+    sp.style.top  = `${35 + Math.random() * 20}vh`;
     const angle = Math.random() * 360;
-    const dist  = 20 + Math.random() * 60;
-    const sx = Math.cos(angle * Math.PI / 180) * dist;
-    const sy = Math.sin(angle * Math.PI / 180) * dist;
-    sp.style.setProperty('--sx', `${sx}px`);
-    sp.style.setProperty('--sy', `${sy}px`);
+    const dist  = (20 + Math.random() * 60) * size;
+    sp.style.setProperty('--sx', `${Math.cos(angle * Math.PI / 180) * dist}px`);
+    sp.style.setProperty('--sy', `${Math.sin(angle * Math.PI / 180) * dist}px`);
     sp.style.animationDelay    = `${Math.random() * 0.4}s`;
-    sp.style.animationDuration = `${0.5 + Math.random() * 0.4}s`;
+    sp.style.animationDuration = `${(0.5 + Math.random() * 0.4) / speed}s`;
     container.appendChild(sp);
   }
 }
 
-function spawnConfettiAndFlashes() {
+function spawnConfettiAndFlashes(speed, amount, size) {
   const colors = ['#ff4444','#00ff88','#f7c948','#4285f4','#ff88cc','#ffffff','#bf00ff','#00ccff'];
+  const count = Math.round(60 * amount);
 
-  // 60 confetti pieces
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < count; i++) {
     const el = document.createElement('div');
     el.className = 'screen-effect confetti';
     el.style.left            = `${Math.random() * 100}vw`;
     el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-    el.style.width           = `${6 + Math.random() * 8}px`;
-    el.style.height          = `${8 + Math.random() * 10}px`;
+    el.style.width           = `${(6 + Math.random() * 8) * size}px`;
+    el.style.height          = `${(8 + Math.random() * 10) * size}px`;
     el.style.animationDelay    = `${Math.random() * 1.5}s`;
-    el.style.animationDuration = `${2 + Math.random() * 2}s`;
+    el.style.animationDuration = `${(2 + Math.random() * 2) / speed}s`;
     container.appendChild(el);
   }
 
-  // 5 camera flashes at random positions
-  for (let i = 0; i < 5; i++) {
+  const flashCount = Math.round(5 * amount);
+  for (let i = 0; i < flashCount; i++) {
     const fl = document.createElement('div');
     fl.className = 'screen-effect cam-flash';
     fl.style.setProperty('--fx', `${15 + Math.random() * 70}%`);
     fl.style.setProperty('--fy', `${20 + Math.random() * 50}%`);
-    fl.style.animationDelay = `${i * 0.5}s`;
+    fl.style.animationDelay = `${i * (0.5 / speed)}s`;
     container.appendChild(fl);
   }
 }
 
-function spawnGoldRain() {
+function spawnGoldRain(speed, amount, size) {
   const items = ['🪙','💎','⭐','🏆','✨','💰','🥇'];
-  for (let i = 0; i < 35; i++) {
+  const count = Math.round(35 * amount);
+  for (let i = 0; i < count; i++) {
     const el = document.createElement('div');
     el.className   = 'screen-effect gold-item';
     el.textContent = items[Math.floor(Math.random() * items.length)];
+    el.style.fontSize        = `${24 * size}px`;
     el.style.left            = `${Math.random() * 100}vw`;
     el.style.animationDelay    = `${Math.random() * 2}s`;
-    el.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+    el.style.animationDuration = `${(1.5 + Math.random() * 2) / speed}s`;
     container.appendChild(el);
   }
 }
 
-function spawnMoneyRain() {
+function spawnMoneyRain(speed, amount, size) {
   const items = ['💵','💰','💲','🪙','💸','💎'];
-  for (let i = 0; i < 30; i++) {
+  const count = Math.round(30 * amount);
+  for (let i = 0; i < count; i++) {
     const el = document.createElement('div');
     el.className   = 'screen-effect money-item';
     el.textContent = items[Math.floor(Math.random() * items.length)];
+    el.style.fontSize        = `${22 * size}px`;
     el.style.left            = `${Math.random() * 100}vw`;
     el.style.animationDelay    = `${Math.random() * 2}s`;
-    el.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+    el.style.animationDuration = `${(1.5 + Math.random() * 2) / speed}s`;
     container.appendChild(el);
   }
 }
 
-function spawnRobots() {
-  // 30 falling robots
-  for (let i = 0; i < 30; i++) {
+function spawnRobots(speed, amount, size) {
+  const count = Math.round(30 * amount);
+  for (let i = 0; i < count; i++) {
     const el = document.createElement('div');
     el.className   = 'screen-effect robot';
     el.textContent = '🤖';
+    el.style.fontSize        = `${26 * size}px`;
     el.style.left            = `${Math.random() * 100}vw`;
     el.style.animationDelay    = `${Math.random() * 2.5}s`;
-    el.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+    el.style.animationDuration = `${(1.5 + Math.random() * 2) / speed}s`;
     container.appendChild(el);
   }
 
-  // Red edge glow
   const glow = document.createElement('div');
   glow.className = 'screen-effect edge-glow';
   container.appendChild(glow);
@@ -766,6 +786,30 @@ function applyCustomDesign(card, eventType) {
   // Car track accent
   const track = card.querySelector('.car-track');
   if (track) track.style.background = hexToRgba(design.accent_color, 0.06);
+
+  // Car animation
+  const carEl = card.querySelector('.track-car');
+  if (carEl && design.car_animation) {
+    const speed = design.animation_speed || 1.0;
+    if (design.car_animation === 'none') {
+      carEl.style.animation = 'none';
+      carEl.style.left = '50%';
+      carEl.style.transform = 'translateY(-50%) scaleX(-1)';
+    } else if (design.car_animation === 'zoomRL') {
+      carEl.style.animation = `carZoomRL ${2.8 / speed}s linear infinite`;
+    } else if (design.car_animation === 'bounce') {
+      carEl.style.animation = `carBounce ${1.2 / speed}s ease-in-out infinite`;
+    } else {
+      carEl.style.animation = `carZoomLR ${2.8 / speed}s linear infinite`;
+    }
+  }
+
+  // Entrance animation
+  if (design.entrance_animation && design.entrance_animation !== 'slideDown' && !design.card_custom_x) {
+    card.classList.remove('entering');
+    const speed = design.animation_speed || 1.0;
+    card.style.animation = `${design.entrance_animation} ${0.4 / speed}s ease-out forwards`;
+  }
 }
 
 // ─── Utilities ─────────────────────────────────────────────────

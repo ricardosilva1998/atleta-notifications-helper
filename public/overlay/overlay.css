@@ -39,6 +39,45 @@ body {
   to   { transform: translateX(-50%) translateY(-120%); opacity: 0; }
 }
 
+/* Custom entrance animations */
+@keyframes slideLeft {
+  from { transform: translateX(120%); opacity: 0; }
+  to   { transform: translateX(-50%); opacity: 1; }
+}
+@keyframes slideRight {
+  from { transform: translateX(-220%); opacity: 0; }
+  to   { transform: translateX(-50%); opacity: 1; }
+}
+@keyframes zoomIn {
+  from { transform: translateX(-50%) scale(0.3); opacity: 0; }
+  to   { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+@keyframes fadeIn {
+  from { transform: translateX(-50%); opacity: 0; }
+  to   { transform: translateX(-50%); opacity: 1; }
+}
+
+/* Car track animations */
+@keyframes carZoomLR {
+  0%   { left: -40px; opacity: 1; }
+  80%  { left: 105%;  opacity: 1; }
+  81%  { opacity: 0; left: -40px; }
+  100% { opacity: 0; left: -40px; }
+}
+@keyframes carZoomRL {
+  0%   { left: calc(100% + 40px); opacity: 1; transform: translateY(-50%) scaleX(1); }
+  80%  { left: -40px; opacity: 1; }
+  81%  { opacity: 0; left: calc(100% + 40px); }
+  100% { opacity: 0; left: calc(100% + 40px); }
+}
+@keyframes carBounce {
+  0%   { left: 50%; transform: translateY(-50%) scaleX(-1) translateX(0); }
+  25%  { transform: translateY(-50%) scaleX(-1) translateX(-15px); }
+  50%  { transform: translateY(-50%) scaleX(-1) translateX(0); }
+  75%  { transform: translateY(-50%) scaleX(-1) translateX(15px); }
+  100% { transform: translateY(-50%) scaleX(-1) translateX(0); }
+}
+
 /* Top accent line */
 .top-accent {
   height: 3px;
