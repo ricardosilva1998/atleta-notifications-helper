@@ -1218,8 +1218,8 @@ function getControlValues() {
     entrance_animation: document.getElementById('ctrl-entrance-animation').value,
     car_animation: document.getElementById('ctrl-car-animation').value,
     screen_effect: document.getElementById('ctrl-screen-effect').value,
-    animation_speed: parseFloat(document.getElementById('ctrl-animation-speed').value),
-    card_width: parseInt(document.getElementById('ctrl-card-width').value),
+    animation_speed: parseFloat(document.getElementById('ctrl-animation-speed').value) || 1.0,
+    card_width: parseInt(document.getElementById('ctrl-card-width').value) || 420,
     card_position: document.querySelector('.pos-cell.active')?.dataset.pos || 'top-center',
     card_custom_x: wd.card_custom_x != null ? wd.card_custom_x : null,
     card_custom_y: wd.card_custom_y != null ? wd.card_custom_y : null,
@@ -1239,16 +1239,13 @@ function getControlValues() {
     detail_color: wd.detail_color || null,
     text_align: wd.text_align || 'center',
     card_side_icon: wd.card_side_icon !== undefined ? wd.card_side_icon : null,
-    effect_amount: parseFloat(document.getElementById('ctrl-effect-amount').value),
-    effect_size: parseFloat(document.getElementById('ctrl-effect-size').value),
+    effect_amount: parseFloat(document.getElementById('ctrl-effect-amount').value) || 1.0,
+    effect_size: parseFloat(document.getElementById('ctrl-effect-size').value) || 1.0,
     effect_direction: document.getElementById('ctrl-effect-direction').value,
   };
 }
 
 function setControlValues(d) {
-  try { _setControlValuesInner(d); } catch(e) { console.error('[Builder] setControlValues error:', e); }
-}
-function _setControlValuesInner(d) {
   document.getElementById('ctrl-bg-color').value = d.bg_color;
   document.getElementById('ctrl-accent-color').value = d.accent_color;
   document.getElementById('ctrl-border-color').value = d.border_color;
@@ -1268,14 +1265,14 @@ function _setControlValuesInner(d) {
   document.getElementById('ctrl-entrance-animation').value = d.entrance_animation;
   document.getElementById('ctrl-car-animation').value = d.car_animation;
   document.getElementById('ctrl-screen-effect').value = d.screen_effect;
-  document.getElementById('ctrl-animation-speed').value = d.animation_speed;
-  document.getElementById('ctrl-card-width').value = d.card_width;
+  document.getElementById('ctrl-animation-speed').value = d.animation_speed || 1.0;
+  document.getElementById('ctrl-card-width').value = d.card_width || 420;
   document.getElementById('val-card-width').textContent = d.card_width + 'px';
-  document.getElementById('ctrl-border-radius').value = d.border_radius;
+  document.getElementById('ctrl-border-radius').value = d.border_radius || 16;
   document.getElementById('val-border-radius').textContent = d.border_radius + 'px';
   document.getElementById('ctrl-sponsor-animation').value = d.sponsor_animation || 'fade';
-  document.getElementById('ctrl-effect-amount').value = d.effect_amount != null ? d.effect_amount : 1.0;
-  document.getElementById('ctrl-effect-size').value = d.effect_size != null ? d.effect_size : 1.0;
+  document.getElementById('ctrl-effect-amount').value = d.effect_amount || 1.0;
+  document.getElementById('ctrl-effect-size').value = d.effect_size || 1.0;
   document.getElementById('ctrl-effect-direction').value = d.effect_direction || 'down';
   // Update theme button swatches
   document.getElementById('swatch-bg').style.background = d.bg_color;
@@ -1338,9 +1335,6 @@ function darken(hex, factor=0.35) {
 
 // ─── Update preview card ──────────────────────────────────────────────────────
 function updatePreview() {
-  try { _updatePreviewInner(); } catch(e) { console.error('[Builder] updatePreview error:', e); }
-}
-function _updatePreviewInner() {
   const d = getControlValues();
   workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], d);
 
