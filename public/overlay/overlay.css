@@ -48,6 +48,7 @@ body {
 /* Card body */
 .card-body {
   padding: 14px 20px 12px;
+  text-align: center;
 }
 
 .event-label {
