@@ -12,13 +12,16 @@ Self-service Discord notification bot for streamers. Monitors Twitch (live strea
 - **Chatbot:** tmi.js (Twitch IRC) — single shared connection for all channels; YouTube Live Chat API polling
 - **i18n:** Custom JSON-based translation system (7 languages)
 - **Deployment:** Docker on Railway with persistent volume at `/app/data`
+- **Testing:** Playwright E2E tests, run via pre-push git hook (must pass before push)
 
 ## Commands
 
 - `npm run dev` — run locally (loads `.env` via `--env-file`)
 - `npm start` — production start
 
-There are no tests or linting configured.
+- `npx playwright test` — run Playwright E2E tests (public pages, authenticated flows, custom overlays)
+
+No linting configured.
 
 ## Project Structure
 
@@ -54,6 +57,7 @@ src/
 ├── routes/
 │   ├── auth.js           # Discord + Twitch + YouTube + Spotify OAuth flows
 │   ├── overlay.js        # OBS overlay SSE endpoint + overlay HTML page + custom designs
+│   ├── customOverlays.js # Custom overlays CRUD, SSE, file upload (DISABLED — commented out in server.js/overlay.js)
 │   ├── dashboard.js      # Dashboard, account, guild config (tabbed), stats, channel CRUD, overlay config, chatbot config, overlay builder, YouTube chatbot, sound management, sponsor upload/settings
 │   ├── api.js            # API endpoints
 │   ├── admin.js          # Admin panel
@@ -77,12 +81,21 @@ src/
     ├── link-result.ejs   # Styled /link callback page
     ├── tutorial.ejs      # 8-step setup guide
     ├── report-issue.ejs  # Bug report form
+    ├── custom-overlays.ejs # Custom overlays management page (DISABLED — not mounted)
     └── admin-*.ejs       # Admin panel views
 public/
 ├── overlay/
 │   ├── overlay.css       # Alert card styles — centered cards with per-event themes, full-screen effects
 │   ├── overlay.js        # SSE client, event queue, card rendering, custom design application, synthesized racing sounds
+│   ├── sponsors.js       # Sponsor overlay — independent OBS browser source for sponsor image rotation
+│   ├── scenes.js         # Scene overlay OBS client (DISABLED — custom overlays feature)
+│   ├── bar.js            # Info bar overlay OBS client (DISABLED — custom overlays feature)
+│   ├── custom-alerts.js  # Custom alerts overlay OBS client (DISABLED — custom overlays feature)
 │   └── sounds/           # Default sound directory (.gitkeep) — custom sounds stored in data/sounds/
+tests/
+├── public-pages.spec.js      # Playwright E2E tests for public pages (landing, pricing, tutorial, nav)
+├── authenticated.spec.js     # Playwright E2E tests for authenticated flows
+└── custom-overlays.spec.js   # Playwright E2E tests for custom overlay pages
 data/
 ├── bot.db                # SQLite database (persistent volume on Railway)
 ├── sounds/               # Uploaded custom alert sounds (persistent, survives deploys)
@@ -107,6 +120,8 @@ data/
 - **YouTube Shorts:** Detected via YouTube Data API duration check (≤60s), separate notification format
 - **User feedback:** Star rating + message on account page, visible in admin Feedback tab
 - **Admin panel:** Accessible via Admin tab on dashboard (admin-only), tabbed UI with Stats/Users/Issues/Feedback/Discounts/Testing
+- **Custom Overlays (DISABLED):** Template-based scene banners, info bars, and custom alerts controlled via chat commands. Code exists (`customOverlays.js`, `scenes.js`, `bar.js`, `custom-alerts.js`, `custom-overlays.ejs`) but all integrations are commented out in `server.js`, `overlay.js`, `twitchChat.js`, `dashboard.ejs`, `overlay-builder.ejs`, `overlay-config.ejs`, and `overlay.css`. DB table `custom_overlays` exists. Re-enable by uncommenting the marked sections.
+- **Sponsor Overlay (separate source):** Sponsors have their own OBS browser source at `/overlay/sponsors/TOKEN` via `sponsors.js`, independent from the main alert overlay.
 - **iRacing (coming soon):** Full integration built but disabled — waiting for iRacing OAuth credentials
 - **DB migrations:** Auto-run on startup in `src/db.js`
 - **No ORM:** All SQL is raw in `db.js`
