@@ -222,6 +222,17 @@ function connectSSE() {
     const typeConfig = overlayConfig[eventType];
     if (typeConfig && !typeConfig.enabled) return;
 
+    // Gift sub dedup: when a giftsub event arrives, suppress individual
+    // subscribe events that follow within 10 seconds (Twitch sends both
+    // a giftsub event AND individual sub events for each recipient)
+    if (data.type === 'giftsub') {
+      window._giftSubUntil = Date.now() + 10000;
+    }
+    if (data.type === 'subscription' && window._giftSubUntil && Date.now() < window._giftSubUntil) {
+      console.log('[Overlay] Suppressing individual sub (part of gift sub batch)');
+      return;
+    }
+
     queue.push(data);
     if (!isPlaying) playNext();
   };
@@ -266,15 +277,31 @@ function getCardClass(type) {
 }
 
 // ─── Show notification ─────────────────────────────────────────
+let currentAudio = null;
+
+function stopCurrentSound() {
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (e) {}
+    currentAudio = null;
+  }
+}
+
 function showNotification(event) {
   const typeConfig = overlayConfig[event.type] || {};
   const duration = (typeConfig.duration || 5) * 1000;
+
+  // Stop any currently playing sound before starting new one
+  stopCurrentSound();
 
   // Play notification sound — try custom mp3 first, fall back to synthesized
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const soundUrl = `/overlay/sounds/${event.type}.mp3`;
   const audio = new Audio(soundUrl);
   audio.volume = overlayConfig.volume || 0.8;
+  currentAudio = audio;
   audio.play().then(() => {
     // Custom sound played successfully
   }).catch(() => {
