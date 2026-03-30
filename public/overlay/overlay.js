@@ -397,15 +397,34 @@ function showNotification(event) {
 }
 
 // ─── Build card HTML per event type ───────────────────────────
+// Default side icons per event type
+const DEFAULT_SIDE_ICONS = {
+  subscription: '🏆', yt_member: '⭐',
+};
+
+function getSideIcon(eventType) {
+  const design = overlayDesigns[eventType];
+  if (design && design.card_side_icon) {
+    return design.card_side_icon === 'none' ? null : design.card_side_icon;
+  }
+  return DEFAULT_SIDE_ICONS[eventType] || null;
+}
+
+function wrapWithSideIcons(icon, bodyHtml) {
+  if (!icon) return bodyHtml;
+  return `<div class="cup-row"><span class="cup">${icon}</span><div class="card-inner">${bodyHtml}</div><span class="cup">${icon}</span></div>`;
+}
+
 function buildBannerContent(event) {
+  const icon = getSideIcon(event.type);
+
   switch (event.type) {
-    case 'follow':
-      return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="event-label">New Pit Crew Member</div>
+    case 'follow': {
+      const body = `<div class="event-label">New Pit Crew Member</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">just joined the race 🏁</div>
-        </div>
+          <div class="detail">just joined the race 🏁</div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
           <div class="race-line"></div>
           <div class="speed-dot fsd1"></div>
@@ -413,45 +432,38 @@ function buildBannerContent(event) {
           <div class="speed-dot fsd3"></div>
           <div class="track-car">🏎️</div>
         </div>`;
+    }
 
     case 'subscription': {
       const d = event.data;
       const detail = d.months && d.months > 1
         ? `Subscribed for <b>${d.months} months</b> — Tier ${d.tier || '1'} 🥇`
         : d.message ? esc(d.message) : `Tier ${d.tier || '1'} subscriber! 🥇`;
+      const body = `<div class="event-label">Podium Finish</div>
+          <div class="username">${esc(d.username)}</div>
+          <div class="detail">${detail}</div>`;
       return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="cup-row">
-            <span class="cup">🏆</span>
-            <div class="card-inner">
-              <div class="event-label">Podium Finish</div>
-              <div class="username">${esc(d.username)}</div>
-              <div class="detail">${detail}</div>
-            </div>
-            <span class="cup">🏆</span>
-          </div>
-        </div>`;
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>`;
     }
 
-    case 'bits':
-      return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="event-label">Nitro Boost</div>
+    case 'bits': {
+      const body = `<div class="event-label">Nitro Boost</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">fueled up <b>${event.data.amount} bits</b> of nitro! 🔥</div>
-        </div>
+          <div class="detail">fueled up <b>${event.data.amount} bits</b> of nitro! 🔥</div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
           <div class="race-line"></div>
           <div class="track-car">🏎️</div>
         </div>`;
+    }
 
-    case 'donation':
-      return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="event-label">Sponsor Alert</div>
+    case 'donation': {
+      const body = `<div class="event-label">Sponsor Alert</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">sponsored the team with <b>$${event.data.amount}</b> 💸</div>
-        </div>
+          <div class="detail">sponsored the team with <b>$${event.data.amount}</b> 💸</div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
           <div class="race-line"></div>
           <div class="speed-dot dsd1"></div>
@@ -459,18 +471,18 @@ function buildBannerContent(event) {
           <div class="speed-dot dsd3"></div>
           <div class="track-car donation-car">🏎️</div>
         </div>`;
+    }
 
     case 'raid': {
       const viewers = event.data.viewers || '??';
       const row1 = '<span class="person">👤</span><span class="person">🧑</span><span class="person">👨</span><span class="person">👩</span><span class="person">🧔</span><span class="person">👱</span><span class="person">🧑</span><span class="person">👤</span><span class="person">👨</span><span class="person">👩</span><span class="person">🧔</span><span class="person">👱</span><span class="person">🧑</span><span class="person">👤</span>';
       const row2 = '<span class="person">🧑</span><span class="person">👤</span><span class="person">👩</span><span class="person">🧔</span><span class="person">👨</span><span class="person">👱</span><span class="person">👤</span><span class="person">🧑</span><span class="person">👩</span><span class="person">👨</span><span class="person">🧔</span><span class="person">👱</span>';
       const row3 = '<span class="person">👤</span><span class="person">👨</span><span class="person">🧑</span><span class="person">👩</span><span class="person">👱</span><span class="person">🧔</span><span class="person">👤</span><span class="person">👨</span><span class="person">🧑</span><span class="person">👩</span>';
-      return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="event-label">Incoming Raid</div>
+      const body = `<div class="event-label">Incoming Raid</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">raiding with <b>${viewers} viewers</b>! 🏁</div>
-        </div>
+          <div class="detail">raiding with <b>${viewers} viewers</b>! 🏁</div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="crowd-section">
           <div class="crowd-row">${row1}</div>
           <div class="crowd-row">${row2}</div>
@@ -479,45 +491,38 @@ function buildBannerContent(event) {
         </div>`;
     }
 
-    case 'yt_superchat':
-      return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="event-label">Super Chat</div>
+    case 'yt_superchat': {
+      const body = `<div class="event-label">Super Chat</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">sent <b>${esc(event.data.amount)}</b>${event.data.message ? ' — ' + esc(event.data.message) : ''} 🔥</div>
-        </div>
+          <div class="detail">sent <b>${esc(event.data.amount)}</b>${event.data.message ? ' — ' + esc(event.data.message) : ''} 🔥</div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
           <div class="race-line"></div>
           <div class="track-car">🏎️</div>
-        </div>`;
-
-    case 'yt_member': {
-      const d = event.data;
-      return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="cup-row">
-            <span class="cup">⭐</span>
-            <div class="card-inner">
-              <div class="event-label">New Member</div>
-              <div class="username">${esc(d.username)}</div>
-              <div class="detail">just became a <b>${esc(d.level || 'member')}</b>! 🥇</div>
-            </div>
-            <span class="cup">⭐</span>
-          </div>
         </div>`;
     }
 
-    case 'yt_giftmember':
+    case 'yt_member': {
+      const d = event.data;
+      const body = `<div class="event-label">New Member</div>
+          <div class="username">${esc(d.username)}</div>
+          <div class="detail">just became a <b>${esc(d.level || 'member')}</b>! 🥇</div>`;
       return `<div class="top-accent"></div>
-        <div class="card-body">
-          <div class="event-label">Gift Alert</div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>`;
+    }
+
+    case 'yt_giftmember': {
+      const body = `<div class="event-label">Gift Alert</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">gifted <b>${event.data.amount} memberships</b>! 🎁</div>
-        </div>
+          <div class="detail">gifted <b>${event.data.amount} memberships</b>! 🎁</div>`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
           <div class="race-line"></div>
           <div class="track-car">🏎️</div>
         </div>`;
+    }
 
     default: return '';
   }

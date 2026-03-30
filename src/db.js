@@ -2178,6 +2178,7 @@ function saveOverlayDesign(streamerId, eventType, design) {
     detail_font_weight: design.detail_font_weight != null ? design.detail_font_weight : null,
     detail_color: design.detail_color || null,
     text_align: design.text_align || 'center',
+    card_side_icon: design.card_side_icon || null,
   };
   db.prepare(`
     INSERT OR REPLACE INTO overlay_designs
@@ -2188,8 +2189,8 @@ function saveOverlayDesign(streamerId, eventType, design) {
        label_font_family, label_font_size, label_font_weight, label_color,
        username_font_family, username_font_weight, username_color,
        detail_font_family, detail_font_size, detail_font_weight, detail_color,
-       text_align)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       text_align, card_side_icon)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     streamerId, eventType,
     row.bg_color, row.accent_color, row.border_color, row.text_color,
@@ -2201,7 +2202,7 @@ function saveOverlayDesign(streamerId, eventType, design) {
     row.label_font_family, row.label_font_size, row.label_font_weight, row.label_color,
     row.username_font_family, row.username_font_weight, row.username_color,
     row.detail_font_family, row.detail_font_size, row.detail_font_weight, row.detail_color,
-    row.text_align,
+    row.text_align, row.card_side_icon,
   );
 }
 
@@ -2247,6 +2248,15 @@ function deleteOverlayDesign(streamerId, eventType) {
       ALTER TABLE overlay_designs ADD COLUMN text_align TEXT DEFAULT 'center';
     `);
     console.log('[DB] Added per-text styling columns to overlay_designs');
+  }
+}
+
+// Migration: Add card_side_icon to overlay_designs
+{
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  if (!cols.includes('card_side_icon')) {
+    db.exec(`ALTER TABLE overlay_designs ADD COLUMN card_side_icon TEXT`);
+    console.log('[DB] Added card_side_icon to overlay_designs');
   }
 }
 

@@ -256,6 +256,19 @@
     .text-align-btn:hover { border-color: rgba(145,70,255,0.3); color: var(--text-primary); }
     .text-align-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
+    /* Side icon grid */
+    .side-icon-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+    }
+    .side-icon-btn {
+      width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+      font-size: 20px; background: var(--bg-elevated); border: 2px solid var(--border);
+      border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s;
+    }
+    .side-icon-btn:hover { border-color: rgba(145,70,255,0.3); }
+    .side-icon-btn.active { border-color: var(--accent); background: var(--accent-glow); }
+    .side-icon-btn[data-icon="none"] { font-size: 14px; color: var(--text-muted); }
+
     /* Controls */
     .ctrl-row {
       display: flex; align-items: center; justify-content: space-between;
@@ -928,6 +941,32 @@
         </div>
       </div>
 
+      <!-- Side Icons Section -->
+      <div class="section collapsed" id="section-sideicon">
+        <div class="section-header" onclick="toggleSection('sideicon')">
+          <span class="section-title">🏆 Side Icons</span>
+          <span class="section-chevron">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="ctrl-label" style="margin-bottom:6px;">Icon displayed on each side of the card</div>
+          <div class="side-icon-grid" id="side-icon-grid">
+            <button type="button" class="side-icon-btn" data-icon="none" onclick="setSideIcon('none')" title="None">✕</button>
+            <button type="button" class="side-icon-btn" data-icon="🏆" onclick="setSideIcon('🏆')" title="Trophy">🏆</button>
+            <button type="button" class="side-icon-btn" data-icon="⭐" onclick="setSideIcon('⭐')" title="Star">⭐</button>
+            <button type="button" class="side-icon-btn" data-icon="🔥" onclick="setSideIcon('🔥')" title="Fire">🔥</button>
+            <button type="button" class="side-icon-btn" data-icon="💎" onclick="setSideIcon('💎')" title="Diamond">💎</button>
+            <button type="button" class="side-icon-btn" data-icon="🎉" onclick="setSideIcon('🎉')" title="Party">🎉</button>
+            <button type="button" class="side-icon-btn" data-icon="❤️" onclick="setSideIcon('❤️')" title="Heart">❤️</button>
+            <button type="button" class="side-icon-btn" data-icon="🏁" onclick="setSideIcon('🏁')" title="Checkered Flag">🏁</button>
+            <button type="button" class="side-icon-btn" data-icon="👑" onclick="setSideIcon('👑')" title="Crown">👑</button>
+            <button type="button" class="side-icon-btn" data-icon="🎁" onclick="setSideIcon('🎁')" title="Gift">🎁</button>
+            <button type="button" class="side-icon-btn" data-icon="💰" onclick="setSideIcon('💰')" title="Money">💰</button>
+            <button type="button" class="side-icon-btn" data-icon="🏎️" onclick="setSideIcon('🏎️')" title="Race Car">🏎️</button>
+          </div>
+          <div class="ctrl-label" style="margin-top:8px;font-size:11px;color:var(--text-muted);" id="side-icon-hint">Default: based on event type</div>
+        </div>
+      </div>
+
       <!-- Animation Section -->
       <div class="section collapsed" id="section-animation">
         <div class="section-header" onclick="toggleSection('animation')">
@@ -1058,9 +1097,20 @@
           <div class="preview-alert-card" id="preview-card">
             <div class="top-accent" id="preview-top-accent"></div>
             <div class="card-body">
-              <div class="event-label" id="preview-event-label">New Pit Crew Member</div>
-              <div class="username" id="preview-username">StreamerFan99</div>
-              <div class="detail" id="preview-detail">just joined the race 🏁</div>
+              <div class="cup-row" id="preview-cup-row" style="display:none;">
+                <span class="cup" id="preview-icon-left">🏆</span>
+                <div class="card-inner">
+                  <div class="event-label" id="preview-event-label">New Pit Crew Member</div>
+                  <div class="username" id="preview-username">StreamerFan99</div>
+                  <div class="detail" id="preview-detail">just joined the race 🏁</div>
+                </div>
+                <span class="cup" id="preview-icon-right">🏆</span>
+              </div>
+              <div id="preview-no-icon-wrap">
+                <div class="event-label" id="preview-event-label-flat">New Pit Crew Member</div>
+                <div class="username" id="preview-username-flat">StreamerFan99</div>
+                <div class="detail" id="preview-detail-flat">just joined the race 🏁</div>
+              </div>
             </div>
             <div class="car-track" id="preview-car-track">
               <div class="race-line"></div>
@@ -1087,7 +1137,13 @@ const TEXT_STYLE_DEFAULTS = {
   label_font_family: null, label_font_size: 10, label_font_weight: 700, label_color: null,
   username_font_family: null, username_font_weight: 800, username_color: null,
   detail_font_family: null, detail_font_size: 13, detail_font_weight: 400, detail_color: null,
-  text_align: 'center',
+  text_align: 'center', card_side_icon: null,
+};
+
+// Default side icons per event type (null = no icon)
+const DEFAULT_SIDE_ICONS = {
+  follow: null, subscription: '🏆', bits: null, donation: null, raid: null,
+  yt_superchat: null, yt_member: '⭐', yt_giftmember: null, timed: null,
 };
 
 const EVENT_DEFAULTS = {
@@ -1185,6 +1241,7 @@ function getControlValues() {
     detail_font_weight: wd.detail_font_weight != null ? wd.detail_font_weight : 400,
     detail_color: wd.detail_color || null,
     text_align: wd.text_align || 'center',
+    card_side_icon: wd.card_side_icon !== undefined ? wd.card_side_icon : null,
   };
 }
 
@@ -1233,6 +1290,35 @@ function resolveFont(name) {
   return `'${name}', sans-serif`;
 }
 
+// ─── Side icon helpers ────────────────────────────────────────────────────────
+function setSideIcon(icon) {
+  workingDesigns[currentType].card_side_icon = icon === 'none' ? 'none' : icon;
+  unsavedChanges = true;
+  updateSideIconGrid(workingDesigns[currentType]);
+  updatePreview();
+}
+
+function updateSideIconGrid(d) {
+  const activeIcon = d.card_side_icon;
+  const defaultIcon = DEFAULT_SIDE_ICONS[currentType];
+  const hint = document.getElementById('side-icon-hint');
+  document.querySelectorAll('.side-icon-btn').forEach(btn => {
+    if (activeIcon != null) {
+      btn.classList.toggle('active', btn.dataset.icon === activeIcon);
+    } else {
+      // No custom set — highlight default or 'none'
+      btn.classList.toggle('active', defaultIcon ? btn.dataset.icon === defaultIcon : btn.dataset.icon === 'none');
+    }
+  });
+  if (hint) {
+    if (activeIcon != null) {
+      hint.textContent = activeIcon === 'none' ? 'No side icons' : `Custom: ${activeIcon}`;
+    } else {
+      hint.textContent = defaultIcon ? `Default: ${defaultIcon} (from event type)` : 'Default: no icons';
+    }
+  }
+}
+
 // ─── Darken helper ────────────────────────────────────────────────────────────
 function hexToRgb(hex) {
   const r = parseInt(hex.slice(1,3),16);
@@ -1253,9 +1339,28 @@ function updatePreview() {
   const card = document.getElementById('preview-card');
   const accent = document.getElementById('preview-top-accent');
   const track = document.getElementById('preview-car-track');
-  const labelEl = document.getElementById('preview-event-label');
-  const usernameEl = document.getElementById('preview-username');
-  const detailEl = document.getElementById('preview-detail');
+
+  // Determine side icon: custom > default per event type > none
+  const sideIcon = d.card_side_icon !== null && d.card_side_icon !== undefined
+    ? d.card_side_icon
+    : (DEFAULT_SIDE_ICONS[currentType] || null);
+  const hasIcon = sideIcon && sideIcon !== 'none';
+
+  // Toggle icon vs flat layout
+  const cupRow = document.getElementById('preview-cup-row');
+  const flatWrap = document.getElementById('preview-no-icon-wrap');
+  cupRow.style.display = hasIcon ? 'flex' : 'none';
+  flatWrap.style.display = hasIcon ? 'none' : '';
+
+  if (hasIcon) {
+    document.getElementById('preview-icon-left').textContent = sideIcon;
+    document.getElementById('preview-icon-right').textContent = sideIcon;
+  }
+
+  // Use the correct set of elements based on layout
+  const labelEl = hasIcon ? document.getElementById('preview-event-label') : document.getElementById('preview-event-label-flat');
+  const usernameEl = hasIcon ? document.getElementById('preview-username') : document.getElementById('preview-username-flat');
+  const detailEl = hasIcon ? document.getElementById('preview-detail') : document.getElementById('preview-detail-flat');
 
   // Background gradient
   const dark = darken(d.bg_color);
@@ -1556,11 +1661,14 @@ function switchTab(type) {
   const topBadge = document.getElementById('save-event-badge-top');
   if (topBadge) topBadge.textContent = name;
 
-  // Update preview username text
-  document.getElementById('preview-username').textContent = PREVIEW_USERNAMES[type] || 'StreamerFan99';
+  // Update preview username text in both layouts
+  const uname = PREVIEW_USERNAMES[type] || 'StreamerFan99';
+  document.getElementById('preview-username').textContent = uname;
+  document.getElementById('preview-username-flat').textContent = uname;
 
   // Load controls for this type
   setControlValues(workingDesigns[type]);
+  updateSideIconGrid(workingDesigns[type]);
   updatePreview();
 
   // Update URL and sounds link to preserve tab context
@@ -1977,6 +2085,7 @@ function stopSponsorPreview() {
 
 // ─── Initial render ───────────────────────────────────────────────────────────
 setControlValues(workingDesigns['follow']);
+updateSideIconGrid(workingDesigns['follow']);
 updatePreview();
 renderSponsorList();
 document.getElementById('sp-rotation-toggle').checked = sponsorRotationEnabled;
