@@ -935,7 +935,10 @@
 
 <!-- Test Alerts Section -->
 <div class="card" style="margin-top: 24px; padding: 24px;">
-  <h3 style="font-size: 16px; margin-bottom: 8px;">Test Alerts</h3>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h3 style="font-size: 16px; margin: 0;">Test Alerts</h3>
+    <button onclick="clearOverlay()" class="btn btn-danger" style="padding: 6px 16px; font-size: 12px;">Clear All Alerts</button>
+  </div>
   <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">Send test alerts to your OBS overlay. Make sure the overlay is open in OBS to see them.</p>
 
   <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
@@ -992,6 +995,20 @@
 </div>
 
 <script>
+async function clearOverlay() {
+  try {
+    const res = await fetch('/overlay/clear', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      const statusEl = document.getElementById('test-alert-status');
+      statusEl.style.display = 'block';
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = 'Overlay cleared! All queued alerts removed.';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    }
+  } catch (e) {}
+}
+
 async function sendTestAlert(type, amount) {
   const statusEl = document.getElementById('test-alert-status');
   statusEl.style.display = 'block';

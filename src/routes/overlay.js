@@ -124,6 +124,14 @@ router.post('/test-alert', (req, res) => {
   res.json({ ok: true, type });
 });
 
+// Clear overlay — removes all queued alerts and cards
+router.post('/clear', (req, res) => {
+  if (!req.streamer) return res.status(401).json({ error: 'Not authenticated' });
+  bus.emit(`overlay:${req.streamer.id}`, { type: 'clear' });
+  console.log(`[Overlay] Cleared for streamer ${req.streamer.id}`);
+  res.json({ ok: true });
+});
+
 // Sponsor-only SSE endpoint
 router.get('/sponsors/events/:token', (req, res) => {
   const streamer = db.getStreamerByOverlayToken(req.params.token);

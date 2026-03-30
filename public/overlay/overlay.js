@@ -208,6 +208,11 @@ function connectSSE() {
       return;
     }
 
+    if (data.type === 'clear') {
+      clearOverlay();
+      return;
+    }
+
     if (data.type === 'timed') {
       console.log('[Overlay] Timed notification received:', data.data);
       showTimedNotification(data.data);
@@ -252,6 +257,15 @@ function connectSSE() {
 }
 
 connectSSE();
+
+function clearOverlay() {
+  queue.length = 0;
+  isPlaying = false;
+  stopCurrentSound();
+  // Remove all alert cards and screen effects
+  document.querySelectorAll('.alert-card, .screen-effect').forEach(e => e.remove());
+  console.log('[Overlay] Queue cleared, all cards removed');
+}
 
 function playNext() {
   if (queue.length === 0) { isPlaying = false; return; }
