@@ -565,11 +565,11 @@ function spawnEffects(type) {
 }
 
 function getSpawnPos(dir) {
-  if (dir === 'down') return `left:${Math.random()*100}vw;top:-40px;`;
-  if (dir === 'up') return `left:${Math.random()*100}vw;bottom:-40px;`;
-  if (dir === 'left') return `top:${Math.random()*100}vh;right:-40px;`;
-  if (dir === 'right') return `top:${Math.random()*100}vh;left:-40px;`;
-  return `left:${Math.random()*100}vw;top:-40px;`;
+  if (dir === 'down') return `left:${Math.random()*100}vw;top:-40px;bottom:auto;`;
+  if (dir === 'up') return `left:${Math.random()*100}vw;bottom:-40px;top:auto;`;
+  if (dir === 'left') return `top:${Math.random()*100}vh;right:-40px;left:auto;`;
+  if (dir === 'right') return `top:${Math.random()*100}vh;left:-40px;right:auto;`;
+  return `left:${Math.random()*100}vw;top:-40px;bottom:auto;`;
 }
 
 function getFallAnim(dir) {

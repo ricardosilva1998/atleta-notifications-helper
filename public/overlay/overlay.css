@@ -437,7 +437,6 @@ body {
   width: 8px;
   height: 10px;
   border-radius: 2px;
-  top: -14px;
   animation: confFall linear forwards;
 }
 
@@ -478,7 +477,6 @@ body {
 
 /* Gold rain */
 .gold-item {
-  top: -40px;
   font-size: 24px;
   animation: goldFall linear forwards;
 }
@@ -491,7 +489,6 @@ body {
 
 /* Money rain */
 .money-item {
-  top: -40px;
   font-size: 22px;
   animation: moneyFall linear forwards;
 }
@@ -504,7 +501,6 @@ body {
 
 /* Robots */
 .robot {
-  top: -40px;
   font-size: 26px;
   animation: robotFall linear forwards;
 }
