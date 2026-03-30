@@ -235,7 +235,7 @@ async function helixDeleteMessage(broadcasterId, messageId) {
   const token = config.bot.twitchToken.replace(/^oauth:/, '');
   const clientId = botClientId || config.twitch.clientId;
   const url = `https://api.twitch.tv/helix/moderation/chat/messages?broadcaster_id=${broadcasterId}&moderator_id=${modId}&message_id=${messageId}`;
-  console.log(`[Mod] Helix DELETE message ${messageId} in channel ${broadcasterId}`);
+  console.log(`[Mod] Helix DELETE message_id=${messageId} broadcaster_id=${broadcasterId} moderator_id=${modId} client_id=${clientId?.substring(0,8)}...`);
   const res = await fetch(url, {
     method: 'DELETE',
     headers: { 'Client-ID': clientId, 'Authorization': `Bearer ${token}` }
@@ -266,11 +266,37 @@ async function helixBanUser(broadcasterId, userId, duration, reason) {
   }
 }
 
+// ─── Resolve broadcaster ID ───────────────────────────────────────────────────
+const broadcasterIdCache = new Map();
+
+async function resolveBroadcasterId(channel, streamer) {
+  if (streamer.twitch_user_id) return streamer.twitch_user_id;
+  const clean = channel.replace(/^#/, '').toLowerCase();
+  if (broadcasterIdCache.has(clean)) return broadcasterIdCache.get(clean);
+  try {
+    const { getUserId } = require('./twitch');
+    const id = await getUserId(clean);
+    if (id) {
+      broadcasterIdCache.set(clean, id);
+      console.log(`[Mod] Resolved broadcaster ID for ${clean}: ${id}`);
+    }
+    return id;
+  } catch (e) {
+    console.error(`[Mod] Failed to resolve broadcaster ID for ${clean}:`, e.message);
+    return null;
+  }
+}
+
 // ─── Execute moderation action ────────────────────────────────────────────────
 async function executeAction(client, channel, tags, action, reason, streamer) {
   const username = tags.username;
-  const broadcasterId = streamer.twitch_user_id;
+  const broadcasterId = await resolveBroadcasterId(channel, streamer);
   const userId = tags['user-id'];
+
+  if (!broadcasterId) {
+    console.error(`[Mod] Cannot execute ${action}: no broadcaster ID for ${channel}`);
+    return;
+  }
 
   try {
     switch (action) {
