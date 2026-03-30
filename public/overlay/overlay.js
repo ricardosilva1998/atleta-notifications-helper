@@ -333,19 +333,13 @@ function showNotification(event) {
       setTimeout(() => e.remove(), 100);
     });
 
-    if (card._customPosition) {
-      // Custom-positioned cards use fade out (no CSS animation)
-      card.style.transition = 'opacity 0.3s ease-in';
-      card.style.opacity = '0';
-      setTimeout(() => { card.remove(); setTimeout(playNext, 500); }, 350);
-    } else {
-      card.classList.remove('entering');
-      card.classList.add('dismissing');
-      card.addEventListener('animationend', () => {
-        card.remove();
-        setTimeout(playNext, 500);
-      }, { once: true });
-    }
+    // Fade out and remove card
+    card.style.transition = 'opacity 0.3s ease-in';
+    card.style.opacity = '0';
+    setTimeout(() => {
+      card.remove();
+      setTimeout(playNext, 500);
+    }, 400);
   }, duration);
 }
 
