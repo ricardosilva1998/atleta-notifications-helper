@@ -1246,6 +1246,9 @@ function getControlValues() {
 }
 
 function setControlValues(d) {
+  try { _setControlValuesInner(d); } catch(e) { console.error('[Builder] setControlValues error:', e); }
+}
+function _setControlValuesInner(d) {
   document.getElementById('ctrl-bg-color').value = d.bg_color;
   document.getElementById('ctrl-accent-color').value = d.accent_color;
   document.getElementById('ctrl-border-color').value = d.border_color;
@@ -1335,6 +1338,9 @@ function darken(hex, factor=0.35) {
 
 // ─── Update preview card ──────────────────────────────────────────────────────
 function updatePreview() {
+  try { _updatePreviewInner(); } catch(e) { console.error('[Builder] updatePreview error:', e); }
+}
+function _updatePreviewInner() {
   const d = getControlValues();
   workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], d);
 
