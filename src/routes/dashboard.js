@@ -748,6 +748,7 @@ router.post('/overlay/generate-token', (req, res) => {
 // Test notification
 router.post('/overlay/test/:eventType', (req, res) => {
   const bus = require('../services/overlayBus');
+  const { chatManager } = require('../services/twitchChat');
   const type = req.params.eventType;
   const testEvents = {
     follow: { type: 'follow', data: { username: 'TestRacer' } },
@@ -760,7 +761,12 @@ router.post('/overlay/test/:eventType', (req, res) => {
   const event = testEvents[type];
   if (!event) return res.status(400).json({ error: 'Invalid event type' });
 
+  // Fire overlay alert
   bus.emit(`overlay:${req.streamer.id}`, event);
+
+  // Fire chatbot message in sync
+  chatManager.sendEventMessage(req.streamer.id, type, event.data);
+
   res.json({ ok: true });
 });
 

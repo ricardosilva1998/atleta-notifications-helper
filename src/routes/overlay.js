@@ -95,6 +95,11 @@ router.post('/test-alert', (req, res) => {
   const event = testEvents[type];
   if (!event) return res.status(400).json({ error: 'Invalid event type' });
 
+  // Fire chatbot message in sync with the overlay
+  const { chatManager } = require('../services/twitchChat');
+  const chatType = type === 'giftsub' ? 'giftsub' : type;
+  chatManager.sendEventMessage(req.streamer.id, chatType, event.data);
+
   // If testing giftsub, emit as 'subscription' type (matching real EventSub behavior)
   // then send individual sub events that should be suppressed by dedup
   if (type === 'giftsub') {
