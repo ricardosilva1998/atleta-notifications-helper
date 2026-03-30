@@ -1263,16 +1263,13 @@ function setControlValues(d) {
   document.getElementById('ctrl-car-animation').value = d.car_animation;
   document.getElementById('ctrl-screen-effect').value = d.screen_effect;
   document.getElementById('ctrl-animation-speed').value = d.animation_speed;
-  document.getElementById('val-animation-speed').textContent = parseFloat(d.animation_speed).toFixed(1) + '×';
   document.getElementById('ctrl-card-width').value = d.card_width;
   document.getElementById('val-card-width').textContent = d.card_width + 'px';
   document.getElementById('ctrl-border-radius').value = d.border_radius;
   document.getElementById('val-border-radius').textContent = d.border_radius + 'px';
   document.getElementById('ctrl-sponsor-animation').value = d.sponsor_animation || 'fade';
   document.getElementById('ctrl-effect-amount').value = d.effect_amount != null ? d.effect_amount : 1.0;
-  document.getElementById('val-effect-amount').textContent = parseFloat(d.effect_amount || 1.0).toFixed(1) + '×';
   document.getElementById('ctrl-effect-size').value = d.effect_size != null ? d.effect_size : 1.0;
-  document.getElementById('val-effect-size').textContent = parseFloat(d.effect_size || 1.0).toFixed(1) + '×';
   // Update theme button swatches
   document.getElementById('swatch-bg').style.background = d.bg_color;
   document.getElementById('swatch-accent').style.background = d.accent_color;
@@ -1718,7 +1715,6 @@ document.getElementById('ctrl-username-size').addEventListener('input', function
   updatePreview();
 });
 document.getElementById('ctrl-animation-speed').addEventListener('input', function() {
-  document.getElementById('val-animation-speed').textContent = parseFloat(this.value).toFixed(1) + '×';
   updatePreview();
 });
 document.getElementById('ctrl-card-width').addEventListener('input', function() {
@@ -2929,7 +2925,6 @@ function applyAnim() {
   document.getElementById('ctrl-car-animation').value = d.car_animation;
   document.getElementById('ctrl-screen-effect').value = d.screen_effect;
   document.getElementById('ctrl-animation-speed').value = d.animation_speed;
-  document.getElementById('val-animation-speed').textContent = d.animation_speed.toFixed(1) + '×';
   document.getElementById('ctrl-effect-amount').value = d.effect_amount;
   document.getElementById('ctrl-effect-size').value = d.effect_size;
 
