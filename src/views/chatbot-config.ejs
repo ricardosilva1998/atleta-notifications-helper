@@ -4,6 +4,27 @@
 .tab-connection.active { background: #9146ff; }
 .tab-events.active { background: #9146ff; }
 .tab-commands.active { background: #9146ff; }
+.tab-moderation.active { background: #ff4444; }
+.mod-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin: 20px 0 10px; font-family: var(--font-display); }
+.mod-section-title:first-child { margin-top: 4px; }
+.mod-card { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.mod-card:last-child { border-bottom: none; }
+.mod-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.mod-card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.mod-card-desc { font-size: 12px; color: var(--text-muted); }
+.mod-card-settings { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 10px; }
+.mod-setting { display: flex; align-items: center; gap: 6px; }
+.mod-setting label { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.mod-setting input[type=number] { width: 60px; padding: 5px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; text-align: center; }
+.mod-setting select { padding: 5px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; }
+.mod-note { background: rgba(145,70,255,0.08); border: 1px solid rgba(145,70,255,0.2); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+.banned-word-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.banned-word-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; font-size: 12px; color: var(--text-primary); }
+.banned-word-tag.regex { border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.08); }
+.banned-word-tag button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
+.banned-word-tag button:hover { color: var(--danger); }
+.banned-word-add { display: flex; gap: 6px; margin-top: 10px; }
+.banned-word-add input[type=text] { flex: 1; padding: 6px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 12px; }
 </style>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
@@ -26,6 +47,10 @@
   <button class="tab-btn tab-commands" data-tab="commands">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
     Custom Commands
+  </button>
+  <button class="tab-btn tab-moderation" data-tab="moderation">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Moderation
   </button>
 </div>
 
@@ -394,6 +419,302 @@
 
 </div>
 
+<div class="tab-content" id="tab-moderation">
+  <form method="POST" action="/dashboard/chatbot/moderation">
+    <div class="mod-note">
+      <strong>Note:</strong> The bot must be a moderator in your channel for moderation to work. Type <code>/mod Atleta</code> in your Twitch chat.
+    </div>
+
+    <div class="mod-section-title">Message Filters</div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Banned Words</div>
+          <div class="mod-card-desc">Block messages containing specific words or patterns</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_banned_words_enabled" name="mod_banned_words_enabled" value="1" <%= streamer.mod_banned_words_enabled ? 'checked' : '' %>>
+          <label for="mod_banned_words_enabled"></label>
+        </div>
+      </div>
+      <div class="banned-word-list" id="banned-word-list">
+        <% bannedWords.forEach(w => { %>
+          <span class="banned-word-tag <%= w.is_regex ? 'regex' : '' %>">
+            <% if (w.is_regex) { %><small style="opacity:0.5">regex:</small><% } %>
+            <%= w.word %>
+            <button type="button" onclick="removeBannedWord(<%= w.id %>)">×</button>
+          </span>
+        <% }) %>
+      </div>
+      <div class="banned-word-add">
+        <input type="text" id="new-banned-word" placeholder="Add word or phrase...">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);white-space:nowrap;">
+          <input type="checkbox" id="new-banned-regex"> Regex
+        </label>
+        <button type="button" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="addBannedWord()">Add</button>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Link Protection</div>
+          <div class="mod-card-desc">Block URLs from non-mods/VIPs. Mods can use <code>!permit username</code></div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_link_protection_enabled" name="mod_link_protection_enabled" value="1" <%= streamer.mod_link_protection_enabled ? 'checked' : '' %>>
+          <label for="mod_link_protection_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Permit duration</label>
+          <input type="number" name="mod_link_permit_seconds" value="<%= streamer.mod_link_permit_seconds || 60 %>" min="10" max="600">
+          <span style="font-size:12px;color:var(--text-muted)">s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Caps Filter</div>
+          <div class="mod-card-desc">Block messages with excessive uppercase letters</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_caps_enabled" name="mod_caps_enabled" value="1" <%= streamer.mod_caps_enabled ? 'checked' : '' %>>
+          <label for="mod_caps_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Min length</label>
+          <input type="number" name="mod_caps_min_length" value="<%= streamer.mod_caps_min_length || 10 %>" min="3" max="100">
+        </div>
+        <div class="mod-setting">
+          <label>Max caps %</label>
+          <input type="number" name="mod_caps_max_percent" value="<%= streamer.mod_caps_max_percent || 70 %>" min="30" max="100">
+          <span style="font-size:12px;color:var(--text-muted)">%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Emote Spam</div>
+          <div class="mod-card-desc">Limit the number of emotes per message</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_emote_spam_enabled" name="mod_emote_spam_enabled" value="1" <%= streamer.mod_emote_spam_enabled ? 'checked' : '' %>>
+          <label for="mod_emote_spam_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Max emotes</label>
+          <input type="number" name="mod_emote_max_count" value="<%= streamer.mod_emote_max_count || 15 %>" min="1" max="100">
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Repetition Filter</div>
+          <div class="mod-card-desc">Block users from spamming the same message</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_repetition_enabled" name="mod_repetition_enabled" value="1" <%= streamer.mod_repetition_enabled ? 'checked' : '' %>>
+          <label for="mod_repetition_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Window</label>
+          <input type="number" name="mod_repetition_window" value="<%= streamer.mod_repetition_window || 30 %>" min="5" max="300">
+          <span style="font-size:12px;color:var(--text-muted)">s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Symbol Spam</div>
+          <div class="mod-card-desc">Block messages with excessive special characters</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_symbol_spam_enabled" name="mod_symbol_spam_enabled" value="1" <%= streamer.mod_symbol_spam_enabled ? 'checked' : '' %>>
+          <label for="mod_symbol_spam_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Max symbols %</label>
+          <input type="number" name="mod_symbol_max_percent" value="<%= streamer.mod_symbol_max_percent || 50 %>" min="10" max="100">
+          <span style="font-size:12px;color:var(--text-muted)">%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-section-title">User Management</div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Slow Mode Command</div>
+          <div class="mod-card-desc">Enable <code>!slow &lt;seconds&gt;</code> and <code>!slowoff</code> for mods</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_slow_mode_cmd_enabled" name="mod_slow_mode_cmd_enabled" value="1" <%= streamer.mod_slow_mode_cmd_enabled ? 'checked' : '' %>>
+          <label for="mod_slow_mode_cmd_enabled"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Follow Age Gate</div>
+          <div class="mod-card-desc">Require users to follow for a minimum time before chatting</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_follow_age_enabled" name="mod_follow_age_enabled" value="1" <%= streamer.mod_follow_age_enabled ? 'checked' : '' %>>
+          <label for="mod_follow_age_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Min follow age</label>
+          <input type="number" name="mod_follow_age_minutes" value="<%= streamer.mod_follow_age_minutes || 10 %>" min="1" max="1440">
+          <span style="font-size:12px;color:var(--text-muted)">min</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">First-Time Chatter Flag</div>
+          <div class="mod-card-desc">Post a notice in chat when someone chats for the first time</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_first_chatter_enabled" name="mod_first_chatter_enabled" value="1" <%= streamer.mod_first_chatter_enabled ? 'checked' : '' %>>
+          <label for="mod_first_chatter_enabled"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-section-title">Automated Protection</div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Raid Protection</div>
+          <div class="mod-card-desc">Auto-enable followers-only mode when a raid is detected</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_raid_protection_enabled" name="mod_raid_protection_enabled" value="1" <%= streamer.mod_raid_protection_enabled ? 'checked' : '' %>>
+          <label for="mod_raid_protection_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Duration</label>
+          <input type="number" name="mod_raid_protection_duration" value="<%= streamer.mod_raid_protection_duration || 120 %>" min="30" max="600">
+          <span style="font-size:12px;color:var(--text-muted)">s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-section-title">Actions & Logging</div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Default Action</div>
+          <div class="mod-card-desc">What happens when a filter is triggered</div>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <select name="mod_action_response">
+            <option value="delete" <%= (streamer.mod_action_response || 'delete') === 'delete' ? 'selected' : '' %>>Delete message</option>
+            <option value="timeout_10" <%= streamer.mod_action_response === 'timeout_10' ? 'selected' : '' %>>Timeout 10s</option>
+            <option value="timeout_60" <%= streamer.mod_action_response === 'timeout_60' ? 'selected' : '' %>>Timeout 60s</option>
+            <option value="timeout_600" <%= streamer.mod_action_response === 'timeout_600' ? 'selected' : '' %>>Timeout 10min</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Escalation</div>
+          <div class="mod-card-desc">Progressive punishment: 1st = warning, 2nd = 10s timeout, 3rd = 10min, 4th+ = 30min. Resets after 24h.</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_escalation_enabled" name="mod_escalation_enabled" value="1" <%= streamer.mod_escalation_enabled ? 'checked' : '' %>>
+          <label for="mod_escalation_enabled"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Exemptions</div>
+          <div class="mod-card-desc">Choose which user types bypass moderation filters</div>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-primary);cursor:pointer;">
+          <input type="checkbox" name="mod_exempt_subs" value="1" <%= streamer.mod_exempt_subs !== 0 ? 'checked' : '' %>>
+          Subscribers
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-primary);cursor:pointer;">
+          <input type="checkbox" name="mod_exempt_vips" value="1" <%= streamer.mod_exempt_vips !== 0 ? 'checked' : '' %>>
+          VIPs
+        </label>
+      </div>
+    </div>
+
+    <div class="mod-card">
+      <div class="mod-card-header">
+        <div>
+          <div class="mod-card-title">Discord Mod Log</div>
+          <div class="mod-card-desc">Send moderation actions to a Discord channel</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="mod_log_discord_enabled" name="mod_log_discord_enabled" value="1" <%= streamer.mod_log_discord_enabled ? 'checked' : '' %>>
+          <label for="mod_log_discord_enabled"></label>
+        </div>
+      </div>
+      <div class="mod-card-settings">
+        <div class="mod-setting">
+          <label>Channel</label>
+          <select name="mod_log_discord_channel_id">
+            <option value="">Select a channel...</option>
+            <% discordChannels.forEach(ch => { %>
+              <option value="<%= ch.id %>" <%= streamer.mod_log_discord_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+      <button type="submit" class="btn btn-primary" style="padding: 10px 28px; font-size: 14px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save Moderation Settings
+      </button>
+    </div>
+  </form>
+</div>
+
 <script>
   const tabs = document.querySelectorAll('.tab-btn');
   const panes = document.querySelectorAll('.tab-content');
@@ -427,6 +748,45 @@
     }
     setTimeout(() => { btn.textContent = originalText; btn.disabled = false; }, 2000);
   }
+</script>
+
+<script>
+function addBannedWord() {
+  const input = document.getElementById('new-banned-word');
+  const word = input.value.trim();
+  if (!word) return;
+  const isRegex = document.getElementById('new-banned-regex').checked;
+  fetch('/dashboard/chatbot/banned-words', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ word, is_regex: isRegex })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      input.value = '';
+      document.getElementById('new-banned-regex').checked = false;
+      renderBannedWords(data.words);
+    }
+  });
+}
+
+function removeBannedWord(id) {
+  fetch('/dashboard/chatbot/banned-words/' + id, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(data => { if (data.ok) renderBannedWords(data.words); });
+}
+
+function renderBannedWords(words) {
+  const list = document.getElementById('banned-word-list');
+  list.innerHTML = words.map(w =>
+    '<span class="banned-word-tag ' + (w.is_regex ? 'regex' : '') + '">' +
+    (w.is_regex ? '<small style="opacity:0.5">regex:</small>' : '') +
+    w.word.replace(/</g,'&lt;') + ' <button type="button" onclick="removeBannedWord(' + w.id + ')">×</button></span>'
+  ).join('');
+}
+
+document.getElementById('new-banned-word').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addBannedWord(); }
+});
 </script>
 
 <%- include('footer') %>
