@@ -90,11 +90,12 @@ class EventSubClient {
           const streamer = db.getStreamerById(this.streamerId);
 
           // Emit to overlay — giftsub shows as subscription banner
-          const overlayType = normalized.type === 'giftsub' ? 'subscription' : normalized.type;
+          const isGift = normalized.type === 'giftsub';
+          const overlayType = isGift ? 'subscription' : normalized.type;
           const typeMap = { follow: 'follow', subscription: 'sub', giftsub: 'sub', bits: 'bits', donation: 'donation', raid: 'raid' };
           const enabledKey = `overlay_${typeMap[overlayType] || overlayType}_enabled`;
           if (streamer && streamer[enabledKey]) {
-            bus.emit(`overlay:${this.streamerId}`, { ...normalized, type: overlayType });
+            bus.emit(`overlay:${this.streamerId}`, { ...normalized, type: overlayType, isGift });
           }
 
           // Emit to chat service

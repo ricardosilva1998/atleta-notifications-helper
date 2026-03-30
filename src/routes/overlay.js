@@ -95,15 +95,26 @@ router.post('/test-alert', (req, res) => {
   const event = testEvents[type];
   if (!event) return res.status(400).json({ error: 'Invalid event type' });
 
-  // If testing giftsub with amount > 1, send the giftsub event followed by individual subs
-  if (type === 'giftsub' && (amount || 5) > 1) {
-    // Send the main giftsub event
-    bus.emit(`overlay:${req.streamer.id}`, { type: 'giftsub', data: { username: event.data.username, tier: '1', amount: amount || 5, message: `Gifted ${amount || 5} subs!` } });
-    // Simulate individual sub events (these should be suppressed by the dedup logic)
-    for (let i = 0; i < (amount || 5); i++) {
-      setTimeout(() => {
-        bus.emit(`overlay:${req.streamer.id}`, { type: 'subscription', data: { username: `GiftRecipient${i + 1}`, tier: '1', months: 1, message: null } });
-      }, 200 * (i + 1));
+  // If testing giftsub, emit as 'subscription' type (matching real EventSub behavior)
+  // then send individual sub events that should be suppressed by dedup
+  if (type === 'giftsub') {
+    const giftCount = amount || 5;
+    // Main gift event — shows as subscription card with gift message + isGift flag
+    bus.emit(`overlay:${req.streamer.id}`, {
+      type: 'subscription',
+      isGift: true,
+      data: { username: event.data.username, tier: '1', months: 1, message: `Gifted ${giftCount} sub${giftCount > 1 ? 's' : ''}!` }
+    });
+    // Simulate individual sub events from each recipient (should be suppressed by overlay dedup)
+    if (giftCount > 1) {
+      for (let i = 0; i < giftCount; i++) {
+        setTimeout(() => {
+          bus.emit(`overlay:${req.streamer.id}`, {
+            type: 'subscription',
+            data: { username: `GiftRecipient${i + 1}`, tier: '1', months: 1, message: null }
+          });
+        }, 200 * (i + 1));
+      }
     }
   } else {
     bus.emit(`overlay:${req.streamer.id}`, event);

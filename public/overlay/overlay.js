@@ -222,13 +222,13 @@ function connectSSE() {
     const typeConfig = overlayConfig[eventType];
     if (typeConfig && !typeConfig.enabled) return;
 
-    // Gift sub dedup: when a giftsub event arrives, suppress individual
-    // subscribe events that follow within 10 seconds (Twitch sends both
-    // a giftsub event AND individual sub events for each recipient)
-    if (data.type === 'giftsub') {
+    // Gift sub dedup: when a gift sub event arrives (isGift flag),
+    // suppress individual subscribe events that follow within 10 seconds
+    // (Twitch sends both a giftsub event AND individual sub events for each recipient)
+    if (data.isGift) {
       window._giftSubUntil = Date.now() + 10000;
     }
-    if (data.type === 'subscription' && window._giftSubUntil && Date.now() < window._giftSubUntil) {
+    if (data.type === 'subscription' && !data.isGift && window._giftSubUntil && Date.now() < window._giftSubUntil) {
       console.log('[Overlay] Suppressing individual sub (part of gift sub batch)');
       return;
     }
