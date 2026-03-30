@@ -671,14 +671,20 @@
         </div>
       </div>
       <div class="mod-card-settings">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-primary);cursor:pointer;">
-          <input type="checkbox" name="mod_exempt_subs" value="1" <%= streamer.mod_exempt_subs !== 0 ? 'checked' : '' %>>
-          Subscribers
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-primary);cursor:pointer;">
-          <input type="checkbox" name="mod_exempt_vips" value="1" <%= streamer.mod_exempt_vips !== 0 ? 'checked' : '' %>>
-          VIPs
-        </label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="toggle">
+            <input type="checkbox" id="mod_exempt_subs" name="mod_exempt_subs" value="1" <%= streamer.mod_exempt_subs !== 0 ? 'checked' : '' %>>
+            <label for="mod_exempt_subs"></label>
+          </div>
+          <span style="font-size:13px;color:var(--text-primary);">Subscribers</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="toggle">
+            <input type="checkbox" id="mod_exempt_vips" name="mod_exempt_vips" value="1" <%= streamer.mod_exempt_vips !== 0 ? 'checked' : '' %>>
+            <label for="mod_exempt_vips"></label>
+          </div>
+          <span style="font-size:13px;color:var(--text-primary);">VIPs</span>
+        </div>
       </div>
     </div>
 
