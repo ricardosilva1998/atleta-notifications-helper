@@ -208,4 +208,29 @@ async function refreshBotToken(streamer) {
   return data.access_token;
 }
 
-module.exports = { getStream, getUserId, getUserProfile, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken };
+async function getFollowAge(broadcasterLogin, userLogin) {
+  try {
+    const token = await (async () => {
+      if (!accessToken || Date.now() >= tokenExpiresAt) await authenticate();
+      return accessToken;
+    })();
+    const broadcasterId = await getUserId(broadcasterLogin);
+    const userId = await getUserId(userLogin);
+    if (!broadcasterId || !userId) return { following: false, followedAt: null };
+
+    const res = await fetch(
+      `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${userId}`,
+      { headers: { 'Client-ID': config.twitch.clientId, 'Authorization': `Bearer ${token}` } }
+    );
+    const data = await res.json();
+    if (data.data && data.data.length > 0) {
+      return { following: true, followedAt: data.data[0].followed_at };
+    }
+    return { following: false, followedAt: null };
+  } catch (e) {
+    console.error('[Twitch] getFollowAge error:', e.message);
+    return { following: false, followedAt: null };
+  }
+}
+
+module.exports = { getStream, getUserId, getUserProfile, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge };
