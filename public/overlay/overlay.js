@@ -443,7 +443,11 @@ function buildBannerContent(event) {
           <div class="username">${esc(d.username)}</div>
           <div class="detail">${detail}</div>`;
       return `<div class="top-accent"></div>
-        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>`;
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="track-car">🏎️</div>
+        </div>`;
     }
 
     case 'bits': {
