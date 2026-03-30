@@ -226,9 +226,10 @@ async function getBotUserId() {
 
 async function helixDeleteMessage(broadcasterId, messageId) {
   const modId = await getBotUserId();
-  if (!modId) return;
+  if (!modId) { console.error('[Mod] No bot user ID, cannot delete'); return; }
   const token = config.bot.twitchToken.replace(/^oauth:/, '');
-  const url = `https://api.twitch.tv/helix/moderation/chat?broadcaster_id=${broadcasterId}&moderator_id=${modId}&message_id=${messageId}`;
+  const url = `https://api.twitch.tv/helix/moderation/chat/messages?broadcaster_id=${broadcasterId}&moderator_id=${modId}&message_id=${messageId}`;
+  console.log(`[Mod] Helix DELETE ${url}`);
   const res = await fetch(url, {
     method: 'DELETE',
     headers: { 'Client-ID': config.twitch.clientId, 'Authorization': `Bearer ${token}` }
@@ -236,6 +237,8 @@ async function helixDeleteMessage(broadcasterId, messageId) {
   if (!res.ok) {
     const body = await res.text();
     console.error(`[Mod] Helix delete failed (${res.status}):`, body);
+  } else {
+    console.log(`[Mod] Message deleted successfully`);
   }
 }
 
