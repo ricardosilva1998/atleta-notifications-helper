@@ -2165,14 +2165,31 @@ function saveOverlayDesign(streamerId, eventType, design) {
     border_radius: design.border_radius != null ? design.border_radius : 16,
     card_image_scale: design.card_image_scale != null ? design.card_image_scale : 1.0,
     sponsor_animation: design.sponsor_animation || 'fade',
+    // Per-text styling (null = inherit from legacy fields)
+    label_font_family: design.label_font_family || null,
+    label_font_size: design.label_font_size != null ? design.label_font_size : null,
+    label_font_weight: design.label_font_weight != null ? design.label_font_weight : null,
+    label_color: design.label_color || null,
+    username_font_family: design.username_font_family || null,
+    username_font_weight: design.username_font_weight != null ? design.username_font_weight : null,
+    username_color: design.username_color || null,
+    detail_font_family: design.detail_font_family || null,
+    detail_font_size: design.detail_font_size != null ? design.detail_font_size : null,
+    detail_font_weight: design.detail_font_weight != null ? design.detail_font_weight : null,
+    detail_color: design.detail_color || null,
+    text_align: design.text_align || 'center',
   };
   db.prepare(`
     INSERT OR REPLACE INTO overlay_designs
       (streamer_id, event_type, bg_color, accent_color, border_color, text_color,
        font_family, username_size, event_label, detail_text, entrance_animation,
        car_animation, screen_effect, animation_speed, card_width, card_position,
-       card_custom_x, card_custom_y, border_radius, card_image_scale, sponsor_animation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       card_custom_x, card_custom_y, border_radius, card_image_scale, sponsor_animation,
+       label_font_family, label_font_size, label_font_weight, label_color,
+       username_font_family, username_font_weight, username_color,
+       detail_font_family, detail_font_size, detail_font_weight, detail_color,
+       text_align)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     streamerId, eventType,
     row.bg_color, row.accent_color, row.border_color, row.text_color,
@@ -2181,6 +2198,10 @@ function saveOverlayDesign(streamerId, eventType, design) {
     row.animation_speed, row.card_width, row.card_position,
     row.card_custom_x, row.card_custom_y, row.border_radius,
     row.card_image_scale, row.sponsor_animation,
+    row.label_font_family, row.label_font_size, row.label_font_weight, row.label_color,
+    row.username_font_family, row.username_font_weight, row.username_color,
+    row.detail_font_family, row.detail_font_size, row.detail_font_weight, row.detail_color,
+    row.text_align,
   );
 }
 
@@ -2204,6 +2225,28 @@ function deleteOverlayDesign(streamerId, eventType) {
   if (!cols.includes('sponsor_animation')) {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN sponsor_animation TEXT DEFAULT 'fade'`);
     console.log('[DB] Added sponsor_animation to overlay_designs');
+  }
+}
+
+// Migration: Add per-text styling columns to overlay_designs
+{
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  if (!cols.includes('label_font_family')) {
+    db.exec(`
+      ALTER TABLE overlay_designs ADD COLUMN label_font_family TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN label_font_size INTEGER;
+      ALTER TABLE overlay_designs ADD COLUMN label_font_weight INTEGER;
+      ALTER TABLE overlay_designs ADD COLUMN label_color TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN username_font_family TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN username_font_weight INTEGER;
+      ALTER TABLE overlay_designs ADD COLUMN username_color TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN detail_font_family TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN detail_font_size INTEGER;
+      ALTER TABLE overlay_designs ADD COLUMN detail_font_weight INTEGER;
+      ALTER TABLE overlay_designs ADD COLUMN detail_color TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN text_align TEXT DEFAULT 'center';
+    `);
+    console.log('[DB] Added per-text styling columns to overlay_designs');
   }
 }
 

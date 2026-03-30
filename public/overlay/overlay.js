@@ -7,6 +7,33 @@ let serverVersion = null;
 const queue = [];
 let isPlaying = false;
 
+// Load Google Fonts used by custom designs
+const loadedFonts = new Set();
+function loadDesignFonts(designs) {
+  const FONT_MAP = {
+    'Inter': 'Inter:wght@400;600;700;800',
+    'Poppins': 'Poppins:wght@400;600;700;800',
+    'Roboto Mono': 'Roboto+Mono:wght@400;700',
+    'Press Start 2P': 'Press+Start+2P',
+    'Outfit': 'Outfit:wght@400;600;700;800',
+    'Permanent Marker': 'Permanent+Marker',
+    'Bangers': 'Bangers',
+  };
+  const fontsNeeded = new Set();
+  Object.values(designs).forEach(d => {
+    [d.font_family, d.label_font_family, d.username_font_family, d.detail_font_family].forEach(f => {
+      if (f && f !== 'System Default' && FONT_MAP[f] && !loadedFonts.has(f)) fontsNeeded.add(f);
+    });
+  });
+  fontsNeeded.forEach(f => {
+    loadedFonts.add(f);
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${FONT_MAP[f]}&display=swap`;
+    document.head.appendChild(link);
+  });
+}
+
 // Synthesized notification sounds using Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -204,7 +231,10 @@ function connectSSE() {
       }
       serverVersion = data.serverVersion;
       overlayConfig = data.config;
-      if (data.designs) overlayDesigns = data.designs;
+      if (data.designs) {
+        overlayDesigns = data.designs;
+        loadDesignFonts(data.designs);
+      }
       return;
     }
 
@@ -675,30 +705,48 @@ function applyCustomDesign(card, eventType) {
     accent.style.borderRadius = (design.border_radius || 16) + 'px ' + (design.border_radius || 16) + 'px 0 0';
   }
 
-  // Event label color & text
+  // Text alignment
+  const cardBody = card.querySelector('.card-body');
+  if (cardBody && design.text_align) {
+    cardBody.style.textAlign = design.text_align;
+  }
+
+  // Event label — per-text styling with fallbacks
   const labelEl = card.querySelector('.event-label');
   if (labelEl) {
-    labelEl.style.color = design.accent_color;
+    labelEl.style.color = design.label_color || design.accent_color;
     if (design.event_label) labelEl.textContent = design.event_label;
+    if (design.label_font_size) labelEl.style.fontSize = design.label_font_size + 'px';
+    if (design.label_font_weight) labelEl.style.fontWeight = design.label_font_weight;
+    const labelFont = design.label_font_family || design.font_family;
+    if (labelFont && labelFont !== 'System Default') labelEl.style.fontFamily = labelFont;
   }
 
-  // Detail text
+  // Detail text — per-text styling with fallbacks
   const detailEl = card.querySelector('.detail');
-  if (detailEl && design.detail_text) {
-    // Replace placeholder values in the template
-    detailEl.innerHTML = design.detail_text;
+  if (detailEl) {
+    if (design.detail_text) detailEl.innerHTML = design.detail_text;
+    detailEl.style.color = design.detail_color || design.text_color || '#ffffff';
+    if (design.detail_font_size) detailEl.style.fontSize = design.detail_font_size + 'px';
+    if (design.detail_font_weight) detailEl.style.fontWeight = design.detail_font_weight;
+    const detailFont = design.detail_font_family || design.font_family;
+    if (detailFont && detailFont !== 'System Default') detailEl.style.fontFamily = detailFont;
   }
 
-  // Font — apply to whole card so label/detail inherit it too
-  if (design.font_family && design.font_family !== 'System Default') {
-    card.style.fontFamily = design.font_family;
-  }
-
-  // Username color & size
+  // Username — per-text styling with fallbacks
   const usernameEl = card.querySelector('.username');
   if (usernameEl) {
-    usernameEl.style.color = design.text_color || '#ffffff';
+    usernameEl.style.color = design.username_color || design.text_color || '#ffffff';
     if (design.username_size) usernameEl.style.fontSize = design.username_size + 'px';
+    if (design.username_font_weight) usernameEl.style.fontWeight = design.username_font_weight;
+    const usernameFont = design.username_font_family || design.font_family;
+    if (usernameFont && usernameFont !== 'System Default') usernameEl.style.fontFamily = usernameFont;
+  }
+
+  // Legacy fallback: apply font_family to whole card if no per-element fonts
+  if (design.font_family && design.font_family !== 'System Default' &&
+      !design.label_font_family && !design.username_font_family && !design.detail_font_family) {
+    card.style.fontFamily = design.font_family;
   }
 
   // Car track accent

@@ -235,6 +235,26 @@
     .font-gallery-item.selected { border-color: var(--accent); background: var(--accent-glow); }
     .font-gallery-item .font-name { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
     .font-gallery-item .font-sample { font-size: 18px; color: var(--text-primary); }
+    .font-gallery-sm .font-gallery-item { padding: 8px 10px; }
+    .font-gallery-sm .font-gallery-item .font-sample { font-size: 15px; }
+
+    /* Text tabs */
+    .text-tab {
+      flex: 1; padding: 8px 12px; background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; text-align: center;
+    }
+    .text-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .text-tab.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+
+    /* Text alignment buttons */
+    .text-align-btn {
+      width: 32px; height: 28px; display: flex; align-items: center; justify-content: center;
+      background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+    }
+    .text-align-btn:hover { border-color: rgba(145,70,255,0.3); color: var(--text-primary); }
+    .text-align-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
     /* Controls */
     .ctrl-row {
@@ -882,9 +902,14 @@
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
+          <!-- Inline preview card showing current text styling -->
+          <div id="text-section-preview" style="padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;text-align:center;">
+            <div id="tsp-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:3px;">New Follower</div>
+            <div id="tsp-username" style="font-size:24px;font-weight:800;color:#ffffff;">RacerName</div>
+            <div id="tsp-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race</div>
+          </div>
           <button type="button" class="popup-trigger-btn" onclick="openTextPopup()">
-            <span id="text-font-preview" style="font-size:12px;color:var(--text-muted);">System Default</span>
-            Customize Text
+            Customize Text &amp; Font
           </button>
           <!-- Hidden inputs (still used by getControlValues) -->
           <div style="display:none;">
@@ -1056,16 +1081,24 @@ const SAVED_DESIGNS = {};
 const SERVER_DESIGNS = <%- designs %>;
 SERVER_DESIGNS.forEach(d => { SAVED_DESIGNS[d.event_type] = d; });
 
+// Per-text defaults shared across all events
+const TEXT_STYLE_DEFAULTS = {
+  label_font_family: null, label_font_size: 10, label_font_weight: 700, label_color: null,
+  username_font_family: null, username_font_weight: 800, username_color: null,
+  detail_font_family: null, detail_font_size: 13, detail_font_weight: 400, detail_color: null,
+  text_align: 'center',
+};
+
 const EVENT_DEFAULTS = {
-  follow:        { bg_color:'#1a1a3e', accent_color:'#8888cc', border_color:'#8888cc', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Pit Crew Member', detail_text:'just joined the race 🏁', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  subscription:  { bg_color:'#061a10', accent_color:'#00ff88', border_color:'#00ff88', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Podium Finish',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  bits:          { bg_color:'#1c1200', accent_color:'#f7c948', border_color:'#f7c948', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Nitro Boost',          detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  donation:      { bg_color:'#110022', accent_color:'#bf00ff', border_color:'#bf00ff', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Sponsor Alert',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  raid:          { bg_color:'#1c0505', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Incoming Raid',        detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  yt_superchat:  { bg_color:'#200808', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Super Chat',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  yt_member:     { bg_color:'#041a0c', accent_color:'#0f9d58', border_color:'#0f9d58', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Member',           detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  yt_giftmember: { bg_color:'#060e20', accent_color:'#4285f4', border_color:'#4285f4', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Gift Alert',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  timed:         { bg_color:'#1a1a2e', accent_color:'#f79009', border_color:'#f79009', text_color:'#ffffff', font_family:'System Default', username_size:18, event_label:'', detail_text:'', entrance_animation:'slideDown', car_animation:'none', screen_effect:'none', animation_speed:1.0, card_width:500, card_position:'bot-center', border_radius:12 },
+  follow:        { ...TEXT_STYLE_DEFAULTS, bg_color:'#1a1a3e', accent_color:'#8888cc', border_color:'#8888cc', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Pit Crew Member', detail_text:'just joined the race 🏁', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  subscription:  { ...TEXT_STYLE_DEFAULTS, bg_color:'#061a10', accent_color:'#00ff88', border_color:'#00ff88', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Podium Finish',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  bits:          { ...TEXT_STYLE_DEFAULTS, bg_color:'#1c1200', accent_color:'#f7c948', border_color:'#f7c948', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Nitro Boost',          detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  donation:      { ...TEXT_STYLE_DEFAULTS, bg_color:'#110022', accent_color:'#bf00ff', border_color:'#bf00ff', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Sponsor Alert',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  raid:          { ...TEXT_STYLE_DEFAULTS, bg_color:'#1c0505', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Incoming Raid',        detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  yt_superchat:  { ...TEXT_STYLE_DEFAULTS, bg_color:'#200808', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Super Chat',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  yt_member:     { ...TEXT_STYLE_DEFAULTS, bg_color:'#041a0c', accent_color:'#0f9d58', border_color:'#0f9d58', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Member',           detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  yt_giftmember: { ...TEXT_STYLE_DEFAULTS, bg_color:'#060e20', accent_color:'#4285f4', border_color:'#4285f4', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Gift Alert',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
+  timed:         { ...TEXT_STYLE_DEFAULTS, bg_color:'#1a1a2e', accent_color:'#f79009', border_color:'#f79009', text_color:'#ffffff', font_family:'System Default', username_size:18, event_label:'', detail_text:'', entrance_animation:'slideDown', car_animation:'none', screen_effect:'none', animation_speed:1.0, card_width:500, card_position:'bot-center', border_radius:12 },
 };
 
 const EVENT_NAMES = {
@@ -1118,6 +1151,7 @@ function loadGoogleFont(name) {
 
 // ─── Controls → design ───────────────────────────────────────────────────────
 function getControlValues() {
+  const wd = workingDesigns[currentType] || {};
   return {
     bg_color: document.getElementById('ctrl-bg-color').value,
     accent_color: document.getElementById('ctrl-accent-color').value,
@@ -1133,10 +1167,23 @@ function getControlValues() {
     animation_speed: parseFloat(document.getElementById('ctrl-animation-speed').value),
     card_width: parseInt(document.getElementById('ctrl-card-width').value),
     card_position: document.querySelector('.pos-cell.active')?.dataset.pos || 'top-center',
-    card_custom_x: workingDesigns[currentType]?.card_custom_x != null ? workingDesigns[currentType].card_custom_x : null,
-    card_custom_y: workingDesigns[currentType]?.card_custom_y != null ? workingDesigns[currentType].card_custom_y : null,
+    card_custom_x: wd.card_custom_x != null ? wd.card_custom_x : null,
+    card_custom_y: wd.card_custom_y != null ? wd.card_custom_y : null,
     border_radius: parseInt(document.getElementById('ctrl-border-radius').value),
     sponsor_animation: document.getElementById('ctrl-sponsor-animation').value,
+    // Per-text styling (read from workingDesigns, set via popup)
+    label_font_family: wd.label_font_family || null,
+    label_font_size: wd.label_font_size != null ? wd.label_font_size : 10,
+    label_font_weight: wd.label_font_weight != null ? wd.label_font_weight : 700,
+    label_color: wd.label_color || null,
+    username_font_family: wd.username_font_family || null,
+    username_font_weight: wd.username_font_weight != null ? wd.username_font_weight : 800,
+    username_color: wd.username_color || null,
+    detail_font_family: wd.detail_font_family || null,
+    detail_font_size: wd.detail_font_size != null ? wd.detail_font_size : 13,
+    detail_font_weight: wd.detail_font_weight != null ? wd.detail_font_weight : 400,
+    detail_color: wd.detail_color || null,
+    text_align: wd.text_align || 'center',
   };
 }
 
@@ -1170,13 +1217,19 @@ function setControlValues(d) {
   // Update theme button swatches
   document.getElementById('swatch-bg').style.background = d.bg_color;
   document.getElementById('swatch-accent').style.background = d.accent_color;
-  // Update text button font preview
-  document.getElementById('text-font-preview').textContent = d.font_family;
+  // Update text section inline preview
+  updateTextSectionPreview(d);
 
   // Position grid
   document.querySelectorAll('.pos-cell').forEach(c => c.classList.remove('active'));
   const cell = document.querySelector(`.pos-cell[data-pos="${d.card_position}"]`);
   if (cell) cell.classList.add('active');
+}
+
+// ─── Font resolver ────────────────────────────────────────────────────────────
+function resolveFont(name) {
+  if (!name || name === 'System Default') return '-apple-system, BlinkMacSystemFont, sans-serif';
+  return `'${name}', sans-serif`;
 }
 
 // ─── Darken helper ────────────────────────────────────────────────────────────
@@ -1221,18 +1274,31 @@ function updatePreview() {
   // Car track background
   track.style.background = hexToRgba(d.accent_color, 0.06);
 
-  // Label color = accent
-  labelEl.style.color = d.accent_color;
+  // Text alignment
+  const cardBody = card.querySelector('.card-body');
+  if (cardBody) cardBody.style.textAlign = d.text_align || 'center';
+
+  // Label — per-text styling with fallbacks
+  const labelFont = resolveFont(d.label_font_family || d.font_family);
+  labelEl.style.fontFamily = labelFont;
+  labelEl.style.fontSize = (d.label_font_size || 10) + 'px';
+  labelEl.style.fontWeight = d.label_font_weight || 700;
+  labelEl.style.color = d.label_color || d.accent_color;
   labelEl.textContent = d.event_label || EVENT_DEFAULTS[currentType].event_label;
 
-  // Username
-  const ff = d.font_family === 'System Default' ? '-apple-system, BlinkMacSystemFont, sans-serif' : d.font_family;
-  usernameEl.style.fontFamily = ff;
+  // Username — per-text styling with fallbacks
+  const usernameFont = resolveFont(d.username_font_family || d.font_family);
+  usernameEl.style.fontFamily = usernameFont;
   usernameEl.style.fontSize = d.username_size + 'px';
-  usernameEl.style.color = d.text_color;
-  card.style.fontFamily = ff;
+  usernameEl.style.fontWeight = d.username_font_weight || 800;
+  usernameEl.style.color = d.username_color || d.text_color;
 
-  // Detail
+  // Detail — per-text styling with fallbacks
+  const detailFont = resolveFont(d.detail_font_family || d.font_family);
+  detailEl.style.fontFamily = detailFont;
+  detailEl.style.fontSize = (d.detail_font_size || 13) + 'px';
+  detailEl.style.fontWeight = d.detail_font_weight || 400;
+  detailEl.style.color = d.detail_color || d.text_color;
   const detailDefault = getDetailPreviewText(currentType);
   detailEl.textContent = d.detail_text || detailDefault;
 
@@ -1256,8 +1322,10 @@ function updatePreview() {
   // Update overlay guide border
   updateOverlayGuide();
 
-  // Load font if needed
-  if (d.font_family !== 'System Default') loadGoogleFont(d.font_family);
+  // Load fonts if needed
+  [d.font_family, d.label_font_family, d.username_font_family, d.detail_font_family].forEach(f => {
+    if (f && f !== 'System Default') loadGoogleFont(f);
+  });
 
   // Show screen effect preview
   renderScreenEffect(d.screen_effect);
@@ -2095,68 +2163,141 @@ document.addEventListener('mouseup', e => {
   </div>
 </div>
 
-<!-- Text & Font Popup Modal -->
+<!-- Text & Font Popup Modal (Tabbed: Label / Username / Detail) -->
 <div class="modal-overlay" id="text-modal" onclick="if(event.target===this)closeTextPopup()">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:520px;">
     <h3>✏️ Customize Text</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
-      <div>
-        <div class="ctrl-label" style="margin-bottom:6px;">Event Label</div>
-        <input type="text" id="modal-event-label" placeholder="e.g. New Pit Crew Member" style="width:100%;">
-      </div>
-      <div>
-        <div class="ctrl-label" style="margin-bottom:6px;">Detail Text</div>
-        <input type="text" id="modal-detail-text" placeholder="just joined the race 🏁" style="width:100%;">
-      </div>
-    </div>
-    <div class="ctrl-label" style="margin-bottom:8px;">Font Family</div>
-    <div class="font-gallery" id="font-gallery">
-      <div class="font-gallery-item selected" data-font="System Default">
-        <div class="font-name">System Default</div>
-        <div class="font-sample" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Outfit">
-        <div class="font-name">Outfit</div>
-        <div class="font-sample" style="font-family:'Outfit',sans-serif;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Inter">
-        <div class="font-name">Inter</div>
-        <div class="font-sample" style="font-family:'Inter',sans-serif;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Poppins">
-        <div class="font-name">Poppins</div>
-        <div class="font-sample" style="font-family:'Poppins',sans-serif;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Roboto Mono">
-        <div class="font-name">Roboto Mono</div>
-        <div class="font-sample" style="font-family:'Roboto Mono',monospace;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Press Start 2P">
-        <div class="font-name">Press Start 2P</div>
-        <div class="font-sample" style="font-family:'Press Start 2P',cursive;font-size:12px;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Permanent Marker">
-        <div class="font-name">Permanent Marker</div>
-        <div class="font-sample" style="font-family:'Permanent Marker',cursive;">The quick brown fox</div>
-      </div>
-      <div class="font-gallery-item" data-font="Bangers">
-        <div class="font-name">Bangers</div>
-        <div class="font-sample" style="font-family:'Bangers',cursive;">The quick brown fox</div>
+
+    <!-- Text Alignment -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <span class="ctrl-label" style="margin:0;">Alignment</span>
+      <div style="display:flex;gap:4px;">
+        <button type="button" class="text-align-btn" data-align="left" onclick="setTextAlign('left')" title="Left">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 3h12M2 6h8M2 9h10M2 12h6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <button type="button" class="text-align-btn active" data-align="center" onclick="setTextAlign('center')" title="Center">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 3h12M4 6h8M3 9h10M5 12h6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <button type="button" class="text-align-btn" data-align="right" onclick="setTextAlign('right')" title="Right">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 3h12M6 6h8M4 9h10M8 12h6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
       </div>
     </div>
-    <div class="range-row" style="margin-bottom:16px;">
-      <div class="range-header">
-        <span class="ctrl-label">Username Size</span>
-        <span class="range-val" id="modal-val-username-size">24px</span>
-      </div>
-      <input type="range" id="modal-username-size" min="14" max="42" step="1" value="24" oninput="document.getElementById('modal-val-username-size').textContent=this.value+'px';updateTextPreview();">
+
+    <!-- 3 Tabs -->
+    <div class="text-tabs" style="display:flex;gap:4px;margin-bottom:14px;">
+      <button type="button" class="text-tab active" data-tab="label" onclick="switchTextTab('label')">Top Text</button>
+      <button type="button" class="text-tab" data-tab="username" onclick="switchTextTab('username')">Username</button>
+      <button type="button" class="text-tab" data-tab="detail" onclick="switchTextTab('detail')">Bottom Text</button>
     </div>
-    <div class="ctrl-label" style="margin-bottom:8px;">Preview</div>
+
+    <!-- Label Tab -->
+    <div class="text-tab-panel" id="tab-label">
+      <div class="ctrl-label" style="margin-bottom:6px;">Text Content</div>
+      <input type="text" id="modal-event-label" placeholder="e.g. New Pit Crew Member" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="color" id="modal-label-color" value="#8888cc" style="width:32px;height:28px;padding:0;border:none;background:none;cursor:pointer;" oninput="updateTextPreview()">
+            <span class="ctrl-label" style="font-size:11px;opacity:0.6;" id="modal-label-color-hint">accent</span>
+          </div>
+        </div>
+        <div>
+          <div class="ctrl-label" style="margin-bottom:4px;">Weight</div>
+          <select id="modal-label-weight" style="width:100%;" onchange="updateTextPreview()">
+            <option value="400">Regular (400)</option>
+            <option value="500">Medium (500)</option>
+            <option value="600">Semibold (600)</option>
+            <option value="700" selected>Bold (700)</option>
+            <option value="800">Extra Bold (800)</option>
+          </select>
+        </div>
+      </div>
+      <div class="range-row" style="margin-bottom:12px;">
+        <div class="range-header">
+          <span class="ctrl-label">Size</span>
+          <span class="range-val" id="modal-val-label-size">10px</span>
+        </div>
+        <input type="range" id="modal-label-size" min="8" max="24" step="1" value="10" oninput="document.getElementById('modal-val-label-size').textContent=this.value+'px';updateTextPreview();">
+      </div>
+      <div class="ctrl-label" style="margin-bottom:6px;">Font Family</div>
+      <div class="font-gallery font-gallery-sm" id="font-gallery-label"></div>
+    </div>
+
+    <!-- Username Tab -->
+    <div class="text-tab-panel" id="tab-username" style="display:none;">
+      <div class="ctrl-label" style="margin-bottom:6px;opacity:0.5;">Username is set automatically from the event</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="color" id="modal-username-color" value="#ffffff" style="width:32px;height:28px;padding:0;border:none;background:none;cursor:pointer;" oninput="updateTextPreview()">
+          </div>
+        </div>
+        <div>
+          <div class="ctrl-label" style="margin-bottom:4px;">Weight</div>
+          <select id="modal-username-weight" style="width:100%;" onchange="updateTextPreview()">
+            <option value="400">Regular (400)</option>
+            <option value="500">Medium (500)</option>
+            <option value="600">Semibold (600)</option>
+            <option value="700">Bold (700)</option>
+            <option value="800" selected>Extra Bold (800)</option>
+          </select>
+        </div>
+      </div>
+      <div class="range-row" style="margin-bottom:12px;">
+        <div class="range-header">
+          <span class="ctrl-label">Size</span>
+          <span class="range-val" id="modal-val-username-size">24px</span>
+        </div>
+        <input type="range" id="modal-username-size" min="14" max="52" step="1" value="24" oninput="document.getElementById('modal-val-username-size').textContent=this.value+'px';updateTextPreview();">
+      </div>
+      <div class="ctrl-label" style="margin-bottom:6px;">Font Family</div>
+      <div class="font-gallery font-gallery-sm" id="font-gallery-username"></div>
+    </div>
+
+    <!-- Detail Tab -->
+    <div class="text-tab-panel" id="tab-detail" style="display:none;">
+      <div class="ctrl-label" style="margin-bottom:6px;">Text Content</div>
+      <input type="text" id="modal-detail-text" placeholder="just joined the race 🏁" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="color" id="modal-detail-color" value="#ffffff" style="width:32px;height:28px;padding:0;border:none;background:none;cursor:pointer;" oninput="updateTextPreview()">
+          </div>
+        </div>
+        <div>
+          <div class="ctrl-label" style="margin-bottom:4px;">Weight</div>
+          <select id="modal-detail-weight" style="width:100%;" onchange="updateTextPreview()">
+            <option value="400" selected>Regular (400)</option>
+            <option value="500">Medium (500)</option>
+            <option value="600">Semibold (600)</option>
+            <option value="700">Bold (700)</option>
+            <option value="800">Extra Bold (800)</option>
+          </select>
+        </div>
+      </div>
+      <div class="range-row" style="margin-bottom:12px;">
+        <div class="range-header">
+          <span class="ctrl-label">Size</span>
+          <span class="range-val" id="modal-val-detail-size">13px</span>
+        </div>
+        <input type="range" id="modal-detail-size" min="8" max="32" step="1" value="13" oninput="document.getElementById('modal-val-detail-size').textContent=this.value+'px';updateTextPreview();">
+      </div>
+      <div class="ctrl-label" style="margin-bottom:6px;">Font Family</div>
+      <div class="font-gallery font-gallery-sm" id="font-gallery-detail"></div>
+    </div>
+
+    <!-- Live Preview -->
+    <div class="ctrl-label" style="margin-bottom:8px;margin-top:14px;">Preview</div>
     <div id="text-preview-card" style="padding:16px;border-radius:12px;border:2px solid #8888cc;background:#1a1a3e;margin-bottom:8px;">
-      <div id="text-preview-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8888cc;margin-bottom:4px;">New Follower</div>
+      <div id="text-preview-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:4px;">New Follower</div>
       <div id="text-preview-username" style="font-size:24px;font-weight:800;color:#ffffff;">RacerName</div>
       <div id="text-preview-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race</div>
     </div>
+
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeTextPopup()">Cancel</button>
       <button type="button" class="btn-apply" onclick="applyText()">Apply</button>
@@ -2235,87 +2376,211 @@ document.querySelectorAll('#theme-modal .theme-preset').forEach(btn => {
   });
 });
 
-// ─── Text & Font Popup ──────────────────────────────────────
+// ─── Text & Font Popup (Tabbed) ──────────────────────────────
 let textBackup = {};
-let modalSelectedFont = 'System Default';
+const FONT_LIST = [
+  { name: 'System Default', family: '-apple-system, BlinkMacSystemFont, sans-serif' },
+  { name: 'Outfit', family: "'Outfit', sans-serif" },
+  { name: 'Inter', family: "'Inter', sans-serif" },
+  { name: 'Poppins', family: "'Poppins', sans-serif" },
+  { name: 'Roboto Mono', family: "'Roboto Mono', monospace" },
+  { name: 'Press Start 2P', family: "'Press Start 2P', cursive", sampleSize: '12px' },
+  { name: 'Permanent Marker', family: "'Permanent Marker', cursive" },
+  { name: 'Bangers', family: "'Bangers', cursive" },
+];
+
+// Per-tab selected fonts
+const modalFonts = { label: 'System Default', username: 'System Default', detail: 'System Default' };
+
+function buildFontGallery(containerId, tabKey) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  FONT_LIST.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'font-gallery-item' + (modalFonts[tabKey] === f.name ? ' selected' : '');
+    div.dataset.font = f.name;
+    div.innerHTML = `<div class="font-name">${f.name}</div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}">The quick brown fox</div>`;
+    div.addEventListener('click', () => {
+      container.querySelectorAll('.font-gallery-item').forEach(i => i.classList.remove('selected'));
+      div.classList.add('selected');
+      modalFonts[tabKey] = f.name;
+      if (f.name !== 'System Default') loadGoogleFont(f.name);
+      updateTextPreview();
+    });
+    container.appendChild(div);
+  });
+}
+
+function switchTextTab(tab) {
+  document.querySelectorAll('.text-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  ['label', 'username', 'detail'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+  });
+}
+
+function setTextAlign(align) {
+  document.querySelectorAll('.text-align-btn').forEach(b => b.classList.toggle('active', b.dataset.align === align));
+  modalTextAlign = align;
+  updateTextPreview();
+}
+
+let modalTextAlign = 'center';
 
 function openTextPopup() {
-  textBackup = {
-    eventLabel: document.getElementById('ctrl-event-label').value,
-    detailText: document.getElementById('ctrl-detail-text').value,
-    font: document.getElementById('font-picker-selected').querySelector('span').textContent,
-    usernameSize: document.getElementById('ctrl-username-size').value,
-  };
-  document.getElementById('modal-event-label').value = textBackup.eventLabel;
-  document.getElementById('modal-detail-text').value = textBackup.detailText;
-  document.getElementById('modal-username-size').value = textBackup.usernameSize;
-  document.getElementById('modal-val-username-size').textContent = textBackup.usernameSize + 'px';
-  modalSelectedFont = textBackup.font;
-  // Select font in gallery
-  document.querySelectorAll('.font-gallery-item').forEach(el => {
-    el.classList.toggle('selected', el.dataset.font === modalSelectedFont);
-  });
+  const d = workingDesigns[currentType];
+  // Backup for cancel
+  textBackup = JSON.parse(JSON.stringify({
+    event_label: d.event_label, detail_text: d.detail_text, font_family: d.font_family, username_size: d.username_size,
+    label_font_family: d.label_font_family, label_font_size: d.label_font_size, label_font_weight: d.label_font_weight, label_color: d.label_color,
+    username_font_family: d.username_font_family, username_font_weight: d.username_font_weight, username_color: d.username_color,
+    detail_font_family: d.detail_font_family, detail_font_size: d.detail_font_size, detail_font_weight: d.detail_font_weight, detail_color: d.detail_color,
+    text_align: d.text_align,
+  }));
+
+  // Populate label tab
+  document.getElementById('modal-event-label').value = d.event_label || '';
+  document.getElementById('modal-label-color').value = d.label_color || d.accent_color || '#8888cc';
+  document.getElementById('modal-label-weight').value = d.label_font_weight || 700;
+  document.getElementById('modal-label-size').value = d.label_font_size || 10;
+  document.getElementById('modal-val-label-size').textContent = (d.label_font_size || 10) + 'px';
+  modalFonts.label = d.label_font_family || d.font_family || 'System Default';
+
+  // Populate username tab
+  document.getElementById('modal-username-color').value = d.username_color || d.text_color || '#ffffff';
+  document.getElementById('modal-username-weight').value = d.username_font_weight || 800;
+  document.getElementById('modal-username-size').value = d.username_size || 24;
+  document.getElementById('modal-val-username-size').textContent = (d.username_size || 24) + 'px';
+  modalFonts.username = d.username_font_family || d.font_family || 'System Default';
+
+  // Populate detail tab
+  document.getElementById('modal-detail-text').value = d.detail_text || '';
+  document.getElementById('modal-detail-color').value = d.detail_color || d.text_color || '#ffffff';
+  document.getElementById('modal-detail-weight').value = d.detail_font_weight || 400;
+  document.getElementById('modal-detail-size').value = d.detail_font_size || 13;
+  document.getElementById('modal-val-detail-size').textContent = (d.detail_font_size || 13) + 'px';
+  modalFonts.detail = d.detail_font_family || d.font_family || 'System Default';
+
+  // Alignment
+  modalTextAlign = d.text_align || 'center';
+  document.querySelectorAll('.text-align-btn').forEach(b => b.classList.toggle('active', b.dataset.align === modalTextAlign));
+
+  // Build font galleries
+  buildFontGallery('font-gallery-label', 'label');
+  buildFontGallery('font-gallery-username', 'username');
+  buildFontGallery('font-gallery-detail', 'detail');
+
+  // Reset to first tab
+  switchTextTab('label');
+
   updateTextPreview();
   document.getElementById('text-modal').classList.add('visible');
 }
+
 function closeTextPopup() {
   document.getElementById('text-modal').classList.remove('visible');
 }
+
 function updateTextPreview() {
   const card = document.getElementById('text-preview-card');
   const d = workingDesigns[currentType];
   card.style.background = d.bg_color;
   card.style.borderColor = d.border_color;
-  document.getElementById('text-preview-label').style.color = d.accent_color;
-  const label = document.getElementById('modal-event-label').value || d.event_label || 'New Follower';
-  document.getElementById('text-preview-label').textContent = label;
-  const detail = document.getElementById('modal-detail-text').value || d.detail_text || 'just joined the race';
-  document.getElementById('text-preview-detail').textContent = detail;
-  const size = document.getElementById('modal-username-size').value;
+  card.style.textAlign = modalTextAlign;
+
+  // Label
+  const labelEl = document.getElementById('text-preview-label');
+  const labelText = document.getElementById('modal-event-label').value || d.event_label || EVENT_DEFAULTS[currentType]?.event_label || 'New Follower';
+  labelEl.textContent = labelText;
+  labelEl.style.color = document.getElementById('modal-label-color').value;
+  labelEl.style.fontWeight = document.getElementById('modal-label-weight').value;
+  labelEl.style.fontSize = document.getElementById('modal-label-size').value + 'px';
+  labelEl.style.fontFamily = resolveFont(modalFonts.label);
+
+  // Username
   const un = document.getElementById('text-preview-username');
-  un.style.fontSize = size + 'px';
-  un.style.color = d.text_color;
-  document.getElementById('text-preview-detail').style.color = d.text_color;
-  const fontFamily = modalSelectedFont === 'System Default'
-    ? '-apple-system, BlinkMacSystemFont, sans-serif'
-    : `'${modalSelectedFont}', sans-serif`;
-  un.style.fontFamily = fontFamily;
-  document.getElementById('text-preview-label').style.fontFamily = fontFamily;
-  document.getElementById('text-preview-detail').style.fontFamily = fontFamily;
+  un.style.color = document.getElementById('modal-username-color').value;
+  un.style.fontWeight = document.getElementById('modal-username-weight').value;
+  un.style.fontSize = document.getElementById('modal-username-size').value + 'px';
+  un.style.fontFamily = resolveFont(modalFonts.username);
+
+  // Detail
+  const detailEl = document.getElementById('text-preview-detail');
+  const detailText = document.getElementById('modal-detail-text').value || d.detail_text || 'just joined the race';
+  detailEl.textContent = detailText;
+  detailEl.style.color = document.getElementById('modal-detail-color').value;
+  detailEl.style.fontWeight = document.getElementById('modal-detail-weight').value;
+  detailEl.style.fontSize = document.getElementById('modal-detail-size').value + 'px';
+  detailEl.style.fontFamily = resolveFont(modalFonts.detail);
 }
 
-// Font gallery click
-document.querySelectorAll('.font-gallery-item').forEach(el => {
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.font-gallery-item').forEach(i => i.classList.remove('selected'));
-    el.classList.add('selected');
-    modalSelectedFont = el.dataset.font;
-    updateTextPreview();
-  });
-});
-
-// Live preview on text input
-document.getElementById('modal-event-label').addEventListener('input', updateTextPreview);
-document.getElementById('modal-detail-text').addEventListener('input', updateTextPreview);
-
 function applyText() {
-  document.getElementById('ctrl-event-label').value = document.getElementById('modal-event-label').value;
-  document.getElementById('ctrl-detail-text').value = document.getElementById('modal-detail-text').value;
-  document.getElementById('ctrl-username-size').value = document.getElementById('modal-username-size').value;
-  document.getElementById('val-username-size').textContent = document.getElementById('modal-username-size').value + 'px';
-  // Set font
+  const d = workingDesigns[currentType];
+
+  // Text content
+  d.event_label = document.getElementById('modal-event-label').value;
+  document.getElementById('ctrl-event-label').value = d.event_label;
+  d.detail_text = document.getElementById('modal-detail-text').value;
+  document.getElementById('ctrl-detail-text').value = d.detail_text;
+
+  // Label styling
+  d.label_font_family = modalFonts.label === 'System Default' ? null : modalFonts.label;
+  d.label_font_size = parseInt(document.getElementById('modal-label-size').value);
+  d.label_font_weight = parseInt(document.getElementById('modal-label-weight').value);
+  d.label_color = document.getElementById('modal-label-color').value;
+
+  // Username styling
+  d.username_size = parseInt(document.getElementById('modal-username-size').value);
+  document.getElementById('ctrl-username-size').value = d.username_size;
+  d.username_font_family = modalFonts.username === 'System Default' ? null : modalFonts.username;
+  d.username_font_weight = parseInt(document.getElementById('modal-username-weight').value);
+  d.username_color = document.getElementById('modal-username-color').value;
+
+  // Detail styling
+  d.detail_font_family = modalFonts.detail === 'System Default' ? null : modalFonts.detail;
+  d.detail_font_size = parseInt(document.getElementById('modal-detail-size').value);
+  d.detail_font_weight = parseInt(document.getElementById('modal-detail-weight').value);
+  d.detail_color = document.getElementById('modal-detail-color').value;
+
+  // Alignment
+  d.text_align = modalTextAlign;
+
+  // Legacy font_family = username font for backward compat
+  d.font_family = modalFonts.username === 'System Default' ? 'System Default' : modalFonts.username;
   const fontSpan = document.getElementById('font-picker-selected').querySelector('span');
-  fontSpan.textContent = modalSelectedFont;
-  if (modalSelectedFont !== 'System Default') {
-    fontSpan.style.fontFamily = modalSelectedFont;
-    loadGoogleFont(modalSelectedFont);
-  } else {
-    fontSpan.style.fontFamily = '-apple-system, BlinkMacSystemFont, sans-serif';
-  }
-  // Update font preview text in the button
-  document.getElementById('text-font-preview').textContent = modalSelectedFont;
+  fontSpan.textContent = d.font_family;
+  fontSpan.style.fontFamily = resolveFont(d.font_family);
+
+  unsavedChanges = true;
   updatePreview();
+  updateTextSectionPreview(d);
   closeTextPopup();
+}
+
+// Update the inline preview in the Text & Font section
+function updateTextSectionPreview(d) {
+  const preview = document.getElementById('text-section-preview');
+  if (!preview) return;
+  preview.style.textAlign = d.text_align || 'center';
+
+  const labelEl = document.getElementById('tsp-label');
+  labelEl.textContent = d.event_label || EVENT_DEFAULTS[currentType]?.event_label || 'Label';
+  labelEl.style.color = d.label_color || d.accent_color;
+  labelEl.style.fontFamily = resolveFont(d.label_font_family || d.font_family);
+  labelEl.style.fontSize = (d.label_font_size || 10) + 'px';
+  labelEl.style.fontWeight = d.label_font_weight || 700;
+
+  const usernameEl = document.getElementById('tsp-username');
+  usernameEl.style.color = d.username_color || d.text_color;
+  usernameEl.style.fontFamily = resolveFont(d.username_font_family || d.font_family);
+  usernameEl.style.fontSize = (d.username_size || 24) + 'px';
+  usernameEl.style.fontWeight = d.username_font_weight || 800;
+
+  const detailEl = document.getElementById('tsp-detail');
+  detailEl.textContent = d.detail_text || getDetailPreviewText(currentType) || 'detail text';
+  detailEl.style.color = d.detail_color || d.text_color;
+  detailEl.style.fontFamily = resolveFont(d.detail_font_family || d.font_family);
+  detailEl.style.fontSize = (d.detail_font_size || 13) + 'px';
+  detailEl.style.fontWeight = d.detail_font_weight || 400;
 }
 </script>
 
