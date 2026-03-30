@@ -987,58 +987,26 @@
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
-          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
-            <div class="ctrl-label" style="margin-bottom:4px;">Entrance</div>
-            <select id="ctrl-entrance-animation" style="width:100%;" onchange="updatePreview()">
-              <option value="slideDown">Slide Down</option>
-              <option value="slideUp">Slide Up</option>
-              <option value="slideLeft">Slide Left</option>
-              <option value="slideRight">Slide Right</option>
-              <option value="zoomIn">Zoom In</option>
-              <option value="fadeIn">Fade In</option>
-            </select>
+          <!-- Inline preview -->
+          <div id="anim-section-preview" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;font-size:12px;color:var(--text-secondary);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
+            <div><span style="color:var(--text-muted);">Entrance:</span> <span id="asp-entrance">Slide Down</span></div>
+            <div><span style="color:var(--text-muted);">Car:</span> <span id="asp-car">L→R</span></div>
+            <div><span style="color:var(--text-muted);">Effect:</span> <span id="asp-effect">Default</span></div>
+            <div><span style="color:var(--text-muted);">Speed:</span> <span id="asp-speed">1.0×</span></div>
+            <div><span style="color:var(--text-muted);">Amount:</span> <span id="asp-amount">1.0×</span></div>
+            <div><span style="color:var(--text-muted);">Size:</span> <span id="asp-size">1.0×</span></div>
           </div>
-          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
-            <div class="ctrl-label" style="margin-bottom:4px;">Car Animation</div>
-            <select id="ctrl-car-animation" style="width:100%;" onchange="updatePreview()">
-              <option value="zoomLR">Zoom L→R</option>
-              <option value="zoomRL">Zoom R→L</option>
-              <option value="bounce">Bounce</option>
-              <option value="none">None</option>
-            </select>
-          </div>
-          <div class="ctrl-row" style="display:block;margin-bottom:10px;">
-            <div class="ctrl-label" style="margin-bottom:4px;">Screen Effect</div>
-            <select id="ctrl-screen-effect" style="width:100%;" onchange="updatePreview()">
-              <option value="default">Default (per event)</option>
-              <option value="none">None</option>
-              <option value="confetti">Confetti</option>
-              <option value="gold">Gold Rain</option>
-              <option value="money">Money Rain</option>
-              <option value="robots">Robots</option>
-              <option value="tiremarks">Tire Marks</option>
-            </select>
-          </div>
-          <div class="range-row" style="margin-bottom:10px;">
-            <div class="range-header">
-              <span class="ctrl-label">Effect Speed</span>
-              <span class="range-val" id="val-animation-speed">1.0×</span>
-            </div>
-            <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('val-animation-speed').textContent=parseFloat(this.value).toFixed(1)+'×';updatePreview();">
-          </div>
-          <div class="range-row" style="margin-bottom:10px;">
-            <div class="range-header">
-              <span class="ctrl-label">Effect Amount</span>
-              <span class="range-val" id="val-effect-amount">1.0×</span>
-            </div>
-            <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('val-effect-amount').textContent=parseFloat(this.value).toFixed(1)+'×';updatePreview();">
-          </div>
-          <div class="range-row">
-            <div class="range-header">
-              <span class="ctrl-label">Effect Size</span>
-              <span class="range-val" id="val-effect-size">1.0×</span>
-            </div>
-            <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('val-effect-size').textContent=parseFloat(this.value).toFixed(1)+'×';updatePreview();">
+          <button type="button" class="popup-trigger-btn" onclick="openAnimPopup()">
+            Customize Animation
+          </button>
+          <!-- Hidden inputs still used by getControlValues -->
+          <div style="display:none;">
+            <select id="ctrl-entrance-animation"><option value="slideDown">Slide Down</option><option value="slideUp">Slide Up</option><option value="slideLeft">Slide Left</option><option value="slideRight">Slide Right</option><option value="zoomIn">Zoom In</option><option value="fadeIn">Fade In</option></select>
+            <select id="ctrl-car-animation"><option value="zoomLR">Zoom L→R</option><option value="zoomRL">Zoom R→L</option><option value="bounce">Bounce</option><option value="none">None</option></select>
+            <select id="ctrl-screen-effect"><option value="default">Default (per event)</option><option value="none">None</option><option value="confetti">Confetti</option><option value="gold">Gold Rain</option><option value="money">Money Rain</option><option value="robots">Robots</option><option value="tiremarks">Tire Marks</option></select>
+            <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
+            <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0">
+            <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0">
           </div>
         </div>
       </div>
@@ -1713,6 +1681,7 @@ function switchTab(type) {
   // Load controls for this type
   setControlValues(workingDesigns[type]);
   updateSideIconGrid(workingDesigns[type]);
+  if (typeof updateAnimSectionPreview === 'function') updateAnimSectionPreview(workingDesigns[type]);
   updatePreview();
 
   // Update URL and sounds link to preserve tab context
@@ -2459,6 +2428,93 @@ document.addEventListener('mouseup', e => {
   </div>
 </div>
 
+<!-- Animation Popup Modal -->
+<div class="modal-overlay" id="anim-modal" onclick="if(event.target===this)closeAnimPopup()">
+  <div class="modal-box" style="max-width:540px;">
+    <h3>⚡ Customize Animation</h3>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div>
+        <div class="ctrl-label" style="margin-bottom:4px;">Entrance</div>
+        <select id="modal-entrance-animation" style="width:100%;" onchange="updateAnimPreview()">
+          <option value="slideDown">Slide Down</option>
+          <option value="slideUp">Slide Up</option>
+          <option value="slideLeft">Slide Left</option>
+          <option value="slideRight">Slide Right</option>
+          <option value="zoomIn">Zoom In</option>
+          <option value="fadeIn">Fade In</option>
+        </select>
+      </div>
+      <div>
+        <div class="ctrl-label" style="margin-bottom:4px;">Car Animation</div>
+        <select id="modal-car-animation" style="width:100%;" onchange="updateAnimPreview()">
+          <option value="zoomLR">Zoom L→R</option>
+          <option value="zoomRL">Zoom R→L</option>
+          <option value="bounce">Bounce</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="ctrl-row" style="display:block;margin-bottom:14px;">
+      <div class="ctrl-label" style="margin-bottom:4px;">Screen Effect</div>
+      <select id="modal-screen-effect" style="width:100%;" onchange="updateAnimPreview()">
+        <option value="default">Default (per event)</option>
+        <option value="none">None</option>
+        <option value="confetti">Confetti</option>
+        <option value="gold">Gold Rain</option>
+        <option value="money">Money Rain</option>
+        <option value="robots">Robots</option>
+        <option value="tiremarks">Tire Marks</option>
+      </select>
+    </div>
+
+    <div class="range-row" style="margin-bottom:12px;">
+      <div class="range-header">
+        <span class="ctrl-label">Effect Speed</span>
+        <span class="range-val" id="modal-val-speed">1.0×</span>
+      </div>
+      <input type="range" id="modal-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('modal-val-speed').textContent=parseFloat(this.value).toFixed(1)+'×';updateAnimPreview();">
+    </div>
+
+    <div class="range-row" style="margin-bottom:12px;">
+      <div class="range-header">
+        <span class="ctrl-label">Effect Amount</span>
+        <span class="range-val" id="modal-val-amount">1.0×</span>
+      </div>
+      <input type="range" id="modal-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('modal-val-amount').textContent=parseFloat(this.value).toFixed(1)+'×';updateAnimPreview();">
+    </div>
+
+    <div class="range-row" style="margin-bottom:14px;">
+      <div class="range-header">
+        <span class="ctrl-label">Effect Size</span>
+        <span class="range-val" id="modal-val-size">1.0×</span>
+      </div>
+      <input type="range" id="modal-effect-size" min="0.5" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('modal-val-size').textContent=parseFloat(this.value).toFixed(1)+'×';updateAnimPreview();">
+    </div>
+
+    <!-- Live effect preview -->
+    <div class="ctrl-label" style="margin-bottom:6px;">Preview</div>
+    <div id="anim-preview-box" style="position:relative;aspect-ratio:16/9;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:#080a10;overflow:hidden;margin-bottom:12px;">
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+        <div id="anim-preview-card" style="padding:12px 20px;border-radius:12px;border:1px solid rgba(136,136,204,0.5);background:linear-gradient(160deg,rgb(9,9,22),#1a1a3e 40%,rgb(9,9,22));text-align:center;width:180px;">
+          <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#8888cc;font-weight:700;margin-bottom:2px;">New Follower</div>
+          <div style="font-size:16px;font-weight:800;color:#fff;">RacerName</div>
+          <div style="font-size:10px;color:#ccc;margin-top:2px;">just joined the race</div>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="btn-cancel" style="width:100%;margin-bottom:8px;" onclick="playAnimPreviewDemo()">
+      ▶ Play Animation
+    </button>
+
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="closeAnimPopup()">Cancel</button>
+      <button type="button" class="btn-apply" onclick="applyAnim()">Apply</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── Theme Popup ─────────────────────────────────────────────
 let themeBackup = {};
@@ -2739,6 +2795,161 @@ function updateTextSectionPreview(d) {
 
 // Run initial text section preview now that this function is defined
 updateTextSectionPreview(workingDesigns[currentType]);
+
+// ─── Animation Popup ─────────────────────────────────────────
+const ENTRANCE_LABELS = { slideDown:'Slide Down', slideUp:'Slide Up', slideLeft:'Slide Left', slideRight:'Slide Right', zoomIn:'Zoom In', fadeIn:'Fade In' };
+const CAR_LABELS = { zoomLR:'L→R', zoomRL:'R→L', bounce:'Bounce', none:'None' };
+const EFFECT_LABELS = { default:'Default', none:'None', confetti:'Confetti', gold:'Gold Rain', money:'Money Rain', robots:'Robots', tiremarks:'Tire Marks' };
+
+let animBackup = {};
+
+function openAnimPopup() {
+  const d = workingDesigns[currentType];
+  animBackup = {
+    entrance_animation: d.entrance_animation,
+    car_animation: d.car_animation,
+    screen_effect: d.screen_effect,
+    animation_speed: d.animation_speed,
+    effect_amount: d.effect_amount,
+    effect_size: d.effect_size,
+  };
+  document.getElementById('modal-entrance-animation').value = d.entrance_animation || 'slideDown';
+  document.getElementById('modal-car-animation').value = d.car_animation || 'zoomLR';
+  document.getElementById('modal-screen-effect').value = d.screen_effect || 'default';
+  document.getElementById('modal-animation-speed').value = d.animation_speed || 1.0;
+  document.getElementById('modal-val-speed').textContent = parseFloat(d.animation_speed || 1.0).toFixed(1) + '×';
+  document.getElementById('modal-effect-amount').value = d.effect_amount || 1.0;
+  document.getElementById('modal-val-amount').textContent = parseFloat(d.effect_amount || 1.0).toFixed(1) + '×';
+  document.getElementById('modal-effect-size').value = d.effect_size || 1.0;
+  document.getElementById('modal-val-size').textContent = parseFloat(d.effect_size || 1.0).toFixed(1) + '×';
+  updateAnimPreview();
+  document.getElementById('anim-modal').classList.add('visible');
+}
+
+function closeAnimPopup() {
+  document.getElementById('anim-modal').classList.remove('visible');
+}
+
+function updateAnimPreview() {
+  // Update the mini effect preview
+  const box = document.getElementById('anim-preview-box');
+  box.querySelectorAll('.anim-fx').forEach(e => e.remove());
+
+  const effect = document.getElementById('modal-screen-effect').value;
+  const speed = parseFloat(document.getElementById('modal-animation-speed').value) || 1.0;
+  const amount = parseFloat(document.getElementById('modal-effect-amount').value) || 1.0;
+  const size = parseFloat(document.getElementById('modal-effect-size').value) || 1.0;
+
+  let resolved = effect;
+  if (resolved === 'default') {
+    const defaults = { follow:'confetti', subscription:'confetti', bits:'gold', donation:'money', raid:'robots', yt_superchat:'gold', yt_member:'confetti', yt_giftmember:'money' };
+    resolved = defaults[currentType] || 'none';
+  }
+  if (resolved === 'none') return;
+
+  const fxContainer = document.createElement('div');
+  fxContainer.className = 'anim-fx';
+  fxContainer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5;';
+
+  const colors = ['#f7c948','#ff6b35','#00ff88','#9146ff','#ff4444','#4285f4','#fff'];
+  const goldIcons = ['🪙','💎','⭐','🏆','✨'];
+  const moneyIcons = ['💵','💰','💲','🪙','💸'];
+
+  if (resolved === 'confetti') {
+    const count = Math.round(20 * amount);
+    for (let i = 0; i < count; i++) {
+      const c = document.createElement('div');
+      const w = (4 + Math.random()*4) * size;
+      c.style.cssText = `position:absolute;width:${w}px;height:${w*1.3}px;border-radius:${Math.random()>0.5?'50%':'1px'};background:${colors[Math.floor(Math.random()*colors.length)]};left:${Math.random()*100}%;top:-5%;opacity:0;animation:fxFall ${(1.5+Math.random()*2)/speed}s linear ${Math.random()*2}s infinite;`;
+      fxContainer.appendChild(c);
+    }
+  } else if (resolved === 'gold') {
+    const count = Math.round(12 * amount);
+    for (let i = 0; i < count; i++) {
+      const g = document.createElement('div');
+      g.textContent = goldIcons[Math.floor(Math.random()*goldIcons.length)];
+      g.style.cssText = `position:absolute;font-size:${10*size}px;left:${Math.random()*100}%;top:-5%;opacity:0;animation:fxFall ${(2+Math.random()*2)/speed}s linear ${Math.random()*2}s infinite;`;
+      fxContainer.appendChild(g);
+    }
+  } else if (resolved === 'money') {
+    const count = Math.round(12 * amount);
+    for (let i = 0; i < count; i++) {
+      const m = document.createElement('div');
+      m.textContent = moneyIcons[Math.floor(Math.random()*moneyIcons.length)];
+      m.style.cssText = `position:absolute;font-size:${10*size}px;left:${Math.random()*100}%;top:-5%;opacity:0;animation:fxFall ${(2+Math.random()*2)/speed}s linear ${Math.random()*2}s infinite;`;
+      fxContainer.appendChild(m);
+    }
+  } else if (resolved === 'robots') {
+    const count = Math.round(8 * amount);
+    for (let i = 0; i < count; i++) {
+      const r = document.createElement('div');
+      r.textContent = '🤖';
+      r.style.cssText = `position:absolute;font-size:${(8+Math.random()*6)*size}px;left:${Math.random()*95}%;top:-5%;opacity:0;animation:fxFall ${(2+Math.random()*2)/speed}s linear ${Math.random()*3}s infinite;`;
+      fxContainer.appendChild(r);
+    }
+  } else if (resolved === 'tiremarks') {
+    for (let i = 0; i < 2; i++) {
+      const t = document.createElement('div');
+      t.style.cssText = `position:absolute;height:${2*size}px;left:0;right:0;top:${48+i*3}%;background:linear-gradient(90deg,transparent,rgba(136,136,204,0.2),transparent);animation:fxTire ${2.5/speed}s ease-in-out infinite;`;
+      fxContainer.appendChild(t);
+    }
+  }
+
+  box.appendChild(fxContainer);
+}
+
+function playAnimPreviewDemo() {
+  const card = document.getElementById('anim-preview-card');
+  const entrance = document.getElementById('modal-entrance-animation').value;
+  const speed = parseFloat(document.getElementById('modal-animation-speed').value) || 1.0;
+  const dur = (0.5 / speed).toFixed(2) + 's';
+
+  card.style.opacity = '0';
+  card.style.animation = 'none';
+  setTimeout(() => {
+    card.style.animation = `anim-${entrance} ${dur} ease-out forwards`;
+    card.style.opacity = '';
+  }, 50);
+
+  // Also refresh the effect preview
+  updateAnimPreview();
+}
+
+function applyAnim() {
+  const d = workingDesigns[currentType];
+  d.entrance_animation = document.getElementById('modal-entrance-animation').value;
+  d.car_animation = document.getElementById('modal-car-animation').value;
+  d.screen_effect = document.getElementById('modal-screen-effect').value;
+  d.animation_speed = parseFloat(document.getElementById('modal-animation-speed').value);
+  d.effect_amount = parseFloat(document.getElementById('modal-effect-amount').value);
+  d.effect_size = parseFloat(document.getElementById('modal-effect-size').value);
+
+  // Sync to hidden controls
+  document.getElementById('ctrl-entrance-animation').value = d.entrance_animation;
+  document.getElementById('ctrl-car-animation').value = d.car_animation;
+  document.getElementById('ctrl-screen-effect').value = d.screen_effect;
+  document.getElementById('ctrl-animation-speed').value = d.animation_speed;
+  document.getElementById('val-animation-speed').textContent = d.animation_speed.toFixed(1) + '×';
+  document.getElementById('ctrl-effect-amount').value = d.effect_amount;
+  document.getElementById('ctrl-effect-size').value = d.effect_size;
+
+  unsavedChanges = true;
+  updateAnimSectionPreview(d);
+  updatePreview();
+  closeAnimPopup();
+}
+
+function updateAnimSectionPreview(d) {
+  document.getElementById('asp-entrance').textContent = ENTRANCE_LABELS[d.entrance_animation] || 'Slide Down';
+  document.getElementById('asp-car').textContent = CAR_LABELS[d.car_animation] || 'L→R';
+  document.getElementById('asp-effect').textContent = EFFECT_LABELS[d.screen_effect] || 'Default';
+  document.getElementById('asp-speed').textContent = parseFloat(d.animation_speed || 1.0).toFixed(1) + '×';
+  document.getElementById('asp-amount').textContent = parseFloat(d.effect_amount || 1.0).toFixed(1) + '×';
+  document.getElementById('asp-size').textContent = parseFloat(d.effect_size || 1.0).toFixed(1) + '×';
+}
+
+// Initial animation section preview
+updateAnimSectionPreview(workingDesigns[currentType]);
 </script>
 
 </body>
