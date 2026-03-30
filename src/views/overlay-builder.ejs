@@ -1827,26 +1827,7 @@ document.querySelectorAll('.theme-preset').forEach(btn => {
   });
 });
 
-// ─── Font picker ──────────────────────────────────────────────────────────────
-function toggleFontPicker() {
-  document.getElementById('font-picker-dropdown').classList.toggle('open');
-}
-document.querySelectorAll('.font-option').forEach(opt => {
-  opt.addEventListener('click', () => {
-    const font = opt.dataset.font;
-    const selectedSpan = document.getElementById('font-picker-selected').querySelector('span');
-    selectedSpan.textContent = font;
-    selectedSpan.style.fontFamily = opt.style.fontFamily;
-    document.getElementById('font-picker-dropdown').classList.remove('open');
-    if (font !== 'System Default') loadGoogleFont(font);
-    updatePreview();
-  });
-});
-document.addEventListener('click', e => {
-  if (!e.target.closest('.font-picker')) {
-    document.getElementById('font-picker-dropdown').classList.remove('open');
-  }
-});
+// ─── Font picker (legacy — fonts now managed via popup) ──────────────────────
 
 // ─── Sponsor management ──────────────────────────────────────────────────────
 
