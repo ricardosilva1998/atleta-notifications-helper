@@ -294,6 +294,7 @@ function activateRaidProtection(client, channel, streamer) {
 
 module.exports = {
   isExempt,
+  checkBannedWords,
   runFilters,
   getAction,
   executeAction,

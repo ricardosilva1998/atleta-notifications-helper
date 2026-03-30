@@ -2,7 +2,7 @@ const tmi = require('tmi.js');
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { isExempt, runFilters, getAction, executeAction, grantPermit, activateRaidProtection } = require('./chatModeration');
+const { isExempt, runFilters, getAction, executeAction, grantPermit, activateRaidProtection, checkBannedWords } = require('./chatModeration');
 
 let client = null;
 const channelMap = new Map(); // channelName -> streamerId
@@ -24,17 +24,26 @@ async function handleMessage(channel, tags, message, self) {
   const streamer = db.getStreamerById(streamerId);
   if (!streamer) return;
 
-  // Run moderation filters for non-exempt users
+  // Banned words always enforced (except mods/broadcaster)
+  if (!(tags.mod || tags.badges?.broadcaster) && streamer.mod_banned_words_enabled) {
+    const bwViolation = checkBannedWords(message, streamer.id);
+    if (bwViolation) {
+      const action = getAction(channel, tags.username, streamer);
+      await executeAction(client, channel, tags, action, bwViolation.reason, streamer);
+      return;
+    }
+  }
+
+  // Run remaining moderation filters for non-exempt users
   if (!isExempt(tags, streamer)) {
     const violation = await runFilters(channel, tags, message, streamer);
     if (violation) {
       if (violation.flagOnly) {
-        // Just announce — don't block command processing
         client.say(channel, `[Mod] ${violation.reason}`).catch(() => {});
       } else {
         const action = getAction(channel, tags.username, streamer);
         await executeAction(client, channel, tags, action, violation.reason, streamer);
-        return; // Don't process commands after a moderation action
+        return;
       }
     }
   }
