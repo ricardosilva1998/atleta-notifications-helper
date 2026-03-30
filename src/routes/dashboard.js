@@ -1339,6 +1339,14 @@ router.post('/overlay-builder/save', (req, res) => {
   if (!eventType || !design) return res.status(400).json({ error: 'Missing data' });
   const parsed = typeof design === 'string' ? JSON.parse(design) : design;
   db.saveOverlayDesign(req.streamer.id, eventType, parsed);
+
+  // Push updated designs to running overlay so it updates without reconnecting
+  const bus = require('../services/overlayBus');
+  const designs = db.getAllOverlayDesigns(req.streamer.id);
+  const designMap = {};
+  designs.forEach(d => { designMap[d.event_type] = d; });
+  bus.emit(`overlay:${req.streamer.id}`, { type: 'config-update', designs: designMap });
+
   res.json({ ok: true });
 });
 
@@ -1346,6 +1354,14 @@ router.post('/overlay-builder/reset', (req, res) => {
   const { eventType } = req.body;
   if (!eventType) return res.status(400).json({ error: 'Missing event type' });
   db.deleteOverlayDesign(req.streamer.id, eventType);
+
+  // Push updated designs to running overlay
+  const bus = require('../services/overlayBus');
+  const designs = db.getAllOverlayDesigns(req.streamer.id);
+  const designMap = {};
+  designs.forEach(d => { designMap[d.event_type] = d; });
+  bus.emit(`overlay:${req.streamer.id}`, { type: 'config-update', designs: designMap });
+
   res.json({ ok: true });
 });
 

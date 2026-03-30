@@ -238,6 +238,15 @@ function connectSSE() {
       return;
     }
 
+    if (data.type === 'config-update') {
+      console.log('[Overlay] Design config updated from builder');
+      if (data.designs) {
+        overlayDesigns = data.designs;
+        loadDesignFonts(data.designs);
+      }
+      return;
+    }
+
     if (data.type === 'clear') {
       clearOverlay();
       return;
