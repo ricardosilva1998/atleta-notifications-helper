@@ -374,9 +374,10 @@
     }
     .preview-screen {
       width: 100%;
+      max-width: 960px;
       aspect-ratio: 16/9;
       background: #080a10;
-      border-radius: 4px;
+      border-radius: 8px;
       border: 1px solid rgba(255,255,255,0.08);
       position: relative;
       overflow: hidden;
@@ -904,9 +905,9 @@
         <div class="section-body">
           <!-- Inline preview card showing current text styling -->
           <div id="text-section-preview" style="padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;text-align:center;">
-            <div id="tsp-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:3px;">New Follower</div>
+            <div id="tsp-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:3px;">New Pit Crew Member</div>
             <div id="tsp-username" style="font-size:24px;font-weight:800;color:#ffffff;">RacerName</div>
-            <div id="tsp-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race</div>
+            <div id="tsp-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race 🏁</div>
           </div>
           <button type="button" class="popup-trigger-btn" onclick="openTextPopup()">
             Customize Text &amp; Font
