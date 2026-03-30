@@ -162,6 +162,7 @@
         </h3>
         <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">Configure each event alert individually.</p>
       </div>
+      <button onclick="clearOverlayAlerts()" class="btn btn-danger" style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">Clear All Alerts</button>
     </div>
     <input type="hidden" name="overlay_volume" value="<%= streamer.overlay_volume != null ? streamer.overlay_volume : 0.8 %>">
 
@@ -933,14 +934,6 @@
   }
 </script>
 
-<!-- Clear Alerts -->
-<div class="card" style="margin-top: 24px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
-  <div>
-    <h3 style="font-size: 15px; margin-bottom: 4px;">Clear Overlay</h3>
-    <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">Remove all queued alerts and stop any playing sounds on your OBS overlay.</p>
-  </div>
-  <button onclick="clearOverlayAlerts()" class="btn btn-danger" style="padding: 8px 20px; font-size: 13px; white-space: nowrap;">Clear All Alerts</button>
-</div>
 <div id="clear-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted); display: none; text-align: center;"></div>
 
 <script>
