@@ -12,26 +12,29 @@
 .tab-events.active { background: #9146ff; }
 .tab-commands.active { background: #9146ff; }
 .tab-moderation.active { background: #ff4444; }
-.mod-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin: 20px 0 10px; font-family: var(--font-display); }
-.mod-section-title:first-child { margin-top: 4px; }
-.mod-card { padding: 16px 0; border-bottom: 1px solid var(--border); }
-.mod-card:last-child { border-bottom: none; }
-.mod-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.mod-card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.mod-card-desc { font-size: 12px; color: var(--text-muted); }
-.mod-card-settings { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 10px; }
+.mod-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 10px; transition: border-color 0.2s; }
+.mod-card:hover { border-color: rgba(145,70,255,0.2); }
+.mod-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mod-card-info { display: flex; align-items: center; gap: 12px; }
+.mod-card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; }
+.mod-card-title { font-size: 14px; font-weight: 700; color: var(--text-primary); font-family: var(--font-display); }
+.mod-card-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.mod-card-settings { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .mod-setting { display: flex; align-items: center; gap: 6px; }
-.mod-setting label { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.mod-setting input[type=number] { width: 60px; padding: 5px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; text-align: center; }
-.mod-setting select { padding: 5px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; }
-.mod-note { background: rgba(145,70,255,0.08); border: 1px solid rgba(145,70,255,0.2); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
-.banned-word-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.banned-word-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; font-size: 12px; color: var(--text-primary); }
+.mod-setting label { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-display); }
+.mod-setting input[type=number] { width: 64px; padding: 6px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; text-align: center; transition: border-color 0.2s; }
+.mod-setting input[type=number]:focus { border-color: var(--accent); outline: none; }
+.mod-setting select { padding: 6px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; transition: border-color 0.2s; }
+.mod-setting select:focus { border-color: var(--accent); outline: none; }
+.mod-note { background: rgba(145,70,255,0.08); border: 1px solid rgba(145,70,255,0.2); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.banned-word-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.banned-word-tag { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 14px; font-size: 12px; color: var(--text-primary); font-family: var(--font-display); font-weight: 500; }
 .banned-word-tag.regex { border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.08); }
-.banned-word-tag button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
+.banned-word-tag button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0 0 0 2px; line-height: 1; transition: color 0.15s; }
 .banned-word-tag button:hover { color: var(--danger); }
-.banned-word-add { display: flex; gap: 6px; margin-top: 10px; }
-.banned-word-add input[type=text] { flex: 1; padding: 6px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 12px; }
+.banned-word-add { display: flex; gap: 6px; margin-top: 12px; }
+.banned-word-add input[type=text] { flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; transition: border-color 0.2s; }
+.banned-word-add input[type=text]:focus { border-color: var(--accent); outline: none; }
 </style>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
@@ -448,9 +451,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Banned Words</div>
-          <div class="mod-card-desc">Block messages containing specific words or patterns</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(240,68,56,0.12);"><span>🚫</span></div>
+          <div>
+            <div class="mod-card-title">Banned Words</div>
+            <div class="mod-card-desc">Block messages containing specific words or patterns</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_banned_words_enabled" name="mod_banned_words_enabled" value="1" <%= streamer.mod_banned_words_enabled ? 'checked' : '' %>>
@@ -477,9 +483,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Link Protection</div>
-          <div class="mod-card-desc">Block URLs from non-mods/VIPs. Mods can use <code>!permit username</code></div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(66,133,244,0.12);"><span>🔗</span></div>
+          <div>
+            <div class="mod-card-title">Link Protection</div>
+            <div class="mod-card-desc">Block URLs from non-mods/VIPs. Mods can use <code>!permit username</code></div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_link_protection_enabled" name="mod_link_protection_enabled" value="1" <%= streamer.mod_link_protection_enabled ? 'checked' : '' %>>
@@ -497,9 +506,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Caps Filter</div>
-          <div class="mod-card-desc">Block messages with excessive uppercase letters</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(247,144,9,0.12);"><span>🔠</span></div>
+          <div>
+            <div class="mod-card-title">Caps Filter</div>
+            <div class="mod-card-desc">Block messages with excessive uppercase letters</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_caps_enabled" name="mod_caps_enabled" value="1" <%= streamer.mod_caps_enabled ? 'checked' : '' %>>
@@ -521,9 +533,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Emote Spam</div>
-          <div class="mod-card-desc">Limit the number of emotes per message</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(145,70,255,0.12);"><span>😂</span></div>
+          <div>
+            <div class="mod-card-title">Emote Spam</div>
+            <div class="mod-card-desc">Limit the number of emotes per message</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_emote_spam_enabled" name="mod_emote_spam_enabled" value="1" <%= streamer.mod_emote_spam_enabled ? 'checked' : '' %>>
@@ -540,9 +555,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Repetition Filter</div>
-          <div class="mod-card-desc">Block users from spamming the same message</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(0,204,136,0.12);"><span>🔁</span></div>
+          <div>
+            <div class="mod-card-title">Repetition Filter</div>
+            <div class="mod-card-desc">Block users from spamming the same message</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_repetition_enabled" name="mod_repetition_enabled" value="1" <%= streamer.mod_repetition_enabled ? 'checked' : '' %>>
@@ -560,9 +578,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Symbol Spam</div>
-          <div class="mod-card-desc">Block messages with excessive special characters</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(255,136,204,0.12);"><span>#️⃣</span></div>
+          <div>
+            <div class="mod-card-title">Symbol Spam</div>
+            <div class="mod-card-desc">Block messages with excessive special characters</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_symbol_spam_enabled" name="mod_symbol_spam_enabled" value="1" <%= streamer.mod_symbol_spam_enabled ? 'checked' : '' %>>
@@ -588,9 +609,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Slow Mode Command</div>
-          <div class="mod-card-desc">Enable <code>!slow &lt;seconds&gt;</code> and <code>!slowoff</code> for mods</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(66,133,244,0.12);"><span>🐢</span></div>
+          <div>
+            <div class="mod-card-title">Slow Mode Command</div>
+            <div class="mod-card-desc">Enable <code>!slow &lt;seconds&gt;</code> and <code>!slowoff</code> for mods</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_slow_mode_cmd_enabled" name="mod_slow_mode_cmd_enabled" value="1" <%= streamer.mod_slow_mode_cmd_enabled ? 'checked' : '' %>>
@@ -601,9 +625,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Follow Age Gate</div>
-          <div class="mod-card-desc">Require users to follow for a minimum time before chatting</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(62,207,142,0.12);"><span>⏳</span></div>
+          <div>
+            <div class="mod-card-title">Follow Age Gate</div>
+            <div class="mod-card-desc">Require users to follow for a minimum time before chatting</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_follow_age_enabled" name="mod_follow_age_enabled" value="1" <%= streamer.mod_follow_age_enabled ? 'checked' : '' %>>
@@ -621,9 +648,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">First-Time Chatter Flag</div>
-          <div class="mod-card-desc">Post a notice in chat when someone chats for the first time</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(247,201,72,0.12);"><span>👋</span></div>
+          <div>
+            <div class="mod-card-title">First-Time Chatter Flag</div>
+            <div class="mod-card-desc">Post a notice in chat when someone chats for the first time</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_first_chatter_enabled" name="mod_first_chatter_enabled" value="1" <%= streamer.mod_first_chatter_enabled ? 'checked' : '' %>>
@@ -642,9 +672,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Raid Protection</div>
-          <div class="mod-card-desc">Auto-enable followers-only mode when a raid is detected</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(240,68,56,0.12);"><span>🛡️</span></div>
+          <div>
+            <div class="mod-card-title">Raid Protection</div>
+            <div class="mod-card-desc">Auto-enable followers-only mode when a raid is detected</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_raid_protection_enabled" name="mod_raid_protection_enabled" value="1" <%= streamer.mod_raid_protection_enabled ? 'checked' : '' %>>
@@ -670,9 +703,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Default Action</div>
-          <div class="mod-card-desc">What happens when a filter is triggered</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(145,70,255,0.12);"><span>⚡</span></div>
+          <div>
+            <div class="mod-card-title">Default Action</div>
+            <div class="mod-card-desc">What happens when a filter is triggered</div>
+          </div>
         </div>
       </div>
       <div class="mod-card-settings">
@@ -689,9 +725,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Escalation</div>
-          <div class="mod-card-desc">Progressive punishment: 1st = warning, 2nd = 10s timeout, 3rd = 10min, 4th+ = 30min. Resets after 24h.</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(247,144,9,0.12);"><span>📈</span></div>
+          <div>
+            <div class="mod-card-title">Escalation</div>
+            <div class="mod-card-desc">Progressive punishment: 1st = warning, 2nd = 10s timeout, 3rd = 10min, 4th+ = 30min. Resets after 24h.</div>
+          </div>
         </div>
         <label class="pill-toggle">
           <input type="checkbox" id="mod_escalation_enabled" name="mod_escalation_enabled" value="1" <%= streamer.mod_escalation_enabled ? 'checked' : '' %>>
@@ -702,9 +741,12 @@
 
     <div class="mod-card">
       <div class="mod-card-header">
-        <div>
-          <div class="mod-card-title">Exemptions</div>
-          <div class="mod-card-desc">Choose which user types bypass moderation filters</div>
+        <div class="mod-card-info">
+          <div class="mod-card-icon" style="background:rgba(62,207,142,0.12);"><span>✅</span></div>
+          <div>
+            <div class="mod-card-title">Exemptions</div>
+            <div class="mod-card-desc">Choose which user types bypass moderation filters</div>
+          </div>
         </div>
       </div>
       <div class="mod-card-settings">
