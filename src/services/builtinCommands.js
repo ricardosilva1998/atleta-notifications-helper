@@ -268,6 +268,40 @@ async function handleBuiltinCommand(client, channel, tags, commandName, args, st
       return true;
     }
 
+    case 'commands':
+    case 'cmds':
+    case 'help': {
+      if (onCooldown(sid, 'commands')) return true;
+      const cmds = [];
+      // Built-in commands
+      if (streamer.cmd_followage_enabled) cmds.push('!followage');
+      if (streamer.cmd_subage_enabled) cmds.push('!subage');
+      if (streamer.cmd_uptime_enabled) cmds.push('!uptime');
+      if (streamer.cmd_accountage_enabled) cmds.push('!accountage');
+      if (streamer.cmd_8ball_enabled) cmds.push('!8ball');
+      if (streamer.cmd_roll_enabled) cmds.push('!roll');
+      if (streamer.cmd_hug_enabled) cmds.push('!hug');
+      if (streamer.cmd_slap_enabled) cmds.push('!slap');
+      if (streamer.cmd_love_enabled) cmds.push('!love');
+      if (streamer.cmd_rps_enabled) cmds.push('!rps');
+      if (streamer.cmd_coinflip_enabled) cmds.push('!coinflip');
+      if (streamer.cmd_quote_enabled) cmds.push('!quote');
+      if (streamer.cmd_roast_enabled) cmds.push('!roast');
+      // Song command (always available if chatbot is on)
+      cmds.push('!song');
+      // Custom commands from DB
+      try {
+        const db = require('../db');
+        const custom = db.getChatCommands(sid);
+        custom.filter(c => c.enabled).forEach(c => cmds.push('!' + c.command));
+      } catch (e) {}
+      client.say(channel, cmds.length > 0
+        ? `Available commands: ${cmds.join(', ')}`
+        : 'No commands available.'
+      ).catch(() => {});
+      return true;
+    }
+
     default:
       return false;
   }
