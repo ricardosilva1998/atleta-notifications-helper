@@ -1452,6 +1452,18 @@ function updatePreview() {
   const detailDefault = getDetailPreviewText(currentType);
   detailEl.textContent = d.detail_text || detailDefault;
 
+  // Show example message line below detail for donation/bits/yt_superchat
+  const msgTypes = { donation: '"Keep racing!"', bits: '"Take my bits!"', yt_superchat: '"Love the stream!"' };
+  const parentEl = detailEl.parentElement;
+  if (parentEl) parentEl.querySelectorAll('.preview-msg').forEach(e => e.remove());
+  if (msgTypes[currentType] && parentEl) {
+    const msgEl = document.createElement('div');
+    msgEl.className = 'preview-msg';
+    msgEl.style.cssText = `font-size:${(d.detail_font_size || 13) - 1}px;color:${d.detail_color || d.text_color};opacity:0.7;font-style:italic;margin-top:4px;`;
+    msgEl.textContent = msgTypes[currentType];
+    detailEl.after(msgEl);
+  }
+
   // Bottom bar animation (dynamic)
   const bottomAnim = d.car_animation || 'zoomLR';
   const animSpeed = d.animation_speed || 1.0;
@@ -1738,7 +1750,7 @@ function getDetailPreviewText(type) {
     follow: 'just joined the race 🏁',
     subscription: 'Subscribed for 3 months — Tier 1 🥇',
     bits: 'fueled up 500 bits of nitro! 🔥',
-    donation: 'donated EUR 10 — Keep racing! 💸',
+    donation: 'donated EUR 10 💸',
     raid: 'raiding with 42 viewers! 🏁',
     yt_superchat: 'sent $5.00 — Love the stream! 🔥',
     yt_member: 'just became a member! 🥇',
