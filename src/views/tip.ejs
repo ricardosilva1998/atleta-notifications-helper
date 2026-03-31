@@ -50,14 +50,14 @@
     <% } else { %>
       <form method="POST" action="/tip/<%= streamer.twitch_username %>/create" id="tip-form">
         <div class="tip-amounts">
-          <button type="button" class="tip-amount" data-amount="2">2</button>
-          <button type="button" class="tip-amount active" data-amount="5">5</button>
-          <button type="button" class="tip-amount" data-amount="10">10</button>
-          <button type="button" class="tip-amount" data-amount="25">25</button>
+          <% const minAmt = streamer.donation_min_amount || 1; %>
+          <% [2, 5, 10, 25].filter(a => a >= minAmt).forEach((a, i) => { %>
+            <button type="button" class="tip-amount <%= i === 0 ? 'active' : '' %>" data-amount="<%= a %>"><%= a %></button>
+          <% }) %>
         </div>
         <div class="tip-row">
           <span class="tip-currency"><%= streamer.donation_currency || 'EUR' %></span>
-          <input type="number" name="amount" id="tip-amount-input" class="tip-input" value="5" min="<%= streamer.donation_min_amount || 1 %>" step="0.01" placeholder="Amount">
+          <input type="number" name="amount" id="tip-amount-input" class="tip-input" value="<%= [2,5,10,25].find(a => a >= (streamer.donation_min_amount || 1)) || 5 %>" min="<%= streamer.donation_min_amount || 1 %>" step="0.01" placeholder="Amount">
         </div>
         <input type="text" name="message" class="tip-input" placeholder="Add a message (optional)" maxlength="200">
         <input type="text" name="donor_name" class="tip-input" placeholder="Your name (optional)" maxlength="50">
@@ -84,6 +84,20 @@
       document.querySelectorAll('.tip-amount').forEach(b => {
         b.classList.toggle('active', b.dataset.amount === this.value);
       });
+    });
+
+    // Client-side min amount validation
+    const minAmount = <%= streamer.donation_min_amount || 1 %>;
+    document.getElementById('tip-form')?.addEventListener('submit', function(e) {
+      const amount = parseFloat(document.getElementById('tip-amount-input').value);
+      const errorEl = document.getElementById('tip-error');
+      if (isNaN(amount) || amount < minAmount) {
+        e.preventDefault();
+        errorEl.textContent = 'Minimum donation is ' + minAmount + ' <%= streamer.donation_currency || "EUR" %>';
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
     });
   </script>
 </body>
