@@ -705,14 +705,34 @@ function applyCustomDesign(card, eventType) {
   if (!design) return;
 
   // Background
-  const dark = darken(design.bg_color);
-  card.style.background = `linear-gradient(160deg, ${dark}, ${design.bg_color} 40%, ${dark})`;
+  // Background (with advanced theme)
+  const bgOpacity = design.bg_opacity != null ? design.bg_opacity : 1.0;
+  const gradDir = design.gradient_direction || '160deg';
+  const [bgR,bgG,bgB] = hexToRgb(design.bg_color);
+  const darkR = Math.round(bgR * 0.35), darkG = Math.round(bgG * 0.35), darkB = Math.round(bgB * 0.35);
+  if (gradDir) {
+    card.style.background = `linear-gradient(${gradDir}, rgba(${darkR},${darkG},${darkB},${bgOpacity}), rgba(${bgR},${bgG},${bgB},${bgOpacity}) 40%, rgba(${darkR},${darkG},${darkB},${bgOpacity}))`;
+  } else {
+    card.style.background = `rgba(${bgR},${bgG},${bgB},${bgOpacity})`;
+  }
 
-  // Border & shadow
-  card.style.borderColor = hexToRgba(design.border_color, 0.5);
-  card.style.boxShadow = `0 8px 32px ${hexToRgba(design.border_color, 0.25)}, 0 4px 24px rgba(0,0,0,0.6)`;
+  // Border (with advanced theme)
+  const borderThick = design.border_thickness != null ? design.border_thickness : 2;
+  const borderOpacity = design.border_opacity != null ? design.border_opacity : 0.5;
+  card.style.border = `${borderThick}px solid ${hexToRgba(design.border_color, borderOpacity)}`;
   card.style.borderRadius = (design.border_radius || 16) + 'px';
   card.style.width = (design.card_width || 420) + 'px';
+
+  // Shadow & glow (with advanced theme)
+  const glowIntensity = design.glow_intensity != null ? design.glow_intensity : 0.25;
+  const shadowOpacity = design.shadow_opacity != null ? design.shadow_opacity : 0.6;
+  const shadowBlur = design.shadow_blur != null ? design.shadow_blur : 32;
+  const shadowSpread = design.shadow_spread != null ? design.shadow_spread : 0;
+  if (glowIntensity > 0) {
+    card.style.boxShadow = `0 ${Math.round(shadowBlur/4)}px ${shadowBlur}px ${shadowSpread}px ${hexToRgba(design.border_color, glowIntensity)}, 0 4px 24px rgba(0,0,0,${shadowOpacity})`;
+  } else {
+    card.style.boxShadow = `0 4px ${shadowBlur}px ${shadowSpread}px rgba(0,0,0,${shadowOpacity})`;
+  }
 
   // Position — use custom x/y if dragged, otherwise grid position
   card.style.position = 'absolute';

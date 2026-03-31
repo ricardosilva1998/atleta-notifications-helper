@@ -1242,6 +1242,15 @@ function getControlValues() {
     effect_amount: parseFloat(document.getElementById('ctrl-effect-amount').value) || 1.0,
     effect_size: parseFloat(document.getElementById('ctrl-effect-size').value) || 1.0,
     effect_direction: document.getElementById('ctrl-effect-direction').value,
+    // Advanced theme (read from workingDesigns, set via popup)
+    bg_opacity: wd.bg_opacity != null ? wd.bg_opacity : 1.0,
+    gradient_direction: wd.gradient_direction || '160deg',
+    border_thickness: wd.border_thickness != null ? wd.border_thickness : 2,
+    border_opacity: wd.border_opacity != null ? wd.border_opacity : 0.5,
+    glow_intensity: wd.glow_intensity != null ? wd.glow_intensity : 0.25,
+    shadow_opacity: wd.shadow_opacity != null ? wd.shadow_opacity : 0.6,
+    shadow_blur: wd.shadow_blur != null ? wd.shadow_blur : 32,
+    shadow_spread: wd.shadow_spread != null ? wd.shadow_spread : 0,
   };
 }
 
@@ -1364,15 +1373,34 @@ function updatePreview() {
   const usernameEl = hasIcon ? document.getElementById('preview-username') : document.getElementById('preview-username-flat');
   const detailEl = hasIcon ? document.getElementById('preview-detail') : document.getElementById('preview-detail-flat');
 
-  // Background gradient
-  const dark = darken(d.bg_color);
-  card.style.background = `linear-gradient(160deg, ${dark}, ${d.bg_color} 40%, ${dark})`;
+  // Background gradient (with advanced theme)
+  const bgOpacity = d.bg_opacity != null ? d.bg_opacity : 1.0;
+  const gradDir = d.gradient_direction || '160deg';
+  const [bgR,bgG,bgB] = hexToRgb(d.bg_color);
+  const darkR = Math.round(bgR * 0.35), darkG = Math.round(bgG * 0.35), darkB = Math.round(bgB * 0.35);
+  if (gradDir) {
+    card.style.background = `linear-gradient(${gradDir}, rgba(${darkR},${darkG},${darkB},${bgOpacity}), rgba(${bgR},${bgG},${bgB},${bgOpacity}) 40%, rgba(${darkR},${darkG},${darkB},${bgOpacity}))`;
+  } else {
+    card.style.background = `rgba(${bgR},${bgG},${bgB},${bgOpacity})`;
+  }
 
-  // Border
-  card.style.borderColor = hexToRgba(d.border_color, 0.5);
-  card.style.boxShadow = `0 8px 32px ${hexToRgba(d.border_color, 0.25)}, 0 4px 24px rgba(0,0,0,0.6)`;
+  // Border (with advanced theme)
+  const borderThick = d.border_thickness != null ? d.border_thickness : 2;
+  const borderOpacity = d.border_opacity != null ? d.border_opacity : 0.5;
+  card.style.border = `${borderThick}px solid ${hexToRgba(d.border_color, borderOpacity)}`;
   card.style.borderRadius = d.border_radius + 'px';
   card.style.width = d.card_width + 'px';
+
+  // Shadow & glow (with advanced theme)
+  const glowIntensity = d.glow_intensity != null ? d.glow_intensity : 0.25;
+  const shadowOpacity = d.shadow_opacity != null ? d.shadow_opacity : 0.6;
+  const shadowBlur = d.shadow_blur != null ? d.shadow_blur : 32;
+  const shadowSpread = d.shadow_spread != null ? d.shadow_spread : 0;
+  if (glowIntensity > 0) {
+    card.style.boxShadow = `0 ${Math.round(shadowBlur/4)}px ${shadowBlur}px ${shadowSpread}px ${hexToRgba(d.border_color, glowIntensity)}, 0 4px 24px rgba(0,0,0,${shadowOpacity})`;
+  } else {
+    card.style.boxShadow = `0 4px ${shadowBlur}px ${shadowSpread}px rgba(0,0,0,${shadowOpacity})`;
+  }
 
   // Top accent
   const accentDark = darken(d.accent_color, 0.6);
@@ -2231,55 +2259,127 @@ document.addEventListener('mouseup', e => {
 
 <!-- Theme Popup Modal -->
 <div class="modal-overlay" id="theme-modal" onclick="if(event.target===this)closeThemePopup()">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:580px;max-height:90vh;overflow-y:auto;">
     <h3>🎨 Change Theme</h3>
+
+    <!-- Presets -->
     <div style="margin-bottom:16px;">
       <div class="ctrl-label" style="margin-bottom:8px;">Presets</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button type="button" class="theme-preset" data-bg="#1a1a3e" data-accent="#8888cc" data-border="#8888cc" data-text="#ffffff" title="Default Blue" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a3e,#8888cc);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#061a10" data-accent="#00ff88" data-border="#00ff88" data-text="#ffffff" title="Green" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#061a10,#00ff88);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1c1200" data-accent="#f7c948" data-border="#f7c948" data-text="#ffffff" title="Gold" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c1200,#f7c948);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#110022" data-accent="#bf00ff" data-border="#bf00ff" data-text="#ffffff" title="Purple" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#110022,#bf00ff);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1c0505" data-accent="#ff4444" data-border="#ff4444" data-text="#ffffff" title="Red" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c0505,#ff4444);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#0a1520" data-accent="#00b4d8" data-border="#00b4d8" data-text="#ffffff" title="Cyan" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0a1520,#00b4d8);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1a0a00" data-accent="#ff6b35" data-border="#ff6b35" data-text="#ffffff" title="Orange" style="width:42px;height:42px;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0a00,#ff6b35);cursor:pointer;"></button>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+        <button type="button" class="theme-preset" data-bg="#1a1a3e" data-accent="#8888cc" data-border="#8888cc" data-text="#ffffff" title="Default Blue" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a3e,#8888cc);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#061a10" data-accent="#00ff88" data-border="#00ff88" data-text="#ffffff" title="Racing Green" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#061a10,#00ff88);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1c1200" data-accent="#f7c948" data-border="#f7c948" data-text="#ffffff" title="Gold" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c1200,#f7c948);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#110022" data-accent="#bf00ff" data-border="#bf00ff" data-text="#ffffff" title="Purple" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#110022,#bf00ff);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1c0505" data-accent="#ff4444" data-border="#ff4444" data-text="#ffffff" title="Red" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c0505,#ff4444);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#0a1520" data-accent="#00b4d8" data-border="#00b4d8" data-text="#ffffff" title="Cyan" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0a1520,#00b4d8);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a0a00" data-accent="#ff6b35" data-border="#ff6b35" data-text="#ffffff" title="Orange" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0a00,#ff6b35);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#0d0d0d" data-accent="#00ff41" data-border="#00ff41" data-text="#00ff41" title="Neon Matrix" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0d0d0d,#003311);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a1a2e" data-accent="#e94560" data-border="#e94560" data-text="#ffffff" title="Synthwave" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a2e,#e94560);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#f5f0e8" data-accent="#2d2d2d" data-border="#c8b89a" data-text="#2d2d2d" title="Light Classic" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(0,0,0,0.1);background:linear-gradient(135deg,#f5f0e8,#c8b89a);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#2b1055" data-accent="#d946ef" data-border="#d946ef" data-text="#ffffff" title="Vaporwave" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#2b1055,#d946ef);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1e293b" data-accent="#38bdf8" data-border="#38bdf8" data-text="#f1f5f9" title="Frost" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1e293b,#38bdf8);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#0f0f0f" data-accent="#ffffff" data-border="#333333" data-text="#ffffff" title="Minimal Dark" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0f0f0f,#333333);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a0000" data-accent="#ff0055" data-border="#ff0055" data-text="#ffffff" title="Hot Pink" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0000,#ff0055);cursor:pointer;"></button>
       </div>
     </div>
+
+    <!-- Colors -->
+    <div class="ctrl-label" style="margin-bottom:8px;">Colors</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;">Background</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Background</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <input type="color" id="modal-bg-color" value="#1a1a3e" style="width:40px;height:40px;border-radius:8px;">
-          <input type="text" id="modal-bg-hex" value="#1a1a3e" style="width:80px;font-size:12px;font-family:monospace;" oninput="document.getElementById('modal-bg-color').value=this.value;updateThemePreview();">
+          <input type="color" id="modal-bg-color" value="#1a1a3e" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
+          <input type="text" id="modal-bg-hex" value="#1a1a3e" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-bg-color').value=this.value;updateThemePreview();">
         </div>
       </div>
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;">Accent</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Accent</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <input type="color" id="modal-accent-color" value="#8888cc" style="width:40px;height:40px;border-radius:8px;">
-          <input type="text" id="modal-accent-hex" value="#8888cc" style="width:80px;font-size:12px;font-family:monospace;" oninput="document.getElementById('modal-accent-color').value=this.value;updateThemePreview();">
+          <input type="color" id="modal-accent-color" value="#8888cc" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
+          <input type="text" id="modal-accent-hex" value="#8888cc" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-accent-color').value=this.value;updateThemePreview();">
         </div>
       </div>
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;">Border</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Border</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <input type="color" id="modal-border-color" value="#8888cc" style="width:40px;height:40px;border-radius:8px;">
-          <input type="text" id="modal-border-hex" value="#8888cc" style="width:80px;font-size:12px;font-family:monospace;" oninput="document.getElementById('modal-border-color').value=this.value;updateThemePreview();">
+          <input type="color" id="modal-border-color" value="#8888cc" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
+          <input type="text" id="modal-border-hex" value="#8888cc" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-border-color').value=this.value;updateThemePreview();">
         </div>
       </div>
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;">Text</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Text</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <input type="color" id="modal-text-color" value="#ffffff" style="width:40px;height:40px;border-radius:8px;">
-          <input type="text" id="modal-text-hex" value="#ffffff" style="width:80px;font-size:12px;font-family:monospace;" oninput="document.getElementById('modal-text-color').value=this.value;updateThemePreview();">
+          <input type="color" id="modal-text-color" value="#ffffff" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
+          <input type="text" id="modal-text-hex" value="#ffffff" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-text-color').value=this.value;updateThemePreview();">
         </div>
       </div>
     </div>
+
+    <!-- Background & Gradient -->
+    <div class="ctrl-label" style="margin-bottom:8px;">Background & Gradient</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Opacity <span id="modal-val-bg-opacity" style="float:right;color:var(--text-muted);">100%</span></div>
+        <input type="range" id="modal-bg-opacity" min="0" max="1" step="0.05" value="1" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-bg-opacity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
+      </div>
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Gradient Direction</div>
+        <select id="modal-gradient-direction" style="width:100%;padding:6px 8px;font-size:12px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" onchange="updateThemePreview();">
+          <option value="160deg">Diagonal (default)</option>
+          <option value="180deg">Top to Bottom</option>
+          <option value="0deg">Bottom to Top</option>
+          <option value="90deg">Left to Right</option>
+          <option value="270deg">Right to Left</option>
+          <option value="135deg">Top-Left to Bottom-Right</option>
+          <option value="45deg">Bottom-Left to Top-Right</option>
+          <option value="">Solid (no gradient)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Border -->
+    <div class="ctrl-label" style="margin-bottom:8px;">Border</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Thickness <span id="modal-val-border-thickness" style="float:right;color:var(--text-muted);">2px</span></div>
+        <input type="range" id="modal-border-thickness" min="0" max="6" step="1" value="2" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-border-thickness').textContent=this.value+'px';updateThemePreview();">
+      </div>
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Opacity <span id="modal-val-border-opacity" style="float:right;color:var(--text-muted);">50%</span></div>
+        <input type="range" id="modal-border-opacity" min="0" max="1" step="0.05" value="0.5" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-border-opacity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
+      </div>
+    </div>
+
+    <!-- Glow & Shadow -->
+    <div class="ctrl-label" style="margin-bottom:8px;">Glow & Shadow</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Glow Intensity <span id="modal-val-glow-intensity" style="float:right;color:var(--text-muted);">25%</span></div>
+        <input type="range" id="modal-glow-intensity" min="0" max="1" step="0.05" value="0.25" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-glow-intensity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
+      </div>
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Shadow Opacity <span id="modal-val-shadow-opacity" style="float:right;color:var(--text-muted);">60%</span></div>
+        <input type="range" id="modal-shadow-opacity" min="0" max="1" step="0.05" value="0.6" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-shadow-opacity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
+      </div>
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Shadow Blur <span id="modal-val-shadow-blur" style="float:right;color:var(--text-muted);">32px</span></div>
+        <input type="range" id="modal-shadow-blur" min="0" max="80" step="2" value="32" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-shadow-blur').textContent=this.value+'px';updateThemePreview();">
+      </div>
+      <div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Shadow Spread <span id="modal-val-shadow-spread" style="float:right;color:var(--text-muted);">0px</span></div>
+        <input type="range" id="modal-shadow-spread" min="-20" max="20" step="1" value="0" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-shadow-spread').textContent=this.value+'px';updateThemePreview();">
+      </div>
+    </div>
+
+    <!-- Preview -->
     <div class="ctrl-label" style="margin-bottom:8px;">Preview</div>
-    <div id="theme-preview-card" style="padding:16px;border-radius:12px;border:2px solid #8888cc;background:#1a1a3e;margin-bottom:8px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8888cc;margin-bottom:4px;">New Follower</div>
-      <div id="theme-preview-username" style="font-size:20px;font-weight:800;color:#ffffff;">RacerName</div>
-      <div style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race</div>
+    <div style="background:#0a0a0a;border-radius:10px;padding:20px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;min-height:80px;">
+      <div id="theme-preview-card" style="padding:16px 20px;border-radius:12px;border:2px solid #8888cc;background:#1a1a3e;width:100%;max-width:320px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8888cc;margin-bottom:4px;">New Follower</div>
+        <div id="theme-preview-username" style="font-size:20px;font-weight:800;color:#ffffff;">RacerName</div>
+        <div style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race</div>
+      </div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeThemePopup()">Cancel</button>
@@ -2535,11 +2635,20 @@ document.addEventListener('mouseup', e => {
 // ─── Theme Popup ─────────────────────────────────────────────
 let themeBackup = {};
 function openThemePopup() {
+  const d = workingDesigns[currentType];
   themeBackup = {
     bg: document.getElementById('ctrl-bg-color').value,
     accent: document.getElementById('ctrl-accent-color').value,
     border: document.getElementById('ctrl-border-color').value,
     text: document.getElementById('ctrl-text-color').value,
+    bg_opacity: d.bg_opacity != null ? d.bg_opacity : 1.0,
+    gradient_direction: d.gradient_direction || '160deg',
+    border_thickness: d.border_thickness != null ? d.border_thickness : 2,
+    border_opacity: d.border_opacity != null ? d.border_opacity : 0.5,
+    glow_intensity: d.glow_intensity != null ? d.glow_intensity : 0.25,
+    shadow_opacity: d.shadow_opacity != null ? d.shadow_opacity : 0.6,
+    shadow_blur: d.shadow_blur != null ? d.shadow_blur : 32,
+    shadow_spread: d.shadow_spread != null ? d.shadow_spread : 0,
   };
   document.getElementById('modal-bg-color').value = themeBackup.bg;
   document.getElementById('modal-bg-hex').value = themeBackup.bg;
@@ -2549,6 +2658,22 @@ function openThemePopup() {
   document.getElementById('modal-border-hex').value = themeBackup.border;
   document.getElementById('modal-text-color').value = themeBackup.text;
   document.getElementById('modal-text-hex').value = themeBackup.text;
+  // Advanced controls
+  document.getElementById('modal-bg-opacity').value = themeBackup.bg_opacity;
+  document.getElementById('modal-val-bg-opacity').textContent = Math.round(themeBackup.bg_opacity * 100) + '%';
+  document.getElementById('modal-gradient-direction').value = themeBackup.gradient_direction;
+  document.getElementById('modal-border-thickness').value = themeBackup.border_thickness;
+  document.getElementById('modal-val-border-thickness').textContent = themeBackup.border_thickness + 'px';
+  document.getElementById('modal-border-opacity').value = themeBackup.border_opacity;
+  document.getElementById('modal-val-border-opacity').textContent = Math.round(themeBackup.border_opacity * 100) + '%';
+  document.getElementById('modal-glow-intensity').value = themeBackup.glow_intensity;
+  document.getElementById('modal-val-glow-intensity').textContent = Math.round(themeBackup.glow_intensity * 100) + '%';
+  document.getElementById('modal-shadow-opacity').value = themeBackup.shadow_opacity;
+  document.getElementById('modal-val-shadow-opacity').textContent = Math.round(themeBackup.shadow_opacity * 100) + '%';
+  document.getElementById('modal-shadow-blur').value = themeBackup.shadow_blur;
+  document.getElementById('modal-val-shadow-blur').textContent = themeBackup.shadow_blur + 'px';
+  document.getElementById('modal-shadow-spread').value = themeBackup.shadow_spread;
+  document.getElementById('modal-val-shadow-spread').textContent = themeBackup.shadow_spread + 'px';
   updateThemePreview();
   document.getElementById('theme-modal').classList.add('visible');
 }
@@ -2560,21 +2685,60 @@ function updateThemePreview() {
   const accent = document.getElementById('modal-accent-color').value;
   const border = document.getElementById('modal-border-color').value;
   const text = document.getElementById('modal-text-color').value;
+  const bgOpacity = parseFloat(document.getElementById('modal-bg-opacity').value);
+  const gradDir = document.getElementById('modal-gradient-direction').value;
+  const borderThick = parseInt(document.getElementById('modal-border-thickness').value);
+  const borderOpacity = parseFloat(document.getElementById('modal-border-opacity').value);
+  const glowIntensity = parseFloat(document.getElementById('modal-glow-intensity').value);
+  const shadowOpacity = parseFloat(document.getElementById('modal-shadow-opacity').value);
+  const shadowBlur = parseInt(document.getElementById('modal-shadow-blur').value);
+  const shadowSpread = parseInt(document.getElementById('modal-shadow-spread').value);
+
   const card = document.getElementById('theme-preview-card');
-  card.style.background = bg;
-  card.style.borderColor = border;
+  const dark = darken(bg);
+  const [r,g,b] = hexToRgb(bg);
+
+  // Background
+  if (gradDir) {
+    card.style.background = `linear-gradient(${gradDir}, rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},${bgOpacity}), rgba(${r},${g},${b},${bgOpacity}) 40%, rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},${bgOpacity}))`;
+  } else {
+    card.style.background = `rgba(${r},${g},${b},${bgOpacity})`;
+  }
+
+  // Border
+  const [br,bg2,bb] = hexToRgb(border);
+  card.style.border = `${borderThick}px solid rgba(${br},${bg2},${bb},${borderOpacity})`;
+
+  // Shadow
+  const [gr,gg,gb] = hexToRgb(border);
+  card.style.boxShadow = glowIntensity > 0
+    ? `0 ${shadowBlur/4}px ${shadowBlur}px ${shadowSpread}px rgba(${gr},${gg},${gb},${glowIntensity}), 0 4px 24px rgba(0,0,0,${shadowOpacity})`
+    : `0 4px ${shadowBlur}px ${shadowSpread}px rgba(0,0,0,${shadowOpacity})`;
+
+  // Text
   card.querySelector('div:first-child').style.color = accent;
   document.getElementById('theme-preview-username').style.color = text;
   card.querySelector('div:last-child').style.color = text;
 }
 function applyTheme() {
+  const d = workingDesigns[currentType];
   document.getElementById('ctrl-bg-color').value = document.getElementById('modal-bg-color').value;
   document.getElementById('ctrl-accent-color').value = document.getElementById('modal-accent-color').value;
   document.getElementById('ctrl-border-color').value = document.getElementById('modal-border-color').value;
   document.getElementById('ctrl-text-color').value = document.getElementById('modal-text-color').value;
-  // Update swatches in the button
+  // Advanced properties
+  d.bg_opacity = parseFloat(document.getElementById('modal-bg-opacity').value);
+  d.gradient_direction = document.getElementById('modal-gradient-direction').value;
+  d.border_thickness = parseInt(document.getElementById('modal-border-thickness').value);
+  d.border_opacity = parseFloat(document.getElementById('modal-border-opacity').value);
+  d.glow_intensity = parseFloat(document.getElementById('modal-glow-intensity').value);
+  d.shadow_opacity = parseFloat(document.getElementById('modal-shadow-opacity').value);
+  d.shadow_blur = parseInt(document.getElementById('modal-shadow-blur').value);
+  d.shadow_spread = parseInt(document.getElementById('modal-shadow-spread').value);
+  // Update swatches
   document.getElementById('swatch-bg').style.background = document.getElementById('modal-bg-color').value;
   document.getElementById('swatch-accent').style.background = document.getElementById('modal-accent-color').value;
+  unsavedChanges = true;
   updatePreview();
   closeThemePopup();
 }
