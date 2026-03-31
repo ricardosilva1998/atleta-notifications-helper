@@ -250,6 +250,20 @@ try {
   }
 }
 
+// Migration: Add donation page columns to streamers
+{
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('paypal_email')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN paypal_email TEXT;
+      ALTER TABLE streamers ADD COLUMN donation_page_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN donation_min_amount REAL DEFAULT 1.00;
+      ALTER TABLE streamers ADD COLUMN donation_currency TEXT DEFAULT 'EUR';
+    `);
+    console.log('[DB] Added donation page columns to streamers');
+  }
+}
+
 // Migration: Create overlay_designs table
 db.exec(`
   CREATE TABLE IF NOT EXISTS overlay_designs (
@@ -2751,6 +2765,24 @@ function cleanupOldModLogs() {
   if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} old moderation log entries`);
 }
 
+function updateDonationSettings(streamerId, settings) {
+  const allowed = new Set(['paypal_email', 'donation_page_enabled', 'donation_min_amount', 'donation_currency']);
+  const fields = [];
+  const values = [];
+  for (const [key, value] of Object.entries(settings)) {
+    if (!allowed.has(key)) continue;
+    fields.push(`${key} = ?`);
+    values.push(value);
+  }
+  if (fields.length === 0) return;
+  values.push(streamerId);
+  db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
+function getStreamerByUsername(username) {
+  return db.prepare('SELECT * FROM streamers WHERE twitch_username = ? COLLATE NOCASE').get(username);
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -2941,4 +2973,6 @@ module.exports = {
   addModLogEntry,
   getModLog,
   cleanupOldModLogs,
+  updateDonationSettings,
+  getStreamerByUsername,
 };
