@@ -22,19 +22,33 @@
 .mod-card-settings { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .mod-setting { display: flex; align-items: center; gap: 6px; }
 .mod-setting label { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-display); }
-.mod-setting input[type=number] { width: 64px; padding: 6px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; text-align: center; transition: border-color 0.2s; }
-.mod-setting input[type=number]:focus { border-color: var(--accent); outline: none; }
-.mod-setting select { padding: 6px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; transition: border-color 0.2s; }
-.mod-setting select:focus { border-color: var(--accent); outline: none; }
+.mod-setting input[type=number] { width: 64px; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px; font-family: var(--font-display); font-weight: 600; text-align: center; transition: all 0.2s; }
+.mod-setting input[type=number]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(145,70,255,0.1); }
+.mod-setting input[type=number]:hover { border-color: rgba(145,70,255,0.3); }
+.mod-setting select { padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px; font-family: var(--font-display); font-weight: 500; transition: all 0.2s; cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238b8a9e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+.mod-setting select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(145,70,255,0.1); }
+.mod-setting select:hover { border-color: rgba(145,70,255,0.3); }
+.mod-setting .mod-unit { font-size: 12px; color: var(--text-muted); font-family: var(--font-display); font-weight: 500; }
 .mod-note { background: rgba(145,70,255,0.08); border: 1px solid rgba(145,70,255,0.2); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 .banned-word-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .banned-word-tag { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 14px; font-size: 12px; color: var(--text-primary); font-family: var(--font-display); font-weight: 500; }
 .banned-word-tag.regex { border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.08); }
 .banned-word-tag button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0 0 0 2px; line-height: 1; transition: color 0.15s; }
 .banned-word-tag button:hover { color: var(--danger); }
-.banned-word-add { display: flex; gap: 6px; margin-top: 12px; }
-.banned-word-add input[type=text] { flex: 1; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; transition: border-color 0.2s; }
-.banned-word-add input[type=text]:focus { border-color: var(--accent); outline: none; }
+.banned-word-add { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+.banned-word-add input[type=text] { flex: 1; padding: 9px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px; font-family: var(--font-body); transition: all 0.2s; }
+.banned-word-add input[type=text]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(145,70,255,0.1); }
+.banned-word-add input[type=text]:hover { border-color: rgba(145,70,255,0.3); }
+.banned-word-add .mod-btn { padding: 9px 16px; font-size: 12px; font-weight: 600; font-family: var(--font-display); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+.banned-word-add .mod-btn-add { background: var(--accent); border-color: var(--accent); color: #fff; }
+.banned-word-add .mod-btn-add:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.mod-checkbox { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--text-muted); font-family: var(--font-display); font-weight: 500; white-space: nowrap; user-select: none; }
+.mod-checkbox input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; border-radius: 4px; }
+.mod-exempt-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.2s; }
+.mod-exempt-item:hover { border-color: rgba(145,70,255,0.2); }
+.mod-exempt-label { font-size: 13px; font-weight: 600; color: var(--text-primary); font-family: var(--font-display); }
+.mod-save-btn { padding: 12px 32px; font-size: 14px; font-weight: 700; font-family: var(--font-display); background: var(--accent); color: #fff; border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(145,70,255,0.25); }
+.mod-save-btn:hover { background: var(--accent-hover); box-shadow: 0 4px 16px rgba(145,70,255,0.35); transform: translateY(-1px); }
 </style>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
@@ -474,10 +488,10 @@
       </div>
       <div class="banned-word-add">
         <input type="text" id="new-banned-word" placeholder="Add word or phrase...">
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);white-space:nowrap;">
+        <label class="mod-checkbox">
           <input type="checkbox" id="new-banned-regex"> Regex
         </label>
-        <button type="button" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="addBannedWord()">Add</button>
+        <button type="button" class="mod-btn mod-btn-add" onclick="addBannedWord()">+ Add</button>
       </div>
     </div>
 
@@ -499,7 +513,7 @@
         <div class="mod-setting">
           <label>Permit duration</label>
           <input type="number" name="mod_link_permit_seconds" value="<%= streamer.mod_link_permit_seconds || 60 %>" min="10" max="600">
-          <span style="font-size:12px;color:var(--text-muted)">s</span>
+          <span class="mod-unit">s</span>
         </div>
       </div>
     </div>
@@ -526,7 +540,7 @@
         <div class="mod-setting">
           <label>Max caps %</label>
           <input type="number" name="mod_caps_max_percent" value="<%= streamer.mod_caps_max_percent || 70 %>" min="30" max="100">
-          <span style="font-size:12px;color:var(--text-muted)">%</span>
+          <span class="mod-unit">%</span>
         </div>
       </div>
     </div>
@@ -571,7 +585,7 @@
         <div class="mod-setting">
           <label>Window</label>
           <input type="number" name="mod_repetition_window" value="<%= streamer.mod_repetition_window || 30 %>" min="5" max="300">
-          <span style="font-size:12px;color:var(--text-muted)">s</span>
+          <span class="mod-unit">s</span>
         </div>
       </div>
     </div>
@@ -594,7 +608,7 @@
         <div class="mod-setting">
           <label>Max symbols %</label>
           <input type="number" name="mod_symbol_max_percent" value="<%= streamer.mod_symbol_max_percent || 50 %>" min="10" max="100">
-          <span style="font-size:12px;color:var(--text-muted)">%</span>
+          <span class="mod-unit">%</span>
         </div>
       </div>
     </div>
@@ -641,7 +655,7 @@
         <div class="mod-setting">
           <label>Min follow age</label>
           <input type="number" name="mod_follow_age_minutes" value="<%= streamer.mod_follow_age_minutes || 10 %>" min="1" max="1440">
-          <span style="font-size:12px;color:var(--text-muted)">min</span>
+          <span class="mod-unit">min</span>
         </div>
       </div>
     </div>
@@ -688,7 +702,7 @@
         <div class="mod-setting">
           <label>Duration</label>
           <input type="number" name="mod_raid_protection_duration" value="<%= streamer.mod_raid_protection_duration || 120 %>" min="30" max="600">
-          <span style="font-size:12px;color:var(--text-muted)">s</span>
+          <span class="mod-unit">s</span>
         </div>
       </div>
     </div>
@@ -750,28 +764,28 @@
         </div>
       </div>
       <div class="mod-card-settings">
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="mod-exempt-item">
           <label class="pill-toggle">
             <input type="checkbox" id="mod_exempt_subs" name="mod_exempt_subs" value="1" <%= streamer.mod_exempt_subs !== 0 ? 'checked' : '' %>>
             <span class="slider"></span>
           </label>
-          <span style="font-size:13px;color:var(--text-primary);">Subscribers</span>
+          <span class="mod-exempt-label">Subscribers</span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="mod-exempt-item">
           <label class="pill-toggle">
             <input type="checkbox" id="mod_exempt_vips" name="mod_exempt_vips" value="1" <%= streamer.mod_exempt_vips !== 0 ? 'checked' : '' %>>
             <span class="slider"></span>
           </label>
-          <span style="font-size:13px;color:var(--text-primary);">VIPs</span>
+          <span class="mod-exempt-label">VIPs</span>
         </div>
       </div>
     </div>
 
     </div><!-- end Actions & Logging card -->
 
-    <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-      <button type="submit" class="btn btn-primary" style="padding: 10px 28px; font-size: 14px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    <div style="display: flex; justify-content: flex-end; margin-top: 24px;">
+      <button type="submit" class="mod-save-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         Save Moderation Settings
       </button>
     </div>
