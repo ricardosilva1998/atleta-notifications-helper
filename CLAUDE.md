@@ -1,6 +1,6 @@
-# Atleta Notifications Helper
+# Atleta Streamers Helper
 
-Self-service Discord notification bot for streamers. Monitors Twitch (live streams, clips, recaps, milestones), YouTube (videos, shorts, livestreams), and provides welcome messages, subscriber role sync, and weekly digests. Includes chatbots for Twitch and YouTube with customizable thank-you messages and custom commands, OBS overlay with racing-themed animated notification banners and a visual overlay builder, and Spotify integration for `!song` commands. Streamers configure everything through a web dashboard with platform-tabbed layout and multi-language support.
+Self-service streaming toolkit. Monitors Twitch (live streams, clips, recaps, milestones), YouTube (videos, shorts, livestreams — currently disabled via `features.youtube` flag), and provides welcome messages, subscriber role sync, and weekly digests. Includes chatbots for Twitch and YouTube with customizable thank-you messages, custom commands, 13 built-in fun commands, and chat moderation. OBS overlay with racing-themed animated notification banners, a visual overlay builder with advanced theme editor, and multiple card animations. PayPal donation system with direct-to-streamer payments and overlay alerts. Spotify integration for `!song` commands. Streamers configure everything through a web dashboard at `atletanotifications.com` with platform-tabbed layout, tab persistence, and multi-language support.
 
 ## Tech Stack
 
@@ -51,6 +51,8 @@ src/
 │   ├── eventsub.js       # Twitch EventSub WebSocket (per-streamer connections for overlay/chat events)
 │   ├── streamelements.js # StreamElements socket.io (per-streamer, donation tips)
 │   ├── twitchChat.js     # Shared tmi.js chatbot — single connection, joins all enabled channels
+│   ├── chatModeration.js # Chat moderation filters — banned words, link protection, caps, emotes, repetition, symbols, escalation
+│   ├── builtinCommands.js # 13 built-in chat commands — followage, 8ball, rps, roast, etc.
 │   ├── youtubeLiveChat.js # YouTube Live Chat poller — polls chat during live streams, handles events + commands
 │   ├── timedNotifications.js # Sponsor image rotation — cycles enabled sponsors per-streamer, emits to overlay + chat
 │   └── overlayBus.js     # EventEmitter singleton — routes events to overlay SSE + chat
@@ -58,7 +60,8 @@ src/
 │   ├── auth.js           # Discord + Twitch + YouTube + Spotify OAuth flows
 │   ├── overlay.js        # OBS overlay SSE endpoint + overlay HTML page + custom designs
 │   ├── customOverlays.js # Custom overlays CRUD, SSE, file upload (DISABLED — commented out in server.js/overlay.js)
-│   ├── dashboard.js      # Dashboard, account, guild config (tabbed), stats, channel CRUD, overlay config, chatbot config, overlay builder, YouTube chatbot, sound management, sponsor upload/settings
+│   ├── dashboard.js      # Dashboard, account, guild config (tabbed), stats, channel CRUD, overlay config, chatbot config, overlay builder, YouTube chatbot, sound management, sponsor upload/settings, donation settings, built-in commands
+│   ├── tip.js            # Public donation page — PayPal Checkout flow, captures payment, fires overlay alert
 │   ├── api.js            # API endpoints
 │   ├── admin.js          # Admin panel
 │   └── payment.js        # PayPal subscriptions
@@ -71,7 +74,10 @@ src/
     ├── guild-config.ejs  # Tabbed UI: Twitch | YouTube | Discord | iRacing (coming soon) | Settings
     ├── overlay-config.ejs # OBS overlay settings — per-event pill toggles, durations, sound upload/trim/preview, alert preview modal
     ├── overlay-builder.ejs # Visual overlay builder — customize colors, fonts, animations, position per event with live preview
-    ├── chatbot-config.ejs # Twitch chatbot — tabbed: Connection | Event Messages (with test buttons) | Custom Commands
+    ├── chatbot-config.ejs # Twitch chatbot — tabbed: Connection | Event Messages | Custom Commands (with built-in toggles) | Moderation (sub-tabbed: Filters | Users | Protection | Actions)
+    ├── mod-log.ejs       # Moderation log — 7-day action history table
+    ├── donation-settings.ejs # PayPal donation settings — email, currency, min amount, enable toggle
+    ├── tip.ejs           # Public donation page — standalone PayPal Checkout for viewers
     ├── youtube-chatbot-config.ejs # YouTube chatbot — live stream connection, event templates, test buttons
     ├── timed-notifications.ejs # Sponsor rotation — image upload (drag & drop), per-image settings, interval/chat config
     ├── guild-stats.ejs   # Per-server stats with period selector (24h/7d/30d/year/lifetime)
@@ -104,17 +110,20 @@ data/
 
 ## Key Architecture
 
-- **Dashboard:** Platform-tabbed main page (Discord | Twitch | YouTube | Kick | Admin). Discord tab shows guild management. Twitch tab shows overlay/chatbot/Spotify cards. YouTube tab shows chatbot config. Kick is coming soon. Admin tab is admin-only.
-- **OBS Overlay:** EventSub receives Twitch events → overlayBus EventEmitter → SSE push to OBS browser source. Centered card design with per-event themes and full-screen effects (confetti, gold rain, money rain, robots, tire marks). All event types use the same card structure: top-accent + card-body (with optional side icons) + car-track. YouTube events (Super Chat, Member, Gift) also emit to the same overlay. Custom designs stored in `overlay_designs` table.
-- **Overlay Builder:** Visual editor at `/dashboard/overlay-builder` with left control panel + right live preview. Events grouped by platform tabs (Twitch/YouTube/Kick/General). Customize per-event: colors, fonts (Google Fonts with live preview dropdown), text, animation entrance/screen effects, card size, position (9-cell grid + free drag with pixel coordinates), border radius, theme presets. Preview shows stream screenshot background with fake webcam/chat/HUD and draggable alert card. Designs saved to DB (including `card_custom_x`/`card_custom_y` for drag positions) and applied at runtime via `applyCustomDesign()`.
-- **Twitch Chatbot (Atleta):** Single shared tmi.js connection (env var credentials) joins all enabled channels. EventSub/StreamElements events trigger customizable thank-you messages. Custom `!commands` stored per-streamer in `chat_commands` table. Built-in `!song` command for Spotify.
+- **Dashboard:** Platform-tabbed main page (Discord | Twitch | YouTube | Kick | Admin) with localStorage tab persistence. Discord tab shows guild management. Twitch tab shows 7-day activity stats card (follows/subs/bits/donations/raids/giftsubs) + overlay/chatbot/Spotify/donations/sponsor cards. YouTube tab shows "Coming Soon" (disabled via features flag). Kick is coming soon. Admin tab is admin-only.
+- **OBS Overlay:** EventSub receives Twitch events → overlayBus EventEmitter → SSE push to OBS browser source. Centered card design with per-event themes and full-screen effects (confetti, gold rain, money rain, robots, tire marks). All event types use the same card structure: top-accent + card-body (with optional side icons) + car-track (always visible for consistent height). Card animations built dynamically by `buildBottomAnimation()` — bottom-track types (car, checkered, equalizer) stay in track; full-card types (flames, sparkles, lightning, neon sweep, pulse) use `.card-anim-overlay` div. YouTube events (Super Chat, Member, Gift) also emit to the same overlay. Custom designs stored in `overlay_designs` table with advanced theme columns (opacity, gradient, border, glow, shadow). Donation alerts show message on separate line below amount. Moderation actions use Twitch Helix API (not tmi.js IRC) for message deletion/timeouts.
+- **Overlay Builder:** Visual editor at `/dashboard/overlay-builder` with left control panel + right live preview. Events grouped by platform tabs (Twitch/YouTube/Kick/General). Customize per-event: colors, fonts (Google Fonts with live preview dropdown), text, animation entrance/screen effects, card size, position (9-cell grid + free drag with pixel coordinates), border radius. Advanced theme editor with 14 presets, gradient direction (7 options + solid), background opacity, border thickness/opacity, glow intensity, shadow blur/spread/opacity. Card animations split into Card Animation tab (entrance + bottom bar) and Canvas Animation tab (screen effects). Bottom bar animations: Car L→R, Car R→L, Checkered Flag, Equalizer (bottom track); Flames, Sparkles, Lightning, Neon Sweep, Pulse (full-card overlays). Preview shows stream screenshot background with draggable alert card. Designs saved to DB and applied at runtime via `applyCustomDesign()`.
+- **Feature Flags:** `config.features.youtube` controls YouTube UI visibility across all pages. When `false`, YouTube tabs show "Coming Soon" placeholder. Set in `src/config.js`.
+- **Twitch Chatbot (Atleta):** Single shared tmi.js connection (env var credentials) joins all enabled channels (requires `chatbot_enabled = 1` and `twitch_username` set). EventSub/StreamElements events trigger customizable thank-you messages. Custom `!commands` stored per-streamer in `chat_commands` table. Built-in `!song` command for Spotify. 13 toggleable built-in commands: `!followage`, `!subage`, `!uptime`, `!accountage`, `!8ball`, `!roll`, `!hug`, `!slap`, `!love`, `!rps`, `!coinflip`, `!quote`, `!roast`, plus `!commands` to list all available. Stored as `cmd_*_enabled` columns on `streamers` table.
+- **Chat Moderation:** Per-feature toggleable moderation system in `chatModeration.js`. Features: banned words (always enforced, even for subs/VIPs), link protection with `!permit`, caps filter, emote spam, repetition filter, symbol spam, follow age gate, first-time chatter flag, slow mode command, raid protection (auto followers-only), escalation ladder, and moderation log (stored in `moderation_log` table, 7-day retention). Uses Twitch Helix API for message deletion and timeouts (not tmi.js IRC commands). Bot user ID resolved via OAuth validate endpoint to handle third-party token Client-IDs. Moderation tab organized into sub-tabs: Message Filters | User Management | Protection | Actions.
 - **YouTube Chatbot:** Polling-based via YouTube Live Chat API. Activates when stream goes live (auto-detected by poller or manual connect). Detects Super Chats, new members, gifted memberships, and `!commands`. Uses global bot YouTube account for sending messages.
 - **Spotify Integration:** Streamer connects Spotify via OAuth. `!song` command in Twitch/YouTube chat returns currently playing track. Token auto-refresh.
 - **Sound System:** Per-event sounds with synthesized racing defaults (engine revs, turbo blow-off, tire screeches via Web Audio API). Custom mp3 upload with client-side trim tool. Custom sounds stored in `data/sounds/` (persistent volume). Overlay tries custom mp3 first, falls back to synthesized.
 - **Sponsor Rotation:** Streamers upload sponsor images (stored in `data/sponsors/`). `timedNotifications.js` cycles through enabled sponsors at a configurable interval, emitting `type: 'sponsor'` events to the overlay and optionally sending chat messages. Managed via `/dashboard/timed-notifications` with drag-and-drop upload, per-image enable/toggle, and settings (interval, chat toggle).
 - **Polling-based Discord notifications:** Pollers run on intervals, detect state changes, and send Discord notifications
 - **Free for all:** All features are free and unlimited for every user — no tier gating
-- **Donations:** PayPal.me donation page at `/donate` (Buy me a coffee or candy)
+- **Donations (PayPal):** Streamers configure their PayPal email in `/dashboard/donations`. Public tip page at `/tip/:username` uses PayPal Checkout API with `payee: { email_address }` — money goes directly to the streamer's PayPal. On successful capture, fires overlay alert + chatbot message. Donation details (donor, message, amount, currency) stored in cookies during PayPal redirect. Donation messages shown on separate line below amount in overlay card. Event logged to `overlay_events` table. Legacy donate page at `/donate` (Buy me a coffee).
+- **Overlay Event Logging:** All overlay events (follows, subs, bits, donations, raids) logged to `overlay_events` table. 7-day stats shown on Twitch tab dashboard card. 30-day retention with auto-cleanup.
 - **Activity Feed:** Stream Recaps, Milestone Celebrations, Weekly Highlights — all free
 - **Auth flows:** Discord OAuth login → Twitch linking → broadcaster auth (EventSub scopes) → bot account (global env var) → YouTube OAuth (streamer account for live detection) → Spotify OAuth (streamer account for !song)
 - **YouTube Shorts:** Detected via YouTube Data API duration check (≤60s), separate notification format
@@ -155,7 +164,12 @@ Optional:
 - Twitch notifications sent as embeds, clips and YouTube videos sent as plain text (for Discord auto-preview)
 - Custom sounds stored in `data/sounds/` (persistent volume), not `public/overlay/sounds/`
 - Sponsor images stored in `data/sponsors/` (persistent volume), served via `/sponsors/` static route
-- Overlay designs stored in `overlay_designs` table (including `card_custom_x`/`card_custom_y` for drag positions), applied at runtime in `overlay.js` via `applyCustomDesign()`
+- Overlay designs stored in `overlay_designs` table (including `card_custom_x`/`card_custom_y` for drag positions, advanced theme: `bg_opacity`, `gradient_direction`, `border_thickness`, `border_opacity`, `glow_intensity`, `shadow_*`), applied at runtime in `overlay.js` via `applyCustomDesign()`
+- `applyCustomDesign()` must NOT overwrite dynamic detail text for donations/subs/bits/raids — only for follows
+- Tab persistence uses `localStorage` across all tabbed pages (dashboard, guild-config, overlay-config, chatbot-config + moderation sub-tabs)
+- Open Graph meta tags in `header.ejs` for social sharing previews
+- Domain: `atletanotifications.com` (Cloudflare DNS → Railway)
+- Public tip pages at `/tip/:username` are NOT behind auth middleware
 
 ## Overlay Consistency Rule
 
