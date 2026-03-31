@@ -2196,6 +2196,9 @@ const OVERLAY_DESIGN_COLUMNS = new Set([
   'username_size', 'event_label', 'detail_text', 'entrance_animation',
   'car_animation', 'screen_effect', 'animation_speed', 'card_width',
   'card_position', 'border_radius',
+  'bg_opacity', 'gradient_direction', 'border_thickness', 'border_opacity',
+  'glow_enabled', 'glow_intensity', 'glow_color',
+  'shadow_color', 'shadow_blur', 'shadow_spread', 'shadow_opacity',
 ]);
 
 function saveOverlayDesign(streamerId, eventType, design) {
@@ -2237,6 +2240,17 @@ function saveOverlayDesign(streamerId, eventType, design) {
     effect_amount: design.effect_amount != null ? design.effect_amount : 1.0,
     effect_size: design.effect_size != null ? design.effect_size : 1.0,
     effect_direction: design.effect_direction || 'down',
+    bg_opacity: design.bg_opacity != null ? design.bg_opacity : 1.0,
+    gradient_direction: design.gradient_direction || '160deg',
+    border_thickness: design.border_thickness != null ? design.border_thickness : 2,
+    border_opacity: design.border_opacity != null ? design.border_opacity : 0.5,
+    glow_enabled: design.glow_enabled != null ? design.glow_enabled : 1,
+    glow_intensity: design.glow_intensity != null ? design.glow_intensity : 0.25,
+    glow_color: design.glow_color || null,
+    shadow_color: design.shadow_color || null,
+    shadow_blur: design.shadow_blur != null ? design.shadow_blur : 32,
+    shadow_spread: design.shadow_spread != null ? design.shadow_spread : 0,
+    shadow_opacity: design.shadow_opacity != null ? design.shadow_opacity : 0.6,
   };
   db.prepare(`
     INSERT OR REPLACE INTO overlay_designs
@@ -2247,8 +2261,11 @@ function saveOverlayDesign(streamerId, eventType, design) {
        label_font_family, label_font_size, label_font_weight, label_color,
        username_font_family, username_font_weight, username_color,
        detail_font_family, detail_font_size, detail_font_weight, detail_color,
-       text_align, card_side_icon, effect_amount, effect_size, effect_direction)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       text_align, card_side_icon, effect_amount, effect_size, effect_direction,
+       bg_opacity, gradient_direction, border_thickness, border_opacity,
+       glow_enabled, glow_intensity, glow_color,
+       shadow_color, shadow_blur, shadow_spread, shadow_opacity)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     streamerId, eventType,
     row.bg_color, row.accent_color, row.border_color, row.text_color,
@@ -2262,6 +2279,9 @@ function saveOverlayDesign(streamerId, eventType, design) {
     row.detail_font_family, row.detail_font_size, row.detail_font_weight, row.detail_color,
     row.text_align, row.card_side_icon,
     row.effect_amount, row.effect_size, row.effect_direction,
+    row.bg_opacity, row.gradient_direction, row.border_thickness, row.border_opacity,
+    row.glow_enabled, row.glow_intensity, row.glow_color,
+    row.shadow_color, row.shadow_blur, row.shadow_spread, row.shadow_opacity,
   );
 }
 
@@ -2337,6 +2357,27 @@ function deleteOverlayDesign(streamerId, eventType) {
   if (!cols.includes('effect_direction')) {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN effect_direction TEXT DEFAULT 'down'`);
     console.log('[DB] Added effect_direction to overlay_designs');
+  }
+}
+
+// Migration: Add advanced theme columns to overlay_designs
+{
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  if (!cols.includes('bg_opacity')) {
+    db.exec(`
+      ALTER TABLE overlay_designs ADD COLUMN bg_opacity REAL DEFAULT 1.0;
+      ALTER TABLE overlay_designs ADD COLUMN gradient_direction TEXT DEFAULT '160deg';
+      ALTER TABLE overlay_designs ADD COLUMN border_thickness INTEGER DEFAULT 2;
+      ALTER TABLE overlay_designs ADD COLUMN border_opacity REAL DEFAULT 0.5;
+      ALTER TABLE overlay_designs ADD COLUMN glow_enabled INTEGER DEFAULT 1;
+      ALTER TABLE overlay_designs ADD COLUMN glow_intensity REAL DEFAULT 0.25;
+      ALTER TABLE overlay_designs ADD COLUMN glow_color TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN shadow_color TEXT;
+      ALTER TABLE overlay_designs ADD COLUMN shadow_blur INTEGER DEFAULT 32;
+      ALTER TABLE overlay_designs ADD COLUMN shadow_spread INTEGER DEFAULT 0;
+      ALTER TABLE overlay_designs ADD COLUMN shadow_opacity REAL DEFAULT 0.6;
+    `);
+    console.log('[DB] Added advanced theme columns to overlay_designs');
   }
 }
 
