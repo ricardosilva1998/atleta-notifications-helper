@@ -693,10 +693,15 @@ function darken(hex, factor) {
   return `rgb(${Math.round(r*factor)},${Math.round(g*factor)},${Math.round(b*factor)})`;
 }
 
-function hexToRgba(hex, alpha) {
+function hexToRgb(hex) {
   const r = parseInt(hex.slice(1,3),16);
   const g = parseInt(hex.slice(3,5),16);
   const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+
+function hexToRgba(hex, alpha) {
+  const [r,g,b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
@@ -704,7 +709,6 @@ function applyCustomDesign(card, eventType) {
   const design = overlayDesigns[eventType];
   if (!design) return;
 
-  // Background
   // Background (with advanced theme)
   const bgOpacity = design.bg_opacity != null ? design.bg_opacity : 1.0;
   const gradDir = design.gradient_direction || '160deg';
