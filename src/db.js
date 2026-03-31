@@ -2107,6 +2107,26 @@ function updateYoutubeChatbotConfig(streamerId, config) {
   db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
+const BUILTIN_CMD_COLUMNS = new Set([
+  'cmd_followage_enabled', 'cmd_subage_enabled', 'cmd_uptime_enabled',
+  'cmd_accountage_enabled', 'cmd_8ball_enabled', 'cmd_roll_enabled',
+  'cmd_hug_enabled', 'cmd_slap_enabled', 'cmd_love_enabled',
+  'cmd_rps_enabled', 'cmd_coinflip_enabled', 'cmd_quote_enabled', 'cmd_roast_enabled',
+]);
+
+function updateBuiltinCommands(streamerId, config) {
+  const fields = [];
+  const values = [];
+  for (const [key, value] of Object.entries(config)) {
+    if (!BUILTIN_CMD_COLUMNS.has(key)) continue;
+    fields.push(`${key} = ?`);
+    values.push(value);
+  }
+  if (fields.length === 0) return;
+  values.push(streamerId);
+  db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
 const MODERATION_COLUMNS = new Set([
   'mod_banned_words_enabled', 'mod_link_protection_enabled', 'mod_link_permit_seconds',
   'mod_caps_enabled', 'mod_caps_min_length', 'mod_caps_max_percent',
@@ -2482,6 +2502,25 @@ function deleteOverlayDesign(streamerId, eventType) {
     `);
     console.log('[DB] Added moderation columns to streamers');
   }
+
+  if (!cols.includes('cmd_followage_enabled')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN cmd_followage_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_subage_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_uptime_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_accountage_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_8ball_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_roll_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_hug_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_slap_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_love_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_rps_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_coinflip_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_quote_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN cmd_roast_enabled INTEGER DEFAULT 0;
+    `);
+    console.log('[DB] Added built-in command columns to streamers');
+  }
 }
 
 db.exec(`
@@ -2856,6 +2895,7 @@ module.exports = {
   updateChatCommand,
   deleteChatCommand,
   updateChatbotConfig,
+  updateBuiltinCommands,
   updateModerationConfig,
   getBannedWords,
   addBannedWord,
