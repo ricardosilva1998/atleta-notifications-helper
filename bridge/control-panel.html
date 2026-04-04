@@ -49,6 +49,20 @@
     </div>
   </div>
 
+  <div id="update-bar" style="display:none; margin-top:10px; margin-bottom:10px; padding:10px 14px; border-radius:8px; border:1px solid rgba(62,207,142,0.3); background:rgba(62,207,142,0.08); font-size:12px; color:#3ecf8e;">
+    <div id="update-text" style="margin-bottom:6px; font-weight:600;"></div>
+    <button id="update-btn" onclick="handleUpdateAction()" style="padding:6px 14px; border-radius:6px; border:none; background:#3ecf8e; color:#0c0d14; font-size:12px; font-weight:600; cursor:pointer; display:none;">Download Update</button>
+    <div id="update-progress" style="display:none; height:4px; border-radius:2px; background:rgba(255,255,255,0.1); margin-top:6px; overflow:hidden;">
+      <div id="update-progress-bar" style="height:100%; background:#3ecf8e; width:0%; transition:width 0.3s;"></div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:10px; text-align:center;">
+    <button onclick="checkForUpdate()" style="padding:6px 14px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#8b8a9e; font-size:11px; cursor:pointer;">
+      Check for Updates
+    </button>
+  </div>
+
   <div class="status-card">
     <div class="status-dot waiting" id="status-dot"></div>
     <div>
@@ -79,20 +93,6 @@
       <input type="checkbox" id="autohide-check" checked onchange="toggleAutoHide(this.checked)" style="accent-color:#9146ff;">
       Auto-hide overlays when iRacing closes
     </label>
-  </div>
-
-  <div id="update-bar" style="display:none; margin-top:12px; padding:10px 14px; border-radius:8px; border:1px solid rgba(62,207,142,0.3); background:rgba(62,207,142,0.08); font-size:12px; color:#3ecf8e;">
-    <div id="update-text" style="margin-bottom:6px; font-weight:600;"></div>
-    <button id="update-btn" onclick="handleUpdateAction()" style="padding:6px 14px; border-radius:6px; border:none; background:#3ecf8e; color:#0c0d14; font-size:12px; font-weight:600; cursor:pointer; display:none;">Download Update</button>
-    <div id="update-progress" style="display:none; height:4px; border-radius:2px; background:rgba(255,255,255,0.1); margin-top:6px; overflow:hidden;">
-      <div id="update-progress-bar" style="height:100%; background:#3ecf8e; width:0%; transition:width 0.3s;"></div>
-    </div>
-  </div>
-
-  <div style="margin-top:10px; text-align:center;">
-    <button onclick="checkForUpdate()" style="padding:6px 14px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#8b8a9e; font-size:11px; cursor:pointer;">
-      Check for Updates
-    </button>
   </div>
 
   <div class="footer">
@@ -142,10 +142,12 @@
     const CUSTOMIZE_FIELDS = {
       standings: [
         { key: 'maxPerClass', label: 'Max cars per class (0 = all)', type: 'number', default: '0', min: 0, max: 50 },
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
       ],
       relative: [
         { key: 'carsAhead', label: 'Cars ahead', type: 'number', default: '5', min: 1, max: 15 },
         { key: 'carsBehind', label: 'Cars behind', type: 'number', default: '5', min: 1, max: 15 },
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
       ],
       fuel: [
         { key: 'showAvg5', label: 'Show Avg 5 Laps', type: 'checkbox', default: true },
@@ -153,10 +155,17 @@
         { key: 'showMinMax', label: 'Show Min/Max Usage', type: 'checkbox', default: true },
         { key: 'showToFinish', label: 'Show Fuel to Finish', type: 'checkbox', default: true },
         { key: 'showToAdd', label: 'Show Fuel to Add', type: 'checkbox', default: true },
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
       ],
-      wind: [],
-      proximity: [],
-      chat: [],
+      wind: [
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
+      ],
+      proximity: [
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
+      ],
+      chat: [
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
+      ],
     };
 
     function openCustomize(id, name) {

@@ -7,7 +7,9 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: transparent; overflow-y: auto; max-height: calc(100vh - 40px); font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; font-size: 11px; }
+    body { background: transparent; overflow-y: auto; max-height: calc(100vh - 40px); font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; font-size: 11px; -ms-overflow-style: none; scrollbar-width: none; }
+    body::-webkit-scrollbar { display: none; }
+    ::-webkit-scrollbar { display: none; }
     .overlay-panel { background: rgba(12,13,20,0.88); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; }
     .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; }
     .overlay-body { padding: 4px 0; }
@@ -93,6 +95,24 @@
       return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
     }
 
+    function clubToFlag(club) {
+      if (!club) return '';
+      const map = {
+        'Iberia': '🇪🇸', 'DE-AT-CH': '🇩🇪', 'UK and I': '🇬🇧', 'Benelux': '🇳🇱',
+        'France': '🇫🇷', 'Italy': '🇮🇹', 'Brazil': '🇧🇷', 'Australia/NZ': '🇦🇺',
+        'Central-Eastern Europe': '🇵🇱', 'Scandinavia': '🇸🇪', 'Finland': '🇫🇮',
+        'International': '🌐', 'Hispanic America': '🇲🇽', 'Portugal': '🇵🇹',
+        'Canada': '🇨🇦', 'Japan': '🇯🇵', 'South Korea': '🇰🇷', 'China': '🇨🇳',
+        'India': '🇮🇳', 'Middle East': '🇦🇪', 'Greece': '🇬🇷', 'Turkey': '🇹🇷',
+        'Israel': '🇮🇱', 'South Africa': '🇿🇦', 'Russia': '🇷🇺',
+      };
+      if (map[club]) return map[club];
+      for (const [key, flag] of Object.entries(map)) {
+        if (club.includes(key) || key.includes(club)) return flag;
+      }
+      return '🏁';
+    }
+
     function licenseColor(lic) {
       if (!lic) return '#888';
       const letter = lic.charAt(0).toUpperCase();
@@ -128,7 +148,7 @@
         gap = '--';
       }
 
-      const flag = countryFlag(d.country);
+      const flag = clubToFlag(d.country);
       const licColor = licenseColor(d.safetyRating || d.license);
       const irStr = formatIR(d.iRating);
       const classColor = d.carClassColor || '#fff';
@@ -183,6 +203,10 @@
           if (!a.disconnected && b.disconnected) return -1;
           const aTime = (a.bestLap > 0 ? a.bestLap : (a.lastLap > 0 ? a.lastLap : Infinity));
           const bTime = (b.bestLap > 0 ? b.bestLap : (b.lastLap > 0 ? b.lastLap : Infinity));
+          if (aTime === Infinity && bTime === Infinity) {
+            // Both have no lap — sort by iRating descending
+            return (b.iRating || 0) - (a.iRating || 0);
+          }
           return aTime - bTime;
         });
         // Apply max per class limit
