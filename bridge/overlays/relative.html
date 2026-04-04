@@ -137,7 +137,7 @@
 
     function buildRelativeRow(d, gapClass, gapStr, isPlayerRow) {
       const pos = d.classPosition > 0 ? d.classPosition : (d.position > 0 ? d.position : '');
-      const flag = clubToFlag(d.country);
+      const flag = (d.country && d.country !== 'None' && d.country !== 'none') ? clubToFlag(d.country) : '';
       const licColor = licenseColor(d.safetyRating || d.license);
       const licStr = d.safetyRating || d.license || '';
       const irStr = formatIR(d.iRating);

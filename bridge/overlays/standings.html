@@ -148,7 +148,7 @@
         gap = '--';
       }
 
-      const flag = clubToFlag(d.country);
+      const flag = (d.country && d.country !== 'None' && d.country !== 'none') ? clubToFlag(d.country) : '';
       const licColor = licenseColor(d.safetyRating || d.license);
       const irStr = formatIR(d.iRating);
       const classColor = d.carClassColor || '#fff';
