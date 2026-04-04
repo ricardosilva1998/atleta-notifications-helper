@@ -26,15 +26,27 @@ jobs:
       - name: Setup Python (for node-gyp)
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
-      - name: Install Windows Build Tools
-        run: npm install -g windows-build-tools node-gyp
-        continue-on-error: true
-
-      - name: Install dependencies
+      - name: Install dependencies (without native addons)
         working-directory: bridge
-        run: npm install
+        run: npm install --ignore-scripts
+
+      - name: Fix node-irsdk BOM character in binding.gyp
+        working-directory: bridge
+        shell: pwsh
+        run: |
+          $file = "node_modules/node-irsdk/binding.gyp"
+          if (Test-Path $file) {
+            $content = [System.IO.File]::ReadAllText($file)
+            $content = $content.TrimStart([char]0xFEFF)
+            [System.IO.File]::WriteAllText($file, $content, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Fixed BOM in binding.gyp"
+          }
+
+      - name: Rebuild native addons
+        working-directory: bridge
+        run: npm rebuild
 
       - name: Build Windows installer
         working-directory: bridge
