@@ -55,12 +55,20 @@
   <h2>Overlays</h2>
   <div class="overlay-list" id="overlay-list"></div>
 
+  <div style="margin-top: 14px;">
+    <button id="lock-btn" onclick="toggleLock()" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #141520; color: #e8e6f0; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+      🔓 Unlocked — Drag & Resize Overlays
+    </button>
+    <p style="font-size: 10px; color: #3a3a4e; text-align: center; margin-top: 6px;">Lock to make overlays click-through while driving</p>
+  </div>
+
   <div class="footer">
     <a href="https://atletanotifications.com" target="_blank">atletanotifications.com</a>
   </div>
 
   <script>
     const { ipcRenderer } = require('electron');
+    let locked = false;
 
     const overlays = [
       { id: 'standings', icon: '🏁', name: 'Standings' },
@@ -92,6 +100,25 @@
       ipcRenderer.send('toggle-overlay', id, enabled);
     }
 
+    function toggleLock() {
+      locked = !locked;
+      ipcRenderer.send('toggle-lock', locked);
+      updateLockBtn();
+    }
+
+    function updateLockBtn() {
+      const btn = document.getElementById('lock-btn');
+      if (locked) {
+        btn.innerHTML = '🔒 Locked — Click-Through Mode';
+        btn.style.background = 'rgba(145,70,255,0.15)';
+        btn.style.borderColor = 'rgba(145,70,255,0.4)';
+      } else {
+        btn.innerHTML = '🔓 Unlocked — Drag & Resize Overlays';
+        btn.style.background = '#141520';
+        btn.style.borderColor = 'rgba(255,255,255,0.1)';
+      }
+    }
+
     ipcRenderer.on('iracing-status', (event, status) => {
       const dot = document.getElementById('status-dot');
       const text = document.getElementById('status-text');
@@ -117,6 +144,11 @@
         const toggle = document.getElementById('toggle-' + id);
         if (toggle) toggle.checked = enabled;
       });
+    });
+
+    ipcRenderer.on('lock-state', (event, isLocked) => {
+      locked = isLocked;
+      updateLockBtn();
     });
 
     ipcRenderer.send('get-overlay-states');

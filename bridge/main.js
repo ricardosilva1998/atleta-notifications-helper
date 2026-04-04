@@ -6,12 +6,13 @@ const { startTelemetry, stopTelemetry } = require('./telemetry');
 let tray = null;
 let controlWindow = null;
 const overlayWindows = {};
+let overlaysLocked = false;
 
 const OVERLAYS = [
   { id: 'standings', name: 'Standings', width: 360, height: 500 },
   { id: 'relative', name: 'Relative', width: 260, height: 400 },
   { id: 'fuel', name: 'Fuel Calculator', width: 260, height: 200 },
-  { id: 'wind', name: 'Wind Direction', width: 140, height: 140 },
+  { id: 'wind', name: 'Wind Direction', width: 150, height: 150 },
   { id: 'proximity', name: 'Car Proximity', width: 160, height: 280 },
   { id: 'chat', name: 'Streaming Chat', width: 340, height: 500 },
 ];
@@ -28,10 +29,8 @@ app.on('second-instance', () => {
 });
 
 app.on('ready', () => {
-  // System tray
-  const iconPath = path.join(__dirname, 'icons', 'icon.png');
   try {
-    tray = new Tray(nativeImage.createFromPath(iconPath));
+    tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')));
   } catch (e) {
     tray = new Tray(nativeImage.createEmpty());
   }
@@ -45,19 +44,14 @@ app.on('ready', () => {
   ]);
   tray.setContextMenu(contextMenu);
 
-  // Start WebSocket server
   startServer(9100);
-
-  // Start telemetry
   startTelemetry((status) => {
     if (controlWindow && !controlWindow.isDestroyed()) {
       controlWindow.webContents.send('iracing-status', status);
     }
   });
 
-  // Show control panel
   showControlWindow();
-
   console.log('[Bridge] Started');
 });
 
@@ -69,16 +63,13 @@ function showControlWindow() {
   }
 
   controlWindow = new BrowserWindow({
-    width: 400,
-    height: 520,
+    width: 420,
+    height: 600,
     resizable: false,
     maximizable: false,
     title: 'Atleta Bridge',
     backgroundColor: '#0c0d14',
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
 
   controlWindow.setMenuBarVisibility(false);
@@ -101,24 +92,26 @@ function createOverlayWindow(overlayId) {
     width: config.width,
     height: config.height,
     x: screenW - config.width - 20,
-    y: 20 + Object.keys(overlayWindows).length * 30,
+    y: 20 + Object.keys(overlayWindows).length * 40,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
+    minimizable: false,
+    maximizable: false,
     hasShadow: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
+    minWidth: 100,
+    minHeight: 80,
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
 
-  // Make click-through when not hovering
-  win.setIgnoreMouseEvents(true, { forward: true });
-
-  // Load the overlay page from local HTML file that connects to ws://localhost:9100
   win.loadFile(path.join(__dirname, 'overlays', `${overlayId}.html`));
+
+  if (overlaysLocked) {
+    win.setIgnoreMouseEvents(true, { forward: true });
+    win.setResizable(false);
+  }
 
   win.on('closed', () => {
     delete overlayWindows[overlayId];
@@ -137,22 +130,34 @@ function closeOverlayWindow(overlayId) {
   }
 }
 
-// IPC handlers
+function setOverlaysLocked(locked) {
+  overlaysLocked = locked;
+  Object.values(overlayWindows).forEach(win => {
+    if (win && !win.isDestroyed()) {
+      win.setIgnoreMouseEvents(locked, { forward: locked });
+      win.setResizable(!locked);
+      win.webContents.send('lock-state', locked);
+    }
+  });
+}
+
 ipcMain.on('toggle-overlay', (event, overlayId, enabled) => {
-  if (enabled) {
-    createOverlayWindow(overlayId);
-  } else {
-    closeOverlayWindow(overlayId);
-  }
+  if (enabled) createOverlayWindow(overlayId);
+  else closeOverlayWindow(overlayId);
+});
+
+ipcMain.on('toggle-lock', (event, locked) => {
+  setOverlaysLocked(locked);
 });
 
 ipcMain.on('get-overlay-states', (event) => {
   const states = {};
   OVERLAYS.forEach(o => { states[o.id] = !!overlayWindows[o.id]; });
   event.reply('overlay-states', states);
+  event.reply('lock-state', overlaysLocked);
 });
 
-app.on('window-all-closed', () => {}); // Keep running
+app.on('window-all-closed', () => {});
 app.on('before-quit', () => {
   Object.keys(overlayWindows).forEach(closeOverlayWindow);
   stopTelemetry();
