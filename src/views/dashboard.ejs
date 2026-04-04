@@ -5,6 +5,7 @@
   .tab-twitch.active { background: #9146ff; }
   .tab-youtube.active { background: #ff0000; }
   .tab-kick.active { background: #53fc18; color: #000; }
+  .tab-experimental.active { background: linear-gradient(135deg, #667eea, #764ba2); }
   .tab-admin.active { background: #e74c3c; }
 </style>
 
@@ -39,6 +40,10 @@
   </button>
   <button class="tab-btn tab-kick" data-tab="kick">
     <svg width="30" height="10" viewBox="0 0 78 26" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0307312H8.34073V5.79423H11.1163V2.91248H13.8919V0.0307312H22.2326V8.69274H19.457V11.5745H16.6815V14.4562H19.457V17.338H22.2326V26H13.8919V23.1182H11.1163V20.2365H8.34073V26H0V0.0307312ZM55.6444 0.0307312H63.9852V5.79423H66.7608V2.91248H69.5363V0.0307312H77.8771V8.69274H75.1015V11.5745H72.3259V14.4562H75.1015V17.338H77.8771V26H69.5363V23.1182H66.7608V20.2365H63.9852V26H55.6444V0.0307312ZM25.039 0.0307312H33.3797V26H25.039V0.0307312ZM38.9462 0.0307312V2.91248H36.1706V23.1029H38.9462V25.9846H52.8535V17.3226H44.5128V8.66061H52.8535V0H38.9462V0.0307312Z"/></svg>
+  </button>
+  <button class="tab-btn tab-experimental" data-tab="experimental">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v8l4 9H5l4-9V3z"/><path d="M9 3h6"/></svg>
+    Experimental
   </button>
   <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
   <button class="tab-btn tab-admin" data-tab="admin">
@@ -567,6 +572,97 @@
     <p style="color: var(--text-muted); font-size: 13px;">Kick.com integration with chatbot and overlay support is coming.</p>
   </div>
 </div>
+
+<div class="tab-content" id="tab-experimental">
+  <div class="animate-in animate-in-delay-2">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+      <h3 class="section-title" style="margin: 0; line-height: 1;">VTuber Face Tracker</h3>
+      <span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;">BETA</span>
+    </div>
+
+    <div class="card" style="padding: 16px; margin-bottom: 16px;">
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
+        Track your face with your webcam and display an animated avatar on your stream via OBS Browser Source. Choose between different characters — head rotation, mouth, and eye tracking included.
+      </p>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary);">1.</strong> Start the tracker below
+        </div>
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary);">2.</strong> Allow camera access
+        </div>
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary);">3.</strong> In OBS: add Browser Source → <code style="background: var(--bg-hover); padding: 1px 5px; border-radius: 3px; font-size: 11px;">http://localhost:5173?mode=stream</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div id="vtuber-toolbar" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-elevated);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div id="vtuber-status" style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted);"></div>
+          <span style="font-size: 12px; color: var(--text-secondary);" id="vtuber-status-text">Not started</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="copyOBSUrl()" style="background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary); padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; font-family: var(--font-display); font-weight: 600; transition: all var(--transition);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-secondary)'" id="copy-obs-btn">
+            Copy OBS URL
+          </button>
+          <button onclick="toggleVtuber()" id="vtuber-toggle-btn" style="background: linear-gradient(135deg, #667eea, #764ba2); border: none; color: white; padding: 5px 16px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; font-family: var(--font-display); font-weight: 600; transition: all var(--transition);">
+            Launch Tracker
+          </button>
+        </div>
+      </div>
+      <div id="vtuber-container" style="position: relative; width: 100%; height: 500px; background: #1a1a2e; display: flex; align-items: center; justify-content: center;">
+        <div id="vtuber-placeholder" style="text-align: center; color: var(--text-muted);">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.5;"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          <p style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Click "Launch Tracker" to start</p>
+          <p style="font-size: 12px;">Your webcam will be used to track facial movements</p>
+        </div>
+        <iframe id="vtuber-iframe" style="display: none; width: 100%; height: 100%; border: none;" allow="camera"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let vtuberActive = false;
+
+  function toggleVtuber() {
+    const iframe = document.getElementById('vtuber-iframe');
+    const placeholder = document.getElementById('vtuber-placeholder');
+    const btn = document.getElementById('vtuber-toggle-btn');
+    const status = document.getElementById('vtuber-status');
+    const statusText = document.getElementById('vtuber-status-text');
+
+    if (!vtuberActive) {
+      iframe.src = 'http://localhost:5173';
+      iframe.style.display = 'block';
+      placeholder.style.display = 'none';
+      btn.textContent = 'Stop Tracker';
+      btn.style.background = '#e74c3c';
+      status.style.background = '#2ecc71';
+      statusText.textContent = 'Running';
+      vtuberActive = true;
+    } else {
+      iframe.src = '';
+      iframe.style.display = 'none';
+      placeholder.style.display = 'block';
+      btn.textContent = 'Launch Tracker';
+      btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+      status.style.background = 'var(--text-muted)';
+      statusText.textContent = 'Not started';
+      vtuberActive = false;
+    }
+  }
+
+  function copyOBSUrl() {
+    navigator.clipboard.writeText('http://localhost:5173?mode=stream').then(() => {
+      const btn = document.getElementById('copy-obs-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy OBS URL'; }, 2000);
+    });
+  }
+</script>
 
 <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
 <div class="tab-content" id="tab-admin">
