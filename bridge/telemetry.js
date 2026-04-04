@@ -93,55 +93,45 @@ async function startTelemetry(onStatusChange) {
         ir.refreshSharedMemory();
         pollCount++;
 
-        // === Try to get session info (may take several polls to become available) ===
+        // === Try to get session info ===
         if (!sessionInfoFound) {
           try {
+            // Method 1: getSessionInfo()
             const si = ir.getSessionInfo();
-            if (si && typeof si === 'object' && Object.keys(si).length > 0) {
+            if (si && typeof si === 'object' && si !== null && Object.keys(si).length > 0) {
               sessionInfoFound = true;
               drivers = si.DriverInfo?.Drivers || [];
               playerCarIdx = si.DriverInfo?.DriverCarIdx ?? 0;
-              log('[SessionInfo] Found! Track: ' + (si.WeekendInfo?.TrackDisplayName || '?'));
-              log('[SessionInfo] PlayerCarIdx: ' + playerCarIdx);
-              log('[SessionInfo] Drivers: ' + drivers.length);
-              drivers.slice(0, 3).forEach((d, i) => log('[SessionInfo] D[' + i + '] idx=' + d.CarIdx + ' ' + d.UserName + ' #' + d.CarNumber));
-            } else if (pollCount % 50 === 0) {
-              // Every 5 seconds, try alternative methods
-              log('[SessionInfo] Still null after ' + pollCount + ' polls. Trying alternatives...');
+              log('[SessionInfo] Found via getSessionInfo! Drivers: ' + drivers.length);
+            }
 
-              // Try getSessionInfoBinary
+            // Method 2: Try reading the shared memory YAML directly
+            if (!sessionInfoFound && pollCount % 30 === 0) {
+              // The SDK stores session info as YAML in shared memory
+              // Try to access the raw buffer through sharedMemory property
+              if (ir.sharedMemory) {
+                try {
+                  const yaml = require('js-yaml');
+                  // sharedMemory might be a Buffer or have session info somewhere
+                  const smType = typeof ir.sharedMemory;
+                  if (pollCount === 30) log('[SessionInfo] sharedMemory type: ' + smType + ', keys: ' + (ir.sharedMemory && typeof ir.sharedMemory === 'object' ? Object.keys(ir.sharedMemory).slice(0, 10).join(',') : 'N/A'));
+                } catch(e) {}
+              }
+
+              // Method 3: Call getSessionInfo after explicit memory refresh
               try {
-                const binary = ir.getSessionInfoBinary();
-                if (binary) {
-                  let str;
-                  if (typeof binary === 'string') str = binary;
-                  else if (Buffer.isBuffer(binary)) str = binary.toString('utf8');
-                  else if (binary.buffer) str = Buffer.from(binary.buffer).toString('utf8');
-
-                  if (str && str.length > 10) {
-                    log('[SessionInfo] Binary data found, length: ' + str.length);
-                    log('[SessionInfo] First 300 chars: ' + str.substring(0, 300).replace(/\n/g, '\\n'));
-
-                    // Try to parse YAML
-                    try {
-                      const parsed = ir.parseYamlContent(str);
-                      if (parsed && Object.keys(parsed).length > 0) {
-                        sessionInfoFound = true;
-                        drivers = parsed.DriverInfo?.Drivers || [];
-                        playerCarIdx = parsed.DriverInfo?.DriverCarIdx ?? 0;
-                        log('[SessionInfo] Parsed from binary! Drivers: ' + drivers.length);
-                      }
-                    } catch(pe) { log('[SessionInfo] YAML parse error: ' + pe.message); }
-                  }
+                ir.openSharedMemory?.();
+                const si2 = ir.getSessionInfo();
+                if (si2 && typeof si2 === 'object' && si2 !== null && Object.keys(si2).length > 0) {
+                  sessionInfoFound = true;
+                  drivers = si2.DriverInfo?.Drivers || [];
+                  playerCarIdx = si2.DriverInfo?.DriverCarIdx ?? 0;
+                  log('[SessionInfo] Found after openSharedMemory! Drivers: ' + drivers.length);
                 }
-              } catch(be) { log('[SessionInfo] Binary error: ' + be.message); }
+              } catch(e) {}
 
-              // Try reading sessionInfoDict directly
-              if (!sessionInfoFound && ir.sessionInfoDict && Object.keys(ir.sessionInfoDict).length > 0) {
-                log('[SessionInfo] Found in sessionInfoDict! Keys: ' + Object.keys(ir.sessionInfoDict).join(', '));
-                drivers = ir.sessionInfoDict.DriverInfo?.Drivers || [];
-                playerCarIdx = ir.sessionInfoDict.DriverInfo?.DriverCarIdx ?? 0;
-                if (drivers.length > 0) sessionInfoFound = true;
+              if (!sessionInfoFound && pollCount % 100 === 0) {
+                log('[SessionInfo] Still null after ' + pollCount + ' polls');
               }
             }
           } catch(e) {
@@ -208,9 +198,17 @@ async function startTelemetry(onStatusChange) {
           drivers: drivers.map(d => ({ carIdx: d.CarIdx, driverName: d.UserName, carNumber: d.CarNumber })),
         }});
 
+        // Use PLAYER_CAR_IDX from telemetry if session info unavailable
+        if (!sessionInfoFound) {
+          const pci = ir.get(VARS.PLAYER_CAR_POSITION);
+          // Try to find our car idx from telemetry
+        }
+
         const standings = [];
         for (let i = 0; i < lapsCompletedArr.length; i++) {
-          if (lapsCompletedArr[i] === undefined || lapsCompletedArr[i] < 0) continue;
+          // Include car if it has completed any laps OR has est time (is on track/in pits)
+          const isActive = (lapsCompletedArr[i] !== undefined && lapsCompletedArr[i] >= 0) || estTime[i] > 0;
+          if (!isActive) continue;
 
           // Find driver name from session info, or use "Car #idx"
           const driver = drivers.find(d => d.CarIdx === i);
@@ -253,17 +251,30 @@ async function startTelemetry(onStatusChange) {
         broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings });
 
         // === Relative ===
-        const playerEst = estTime[playerCarIdx] || 0;
+        // Relative: use lapDistPct for gap calculation (more reliable than estTime in practice)
+        const playerLapDist = lapDistPct[playerCarIdx] || 0;
+        const playerLaps = lapsCompletedArr[playerCarIdx] || 0;
         const relative = standings
-          .filter(s => s.carIdx !== playerCarIdx && s.estTime > 0)
+          .filter(s => s.carIdx !== playerCarIdx)
           .map(s => {
-            let gap = s.estTime - playerEst;
-            if (gap > 50) gap -= 100;
-            if (gap < -50) gap += 100;
-            return { ...s, gap };
+            // Gap based on track distance (0-1 for one lap)
+            let distGap = s.lapDistPct - playerLapDist;
+            // Normalize to -0.5 to 0.5
+            if (distGap > 0.5) distGap -= 1;
+            if (distGap < -0.5) distGap += 1;
+            // Convert to approximate seconds using estTime if available
+            let gapSeconds = 0;
+            if (s.estTime > 0 && estTime[playerCarIdx] > 0) {
+              gapSeconds = s.estTime - estTime[playerCarIdx];
+              if (gapSeconds > 50) gapSeconds -= 100;
+              if (gapSeconds < -50) gapSeconds += 100;
+            } else {
+              // Rough estimate: assume ~90 second lap time
+              gapSeconds = distGap * 90;
+            }
+            return { ...s, gap: gapSeconds, distGap };
           })
-          .sort((a, b) => a.gap - b.gap)
-          .filter(s => Math.abs(s.gap) < 30);
+          .sort((a, b) => a.distGap - b.distGap);
 
         broadcastToChannel('relative', { type: 'data', channel: 'relative', data: {
           playerCarIdx, cars: relative,
