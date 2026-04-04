@@ -14,7 +14,7 @@
     "node-irsdk": "^2.1.0"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
+    "electron": "^25.0.0",
     "electron-builder": "^24.0.0"
   },
   "build": {
