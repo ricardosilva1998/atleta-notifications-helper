@@ -315,13 +315,43 @@
     let lastFpsUpdate = 0;
     let fps = 0;
 
+    let faceDetected = false;
+    let debugLogged = false;
+
     function animate() {
       requestAnimationFrame(animate);
       const delta = clock.getDelta();
 
       if (vrm && faceLandmarker && videoEl && videoEl.readyState >= 2) {
         const now = performance.now();
-        const result = faceLandmarker.detectForVideo(videoEl, now);
+        let result;
+        try {
+          result = faceLandmarker.detectForVideo(videoEl, now);
+        } catch (e) {
+          if (!debugLogged) { console.error('detectForVideo error:', e); debugLogged = true; }
+          renderer.render(scene, camera);
+          return;
+        }
+
+        // Debug: log first successful detection
+        if (!debugLogged && result) {
+          console.log('MediaPipe result keys:', Object.keys(result));
+          console.log('faceBlendshapes:', result.faceBlendshapes?.length || 0);
+          console.log('facialTransformationMatrixes:', result.facialTransformationMatrixes?.length || 0);
+          console.log('facialTransformationMatrices:', result.facialTransformationMatrices?.length || 0);
+          if (vrm.expressionManager) {
+            console.log('VRM expressions available:', vrm.expressionManager.expressions?.map(e => e.expressionName) || 'unknown');
+          } else {
+            console.log('VRM expressionManager is null/undefined');
+          }
+          if (vrm.humanoid) {
+            const head = vrm.humanoid.getNormalizedBoneNode('head');
+            console.log('VRM head bone:', head ? 'found' : 'NOT FOUND');
+          }
+          debugLogged = true;
+        }
+
+        faceDetected = !!(result.faceBlendshapes && result.faceBlendshapes.length > 0);
 
         if (result.faceBlendshapes && result.faceBlendshapes.length > 0) {
           const bs = result.faceBlendshapes;
@@ -356,9 +386,10 @@
           vrm.expressionManager.setValue('lookDown', lerp('lookDown', lookDown, 0.3));
         }
 
-        // Head rotation from transformation matrix
-        if (result.facialTransformationMatrixes && result.facialTransformationMatrixes.length > 0) {
-          const matrix = result.facialTransformationMatrixes[0];
+        // Head rotation from transformation matrix (API uses both spellings across versions)
+        const matrices = result.facialTransformationMatrixes || result.facialTransformationMatrices;
+        if (matrices && matrices.length > 0) {
+          const matrix = matrices[0];
           const m = new THREE.Matrix4().fromArray(matrix.data);
           const euler = new THREE.Euler().setFromRotationMatrix(m, 'ZYX');
 
@@ -393,8 +424,9 @@
           fps = frameCount;
           frameCount = 0;
           lastFpsUpdate = now;
-          const tracking = (vrm && videoEl && videoEl.readyState >= 2) ? 'ON' : 'OFF';
-          statusBar.textContent = `${fps} FPS | Tracking: ${tracking}`;
+          const camReady = videoEl && videoEl.readyState >= 2;
+          const status = !camReady ? 'No camera' : !faceDetected ? 'No face' : 'Tracking';
+          statusBar.textContent = `${fps} FPS | ${status}`;
         }
       }
 
