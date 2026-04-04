@@ -196,15 +196,21 @@ async function startTelemetry(onStatusChange) {
         }
 
         const standings = [];
+        // Build set of all known car indices from drivers + telemetry
+        const activeIndices = new Set();
         for (let i = 0; i < lapsCompletedArr.length; i++) {
-          // Include car if it has completed any laps OR has est time (is on track/in pits)
-          const isActive = (lapsCompletedArr[i] !== undefined && lapsCompletedArr[i] >= 0) || estTime[i] > 0;
-          if (!isActive) continue;
+          if ((lapsCompletedArr[i] !== undefined && lapsCompletedArr[i] >= 0) || estTime[i] > 0 || lapDistPct[i] > 0) {
+            activeIndices.add(i);
+          }
+        }
+        // Also include all cars from session info (even if not on track yet)
+        drivers.forEach(d => { if (d.CarIdx !== undefined && d.UserName && d.UserName !== 'Pace Car') activeIndices.add(d.CarIdx); });
 
-          // Find driver name from session info, or use "Car #idx"
+        for (const i of activeIndices) {
           const driver = drivers.find(d => d.CarIdx === i);
           const name = driver?.UserName || ('Car ' + i);
           const number = driver?.CarNumber || String(i);
+          if (name === 'Pace Car') continue;
 
           standings.push({
             carIdx: i,

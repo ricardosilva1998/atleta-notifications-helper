@@ -36,9 +36,9 @@ jobs:
         working-directory: bridge
         run: npm install
 
-      - name: Build Windows installer
+      - name: Build and publish Windows installer
         working-directory: bridge
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -48,15 +48,3 @@ jobs:
         with:
           name: atleta-bridge-installer
           path: bridge/dist/*.exe
-
-      - name: Create Release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: bridge-v${{ github.run_number }}
-          name: Atleta Bridge v1.0.${{ github.run_number }}
-          files: bridge/dist/*.exe
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

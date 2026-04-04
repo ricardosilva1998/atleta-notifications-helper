@@ -170,7 +170,16 @@
         });
       });
 
-      const classNames = Object.keys(classes);
+      // Sort class names: known order first (GTP > LMP2 > GT3), then alphabetical
+      const classOrder = ['GTP', 'LMDh', 'DPi', 'LMP2', 'LMP3', 'GT3', 'GTE', 'GT4', 'TCR', 'MX5'];
+      const classNames = Object.keys(classes).sort((a, b) => {
+        const ai = classOrder.findIndex(c => a.toUpperCase().includes(c));
+        const bi = classOrder.findIndex(c => b.toUpperCase().includes(c));
+        if (ai >= 0 && bi >= 0) return ai - bi;
+        if (ai >= 0) return -1;
+        if (bi >= 0) return 1;
+        return a.localeCompare(b);
+      });
 
       // If only one class, no headers needed
       if (classNames.length <= 1) {
