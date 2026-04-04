@@ -12,6 +12,7 @@ const adminRoutes = require('./routes/admin');
 const paymentRoutes = require('./routes/payment');
 const tipRoutes = require('./routes/tip');
 const overlayRoutes = require('./routes/overlay');
+const vtuberRoutes = require('./routes/vtuber');
 // const customOverlayRoutes = require('./routes/customOverlays'); // DISABLED for now
 
 const app = express();
@@ -33,6 +34,8 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
 app.use('/overlay/sounds', express.static(path.join(__dirname, '..', 'data', 'sounds')));
 // Serve sponsor images from persistent data volume
 app.use('/sponsors', express.static(path.join(__dirname, '..', 'data', 'sponsors')));
+// Serve custom VTuber models from persistent data volume
+app.use('/vtuber-models', express.static(path.join(__dirname, '..', 'data', 'vtuber-models')));
 // Serve custom overlay uploads from persistent data volume — DISABLED for now
 // app.use('/uploads/custom', express.static(path.join(__dirname, '..', 'data', 'uploads', 'custom')));
 
@@ -93,6 +96,7 @@ app.use('/payment', paymentRoutes);
 app.use('/tip', tipRoutes);
 app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
+app.use('/vtuber', vtuberRoutes);
 app.use('/overlay', overlayRoutes);
 
 // Language switch
