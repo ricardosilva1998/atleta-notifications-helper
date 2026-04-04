@@ -60,6 +60,16 @@
   <h2>Overlays</h2>
   <div class="overlay-list" id="overlay-list"></div>
 
+  <!-- Overlay Customization -->
+  <div id="customize-panel" style="display:none; margin-top:12px; padding:12px; background:#141520; border:1px solid rgba(255,255,255,0.06); border-radius:8px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h2 style="margin:0; font-size:12px;">Customize: <span id="customize-title"></span></h2>
+      <button onclick="closeCustomize()" style="background:none; border:none; color:#5c5b6e; cursor:pointer; font-size:14px;">✕</button>
+    </div>
+    <div id="customize-content"></div>
+    <button onclick="saveCustomize()" style="width:100%; margin-top:8px; padding:7px; border-radius:6px; border:none; background:#9146ff; color:#fff; font-size:12px; font-weight:600; cursor:pointer;">Save</button>
+  </div>
+
   <div style="margin-top: 14px;">
     <button id="lock-btn" onclick="toggleLock()" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #141520; color: #e8e6f0; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
       🔓 Unlocked — Drag & Resize Overlays
@@ -111,16 +121,93 @@
           <span class="overlay-icon">${ov.icon}</span>
           <span class="overlay-name">${ov.name}</span>
         </div>
-        <label class="toggle">
-          <input type="checkbox" id="toggle-${ov.id}" onchange="toggleOverlay('${ov.id}', this.checked)">
-          <span class="slider"></span>
-        </label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button onclick="openCustomize('${ov.id}','${ov.name}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#5c5b6e;cursor:pointer;padding:2px 6px;font-size:12px;" title="Settings">⚙</button>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-${ov.id}" onchange="toggleOverlay('${ov.id}', this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
       `;
       list.appendChild(item);
     });
 
     function toggleOverlay(id, enabled) {
       ipcRenderer.send('toggle-overlay', id, enabled);
+    }
+
+    // ─── Overlay Customization ─────────────────────────────────
+    let currentCustomizeId = null;
+
+    const CUSTOMIZE_FIELDS = {
+      standings: [
+        { key: 'maxPerClass', label: 'Max cars per class (0 = all)', type: 'number', default: '0', min: 0, max: 50 },
+      ],
+      relative: [
+        { key: 'carsAhead', label: 'Cars ahead', type: 'number', default: '5', min: 1, max: 15 },
+        { key: 'carsBehind', label: 'Cars behind', type: 'number', default: '5', min: 1, max: 15 },
+      ],
+      fuel: [
+        { key: 'showAvg5', label: 'Show Avg 5 Laps', type: 'checkbox', default: true },
+        { key: 'showAvg10', label: 'Show Avg 10 Laps', type: 'checkbox', default: true },
+        { key: 'showMinMax', label: 'Show Min/Max Usage', type: 'checkbox', default: true },
+        { key: 'showToFinish', label: 'Show Fuel to Finish', type: 'checkbox', default: true },
+        { key: 'showToAdd', label: 'Show Fuel to Add', type: 'checkbox', default: true },
+      ],
+      wind: [],
+      proximity: [],
+      chat: [],
+    };
+
+    function openCustomize(id, name) {
+      currentCustomizeId = id;
+      document.getElementById('customize-title').textContent = name;
+      const content = document.getElementById('customize-content');
+      const fields = CUSTOMIZE_FIELDS[id] || [];
+
+      if (fields.length === 0) {
+        content.innerHTML = '<p style="font-size:11px;color:#5c5b6e;">No settings available for this overlay.</p>';
+      } else {
+        // Load current settings
+        const saved = JSON.parse(localStorage.getItem('overlay_' + id) || '{}');
+        content.innerHTML = fields.map(f => {
+          const val = saved[f.key] !== undefined ? saved[f.key] : f.default;
+          if (f.type === 'number') {
+            return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:11px;color:#8b8a9e;">${f.label}</span>
+              <input type="number" id="cust-${f.key}" value="${val}" min="${f.min}" max="${f.max}" style="width:60px;padding:4px;background:#0c0d14;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e8e6f0;font-size:12px;text-align:center;">
+            </div>`;
+          } else if (f.type === 'checkbox') {
+            return `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;color:#8b8a9e;cursor:pointer;">
+              <input type="checkbox" id="cust-${f.key}" ${val ? 'checked' : ''} style="accent-color:#9146ff;">
+              ${f.label}
+            </label>`;
+          }
+          return '';
+        }).join('');
+      }
+
+      document.getElementById('customize-panel').style.display = 'block';
+    }
+
+    function closeCustomize() {
+      document.getElementById('customize-panel').style.display = 'none';
+      currentCustomizeId = null;
+    }
+
+    function saveCustomize() {
+      if (!currentCustomizeId) return;
+      const fields = CUSTOMIZE_FIELDS[currentCustomizeId] || [];
+      const settings = {};
+      fields.forEach(f => {
+        const el = document.getElementById('cust-' + f.key);
+        if (f.type === 'number') settings[f.key] = el.value;
+        else if (f.type === 'checkbox') settings[f.key] = el.checked;
+      });
+      localStorage.setItem('overlay_' + currentCustomizeId, JSON.stringify(settings));
+      // Send to main process to save in persistent settings and notify overlays
+      ipcRenderer.send('save-overlay-settings', currentCustomizeId, settings);
+      closeCustomize();
     }
 
     function toggleLock() {

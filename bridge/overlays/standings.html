@@ -61,6 +61,20 @@
     <div class="overlay-disconnected" id="overlay-disconnected"></div>
   </div>
   <script>
+    // Load settings from persisted file
+    let _overlaySettings = {};
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const settingsFile = path.join(os.homedir(), 'Documents', 'Atleta Bridge', 'settings.json');
+      if (fs.existsSync(settingsFile)) {
+        const all = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        _overlaySettings = (all.overlayCustom && all.overlayCustom.standings) || {};
+      }
+    } catch(e) {}
+    function getSetting(k, d) { return _overlaySettings[k] !== undefined ? _overlaySettings[k] : d; }
+
     const BRIDGE_URL = 'ws://localhost:9100';
     let ws = null;
     let bridgeConnected = false;
@@ -151,23 +165,31 @@
     }
 
     function buildStandingsHTML(data) {
+      // Filter: only show cars that have completed at least 1 lap
+      const withLaps = data.filter(d => d.lapsCompleted >= 1 || d.bestLap > 0 || d.lastLap > 0);
+
+      // Get settings for max cars per class
+      const maxPerClass = parseInt(getSetting('maxPerClass', '0')) || 0; // 0 = unlimited
+
       // Group by class
       const classes = {};
-      data.forEach(d => {
+      withLaps.forEach(d => {
         const cls = d.carClass || 'Overall';
         if (!classes[cls]) classes[cls] = { color: d.carClassColor || '#fff', drivers: [] };
         classes[cls].drivers.push(d);
       });
 
-      // Sort each class by best lap time (fastest first), no-lap at end, disconnected at end
+      // Sort each class by best lap (or last lap as fallback), no-lap at end, disconnected at end
       Object.values(classes).forEach(cls => {
         cls.drivers.sort((a, b) => {
           if (a.disconnected && !b.disconnected) return 1;
           if (!a.disconnected && b.disconnected) return -1;
-          if (!a.bestLap || a.bestLap <= 0) return 1;
-          if (!b.bestLap || b.bestLap <= 0) return -1;
-          return a.bestLap - b.bestLap;
+          const aTime = (a.bestLap > 0 ? a.bestLap : (a.lastLap > 0 ? a.lastLap : Infinity));
+          const bTime = (b.bestLap > 0 ? b.bestLap : (b.lastLap > 0 ? b.lastLap : Infinity));
+          return aTime - bTime;
         });
+        // Apply max per class limit
+        if (maxPerClass > 0) cls.drivers = cls.drivers.slice(0, maxPerClass);
       });
 
       // Sort class names: known order first (GTP > LMP2 > GT3), then alphabetical

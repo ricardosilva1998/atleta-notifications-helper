@@ -110,9 +110,15 @@ async function startTelemetry(onStatusChange) {
                 sessionInfoFound = true;
                 log('[SessionInfo] Found! Drivers: ' + driverInfo.Drivers.length);
                 log('[SessionInfo] Track: ' + (weekendInfo?.TrackDisplayName || '?'));
-                driverInfo.Drivers.slice(0, 3).forEach((d, i) =>
-                  log('[SessionInfo] D[' + i + '] idx=' + d.CarIdx + ' ' + d.UserName + ' #' + d.CarNumber +
-                    ' iR=' + d.IRating + ' SR=' + d.LicString + ' Country=' + d.LicCountryCode));
+                driverInfo.Drivers.slice(0, 3).forEach((d, i) => {
+                  // Log all driver keys to find correct country/license fields
+                  const keys = Object.keys(d);
+                  log('[SessionInfo] D[' + i + '] keys: ' + keys.join(', '));
+                  log('[SessionInfo] D[' + i + '] data: idx=' + d.CarIdx + ' Name=' + d.UserName + ' #' + d.CarNumber +
+                    ' iR=' + d.IRating + ' Lic=' + d.LicString + ' Country=' + d.LicCountryCode +
+                    ' ClassShort=' + d.CarClassShortName + ' ClassColor=' + d.CarClassColor +
+                    ' CarShort=' + d.CarScreenNameShort);
+                });
               }
               drivers = driverInfo.Drivers;
               playerCarIdx = driverInfo.DriverCarIdx ?? 0;

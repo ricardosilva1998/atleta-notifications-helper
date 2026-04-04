@@ -59,9 +59,23 @@
     <div class="overlay-disconnected" id="overlay-disconnected"></div>
   </div>
   <script>
+    // Load settings
+    let _overlaySettings = {};
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const settingsFile = path.join(os.homedir(), 'Documents', 'Atleta Bridge', 'settings.json');
+      if (fs.existsSync(settingsFile)) {
+        const all = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        _overlaySettings = (all.overlayCustom && all.overlayCustom.relative) || {};
+      }
+    } catch(e) {}
+    function getSetting(k, d) { return _overlaySettings[k] !== undefined ? _overlaySettings[k] : d; }
+
     const BRIDGE_URL = 'ws://localhost:9100';
-    const MAX_AHEAD = 5;
-    const MAX_BEHIND = 5;
+    const MAX_AHEAD = parseInt(getSetting('carsAhead', '5')) || 5;
+    const MAX_BEHIND = parseInt(getSetting('carsBehind', '5')) || 5;
     let ws = null;
     let bridgeConnected = false;
     let iracingConnected = false;

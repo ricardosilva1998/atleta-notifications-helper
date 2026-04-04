@@ -289,6 +289,16 @@ ipcMain.on('toggle-autohide', (event, enabled) => {
   persistSettings();
 });
 
+ipcMain.on('save-overlay-settings', (event, overlayId, overlaySettings) => {
+  if (!settings.overlayCustom) settings.overlayCustom = {};
+  settings.overlayCustom[overlayId] = overlaySettings;
+  persistSettings();
+  // Reload the overlay window to apply new settings
+  if (overlayWindows[overlayId] && !overlayWindows[overlayId].isDestroyed()) {
+    overlayWindows[overlayId].reload();
+  }
+});
+
 ipcMain.on('get-overlay-states', (event) => {
   const states = {};
   OVERLAYS.forEach(o => { states[o.id] = !!overlayWindows[o.id]; });
