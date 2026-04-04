@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VTuber Face Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      background: <% if (mode === 'stream') { %>transparent<% } else { %>#1a1a2e<% } %>;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    #canvas3d {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    <% if (mode !== 'stream') { %>
+    #webcam-preview {
+      position: fixed;
+      bottom: 12px;
+      left: 12px;
+      width: 160px;
+      height: 120px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.15);
+      object-fit: cover;
+      z-index: 10;
+      background: #000;
+    }
+    #status-bar {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: rgba(0,0,0,0.6);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      font-family: monospace;
+      z-index: 10;
+    }
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: #1a1a2e;
+      z-index: 100;
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+      gap: 12px;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    <% } %>
+    <% if (mode === 'stream') { %>
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      z-index: 100;
+      color: rgba(255,255,255,0.4);
+      font-size: 14px;
+    }
+    <% } %>
+    #error-msg {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: #1a1a2e;
+      z-index: 200;
+      color: #e74c3c;
+      font-size: 14px;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas3d"></canvas>
+  <% if (mode !== 'stream') { %>
+    <video id="webcam-preview" autoplay playsinline muted></video>
+    <div id="status-bar">Loading...</div>
+  <% } %>
+  <div id="loading-screen">
+    <% if (mode !== 'stream') { %><div class="spinner"></div><% } %>
+    <span>Loading face tracker...</span>
+  </div>
+  <div id="error-msg"></div>
+
+  <!-- CDN Libraries -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+      "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+    import { FilesetResolver, FaceLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs';
+
+    const MODE = '<%= mode %>';
+    const MODEL_URL = <%- modelUrl ? JSON.stringify(modelUrl) : 'null' %>;
+    const canvas = document.getElementById('canvas3d');
+    const loading = document.getElementById('loading-screen');
+    const errorEl = document.getElementById('error-msg');
+    const statusBar = document.getElementById('status-bar');
+
+    function showError(msg) {
+      errorEl.innerHTML = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>${msg}</span>`;
+      errorEl.style.display = 'flex';
+      loading.style.display = 'none';
+    }
+
+    if (!MODEL_URL) {
+      showError('No model selected. Pick a model in the dashboard first.');
+      throw new Error('No model');
+    }
+
+    // --- Three.js Setup ---
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: MODE === 'stream', antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    if (MODE === 'stream') {
+      renderer.setClearColor(0x000000, 0);
+    }
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(20, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.35, 1.5);
+    camera.lookAt(0, 1.35, 0);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambient);
+    const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+    directional.position.set(1, 2, 3);
+    scene.add(directional);
+    const fill = new THREE.DirectionalLight(0x8888ff, 0.3);
+    fill.position.set(-1, 1, -1);
+    scene.add(fill);
+
+    // --- Load VRM Model ---
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+
+    let vrm = null;
+
+    try {
+      const gltf = await loader.loadAsync(MODEL_URL);
+      vrm = gltf.userData.vrm;
+      VRMUtils.rotateVRM0(vrm);
+      scene.add(vrm.scene);
+
+      // Center the model
+      const box = new THREE.Box3().setFromObject(vrm.scene);
+      const center = box.getCenter(new THREE.Vector3());
+      const height = box.max.y - box.min.y;
+      camera.position.set(0, center.y + height * 0.1, height * 0.9);
+      camera.lookAt(0, center.y + height * 0.1, 0);
+    } catch (e) {
+      showError('Failed to load model. Try a different avatar.');
+      throw e;
+    }
+
+    // --- MediaPipe Face Landmarker ---
+    let faceLandmarker = null;
+    let videoEl = null;
+
+    try {
+      const vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
+      );
+      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+          delegate: 'GPU'
+        },
+        runningMode: 'VIDEO',
+        numFaces: 1,
+        outputFaceBlendshapes: true,
+        outputFacialTransformationMatrixes: true
+      });
+    } catch (e) {
+      showError('Failed to load face detection model.');
+      throw e;
+    }
+
+    // --- Webcam ---
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: 'user' }
+      });
+      videoEl = document.createElement('video');
+      videoEl.srcObject = stream;
+      videoEl.autoplay = true;
+      videoEl.playsInline = true;
+      await videoEl.play();
+
+      // Show webcam preview in dashboard mode
+      if (MODE !== 'stream') {
+        const preview = document.getElementById('webcam-preview');
+        if (preview) preview.srcObject = stream;
+      }
+    } catch (e) {
+      showError('Camera access denied. Please allow camera and reload.');
+      throw e;
+    }
+
+    loading.style.display = 'none';
+
+    // --- Blend shape helpers ---
+    function getBlendShape(blendShapes, name) {
+      if (!blendShapes || !blendShapes[0]) return 0;
+      const shape = blendShapes[0].categories.find(c => c.categoryName === name);
+      return shape ? shape.score : 0;
+    }
+
+    // Smoothing for stable tracking
+    const smooth = {};
+    function lerp(key, target, factor = 0.3) {
+      if (smooth[key] === undefined) smooth[key] = target;
+      smooth[key] += (target - smooth[key]) * factor;
+      return smooth[key];
+    }
+
+    // --- Animation Loop ---
+    const clock = new THREE.Clock();
+    let frameCount = 0;
+    let lastFpsUpdate = 0;
+    let fps = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      if (vrm && faceLandmarker && videoEl && videoEl.readyState >= 2) {
+        const now = performance.now();
+        const result = faceLandmarker.detectForVideo(videoEl, now);
+
+        if (result.faceBlendshapes && result.faceBlendshapes.length > 0) {
+          const bs = result.faceBlendshapes;
+
+          // Eye blinks
+          const blinkL = getBlendShape(bs, 'eyeBlinkLeft');
+          const blinkR = getBlendShape(bs, 'eyeBlinkRight');
+          vrm.expressionManager.setValue('blinkLeft', lerp('blinkL', blinkL, 0.5));
+          vrm.expressionManager.setValue('blinkRight', lerp('blinkR', blinkR, 0.5));
+
+          // Mouth
+          const jawOpen = getBlendShape(bs, 'jawOpen');
+          const mouthSmile = (getBlendShape(bs, 'mouthSmileLeft') + getBlendShape(bs, 'mouthSmileRight')) / 2;
+          vrm.expressionManager.setValue('aa', lerp('mouth', jawOpen * 1.2, 0.4));
+          vrm.expressionManager.setValue('happy', lerp('smile', mouthSmile, 0.3));
+
+          // Brows
+          const browUp = getBlendShape(bs, 'browInnerUp');
+          const browDownL = getBlendShape(bs, 'browDownLeft');
+          const browDownR = getBlendShape(bs, 'browDownRight');
+          vrm.expressionManager.setValue('surprised', lerp('browUp', browUp * 0.7, 0.3));
+          vrm.expressionManager.setValue('angry', lerp('browDown', (browDownL + browDownR) / 2 * 0.5, 0.3));
+
+          // Eye look direction
+          const lookLeft = getBlendShape(bs, 'eyeLookOutLeft');
+          const lookRight = getBlendShape(bs, 'eyeLookOutRight');
+          const lookUp = getBlendShape(bs, 'eyeLookUpLeft');
+          const lookDown = getBlendShape(bs, 'eyeLookDownLeft');
+          vrm.expressionManager.setValue('lookLeft', lerp('lookL', lookLeft, 0.3));
+          vrm.expressionManager.setValue('lookRight', lerp('lookR', lookRight, 0.3));
+          vrm.expressionManager.setValue('lookUp', lerp('lookUp', lookUp, 0.3));
+          vrm.expressionManager.setValue('lookDown', lerp('lookDown', lookDown, 0.3));
+        }
+
+        // Head rotation from transformation matrix
+        if (result.facialTransformationMatrixes && result.facialTransformationMatrixes.length > 0) {
+          const matrix = result.facialTransformationMatrixes[0];
+          const m = new THREE.Matrix4().fromArray(matrix.data);
+          const euler = new THREE.Euler().setFromRotationMatrix(m, 'ZYX');
+
+          const head = vrm.humanoid.getNormalizedBoneNode('head');
+          if (head) {
+            head.rotation.x = lerp('headX', euler.x * 0.6, 0.3);
+            head.rotation.y = lerp('headY', -euler.y * 0.7, 0.3);
+            head.rotation.z = lerp('headZ', -euler.z * 0.5, 0.3);
+          }
+
+          const neck = vrm.humanoid.getNormalizedBoneNode('neck');
+          if (neck) {
+            neck.rotation.x = lerp('neckX', euler.x * 0.2, 0.2);
+            neck.rotation.y = lerp('neckY', -euler.y * 0.2, 0.2);
+          }
+
+          const spine = vrm.humanoid.getNormalizedBoneNode('upperChest') || vrm.humanoid.getNormalizedBoneNode('spine');
+          if (spine) {
+            spine.rotation.x = lerp('spineX', euler.x * 0.05, 0.15);
+            spine.rotation.y = lerp('spineY', -euler.y * 0.05, 0.15);
+          }
+        }
+
+        vrm.update(delta);
+      }
+
+      // FPS counter
+      if (MODE !== 'stream' && statusBar) {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastFpsUpdate > 1000) {
+          fps = frameCount;
+          frameCount = 0;
+          lastFpsUpdate = now;
+          const tracking = (vrm && videoEl && videoEl.readyState >= 2) ? 'ON' : 'OFF';
+          statusBar.textContent = `${fps} FPS | Tracking: ${tracking}`;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // --- Resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
