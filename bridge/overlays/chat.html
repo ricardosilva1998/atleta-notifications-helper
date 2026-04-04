@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Streaming Chat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; }
+    .overlay-panel { background: rgba(12,13,20,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; display: flex; flex-direction: column; height: 480px; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; flex-shrink: 0; }
+    .overlay-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 8px; gap: 4px; }
+    .chat-message { font-size: 12px; line-height: 1.4; word-break: break-word; }
+    .chat-author { font-weight: 700; margin-right: 4px; }
+    .chat-text { color: rgba(255,255,255,0.85); }
+    .info-box { margin: auto; text-align: center; padding: 20px 16px; }
+    .info-icon { font-size: 32px; margin-bottom: 10px; }
+    .info-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    .info-text { font-size: 11px; color: rgba(255,255,255,0.4); line-height: 1.5; }
+    .info-link { color: #9146ff; text-decoration: none; font-weight: 600; }
+    .info-link:hover { text-decoration: underline; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.connected { background: #3ecf8e; }
+    .status-dot.disconnected { background: #f04438; }
+    .status-dot.waiting { background: #f79009; }
+  </style>
+</head>
+<body>
+  <div id="overlay-root" style="width:320px;">
+    <div class="overlay-panel" style="width:320px;">
+      <div class="overlay-header">
+        <span>STREAMING CHAT</span>
+        <span id="connection-status"><span class="status-dot waiting"></span> Connecting</span>
+      </div>
+      <div class="overlay-body" id="chat-body">
+        <div class="info-box">
+          <div class="info-icon">💬</div>
+          <div class="info-title">Chat Overlay</div>
+          <div class="info-text">
+            Connect your Twitch channel at<br>
+            <a class="info-link" href="https://atletanotifications.com" target="_blank">atletanotifications.com</a><br><br>
+            Chat messages will appear here<br>during your stream.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Chat overlay connects to the Atleta notification server SSE endpoint,
+    // not the bridge WebSocket — it relies on the user having set up their
+    // Twitch channel through the web dashboard. For now we show a helpful
+    // prompt and connect to bridge just to reflect status.
+    const BRIDGE_URL = 'ws://localhost:9100';
+    let ws = null;
+    let bridgeConnected = false;
+    let iracingConnected = false;
+
+    function connectBridge() {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(connectBridge, 3000); return; }
+      ws.onopen = () => {
+        bridgeConnected = true;
+        updateStatus();
+        ws.send(JSON.stringify({ type: 'subscribe', channels: [] }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'status') { iracingConnected = msg.iracing; updateStatus(); }
+        } catch(e) {}
+      };
+      ws.onclose = () => { bridgeConnected = false; iracingConnected = false; updateStatus(); setTimeout(connectBridge, 3000); };
+      ws.onerror = () => { ws.close(); };
+    }
+
+    function updateStatus() {
+      const el = document.getElementById('connection-status');
+      if (!el) return;
+      if (!bridgeConnected) {
+        el.innerHTML = '<span class="status-dot disconnected"></span> Disconnected';
+      } else {
+        el.innerHTML = '<span class="status-dot connected"></span> Ready';
+      }
+    }
+
+    connectBridge();
+  </script>
+</body>
+</html>

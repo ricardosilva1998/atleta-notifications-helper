@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Car Proximity</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; }
+    .overlay-panel { background: rgba(12,13,20,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; }
+    .overlay-body { padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .proximity-view { position: relative; width: 100px; height: 180px; }
+    .road-lane { position: absolute; left: 50%; top: 0; bottom: 0; width: 60px; transform: translateX(-50%); background: rgba(255,255,255,0.03); border-left: 1px dashed rgba(255,255,255,0.1); border-right: 1px dashed rgba(255,255,255,0.1); }
+    .car-icon { position: absolute; left: 50%; transform: translateX(-50%); width: 28px; height: 44px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; line-height: 1; }
+    .car-player { bottom: 20px; background: rgba(145,70,255,0.3); border: 1px solid rgba(145,70,255,0.6); }
+    .car-left { top: 50%; transform: translate(-60px, -50%); background: rgba(240,68,56,0.25); border: 1px solid rgba(240,68,56,0.5); opacity: 0; transition: opacity 0.3s; }
+    .car-right { top: 50%; transform: translate(32px, -50%); background: rgba(240,68,56,0.25); border: 1px solid rgba(240,68,56,0.5); opacity: 0; transition: opacity 0.3s; }
+    .car-ahead { top: 10px; background: rgba(247,144,9,0.25); border: 1px solid rgba(247,144,9,0.5); opacity: 0; transition: opacity 0.3s; }
+    .indicator-label { font-size: 10px; color: rgba(255,255,255,0.4); text-align: center; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.connected { background: #3ecf8e; }
+    .status-dot.disconnected { background: #f04438; }
+    .status-dot.waiting { background: #f79009; }
+    .overlay-disconnected { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,20,0.9); color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div id="overlay-root" style="position:relative;width:150px;">
+    <div class="overlay-panel" style="width:150px;">
+      <div class="overlay-header">
+        <span>PROXIMITY</span>
+        <span id="connection-status"><span class="status-dot waiting"></span></span>
+      </div>
+      <div class="overlay-body">
+        <div class="proximity-view">
+          <div class="road-lane"></div>
+          <div class="car-icon car-ahead" id="car-ahead">🚗</div>
+          <div class="car-icon car-left" id="car-left">🚗</div>
+          <div class="car-icon car-right" id="car-right">🚗</div>
+          <div class="car-icon car-player">🚗</div>
+        </div>
+        <div class="indicator-label" id="proximity-label">Clear</div>
+      </div>
+    </div>
+    <div class="overlay-disconnected" id="overlay-disconnected"></div>
+  </div>
+  <script>
+    const BRIDGE_URL = 'ws://localhost:9100';
+    let ws = null;
+    let bridgeConnected = false;
+    let iracingConnected = false;
+    const dataHandlers = {};
+
+    function connectBridge(channels) {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(() => connectBridge(channels), 3000); return; }
+      ws.onopen = () => {
+        bridgeConnected = true;
+        updateConnectionStatus();
+        ws.send(JSON.stringify({ type: 'subscribe', channels }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'status') {
+            iracingConnected = msg.iracing;
+            updateConnectionStatus();
+          } else if (msg.type === 'data' && dataHandlers[msg.channel]) {
+            dataHandlers[msg.channel](msg.data);
+          }
+        } catch(e) {}
+      };
+      ws.onclose = () => {
+        bridgeConnected = false;
+        iracingConnected = false;
+        updateConnectionStatus();
+        setTimeout(() => connectBridge(channels), 3000);
+      };
+      ws.onerror = () => { ws.close(); };
+    }
+
+    function onData(ch, fn) { dataHandlers[ch] = fn; }
+
+    function updateConnectionStatus() {
+      const el = document.getElementById('connection-status');
+      const dis = document.getElementById('overlay-disconnected');
+      if (!bridgeConnected) {
+        if (el) el.innerHTML = '<span class="status-dot disconnected"></span>';
+        if (dis) { dis.textContent = 'Bridge not running'; dis.style.display = 'flex'; }
+      } else if (!iracingConnected) {
+        if (el) el.innerHTML = '<span class="status-dot waiting"></span>';
+        if (dis) { dis.textContent = 'Waiting for iRacing...'; dis.style.display = 'flex'; }
+      } else {
+        if (el) el.innerHTML = '<span class="status-dot connected"></span>';
+        if (dis) dis.style.display = 'none';
+      }
+    }
+
+    // iRacing CarLeftRight values:
+    // 0=off, 1=car left, 2=car right, 3=both sides, 4=car on left (ahead), 5=car on right (ahead)
+    const CLR_LABELS = { 0: 'Clear', 1: 'Car Left', 2: 'Car Right', 3: 'Cars Both Sides', 4: 'Overlap Left', 5: 'Overlap Right' };
+
+    onData('proximity', data => {
+      if (!data) return;
+      const val = data.carLeftRight || 0;
+      const carLeft = document.getElementById('car-left');
+      const carRight = document.getElementById('car-right');
+      const carAhead = document.getElementById('car-ahead');
+      const label = document.getElementById('proximity-label');
+      carLeft.style.opacity = (val === 1 || val === 3 || val === 4) ? '1' : '0';
+      carRight.style.opacity = (val === 2 || val === 3 || val === 5) ? '1' : '0';
+      carAhead.style.opacity = (val === 4 || val === 5) ? '0.7' : '0';
+      if (label) label.textContent = CLR_LABELS[val] || 'Clear';
+    });
+
+    connectBridge(['proximity']);
+  </script>
+</body>
+</html>

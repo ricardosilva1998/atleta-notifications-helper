@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Standings</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; }
+    .overlay-panel { background: rgba(12,13,20,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; }
+    .overlay-body { padding: 4px 0; }
+    .overlay-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .overlay-table th { padding: 4px 8px; text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.35); border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .overlay-table td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .overlay-table tr.player-row { background: rgba(145,70,255,0.15); }
+    .overlay-table tr.player-row td { color: #fff; font-weight: 600; }
+    .overlay-table tr.lapped { opacity: 0.6; }
+    .pit-indicator { color: #f79009; font-weight: 700; font-size: 10px; }
+    .mono { font-family: 'Consolas', 'Courier New', monospace; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.connected { background: #3ecf8e; }
+    .status-dot.disconnected { background: #f04438; }
+    .status-dot.waiting { background: #f79009; }
+    .overlay-disconnected { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,20,0.9); color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div id="overlay-root" style="position:relative;width:340px;">
+    <div class="overlay-panel" style="width:340px;">
+      <div class="overlay-header">
+        <span>STANDINGS</span>
+        <span id="connection-status"><span class="status-dot waiting"></span> Connecting</span>
+      </div>
+      <div class="overlay-body">
+        <table class="overlay-table">
+          <thead><tr><th>P</th><th>#</th><th>Driver</th><th>Int</th><th>Last</th><th></th></tr></thead>
+          <tbody id="standings-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="overlay-disconnected" id="overlay-disconnected"></div>
+  </div>
+  <script>
+    const BRIDGE_URL = 'ws://localhost:9100';
+    const MAX_ROWS = 15;
+    let ws = null;
+    let bridgeConnected = false;
+    let iracingConnected = false;
+    const dataHandlers = {};
+
+    function connectBridge(channels) {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(() => connectBridge(channels), 3000); return; }
+      ws.onopen = () => {
+        bridgeConnected = true;
+        updateConnectionStatus();
+        ws.send(JSON.stringify({ type: 'subscribe', channels }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'status') {
+            iracingConnected = msg.iracing;
+            updateConnectionStatus();
+            if (dataHandlers.status) dataHandlers.status(msg);
+          } else if (msg.type === 'data' && dataHandlers[msg.channel]) {
+            dataHandlers[msg.channel](msg.data);
+          }
+        } catch(e) {}
+      };
+      ws.onclose = () => {
+        bridgeConnected = false;
+        iracingConnected = false;
+        updateConnectionStatus();
+        setTimeout(() => connectBridge(channels), 3000);
+      };
+      ws.onerror = () => { ws.close(); };
+    }
+
+    function onData(ch, fn) { dataHandlers[ch] = fn; }
+
+    function updateConnectionStatus() {
+      const el = document.getElementById('connection-status');
+      const dis = document.getElementById('overlay-disconnected');
+      if (!bridgeConnected) {
+        if (el) el.innerHTML = '<span class="status-dot disconnected"></span> Disconnected';
+        if (dis) { dis.textContent = 'Bridge not running'; dis.style.display = 'flex'; }
+      } else if (!iracingConnected) {
+        if (el) el.innerHTML = '<span class="status-dot waiting"></span> Waiting';
+        if (dis) { dis.textContent = 'Waiting for iRacing...'; dis.style.display = 'flex'; }
+      } else {
+        if (el) el.innerHTML = '<span class="status-dot connected"></span> Live';
+        if (dis) dis.style.display = 'none';
+      }
+    }
+
+    let playerCarIdx = -1;
+
+    onData('session', d => {
+      if (d.playerCarIdx !== undefined) playerCarIdx = d.playerCarIdx;
+    });
+
+    onData('standings', data => {
+      const tbody = document.getElementById('standings-body');
+      if (!data || !data.length) return;
+      const playerPos = data.findIndex(d => d.carIdx === playerCarIdx);
+      let startIdx = 0;
+      if (data.length > MAX_ROWS && playerPos >= 0) {
+        startIdx = Math.max(0, Math.min(playerPos - Math.floor(MAX_ROWS / 2), data.length - MAX_ROWS));
+      }
+      const visible = data.slice(startIdx, startIdx + MAX_ROWS);
+      tbody.innerHTML = visible.map(d => `
+        <tr class="${d.carIdx === playerCarIdx ? 'player-row' : ''} ${!d.onLeadLap ? 'lapped' : ''}">
+          <td class="mono" style="font-weight:700">${d.position}</td>
+          <td style="color:${d.classColor || '#fff'};font-weight:600">${d.carNumber || ''}</td>
+          <td>${d.driverName || ''}</td>
+          <td class="mono" style="font-size:11px">${d.interval || ''}</td>
+          <td class="mono" style="font-size:11px">${d.lastLap || ''}</td>
+          <td>${d.inPit ? '<span class="pit-indicator">PIT</span>' : ''}</td>
+        </tr>
+      `).join('');
+    });
+
+    connectBridge(['session', 'standings']);
+  </script>
+</body>
+</html>

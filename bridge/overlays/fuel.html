@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fuel Calculator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; }
+    .overlay-panel { background: rgba(12,13,20,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; }
+    .overlay-body { padding: 10px 14px; }
+    .fuel-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .fuel-row:last-child { border-bottom: none; }
+    .fuel-label { font-size: 11px; color: rgba(255,255,255,0.45); }
+    .fuel-value { font-size: 14px; font-weight: 700; font-family: 'Consolas', monospace; }
+    .fuel-value.warning { color: #f79009; }
+    .fuel-value.danger { color: #f04438; }
+    .fuel-value.ok { color: #3ecf8e; }
+    .fuel-bar-track { width: 100%; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .fuel-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease, background 0.5s ease; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.connected { background: #3ecf8e; }
+    .status-dot.disconnected { background: #f04438; }
+    .status-dot.waiting { background: #f79009; }
+    .overlay-disconnected { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,20,0.9); color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div id="overlay-root" style="position:relative;width:240px;">
+    <div class="overlay-panel" style="width:240px;">
+      <div class="overlay-header">
+        <span>FUEL CALCULATOR</span>
+        <span id="connection-status"><span class="status-dot waiting"></span> Connecting</span>
+      </div>
+      <div class="overlay-body">
+        <div class="fuel-row">
+          <span class="fuel-label">Current Fuel</span>
+          <span class="fuel-value ok" id="fuel-current">— L</span>
+        </div>
+        <div class="fuel-row">
+          <span class="fuel-label">Per Lap</span>
+          <span class="fuel-value" id="fuel-per-lap">— L</span>
+        </div>
+        <div class="fuel-row">
+          <span class="fuel-label">Laps Remaining</span>
+          <span class="fuel-value" id="fuel-laps">—</span>
+        </div>
+        <div class="fuel-row">
+          <span class="fuel-label">To Add</span>
+          <span class="fuel-value" id="fuel-to-add">— L</span>
+        </div>
+        <div class="fuel-bar-track">
+          <div class="fuel-bar-fill" id="fuel-bar" style="width:0%;background:#3ecf8e;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="overlay-disconnected" id="overlay-disconnected"></div>
+  </div>
+  <script>
+    const BRIDGE_URL = 'ws://localhost:9100';
+    let ws = null;
+    let bridgeConnected = false;
+    let iracingConnected = false;
+    const dataHandlers = {};
+
+    function connectBridge(channels) {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(() => connectBridge(channels), 3000); return; }
+      ws.onopen = () => {
+        bridgeConnected = true;
+        updateConnectionStatus();
+        ws.send(JSON.stringify({ type: 'subscribe', channels }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'status') {
+            iracingConnected = msg.iracing;
+            updateConnectionStatus();
+          } else if (msg.type === 'data' && dataHandlers[msg.channel]) {
+            dataHandlers[msg.channel](msg.data);
+          }
+        } catch(e) {}
+      };
+      ws.onclose = () => {
+        bridgeConnected = false;
+        iracingConnected = false;
+        updateConnectionStatus();
+        setTimeout(() => connectBridge(channels), 3000);
+      };
+      ws.onerror = () => { ws.close(); };
+    }
+
+    function onData(ch, fn) { dataHandlers[ch] = fn; }
+
+    function updateConnectionStatus() {
+      const el = document.getElementById('connection-status');
+      const dis = document.getElementById('overlay-disconnected');
+      if (!bridgeConnected) {
+        if (el) el.innerHTML = '<span class="status-dot disconnected"></span> Disconnected';
+        if (dis) { dis.textContent = 'Bridge not running'; dis.style.display = 'flex'; }
+      } else if (!iracingConnected) {
+        if (el) el.innerHTML = '<span class="status-dot waiting"></span> Waiting';
+        if (dis) { dis.textContent = 'Waiting for iRacing...'; dis.style.display = 'flex'; }
+      } else {
+        if (el) el.innerHTML = '<span class="status-dot connected"></span> Live';
+        if (dis) dis.style.display = 'none';
+      }
+    }
+
+    onData('fuel', data => {
+      if (!data) return;
+      const { fuelLevel, fuelPerLap, lapsRemaining, fuelToAdd, fuelCapacity } = data;
+
+      const currentEl = document.getElementById('fuel-current');
+      const perLapEl = document.getElementById('fuel-per-lap');
+      const lapsEl = document.getElementById('fuel-laps');
+      const toAddEl = document.getElementById('fuel-to-add');
+      const barEl = document.getElementById('fuel-bar');
+
+      if (fuelLevel !== undefined) {
+        currentEl.textContent = fuelLevel.toFixed(2) + ' L';
+        const pct = fuelCapacity > 0 ? Math.min(100, (fuelLevel / fuelCapacity) * 100) : 0;
+        barEl.style.width = pct + '%';
+        if (pct > 40) {
+          currentEl.className = 'fuel-value ok';
+          barEl.style.background = '#3ecf8e';
+        } else if (pct > 20) {
+          currentEl.className = 'fuel-value warning';
+          barEl.style.background = '#f79009';
+        } else {
+          currentEl.className = 'fuel-value danger';
+          barEl.style.background = '#f04438';
+        }
+      }
+      if (fuelPerLap !== undefined) perLapEl.textContent = fuelPerLap.toFixed(2) + ' L';
+      if (lapsRemaining !== undefined) {
+        lapsEl.textContent = lapsRemaining.toFixed(1);
+        lapsEl.className = lapsRemaining < 2 ? 'fuel-value danger' : lapsRemaining < 4 ? 'fuel-value warning' : 'fuel-value ok';
+      }
+      if (fuelToAdd !== undefined) toAddEl.textContent = (fuelToAdd > 0 ? fuelToAdd.toFixed(2) : '0.00') + ' L';
+    });
+
+    connectBridge(['fuel']);
+  </script>
+</body>
+</html>

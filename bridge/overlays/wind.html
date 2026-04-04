@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Wind Direction</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; }
+    .overlay-panel { background: rgba(12,13,20,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; }
+    .overlay-body { padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .compass { position: relative; width: 80px; height: 80px; }
+    .compass-ring { width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.12); position: relative; }
+    .compass-ring::before, .compass-ring::after { content: ''; position: absolute; background: rgba(255,255,255,0.2); }
+    .compass-ring::before { width: 1px; height: 100%; left: 50%; transform: translateX(-50%); }
+    .compass-ring::after { width: 100%; height: 1px; top: 50%; transform: translateY(-50%); }
+    .compass-n { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 9px; color: #f04438; font-weight: 700; }
+    .wind-arrow { position: absolute; top: 50%; left: 50%; width: 3px; height: 32px; background: linear-gradient(to top, #9146ff, transparent); border-radius: 2px; transform-origin: bottom center; margin-left: -1.5px; margin-top: -32px; transition: transform 0.5s ease; }
+    .car-arrow { position: absolute; top: 50%; left: 50%; width: 3px; height: 28px; background: linear-gradient(to top, #3ecf8e, transparent); border-radius: 2px; transform-origin: bottom center; margin-left: -1.5px; margin-top: -28px; transition: transform 0.5s ease; opacity: 0.6; }
+    .wind-speed { font-size: 16px; font-weight: 700; font-family: 'Consolas', monospace; }
+    .wind-unit { font-size: 10px; color: rgba(255,255,255,0.4); }
+    .legend { display: flex; gap: 10px; font-size: 9px; color: rgba(255,255,255,0.4); }
+    .legend span { display: flex; align-items: center; gap: 4px; }
+    .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.connected { background: #3ecf8e; }
+    .status-dot.disconnected { background: #f04438; }
+    .status-dot.waiting { background: #f79009; }
+    .overlay-disconnected { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,20,0.9); color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div id="overlay-root" style="position:relative;width:130px;">
+    <div class="overlay-panel" style="width:130px;">
+      <div class="overlay-header">
+        <span>WIND</span>
+        <span id="connection-status"><span class="status-dot waiting"></span></span>
+      </div>
+      <div class="overlay-body">
+        <div class="compass">
+          <div class="compass-ring">
+            <span class="compass-n">N</span>
+            <div class="wind-arrow" id="wind-arrow"></div>
+            <div class="car-arrow" id="car-arrow"></div>
+          </div>
+        </div>
+        <div class="wind-speed" id="wind-speed">0.0 <span class="wind-unit">m/s</span></div>
+        <div class="legend">
+          <span><span class="legend-dot" style="background:#9146ff;"></span>Wind</span>
+          <span><span class="legend-dot" style="background:#3ecf8e;"></span>Car</span>
+        </div>
+      </div>
+    </div>
+    <div class="overlay-disconnected" id="overlay-disconnected"></div>
+  </div>
+  <script>
+    const BRIDGE_URL = 'ws://localhost:9100';
+    let ws = null;
+    let bridgeConnected = false;
+    let iracingConnected = false;
+    const dataHandlers = {};
+
+    function connectBridge(channels) {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(() => connectBridge(channels), 3000); return; }
+      ws.onopen = () => {
+        bridgeConnected = true;
+        updateConnectionStatus();
+        ws.send(JSON.stringify({ type: 'subscribe', channels }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'status') {
+            iracingConnected = msg.iracing;
+            updateConnectionStatus();
+          } else if (msg.type === 'data' && dataHandlers[msg.channel]) {
+            dataHandlers[msg.channel](msg.data);
+          }
+        } catch(e) {}
+      };
+      ws.onclose = () => {
+        bridgeConnected = false;
+        iracingConnected = false;
+        updateConnectionStatus();
+        setTimeout(() => connectBridge(channels), 3000);
+      };
+      ws.onerror = () => { ws.close(); };
+    }
+
+    function onData(ch, fn) { dataHandlers[ch] = fn; }
+
+    function updateConnectionStatus() {
+      const el = document.getElementById('connection-status');
+      const dis = document.getElementById('overlay-disconnected');
+      if (!bridgeConnected) {
+        if (el) el.innerHTML = '<span class="status-dot disconnected"></span>';
+        if (dis) { dis.textContent = 'Bridge not running'; dis.style.display = 'flex'; }
+      } else if (!iracingConnected) {
+        if (el) el.innerHTML = '<span class="status-dot waiting"></span>';
+        if (dis) { dis.textContent = 'Waiting for iRacing...'; dis.style.display = 'flex'; }
+      } else {
+        if (el) el.innerHTML = '<span class="status-dot connected"></span>';
+        if (dis) dis.style.display = 'none';
+      }
+    }
+
+    onData('wind', data => {
+      if (!data) return;
+      const { windDirection, windSpeed, carHeading } = data;
+      const windArrow = document.getElementById('wind-arrow');
+      const carArrow = document.getElementById('car-arrow');
+      const speedEl = document.getElementById('wind-speed');
+      if (windDirection !== undefined && windArrow) {
+        const deg = (windDirection * 180 / Math.PI) % 360;
+        windArrow.style.transform = `rotate(${deg}deg)`;
+      }
+      if (carHeading !== undefined && carArrow) {
+        const deg = (carHeading * 180 / Math.PI) % 360;
+        carArrow.style.transform = `rotate(${deg}deg)`;
+      }
+      if (windSpeed !== undefined && speedEl) {
+        speedEl.innerHTML = windSpeed.toFixed(1) + ' <span class="wind-unit">m/s</span>';
+      }
+    });
+
+    connectBridge(['wind']);
+  </script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Atleta Bridge</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0c0d14; color: #e8e6f0; padding: 20px; user-select: none; }
+    h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #5c5b6e; margin-bottom: 20px; }
+    .status-card {
+      background: #141520; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+    }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.connected { background: #3ecf8e; box-shadow: 0 0 6px rgba(62,207,142,0.5); }
+    .status-dot.disconnected { background: #f04438; }
+    .status-dot.waiting { background: #f79009; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .status-text { font-size: 13px; font-weight: 600; }
+    .status-detail { font-size: 11px; color: #5c5b6e; }
+    h2 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #5c5b6e; margin-bottom: 10px; }
+    .overlay-list { display: flex; flex-direction: column; gap: 6px; }
+    .overlay-item {
+      background: #141520; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;
+      padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+    .overlay-item:hover { border-color: rgba(145,70,255,0.3); }
+    .overlay-info { display: flex; align-items: center; gap: 10px; }
+    .overlay-icon { font-size: 18px; width: 28px; text-align: center; }
+    .overlay-name { font-size: 13px; font-weight: 600; }
+    .toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle .slider { position: absolute; inset: 0; background: #1a1b2e; border-radius: 22px; border: 1px solid rgba(255,255,255,0.1); transition: 0.3s; }
+    .toggle .slider:before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+    .toggle input:checked + .slider { background: #9146ff; border-color: #9146ff; }
+    .toggle input:checked + .slider:before { transform: translateX(18px); }
+    .footer { margin-top: 16px; text-align: center; font-size: 10px; color: #3a3a4e; }
+    .footer a { color: #9146ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Atleta Bridge</h1>
+  <p class="subtitle">iRacing Overlay Manager</p>
+
+  <div class="status-card">
+    <div class="status-dot waiting" id="status-dot"></div>
+    <div>
+      <div class="status-text" id="status-text">Waiting for iRacing...</div>
+      <div class="status-detail" id="status-detail">Start iRacing to connect</div>
+    </div>
+  </div>
+
+  <h2>Overlays</h2>
+  <div class="overlay-list" id="overlay-list"></div>
+
+  <div class="footer">
+    <a href="https://atletanotifications.com" target="_blank">atletanotifications.com</a>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const overlays = [
+      { id: 'standings', icon: '🏁', name: 'Standings' },
+      { id: 'relative', icon: '📊', name: 'Relative' },
+      { id: 'fuel', icon: '⛽', name: 'Fuel Calculator' },
+      { id: 'wind', icon: '🌬️', name: 'Wind Direction' },
+      { id: 'proximity', icon: '🚗', name: 'Car Proximity' },
+      { id: 'chat', icon: '💬', name: 'Streaming Chat' },
+    ];
+
+    const list = document.getElementById('overlay-list');
+    overlays.forEach(ov => {
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+      item.innerHTML = `
+        <div class="overlay-info">
+          <span class="overlay-icon">${ov.icon}</span>
+          <span class="overlay-name">${ov.name}</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-${ov.id}" onchange="toggleOverlay('${ov.id}', this.checked)">
+          <span class="slider"></span>
+        </label>
+      `;
+      list.appendChild(item);
+    });
+
+    function toggleOverlay(id, enabled) {
+      ipcRenderer.send('toggle-overlay', id, enabled);
+    }
+
+    ipcRenderer.on('iracing-status', (event, status) => {
+      const dot = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      const detail = document.getElementById('status-detail');
+      if (status.iracing) {
+        dot.className = 'status-dot connected';
+        text.textContent = 'Connected to iRacing';
+        detail.textContent = status.track || 'Session active';
+      } else {
+        dot.className = 'status-dot waiting';
+        text.textContent = 'Waiting for iRacing...';
+        detail.textContent = 'Start iRacing to connect';
+      }
+    });
+
+    ipcRenderer.on('overlay-closed', (event, id) => {
+      const toggle = document.getElementById('toggle-' + id);
+      if (toggle) toggle.checked = false;
+    });
+
+    ipcRenderer.on('overlay-states', (event, states) => {
+      Object.entries(states).forEach(([id, enabled]) => {
+        const toggle = document.getElementById('toggle-' + id);
+        if (toggle) toggle.checked = enabled;
+      });
+    });
+
+    ipcRenderer.send('get-overlay-states');
+  </script>
+</body>
+</html>
