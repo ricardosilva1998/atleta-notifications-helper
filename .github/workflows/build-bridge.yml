@@ -48,7 +48,7 @@ jobs:
 
       - name: Build Windows installer
         working-directory: bridge
-        run: npx electron-builder --win -c.npmRebuild=false
+        run: npx electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
