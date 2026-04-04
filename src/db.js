@@ -2751,7 +2751,7 @@ try {
 } catch {}
 
 // Cleanup: Remove old bundled VTuber models that were renamed
-db.prepare("DELETE FROM vtuber_models WHERE is_bundled = 1 AND filename IN ('AvatarSample_A.vrm', 'AvatarSample_B.vrm')").run();
+try { db.prepare("DELETE FROM vtuber_models WHERE is_bundled = 1 AND filename IN ('AvatarSample_A.vrm', 'AvatarSample_B.vrm')").run(); } catch(e) {}
 
 // Seed: Bundled VTuber models
 {
