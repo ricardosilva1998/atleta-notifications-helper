@@ -24,6 +24,14 @@ async function handleMessage(channel, tags, message, self) {
   const streamer = db.getStreamerById(streamerId);
   if (!streamer) return;
 
+  // Emit to chat overlay (all messages, before moderation)
+  if (streamer.overlay_enabled) {
+    bus.emit(`overlay:${streamerId}`, {
+      type: 'chat',
+      data: { platform: 'twitch', username: tags['display-name'] || tags.username, message, color: tags.color || '#9146ff' }
+    });
+  }
+
   // Banned words always enforced (except mods/broadcaster)
   if (!(tags.mod || tags.badges?.broadcaster) && streamer.mod_banned_words_enabled) {
     const bwViolation = checkBannedWords(message, streamer.id);
