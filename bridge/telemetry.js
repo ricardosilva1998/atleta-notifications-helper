@@ -1,5 +1,16 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+// Log to file for debugging (user can check this)
+const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  console.log(msg);
+  try { fs.appendFileSync(logPath, line); } catch(e) {}
+}
+
 let statusCallback = null;
 let connected = false;
 let pollInterval = null;
@@ -13,14 +24,19 @@ const relativeCalc = new RelativeCalculator();
 
 function startTelemetry(onStatusChange) {
   statusCallback = onStatusChange;
+  log('[Telemetry] Starting telemetry reader...');
+  log('[Telemetry] Log file: ' + logPath);
 
   let SDK;
   try {
+    log('[Telemetry] Attempting to load irsdk-node...');
     const irsdk = require('irsdk-node');
     SDK = irsdk;
+    log('[Telemetry] irsdk-node loaded successfully. Exports: ' + Object.keys(irsdk).join(', '));
   } catch (e) {
-    console.error('[Telemetry] irsdk-node not available:', e.message);
-    console.log('[Telemetry] Running in stub mode (no iRacing data)');
+    log('[Telemetry] irsdk-node FAILED: ' + e.message);
+    log('[Telemetry] Stack: ' + e.stack);
+    log('[Telemetry] Running in stub mode (no iRacing data)');
     return;
   }
 

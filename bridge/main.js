@@ -41,8 +41,10 @@ app.on('ready', () => {
   tray.setToolTip('Atleta Bridge');
   tray.on('click', () => showControlWindow());
 
+  const logPath = require('path').join(require('os').homedir(), 'atleta-bridge.log');
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open Control Panel', click: () => showControlWindow() },
+    { label: 'View Log File', click: () => { require('electron').shell.openPath(logPath); } },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
