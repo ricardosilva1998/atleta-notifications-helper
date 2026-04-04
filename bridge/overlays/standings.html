@@ -137,7 +137,7 @@
     ];
 
     function buildDriverRow(d, rank, classLeaderBest) {
-      const pos = d.classPosition > 0 ? d.classPosition : rank;
+      const pos = rank; // Use our sorted rank, not iRacing's classPosition
       const bestFormatted = formatLapTime(d.bestLap);
       const lastFormatted = formatLapTime(d.lastLap);
 

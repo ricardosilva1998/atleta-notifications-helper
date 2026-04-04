@@ -118,11 +118,11 @@ async function startTelemetry(onStatusChange) {
                 log('[SessionInfo] Found! Drivers: ' + driverInfo.Drivers.length);
                 log('[SessionInfo] Track: ' + (weekendInfo?.TrackDisplayName || '?'));
                 driverInfo.Drivers.slice(0, 3).forEach((d, i) => {
-                  // Log all driver keys to find correct country/license fields
                   const keys = Object.keys(d);
                   log('[SessionInfo] D[' + i + '] keys: ' + keys.join(', '));
                   log('[SessionInfo] D[' + i + '] data: idx=' + d.CarIdx + ' Name=' + d.UserName + ' #' + d.CarNumber +
-                    ' iR=' + d.IRating + ' Lic=' + d.LicString + ' Country=' + d.LicCountryCode +
+                    ' iR=' + d.IRating + ' Lic=' + d.LicString +
+                    ' ClubName=' + d.ClubName + ' ClubID=' + d.ClubID +
                     ' ClassShort=' + d.CarClassShortName + ' ClassColor=' + d.CarClassColor +
                     ' CarShort=' + d.CarScreenNameShort);
                 });
