@@ -3,6 +3,7 @@ const path = require('path');
 const { startServer, stopServer } = require('./websocket');
 const { startTelemetry, stopTelemetry } = require('./telemetry');
 const { load: loadSettings, save: saveSettings } = require('./settings');
+const { startVoiceInput, stopVoiceInput, setVoiceChatWindow } = require('./voiceInput');
 
 // Auto-updater
 let autoUpdater;
@@ -29,6 +30,7 @@ const OVERLAYS = [
   { id: 'proximity', name: 'Car Proximity', width: 160, height: 280 },
   { id: 'chat', name: 'Streaming Chat', width: 340, height: 500 },
   { id: 'trackmap', name: 'Track Map', width: 300, height: 300 },
+  { id: 'voicechat', name: 'Voice Chat', width: 340, height: 400 },
 ];
 
 const gotLock = app.requestSingleInstanceLock();
@@ -96,6 +98,10 @@ app.on('ready', () => {
       }
     }
   });
+
+  // Start voice input system
+  const { getStatus } = require('./telemetry');
+  startVoiceInput({ settings, getStatus });
 
   showControlWindow();
 
@@ -246,6 +252,9 @@ function createOverlayWindow(overlayId) {
   win.on('closed', () => {
     clearInterval(topInterval);
     delete overlayWindows[overlayId];
+    if (overlayId === 'voicechat') {
+      setVoiceChatWindow(null);
+    }
     if (controlWindow && !controlWindow.isDestroyed()) {
       controlWindow.webContents.send('overlay-closed', overlayId);
     }
@@ -253,6 +262,12 @@ function createOverlayWindow(overlayId) {
   });
 
   overlayWindows[overlayId] = win;
+
+  // Wire up voice chat overlay to voice input module
+  if (overlayId === 'voicechat') {
+    setVoiceChatWindow(win);
+  }
+
   persistSettings();
 }
 
@@ -325,5 +340,6 @@ app.on('before-quit', () => {
   persistSettings();
   Object.keys(overlayWindows).forEach(closeOverlayWindow);
   stopTelemetry();
+  stopVoiceInput();
   stopServer();
 });
