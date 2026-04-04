@@ -6,6 +6,7 @@ on:
       - 'bridge/**'
     branches:
       - main
+      - dev
   workflow_dispatch:
 
 jobs:
@@ -19,19 +20,13 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-
-      - name: Setup Windows Build Tools
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Install dependencies
         working-directory: bridge
-        run: bun install --ignore-optional
+        run: npm install --ignore-optional
 
       - name: Build Windows installer
         working-directory: bridge
-        run: npm run build
+        run: npx electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
