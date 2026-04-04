@@ -220,6 +220,19 @@ async function startTelemetry(onStatusChange) {
         });
         if (!debugDumped) {
           debugDumped = true;
+          // Log all methods on the ir object
+          const irMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(ir)).filter(k => typeof ir[k] === 'function');
+          log('[Debug] ir methods: ' + irMethods.join(', '));
+          const irKeys = Object.keys(ir);
+          log('[Debug] ir own keys: ' + irKeys.join(', '));
+          // Try different session info methods
+          const tryMethods = ['getSessionInfo', 'getSessionData', 'sessionInfo', 'session', 'getSession'];
+          for (const m of tryMethods) {
+            try {
+              const val = typeof ir[m] === 'function' ? ir[m]() : ir[m];
+              log('[Debug] ir.' + m + ' type=' + typeof val + ' keys=' + (val && typeof val === 'object' ? Object.keys(val).slice(0, 5).join(',') : String(val)));
+            } catch(e) { log('[Debug] ir.' + m + ' error: ' + e.message); }
+          }
           log('[Debug] SessionInfo: ' + (si ? 'present' : 'NULL'));
           log('[Debug] Drivers: ' + drivers.length);
           log('[Debug] Positions array length: ' + positions.length);
