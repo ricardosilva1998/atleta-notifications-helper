@@ -44,6 +44,7 @@ async function startTelemetry(onStatusChange) {
   let sessionInfoFound = false;
   let drivers = [];
   let playerCarIdx = 0;
+  let trackName = '';
   let pollCount = 0;
 
   connectInterval = setInterval(async () => {
@@ -93,46 +94,27 @@ async function startTelemetry(onStatusChange) {
         ir.refreshSharedMemory();
         pollCount++;
 
-        // === Try to get session info ===
-        if (!sessionInfoFound) {
+        // === Get session info (requires key parameter!) ===
+        if (!sessionInfoFound || pollCount % 100 === 0) {
           try {
-            // Method 1: getSessionInfo()
-            const si = ir.getSessionInfo();
-            if (si && typeof si === 'object' && si !== null && Object.keys(si).length > 0) {
-              sessionInfoFound = true;
-              drivers = si.DriverInfo?.Drivers || [];
-              playerCarIdx = si.DriverInfo?.DriverCarIdx ?? 0;
-              log('[SessionInfo] Found via getSessionInfo! Drivers: ' + drivers.length);
-            }
+            // getSessionInfo takes a KEY parameter, not called with no args!
+            const driverInfo = ir.getSessionInfo('DriverInfo');
+            const weekendInfo = ir.getSessionInfo('WeekendInfo');
 
-            // Method 2: Try reading the shared memory YAML directly
-            if (!sessionInfoFound && pollCount % 30 === 0) {
-              // The SDK stores session info as YAML in shared memory
-              // Try to access the raw buffer through sharedMemory property
-              if (ir.sharedMemory) {
-                try {
-                  const yaml = require('js-yaml');
-                  // sharedMemory might be a Buffer or have session info somewhere
-                  const smType = typeof ir.sharedMemory;
-                  if (pollCount === 30) log('[SessionInfo] sharedMemory type: ' + smType + ', keys: ' + (ir.sharedMemory && typeof ir.sharedMemory === 'object' ? Object.keys(ir.sharedMemory).slice(0, 10).join(',') : 'N/A'));
-                } catch(e) {}
+            if (driverInfo && driverInfo.Drivers) {
+              if (!sessionInfoFound) {
+                sessionInfoFound = true;
+                log('[SessionInfo] Found! Drivers: ' + driverInfo.Drivers.length);
+                log('[SessionInfo] Track: ' + (weekendInfo?.TrackDisplayName || '?'));
+                driverInfo.Drivers.slice(0, 3).forEach((d, i) =>
+                  log('[SessionInfo] D[' + i + '] idx=' + d.CarIdx + ' ' + d.UserName + ' #' + d.CarNumber +
+                    ' iR=' + d.IRating + ' SR=' + d.LicString + ' Country=' + d.LicCountryCode));
               }
-
-              // Method 3: Call getSessionInfo after explicit memory refresh
-              try {
-                ir.openSharedMemory?.();
-                const si2 = ir.getSessionInfo();
-                if (si2 && typeof si2 === 'object' && si2 !== null && Object.keys(si2).length > 0) {
-                  sessionInfoFound = true;
-                  drivers = si2.DriverInfo?.Drivers || [];
-                  playerCarIdx = si2.DriverInfo?.DriverCarIdx ?? 0;
-                  log('[SessionInfo] Found after openSharedMemory! Drivers: ' + drivers.length);
-                }
-              } catch(e) {}
-
-              if (!sessionInfoFound && pollCount % 100 === 0) {
-                log('[SessionInfo] Still null after ' + pollCount + ' polls');
-              }
+              drivers = driverInfo.Drivers;
+              playerCarIdx = driverInfo.DriverCarIdx ?? 0;
+              trackName = weekendInfo?.TrackDisplayName || '';
+            } else if (pollCount % 100 === 0) {
+              log('[SessionInfo] DriverInfo not available yet (poll ' + pollCount + ')');
             }
           } catch(e) {
             if (pollCount % 100 === 0) log('[SessionInfo] Error: ' + e.message);
@@ -194,8 +176,13 @@ async function startTelemetry(onStatusChange) {
 
         broadcastToChannel('session', { type: 'data', channel: 'session', data: {
           playerCarIdx,
-          trackName: '',
-          drivers: drivers.map(d => ({ carIdx: d.CarIdx, driverName: d.UserName, carNumber: d.CarNumber })),
+          trackName,
+          drivers: drivers.map(d => ({
+            carIdx: d.CarIdx, driverName: d.UserName, carNumber: d.CarNumber,
+            carMake: d.CarScreenNameShort || d.CarScreenName || '',
+            country: d.LicCountryCode || '', license: d.LicString || '',
+            iRating: d.IRating || 0,
+          })),
         }});
 
         // Use PLAYER_CAR_IDX from telemetry if session info unavailable
@@ -221,8 +208,12 @@ async function startTelemetry(onStatusChange) {
             classPosition: classPositions[i] || 0,
             driverName: name,
             carNumber: number,
-            lastLap: lastLaps[i] > 0 ? lastLaps[i].toFixed(3) : '',
-            bestLap: bestLaps[i] > 0 ? bestLaps[i].toFixed(3) : '',
+            carMake: driver?.CarScreenNameShort || driver?.CarScreenName || '',
+            country: driver?.LicCountryCode || '',
+            license: driver?.LicString || '',
+            iRating: driver?.IRating || 0,
+            lastLap: lastLaps[i] > 0 ? lastLaps[i] : 0,
+            bestLap: bestLaps[i] > 0 ? bestLaps[i] : 0,
             inPit: !!onPitRoad[i],
             lapsCompleted: lapsCompletedArr[i] || 0,
             estTime: estTime[i] || 0,
