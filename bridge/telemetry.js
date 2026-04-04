@@ -294,13 +294,25 @@ async function startTelemetry(onStatusChange) {
           return b.lapDistPct - a.lapDistPct;
         });
 
-        // Log standings summary periodically
-        if (pollCount === 50 || pollCount === 200) {
-          log('[Standings] Built: ' + standings.length + ' (sessionInfo: ' + (sessionInfoFound ? 'yes' : 'no') + ', drivers: ' + drivers.length + ')');
-          const classCounts = {};
-          standings.forEach(s => { classCounts[s.carClass || '?'] = (classCounts[s.carClass || '?'] || 0) + 1; });
-          log('[Standings] Classes: ' + JSON.stringify(classCounts));
-          log('[Standings] WithBestLap: ' + standings.filter(s => s.bestLap > 0).length + '/' + standings.length);
+        // Diagnostic: log raw SDK data for lap times (first few polls only)
+        if (pollCount === 30 || pollCount === 100) {
+          log('[Diag] === LAP TIME DIAGNOSTICS ===');
+          // Raw arrays from SDK
+          const sample = standings.slice(0, 5);
+          sample.forEach(s => {
+            const idx = s.carIdx;
+            log('[Diag] ' + s.driverName + ' (idx=' + idx + '): rawBest=' + bestLaps[idx] +
+              ' rawLast=' + lastLaps[idx] + ' rawLapsComp=' + lapsCompletedArr[idx] +
+              ' pos=' + positions[idx] + ' classPos=' + classPositions[idx] +
+              ' cachedBest=' + cachedBestLaps.get(idx) + ' cachedLast=' + cachedLastLaps.get(idx) +
+              ' -> bestLap=' + s.bestLap + ' lastLap=' + s.lastLap);
+          });
+          log('[Diag] bestLaps type=' + typeof bestLaps + ' isArray=' + Array.isArray(bestLaps) + ' len=' + bestLaps.length);
+          // Show raw first 10 values of bestLaps array to see if they're all -1 or valid
+          log('[Diag] bestLaps[0..9]=' + JSON.stringify(bestLaps.slice(0, 10)));
+          log('[Diag] lastLaps[0..9]=' + JSON.stringify(lastLaps.slice(0, 10)));
+          log('[Diag] positions[0..9]=' + JSON.stringify(positions.slice(0, 10)));
+          log('[Diag] WithBestLap: ' + standings.filter(s => s.bestLap > 0).length + '/' + standings.length);
         }
 
         // Only broadcast standings every 1 second (every 10th poll) to prevent flickering
