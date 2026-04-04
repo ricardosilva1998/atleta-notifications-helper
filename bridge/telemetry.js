@@ -3,7 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// Log to file for debugging (user can check this)
 const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -27,35 +26,53 @@ function startTelemetry(onStatusChange) {
   log('[Telemetry] Starting telemetry reader...');
   log('[Telemetry] Log file: ' + logPath);
 
-  let SDK;
+  let iRacingSDK;
   try {
-    log('[Telemetry] Attempting to load irsdk-node...');
-    const irsdk = require('irsdk-node');
-    SDK = irsdk;
-    log('[Telemetry] irsdk-node loaded successfully. Exports: ' + Object.keys(irsdk).join(', '));
+    log('[Telemetry] Attempting to load @emiliosp/node-iracing-sdk...');
+    const sdk = require('@emiliosp/node-iracing-sdk');
+    iRacingSDK = sdk;
+    log('[Telemetry] SDK loaded successfully. Exports: ' + Object.keys(sdk).join(', '));
   } catch (e) {
-    log('[Telemetry] irsdk-node FAILED: ' + e.message);
+    log('[Telemetry] SDK FAILED: ' + e.message);
     log('[Telemetry] Stack: ' + e.stack);
     log('[Telemetry] Running in stub mode (no iRacing data)');
     return;
   }
 
-  const sdk = new SDK.IRacingSDK();
+  let sdk;
+  try {
+    // The SDK may export the class directly or as a named export
+    const SDKClass = iRacingSDK.iRacingSDK || iRacingSDK.IRacingSDK || iRacingSDK.default || iRacingSDK;
+    if (typeof SDKClass === 'function') {
+      sdk = new SDKClass();
+      log('[Telemetry] SDK instance created');
+    } else {
+      // Some SDKs export methods directly
+      sdk = SDKClass;
+      log('[Telemetry] SDK used as module (not class)');
+    }
+  } catch (e) {
+    log('[Telemetry] SDK init error: ' + e.message);
+    return;
+  }
+
   let wasConnected = false;
 
-  // Poll for data at 10Hz
   pollInterval = setInterval(() => {
     try {
-      const isRunning = sdk.isSimRunning();
+      // Check if iRacing is running
+      const isRunning = typeof sdk.isSimRunning === 'function' ? sdk.isSimRunning() :
+                        typeof sdk.isConnected === 'function' ? sdk.isConnected() :
+                        typeof sdk.waitForData === 'function' ? true : false;
 
       if (isRunning && !wasConnected) {
-        console.log('[Telemetry] iRacing connected');
+        log('[Telemetry] iRacing connected');
         connected = true;
         wasConnected = true;
         broadcastToChannel('_all', { type: 'status', iracing: true });
         if (statusCallback) statusCallback({ iracing: true });
       } else if (!isRunning && wasConnected) {
-        console.log('[Telemetry] iRacing disconnected');
+        log('[Telemetry] iRacing disconnected');
         connected = false;
         wasConnected = false;
         fuelCalc.reset();
@@ -66,8 +83,10 @@ function startTelemetry(onStatusChange) {
       if (!isRunning) return;
 
       // Read telemetry
-      const telemetry = sdk.getTelemetry();
-      const session = sdk.getSessionInfo();
+      const telemetry = typeof sdk.getTelemetry === 'function' ? sdk.getTelemetry() :
+                        typeof sdk.getSessionData === 'function' ? sdk.getSessionData() : null;
+      const session = typeof sdk.getSessionInfo === 'function' ? sdk.getSessionInfo() : null;
+
       if (!telemetry) return;
 
       // Fuel data
@@ -86,51 +105,52 @@ function startTelemetry(onStatusChange) {
         carLeftRight: telemetry.CarLeftRight || 0,
       }});
 
-      // Session data (less frequent)
+      // Session data
       if (session) {
         const drivers = session.DriverInfo?.Drivers || [];
         const playerCarIdx = session.DriverInfo?.DriverCarIdx || 0;
         const trackName = session.WeekendInfo?.TrackDisplayName || '';
-        const sessionType = '';
 
         broadcastToChannel('session', { type: 'data', channel: 'session', data: {
           playerCarIdx,
           trackName,
-          sessionType,
           drivers: drivers.map(d => ({
             carIdx: d.CarIdx,
             driverName: d.UserName,
             carNumber: d.CarNumber,
-            classColor: d.CarClassColor ? '#' + d.CarClassColor.toString(16).padStart(6, '0') : '#fff',
+            classColor: '#fff',
           })),
         }});
 
         // Standings
         const standings = [];
-        for (let i = 0; i < drivers.length; i++) {
-          const pos = telemetry.CarIdxPosition?.[i] || 0;
-          if (pos <= 0) continue;
-          standings.push({
-            carIdx: i,
-            position: pos,
-            driverName: drivers[i]?.UserName || '',
-            carNumber: drivers[i]?.CarNumber || '',
-            interval: '',
-            lastLap: telemetry.CarIdxLastLapTime?.[i]?.toFixed(3) || '',
-            bestLap: telemetry.CarIdxBestLapTime?.[i]?.toFixed(3) || '',
-            inPit: !!telemetry.CarIdxOnPitRoad?.[i],
-            onLeadLap: (telemetry.CarIdxLapCompleted?.[i] || 0) >= (telemetry.CarIdxLapCompleted?.[playerCarIdx] || 0),
-            classColor: drivers[i]?.CarClassColor ? '#' + drivers[i].CarClassColor.toString(16).padStart(6, '0') : '#fff',
-          });
+        if (telemetry.CarIdxPosition) {
+          for (let i = 0; i < (telemetry.CarIdxPosition.length || 0); i++) {
+            const pos = telemetry.CarIdxPosition[i] || 0;
+            if (pos <= 0) continue;
+            standings.push({
+              carIdx: i,
+              position: pos,
+              driverName: drivers[i]?.UserName || '',
+              carNumber: drivers[i]?.CarNumber || '',
+              interval: '',
+              lastLap: telemetry.CarIdxLastLapTime?.[i]?.toFixed(3) || '',
+              bestLap: telemetry.CarIdxBestLapTime?.[i]?.toFixed(3) || '',
+              inPit: !!telemetry.CarIdxOnPitRoad?.[i],
+              onLeadLap: true,
+              classColor: '#fff',
+            });
+          }
         }
         standings.sort((a, b) => a.position - b.position);
         broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings });
       }
 
     } catch (e) {
-      // Silently handle errors during polling
+      // Log errors periodically (not every frame)
+      if (Math.random() < 0.01) log('[Telemetry] Poll error: ' + e.message);
     }
-  }, 100); // 10Hz
+  }, 100);
 }
 
 function stopTelemetry() {

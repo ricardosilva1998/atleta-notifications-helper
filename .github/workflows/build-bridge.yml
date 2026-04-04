@@ -23,11 +23,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Python (for node-gyp)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Set version from run number
         working-directory: bridge
         shell: pwsh
@@ -37,20 +32,11 @@ jobs:
           $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
           Write-Host "Version set to 1.0.${{ github.run_number }}"
 
-      - name: Install Windows SDK via winget
-        shell: pwsh
-        run: |
-          winget install Microsoft.WindowsSDK.10.0.22621 --accept-source-agreements --accept-package-agreements --silent
-          Write-Host "Windows SDK installed via winget"
-        continue-on-error: true
-
-      - name: Install dependencies with native compilation
+      - name: Install dependencies
         working-directory: bridge
         run: npm install
-        env:
-          npm_config_msvs_version: '2022'
 
-      - name: Build Windows installer (rebuilds for Electron)
+      - name: Build Windows installer
         working-directory: bridge
         run: npx electron-builder --win
         env:
