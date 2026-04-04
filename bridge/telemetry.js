@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
+// Clear log on startup
+try { fs.writeFileSync(logPath, ''); } catch(e) {}
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   console.log(msg);
@@ -74,6 +76,7 @@ async function startTelemetry(onStatusChange) {
 
 function startPolling(ir, VARS) {
   if (pollInterval) clearInterval(pollInterval);
+  let debugDumped = false;
 
   pollInterval = setInterval(() => {
     try {
@@ -91,6 +94,40 @@ function startPolling(ir, VARS) {
       }
 
       ir.refreshSharedMemory();
+
+      // One-time debug dump of available VARS and sample data
+      if (!debugDumped) {
+        debugDumped = true;
+        // Log some VARS keys to understand the naming
+        const sampleKeys = Object.keys(VARS).slice(0, 30);
+        log('[Debug] First 30 VARS keys: ' + sampleKeys.join(', '));
+        // Try to find fuel-related keys
+        const fuelKeys = Object.keys(VARS).filter(k => k.toLowerCase().includes('fuel'));
+        log('[Debug] Fuel VARS: ' + fuelKeys.join(', '));
+        const windKeys = Object.keys(VARS).filter(k => k.toLowerCase().includes('wind'));
+        log('[Debug] Wind VARS: ' + windKeys.join(', '));
+        const posKeys = Object.keys(VARS).filter(k => k.toLowerCase().includes('position') || k.toLowerCase().includes('pos'));
+        log('[Debug] Position VARS: ' + posKeys.join(', '));
+        const lapKeys = Object.keys(VARS).filter(k => k.toLowerCase().includes('lap'));
+        log('[Debug] Lap VARS: ' + lapKeys.join(', '));
+        const carIdxKeys = Object.keys(VARS).filter(k => k.toLowerCase().includes('caridx'));
+        log('[Debug] CarIdx VARS: ' + carIdxKeys.join(', '));
+        // Try getting data with a few possible key formats
+        try {
+          const testKeys = ['FUEL_LEVEL', 'FuelLevel', 'fuelLevel', 'Speed', 'SPEED', 'speed'];
+          for (const k of testKeys) {
+            const val = VARS[k] !== undefined ? ir.get(VARS[k]) : undefined;
+            log('[Debug] VARS.' + k + ' = ' + JSON.stringify(VARS[k]) + ' → ir.get() = ' + JSON.stringify(val));
+          }
+          // Try getSessionInfo
+          const si = ir.getSessionInfo?.();
+          log('[Debug] getSessionInfo type: ' + typeof si);
+          if (si) {
+            log('[Debug] SessionInfo keys: ' + Object.keys(si).join(', '));
+            if (si.DriverInfo) log('[Debug] DriverInfo.Drivers count: ' + (si.DriverInfo.Drivers?.length || 0));
+          }
+        } catch(e) { log('[Debug] Error: ' + e.message); }
+      }
 
       // Fuel
       const fuelLevel = ir.get(VARS.FUEL_LEVEL)?.[0] || 0;
