@@ -63,10 +63,6 @@ function sleep(ms) {
  */
 async function pressKey(vk) {
   if (!sendInput) return;
-  const koffi = require('koffi');
-  const KEYBDINPUT = koffi.resolve('KEYBDINPUT');
-  const INPUT = koffi.resolve('INPUT');
-
   const down = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 } };
   const up = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } };
   sendInput(down);
@@ -80,8 +76,6 @@ async function pressKey(vk) {
  */
 async function typeString(str) {
   if (!sendInput) return;
-  const koffi = require('koffi');
-
   for (let i = 0; i < str.length; i++) {
     const charCode = str.charCodeAt(i);
     const down = { type: INPUT_KEYBOARD, ki: { wVk: 0, wScan: charCode, dwFlags: KEYEVENTF_UNICODE, time: 0, dwExtraInfo: 0 } };

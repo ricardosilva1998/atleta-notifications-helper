@@ -144,7 +144,7 @@ function setVoiceChatWindow(win) {
   voiceChatWindow = win;
   // Send current settings to the overlay when it's set
   if (win && !win.isDestroyed() && settings.voiceChat) {
-    win.webContents.on('did-finish-load', () => {
+    win.webContents.once('did-finish-load', () => {
       win.webContents.send('voice-settings-update', settings.voiceChat);
     });
   }

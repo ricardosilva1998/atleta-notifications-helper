@@ -64,7 +64,6 @@
     let voiceSettings = { wakeWordEnabled: false, language: 'en-US', micDeviceId: null };
     let recognition = null;
     let wakeWordRecognition = null;
-    let wakeWordBuffer = '';
 
     // ─── WebSocket for driver list ──────────────────────────
     const BRIDGE_URL = 'ws://localhost:9100';
@@ -371,7 +370,7 @@
 
     // ─── IPC from main process ──────────────────────────────
     ipcRenderer.on('voice-start-listening', () => {
-      if (state === 'confirming') return; // Don't interrupt confirmation
+      if (state === 'confirming' || state === 'processing') return; // Don't interrupt confirmation or processing
       startRecognition();
     });
 
