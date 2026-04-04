@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voice Chat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', -apple-system, sans-serif; color: #e8e6f0; scrollbar-width: none; }
+    ::-webkit-scrollbar { display: none; }
+    .overlay-panel { background: rgba(12,13,20,0.88); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; flex-shrink: 0; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.idle { background: #5c5b6e; }
+    .status-dot.listening { background: #f04438; animation: pulse 0.8s ease-in-out infinite; }
+    .status-dot.processing { background: #f79009; }
+    .status-dot.confirming { background: #3b82f6; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .message-log { flex: 1; overflow-y: auto; padding: 8px 12px; scrollbar-width: none; }
+    .message-log::-webkit-scrollbar { display: none; }
+    .msg-entry { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .msg-time { font-size: 9px; color: rgba(255,255,255,0.3); }
+    .msg-target { font-size: 10px; font-weight: 600; color: #9146ff; margin-left: 6px; }
+    .msg-target.all { color: #3ecf8e; }
+    .msg-target.team { color: #f79009; }
+    .msg-text { font-size: 12px; color: #e8e6f0; margin-top: 2px; }
+    .msg-error { font-size: 11px; color: #f04438; padding: 6px 0; }
+
+    .confirm-bar { flex-shrink: 0; padding: 10px 12px; background: rgba(59,130,246,0.1); border-top: 1px solid rgba(59,130,246,0.3); display: none; }
+    .confirm-bar.visible { display: block; }
+    .confirm-target { font-size: 11px; color: #3b82f6; font-weight: 600; }
+    .confirm-text { font-size: 12px; color: #e8e6f0; margin: 4px 0; word-break: break-word; }
+    .confirm-hint { font-size: 9px; color: rgba(255,255,255,0.35); }
+
+    .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; color: rgba(255,255,255,0.25); font-size: 11px; padding: 20px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="overlay-panel">
+    <div class="overlay-header">
+      <span><span class="status-dot idle" id="status-dot"></span> VOICE CHAT</span>
+      <span id="status-label" style="font-size:9px; color:rgba(255,255,255,0.35);">Idle</span>
+    </div>
+    <div class="message-log" id="message-log">
+      <div class="empty-state" id="empty-state">
+        Press your push-to-talk key or say "message" to start.<br>
+        Example: "message Max good race"
+      </div>
+    </div>
+    <div class="confirm-bar" id="confirm-bar">
+      <div class="confirm-target" id="confirm-target"></div>
+      <div class="confirm-text" id="confirm-text"></div>
+      <div class="confirm-hint">Enter to send · Esc to cancel</div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    // ─── State ──────────────────────────────────────────────
+    let state = 'idle'; // idle | listening | processing | confirming
+    let drivers = []; // from standings WebSocket
+    let pendingCommand = null; // { command, targetLabel, text }
+    let voiceSettings = { wakeWordEnabled: false, language: 'en-US', micDeviceId: null };
+    let recognition = null;
+    let wakeWordRecognition = null;
+    let wakeWordBuffer = '';
+
+    // ─── WebSocket for driver list ──────────────────────────
+    const BRIDGE_URL = 'ws://localhost:9100';
+    let ws = null;
+
+    function connectBridge() {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(connectBridge, 3000); return; }
+      ws.onopen = () => { ws.send(JSON.stringify({ type: 'subscribe', channels: ['standings'] })); };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'data' && msg.channel === 'standings') {
+            drivers = (msg.data || []).filter(d => !d.isPlayer && d.driverName && d.driverName !== 'Pace Car');
+          }
+        } catch(e) {}
+      };
+      ws.onclose = () => { setTimeout(connectBridge, 3000); };
+      ws.onerror = () => { ws.close(); };
+    }
+    connectBridge();
+
+    // ─── UI Helpers ─────────────────────────────────────────
+    function setState(newState) {
+      state = newState;
+      const dot = document.getElementById('status-dot');
+      const label = document.getElementById('status-label');
+      dot.className = 'status-dot ' + newState;
+      const labels = { idle: 'Idle', listening: 'Listening...', processing: 'Processing...', confirming: 'Confirm' };
+      label.textContent = labels[newState] || newState;
+    }
+
+    function addMessage(targetLabel, targetType, text) {
+      const log = document.getElementById('message-log');
+      const empty = document.getElementById('empty-state');
+      if (empty) empty.remove();
+
+      const entry = document.createElement('div');
+      entry.className = 'msg-entry';
+      const now = new Date();
+      const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+      entry.innerHTML = `
+        <span class="msg-time">${time}</span>
+        <span class="msg-target ${targetType}">${targetLabel}</span>
+        <div class="msg-text">${escapeHtml(text)}</div>
+      `;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function addError(text) {
+      const log = document.getElementById('message-log');
+      const empty = document.getElementById('empty-state');
+      if (empty) empty.remove();
+
+      const entry = document.createElement('div');
+      entry.className = 'msg-error';
+      entry.textContent = text;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function showConfirm(targetLabel, text) {
+      document.getElementById('confirm-target').textContent = targetLabel;
+      document.getElementById('confirm-text').textContent = '"' + text + '"';
+      document.getElementById('confirm-bar').classList.add('visible');
+    }
+
+    function hideConfirm() {
+      document.getElementById('confirm-bar').classList.remove('visible');
+      pendingCommand = null;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ─── Fuzzy Matching ─────────────────────────────────────
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        }
+      }
+      return dp[m][n];
+    }
+
+    function matchDriver(words) {
+      if (drivers.length === 0) return null;
+
+      let bestMatch = null;
+      let bestScore = Infinity;
+      let bestWordsUsed = 0;
+
+      // Try 1, 2, 3 words as driver name
+      for (let len = Math.min(3, words.length); len >= 1; len--) {
+        const spoken = words.slice(0, len).join(' ').toLowerCase();
+
+        for (const driver of drivers) {
+          const fullName = driver.driverName.toLowerCase();
+          const firstName = fullName.split(' ')[0];
+          const lastName = fullName.split(' ').slice(-1)[0];
+
+          // Check against full name, first name, last name
+          const candidates = [fullName, firstName, lastName];
+          for (const candidate of candidates) {
+            const dist = levenshtein(spoken, candidate);
+            // Normalize by candidate length — shorter distances relative to length are better
+            const score = dist / Math.max(spoken.length, candidate.length);
+            if (score < bestScore && score < 0.45) { // 45% threshold
+              bestScore = score;
+              bestMatch = driver;
+              bestWordsUsed = len;
+            }
+          }
+        }
+      }
+
+      // Prefer longer matches (2 words over 1) if scores are close
+      if (bestMatch) {
+        return { driver: bestMatch, wordsUsed: bestWordsUsed };
+      }
+      return null;
+    }
+
+    // ─── Voice Parsing ──────────────────────────────────────
+    function parseVoiceCommand(rawText) {
+      let text = rawText.trim().toLowerCase();
+
+      // Strip wake word "message" from start
+      if (text.startsWith('message ')) {
+        text = text.substring(8).trim();
+      }
+
+      // Check for "all" or "team" targets
+      if (text.startsWith('all ')) {
+        const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('all ') + 4).trim();
+        return { command: '/all ' + msg, targetLabel: 'To: All', targetType: 'all', text: msg };
+      }
+      if (text.startsWith('team ')) {
+        const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('team ') + 5).trim();
+        return { command: '/team ' + msg, targetLabel: 'To: Team', targetType: 'team', text: msg };
+      }
+
+      // Try to match a driver name
+      const words = text.split(/\s+/);
+      const match = matchDriver(words);
+      if (match) {
+        const msgWords = words.slice(match.wordsUsed);
+        const msg = msgWords.join(' ');
+        if (!msg) return { error: 'No message text after driver name' };
+        return {
+          command: '/p ' + match.driver.driverName + ' ' + msg,
+          targetLabel: 'To: ' + match.driver.driverName + ' (private)',
+          targetType: '',
+          text: msg,
+        };
+      }
+
+      return { error: 'No driver found matching "' + words.slice(0, 3).join(' ') + '"' };
+    }
+
+    // ─── Speech Recognition ─────────────────────────────────
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    function startRecognition() {
+      if (!SpeechRecognition) { addError('Speech recognition not available'); return; }
+      if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = voiceSettings.language || 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('[VoiceChat] Heard:', transcript);
+        processTranscript(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.log('[VoiceChat] Recognition error:', event.error);
+        if (event.error !== 'aborted') {
+          setState('idle');
+        }
+      };
+
+      recognition.onend = () => {
+        if (state === 'listening') {
+          // Push-to-talk released before any result
+          setState('idle');
+        }
+      };
+
+      setState('listening');
+      recognition.start();
+    }
+
+    function stopRecognition() {
+      if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+      }
+    }
+
+    function processTranscript(transcript) {
+      setState('processing');
+      const result = parseVoiceCommand(transcript);
+
+      if (result.error) {
+        addError(result.error);
+        setState('idle');
+        return;
+      }
+
+      // Show confirmation
+      pendingCommand = result;
+      showConfirm(result.targetLabel, result.text);
+      setState('confirming');
+    }
+
+    // ─── Wake Word (Always Listening) ───────────────────────
+    function startWakeWord() {
+      if (!SpeechRecognition || !voiceSettings.wakeWordEnabled) return;
+      if (wakeWordRecognition) { try { wakeWordRecognition.abort(); } catch(e) {} }
+
+      wakeWordRecognition = new SpeechRecognition();
+      wakeWordRecognition.lang = voiceSettings.language || 'en-US';
+      wakeWordRecognition.continuous = true;
+      wakeWordRecognition.interimResults = true;
+      wakeWordRecognition.maxAlternatives = 1;
+
+      wakeWordRecognition.onresult = (event) => {
+        // Check all results for wake word
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript.trim().toLowerCase();
+          if (event.results[i].isFinal) {
+            // Full sentence — check if it starts with "message"
+            if (transcript.startsWith('message ') && state === 'idle') {
+              // Stop wake word recognition, process the full command
+              try { wakeWordRecognition.abort(); } catch(e) {}
+              processTranscript(event.results[i][0].transcript.trim());
+              // Restart wake word after a delay
+              setTimeout(startWakeWord, 1000);
+            }
+          }
+        }
+      };
+
+      wakeWordRecognition.onerror = (event) => {
+        if (event.error !== 'aborted') {
+          console.log('[WakeWord] Error:', event.error);
+          setTimeout(startWakeWord, 2000);
+        }
+      };
+
+      wakeWordRecognition.onend = () => {
+        // Auto-restart if still enabled
+        if (voiceSettings.wakeWordEnabled && state !== 'listening') {
+          setTimeout(startWakeWord, 500);
+        }
+      };
+
+      wakeWordRecognition.start();
+      console.log('[WakeWord] Started');
+    }
+
+    function stopWakeWord() {
+      if (wakeWordRecognition) {
+        try { wakeWordRecognition.abort(); } catch(e) {}
+        wakeWordRecognition = null;
+      }
+    }
+
+    // ─── Keyboard Handlers ──────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (state === 'confirming') {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (pendingCommand) {
+            ipcRenderer.send('voice-send-chat', { command: pendingCommand.command });
+            addMessage(pendingCommand.targetLabel, pendingCommand.targetType, pendingCommand.text);
+            hideConfirm();
+            setState('idle');
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          hideConfirm();
+          setState('idle');
+        }
+      }
+    });
+
+    // ─── IPC from main process ──────────────────────────────
+    ipcRenderer.on('voice-start-listening', () => {
+      if (state === 'confirming') return; // Don't interrupt confirmation
+      startRecognition();
+    });
+
+    ipcRenderer.on('voice-stop-listening', () => {
+      stopRecognition();
+    });
+
+    ipcRenderer.on('voice-settings-update', (event, newSettings) => {
+      const wasWakeWordEnabled = voiceSettings.wakeWordEnabled;
+      voiceSettings = { ...voiceSettings, ...newSettings };
+
+      // Update wake word
+      if (voiceSettings.wakeWordEnabled && !wasWakeWordEnabled) {
+        startWakeWord();
+      } else if (!voiceSettings.wakeWordEnabled && wasWakeWordEnabled) {
+        stopWakeWord();
+      }
+
+      // Update recognition language if active
+      if (recognition) recognition.lang = voiceSettings.language;
+    });
+
+    ipcRenderer.on('voice-send-result', (event, result) => {
+      if (!result.success) {
+        addError('Failed to send: ' + (result.reason || 'unknown error'));
+      }
+    });
+
+    // ─── Lock state ─────────────────────────────────────────
+    ipcRenderer.on('lock-state', (event, locked) => {
+      document.body.style.pointerEvents = locked ? 'none' : 'auto';
+      document.querySelector('.overlay-header').style.cursor = locked ? 'default' : 'move';
+    });
+
+    // ─── Init ───────────────────────────────────────────────
+    // Wake word auto-start if enabled
+    if (voiceSettings.wakeWordEnabled) startWakeWord();
+  </script>
+</body>
+</html>
