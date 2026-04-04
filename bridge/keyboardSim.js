@@ -1,10 +1,13 @@
 'use strict';
 
-/**
- * Keyboard simulator for typing into iRacing chat.
- * Uses koffi to call Windows SendInput API.
- * No-ops gracefully on non-Windows platforms.
- */
+const fs = require('fs');
+const path = require('path');
+const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  console.log(msg);
+  try { fs.appendFileSync(logPath, line); } catch(e) {}
+}
 
 const isWindows = process.platform === 'win32';
 
@@ -47,9 +50,9 @@ if (isWindows) {
       return _sendInput(1, input, INPUT_size);
     };
 
-    console.log('[KeyboardSim] Loaded Windows SendInput');
+    log('[KeyboardSim] Loaded Windows SendInput');
   } catch (e) {
-    console.log('[KeyboardSim] Failed to load koffi/user32:', e.message);
+    log('[KeyboardSim] Failed to load koffi/user32:', e.message);
     sendInput = null;
   }
 }
@@ -94,7 +97,7 @@ async function typeString(str) {
  */
 async function sendChatCommand(command) {
   if (!isWindows || !sendInput) {
-    console.log('[KeyboardSim] Skipping (not Windows or SendInput unavailable)');
+    log('[KeyboardSim] Skipping (not Windows or SendInput unavailable)');
     return false;
   }
 
@@ -108,10 +111,10 @@ async function sendChatCommand(command) {
     await sleep(50);
     // Press Enter to send
     await pressKey(VK_RETURN);
-    console.log('[KeyboardSim] Sent: ' + command);
+    log('[KeyboardSim] Sent: ' + command);
     return true;
   } catch (e) {
-    console.log('[KeyboardSim] Error: ' + e.message);
+    log('[KeyboardSim] Error: ' + e.message);
     return false;
   }
 }

@@ -1,8 +1,17 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { ipcMain } = require('electron');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { sendChatCommand } = require('./keyboardSim');
+
+const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  console.log(msg);
+  try { fs.appendFileSync(logPath, line); } catch(e) {}
+}
 
 // Build reverse lookup: keycode -> name
 const keyCodeToName = {};
@@ -38,7 +47,7 @@ function startVoiceInput(opts) {
     if (pushToTalkKeyCode !== null && !pushToTalkIsMouseButton && e.keycode === pushToTalkKeyCode) {
       if (!isKeyHeld) {
         isKeyHeld = true;
-        console.log('[VoiceInput] PTT keydown (start)');
+        log('[VoiceInput] PTT keydown (start)');
         if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
           voiceChatWindow.webContents.send('voice-start-listening');
         }
@@ -50,7 +59,7 @@ function startVoiceInput(opts) {
   uIOhook.on('keyup', (e) => {
     if (pushToTalkKeyCode !== null && !pushToTalkIsMouseButton && e.keycode === pushToTalkKeyCode && isKeyHeld) {
       isKeyHeld = false;
-      console.log('[VoiceInput] PTT keyup (stop)');
+      log('[VoiceInput] PTT keyup (stop)');
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
         voiceChatWindow.webContents.send('voice-stop-listening');
       }
@@ -76,13 +85,13 @@ function startVoiceInput(opts) {
   });
 
   uIOhook.start();
-  console.log('[VoiceInput] Global hook started');
+  log('[VoiceInput] Global hook started');
 
   // IPC: Overlay sends confirmed chat command
   ipcMain.on('voice-send-chat', (event, data) => {
     const status = getIracingStatus ? getIracingStatus() : { iracing: false };
     if (!status.iracing) {
-      console.log('[VoiceInput] Cannot send — iRacing not connected');
+      log('[VoiceInput] Cannot send — iRacing not connected');
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
         voiceChatWindow.webContents.send('voice-send-result', { success: false, reason: 'iRacing not connected' });
       }
@@ -157,7 +166,7 @@ function setVoiceChatWindow(win) {
 
 function stopVoiceInput() {
   try { uIOhook.stop(); } catch(e) {}
-  console.log('[VoiceInput] Stopped');
+  log('[VoiceInput] Stopped');
 }
 
 module.exports = { startVoiceInput, stopVoiceInput, setVoiceChatWindow };
