@@ -22,9 +22,13 @@
   "build": {
     "appId": "com.atleta.bridge",
     "productName": "Atleta Bridge",
+    "directories": {
+      "buildResources": "build"
+    },
     "win": {
       "target": "nsis",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "icon": null
     },
     "nsis": {
       "oneClick": true,
