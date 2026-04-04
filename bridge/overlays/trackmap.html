@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Track Map</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #e8e6f0; scrollbar-width: none; }
+    ::-webkit-scrollbar { display: none; }
+    .overlay-panel { background: rgba(12,13,20,0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; backdrop-filter: blur(12px); overflow: hidden; width: 100%; height: 100%; display: flex; flex-direction: column; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; flex-shrink: 0; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.connected { background: #3ecf8e; }
+    .status-dot.waiting { background: #f79009; }
+    .status-dot.demo { background: #f79009; }
+    .map-container { flex: 1; position: relative; padding: 10px; }
+    canvas { width: 100%; height: 100%; }
+    .map-legend { position: absolute; bottom: 6px; right: 10px; font-size: 8px; color: rgba(255,255,255,0.3); }
+    .overlay-disconnected { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,20,0.9); color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="overlay-panel">
+    <div class="overlay-header">
+      <span>TRACK MAP</span>
+      <span id="connection-status"><span class="status-dot demo"></span> Demo</span>
+    </div>
+    <div class="map-container">
+      <canvas id="track-canvas"></canvas>
+      <div class="map-legend" id="map-legend">Waiting for track data...</div>
+    </div>
+    <div class="overlay-disconnected" id="overlay-disconnected"></div>
+  </div>
+
+  <script>
+    // Load settings
+    let _overlaySettings = {};
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const settingsFile = path.join(os.homedir(), 'Documents', 'Atleta Bridge', 'settings.json');
+      if (fs.existsSync(settingsFile)) {
+        const all = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        _overlaySettings = (all.overlayCustom && all.overlayCustom.trackmap) || {};
+      }
+    } catch(e) {}
+    function getSetting(k, d) { return _overlaySettings[k] !== undefined ? _overlaySettings[k] : d; }
+
+    const BRIDGE_URL = 'ws://localhost:9100';
+    let ws = null;
+    let bridgeConnected = false;
+    let iracingConnected = false;
+    const dataHandlers = {};
+
+    function connectBridge(channels) {
+      try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(() => connectBridge(channels), 3000); return; }
+      ws.onopen = () => { bridgeConnected = true; updateConnectionStatus(); ws.send(JSON.stringify({ type: 'subscribe', channels })); };
+      ws.onmessage = (event) => { try { const msg = JSON.parse(event.data); if (msg.type === 'bridge-connected') { bridgeConnected = true; updateConnectionStatus(); } else if (msg.type === 'status') { iracingConnected = msg.iracing; updateConnectionStatus(); } else if (msg.type === 'data' && dataHandlers[msg.channel]) { dataHandlers[msg.channel](msg.data); } } catch(e) {} };
+      ws.onclose = () => { bridgeConnected = false; iracingConnected = false; updateConnectionStatus(); setTimeout(() => connectBridge(channels), 3000); };
+      ws.onerror = () => { ws.close(); };
+    }
+    function onData(ch, fn) { dataHandlers[ch] = fn; }
+    function updateConnectionStatus() {
+      const el = document.getElementById('connection-status');
+      if (!bridgeConnected) { if (el) el.innerHTML = '<span class="status-dot demo"></span> Demo'; }
+      else if (!iracingConnected) { if (el) el.innerHTML = '<span class="status-dot waiting"></span> Waiting'; }
+      else { if (el) el.innerHTML = '<span class="status-dot connected"></span> Live'; }
+    }
+
+    // Canvas setup
+    const canvas = document.getElementById('track-canvas');
+    const ctx = canvas.getContext('2d');
+    let trackPoints = []; // normalized {x, y, pct} points
+    let lastCars = [];
+
+    function resizeCanvas() {
+      const container = canvas.parentElement;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      draw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    setTimeout(resizeCanvas, 100);
+
+    // If no track path from GPS, generate a circle as placeholder
+    function generateCirclePath() {
+      const points = [];
+      for (let i = 0; i <= 100; i++) {
+        const angle = (i / 100) * Math.PI * 2 - Math.PI / 2;
+        points.push({ x: 0.5 + 0.4 * Math.cos(angle), y: 0.5 + 0.4 * Math.sin(angle), pct: i / 100 });
+      }
+      return points;
+    }
+
+    function normalizeTrackPath(rawPath) {
+      if (!rawPath || rawPath.length < 10) return generateCirclePath();
+
+      // Convert lat/lon to x/y normalized 0-1
+      let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+      rawPath.forEach(p => {
+        if (p.lat < minLat) minLat = p.lat;
+        if (p.lat > maxLat) maxLat = p.lat;
+        if (p.lon < minLon) minLon = p.lon;
+        if (p.lon > maxLon) maxLon = p.lon;
+      });
+      const latRange = maxLat - minLat || 1;
+      const lonRange = maxLon - minLon || 1;
+      const padding = 0.1;
+
+      return rawPath.map(p => ({
+        x: padding + (1 - 2 * padding) * (p.lon - minLon) / lonRange,
+        y: padding + (1 - 2 * padding) * (1 - (p.lat - minLat) / latRange), // Flip Y
+        pct: p.pct,
+      }));
+    }
+
+    function getTrackPosition(pct) {
+      if (!trackPoints.length) return { x: 0.5, y: 0.5 };
+      // Find the closest point by pct
+      let closest = trackPoints[0];
+      let minDist = Math.abs(pct - closest.pct);
+      for (const p of trackPoints) {
+        const d = Math.abs(pct - p.pct);
+        if (d < minDist) { minDist = d; closest = p; }
+      }
+      return closest;
+    }
+
+    function draw() {
+      if (!ctx) return;
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      if (!trackPoints.length) return;
+
+      // Draw track outline
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 3;
+      trackPoints.forEach((p, i) => {
+        const x = p.x * w;
+        const y = p.y * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.stroke();
+
+      // Draw cars
+      lastCars.forEach(car => {
+        const pos = getTrackPosition(car.pct);
+        const x = pos.x * w;
+        const y = pos.y * h;
+        const radius = car.isPlayer ? 6 : 4;
+        const color = car.isPlayer ? '#9146ff' : (car.carClassColor || '#fff');
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        if (car.isPlayer) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Car number label
+        if (car.isPlayer || radius >= 4) {
+          ctx.fillStyle = 'rgba(255,255,255,0.7)';
+          ctx.font = '8px Segoe UI';
+          ctx.textAlign = 'center';
+          ctx.fillText(car.carNumber, x, y - radius - 3);
+        }
+      });
+    }
+
+    onData('trackmap', (data) => {
+      if (data.trackPathReady && data.trackPath.length > 0) {
+        trackPoints = normalizeTrackPath(data.trackPath);
+        document.getElementById('map-legend').textContent = trackPoints.length + ' points';
+      } else if (trackPoints.length === 0) {
+        // Use circle placeholder until track is mapped
+        trackPoints = generateCirclePath();
+        document.getElementById('map-legend').textContent = 'Mapping track...';
+      }
+
+      lastCars = data.cars || [];
+      draw();
+    });
+
+    // Demo data
+    trackPoints = generateCirclePath();
+    lastCars = [
+      { carIdx: 0, pct: 0.1, carNumber: '1', isPlayer: false, carClassColor: '#ff4444' },
+      { carIdx: 1, pct: 0.25, carNumber: '44', isPlayer: false, carClassColor: '#00aa00' },
+      { carIdx: 2, pct: 0.4, carNumber: '99', isPlayer: true, carClassColor: '#9146ff' },
+      { carIdx: 3, pct: 0.6, carNumber: '55', isPlayer: false, carClassColor: '#0077cc' },
+      { carIdx: 4, pct: 0.8, carNumber: '4', isPlayer: false, carClassColor: '#f7c948' },
+    ];
+    draw();
+
+    // Lock state support
+    try {
+      const { ipcRenderer } = require('electron');
+      ipcRenderer.on('lock-state', (event, locked) => {
+        document.body.style.pointerEvents = locked ? 'none' : 'auto';
+        const header = document.querySelector('.overlay-header');
+        if (header) header.style.cursor = locked ? 'default' : 'move';
+      });
+    } catch(e) {}
+
+    connectBridge(['trackmap']);
+  </script>
+</body>
+</html>

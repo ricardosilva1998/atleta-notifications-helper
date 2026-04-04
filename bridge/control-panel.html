@@ -5,7 +5,8 @@
   <title>Atleta Bridge</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', sans-serif; background: #0c0d14; color: #e8e6f0; padding: 20px; user-select: none; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0c0d14; color: #e8e6f0; padding: 20px; user-select: none; scrollbar-width: none; -ms-overflow-style: none; }
+    ::-webkit-scrollbar { display: none; }
     h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { font-size: 12px; color: #5c5b6e; margin-bottom: 20px; }
     .status-card {
@@ -110,6 +111,7 @@
       { id: 'wind', icon: '🌬️', name: 'Wind Direction' },
       { id: 'proximity', icon: '🚗', name: 'Car Proximity' },
       { id: 'chat', icon: '💬', name: 'Streaming Chat' },
+      { id: 'trackmap', icon: '🗺️', name: 'Track Map' },
     ];
 
     const list = document.getElementById('overlay-list');
@@ -164,6 +166,9 @@
         { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
       ],
       chat: [
+        { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
+      ],
+      trackmap: [
         { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
       ],
     };

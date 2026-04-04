@@ -23,6 +23,11 @@ let fuelHistory = [];
 let lastLap = -1;
 let fuelAtLapStart = null;
 
+// Track map
+const trackPath = []; // Array of {lat, lon, pct} points
+let trackPathComplete = false;
+let lastTrackPct = -1;
+
 // Persistent driver data — keeps drivers visible after they disconnect
 const persistedDrivers = new Map();
 // Cached lap times — survives pit stops where telemetry returns -1
@@ -65,6 +70,9 @@ async function startTelemetry(onStatusChange) {
         playerCarIdx = 0;
         pollCount = 0;
         resetFuel();
+        trackPath.length = 0;
+        trackPathComplete = false;
+        lastTrackPct = -1;
         persistedDrivers.clear();
         cachedBestLaps.clear();
         cachedLastLaps.clear();
@@ -370,6 +378,57 @@ async function startTelemetry(onStatusChange) {
         if (pollCount % 5 === 0) broadcastToChannel('relative', { type: 'data', channel: 'relative', data: {
           playerCarIdx, cars: relative,
         }});
+
+        // === Track Map ===
+        const playerLat = ir.get(VARS.LAT)?.[0] || 0;
+        const playerLon = ir.get(VARS.LON)?.[0] || 0;
+        const playerPct = lapDistPct[playerCarIdx] || 0;
+
+        // Build track path from player GPS as they drive
+        if (playerLat !== 0 && playerLon !== 0 && !trackPathComplete) {
+          if (lastTrackPct < 0 || Math.abs(playerPct - lastTrackPct) > 0.002) {
+            trackPath.push({ lat: playerLat, lon: playerLon, pct: playerPct });
+            lastTrackPct = playerPct;
+            // Track is complete when we have points across the full range and wrap back
+            if (trackPath.length > 100 && playerPct < 0.05 && lastTrackPct > 0.95) {
+              trackPathComplete = true;
+              log('[TrackMap] Path complete: ' + trackPath.length + ' points');
+            }
+          }
+        }
+
+        // Broadcast car positions on track
+        if (pollCount % 5 === 0) {
+          const cars = [];
+          for (const s of standings) {
+            if (s.lapDistPct > 0 || s.estTime > 0) {
+              cars.push({
+                carIdx: s.carIdx,
+                pct: s.lapDistPct,
+                carNumber: s.carNumber,
+                driverName: s.driverName,
+                carClass: s.carClass,
+                carClassColor: s.carClassColor,
+                isPlayer: s.isPlayer,
+                inPit: s.inPit,
+              });
+            }
+          }
+          broadcastToChannel('trackmap', { type: 'data', channel: 'trackmap', data: {
+            trackPath: trackPathComplete ? trackPath : [],
+            trackPathReady: trackPathComplete,
+            cars,
+            playerCarIdx,
+          }});
+        }
+
+        if (pollCount === 50) {
+          try {
+            const lat = ir.get(VARS.LAT);
+            const lon = ir.get(VARS.LON);
+            log('[Debug] LAT=' + JSON.stringify(lat) + ' LON=' + JSON.stringify(lon));
+          } catch(e) { log('[Debug] LAT/LON error: ' + e.message); }
+        }
 
       } catch (e) {
         if (pollCount % 100 === 0) log('[Telemetry] Poll error: ' + e.message);

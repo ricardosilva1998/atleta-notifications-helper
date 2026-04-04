@@ -28,6 +28,7 @@ const OVERLAYS = [
   { id: 'wind', name: 'Wind Direction', width: 150, height: 150 },
   { id: 'proximity', name: 'Car Proximity', width: 160, height: 280 },
   { id: 'chat', name: 'Streaming Chat', width: 340, height: 500 },
+  { id: 'trackmap', name: 'Track Map', width: 300, height: 300 },
 ];
 
 const gotLock = app.requestSingleInstanceLock();
