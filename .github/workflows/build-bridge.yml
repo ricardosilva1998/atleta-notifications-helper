@@ -28,9 +28,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Windows SDK
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install dependencies
         working-directory: bridge
         run: npm install
+        env:
+          npm_config_msvs_version: '2022'
 
       - name: Build Windows installer
         working-directory: bridge
