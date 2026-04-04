@@ -232,20 +232,27 @@
     // ─── Speech Recognition ─────────────────────────────────
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+    let pttTranscript = ''; // accumulates speech while push-to-talk is held
+
     function startRecognition() {
       if (!SpeechRecognition) { addError('Speech recognition not available'); return; }
       if (recognition) { try { recognition.abort(); } catch(e) {} }
+      pttTranscript = '';
 
       recognition = new SpeechRecognition();
       recognition.lang = voiceSettings.language || 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.continuous = true;       // keep listening until key released
+      recognition.interimResults = true;   // show interim feedback
       recognition.maxAlternatives = 1;
 
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        console.log('[VoiceChat] Heard:', transcript);
-        processTranscript(transcript);
+        // Build full transcript from all results
+        let full = '';
+        for (let i = 0; i < event.results.length; i++) {
+          full += event.results[i][0].transcript;
+        }
+        pttTranscript = full.trim();
+        console.log('[VoiceChat] Hearing:', pttTranscript, event.results[event.results.length - 1].isFinal ? '(final)' : '(interim)');
       };
 
       recognition.onerror = (event) => {
@@ -256,8 +263,10 @@
       };
 
       recognition.onend = () => {
-        if (state === 'listening') {
-          // Push-to-talk released before any result
+        // When recognition ends (after stop() is called), process whatever we captured
+        if (state === 'listening' && pttTranscript) {
+          processTranscript(pttTranscript);
+        } else if (state === 'listening') {
           setState('idle');
         }
       };
@@ -268,6 +277,7 @@
 
     function stopRecognition() {
       if (recognition) {
+        // stop() triggers onend which processes the accumulated transcript
         try { recognition.stop(); } catch(e) {}
       }
     }
