@@ -140,7 +140,7 @@
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-    import { FilesetResolver, FaceLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs';
+    import { FilesetResolver, FaceLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
 
     const MODE = '<%= mode %>';
     const MODEL_URL = <%- modelUrl ? JSON.stringify(modelUrl) : 'null' %>;
@@ -221,7 +221,7 @@
 
     try {
       const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm'
       );
       // Try GPU first, fall back to CPU
       let delegate = 'GPU';
