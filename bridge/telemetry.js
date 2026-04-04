@@ -225,14 +225,26 @@ async function startTelemetry(onStatusChange) {
           log('[Debug] ir methods: ' + irMethods.join(', '));
           const irKeys = Object.keys(ir);
           log('[Debug] ir own keys: ' + irKeys.join(', '));
-          // Try different session info methods
-          const tryMethods = ['getSessionInfo', 'getSessionData', 'sessionInfo', 'session', 'getSession'];
-          for (const m of tryMethods) {
-            try {
-              const val = typeof ir[m] === 'function' ? ir[m]() : ir[m];
-              log('[Debug] ir.' + m + ' type=' + typeof val + ' keys=' + (val && typeof val === 'object' ? Object.keys(val).slice(0, 5).join(',') : String(val)));
-            } catch(e) { log('[Debug] ir.' + m + ' error: ' + e.message); }
-          }
+          // Try all ways to get session info
+          try {
+            const siDirect = ir.getSessionInfo();
+            log('[Debug] getSessionInfo() = ' + JSON.stringify(siDirect)?.substring(0, 200));
+          } catch(e) { log('[Debug] getSessionInfo() error: ' + e.message); }
+          try {
+            log('[Debug] sessionInfoDict type=' + typeof ir.sessionInfoDict + ' val=' + JSON.stringify(ir.sessionInfoDict)?.substring(0, 200));
+          } catch(e) { log('[Debug] sessionInfoDict error: ' + e.message); }
+          try {
+            const binary = ir.getSessionInfoBinary();
+            log('[Debug] getSessionInfoBinary() type=' + typeof binary + ' length=' + (binary?.length || binary?.byteLength || 'N/A'));
+            if (binary) {
+              // It's likely a YAML string or buffer
+              const str = typeof binary === 'string' ? binary : binary.toString('utf8');
+              log('[Debug] SessionInfo YAML first 500 chars: ' + str.substring(0, 500));
+              // Try parsing it
+              const parsed = ir.parseYamlContent?.(str);
+              log('[Debug] parseYamlContent result type=' + typeof parsed + ' keys=' + (parsed ? Object.keys(parsed).slice(0, 10).join(',') : 'null'));
+            }
+          } catch(e) { log('[Debug] getSessionInfoBinary error: ' + e.message); }
           log('[Debug] SessionInfo: ' + (si ? 'present' : 'NULL'));
           log('[Debug] Drivers: ' + drivers.length);
           log('[Debug] Positions array length: ' + positions.length);
