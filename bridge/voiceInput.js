@@ -14,7 +14,6 @@ function log(msg) {
   try { fs.appendFileSync(logPath, line); } catch(e) {}
 }
 
-// Build reverse lookup: keycode -> name
 const keyCodeToName = {};
 Object.entries(UiohookKey).forEach(([name, code]) => { keyCodeToName[code] = name; });
 const mouseButtonNames = { 1: 'Mouse1', 2: 'Mouse2', 3: 'Mouse3', 4: 'Mouse4', 5: 'Mouse5' };
@@ -27,117 +26,93 @@ let isKeyHeld = false;
 let settings = {};
 let getIracingStatus = null;
 
-// Windows SAPI speech recognition worker
+// Per-session speech process
 let speechProcess = null;
-let speechReady = false;
+let scriptPath = null;
 
-function startSpeechWorker() {
-  if (process.platform !== 'win32') {
-    log('[Speech] Skipping — not Windows');
-    return;
-  }
-
-  // Try multiple paths: dev (same dir), packaged (extraResources), asar-unpacked
+function findSpeechScript() {
+  if (process.platform !== 'win32') return null;
   const candidates = [
     path.join(__dirname, 'speechWorker.ps1'),
     path.join(process.resourcesPath || __dirname, 'speechWorker.ps1'),
     path.join(__dirname, '..', 'speechWorker.ps1'),
     __dirname.replace('app.asar', 'app.asar.unpacked') + path.sep + 'speechWorker.ps1',
   ];
-  let scriptPath = null;
   for (const p of candidates) {
-    log('[Speech] Checking: ' + p + ' exists=' + fs.existsSync(p));
-    if (fs.existsSync(p)) { scriptPath = p; break; }
+    if (fs.existsSync(p)) {
+      log('[Speech] Found script: ' + p);
+      return p;
+    }
   }
-  if (!scriptPath) {
-    log('[Speech] Worker script not found in any location');
-    return;
+  log('[Speech] Script not found in any location');
+  return null;
+}
+
+function startListening() {
+  if (!scriptPath) { log('[Speech] No script path'); return; }
+  if (speechProcess) {
+    // Kill previous session if still running
+    try { speechProcess.kill(); } catch(e) {}
+    speechProcess = null;
   }
-  log('[Speech] Using: ' + scriptPath);
 
   speechProcess = spawn('powershell', ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   });
 
-  let buffer = '';
+  let stdout = '';
   speechProcess.stdout.on('data', (data) => {
-    buffer += data.toString();
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // keep incomplete line in buffer
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      if (trimmed === 'READY') {
-        speechReady = true;
-        log('[Speech] Worker ready');
-      } else if (trimmed === 'LISTENING') {
-        log('[Speech] Listening...');
-        if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-          voiceChatWindow.webContents.send('voice-state', 'listening');
-        }
-      } else if (trimmed.startsWith('RESULT:')) {
-        const text = trimmed.substring(7).trim();
-        log('[Speech] Result: "' + text + '"');
-        if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-          voiceChatWindow.webContents.send('voice-transcript', text);
-        }
-      } else if (trimmed.startsWith('ERROR:')) {
-        log('[Speech] Error: ' + trimmed.substring(6));
-        if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-          voiceChatWindow.webContents.send('voice-error', trimmed.substring(6));
-        }
-      }
+    const text = data.toString();
+    stdout += text;
+    // Check if we got the LISTENING signal
+    if (text.includes('LISTENING')) {
+      log('[Speech] Listening...');
     }
   });
 
   speechProcess.stderr.on('data', (data) => {
-    log('[Speech] stderr: ' + data.toString().trim());
-  });
-
-  speechProcess.on('exit', (code) => {
-    log('[Speech] Worker exited: ' + code);
-    speechReady = false;
-    speechProcess = null;
-    // Auto-restart after unexpected exit (not during app shutdown)
-    if (!stopping) {
-      log('[Speech] Auto-restarting worker in 2 seconds...');
-      setTimeout(startSpeechWorker, 2000);
+    // Diagnostic output from PowerShell
+    const lines = data.toString().split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) log('[Speech] ' + trimmed);
     }
   });
 
-  log('[Speech] Worker spawned');
-}
+  speechProcess.on('exit', (code) => {
+    // Process the final stdout — last line is the recognized text
+    const lines = stdout.trim().split('\n');
+    const lastLine = lines[lines.length - 1]?.trim() || '';
+    // Filter out the LISTENING marker
+    const transcript = lastLine === 'LISTENING' ? '' : lastLine;
 
-let stopping = false;
+    log('[Speech] Session ended (code ' + code + '), transcript: "' + transcript + '"');
 
-function stopSpeechWorker() {
-  stopping = true;
-  if (speechProcess) {
-    try { speechProcess.stdin.write('EXIT\n'); } catch(e) {}
-    setTimeout(() => {
-      if (speechProcess) { try { speechProcess.kill(); } catch(e) {} }
-    }, 1000);
-  }
-}
+    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+      voiceChatWindow.webContents.send('voice-transcript', transcript);
+    }
+    speechProcess = null;
+  });
 
-function startListening() {
-  if (speechProcess && speechReady) {
-    speechProcess.stdin.write('START\n');
-  } else {
-    log('[Speech] Worker not ready');
-  }
+  log('[Speech] Session started');
 }
 
 function stopListening() {
-  if (speechProcess && speechReady) {
-    speechProcess.stdin.write('STOP\n');
+  if (speechProcess) {
+    log('[Speech] Sending STOP signal');
+    try { speechProcess.stdin.write('STOP\n'); } catch(e) {}
+    // Give it 2 seconds to finish, then kill
+    const proc = speechProcess;
+    setTimeout(() => {
+      if (proc && !proc.killed) {
+        log('[Speech] Force killing after timeout');
+        try { proc.kill(); } catch(e) {}
+      }
+    }, 2000);
   }
 }
 
-/**
- * Initialize the voice input system.
- */
 function startVoiceInput(opts) {
   settings = opts.settings;
   getIracingStatus = opts.getStatus;
@@ -146,8 +121,8 @@ function startVoiceInput(opts) {
     applyPushToTalkKey(settings.voiceChat.pushToTalkKey);
   }
 
-  // Start Windows SAPI speech worker
-  startSpeechWorker();
+  // Find the speech script once
+  scriptPath = findSpeechScript();
 
   // Global keyboard hook for push-to-talk
   uIOhook.on('keydown', (e) => {
@@ -269,7 +244,7 @@ function setVoiceChatWindow(win) {
 
 function stopVoiceInput() {
   try { uIOhook.stop(); } catch(e) {}
-  stopSpeechWorker();
+  if (speechProcess) { try { speechProcess.kill(); } catch(e) {} }
   log('[VoiceInput] Stopped');
 }
 
