@@ -102,87 +102,106 @@
       { position: 8, classPosition: 8, carNumber: '63', driverName: 'G. Russell',    carMake: 'Dallara IR18', carClass: 'IR18', carClassColor: '#cc0000', safetyRating: 'D 1.50', country: 'GB', iRating: 5100, bestLap: 95.012, lastLap: 95.234, inPit: false, isPlayer: false },
     ];
 
-    function sortAndRankStandings(data) {
-      const hasPositions = data.some(d => d.position > 0);
-      if (hasPositions) {
-        return [...data].sort((a, b) => {
-          // Disconnected go to end
-          if (a.disconnected && !b.disconnected) return 1;
-          if (!a.disconnected && b.disconnected) return -1;
-          const pa = a.classPosition > 0 ? a.classPosition : (a.position > 0 ? a.position : 9999);
-          const pb = b.classPosition > 0 ? b.classPosition : (b.position > 0 ? b.position : 9999);
-          return pa - pb;
-        });
+    function buildDriverRow(d, rank, classLeaderBest) {
+      const pos = d.classPosition > 0 ? d.classPosition : rank;
+      const bestFormatted = formatLapTime(d.bestLap);
+      const lastFormatted = formatLapTime(d.lastLap);
+
+      let gap = 'Leader';
+      if (rank > 1 && classLeaderBest && d.bestLap > 0) {
+        gap = '+' + (d.bestLap - classLeaderBest).toFixed(3);
+      } else if (!d.bestLap || d.bestLap <= 0) {
+        gap = '--';
       }
-      return [...data].sort((a, b) => {
-        if (a.disconnected && !b.disconnected) return 1;
-        if (!a.disconnected && b.disconnected) return -1;
-        if (!a.bestLap || a.bestLap <= 0) return 1;
-        if (!b.bestLap || b.bestLap <= 0) return -1;
-        return a.bestLap - b.bestLap;
-      });
+
+      const flag = countryFlag(d.country);
+      const licColor = licenseColor(d.safetyRating || d.license);
+      const irStr = formatIR(d.iRating);
+      const classColor = d.carClassColor || '#fff';
+      const classLabel = d.carClass || '';
+      const carBrand = d.carMake || '';
+      const pitMark = d.inPit ? ' <span class="pit-indicator">PIT</span>' : '';
+      const disconnCls = d.disconnected ? ' disconnected' : '';
+
+      const numCell = `<span style="background:${classColor};color:#000;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;">${d.carNumber || ''}</span>`;
+
+      let badgeLine = '';
+      if (carBrand) badgeLine += `<span style="font-size:8px;color:rgba(255,255,255,0.45);">${carBrand}</span>`;
+      const badgeCell = badgeLine
+        ? `<div class="driver-name">${d.driverName || ''}${pitMark}</div><div style="margin-top:1px;">${badgeLine}</div>`
+        : `<div class="driver-name">${d.driverName || ''}${pitMark}</div>`;
+
+      const licCell = d.safetyRating || d.license
+        ? `<span style="background:${licColor};color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${d.safetyRating || d.license}</span>`
+        : `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">--</span>`;
+
+      const irCell = `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${irStr}</span>`;
+
+      return `<tr class="${d.isPlayer ? 'player-row' : ''}${disconnCls}">
+        <td class="mono" style="font-weight:700;color:rgba(255,255,255,0.7)">${pos}</td>
+        <td class="flag">${flag}</td>
+        <td>${numCell}</td>
+        <td>${badgeCell}</td>
+        <td>${licCell}</td>
+        <td>${irCell}</td>
+        <td class="mono" style="font-size:10px">${bestFormatted}</td>
+        <td class="mono" style="font-size:10px;color:rgba(255,255,255,0.55)">${lastFormatted}</td>
+        <td class="mono" style="font-size:10px;color:rgba(255,255,255,0.45)">${gap}</td>
+      </tr>`;
     }
 
-    function buildStandingsRows(data) {
-      const sorted = sortAndRankStandings(data);
-      const leaderBest = sorted.find(d => d.bestLap > 0)?.bestLap || null;
+    function buildStandingsHTML(data) {
+      // Group by class
+      const classes = {};
+      data.forEach(d => {
+        const cls = d.carClass || 'Overall';
+        if (!classes[cls]) classes[cls] = { color: d.carClassColor || '#fff', drivers: [] };
+        classes[cls].drivers.push(d);
+      });
 
-      return sorted.map((d, i) => {
-        const rank = i + 1;
-        const pos = d.classPosition > 0 ? d.classPosition : (d.position > 0 ? d.position : rank);
-        const bestFormatted = formatLapTime(d.bestLap);
-        const lastFormatted = formatLapTime(d.lastLap);
+      // Sort each class by best lap time (fastest first), no-lap at end, disconnected at end
+      Object.values(classes).forEach(cls => {
+        cls.drivers.sort((a, b) => {
+          if (a.disconnected && !b.disconnected) return 1;
+          if (!a.disconnected && b.disconnected) return -1;
+          if (!a.bestLap || a.bestLap <= 0) return 1;
+          if (!b.bestLap || b.bestLap <= 0) return -1;
+          return a.bestLap - b.bestLap;
+        });
+      });
 
-        let gap = 'Leader';
-        if (rank > 1 && leaderBest && d.bestLap > 0) {
-          const diff = d.bestLap - leaderBest;
-          gap = '+' + diff.toFixed(3);
-        } else if (!d.bestLap || d.bestLap <= 0) {
-          gap = '--';
-        }
+      const classNames = Object.keys(classes);
 
-        const flag = countryFlag(d.country);
-        const licColor = licenseColor(d.safetyRating || d.license);
-        const irStr = formatIR(d.iRating);
-        const classColor = d.carClassColor || '#fff';
-        const classLabel = d.carClass || '';
-        const carBrand = d.carMake || '';
-        const pitMark = d.inPit ? ' <span class="pit-indicator">PIT</span>' : '';
-        const disconnCls = d.disconnected ? ' disconnected' : '';
+      // If only one class, no headers needed
+      if (classNames.length <= 1) {
+        const drivers = classNames.length === 1 ? classes[classNames[0]].drivers : data;
+        const leaderBest = drivers.find(d => d.bestLap > 0)?.bestLap || null;
+        return drivers.map((d, i) => buildDriverRow(d, i + 1, leaderBest)).join('');
+      }
 
-        // Car number styled with class color background
-        const numCell = `<span style="background:${classColor};color:#000;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;">${d.carNumber || ''}</span>`;
+      // Multiple classes — add a class header row before each group
+      let html = '';
+      classNames.forEach(cls => {
+        const group = classes[cls];
+        const color = group.color;
+        const leaderBest = group.drivers.find(d => d.bestLap > 0)?.bestLap || null;
 
-        // Driver name + class badge + car brand below
-        let badgeLine = '';
-        if (classLabel) badgeLine += `<span class="class-badge" style="background:${classColor};color:#000;">${classLabel}</span>`;
-        if (carBrand) badgeLine += `<span style="font-size:8px;color:rgba(255,255,255,0.45);margin-left:4px;">${carBrand}</span>`;
-        const badgeCell = badgeLine
-          ? `<div class="driver-name">${d.driverName || ''}${pitMark}</div><div style="margin-top:1px;">${badgeLine}</div>`
-          : `<div class="driver-name">${d.driverName || ''}${pitMark}</div>`;
+        // Class header row
+        html += `<tr><td colspan="9" style="padding:6px 8px 3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid ${color};">
+          <span style="color:${color};">${cls}</span>
+          <span style="color:rgba(255,255,255,0.3);font-weight:400;margin-left:6px;">${group.drivers.length} cars</span>
+        </td></tr>`;
 
-        const licCell = d.safetyRating || d.license
-          ? `<span style="background:${licColor};color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${d.safetyRating || d.license}</span>`
-          : `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">--</span>`;
+        group.drivers.forEach((d, i) => {
+          html += buildDriverRow(d, i + 1, leaderBest);
+        });
+      });
 
-        const irCell = `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${irStr}</span>`;
-
-        return `<tr class="${d.isPlayer ? 'player-row' : ''}${disconnCls}">
-          <td class="mono" style="font-weight:700;color:rgba(255,255,255,0.7)">${pos}</td>
-          <td class="flag">${flag}</td>
-          <td>${numCell}</td>
-          <td>${badgeCell}</td>
-          <td>${licCell}</td>
-          <td>${irCell}</td>
-          <td class="mono" style="font-size:10px">${bestFormatted}</td>
-          <td class="mono" style="font-size:10px;color:rgba(255,255,255,0.55)">${lastFormatted}</td>
-          <td class="mono" style="font-size:10px;color:rgba(255,255,255,0.45)">${gap}</td>
-        </tr>`;
-      }).join('');
+      return html;
     }
 
     function renderDemoStandings() {
-      document.getElementById('standings-body').innerHTML = buildStandingsRows(demoStandings);
+      document.getElementById('standings-body').innerHTML = buildStandingsHTML(demoStandings);
     }
 
     renderDemoStandings();
@@ -230,7 +249,7 @@
     onData('standings', data => {
       if (!data || !data.length) return;
       if (!demoCleared) { demoCleared = true; }
-      document.getElementById('standings-body').innerHTML = buildStandingsRows(data);
+      document.getElementById('standings-body').innerHTML = buildStandingsHTML(data);
     });
 
     connectBridge(['standings']);
