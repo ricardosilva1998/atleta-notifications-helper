@@ -22,9 +22,9 @@ let autoHideOverlays = true;
 let settings = {};
 
 const OVERLAYS = [
-  { id: 'standings', name: 'Standings', width: 360, height: 500 },
-  { id: 'relative', name: 'Relative', width: 260, height: 400 },
-  { id: 'fuel', name: 'Fuel Calculator', width: 260, height: 200 },
+  { id: 'standings', name: 'Standings', width: 480, height: 600 },
+  { id: 'relative', name: 'Relative', width: 380, height: 450 },
+  { id: 'fuel', name: 'Fuel Calculator', width: 300, height: 240 },
   { id: 'wind', name: 'Wind Direction', width: 150, height: 150 },
   { id: 'proximity', name: 'Car Proximity', width: 160, height: 280 },
   { id: 'chat', name: 'Streaming Chat', width: 340, height: 500 },

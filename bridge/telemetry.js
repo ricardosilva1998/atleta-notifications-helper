@@ -228,7 +228,7 @@ async function startTelemetry(onStatusChange) {
             carClass: driver?.CarClassShortName || '',
             carClassColor: driver?.CarClassColor ? '#' + parseInt(driver.CarClassColor).toString(16).padStart(6, '0') : '#fff',
             safetyRating: driver?.LicString || '',
-            country: driver?.LicCountryCode || '',
+            country: driver?.ClubName || '',
             license: driver?.LicString || '',
             iRating: driver?.IRating || 0,
             lastLap: lastLaps[i] > 0 ? lastLaps[i] : 0,
@@ -260,19 +260,36 @@ async function startTelemetry(onStatusChange) {
         });
 
         // Log standings count periodically
-        if (pollCount === 10 || pollCount === 100) {
-          log('[Standings] Built: ' + standings.length + ' cars (sessionInfo: ' + (sessionInfoFound ? 'yes' : 'no') + ', drivers: ' + drivers.length + ', activeIndices: ' + activeIndices.size + ')');
-          // Count by class
+        if (pollCount === 10 || pollCount === 100 || pollCount === 500) {
+          log('[Standings] Built: ' + standings.length + ' (sessionInfo: ' + (sessionInfoFound ? 'yes' : 'no') + ', drivers: ' + drivers.length + ')');
           const classCounts = {};
-          standings.forEach(s => { classCounts[s.carClass || 'Unknown'] = (classCounts[s.carClass || 'Unknown'] || 0) + 1; });
+          standings.forEach(s => { classCounts[s.carClass || '?'] = (classCounts[s.carClass || '?'] || 0) + 1; });
           log('[Standings] Classes: ' + JSON.stringify(classCounts));
-          // Log cars with/without best laps
           const withBest = standings.filter(s => s.bestLap > 0).length;
-          const withLast = standings.filter(s => s.lastLap > 0).length;
-          const withCompleted = standings.filter(s => s.lapsCompleted >= 1).length;
-          log('[Standings] WithBestLap: ' + withBest + ', WithLastLap: ' + withLast + ', WithLapsCompleted>=1: ' + withCompleted);
-          if (standings.length > 0 && standings.length <= 5) {
-            standings.forEach((s, i) => log('[Standings] [' + i + '] ' + s.driverName + ' class=' + s.carClass + ' best=' + s.bestLap + ' last=' + s.lastLap + ' laps=' + s.lapsCompleted));
+          log('[Standings] WithBestLap: ' + withBest + '/' + standings.length);
+
+          // Log specific drivers to compare with iRacing
+          // Find drivers by name substring to debug
+          const debugNames = ['Argenis', 'Cheik', 'Frederico', 'Matus'];
+          debugNames.forEach(nameSearch => {
+            const found = standings.find(s => s.driverName.includes(nameSearch));
+            if (found) {
+              log('[Debug] ' + found.driverName + ': carIdx=' + found.carIdx +
+                ' best=' + found.bestLap + ' last=' + found.lastLap + ' laps=' + found.lapsCompleted +
+                ' pos=' + found.position + ' classPos=' + found.classPosition +
+                ' estTime=' + found.estTime + ' lapDist=' + found.lapDistPct);
+              // Also log the raw telemetry for this car index
+              log('[Debug] Raw idx ' + found.carIdx + ': BestLap=' + (bestLaps[found.carIdx]) +
+                ' LastLap=' + (lastLaps[found.carIdx]) + ' LapsCompleted=' + (lapsCompletedArr[found.carIdx]) +
+                ' Position=' + (positions[found.carIdx]) + ' EstTime=' + (estTime[found.carIdx]));
+            }
+          });
+
+          // Also log first GT3 driver with a lap set in iRacing
+          const gt3s = standings.filter(s => s.carClass === 'IMSA23');
+          if (gt3s.length > 0) {
+            log('[Debug] First 3 GT3s:');
+            gt3s.slice(0, 3).forEach(s => log('[Debug]   ' + s.driverName + ' best=' + s.bestLap + ' last=' + s.lastLap + ' laps=' + s.lapsCompleted));
           }
         }
 
