@@ -213,7 +213,10 @@
     try {
       const gltf = await loader.loadAsync(MODEL_URL);
       vrm = gltf.userData.vrm;
-      VRMUtils.rotateVRM0(vrm);
+      // rotateVRM0 only applies to VRM 0.x — safe no-op for 1.0 but let's check
+      if (vrm.meta?.metaVersion === '0') {
+        VRMUtils.rotateVRM0(vrm);
+      }
       scene.add(vrm.scene);
 
       // Center the model
@@ -392,28 +395,37 @@
         const matrices = result.facialTransformationMatrixes || result.facialTransformationMatrices;
         if (matrices && matrices.length > 0) {
           const matrix = matrices[0];
-          const m = new THREE.Matrix4().fromArray(matrix.data);
-          const euler = new THREE.Euler().setFromRotationMatrix(m, 'ZYX');
+          // MediaPipe returns row-major 4x4 — Three.js needs column-major, so transpose
+          const m = new THREE.Matrix4().fromArray(matrix.data).transpose();
+          const rotation = new THREE.Euler().setFromRotationMatrix(m, 'ZYX');
+
+          // Extract pitch/yaw/roll
+          const pitch = rotation.x;
+          const yaw = rotation.y;
+          const roll = rotation.z;
 
           const head = vrm.humanoid.getNormalizedBoneNode('head');
           if (head) {
-            head.rotation.x = lerp('headX', euler.x * 0.6, 0.3);
-            head.rotation.y = lerp('headY', -euler.y * 0.7, 0.3);
-            head.rotation.z = lerp('headZ', -euler.z * 0.5, 0.3);
+            head.rotation.x = lerp('headX', pitch * 0.6, 0.3);
+            head.rotation.y = lerp('headY', yaw * 0.7, 0.3);
+            head.rotation.z = lerp('headZ', roll * 0.5, 0.3);
           }
 
           const neck = vrm.humanoid.getNormalizedBoneNode('neck');
           if (neck) {
-            neck.rotation.x = lerp('neckX', euler.x * 0.2, 0.2);
-            neck.rotation.y = lerp('neckY', -euler.y * 0.2, 0.2);
+            neck.rotation.x = lerp('neckX', pitch * 0.2, 0.2);
+            neck.rotation.y = lerp('neckY', yaw * 0.2, 0.2);
           }
 
           const spine = vrm.humanoid.getNormalizedBoneNode('upperChest') || vrm.humanoid.getNormalizedBoneNode('spine');
           if (spine) {
-            spine.rotation.x = lerp('spineX', euler.x * 0.05, 0.15);
-            spine.rotation.y = lerp('spineY', -euler.y * 0.05, 0.15);
+            spine.rotation.x = lerp('spineX', pitch * 0.05, 0.15);
+            spine.rotation.y = lerp('spineY', yaw * 0.05, 0.15);
           }
         }
+
+        // Apply expression changes
+        vrm.expressionManager.update();
 
         vrm.update(delta);
       }
