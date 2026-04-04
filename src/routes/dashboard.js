@@ -1522,6 +1522,20 @@ router.post('/overlay-builder/reset', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- VTuber Preview (authenticated, no overlay token needed) ---
+
+router.get('/vtuber-preview', (req, res) => {
+  const model = req.streamer.vtuber_model_id ? db.getVtuberModel(req.streamer.vtuber_model_id) : null;
+  let modelUrl = null;
+  if (model) {
+    modelUrl = model.is_bundled
+      ? `/vtuber/models/${model.filename}`
+      : `/vtuber-models/${req.streamer.id}/${model.filename}`;
+  }
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.render('vtuber', { mode: 'dashboard', modelUrl, streamerName: req.streamer.twitch_username || 'Streamer' });
+});
+
 // --- VTuber Model Endpoints ---
 
 router.get('/api/vtuber/models', (req, res) => {

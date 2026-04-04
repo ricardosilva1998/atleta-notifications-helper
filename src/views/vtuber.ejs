@@ -99,9 +99,31 @@
   <% } %>
   <div id="loading-screen">
     <% if (mode !== 'stream') { %><div class="spinner"></div><% } %>
-    <span>Loading face tracker...</span>
+    <span id="loading-text">Loading face tracker...</span>
   </div>
   <div id="error-msg"></div>
+
+  <!-- Catch unhandled module errors -->
+  <script>
+    window.addEventListener('error', function(e) {
+      var el = document.getElementById('error-msg');
+      var ld = document.getElementById('loading-screen');
+      if (el && ld) {
+        el.innerHTML = '<span style="max-width:400px;text-align:center;">' + (e.message || 'An error occurred loading the face tracker.') + '</span>';
+        el.style.display = 'flex';
+        ld.style.display = 'none';
+      }
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var el = document.getElementById('error-msg');
+      var ld = document.getElementById('loading-screen');
+      if (el && ld) {
+        el.innerHTML = '<span style="max-width:400px;text-align:center;">' + (e.reason && e.reason.message ? e.reason.message : 'Failed to initialize face tracker.') + '</span>';
+        el.style.display = 'flex';
+        ld.style.display = 'none';
+      }
+    });
+  </script>
 
   <!-- CDN Libraries -->
   <script type="importmap">
@@ -133,10 +155,15 @@
       loading.style.display = 'none';
     }
 
+    const loadingText = document.getElementById('loading-text');
+    function setLoadingStep(msg) { if (loadingText) loadingText.textContent = msg; }
+
     if (!MODEL_URL) {
       showError('No model selected. Pick a model in the dashboard first.');
       throw new Error('No model');
     }
+
+    setLoadingStep('Setting up 3D renderer...');
 
     // --- Three.js Setup ---
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: MODE === 'stream', antialias: true });
@@ -161,6 +188,8 @@
     fill.position.set(-1, 1, -1);
     scene.add(fill);
 
+    setLoadingStep('Loading 3D avatar model...');
+
     // --- Load VRM Model ---
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
@@ -184,6 +213,8 @@
       throw e;
     }
 
+    setLoadingStep('Loading face detection AI...');
+
     // --- MediaPipe Face Landmarker ---
     let faceLandmarker = null;
     let videoEl = null;
@@ -192,20 +223,39 @@
       const vision = await FilesetResolver.forVisionTasks(
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
       );
-      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-          delegate: 'GPU'
-        },
-        runningMode: 'VIDEO',
-        numFaces: 1,
-        outputFaceBlendshapes: true,
-        outputFacialTransformationMatrixes: true
-      });
+      // Try GPU first, fall back to CPU
+      let delegate = 'GPU';
+      try {
+        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          outputFaceBlendshapes: true,
+          outputFacialTransformationMatrixes: true
+        });
+      } catch (gpuErr) {
+        console.warn('GPU delegate failed, falling back to CPU:', gpuErr);
+        setLoadingStep('Loading face detection AI (CPU mode)...');
+        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'CPU'
+          },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          outputFaceBlendshapes: true,
+          outputFacialTransformationMatrixes: true
+        });
+      }
     } catch (e) {
       showError('Failed to load face detection model.');
       throw e;
     }
+
+    setLoadingStep('Requesting camera access...');
 
     // --- Webcam ---
     try {

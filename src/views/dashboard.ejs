@@ -804,7 +804,7 @@
         // If tracker is running, reload iframe with new model
         if (vtuberActive) {
           const iframe = document.getElementById('vtuber-iframe');
-          iframe.src = vtuberUrl + '?_t=' + Date.now();
+          iframe.src = '/dashboard/vtuber-preview?_t=' + Date.now();
         }
       }
     } catch (e) { console.error('Failed to select model', e); }
@@ -865,15 +865,11 @@
     const statusText = document.getElementById('vtuber-status-text');
 
     if (!vtuberActive) {
-      if (!vtuberUrl) {
-        alert('Overlay token not generated yet. Visit the Overlay Config page first.');
-        return;
-      }
       if (!vtuberSelectedId) {
         alert('Please select a model first.');
         return;
       }
-      iframe.src = vtuberUrl + '?_t=' + Date.now();
+      iframe.src = '/dashboard/vtuber-preview?_t=' + Date.now();
       iframe.style.display = 'block';
       placeholder.style.display = 'none';
       btn.textContent = 'Stop Tracker';
@@ -896,7 +892,7 @@
 
   function copyVtuberOBSUrl() {
     if (!vtuberUrl) {
-      alert('Overlay token not generated yet.');
+      alert('To use in OBS, first generate an overlay token in the Overlay Config page. The dashboard preview works without it.');
       return;
     }
     navigator.clipboard.writeText(vtuberUrl + '?mode=stream').then(() => {
