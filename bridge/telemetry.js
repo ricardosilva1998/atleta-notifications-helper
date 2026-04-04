@@ -218,6 +218,20 @@ async function startTelemetry(onStatusChange) {
           if (a.lapsCompleted !== b.lapsCompleted) return b.lapsCompleted - a.lapsCompleted;
           return b.lapDistPct - a.lapDistPct;
         });
+        if (!debugDumped) {
+          debugDumped = true;
+          log('[Debug] SessionInfo: ' + (si ? 'present' : 'NULL'));
+          log('[Debug] Drivers: ' + drivers.length);
+          log('[Debug] Positions array length: ' + positions.length);
+          log('[Debug] LapsCompleted array length: ' + lapsCompletedArr.length);
+          log('[Debug] Active cars (lapCompleted>=0): ' + lapsCompletedArr.filter(l => l >= 0).length);
+          log('[Debug] Standings built: ' + standings.length);
+          if (standings.length > 0) log('[Debug] First standing: ' + JSON.stringify(standings[0]));
+          log('[Debug] PlayerCarIdx: ' + playerCarIdx);
+          // Log which clients are subscribed
+          const { getClientInfo } = require('./websocket');
+          if (getClientInfo) log('[Debug] WS clients: ' + JSON.stringify(getClientInfo()));
+        }
         broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings });
 
         // === Relative ===

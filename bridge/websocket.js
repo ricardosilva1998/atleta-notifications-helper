@@ -56,4 +56,12 @@ function broadcastToChannel(channel, data) {
   });
 }
 
-module.exports = { startServer, stopServer, broadcastToChannel };
+function getClientInfo() {
+  const info = [];
+  clients.forEach((subs, ws) => {
+    info.push({ state: ws.readyState, channels: [...subs] });
+  });
+  return info;
+}
+
+module.exports = { startServer, stopServer, broadcastToChannel, getClientInfo };
