@@ -41,8 +41,13 @@
   </style>
 </head>
 <body>
-  <h1>Atleta Bridge</h1>
-  <p class="subtitle">iRacing Overlay Manager</p>
+  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+    <img src="build/icon.png" style="width: 32px; height: 32px; border-radius: 6px;" onerror="this.style.display='none'">
+    <div>
+      <h1 style="margin: 0;">Atleta Bridge</h1>
+      <p class="subtitle" style="margin: 0;" id="version-text">iRacing Overlay Manager</p>
+    </div>
+  </div>
 
   <div class="status-card">
     <div class="status-dot waiting" id="status-dot"></div>
@@ -152,6 +157,19 @@
     });
 
     ipcRenderer.send('get-overlay-states');
+
+    // Show version
+    try {
+      const { app } = require('@electron/remote') || {};
+      document.getElementById('version-text').textContent = 'v' + (app?.getVersion?.() || require('../package.json').version);
+    } catch(e) {
+      try {
+        const pkg = require('./package.json');
+        document.getElementById('version-text').textContent = 'v' + pkg.version;
+      } catch(e2) {
+        document.getElementById('version-text').textContent = 'iRacing Overlay Manager';
+      }
+    }
   </script>
 </body>
 </html>

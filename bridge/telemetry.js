@@ -13,97 +13,114 @@ function log(msg) {
 let statusCallback = null;
 let connected = false;
 let pollInterval = null;
+let connectInterval = null;
 
 const { broadcastToChannel } = require('./websocket');
 const FuelCalculator = require('./fuel-calculator');
-const RelativeCalculator = require('./relative');
 
 const fuelCalc = new FuelCalculator();
-const relativeCalc = new RelativeCalculator();
 
 async function startTelemetry(onStatusChange) {
   statusCallback = onStatusChange;
   log('[Telemetry] Starting telemetry reader...');
   log('[Telemetry] Log file: ' + logPath);
 
-  let sdk;
+  let IRSDK, VARS;
   try {
-    log('[Telemetry] Attempting to load @emiliosp/node-iracing-sdk via dynamic import...');
-    const iRacingSDK = await import('@emiliosp/node-iracing-sdk');
-    log('[Telemetry] SDK loaded. Exports: ' + Object.keys(iRacingSDK).join(', '));
-
-    const SDKClass = iRacingSDK.iRacingSDK || iRacingSDK.IRacingSDK || iRacingSDK.default || iRacingSDK;
-    if (typeof SDKClass === 'function') {
-      sdk = new SDKClass();
-      log('[Telemetry] SDK instance created from class');
-    } else if (typeof SDKClass === 'object' && SDKClass !== null) {
-      sdk = SDKClass;
-      log('[Telemetry] SDK used as module object');
-    } else {
-      log('[Telemetry] SDK export type: ' + typeof SDKClass);
-      return;
-    }
+    log('[Telemetry] Loading @emiliosp/node-iracing-sdk...');
+    const sdk = await import('@emiliosp/node-iracing-sdk');
+    IRSDK = sdk.IRSDK;
+    VARS = sdk.VARS;
+    log('[Telemetry] SDK loaded. IRSDK type: ' + typeof IRSDK + ', VARS keys: ' + (VARS ? Object.keys(VARS).length : 0));
   } catch (e) {
     log('[Telemetry] SDK FAILED: ' + e.message);
-    log('[Telemetry] Stack: ' + e.stack);
-    log('[Telemetry] Running in stub mode (no iRacing data)');
+    log('[Telemetry] Running in stub mode');
     return;
   }
 
-  let wasConnected = false;
+  if (!IRSDK || !VARS) {
+    log('[Telemetry] IRSDK or VARS not available');
+    return;
+  }
+
+  let ir = null;
+
+  // Try to connect periodically
+  connectInterval = setInterval(async () => {
+    if (ir && connected) return;
+
+    try {
+      ir = await IRSDK.connect();
+      if (ir && !connected) {
+        connected = true;
+        log('[Telemetry] Connected to iRacing!');
+        broadcastToChannel('_all', { type: 'status', iracing: true });
+        if (statusCallback) statusCallback({ iracing: true });
+        startPolling(ir, VARS);
+      }
+    } catch (e) {
+      if (connected) {
+        connected = false;
+        ir = null;
+        log('[Telemetry] iRacing disconnected: ' + e.message);
+        broadcastToChannel('_all', { type: 'status', iracing: false });
+        if (statusCallback) statusCallback({ iracing: false });
+        fuelCalc.reset();
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      }
+    }
+  }, 3000);
+}
+
+function startPolling(ir, VARS) {
+  if (pollInterval) clearInterval(pollInterval);
 
   pollInterval = setInterval(() => {
     try {
-      // Check if iRacing is running
-      const isRunning = typeof sdk.isSimRunning === 'function' ? sdk.isSimRunning() :
-                        typeof sdk.isConnected === 'function' ? sdk.isConnected() :
-                        typeof sdk.waitForData === 'function' ? true : false;
-
-      if (isRunning && !wasConnected) {
-        log('[Telemetry] iRacing connected');
-        connected = true;
-        wasConnected = true;
-        broadcastToChannel('_all', { type: 'status', iracing: true });
-        if (statusCallback) statusCallback({ iracing: true });
-      } else if (!isRunning && wasConnected) {
-        log('[Telemetry] iRacing disconnected');
-        connected = false;
-        wasConnected = false;
-        fuelCalc.reset();
-        broadcastToChannel('_all', { type: 'status', iracing: false });
-        if (statusCallback) statusCallback({ iracing: false });
+      if (!ir || !ir.isConnected()) {
+        if (connected) {
+          connected = false;
+          log('[Telemetry] iRacing disconnected during poll');
+          broadcastToChannel('_all', { type: 'status', iracing: false });
+          if (statusCallback) statusCallback({ iracing: false });
+          fuelCalc.reset();
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        return;
       }
 
-      if (!isRunning) return;
+      ir.refreshSharedMemory();
 
-      // Read telemetry
-      const telemetry = typeof sdk.getTelemetry === 'function' ? sdk.getTelemetry() :
-                        typeof sdk.getSessionData === 'function' ? sdk.getSessionData() : null;
-      const session = typeof sdk.getSessionInfo === 'function' ? sdk.getSessionInfo() : null;
-
-      if (!telemetry) return;
-
-      // Fuel data
-      fuelCalc.update(telemetry);
+      // Fuel
+      const fuelLevel = ir.get(VARS.FUEL_LEVEL)?.[0] || 0;
+      const lap = ir.get(VARS.LAP)?.[0] || 0;
+      const lapsRemaining = ir.get(VARS.SESSION_LAPS_REMAIN_EX)?.[0] || ir.get(VARS.SESSION_LAPS_REMAIN)?.[0] || 0;
+      fuelCalc.update({ FuelLevel: fuelLevel, Lap: lap, SessionLapsRemain: lapsRemaining });
       broadcastToChannel('fuel', { type: 'data', channel: 'fuel', data: fuelCalc.getData() });
 
-      // Wind data
+      // Wind
+      const windDir = ir.get(VARS.WIND_DIR)?.[0] || 0;
+      const windVel = ir.get(VARS.WIND_VEL)?.[0] || 0;
+      const yaw = ir.get(VARS.YAW)?.[0] || 0;
       broadcastToChannel('wind', { type: 'data', channel: 'wind', data: {
-        windDirection: telemetry.WindDir || 0,
-        windSpeed: telemetry.WindVel || 0,
-        carHeading: telemetry.Yaw || 0,
+        windDirection: windDir,
+        windSpeed: windVel,
+        carHeading: yaw,
       }});
 
       // Proximity
+      const carLeftRight = ir.get(VARS.CAR_LEFT_RIGHT)?.[0] || 0;
       broadcastToChannel('proximity', { type: 'data', channel: 'proximity', data: {
-        carLeftRight: telemetry.CarLeftRight || 0,
+        carLeftRight,
       }});
 
-      // Session data
-      if (session) {
-        const drivers = session.DriverInfo?.Drivers || [];
-        const playerCarIdx = session.DriverInfo?.DriverCarIdx || 0;
-        const trackName = session.WeekendInfo?.TrackDisplayName || '';
+      // Session + Standings (read from session info)
+      const sessionInfo = ir.getSessionInfo?.();
+      if (sessionInfo) {
+        const drivers = sessionInfo.DriverInfo?.Drivers || [];
+        const playerCarIdx = sessionInfo.DriverInfo?.DriverCarIdx || 0;
+        const trackName = sessionInfo.WeekendInfo?.TrackDisplayName || '';
 
         broadcastToChannel('session', { type: 'data', channel: 'session', data: {
           playerCarIdx,
@@ -116,32 +133,35 @@ async function startTelemetry(onStatusChange) {
           })),
         }});
 
-        // Standings
-        const standings = [];
-        if (telemetry.CarIdxPosition) {
-          for (let i = 0; i < (telemetry.CarIdxPosition.length || 0); i++) {
-            const pos = telemetry.CarIdxPosition[i] || 0;
-            if (pos <= 0) continue;
+        // Standings from telemetry arrays
+        const positions = ir.get(VARS.CAR_IDX_POSITION);
+        const lastLaps = ir.get(VARS.CAR_IDX_LAST_LAP_TIME);
+        const bestLaps = ir.get(VARS.CAR_IDX_BEST_LAP_TIME);
+        const onPitRoad = ir.get(VARS.CAR_IDX_ON_PIT_ROAD);
+
+        if (positions) {
+          const standings = [];
+          for (let i = 0; i < positions.length; i++) {
+            if (positions[i] <= 0) continue;
             standings.push({
               carIdx: i,
-              position: pos,
+              position: positions[i],
               driverName: drivers[i]?.UserName || '',
               carNumber: drivers[i]?.CarNumber || '',
               interval: '',
-              lastLap: telemetry.CarIdxLastLapTime?.[i]?.toFixed(3) || '',
-              bestLap: telemetry.CarIdxBestLapTime?.[i]?.toFixed(3) || '',
-              inPit: !!telemetry.CarIdxOnPitRoad?.[i],
+              lastLap: lastLaps?.[i] > 0 ? lastLaps[i].toFixed(3) : '',
+              bestLap: bestLaps?.[i] > 0 ? bestLaps[i].toFixed(3) : '',
+              inPit: !!onPitRoad?.[i],
               onLeadLap: true,
               classColor: '#fff',
             });
           }
+          standings.sort((a, b) => a.position - b.position);
+          broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings });
         }
-        standings.sort((a, b) => a.position - b.position);
-        broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings });
       }
 
     } catch (e) {
-      // Log errors periodically (not every frame)
       if (Math.random() < 0.01) log('[Telemetry] Poll error: ' + e.message);
     }
   }, 100);
@@ -150,6 +170,7 @@ async function startTelemetry(onStatusChange) {
 function stopTelemetry() {
   connected = false;
   if (pollInterval) clearInterval(pollInterval);
+  if (connectInterval) clearInterval(connectInterval);
 }
 
 function getStatus() {

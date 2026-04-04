@@ -27,7 +27,7 @@
     "win": {
       "target": "nsis",
       "signAndEditExecutable": false,
-      "icon": null
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": true,
