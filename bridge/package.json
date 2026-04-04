@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "ws": "^8.16.0",
-    "@emiliosp/node-iracing-sdk": "^1.0.10"
+    "@emiliosp/node-iracing-sdk": "^1.0.10",
+    "electron-updater": "^6.1.0"
   },
   "devDependencies": {
     "electron": "^28.0.0",
@@ -31,6 +32,11 @@
       "**/*",
       "build/icon.png"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "ricardosilva1998",
+      "repo": "atleta-notifications-helper"
+    },
     "win": {
       "target": "nsis",
       "signAndEditExecutable": false,

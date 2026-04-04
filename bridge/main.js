@@ -4,6 +4,14 @@ const { startServer, stopServer } = require('./websocket');
 const { startTelemetry, stopTelemetry } = require('./telemetry');
 const { load: loadSettings, save: saveSettings } = require('./settings');
 
+// Auto-updater
+let autoUpdater;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+} catch(e) { console.log('[Updater] Not available:', e.message); }
+
 let tray = null;
 let controlWindow = null;
 const overlayWindows = {};
@@ -93,6 +101,40 @@ app.on('ready', () => {
   // Restore enabled overlays from settings
   if (settings.enabledOverlays && Array.isArray(settings.enabledOverlays)) {
     settings.enabledOverlays.forEach(id => createOverlayWindow(id));
+  }
+
+  // Auto-updater setup
+  if (autoUpdater) {
+    autoUpdater.on('update-available', (info) => {
+      console.log('[Updater] Update available:', info.version);
+      if (controlWindow && !controlWindow.isDestroyed()) {
+        controlWindow.webContents.send('update-available', info.version);
+      }
+    });
+    autoUpdater.on('update-not-available', () => {
+      console.log('[Updater] No updates');
+      if (controlWindow && !controlWindow.isDestroyed()) {
+        controlWindow.webContents.send('update-not-available');
+      }
+    });
+    autoUpdater.on('download-progress', (progress) => {
+      if (controlWindow && !controlWindow.isDestroyed()) {
+        controlWindow.webContents.send('update-progress', Math.round(progress.percent));
+      }
+    });
+    autoUpdater.on('update-downloaded', () => {
+      console.log('[Updater] Update downloaded, ready to install');
+      if (controlWindow && !controlWindow.isDestroyed()) {
+        controlWindow.webContents.send('update-downloaded');
+      }
+    });
+    autoUpdater.on('error', (err) => {
+      console.log('[Updater] Error:', err.message);
+    });
+    // Check for updates after 5 seconds
+    setTimeout(() => {
+      try { autoUpdater.checkForUpdates(); } catch(e) {}
+    }, 5000);
   }
 
   console.log('[Bridge] Started');
@@ -253,6 +295,18 @@ ipcMain.on('get-overlay-states', (event) => {
   event.reply('overlay-states', states);
   event.reply('lock-state', overlaysLocked);
   event.reply('autohide-state', autoHideOverlays);
+});
+
+ipcMain.on('check-for-update', () => {
+  if (autoUpdater) try { autoUpdater.checkForUpdates(); } catch(e) {}
+});
+
+ipcMain.on('download-update', () => {
+  if (autoUpdater) try { autoUpdater.downloadUpdate(); } catch(e) {}
+});
+
+ipcMain.on('install-update', () => {
+  if (autoUpdater) autoUpdater.quitAndInstall();
 });
 
 app.on('window-all-closed', () => {});
