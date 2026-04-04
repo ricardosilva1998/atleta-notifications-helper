@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const { ipcMain } = require('electron');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { sendChatCommand } = require('./keyboardSim');
@@ -16,31 +17,117 @@ function log(msg) {
 // Build reverse lookup: keycode -> name
 const keyCodeToName = {};
 Object.entries(UiohookKey).forEach(([name, code]) => { keyCodeToName[code] = name; });
-// Add mouse button names
 const mouseButtonNames = { 1: 'Mouse1', 2: 'Mouse2', 3: 'Mouse3', 4: 'Mouse4', 5: 'Mouse5' };
 
 let voiceChatWindow = null;
-let pushToTalkKeyCode = null; // numeric keycode from uiohook
+let pushToTalkKeyCode = null;
 let pushToTalkIsMouseButton = false;
 let pushToTalkMouseButton = null;
 let isKeyHeld = false;
 let settings = {};
-let getIracingStatus = null; // function to check if iRacing is connected
+let getIracingStatus = null;
+
+// Windows SAPI speech recognition worker
+let speechProcess = null;
+let speechReady = false;
+
+function startSpeechWorker() {
+  if (process.platform !== 'win32') {
+    log('[Speech] Skipping — not Windows');
+    return;
+  }
+
+  const scriptPath = path.join(__dirname, 'speechWorker.ps1');
+  if (!fs.existsSync(scriptPath)) {
+    log('[Speech] Worker script not found: ' + scriptPath);
+    return;
+  }
+
+  speechProcess = spawn('powershell', ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+
+  let buffer = '';
+  speechProcess.stdout.on('data', (data) => {
+    buffer += data.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete line in buffer
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed === 'READY') {
+        speechReady = true;
+        log('[Speech] Worker ready');
+      } else if (trimmed === 'LISTENING') {
+        log('[Speech] Listening...');
+        if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+          voiceChatWindow.webContents.send('voice-state', 'listening');
+        }
+      } else if (trimmed.startsWith('RESULT:')) {
+        const text = trimmed.substring(7).trim();
+        log('[Speech] Result: "' + text + '"');
+        if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+          voiceChatWindow.webContents.send('voice-transcript', text);
+        }
+      } else if (trimmed.startsWith('ERROR:')) {
+        log('[Speech] Error: ' + trimmed.substring(6));
+        if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+          voiceChatWindow.webContents.send('voice-error', trimmed.substring(6));
+        }
+      }
+    }
+  });
+
+  speechProcess.stderr.on('data', (data) => {
+    log('[Speech] stderr: ' + data.toString().trim());
+  });
+
+  speechProcess.on('exit', (code) => {
+    log('[Speech] Worker exited: ' + code);
+    speechReady = false;
+    speechProcess = null;
+  });
+
+  log('[Speech] Worker spawned');
+}
+
+function stopSpeechWorker() {
+  if (speechProcess) {
+    try { speechProcess.stdin.write('EXIT\n'); } catch(e) {}
+    setTimeout(() => {
+      if (speechProcess) { try { speechProcess.kill(); } catch(e) {} }
+    }, 1000);
+  }
+}
+
+function startListening() {
+  if (speechProcess && speechReady) {
+    speechProcess.stdin.write('START\n');
+  } else {
+    log('[Speech] Worker not ready');
+  }
+}
+
+function stopListening() {
+  if (speechProcess && speechReady) {
+    speechProcess.stdin.write('STOP\n');
+  }
+}
 
 /**
  * Initialize the voice input system.
- * @param {object} opts
- * @param {object} opts.settings - Current settings object (mutated externally)
- * @param {function} opts.getStatus - Returns { iracing: bool }
  */
 function startVoiceInput(opts) {
   settings = opts.settings;
   getIracingStatus = opts.getStatus;
 
-  // Restore push-to-talk key from settings
   if (settings.voiceChat && settings.voiceChat.pushToTalkKey) {
     applyPushToTalkKey(settings.voiceChat.pushToTalkKey);
   }
+
+  // Start Windows SAPI speech worker
+  startSpeechWorker();
 
   // Global keyboard hook for push-to-talk
   uIOhook.on('keydown', (e) => {
@@ -48,11 +135,11 @@ function startVoiceInput(opts) {
       if (!isKeyHeld) {
         isKeyHeld = true;
         log('[VoiceInput] PTT keydown (start)');
+        startListening();
         if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-          voiceChatWindow.webContents.send('voice-start-listening');
+          voiceChatWindow.webContents.send('voice-state', 'listening');
         }
       }
-      // ignore repeated keydown events while held
     }
   });
 
@@ -60,17 +147,17 @@ function startVoiceInput(opts) {
     if (pushToTalkKeyCode !== null && !pushToTalkIsMouseButton && e.keycode === pushToTalkKeyCode && isKeyHeld) {
       isKeyHeld = false;
       log('[VoiceInput] PTT keyup (stop)');
-      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-        voiceChatWindow.webContents.send('voice-stop-listening');
-      }
+      stopListening();
     }
   });
 
   uIOhook.on('mousedown', (e) => {
     if (pushToTalkIsMouseButton && e.button === pushToTalkMouseButton && !isKeyHeld) {
       isKeyHeld = true;
+      log('[VoiceInput] PTT mousedown (start)');
+      startListening();
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-        voiceChatWindow.webContents.send('voice-start-listening');
+        voiceChatWindow.webContents.send('voice-state', 'listening');
       }
     }
   });
@@ -78,9 +165,8 @@ function startVoiceInput(opts) {
   uIOhook.on('mouseup', (e) => {
     if (pushToTalkIsMouseButton && e.button === pushToTalkMouseButton && isKeyHeld) {
       isKeyHeld = false;
-      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-        voiceChatWindow.webContents.send('voice-stop-listening');
-      }
+      log('[VoiceInput] PTT mouseup (stop)');
+      stopListening();
     }
   });
 
@@ -104,9 +190,8 @@ function startVoiceInput(opts) {
     });
   });
 
-  // IPC: Control panel requests to set push-to-talk key (enters capture mode)
+  // IPC: Control panel requests to set push-to-talk key
   ipcMain.on('voice-capture-key', (event) => {
-    // Next keydown or mousedown sets the push-to-talk key
     const onKey = (e) => {
       const keyName = keyCodeToName[e.keycode] || ('Key' + e.keycode);
       const keyData = { type: 'keyboard', keycode: e.keycode, name: keyName };
@@ -116,7 +201,7 @@ function startVoiceInput(opts) {
       uIOhook.off('mousedown', onMouse);
     };
     const onMouse = (e) => {
-      if (e.button <= 2) return; // Ignore left, right, middle — only side buttons
+      if (e.button <= 2) return;
       const name = mouseButtonNames[e.button] || ('Mouse' + e.button);
       const keyData = { type: 'mouse', button: e.button, name };
       applyPushToTalkKey(keyData);
@@ -132,7 +217,6 @@ function startVoiceInput(opts) {
   ipcMain.on('voice-settings-update', (event, newSettings) => {
     if (!settings.voiceChat) settings.voiceChat = {};
     Object.assign(settings.voiceChat, newSettings);
-    // Forward to overlay
     if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
       voiceChatWindow.webContents.send('voice-settings-update', settings.voiceChat);
     }
@@ -156,7 +240,6 @@ function applyPushToTalkKey(keyData) {
 
 function setVoiceChatWindow(win) {
   voiceChatWindow = win;
-  // Send current settings to the overlay when it's set
   if (win && !win.isDestroyed() && settings.voiceChat) {
     win.webContents.once('did-finish-load', () => {
       win.webContents.send('voice-settings-update', settings.voiceChat);
@@ -166,6 +249,7 @@ function setVoiceChatWindow(win) {
 
 function stopVoiceInput() {
   try { uIOhook.stop(); } catch(e) {}
+  stopSpeechWorker();
   log('[VoiceInput] Stopped');
 }
 

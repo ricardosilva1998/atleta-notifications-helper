@@ -43,7 +43,7 @@
     </div>
     <div class="message-log" id="message-log">
       <div class="empty-state" id="empty-state">
-        Press your push-to-talk key or say "message" to start.<br>
+        Press your push-to-talk key to start.<br>
         Example: "message Max good race"
       </div>
     </div>
@@ -58,12 +58,9 @@
     const { ipcRenderer } = require('electron');
 
     // ─── State ──────────────────────────────────────────────
-    let state = 'idle'; // idle | listening | processing | confirming
-    let drivers = []; // from standings WebSocket
-    let pendingCommand = null; // { command, targetLabel, text }
-    let voiceSettings = { wakeWordEnabled: false, language: 'en-US', micDeviceId: null };
-    let recognition = null;
-    let wakeWordRecognition = null;
+    let state = 'idle';
+    let drivers = [];
+    let pendingCommand = null;
 
     // ─── WebSocket for driver list ──────────────────────────
     const BRIDGE_URL = 'ws://localhost:9100';
@@ -99,7 +96,6 @@
       const log = document.getElementById('message-log');
       const empty = document.getElementById('empty-state');
       if (empty) empty.remove();
-
       const entry = document.createElement('div');
       entry.className = 'msg-entry';
       const now = new Date();
@@ -117,7 +113,6 @@
       const log = document.getElementById('message-log');
       const empty = document.getElementById('empty-state');
       if (empty) empty.remove();
-
       const entry = document.createElement('div');
       entry.className = 'msg-error';
       entry.textContent = text;
@@ -156,27 +151,21 @@
 
     function matchDriver(words) {
       if (drivers.length === 0) return null;
-
       let bestMatch = null;
       let bestScore = Infinity;
       let bestWordsUsed = 0;
 
-      // Try 1, 2, 3 words as driver name
       for (let len = Math.min(3, words.length); len >= 1; len--) {
         const spoken = words.slice(0, len).join(' ').toLowerCase();
-
         for (const driver of drivers) {
           const fullName = driver.driverName.toLowerCase();
           const firstName = fullName.split(' ')[0];
           const lastName = fullName.split(' ').slice(-1)[0];
-
-          // Check against full name, first name, last name
           const candidates = [fullName, firstName, lastName];
           for (const candidate of candidates) {
             const dist = levenshtein(spoken, candidate);
-            // Normalize by candidate length — shorter distances relative to length are better
             const score = dist / Math.max(spoken.length, candidate.length);
-            if (score < bestScore && score < 0.45) { // 45% threshold
+            if (score < bestScore && score < 0.45) {
               bestScore = score;
               bestMatch = driver;
               bestWordsUsed = len;
@@ -185,23 +174,15 @@
         }
       }
 
-      // Prefer longer matches (2 words over 1) if scores are close
-      if (bestMatch) {
-        return { driver: bestMatch, wordsUsed: bestWordsUsed };
-      }
+      if (bestMatch) return { driver: bestMatch, wordsUsed: bestWordsUsed };
       return null;
     }
 
     // ─── Voice Parsing ──────────────────────────────────────
     function parseVoiceCommand(rawText) {
       let text = rawText.trim().toLowerCase();
+      if (text.startsWith('message ')) text = text.substring(8).trim();
 
-      // Strip wake word "message" from start
-      if (text.startsWith('message ')) {
-        text = text.substring(8).trim();
-      }
-
-      // Check for "all" or "team" targets
       if (text.startsWith('all ')) {
         const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('all ') + 4).trim();
         return { command: '/all ' + msg, targetLabel: 'To: All', targetType: 'all', text: msg };
@@ -211,12 +192,10 @@
         return { command: '/team ' + msg, targetLabel: 'To: Team', targetType: 'team', text: msg };
       }
 
-      // Try to match a driver name
       const words = text.split(/\s+/);
       const match = matchDriver(words);
       if (match) {
-        const msgWords = words.slice(match.wordsUsed);
-        const msg = msgWords.join(' ');
+        const msg = words.slice(match.wordsUsed).join(' ');
         if (!msg) return { error: 'No message text after driver name' };
         return {
           command: '/p ' + match.driver.driverName + ' ' + msg,
@@ -229,144 +208,18 @@
       return { error: 'No driver found matching "' + words.slice(0, 3).join(' ') + '"' };
     }
 
-    // ─── Speech Recognition ─────────────────────────────────
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    let pttTranscript = ''; // accumulates speech while push-to-talk is held
-
-    function startRecognition() {
-      if (!SpeechRecognition) { addError('Speech recognition not available'); return; }
-      if (recognition) { try { recognition.abort(); } catch(e) {} }
-      pttTranscript = '';
-
-      recognition = new SpeechRecognition();
-      recognition.lang = voiceSettings.language || 'en-US';
-      recognition.continuous = true;       // keep listening until key released
-      recognition.interimResults = true;   // show interim feedback
-      recognition.maxAlternatives = 1;
-
-      recognition.onresult = (event) => {
-        // Build full transcript from all results
-        let full = '';
-        for (let i = 0; i < event.results.length; i++) {
-          full += event.results[i][0].transcript;
-        }
-        pttTranscript = full.trim();
-        console.log('[VoiceChat] Hearing:', pttTranscript, event.results[event.results.length - 1].isFinal ? '(final)' : '(interim)');
-      };
-
-      recognition.onerror = (event) => {
-        console.log('[VoiceChat] Recognition error:', event.error);
-        addError('Mic error: ' + event.error);
-        if (event.error !== 'aborted') {
-          setState('idle');
-        }
-      };
-
-      recognition.onend = () => {
-        console.log('[VoiceChat] Recognition ended, state:', state, 'transcript:', pttTranscript);
-        // When recognition ends (after stop() is called), process whatever we captured
-        if (state === 'listening' && pttTranscript) {
-          processTranscript(pttTranscript);
-        } else if (state === 'listening') {
-          setState('idle');
-        }
-      };
-
-      setState('listening');
-      console.log('[VoiceChat] Starting recognition, lang:', recognition.lang);
-      try {
-        recognition.start();
-        console.log('[VoiceChat] Recognition started successfully');
-      } catch(e) {
-        console.log('[VoiceChat] Recognition start failed:', e.message);
-        addError('Failed to start mic: ' + e.message);
-        setState('idle');
-      }
-    }
-
-    function stopRecognition() {
-      if (recognition) {
-        // stop() triggers onend which processes the accumulated transcript
-        try { recognition.stop(); } catch(e) {}
-      }
-    }
-
     function processTranscript(transcript) {
+      if (!transcript) { setState('idle'); return; }
       setState('processing');
       const result = parseVoiceCommand(transcript);
-
       if (result.error) {
         addError(result.error);
         setState('idle');
         return;
       }
-
-      // Show confirmation
       pendingCommand = result;
       showConfirm(result.targetLabel, result.text);
       setState('confirming');
-    }
-
-    // ─── Wake Word (Always Listening) ───────────────────────
-    function startWakeWord() {
-      if (!SpeechRecognition || !voiceSettings.wakeWordEnabled) return;
-      if (wakeWordRecognition) { try { wakeWordRecognition.abort(); } catch(e) {} }
-
-      wakeWordRecognition = new SpeechRecognition();
-      wakeWordRecognition.lang = voiceSettings.language || 'en-US';
-      wakeWordRecognition.continuous = true;
-      wakeWordRecognition.interimResults = true;
-      wakeWordRecognition.maxAlternatives = 1;
-
-      let wakeWordTriggered = false;
-      wakeWordRecognition.onresult = (event) => {
-        if (wakeWordTriggered) return;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript.trim().toLowerCase();
-          // Check interim results for early wake word detection
-          if (!event.results[i].isFinal) {
-            if (transcript.startsWith('message ') && state === 'idle') {
-              wakeWordTriggered = true;
-              // Wait for the final result to get the complete command
-            }
-          } else {
-            // Final result — process if wake word detected (interim or now)
-            if ((wakeWordTriggered || transcript.startsWith('message ')) && state === 'idle') {
-              wakeWordTriggered = false;
-              try { wakeWordRecognition.abort(); } catch(e) {}
-              processTranscript(event.results[i][0].transcript.trim());
-              setTimeout(startWakeWord, 1000);
-            } else {
-              wakeWordTriggered = false;
-            }
-          }
-        }
-      };
-
-      wakeWordRecognition.onerror = (event) => {
-        if (event.error !== 'aborted') {
-          console.log('[WakeWord] Error:', event.error);
-          setTimeout(startWakeWord, 2000);
-        }
-      };
-
-      wakeWordRecognition.onend = () => {
-        // Auto-restart if still enabled
-        if (voiceSettings.wakeWordEnabled && state !== 'listening') {
-          setTimeout(startWakeWord, 500);
-        }
-      };
-
-      wakeWordRecognition.start();
-      console.log('[WakeWord] Started');
-    }
-
-    function stopWakeWord() {
-      if (wakeWordRecognition) {
-        try { wakeWordRecognition.abort(); } catch(e) {}
-        wakeWordRecognition = null;
-      }
     }
 
     // ─── Keyboard Handlers ──────────────────────────────────
@@ -389,30 +242,19 @@
     });
 
     // ─── IPC from main process ──────────────────────────────
-    ipcRenderer.on('voice-start-listening', () => {
-      console.log('[VoiceChat] IPC: voice-start-listening, current state:', state);
+    // Speech recognition now happens in main process via Windows SAPI
+    ipcRenderer.on('voice-state', (event, newState) => {
       if (state === 'confirming' || state === 'processing') return;
-      startRecognition();
+      setState(newState);
     });
 
-    ipcRenderer.on('voice-stop-listening', () => {
-      console.log('[VoiceChat] IPC: voice-stop-listening, current state:', state);
-      stopRecognition();
+    ipcRenderer.on('voice-transcript', (event, text) => {
+      processTranscript(text);
     });
 
-    ipcRenderer.on('voice-settings-update', (event, newSettings) => {
-      const wasWakeWordEnabled = voiceSettings.wakeWordEnabled;
-      voiceSettings = { ...voiceSettings, ...newSettings };
-
-      // Update wake word
-      if (voiceSettings.wakeWordEnabled && !wasWakeWordEnabled) {
-        startWakeWord();
-      } else if (!voiceSettings.wakeWordEnabled && wasWakeWordEnabled) {
-        stopWakeWord();
-      }
-
-      // Update recognition language if active
-      if (recognition) recognition.lang = voiceSettings.language;
+    ipcRenderer.on('voice-error', (event, error) => {
+      addError('Speech error: ' + error);
+      setState('idle');
     });
 
     ipcRenderer.on('voice-send-result', (event, result) => {
@@ -421,15 +263,15 @@
       }
     });
 
+    ipcRenderer.on('voice-settings-update', (event, newSettings) => {
+      // Settings received from main process (currently informational)
+    });
+
     // ─── Lock state ─────────────────────────────────────────
     ipcRenderer.on('lock-state', (event, locked) => {
       document.body.style.pointerEvents = locked ? 'none' : 'auto';
       document.querySelector('.overlay-header').style.cursor = locked ? 'default' : 'move';
     });
-
-    // ─── Init ───────────────────────────────────────────────
-    // Wake word auto-start if enabled
-    if (voiceSettings.wakeWordEnabled) startWakeWord();
   </script>
 </body>
 </html>

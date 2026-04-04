@@ -1,7 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen, session } = require('electron');
 const path = require('path');
-const http = require('http');
-const fs = require('fs');
 const { startServer, stopServer } = require('./websocket');
 const { startTelemetry, stopTelemetry } = require('./telemetry');
 const { load: loadSettings, save: saveSettings } = require('./settings');
@@ -23,8 +21,6 @@ let autoHideOverlays = true;
 
 // Persisted settings
 let settings = {};
-let overlayHttpServer = null;
-const OVERLAY_HTTP_PORT = 9101;
 
 
 const OVERLAYS = [
@@ -98,20 +94,6 @@ app.on('ready', () => {
     { label: 'Quit', click: () => app.quit() },
   ]);
   tray.setContextMenu(contextMenu);
-
-  // HTTP server for voicechat overlay — Web Speech API requires http:// origin (file:// gives "network" error)
-  overlayHttpServer = http.createServer((req, res) => {
-    const safeName = path.basename((req.url || '').split('?')[0]);
-    const filePath = path.join(__dirname, 'overlays', safeName);
-    fs.readFile(filePath, (err, data) => {
-      if (err) { res.writeHead(404); res.end('Not found'); return; }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(data);
-    });
-  });
-  overlayHttpServer.listen(OVERLAY_HTTP_PORT, '127.0.0.1', () => {
-    console.log('[HTTP] Overlay server on http://127.0.0.1:' + OVERLAY_HTTP_PORT);
-  });
 
   startServer(9100);
   startTelemetry((status) => {
@@ -267,12 +249,7 @@ function createOverlayWindow(overlayId) {
     try { win.setAlwaysOnTop(true, 'screen-saver'); } catch(e) {}
   }, 2000);
 
-  // Voice chat needs http:// origin for Web Speech API (file:// and custom protocols give "network" error)
-  if (overlayId === 'voicechat') {
-    win.loadURL(`http://127.0.0.1:${OVERLAY_HTTP_PORT}/${overlayId}.html`);
-  } else {
-    win.loadFile(path.join(__dirname, 'overlays', `${overlayId}.html`));
-  }
+  win.loadFile(path.join(__dirname, 'overlays', `${overlayId}.html`));
 
   if (overlaysLocked) {
     win.setIgnoreMouseEvents(true, { forward: true });
@@ -376,5 +353,4 @@ app.on('before-quit', () => {
   stopTelemetry();
   stopVoiceInput();
   stopServer();
-  if (overlayHttpServer) overlayHttpServer.close();
 });
