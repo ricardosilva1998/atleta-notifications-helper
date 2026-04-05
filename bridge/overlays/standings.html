@@ -32,7 +32,7 @@
     .license { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
     .irating { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.6); }
     .flag { font-size: 12px; line-height: 1; }
-    .brand-watermark { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 800; opacity: 0.15; text-transform: uppercase; white-space: nowrap; pointer-events: none; letter-spacing: 1px; color: #fff; }
+    .brand-logo { width: 16px; height: 16px; opacity: 0.7; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -180,7 +180,8 @@
       const numCell = `<span style="background:${classColor};color:#000;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;">${d.carNumber || ''}</span>`;
 
       const mfr = getManufacturer(carBrand);
-      const badgeCell = `<div class="driver-name" style="position:relative;">${d.driverName || ''}${pitMark}${mfr ? '<span class="brand-watermark">' + mfr + '</span>' : ''}</div>`;
+      const logoImg = mfr ? `<img class="brand-logo" src="logos/${mfr}.svg" onerror="this.style.display='none'">` : '';
+      const badgeCell = `<div class="driver-name">${d.driverName || ''}${pitMark}</div>`;
 
       const licCell = d.safetyRating || d.license
         ? `<span style="background:${licColor};color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${d.safetyRating || d.license}</span>`
@@ -192,6 +193,7 @@
         <td class="mono" style="font-weight:700;color:rgba(255,255,255,0.7)">${pos}</td>
         <td class="flag">${flag}</td>
         <td>${numCell}</td>
+        <td>${logoImg}</td>
         <td>${badgeCell}</td>
         <td>${licCell}</td>
         <td>${irCell}</td>

@@ -31,7 +31,7 @@
     .license { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
     .irating { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.6); }
     .flag { font-size: 12px; line-height: 1; }
-    .brand-watermark { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 800; opacity: 0.15; text-transform: uppercase; white-space: nowrap; pointer-events: none; letter-spacing: 1px; color: #fff; }
+    .brand-logo { width: 16px; height: 16px; opacity: 0.7; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -173,13 +173,15 @@
       const irCell = `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${irStr}</span>`;
 
       const mfr = getManufacturer(carBrand);
-      const nameCell = `<div style="position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${d.driverName || ''}${mfr ? '<span class="brand-watermark">' + mfr + '</span>' : ''}</div>`;
+      const logoImg = mfr ? `<img class="brand-logo" src="logos/${mfr}.svg" onerror="this.style.display='none'">` : '';
+      const nameCell = `<div class="driver-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${d.driverName || ''}</div>`;
 
       if (isPlayerRow) {
         return `<tr class="player-row">
           <td class="mono" style="font-weight:700">${pos}</td>
           <td class="flag">${flag}</td>
           <td>${numCell}</td>
+          <td>${logoImg}</td>
           <td>${nameCell}</td>
           <td>${licCell}</td>
           <td>${irCell}</td>
@@ -191,6 +193,7 @@
         <td class="mono" style="font-weight:700;color:rgba(255,255,255,0.7)">${pos}</td>
         <td class="flag">${flag}</td>
         <td>${numCell}</td>
+        <td>${logoImg}</td>
         <td>${nameCell}</td>
         <td>${licCell}</td>
         <td>${irCell}</td>
