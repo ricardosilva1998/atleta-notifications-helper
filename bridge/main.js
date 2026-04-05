@@ -1,3 +1,10 @@
+// Clear log file on startup (fresh logs each session)
+try {
+  const _fs = require('fs');
+  const _logPath = require('path').join(require('os').homedir(), 'atleta-bridge.log');
+  _fs.writeFileSync(_logPath, '--- App started ' + new Date().toISOString() + ' ---\n');
+} catch(e) {}
+
 // Catch uncaught exceptions to prevent crash dialogs (e.g., EBUSY from ibt files)
 process.on('uncaughtException', (err) => {
   console.error('[UNCAUGHT]', err.message);
