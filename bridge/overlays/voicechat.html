@@ -36,6 +36,11 @@
     .confirm-hint { font-size: 9px; color: rgba(255,255,255,0.35); }
 
     .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; color: rgba(255,255,255,0.25); font-size: 11px; padding: 20px; line-height: 1.6; }
+
+    .stop-bar { flex-shrink: 0; padding: 8px 12px; background: rgba(240,68,56,0.1); border-top: 1px solid rgba(240,68,56,0.3); display: none; text-align: center; }
+    .stop-bar.visible { display: block; }
+    .stop-btn { background: #f04438; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; }
+    .stop-btn:hover { background: #d03830; }
   </style>
 </head>
 <body>
@@ -52,6 +57,9 @@
         Select your mic above, then press push-to-talk.<br>
         Example: "message Max good race"
       </div>
+    </div>
+    <div class="stop-bar" id="stop-bar">
+      <button class="stop-btn" onclick="manualStop()">Stop Recording</button>
     </div>
     <div class="confirm-bar" id="confirm-bar">
       <div class="confirm-target" id="confirm-target"></div>
@@ -125,6 +133,7 @@
         source.connect(processor);
         processor.connect(audioContext.destination);
         setState('listening');
+        document.getElementById('stop-bar').classList.add('visible');
         log('[VoiceChat] Recording started, device:', selectedDeviceId);
       } catch(e) {
         addError('Mic error: ' + e.message);
@@ -133,7 +142,14 @@
       }
     }
 
+    function manualStop() {
+      log('Manual stop button pressed');
+      ipcRenderer.send('voice-manual-stop'); // Tell main process recording stopped
+      stopRecording();
+    }
+
     function stopRecording() {
+      document.getElementById('stop-bar').classList.remove('visible');
       if (!audioContext) return;
       try {
         processor.disconnect();

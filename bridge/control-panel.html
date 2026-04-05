@@ -105,6 +105,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="overlays" onclick="switchTab('overlays')">Overlays</div>
     <div class="tab" data-tab="updates" onclick="switchTab('updates')">Updates</div>
+    <div class="tab" data-tab="logs" onclick="switchTab('logs')">Logs</div>
   </div>
 
   <!-- Overlays Tab -->
@@ -158,6 +159,21 @@
     <!-- Release notes -->
     <h2>Release Notes</h2>
     <div id="release-notes-list"></div>
+  </div>
+
+  <!-- Logs Tab -->
+  <div class="tab-content" id="tab-logs">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <h2 style="margin:0;">Live Logs</h2>
+      <div style="display:flex; gap:6px;">
+        <button onclick="copyLogs()" style="padding:4px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#8b8a9e; font-size:10px; cursor:pointer;">Copy All</button>
+        <button onclick="clearLogView()" style="padding:4px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#8b8a9e; font-size:10px; cursor:pointer;">Clear</button>
+      </div>
+    </div>
+    <div id="log-container" style="background:#0a0b10; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px; height:400px; overflow-y:auto; font-family:Consolas,monospace; font-size:10px; color:#8b8a9e; line-height:1.5; white-space:pre-wrap; word-break:break-all;">
+      Loading logs...
+    </div>
+    <div id="copy-toast" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#3ecf8e; color:#0c0d14; padding:6px 16px; border-radius:6px; font-size:11px; font-weight:600;">Copied!</div>
   </div>
 
   <div class="footer">
@@ -548,6 +564,64 @@
     }
     document.getElementById('version-text').textContent = 'v' + appVersion;
     document.getElementById('installed-version').textContent = 'v' + appVersion;
+
+    // ─── Logs Tab ──────────────────────────────────────────────
+    const logFs = require('fs');
+    const logPath = require('path').join(require('os').homedir(), 'atleta-bridge.log');
+    let logContent = '';
+    let logInterval = null;
+
+    function loadLogs() {
+      try {
+        const content = logFs.readFileSync(logPath, 'utf8');
+        if (content !== logContent) {
+          logContent = content;
+          const container = document.getElementById('log-container');
+          // Color-code log lines
+          container.innerHTML = content.split('\n').map(line => {
+            if (line.includes('[Speech]') || line.includes('[VoiceInput]') || line.includes('[VoiceOverlay]'))
+              return '<span style="color:#9146ff">' + escapeLogHtml(line) + '</span>';
+            if (line.includes('ERROR') || line.includes('error') || line.includes('FATAL'))
+              return '<span style="color:#f04438">' + escapeLogHtml(line) + '</span>';
+            if (line.includes('[Telemetry]') || line.includes('[SessionInfo]'))
+              return '<span style="color:#3ecf8e">' + escapeLogHtml(line) + '</span>';
+            if (line.includes('[Diag]'))
+              return '<span style="color:#5c5b6e">' + escapeLogHtml(line) + '</span>';
+            return escapeLogHtml(line);
+          }).join('\n');
+          container.scrollTop = container.scrollHeight;
+        }
+      } catch(e) {
+        document.getElementById('log-container').textContent = 'Log file not found: ' + logPath;
+      }
+    }
+
+    function escapeLogHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function copyLogs() {
+      require('electron').clipboard.writeText(logContent);
+      const toast = document.getElementById('copy-toast');
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 1500);
+    }
+
+    function clearLogView() {
+      document.getElementById('log-container').innerHTML = '';
+      logContent = '';
+    }
+
+    // Auto-refresh logs every 2 seconds when logs tab is active
+    function startLogRefresh() { if (!logInterval) { loadLogs(); logInterval = setInterval(loadLogs, 2000); } }
+    function stopLogRefresh() { if (logInterval) { clearInterval(logInterval); logInterval = null; } }
+
+    // Hook into tab switching
+    const origSwitchTab = switchTab;
+    switchTab = function(tabId) {
+      origSwitchTab(tabId);
+      if (tabId === 'logs') startLogRefresh();
+      else stopLogRefresh();
+    };
+    if (savedTab === 'logs') startLogRefresh();
   </script>
 </body>
 </html>

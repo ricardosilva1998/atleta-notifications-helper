@@ -155,6 +155,13 @@ function startVoiceInput(opts) {
     transcribeWav(wavPath);
   });
 
+  // IPC: Manual stop from overlay button — reset toggle state
+  ipcMain.on('voice-manual-stop', () => {
+    isRecording = false;
+    if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
+    log('[VoiceInput] Manual stop from overlay');
+  });
+
   // IPC: Overlay sends confirmed chat command
   ipcMain.on('voice-send-chat', (event, data) => {
     const status = getIracingStatus ? getIracingStatus() : { iracing: false };
