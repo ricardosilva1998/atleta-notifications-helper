@@ -25,9 +25,6 @@ let pushToTalkMouseButton = null;
 let isKeyHeld = false;
 let settings = {};
 let getIracingStatus = null;
-
-// Per-session speech process
-let speechProcess = null;
 let scriptPath = null;
 
 function findSpeechScript() {
@@ -44,67 +41,41 @@ function findSpeechScript() {
       return p;
     }
   }
-  log('[Speech] Script not found in any location');
+  log('[Speech] Script not found');
   return null;
 }
 
-function startListening() {
-  if (!scriptPath) { log('[Speech] No script path'); return; }
-  if (speechProcess) {
-    // Kill previous session if still running
-    try { speechProcess.kill(); } catch(e) {}
-    speechProcess = null;
-  }
+/**
+ * Transcribe a WAV file using Windows SAPI.
+ * @param {string} wavPath - Path to the WAV file
+ */
+function transcribeWav(wavPath) {
+  if (!scriptPath) { log('[Speech] No script'); return; }
+  log('[Speech] Transcribing: ' + wavPath);
 
-  speechProcess = spawn('powershell', ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
+  const proc = spawn('powershell', [
+    '-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath, wavPath
+  ], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 
   let stdout = '';
-  speechProcess.stdout.on('data', (data) => {
-    const text = data.toString();
-    stdout += text;
-    // Check if we got the LISTENING signal
-    if (text.includes('LISTENING')) {
-      log('[Speech] Listening...');
-    }
+  proc.stdout.on('data', (d) => { stdout += d.toString(); });
+  proc.stderr.on('data', (d) => {
+    d.toString().split('\n').forEach(line => {
+      const t = line.trim();
+      if (t) log('[Speech] ' + t);
+    });
   });
 
-  speechProcess.stderr.on('data', (data) => {
-    // Diagnostic output from PowerShell
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed) log('[Speech] ' + trimmed);
-    }
-  });
-
-  speechProcess.on('exit', (code) => {
-    // Process the final stdout — last line is the recognized text
-    const lines = stdout.trim().split('\n');
-    const lastLine = lines[lines.length - 1]?.trim() || '';
-    // Filter out the LISTENING marker
-    const transcript = lastLine === 'LISTENING' ? '' : lastLine;
-
-    log('[Speech] Session ended (code ' + code + '), transcript: "' + transcript + '"');
+  proc.on('exit', (code) => {
+    const transcript = stdout.trim();
+    log('[Speech] Transcription done (code ' + code + '): "' + transcript + '"');
+    // Clean up temp file
+    try { fs.unlinkSync(wavPath); } catch(e) {}
 
     if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
       voiceChatWindow.webContents.send('voice-transcript', transcript);
     }
-    speechProcess = null;
   });
-
-  log('[Speech] Session started');
-}
-
-function stopListening() {
-  if (speechProcess) {
-    log('[Speech] Killing speech process');
-    // With synchronous Recognize(), we just kill the process on PTT release
-    // The exit handler will read whatever stdout was produced
-    try { speechProcess.kill(); } catch(e) {}
-  }
 }
 
 function startVoiceInput(opts) {
@@ -115,7 +86,6 @@ function startVoiceInput(opts) {
     applyPushToTalkKey(settings.voiceChat.pushToTalkKey);
   }
 
-  // Find the speech script once
   scriptPath = findSpeechScript();
 
   // Global keyboard hook for push-to-talk
@@ -124,9 +94,8 @@ function startVoiceInput(opts) {
       if (!isKeyHeld) {
         isKeyHeld = true;
         log('[VoiceInput] PTT keydown (start)');
-        startListening();
         if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-          voiceChatWindow.webContents.send('voice-state', 'listening');
+          voiceChatWindow.webContents.send('voice-start-recording');
         }
       }
     }
@@ -136,7 +105,9 @@ function startVoiceInput(opts) {
     if (pushToTalkKeyCode !== null && !pushToTalkIsMouseButton && e.keycode === pushToTalkKeyCode && isKeyHeld) {
       isKeyHeld = false;
       log('[VoiceInput] PTT keyup (stop)');
-      stopListening();
+      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+        voiceChatWindow.webContents.send('voice-stop-recording');
+      }
     }
   });
 
@@ -144,9 +115,8 @@ function startVoiceInput(opts) {
     if (pushToTalkIsMouseButton && e.button === pushToTalkMouseButton && !isKeyHeld) {
       isKeyHeld = true;
       log('[VoiceInput] PTT mousedown (start)');
-      startListening();
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-        voiceChatWindow.webContents.send('voice-state', 'listening');
+        voiceChatWindow.webContents.send('voice-start-recording');
       }
     }
   });
@@ -155,12 +125,19 @@ function startVoiceInput(opts) {
     if (pushToTalkIsMouseButton && e.button === pushToTalkMouseButton && isKeyHeld) {
       isKeyHeld = false;
       log('[VoiceInput] PTT mouseup (stop)');
-      stopListening();
+      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+        voiceChatWindow.webContents.send('voice-stop-recording');
+      }
     }
   });
 
   uIOhook.start();
   log('[VoiceInput] Global hook started');
+
+  // IPC: Overlay sends recorded WAV file for transcription
+  ipcMain.on('voice-wav-ready', (event, wavPath) => {
+    transcribeWav(wavPath);
+  });
 
   // IPC: Overlay sends confirmed chat command
   ipcMain.on('voice-send-chat', (event, data) => {
@@ -238,7 +215,6 @@ function setVoiceChatWindow(win) {
 
 function stopVoiceInput() {
   try { uIOhook.stop(); } catch(e) {}
-  if (speechProcess) { try { speechProcess.kill(); } catch(e) {} }
   log('[VoiceInput] Stopped');
 }
 

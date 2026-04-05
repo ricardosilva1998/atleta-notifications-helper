@@ -16,6 +16,9 @@
     .status-dot.confirming { background: #3b82f6; animation: pulse 1.5s ease-in-out infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+    .mic-select { padding: 6px 8px; font-size: 10px; color: #8b8a9e; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-bottom: none; }
+    .mic-select select { background: #0c0d14; color: #e8e6f0; border: 1px solid rgba(255,255,255,0.1); border-radius: 3px; padding: 2px 4px; font-size: 10px; max-width: 200px; }
+
     .message-log { flex: 1; overflow-y: auto; padding: 8px 12px; scrollbar-width: none; }
     .message-log::-webkit-scrollbar { display: none; }
     .msg-entry { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
@@ -41,9 +44,12 @@
       <span><span class="status-dot idle" id="status-dot"></span> VOICE CHAT</span>
       <span id="status-label" style="font-size:9px; color:rgba(255,255,255,0.35);">Idle</span>
     </div>
+    <div class="mic-select">
+      Mic: <select id="mic-dropdown"><option value="">Loading...</option></select>
+    </div>
     <div class="message-log" id="message-log">
       <div class="empty-state" id="empty-state">
-        Press your push-to-talk key to start.<br>
+        Select your mic above, then press push-to-talk.<br>
         Example: "message Max good race"
       </div>
     </div>
@@ -56,16 +62,145 @@
 
   <script>
     const { ipcRenderer } = require('electron');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
 
-    // ─── State ──────────────────────────────────────────────
     let state = 'idle';
     let drivers = [];
     let pendingCommand = null;
+    let selectedDeviceId = '';
+
+    // Audio recording
+    let mediaStream = null;
+    let audioContext = null;
+    let processor = null;
+    let audioChunks = [];
+
+    // ─── Mic Device Enumeration ─────────────────────────────
+    async function loadMicDevices() {
+      const dropdown = document.getElementById('mic-dropdown');
+      try {
+        // Request permission first (needed to see device labels)
+        await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d => d.kind === 'audioinput');
+        dropdown.innerHTML = mics.map(d =>
+          `<option value="${d.deviceId}">${d.label || 'Microphone ' + d.deviceId.substring(0, 8)}</option>`
+        ).join('');
+        if (mics.length > 0) selectedDeviceId = mics[0].deviceId;
+        dropdown.onchange = () => { selectedDeviceId = dropdown.value; };
+        console.log('[VoiceChat] Found', mics.length, 'microphones');
+      } catch(e) {
+        dropdown.innerHTML = '<option value="">Mic access denied</option>';
+        addError('Mic access denied: ' + e.message);
+        console.log('[VoiceChat] Mic enumeration error:', e);
+      }
+    }
+    loadMicDevices();
+
+    // ─── Audio Recording (WAV capture) ──────────────────────
+    async function startRecording() {
+      try {
+        const constraints = { audio: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true };
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        audioContext = new AudioContext({ sampleRate: 16000 });
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        audioChunks = [];
+
+        processor.onaudioprocess = (e) => {
+          const data = e.inputBuffer.getChannelData(0);
+          audioChunks.push(new Float32Array(data));
+        };
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+        setState('listening');
+        console.log('[VoiceChat] Recording started, device:', selectedDeviceId);
+      } catch(e) {
+        addError('Mic error: ' + e.message);
+        setState('idle');
+        console.log('[VoiceChat] Recording error:', e);
+      }
+    }
+
+    function stopRecording() {
+      if (!audioContext) return;
+      try {
+        processor.disconnect();
+        mediaStream.getTracks().forEach(t => t.stop());
+        audioContext.close();
+      } catch(e) {}
+
+      if (audioChunks.length === 0) {
+        setState('idle');
+        return;
+      }
+
+      setState('processing');
+
+      // Convert to WAV
+      const wavBuffer = encodeWAV(audioChunks, 16000);
+      const tempDir = path.join(os.tmpdir(), 'atleta-voice');
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      const wavPath = path.join(tempDir, 'ptt_' + Date.now() + '.wav');
+      fs.writeFileSync(wavPath, Buffer.from(wavBuffer));
+      console.log('[VoiceChat] WAV saved:', wavPath, '(' + wavBuffer.byteLength + ' bytes)');
+
+      // Send to main process for transcription
+      ipcRenderer.send('voice-wav-ready', wavPath);
+
+      audioChunks = [];
+      audioContext = null;
+      processor = null;
+      mediaStream = null;
+    }
+
+    function encodeWAV(chunks, sampleRate) {
+      // Merge all chunks
+      let totalLength = 0;
+      for (const c of chunks) totalLength += c.length;
+      const merged = new Float32Array(totalLength);
+      let offset = 0;
+      for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+
+      // Convert to 16-bit PCM
+      const pcm = new Int16Array(merged.length);
+      for (let i = 0; i < merged.length; i++) {
+        const s = Math.max(-1, Math.min(1, merged[i]));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+
+      // Build WAV header
+      const buffer = new ArrayBuffer(44 + pcm.length * 2);
+      const view = new DataView(buffer);
+      const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + pcm.length * 2, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true); // chunk size
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, 1, true); // mono
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true); // byte rate
+      view.setUint16(32, 2, true); // block align
+      view.setUint16(34, 16, true); // bits per sample
+      writeStr(36, 'data');
+      view.setUint32(40, pcm.length * 2, true);
+
+      const pcmBytes = new Uint8Array(buffer, 44);
+      const pcmView = new Uint8Array(pcm.buffer);
+      pcmBytes.set(pcmView);
+
+      return buffer;
+    }
 
     // ─── WebSocket for driver list ──────────────────────────
     const BRIDGE_URL = 'ws://localhost:9100';
     let ws = null;
-
     function connectBridge() {
       try { ws = new WebSocket(BRIDGE_URL); } catch(e) { setTimeout(connectBridge, 3000); return; }
       ws.onopen = () => { ws.send(JSON.stringify({ type: 'subscribe', channels: ['standings'] })); };
@@ -82,58 +217,35 @@
     }
     connectBridge();
 
-    // ─── UI Helpers ─────────────────────────────────────────
-    function setState(newState) {
-      state = newState;
-      const dot = document.getElementById('status-dot');
-      const label = document.getElementById('status-label');
-      dot.className = 'status-dot ' + newState;
+    // ─── UI ─────────────────────────────────────────────────
+    function setState(s) {
+      state = s;
+      document.getElementById('status-dot').className = 'status-dot ' + s;
       const labels = { idle: 'Idle', listening: 'Listening...', processing: 'Processing...', confirming: 'Confirm' };
-      label.textContent = labels[newState] || newState;
+      document.getElementById('status-label').textContent = labels[s] || s;
     }
-
     function addMessage(targetLabel, targetType, text) {
       const log = document.getElementById('message-log');
-      const empty = document.getElementById('empty-state');
-      if (empty) empty.remove();
-      const entry = document.createElement('div');
-      entry.className = 'msg-entry';
+      const empty = document.getElementById('empty-state'); if (empty) empty.remove();
+      const entry = document.createElement('div'); entry.className = 'msg-entry';
       const now = new Date();
-      const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-      entry.innerHTML = `
-        <span class="msg-time">${time}</span>
-        <span class="msg-target ${targetType}">${targetLabel}</span>
-        <div class="msg-text">${escapeHtml(text)}</div>
-      `;
-      log.appendChild(entry);
-      log.scrollTop = log.scrollHeight;
+      const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+      entry.innerHTML = `<span class="msg-time">${time}</span><span class="msg-target ${targetType}">${targetLabel}</span><div class="msg-text">${escapeHtml(text)}</div>`;
+      log.appendChild(entry); log.scrollTop = log.scrollHeight;
     }
-
     function addError(text) {
       const log = document.getElementById('message-log');
-      const empty = document.getElementById('empty-state');
-      if (empty) empty.remove();
-      const entry = document.createElement('div');
-      entry.className = 'msg-error';
-      entry.textContent = text;
-      log.appendChild(entry);
-      log.scrollTop = log.scrollHeight;
+      const empty = document.getElementById('empty-state'); if (empty) empty.remove();
+      const entry = document.createElement('div'); entry.className = 'msg-error'; entry.textContent = text;
+      log.appendChild(entry); log.scrollTop = log.scrollHeight;
     }
-
     function showConfirm(targetLabel, text) {
       document.getElementById('confirm-target').textContent = targetLabel;
       document.getElementById('confirm-text').textContent = '"' + text + '"';
       document.getElementById('confirm-bar').classList.add('visible');
     }
-
-    function hideConfirm() {
-      document.getElementById('confirm-bar').classList.remove('visible');
-      pendingCommand = null;
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+    function hideConfirm() { document.getElementById('confirm-bar').classList.remove('visible'); pendingCommand = null; }
+    function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     // ─── Fuzzy Matching ─────────────────────────────────────
     function levenshtein(a, b) {
@@ -141,48 +253,30 @@
       const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
       for (let i = 0; i <= m; i++) dp[i][0] = i;
       for (let j = 0; j <= n; j++) dp[0][j] = j;
-      for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-          dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
-        }
-      }
+      for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
       return dp[m][n];
     }
-
     function matchDriver(words) {
-      if (drivers.length === 0) return null;
-      let bestMatch = null;
-      let bestScore = Infinity;
-      let bestWordsUsed = 0;
-
+      if (!drivers.length) return null;
+      let bestMatch = null, bestScore = Infinity, bestWordsUsed = 0;
       for (let len = Math.min(3, words.length); len >= 1; len--) {
         const spoken = words.slice(0, len).join(' ').toLowerCase();
         for (const driver of drivers) {
-          const fullName = driver.driverName.toLowerCase();
-          const firstName = fullName.split(' ')[0];
-          const lastName = fullName.split(' ').slice(-1)[0];
-          const candidates = [fullName, firstName, lastName];
-          for (const candidate of candidates) {
-            const dist = levenshtein(spoken, candidate);
-            const score = dist / Math.max(spoken.length, candidate.length);
-            if (score < bestScore && score < 0.45) {
-              bestScore = score;
-              bestMatch = driver;
-              bestWordsUsed = len;
-            }
+          const full = driver.driverName.toLowerCase();
+          for (const candidate of [full, full.split(' ')[0], full.split(' ').slice(-1)[0]]) {
+            const score = levenshtein(spoken, candidate) / Math.max(spoken.length, candidate.length);
+            if (score < bestScore && score < 0.45) { bestScore = score; bestMatch = driver; bestWordsUsed = len; }
           }
         }
       }
-
-      if (bestMatch) return { driver: bestMatch, wordsUsed: bestWordsUsed };
-      return null;
+      return bestMatch ? { driver: bestMatch, wordsUsed: bestWordsUsed } : null;
     }
 
     // ─── Voice Parsing ──────────────────────────────────────
     function parseVoiceCommand(rawText) {
       let text = rawText.trim().toLowerCase();
       if (text.startsWith('message ')) text = text.substring(8).trim();
-
       if (text.startsWith('all ')) {
         const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('all ') + 4).trim();
         return { command: '/all ' + msg, targetLabel: 'To: All', targetType: 'all', text: msg };
@@ -191,83 +285,42 @@
         const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('team ') + 5).trim();
         return { command: '/team ' + msg, targetLabel: 'To: Team', targetType: 'team', text: msg };
       }
-
       const words = text.split(/\s+/);
       const match = matchDriver(words);
       if (match) {
         const msg = words.slice(match.wordsUsed).join(' ');
         if (!msg) return { error: 'No message text after driver name' };
-        return {
-          command: '/p ' + match.driver.driverName + ' ' + msg,
-          targetLabel: 'To: ' + match.driver.driverName + ' (private)',
-          targetType: '',
-          text: msg,
-        };
+        return { command: '/p ' + match.driver.driverName + ' ' + msg, targetLabel: 'To: ' + match.driver.driverName + ' (private)', targetType: '', text: msg };
       }
-
       return { error: 'No driver found matching "' + words.slice(0, 3).join(' ') + '"' };
     }
-
     function processTranscript(transcript) {
-      if (!transcript) { setState('idle'); return; }
+      if (!transcript) { addError('No speech detected'); setState('idle'); return; }
       setState('processing');
       const result = parseVoiceCommand(transcript);
-      if (result.error) {
-        addError(result.error);
-        setState('idle');
-        return;
-      }
+      if (result.error) { addError(result.error); setState('idle'); return; }
       pendingCommand = result;
       showConfirm(result.targetLabel, result.text);
       setState('confirming');
     }
 
-    // ─── Keyboard Handlers ──────────────────────────────────
+    // ─── Keyboard / IPC ─────────────────────────────────────
     document.addEventListener('keydown', (e) => {
       if (state === 'confirming') {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (pendingCommand) {
-            ipcRenderer.send('voice-send-chat', { command: pendingCommand.command });
-            addMessage(pendingCommand.targetLabel, pendingCommand.targetType, pendingCommand.text);
-            hideConfirm();
-            setState('idle');
-          }
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          hideConfirm();
-          setState('idle');
-        }
+        if (e.key === 'Enter') { e.preventDefault(); if (pendingCommand) { ipcRenderer.send('voice-send-chat', { command: pendingCommand.command }); addMessage(pendingCommand.targetLabel, pendingCommand.targetType, pendingCommand.text); hideConfirm(); setState('idle'); } }
+        else if (e.key === 'Escape') { e.preventDefault(); hideConfirm(); setState('idle'); }
       }
     });
 
-    // ─── IPC from main process ──────────────────────────────
-    // Speech recognition now happens in main process via Windows SAPI
-    ipcRenderer.on('voice-state', (event, newState) => {
+    ipcRenderer.on('voice-start-recording', () => {
       if (state === 'confirming' || state === 'processing') return;
-      setState(newState);
+      startRecording();
     });
-
-    ipcRenderer.on('voice-transcript', (event, text) => {
-      processTranscript(text);
-    });
-
-    ipcRenderer.on('voice-error', (event, error) => {
-      addError('Speech error: ' + error);
-      setState('idle');
-    });
-
-    ipcRenderer.on('voice-send-result', (event, result) => {
-      if (!result.success) {
-        addError('Failed to send: ' + (result.reason || 'unknown error'));
-      }
-    });
-
-    ipcRenderer.on('voice-settings-update', (event, newSettings) => {
-      // Settings received from main process (currently informational)
-    });
-
-    // ─── Lock state ─────────────────────────────────────────
+    ipcRenderer.on('voice-stop-recording', () => { stopRecording(); });
+    ipcRenderer.on('voice-transcript', (event, text) => { processTranscript(text); });
+    ipcRenderer.on('voice-error', (event, err) => { addError('Speech error: ' + err); setState('idle'); });
+    ipcRenderer.on('voice-send-result', (event, r) => { if (!r.success) addError('Failed: ' + (r.reason || 'unknown')); });
+    ipcRenderer.on('voice-settings-update', () => {});
     ipcRenderer.on('lock-state', (event, locked) => {
       document.body.style.pointerEvents = locked ? 'none' : 'auto';
       document.querySelector('.overlay-header').style.cursor = locked ? 'default' : 'move';

@@ -1,52 +1,38 @@
-# Speech recognition session for Atleta Bridge
-# Spawned per PTT session. Uses synchronous Recognize() for reliability.
+# Speech recognition from WAV file for Atleta Bridge
+# Usage: powershell -File speechWorker.ps1 "C:\path\to\audio.wav"
+param([string]$wavPath)
+
 $ErrorActionPreference = "Continue"
+
+if (-not $wavPath -or -not (Test-Path $wavPath)) {
+    [Console]::Error.WriteLine("ERROR: WAV file not found: $wavPath")
+    [Console]::Out.WriteLine("")
+    [Console]::Out.Flush()
+    exit 1
+}
 
 try {
     Add-Type -AssemblyName System.Speech
     $recognizer = New-Object System.Speech.Recognition.SpeechRecognitionEngine
-
     [Console]::Error.WriteLine("ENGINE: " + $recognizer.RecognizerInfo.Description)
-    [Console]::Error.WriteLine("CULTURE: " + $recognizer.RecognizerInfo.Culture.Name)
 
-    try {
-        $recognizer.SetInputToDefaultAudioDevice()
-        [Console]::Error.WriteLine("AUDIO: Default device OK")
-    } catch {
-        [Console]::Error.WriteLine("AUDIO_ERROR: " + $_.Exception.Message)
-        [Console]::Out.WriteLine("")
-        [Console]::Out.Flush()
-        exit 1
-    }
+    $recognizer.SetInputToWaveFile($wavPath)
+    $recognizer.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))
 
-    $grammar = New-Object System.Speech.Recognition.DictationGrammar
-    $recognizer.LoadGrammar($grammar)
+    [Console]::Error.WriteLine("TRANSCRIBING: $wavPath")
+    $result = $recognizer.Recognize()
 
-    [Console]::Out.WriteLine("LISTENING")
-    [Console]::Out.Flush()
-    [Console]::Error.WriteLine("STARTING_RECOGNIZE")
-
-    # Synchronous recognize — blocks until speech+pause detected or timeout
-    # Using 30 second timeout; process will be killed on PTT release
-    $result = $null
-    try {
-        $result = $recognizer.Recognize([TimeSpan]::FromSeconds(30))
-    } catch {
-        [Console]::Error.WriteLine("RECOGNIZE_ERROR: " + $_.Exception.Message)
-    }
-
-    if ($result) {
+    if ($result -and $result.Text) {
         [Console]::Error.WriteLine("RESULT: '" + $result.Text + "' confidence=" + $result.Confidence)
         [Console]::Out.WriteLine($result.Text)
     } else {
-        [Console]::Error.WriteLine("RESULT: empty (no speech detected or timeout)")
+        [Console]::Error.WriteLine("RESULT: empty (no speech detected)")
         [Console]::Out.WriteLine("")
     }
     [Console]::Out.Flush()
-
-    try { $recognizer.Dispose() } catch {}
+    $recognizer.Dispose()
 } catch {
-    [Console]::Error.WriteLine("FATAL: " + $_.Exception.ToString())
+    [Console]::Error.WriteLine("ERROR: " + $_.Exception.Message)
     [Console]::Out.WriteLine("")
     [Console]::Out.Flush()
 }
