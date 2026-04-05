@@ -66,6 +66,14 @@
     const path = require('path');
     const os = require('os');
 
+    // Log to the same file as the main process
+    const logPath = path.join(os.homedir(), 'atleta-bridge.log');
+    function log(msg) {
+      const line = `[${new Date().toISOString()}] [VoiceOverlay] ${msg}\n`;
+      console.log(msg);
+      try { fs.appendFileSync(logPath, line); } catch(e) {}
+    }
+
     let state = 'idle';
     let drivers = [];
     let pendingCommand = null;
@@ -90,11 +98,11 @@
         ).join('');
         if (mics.length > 0) selectedDeviceId = mics[0].deviceId;
         dropdown.onchange = () => { selectedDeviceId = dropdown.value; };
-        console.log('[VoiceChat] Found', mics.length, 'microphones');
+        log('[VoiceChat] Found', mics.length, 'microphones');
       } catch(e) {
         dropdown.innerHTML = '<option value="">Mic access denied</option>';
         addError('Mic access denied: ' + e.message);
-        console.log('[VoiceChat] Mic enumeration error:', e);
+        log('[VoiceChat] Mic enumeration error:', e);
       }
     }
     loadMicDevices();
@@ -117,11 +125,11 @@
         source.connect(processor);
         processor.connect(audioContext.destination);
         setState('listening');
-        console.log('[VoiceChat] Recording started, device:', selectedDeviceId);
+        log('[VoiceChat] Recording started, device:', selectedDeviceId);
       } catch(e) {
         addError('Mic error: ' + e.message);
         setState('idle');
-        console.log('[VoiceChat] Recording error:', e);
+        log('[VoiceChat] Recording error:', e);
       }
     }
 
@@ -225,19 +233,20 @@
       document.getElementById('status-label').textContent = labels[s] || s;
     }
     function addMessage(targetLabel, targetType, text) {
-      const log = document.getElementById('message-log');
+      const msgLog = document.getElementById('message-log');
       const empty = document.getElementById('empty-state'); if (empty) empty.remove();
       const entry = document.createElement('div'); entry.className = 'msg-entry';
       const now = new Date();
       const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
       entry.innerHTML = `<span class="msg-time">${time}</span><span class="msg-target ${targetType}">${targetLabel}</span><div class="msg-text">${escapeHtml(text)}</div>`;
-      log.appendChild(entry); log.scrollTop = log.scrollHeight;
+      msgLog.appendChild(entry); msgLog.scrollTop = msgLog.scrollHeight;
     }
     function addError(text) {
-      const log = document.getElementById('message-log');
+      log('ERROR: ' + text);
+      const msgLog = document.getElementById('message-log');
       const empty = document.getElementById('empty-state'); if (empty) empty.remove();
       const entry = document.createElement('div'); entry.className = 'msg-error'; entry.textContent = text;
-      log.appendChild(entry); log.scrollTop = log.scrollHeight;
+      msgLog.appendChild(entry); msgLog.scrollTop = msgLog.scrollHeight;
     }
     function showConfirm(targetLabel, text) {
       document.getElementById('confirm-target').textContent = targetLabel;
@@ -313,10 +322,14 @@
     });
 
     ipcRenderer.on('voice-start-recording', () => {
+      log('IPC: voice-start-recording, state=' + state);
       if (state === 'confirming' || state === 'processing') return;
       startRecording();
     });
-    ipcRenderer.on('voice-stop-recording', () => { stopRecording(); });
+    ipcRenderer.on('voice-stop-recording', () => {
+      log('IPC: voice-stop-recording, state=' + state + ', chunks=' + audioChunks.length);
+      stopRecording();
+    });
     ipcRenderer.on('voice-transcript', (event, text) => { processTranscript(text); });
     ipcRenderer.on('voice-error', (event, err) => { addError('Speech error: ' + err); setState('idle'); });
     ipcRenderer.on('voice-send-result', (event, r) => { if (!r.success) addError('Failed: ' + (r.reason || 'unknown')); });
