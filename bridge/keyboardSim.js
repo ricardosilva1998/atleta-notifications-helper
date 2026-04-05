@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { clipboard } = require('electron');
 const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -105,7 +104,7 @@ async function pressKeyViaEvent(vk, scan) {
  * Paste text using clipboard + Ctrl+V (most reliable for game chat boxes).
  */
 async function pasteText(str) {
-  // Save current clipboard, paste, restore
+  const { clipboard } = require('electron');
   const oldClip = clipboard.readText();
   clipboard.writeText(str);
   await sleep(50);
@@ -121,7 +120,7 @@ async function pasteText(str) {
     await sleep(50);
   }
   // Restore clipboard after a delay
-  setTimeout(() => { clipboard.writeText(oldClip); }, 500);
+  setTimeout(() => { require('electron').clipboard.writeText(oldClip); }, 500);
 }
 
 /**
