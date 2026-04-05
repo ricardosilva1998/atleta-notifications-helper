@@ -18,6 +18,7 @@ let connectInterval = null;
 
 const { broadcastToChannel, getClientInfo } = require('./websocket');
 const settings = require('./settings');
+const { extractTrackFromIBT } = require('./trackExtractor');
 
 // Fuel tracking
 let fuelHistory = [];
@@ -232,9 +233,8 @@ async function startTelemetry(onStatusChange) {
                 log('[SessionInfo] Found! Drivers: ' + driverInfo.Drivers.length);
                 log('[SessionInfo] Track: ' + trackName);
 
-                // Load track map: server DB → local cache → will map by driving
+                // Load track map: local cache → server DB → .ibt telemetry files → manual mapping
                 if (trackName && !trackPathComplete && trackPathOutput.length === 0) {
-                  // Try local cache first (instant)
                   const cached = loadCachedTrack(trackName);
                   if (cached) {
                     trackPathOutput = cached;
@@ -242,15 +242,28 @@ async function startTelemetry(onStatusChange) {
                     filledSlots = TRACK_SLOTS;
                     log('[TrackMap] Loaded from local cache: ' + trackName);
                   } else {
-                    // Try server (async, non-blocking)
-                    fetchTrackFromServer(trackName).then(serverData => {
+                    // Try server, then .ibt files (async, non-blocking)
+                    (async () => {
+                      // Try server first
+                      const serverData = await fetchTrackFromServer(trackName);
                       if (serverData && !trackPathComplete) {
                         trackPathOutput = serverData;
                         trackPathComplete = true;
                         filledSlots = TRACK_SLOTS;
-                        saveCachedTrack(trackName, serverData); // Cache locally too
+                        saveCachedTrack(trackName, serverData);
+                        return;
                       }
-                    });
+                      // Try extracting from .ibt telemetry files
+                      const ibtData = await extractTrackFromIBT(trackName);
+                      if (ibtData && !trackPathComplete) {
+                        trackPathOutput = ibtData;
+                        trackPathComplete = true;
+                        filledSlots = TRACK_SLOTS;
+                        saveCachedTrack(trackName, ibtData);
+                        uploadTrackToServer(trackName, ibtData);
+                        log('[TrackMap] Built from .ibt file, uploaded to server');
+                      }
+                    })();
                   }
                 }
                 driverInfo.Drivers.slice(0, 3).forEach((d, i) => {
