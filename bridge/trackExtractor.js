@@ -162,7 +162,9 @@ async function extractTrackFromIBT() {
 
     if (files.length === 0) return null;
 
-    for (const entry of files.slice(0, 5)) {
+    // Skip the newest file (likely being written by iRacing) to avoid EBUSY
+    const candidates = files.length > 1 ? files.slice(1, 6) : files.slice(0, 1);
+    for (const entry of candidates) {
       const result = await extractFromFile(path.join(IBT_DIR, entry.file));
       if (result && result.points.length > 50) {
         log('[TrackExtract] Extracted from ' + entry.file + ' (' + result.points.length + ' pts, geo=' + result.geoId + ')');

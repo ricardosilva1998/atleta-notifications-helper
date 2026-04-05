@@ -1,3 +1,13 @@
+// Catch uncaught exceptions to prevent crash dialogs (e.g., EBUSY from ibt files)
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT]', err.message);
+  try {
+    const fs = require('fs');
+    const logPath = require('path').join(require('os').homedir(), 'atleta-bridge.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] [UNCAUGHT] ${err.message}\n`);
+  } catch(e) {}
+});
+
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen, session } = require('electron');
 const path = require('path');
 const { startServer, stopServer } = require('./websocket');
