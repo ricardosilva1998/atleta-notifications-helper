@@ -32,7 +32,7 @@ async function ensureConnected(channel) {
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator,
-      selfDeaf: true,  // Don't receive audio (saves bandwidth)
+      selfDeaf: false,  // Must be undeafened to receive speaking events
       selfMute: true,   // Don't send audio
     });
 
