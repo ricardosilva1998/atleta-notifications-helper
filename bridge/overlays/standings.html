@@ -246,7 +246,7 @@
 
       const irCell = `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${irStr}</span>`;
 
-      return `<tr class="${d.isPlayer ? 'player-row' : ''}${disconnCls}">
+      return `<tr class="${(d.isSpectated || d.isPlayer) ? 'player-row' : ''}${disconnCls}">
         <td class="mono" style="font-weight:700;color:rgba(255,255,255,0.7)">${pos}</td>
         <td class="flag">${flag}</td>
         <td>${numCell}</td>

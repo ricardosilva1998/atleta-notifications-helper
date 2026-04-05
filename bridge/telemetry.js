@@ -398,6 +398,13 @@ async function startTelemetry(onStatusChange) {
           })),
         }});
 
+        // Read camera spectated car index (for replay camera support)
+        let camCarIdx = playerCarIdx;
+        try {
+          const cam = ir.get(VARS.CAM_CAR_IDX);
+          if (cam !== undefined && cam !== null) camCarIdx = Array.isArray(cam) ? cam[0] : cam;
+        } catch(e) {}
+
         // Use PLAYER_CAR_IDX from telemetry if session info unavailable
         if (!sessionInfoFound) {
           const pci = ir.get(VARS.PLAYER_CAR_POSITION);
@@ -460,6 +467,7 @@ async function startTelemetry(onStatusChange) {
             estTime: estTime[i] || 0,
             lapDistPct: lapDistPct[i] || 0,
             isPlayer: i === playerCarIdx,
+            isSpectated: i === (camCarIdx ?? playerCarIdx),
           });
         }
 
@@ -507,7 +515,7 @@ async function startTelemetry(onStatusChange) {
 
         // Only broadcast standings every 1 second (every 10th poll) to prevent flickering
         if (pollCount % 30 === 0) {
-          broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings });
+          broadcastToChannel('standings', { type: 'data', channel: 'standings', data: standings, spectatedCarIdx: camCarIdx ?? playerCarIdx });
         }
 
         // === Relative ===
@@ -537,7 +545,7 @@ async function startTelemetry(onStatusChange) {
           .sort((a, b) => a.distGap - b.distGap);
 
         if (pollCount % 15 === 0) broadcastToChannel('relative', { type: 'data', channel: 'relative', data: {
-          playerCarIdx, cars: relative,
+          playerCarIdx, spectatedCarIdx: camCarIdx ?? playerCarIdx, cars: relative,
         }});
 
         // === Track Map ===
