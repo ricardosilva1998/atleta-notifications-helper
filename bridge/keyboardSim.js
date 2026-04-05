@@ -94,17 +94,22 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Map VK to hardware scan codes (for DirectInput compatibility)
+const VK_TO_SCAN = { 0x54: 0x14, 0x0D: 0x1C }; // T=0x14, Enter=0x1C
+
 /**
- * Send a virtual key press (down + up).
+ * Send a virtual key press (down + up) with scan code for game compatibility.
  */
 async function pressKey(vk) {
   if (!sendInput) return;
-  const down = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 } };
-  const up = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } };
+  const scan = VK_TO_SCAN[vk] || 0;
+  // Send both VK and scan code — games may use either
+  const down = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: scan, dwFlags: 0, time: 0, dwExtraInfo: 0 } };
+  const up = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: scan, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } };
   sendInput(down);
-  await sleep(15);
+  await sleep(30);
   sendInput(up);
-  await sleep(15);
+  await sleep(30);
 }
 
 /**
@@ -137,14 +142,14 @@ async function sendChatCommand(command) {
   try {
     // Focus iRacing window before typing
     focusIRacing();
-    await sleep(200);
+    await sleep(500); // Give iRacing time to accept focus
     // Press T to open iRacing chat
     await pressKey(VK_T);
     // Wait for chat box to open
-    await sleep(200);
+    await sleep(300);
     // Type the command using Unicode input
     await typeString(command);
-    await sleep(50);
+    await sleep(100);
     // Press Enter to send
     await pressKey(VK_RETURN);
     log('[KeyboardSim] Sent: ' + command);
