@@ -101,10 +101,12 @@ app.get('/api/bridge/config', (req, res) => {
 });
 
 // Discord voice state API (public, used by Bridge app)
-app.get('/api/voice/:discordUserId', (req, res) => {
+app.get('/api/voice/:discordUserId', async (req, res) => {
   try {
     const { discordUserId } = req.params;
     const { client } = require('./discord');
+    const { ensureConnected, isSpeaking, scheduleDisconnect } = require('./services/voiceTracker');
+
     let voiceState = null;
     for (const guild of client.guilds.cache.values()) {
       const vs = guild.voiceStates.cache.get(discordUserId);
@@ -113,7 +115,13 @@ app.get('/api/voice/:discordUserId', (req, res) => {
     if (!voiceState || !voiceState.channel) {
       return res.json({ channelName: null, members: [] });
     }
+
     const channel = voiceState.channel;
+
+    // Join the voice channel to detect speaking (bot joins muted+deafened)
+    await ensureConnected(channel);
+    scheduleDisconnect(); // Auto-leave after 5 min of no polls
+
     const members = channel.members.map(member => {
       const vs = member.voice;
       const user = member.user;
@@ -126,6 +134,7 @@ app.get('/api/voice/:discordUserId', (req, res) => {
         avatar, selfMute: vs.selfMute || false, selfDeaf: vs.selfDeaf || false,
         serverMute: vs.serverMute || false, serverDeaf: vs.serverDeaf || false,
         streaming: vs.streaming || false, camera: vs.selfVideo || false,
+        speaking: isSpeaking(user.id),
         isStreamer: user.id === discordUserId,
       };
     });

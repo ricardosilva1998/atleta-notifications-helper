@@ -49,9 +49,9 @@
     .avatar {
       width: 32px; height: 32px; border-radius: 50%;
       border: 2px solid rgba(255,255,255,0.12);
-      transition: border-color 0.3s, opacity 0.3s;
+      transition: border-color 0.2s, opacity 0.2s, box-shadow 0.2s;
     }
-    .avatar.unmuted { border-color: rgba(255,255,255,0.2); }
+    .avatar.speaking { border-color: #3ecf8e; box-shadow: 0 0 6px rgba(62,207,142,0.4); }
     .avatar.muted { border-color: rgba(255,255,255,0.06); opacity: 0.5; }
     .member-info { flex: 1; min-width: 0; }
     .member-name {
@@ -167,7 +167,7 @@
       memberList.innerHTML = sorted.map(m => {
         const isMuted = m.selfMute || m.serverMute;
         const isDeaf = m.selfDeaf || m.serverDeaf;
-        const avatarClass = (isMuted || isDeaf) ? 'muted' : 'unmuted';
+        const avatarClass = (isMuted || isDeaf) ? 'muted' : (m.speaking ? 'speaking' : '');
         const nameClass = m.isStreamer ? 'member-name is-streamer' : 'member-name';
 
         let icons = '';
