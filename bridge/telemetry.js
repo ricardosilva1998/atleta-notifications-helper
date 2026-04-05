@@ -4,7 +4,9 @@ const fs = require('fs');
 const path = require('path');
 
 const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
-try { fs.writeFileSync(logPath, ''); } catch(e) {}
+// Don't clear log on startup — causes EBUSY if previous instance is still writing
+// Just append; file stays small since it's overwritten each session anyway
+try { fs.appendFileSync(logPath, '\n--- App started ' + new Date().toISOString() + ' ---\n'); } catch(e) {}
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   console.log(msg);
