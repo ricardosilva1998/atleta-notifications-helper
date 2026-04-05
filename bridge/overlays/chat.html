@@ -64,7 +64,6 @@
               emoteMap.set(e.name, 'https://cdn.7tv.app/emote/' + e.id + '/1x.webp');
             });
           }
-          emotesLoaded = true;
         }
 
         // Channel emotes via Twitch user ID
@@ -82,11 +81,59 @@
           } catch(e) {} // Channel may not have 7TV
         }
 
-        console.log('[7TV] Loaded ' + emoteMap.size + ' emotes (channel: ' + (twitchUserId || 'global only') + ')');
+        console.log('[7TV] Loaded ' + emoteMap.size + ' emotes');
       } catch(e) {
         console.log('[7TV] Failed to load: ' + e.message);
-        emotesLoaded = true; // Don't retry endlessly
       }
+    }
+
+    async function loadBTTVEmotes(twitchUserId) {
+      try {
+        // Global emotes
+        const globalRes = await fetch('https://api.betterttv.net/3/cached/emotes/global');
+        if (globalRes.ok) {
+          const globalData = await globalRes.json();
+          globalData.forEach(e => {
+            emoteMap.set(e.code, 'https://cdn.betterttv.net/emote/' + e.id + '/1x');
+          });
+        }
+
+        // Channel emotes via Twitch user ID
+        if (twitchUserId) {
+          try {
+            const res = await fetch('https://api.betterttv.net/3/cached/users/twitch/' + twitchUserId);
+            if (res.ok) {
+              const data = await res.json();
+              // Channel emotes
+              if (data.channelEmotes) {
+                data.channelEmotes.forEach(e => {
+                  emoteMap.set(e.code, 'https://cdn.betterttv.net/emote/' + e.id + '/1x');
+                });
+              }
+              // Shared emotes (community-added)
+              if (data.sharedEmotes) {
+                data.sharedEmotes.forEach(e => {
+                  emoteMap.set(e.code, 'https://cdn.betterttv.net/emote/' + e.id + '/1x');
+                });
+              }
+            }
+          } catch(e) {} // Channel may not have BTTV
+        }
+
+        console.log('[BTTV] Total emotes after BTTV: ' + emoteMap.size);
+      } catch(e) {
+        console.log('[BTTV] Failed to load: ' + e.message);
+      }
+    }
+
+    async function loadAllEmotes(twitchUserId) {
+      if (emotesLoaded) return;
+      await Promise.all([
+        load7TVEmotes(twitchUserId),
+        loadBTTVEmotes(twitchUserId),
+      ]);
+      emotesLoaded = true;
+      console.log('[Emotes] Total loaded: ' + emoteMap.size);
     }
 
     function replaceEmotes(text) {
@@ -150,7 +197,7 @@
         const info = document.getElementById('setup-info');
         if (info) info.style.display = 'none';
         // Load 7TV global emotes on connect (channel emotes load from first message's roomId)
-        if (!emotesLoaded) load7TVEmotes(null);
+        if (!emotesLoaded) loadAllEmotes(null);
       } else if (status === 'connecting') {
         el.innerHTML = '<span class="status-dot waiting"></span> Connecting...';
       } else if (status === 'no-channel') {
@@ -173,10 +220,10 @@
       const info = document.getElementById('setup-info');
       if (info) info.remove();
 
-      // Load channel 7TV emotes using Twitch room ID from first message
+      // Load channel emotes (7TV + BTTV) using Twitch room ID from first message
       if (!channelEmotesLoaded && data.roomId) {
         channelEmotesLoaded = true;
-        load7TVEmotes(data.roomId);
+        loadAllEmotes(data.roomId);
       }
 
       const msg = document.createElement('div');
