@@ -11,25 +11,28 @@ function log(msg) {
 
 const isWindows = process.platform === 'win32';
 
-let sendInput = null;
+let sendInputFn = null;
+let keybdEventFn = null;
+let findWindowA = null;
+let setForegroundWindow = null;
 let INPUT_size = 0;
 
 // Windows constants
 const INPUT_KEYBOARD = 1;
 const KEYEVENTF_UNICODE = 0x0004;
 const KEYEVENTF_KEYUP = 0x0002;
+const KEYEVENTF_SCANCODE = 0x0008;
 const VK_RETURN = 0x0D;
-const VK_T = 0x54;
 
-let findWindowA = null;
-let setForegroundWindow = null;
+// Default chat key — configurable
+let chatOpenVK = 0x54; // T key
+let chatOpenScan = 0x14; // T scan code
 
 if (isWindows) {
   try {
     const koffi = require('koffi');
     const user32 = koffi.load('user32.dll');
 
-    // Define INPUT structure for keyboard
     const KEYBDINPUT = koffi.struct('KEYBDINPUT', {
       wVk: 'uint16',
       wScan: 'uint16',
@@ -45,16 +48,14 @@ if (isWindows) {
 
     INPUT_size = koffi.sizeof(INPUT);
 
-    sendInput = user32.func('SendInput', 'uint32', ['uint32', koffi.pointer(INPUT), 'int32']);
+    const _sendInput = user32.func('SendInput', 'uint32', ['uint32', koffi.pointer(INPUT), 'int32']);
+    sendInputFn = function(input) { return _sendInput(1, input, INPUT_size); };
 
-    const _sendInput = sendInput;
-    sendInput = function(input) {
-      return _sendInput(1, input, INPUT_size);
-    };
+    // Also load keybd_event as fallback (some games prefer it over SendInput)
+    keybdEventFn = user32.func('keybd_event', 'void', ['uint8', 'uint8', 'uint32', 'uintptr']);
 
-    log('[KeyboardSim] Loaded SendInput');
+    log('[KeyboardSim] Loaded SendInput + keybd_event');
 
-    // Window focus — load separately so SendInput still works if this fails
     try {
       findWindowA = user32.func('FindWindowA', 'void*', ['void*', 'str']);
       setForegroundWindow = user32.func('SetForegroundWindow', 'int32', ['void*']);
@@ -63,14 +64,10 @@ if (isWindows) {
       log('[KeyboardSim] FindWindow not available: ' + (e2.message || e2));
     }
   } catch (e) {
-    log('[KeyboardSim] Failed to load koffi/user32: ' + (e.message || e));
-    sendInput = null;
+    log('[KeyboardSim] Failed to load: ' + (e.message || e));
   }
 }
 
-/**
- * Try to bring iRacing window to the foreground.
- */
 function focusIRacing() {
   if (!findWindowA || !setForegroundWindow) return false;
   const titles = ['iRacing.com Simulator', 'iRacing'];
@@ -79,12 +76,10 @@ function focusIRacing() {
       const hwnd = findWindowA(null, title);
       if (hwnd) {
         setForegroundWindow(hwnd);
-        log('[KeyboardSim] Focused iRacing window: "' + title + '"');
+        log('[KeyboardSim] Focused: "' + title + '"');
         return true;
       }
-    } catch(e) {
-      log('[KeyboardSim] FindWindow error: ' + (e.message || e));
-    }
+    } catch(e) {}
   }
   log('[KeyboardSim] iRacing window not found');
   return false;
@@ -94,70 +89,73 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Map VK to hardware scan codes (for DirectInput compatibility)
-const VK_TO_SCAN = { 0x54: 0x14, 0x0D: 0x1C }; // T=0x14, Enter=0x1C
-
 /**
- * Send a virtual key press (down + up) with scan code for game compatibility.
+ * Press a key using keybd_event (better game compatibility than SendInput).
  */
-async function pressKey(vk) {
-  if (!sendInput) return;
-  const scan = VK_TO_SCAN[vk] || 0;
-  // Send both VK and scan code — games may use either
-  const down = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: scan, dwFlags: 0, time: 0, dwExtraInfo: 0 } };
-  const up = { type: INPUT_KEYBOARD, ki: { wVk: vk, wScan: scan, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } };
-  sendInput(down);
+async function pressKeyViaEvent(vk, scan) {
+  if (!keybdEventFn) return;
+  keybdEventFn(vk, scan, 0, 0); // key down
   await sleep(30);
-  sendInput(up);
+  keybdEventFn(vk, scan, KEYEVENTF_KEYUP, 0); // key up
   await sleep(30);
 }
 
 /**
- * Type a string using Unicode characters (layout-independent).
+ * Type a string using SendInput with KEYEVENTF_UNICODE (layout-independent).
  */
 async function typeString(str) {
-  if (!sendInput) return;
+  if (!sendInputFn) return;
   for (let i = 0; i < str.length; i++) {
     const charCode = str.charCodeAt(i);
-    const down = { type: INPUT_KEYBOARD, ki: { wVk: 0, wScan: charCode, dwFlags: KEYEVENTF_UNICODE, time: 0, dwExtraInfo: 0 } };
-    const up = { type: INPUT_KEYBOARD, ki: { wVk: 0, wScan: charCode, dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } };
-    sendInput(down);
+    sendInputFn({ type: INPUT_KEYBOARD, ki: { wVk: 0, wScan: charCode, dwFlags: KEYEVENTF_UNICODE, time: 0, dwExtraInfo: 0 } });
     await sleep(10);
-    sendInput(up);
+    sendInputFn({ type: INPUT_KEYBOARD, ki: { wVk: 0, wScan: charCode, dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } });
     await sleep(10);
   }
+}
+
+/**
+ * Set which key opens iRacing chat (configurable from settings).
+ */
+function setChatKey(vk, scan) {
+  chatOpenVK = vk;
+  chatOpenScan = scan || 0;
+  log('[KeyboardSim] Chat key set: VK=0x' + vk.toString(16) + ' scan=0x' + (scan || 0).toString(16));
 }
 
 /**
  * Send a chat command to iRacing.
- * Opens chat with T, types the command, presses Enter.
- * @param {string} command - The full chat command (e.g., "/p Max Verstappen good race")
+ * Focuses iRacing, opens chat, types command, presses Enter.
  */
 async function sendChatCommand(command) {
-  if (!isWindows || !sendInput) {
-    log('[KeyboardSim] Skipping (not Windows or SendInput unavailable)');
+  if (!isWindows || (!sendInputFn && !keybdEventFn)) {
+    log('[KeyboardSim] Skipping (not Windows or no input method)');
     return false;
   }
 
   try {
-    // Focus iRacing window before typing
+    // Focus iRacing
     focusIRacing();
-    await sleep(500); // Give iRacing time to accept focus
-    // Press T to open iRacing chat
-    await pressKey(VK_T);
-    // Wait for chat box to open
-    await sleep(300);
-    // Type the command using Unicode input
+    await sleep(500);
+
+    // Open chat using keybd_event (better game compat)
+    log('[KeyboardSim] Opening chat (VK=0x' + chatOpenVK.toString(16) + ')...');
+    await pressKeyViaEvent(chatOpenVK, chatOpenScan);
+    await sleep(400);
+
+    // Type the command using Unicode SendInput (for text in chat box)
     await typeString(command);
     await sleep(100);
-    // Press Enter to send
-    await pressKey(VK_RETURN);
+
+    // Send with Enter via keybd_event
+    await pressKeyViaEvent(VK_RETURN, 0x1C);
+
     log('[KeyboardSim] Sent: ' + command);
     return true;
   } catch (e) {
-    log('[KeyboardSim] Error: ' + e.message);
+    log('[KeyboardSim] Error: ' + (e.message || e));
     return false;
   }
 }
 
-module.exports = { sendChatCommand };
+module.exports = { sendChatCommand, setChatKey };

@@ -371,6 +371,10 @@
       const el = document.getElementById('whisper-status');
       if (el) { el.textContent = 'Whisper ready'; el.style.color = '#3ecf8e'; el.style.background = 'rgba(62,207,142,0.08)'; el.style.borderColor = 'rgba(62,207,142,0.15)'; setTimeout(() => { el.style.display = 'none'; }, 3000); }
     });
+    ipcRenderer.on('voice-whisper-loading', () => {
+      const el = document.getElementById('whisper-status');
+      if (el) { el.textContent = 'Loading Whisper model...'; el.style.display = 'block'; }
+    });
     ipcRenderer.on('voice-settings-update', () => {});
     ipcRenderer.on('lock-state', (event, locked) => {
       document.body.style.pointerEvents = locked ? 'none' : 'auto';

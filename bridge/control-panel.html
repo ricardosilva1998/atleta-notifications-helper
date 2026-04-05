@@ -268,6 +268,12 @@
       ],
       voicechat: [
         { key: 'pushToTalk', label: 'Push-to-Talk Key', type: 'hotkey', default: null },
+        { key: 'chatKey', label: 'iRacing Chat Key', type: 'select', default: 'T', options: [
+          { value: 'T', label: 'T (default)' },
+          { value: 'Y', label: 'Y' },
+          { value: 'U', label: 'U' },
+          { value: 'Enter', label: 'Enter' },
+        ]},
         { key: 'wakeWordEnabled', label: 'Wake word ("message") always listening', type: 'checkbox', default: false },
         { key: 'language', label: 'Speech Language', type: 'select', default: 'en-US', options: [
           { value: 'en-US', label: 'English (US)' },
@@ -368,6 +374,7 @@
         if (settings.pushToTalk !== undefined) voiceUpdate.pushToTalkKey = settings.pushToTalk;
         if (settings.wakeWordEnabled !== undefined) voiceUpdate.wakeWordEnabled = settings.wakeWordEnabled;
         if (settings.language !== undefined) voiceUpdate.language = settings.language;
+        if (settings.chatKey !== undefined) voiceUpdate.chatKey = settings.chatKey;
         ipcRenderer.send('voice-settings-update', voiceUpdate);
       }
       closeCustomize();

@@ -5,7 +5,15 @@ const path = require('path');
 const os = require('os');
 const { ipcMain } = require('electron');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
-const { sendChatCommand } = require('./keyboardSim');
+const { sendChatCommand, setChatKey } = require('./keyboardSim');
+
+// Map key names to VK codes + scan codes
+const CHAT_KEY_MAP = {
+  'T': { vk: 0x54, scan: 0x14 },
+  'Y': { vk: 0x59, scan: 0x15 },
+  'U': { vk: 0x55, scan: 0x16 },
+  'Enter': { vk: 0x0D, scan: 0x1C },
+};
 
 const logPath = path.join(os.homedir(), 'atleta-bridge.log');
 function log(msg) {
@@ -143,6 +151,12 @@ function startVoiceInput(opts) {
     applyPushToTalkKey(settings.voiceChat.pushToTalkKey);
   }
 
+  // Apply saved chat key
+  if (settings.voiceChat && settings.voiceChat.chatKey && CHAT_KEY_MAP[settings.voiceChat.chatKey]) {
+    const k = CHAT_KEY_MAP[settings.voiceChat.chatKey];
+    setChatKey(k.vk, k.scan);
+  }
+
   // Pre-load Whisper model in background
   initWhisper();
 
@@ -254,6 +268,11 @@ function startVoiceInput(opts) {
   ipcMain.on('voice-settings-update', (event, newSettings) => {
     if (!settings.voiceChat) settings.voiceChat = {};
     Object.assign(settings.voiceChat, newSettings);
+    // Apply chat key setting
+    if (newSettings.chatKey && CHAT_KEY_MAP[newSettings.chatKey]) {
+      const k = CHAT_KEY_MAP[newSettings.chatKey];
+      setChatKey(k.vk, k.scan);
+    }
     if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
       voiceChatWindow.webContents.send('voice-settings-update', settings.voiceChat);
     }
@@ -277,10 +296,15 @@ function applyPushToTalkKey(keyData) {
 
 function setVoiceChatWindow(win) {
   voiceChatWindow = win;
-  if (win && !win.isDestroyed() && settings.voiceChat) {
+  if (win && !win.isDestroyed()) {
     win.webContents.once('did-finish-load', () => {
-      win.webContents.send('voice-settings-update', settings.voiceChat);
-      if (whisperPipeline) win.webContents.send('voice-whisper-ready');
+      if (settings.voiceChat) win.webContents.send('voice-settings-update', settings.voiceChat);
+      // Tell overlay current Whisper status
+      if (whisperPipeline) {
+        win.webContents.send('voice-whisper-ready');
+      } else if (whisperLoading) {
+        win.webContents.send('voice-whisper-loading');
+      }
     });
   }
 }
