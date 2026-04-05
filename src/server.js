@@ -122,8 +122,13 @@ app.get('/api/voice/:discordUserId', async (req, res) => {
     await ensureConnected(channel);
     scheduleDisconnect(); // Auto-leave after 5 min of no polls
 
-    const members = channel.members.map(member => {
-      const vs = member.voice;
+    // Filter out bots (like the Atleta bot itself)
+    const humanMembers = channel.members.filter(m => !m.user.bot);
+
+    const members = humanMembers.map(member => {
+      // Re-fetch voice state from cache for latest mute/deaf status
+      const freshVs = member.guild.voiceStates.cache.get(member.id);
+      const vs = freshVs || member.voice;
       const user = member.user;
       const avatar = user.avatar
         ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.webp?size=64`
