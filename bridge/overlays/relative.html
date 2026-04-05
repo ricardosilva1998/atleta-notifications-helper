@@ -31,8 +31,7 @@
     .license { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
     .irating { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.6); }
     .flag { font-size: 12px; line-height: 1; }
-    .driver-cell { position: relative; }
-    .driver-cell::after { content: attr(data-brand); position: absolute; right: 0; top: 50%; transform: translateY(-50%); font-size: 16px; font-weight: 900; opacity: 0.12; text-transform: uppercase; white-space: nowrap; pointer-events: none; letter-spacing: 1px; color: #fff; z-index: 0; }
+    .brand-watermark { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 800; opacity: 0.15; text-transform: uppercase; white-space: nowrap; pointer-events: none; letter-spacing: 1px; color: #fff; }
   </style>
 </head>
 <body>
@@ -173,7 +172,8 @@
         : `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">--</span>`;
       const irCell = `<span style="background:rgba(255,255,255,0.1);color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${irStr}</span>`;
 
-      const nameCell = `<div class="driver-cell" data-brand="${getManufacturer(carBrand)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${d.driverName || ''}</div>`;
+      const mfr = getManufacturer(carBrand);
+      const nameCell = `<div style="position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${d.driverName || ''}${mfr ? '<span class="brand-watermark">' + mfr + '</span>' : ''}</div>`;
 
       if (isPlayerRow) {
         return `<tr class="player-row">

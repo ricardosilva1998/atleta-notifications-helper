@@ -11,9 +11,9 @@
     .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.5); cursor: move; -webkit-app-region: drag; }
     .overlay-body { padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .compass { position: relative; width: 120px; height: 120px; }
-    .compass-svg { width: 120px; height: 120px; filter: drop-shadow(0 0 8px rgba(145,70,255,0.15)); }
+    .compass-svg { width: 120px; height: 120px; }
     .wind-info { display: flex; align-items: baseline; gap: 8px; }
-    .wind-dir { font-size: 22px; font-weight: 900; color: #9146ff; font-family: 'Consolas', monospace; letter-spacing: 2px; text-shadow: 0 0 10px rgba(145,70,255,0.4); }
+    .wind-dir { font-size: 22px; font-weight: 900; color: #9146ff; font-family: 'Consolas', monospace; letter-spacing: 2px; }
     .wind-speed { font-size: 15px; font-weight: 700; font-family: 'Consolas', monospace; color: #e8e6f0; }
     .wind-unit { font-size: 9px; color: rgba(255,255,255,0.4); }
     .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
@@ -35,66 +35,13 @@
         <div class="compass">
           <svg class="compass-svg" viewBox="0 0 120 120">
             <defs>
-              <!-- Light face of needle (left/bright half) -->
-              <linearGradient id="needleLightFace" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="#d8b4fe"/>
-                <stop offset="40%" stop-color="#a855f7"/>
+              <linearGradient id="arrowGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#b47aff"/>
                 <stop offset="100%" stop-color="#7c3aed"/>
               </linearGradient>
-              <!-- Dark face of needle (right/shadow half) -->
-              <linearGradient id="needleDarkFace" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="#4c1d95"/>
-                <stop offset="60%" stop-color="#6d28d9"/>
-                <stop offset="100%" stop-color="#7c3aed"/>
-              </linearGradient>
-              <!-- Tip inner highlight gradient (along the length) -->
-              <linearGradient id="needleTipHighlight" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="rgba(255,255,255,0.55)"/>
-                <stop offset="60%" stop-color="rgba(255,255,255,0.08)"/>
-                <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-              </linearGradient>
-              <!-- Tail counter-weight gradient -->
-              <linearGradient id="needleTailGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#3b0764"/>
-                <stop offset="100%" stop-color="#1e1040"/>
-              </linearGradient>
-              <!-- Outer glow + drop shadow filter -->
-              <filter id="needleGlow" x="-60%" y="-60%" width="220%" height="220%">
-                <!-- outer purple glow -->
-                <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur1"/>
-                <feFlood flood-color="#9146ff" flood-opacity="0.55" result="color1"/>
-                <feComposite in="color1" in2="blur1" operator="in" result="glow1"/>
-                <!-- tighter inner glow -->
-                <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur2"/>
-                <feFlood flood-color="#c084fc" flood-opacity="0.6" result="color2"/>
-                <feComposite in="color2" in2="blur2" operator="in" result="glow2"/>
-                <!-- drop shadow -->
-                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1e0036" flood-opacity="0.7" result="shadow"/>
-                <feMerge>
-                  <feMergeNode in="glow1"/>
-                  <feMergeNode in="glow2"/>
-                  <feMergeNode in="shadow"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-              <!-- Tip pulse glow (animated, tight) -->
-              <filter id="tipPulse" x="-200%" y="-200%" width="500%" height="500%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
-                <feMerge>
-                  <feMergeNode in="blur"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-              <!-- Bevel edge highlight filter -->
-              <filter id="bevelEdge" x="-10%" y="-10%" width="120%" height="120%">
-                <feGaussianBlur in="SourceAlpha" stdDeviation="0.6" result="blur"/>
-                <feOffset dx="-0.5" dy="-0.5" result="offset"/>
-                <feFlood flood-color="rgba(255,255,255,0.4)" result="white"/>
-                <feComposite in="white" in2="offset" operator="in" result="highlight"/>
-                <feMerge>
-                  <feMergeNode in="SourceGraphic"/>
-                  <feMergeNode in="highlight"/>
-                </feMerge>
+              <filter id="arrowGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
               </filter>
             </defs>
 
@@ -102,20 +49,11 @@
             <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
             <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(145,70,255,0.12)" stroke-width="2"/>
 
-            <!-- Inner ring -->
-            <circle cx="60" cy="60" r="36" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="3,3"/>
-
             <!-- Tick marks -->
-            <line x1="60" y1="8" x2="60" y2="16" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-linecap="round"/>
+            <line x1="60" y1="8" x2="60" y2="16" stroke="rgba(255,255,255,0.2)" stroke-width="2" stroke-linecap="round"/>
             <line x1="60" y1="104" x2="60" y2="112" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-linecap="round"/>
             <line x1="8" y1="60" x2="16" y2="60" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-linecap="round"/>
             <line x1="104" y1="60" x2="112" y2="60" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-linecap="round"/>
-
-            <!-- Diagonal ticks (smaller) -->
-            <line x1="22" y1="22" x2="27" y2="27" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="93" y1="22" x2="98" y2="27" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="93" y1="93" x2="98" y2="98" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="22" y1="93" x2="27" y2="98" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" stroke-linecap="round"/>
 
             <!-- Cardinal labels -->
             <text x="60" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="#f04438" font-family="Segoe UI,sans-serif">N</text>
@@ -123,82 +61,22 @@
             <text x="106" y="64" text-anchor="middle" font-size="10" font-weight="700" fill="rgba(255,255,255,0.25)" font-family="Segoe UI,sans-serif">E</text>
             <text x="14" y="64" text-anchor="middle" font-size="10" font-weight="700" fill="rgba(255,255,255,0.25)" font-family="Segoe UI,sans-serif">W</text>
 
-            <!-- Wind arrow group — premium 3D compass needle -->
-            <g id="wind-arrow-group" transform="rotate(45, 60, 60)" filter="url(#needleGlow)">
-              <!--
-                Needle design: two mirrored halves create a split 3D compass needle.
-                Tip points toward y=12 (north). Needle spans from y=12 (tip) to y=72 (tail).
-                Center axis at x=60. Total length ~60px, rotates around (60,60).
-
-                FORWARD (bright) half — left side (x < 60):
-                  tapered from 0px wide at the very tip down to ~5px at the waist (y=60),
-                  then flares slightly for the tail counterweight.
-
-                DARK half — right side (x > 60):
-                  mirror image with darker fill.
-              -->
-
-              <!-- === DARK FACE (right half) === -->
-              <path d="
-                M 60 108
-                C 63 100, 65 85, 64.5 60
-                L 66 48
-                L 60 52
-                Z
-              " fill="url(#needleDarkFace)" />
-
-              <!-- === LIGHT FACE (left half) === -->
-              <path d="
-                M 60 108
-                C 57 100, 55 85, 55.5 60
-                L 54 48
-                L 60 52
-                Z
-              " fill="url(#needleLightFace)" />
-
-              <!-- === CENTRE SPINE / RIDGE HIGHLIGHT (bevel seam) === -->
-              <path d="
-                M 60 108
-                C 60 95, 60 75, 60 52
-              " stroke="rgba(255,255,255,0.30)" stroke-width="0.8" fill="none" stroke-linecap="round"/>
-
-              <!-- === TIP INNER HIGHLIGHT (specular glint along front face) === -->
-              <path d="
-                M 60 108
-                C 58.5 98, 57.5 82, 57.2 64
-              " stroke="rgba(255,255,255,0.45)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-
-              <!-- === TAIL COUNTERWEIGHT (dark blunt base) === -->
-              <path d="
-                M 60 52
-                L 54 48
-                Q 60 42, 66 48
-                Z
-              " fill="url(#needleTailGrad)" stroke="rgba(145,70,255,0.25)" stroke-width="0.5"/>
-
-              <!-- === TIP PULSE GLOW (animated dot at the needle point) === -->
-              <circle cx="60" cy="108" r="2.5" fill="#e9d5ff" filter="url(#tipPulse)" opacity="0.9">
-                <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
-                <animate attributeName="r" values="2.5;3.8;2.5" dur="2s" repeatCount="indefinite"/>
-              </circle>
-              <!-- Static bright dot on top of the pulse -->
-              <circle cx="60" cy="108" r="1.4" fill="white" opacity="0.85"/>
+            <!-- Wind arrow: points FROM edge TOWARD center (the car) -->
+            <g id="wind-arrow-group" transform="rotate(0, 60, 60)" filter="url(#arrowGlow)">
+              <!-- Shaft from edge toward center -->
+              <line x1="60" y1="10" x2="60" y2="48" stroke="url(#arrowGrad)" stroke-width="4" stroke-linecap="round"/>
+              <!-- Arrowhead pointing toward center -->
+              <polygon points="60,56 52,42 68,42" fill="url(#arrowGrad)"/>
             </g>
 
-            <!-- Top-down car icon at center -->
-            <g transform="translate(52, 52)">
-              <rect x="2" y="0" width="12" height="16" rx="3" fill="#3ecf8e" opacity="0.8"/>
-              <rect x="0" y="2" width="3" height="4" rx="1" fill="#3ecf8e" opacity="0.6"/>
-              <rect x="13" y="2" width="3" height="4" rx="1" fill="#3ecf8e" opacity="0.6"/>
-              <rect x="0" y="10" width="3" height="4" rx="1" fill="#3ecf8e" opacity="0.6"/>
-              <rect x="13" y="10" width="3" height="4" rx="1" fill="#3ecf8e" opacity="0.6"/>
-              <rect x="4" y="3" width="8" height="5" rx="1.5" fill="rgba(255,255,255,0.4)"/>
-            </g>
+            <!-- Center: green car dot -->
+            <circle cx="60" cy="60" r="5" fill="rgba(62,207,142,0.25)"/>
+            <circle cx="60" cy="60" r="3" fill="#3ecf8e"/>
           </svg>
         </div>
         <div class="wind-info">
-          <span class="wind-dir" id="wind-dir">NE</span>
-          <span class="wind-speed" id="wind-speed">3.2 <span class="wind-unit">m/s</span></span>
+          <span class="wind-dir" id="wind-dir">N</span>
+          <span class="wind-speed" id="wind-speed">0.0 <span class="wind-unit">m/s</span></span>
         </div>
       </div>
     </div>
