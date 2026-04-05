@@ -125,8 +125,9 @@
     function countryToFlag(country) {
       if (!country || country === 'None') return '';
       const iso = COUNTRY_TO_ISO[country];
-      if (!iso) return '';
-      return `<img class="flag-img" src="flags/${iso}.svg" onerror="this.style.display='none'" alt="${country}">`;
+      if (iso) return `<img class="flag-img" src="flags/${iso}.svg" onerror="this.style.display='none'" alt="${country}">`;
+      // Unknown country (like "GLO") — show iRacing logo from sprite
+      return `<span style="display:inline-block;width:16px;height:12px;background-image:url('logos/car-icons-sprite.png');background-size:${1024*(16/128)}px ${1024*(16/128)}px;background-position:0 0;vertical-align:middle;border-radius:1px;opacity:0.7;"></span>`;
     }
 
     function getManufacturer(carMake) {
