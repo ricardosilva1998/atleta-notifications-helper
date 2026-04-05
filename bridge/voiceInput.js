@@ -37,6 +37,25 @@ let getIracingStatus = null;
 // Speech Recognition via PowerShell SAPI (transcribes WAV files)
 let scriptPath = null;
 
+// Fetch shared API key from Atleta server (so users don't need their own)
+let serverApiKey = '';
+function fetchServerConfig() {
+  const https = require('https');
+  https.get('https://atletanotifications.com/api/bridge/config', { timeout: 5000 }, (res) => {
+    let body = '';
+    res.on('data', (d) => { body += d; });
+    res.on('end', () => {
+      try {
+        const config = JSON.parse(body);
+        if (config.openaiKey) {
+          serverApiKey = config.openaiKey;
+          log('[Speech] Got server API key');
+        }
+      } catch(e) {}
+    });
+  }).on('error', () => {});
+}
+
 function findSpeechScript() {
   if (process.platform !== 'win32') return null;
   const candidates = [
@@ -56,7 +75,8 @@ function findSpeechScript() {
 
 function transcribeWav(wavPath) {
   if (!scriptPath) { log('[Speech] No script'); return; }
-  const apiKey = (settings.voiceChat && settings.voiceChat.openaiKey) || '';
+  // User's own key takes priority, then server-provided key
+  const apiKey = (settings.voiceChat && settings.voiceChat.openaiKey) || serverApiKey || '';
   log('[Speech] Transcribing: ' + wavPath + (apiKey ? ' (Whisper API)' : ' (SAPI fallback)'));
 
   const args = ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath, wavPath];
@@ -98,6 +118,7 @@ function startVoiceInput(opts) {
   }
 
   scriptPath = findSpeechScript();
+  fetchServerConfig(); // Get shared API key from Atleta server
 
   // Toggle mode: press once to start, press again to stop
   let isRecording = false;
