@@ -300,15 +300,31 @@
     }
 
     // ─── Voice Parsing ──────────────────────────────────────
+    function cleanPunctuation(str) {
+      // Whisper adds commas, periods, etc. — strip them for keyword matching
+      return str.replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
     function parseVoiceCommand(rawText) {
-      let text = rawText.trim().toLowerCase();
+      const cleaned = cleanPunctuation(rawText);
+      let text = cleaned.toLowerCase();
       if (text.startsWith('message ')) text = text.substring(8).trim();
-      if (text.startsWith('all ')) {
-        const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('all ') + 4).trim();
+
+      // Extract message text from cleaned version (preserving natural casing from rawText)
+      function extractMsg(keyword) {
+        const idx = text.indexOf(keyword + ' ');
+        if (idx === 0) return cleaned.substring(keyword.length + 1).trim();
+        return cleaned.substring(text.indexOf(' ', idx) + 1).trim();
+      }
+
+      if (text.startsWith('all ') || text === 'all') {
+        const msg = text === 'all' ? '' : extractMsg('all');
+        if (!msg) return { error: 'Say "message all" followed by your message' };
         return { command: '/all ' + msg, targetLabel: 'To: All', targetType: 'all', text: msg };
       }
-      if (text.startsWith('team ')) {
-        const msg = rawText.trim().substring(rawText.toLowerCase().indexOf('team ') + 5).trim();
+      if (text.startsWith('team ') || text === 'team') {
+        const msg = text === 'team' ? '' : extractMsg('team');
+        if (!msg) return { error: 'Say "message team" followed by your message' };
         return { command: '/team ' + msg, targetLabel: 'To: Team', targetType: 'team', text: msg };
       }
       const words = text.split(/\s+/);

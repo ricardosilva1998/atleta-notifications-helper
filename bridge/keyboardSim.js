@@ -56,8 +56,8 @@ if (isWindows) {
 
     // Window focus — load separately so SendInput still works if this fails
     try {
-      findWindowA = user32.func('FindWindowA', 'pointer', ['pointer', 'pointer']);
-      setForegroundWindow = user32.func('SetForegroundWindow', 'int32', ['pointer']);
+      findWindowA = user32.func('FindWindowA', 'void*', ['void*', 'str']);
+      setForegroundWindow = user32.func('SetForegroundWindow', 'int32', ['void*']);
       log('[KeyboardSim] Loaded FindWindow + SetForegroundWindow');
     } catch(e2) {
       log('[KeyboardSim] FindWindow not available: ' + (e2.message || e2));
@@ -76,10 +76,8 @@ function focusIRacing() {
   const titles = ['iRacing.com Simulator', 'iRacing'];
   for (const title of titles) {
     try {
-      const koffi = require('koffi');
-      // FindWindowA(lpClassName, lpWindowName) — pass null for class, title for name
-      const hwnd = findWindowA(koffi.nullptr, Buffer.from(title + '\0', 'utf8'));
-      if (hwnd && !koffi.isNullPtr(hwnd)) {
+      const hwnd = findWindowA(null, title);
+      if (hwnd) {
         setForegroundWindow(hwnd);
         log('[KeyboardSim] Focused iRacing window: "' + title + '"');
         return true;
