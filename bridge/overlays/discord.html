@@ -95,23 +95,36 @@
 
   <script>
     // ─── Settings ──────────────────────────────────────────────────────
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const logPath = path.join(os.homedir(), 'atleta-bridge.log');
+    function log(msg) {
+      const line = `[${new Date().toISOString()}] [Discord] ${msg}\n`;
+      console.log(msg);
+      try { fs.appendFileSync(logPath, line); } catch(e) {}
+    }
+
     const API_BASE = 'https://atletanotifications.com';
     let discordUserId = '';
-    // Load from localStorage (control panel saves here) and also from Electron settings
+    // Load from localStorage
     try {
       const saved = JSON.parse(localStorage.getItem('overlay_discord') || '{}');
-      if (saved.discordUserId) discordUserId = saved.discordUserId;
+      if (saved.discordUserId) {
+        discordUserId = saved.discordUserId;
+        log('Loaded ID from localStorage: ' + discordUserId);
+      }
     } catch(e) {}
-    // Also try loading from Electron persisted settings (more reliable across windows)
+    // Also load from Electron persisted settings
     try {
       const { ipcRenderer } = require('electron');
       ipcRenderer.on('overlay-settings', (event, id, settings) => {
         if (id === 'discord' && settings && settings.discordUserId) {
           discordUserId = settings.discordUserId;
+          log('Loaded ID from IPC: ' + discordUserId);
           pollVoiceState();
         }
       });
-      // Request current settings from main process
       ipcRenderer.send('get-overlay-settings', 'discord');
     } catch(e) {}
 
@@ -182,6 +195,7 @@
     // ─── Polling ───────────────────────────────────────────────────────
     let apiConnected = false;
 
+    let pollCount = 0;
     async function pollVoiceState() {
       if (!discordUserId) {
         emptyState.style.display = 'flex';
@@ -190,9 +204,12 @@
       }
 
       try {
-        const res = await fetch(API_BASE + '/api/voice/' + discordUserId, { signal: AbortSignal.timeout(5000) });
+        const url = API_BASE + '/api/voice/' + discordUserId;
+        if (pollCount++ < 3) log('Polling: ' + url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
+        if (pollCount <= 3) log('Response: channel=' + (data.channelName || 'null') + ' members=' + (data.members?.length || 0));
 
         if (!apiConnected) {
           apiConnected = true;
@@ -201,6 +218,7 @@
 
         renderMembers(data);
       } catch(e) {
+        if (pollCount <= 3) log('Poll error: ' + e.message);
         if (apiConnected) {
           apiConnected = false;
           statusEl.innerHTML = '<span class="status-dot disconnected"></span>';

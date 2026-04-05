@@ -309,25 +309,18 @@
     }
 
     function parseVoiceCommand(rawText) {
-      const cleaned = cleanPunctuation(rawText);
-      let text = cleaned.toLowerCase();
+      let text = cleanPunctuation(rawText).toLowerCase();
       if (text.startsWith('message ')) text = text.substring(8).trim();
 
-      // Extract message text from cleaned version (preserving natural casing from rawText)
-      function extractMsg(keyword) {
-        const idx = text.indexOf(keyword + ' ');
-        if (idx === 0) return cleaned.substring(keyword.length + 1).trim();
-        return cleaned.substring(text.indexOf(' ', idx) + 1).trim();
-      }
-
+      // For all/team, extract everything after the keyword
       if (text.startsWith('all ') || text === 'all') {
-        const msg = text === 'all' ? '' : extractMsg('all');
-        if (!msg) return { error: 'Say "message all" followed by your message' };
+        const msg = text.substring(4).trim();
+        if (!msg) return { error: 'Say "all" followed by your message' };
         return { command: msg, targetLabel: 'To: All', targetType: 'all', text: msg };
       }
       if (text.startsWith('team ') || text === 'team') {
-        const msg = text === 'team' ? '' : extractMsg('team');
-        if (!msg) return { error: 'Say "message team" followed by your message' };
+        const msg = text.substring(5).trim();
+        if (!msg) return { error: 'Say "team" followed by your message' };
         return { command: '/team ' + msg, targetLabel: 'To: Team', targetType: 'team', text: msg };
       }
 
