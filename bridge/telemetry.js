@@ -449,7 +449,7 @@ async function startTelemetry(onStatusChange) {
             carClass: driver?.CarClassShortName || '',
             carClassColor: driver?.CarClassColor ? '#' + parseInt(driver.CarClassColor).toString(16).padStart(6, '0') : '#fff',
             safetyRating: driver?.LicString || '',
-            country: driver?.ClubName || '',
+            country: driver?.FlairName || driver?.ClubName || '',
             clubId: driver?.ClubID || 0,
             license: driver?.LicString || '',
             iRating: driver?.IRating || 0,

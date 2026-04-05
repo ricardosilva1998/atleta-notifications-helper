@@ -32,6 +32,7 @@
     .license { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
     .irating { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.6); }
     .flag { font-size: 12px; line-height: 1; }
+    .flag-img { width: 16px; height: 12px; vertical-align: middle; border-radius: 1px; }
     .brand-logo { width: 22px; height: 22px; display: inline-block; background-image: url('logos/car-icons-sprite.png'); background-size: 1024px 1024px; background-repeat: no-repeat; opacity: 0.85; vertical-align: middle; }
   </style>
 </head>
@@ -92,27 +93,40 @@
       return mins > 0 ? mins + ':' + secs.toFixed(3).padStart(6, '0') : secs.toFixed(3);
     }
 
-    function countryFlag(code) {
-      if (!code || code.length !== 2) return '';
-      return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
-    }
+    // Map FlairName (country name from iRacing) to ISO 2-letter code for SVG flags
+    const COUNTRY_TO_ISO = {
+      'Afghanistan':'af','Albania':'al','Algeria':'dz','Andorra':'ad','Angola':'ao','Argentina':'ar',
+      'Armenia':'am','Australia':'au','Austria':'at','Azerbaijan':'az','Bahamas':'bs','Bahrain':'bh',
+      'Bangladesh':'bd','Barbados':'bb','Belarus':'by','Belgium':'be','Belize':'bz','Benin':'bj',
+      'Bermuda':'bm','Bolivia':'bo','Bosnia and Herzegovina':'ba','Botswana':'bw','Brazil':'br',
+      'Brunei':'bn','Bulgaria':'bg','Cambodia':'kh','Cameroon':'cm','Canada':'ca','Chile':'cl',
+      'China':'cn','Colombia':'co','Costa Rica':'cr','Croatia':'hr','Cuba':'cu','Cyprus':'cy',
+      'Czech Republic':'cz','Czechia':'cz','Denmark':'dk','Dominican Republic':'do','Ecuador':'ec',
+      'Egypt':'eg','El Salvador':'sv','Estonia':'ee','Ethiopia':'et','Fiji':'fj','Finland':'fi',
+      'France':'fr','Georgia':'ge','Germany':'de','Ghana':'gh','Greece':'gr','Guatemala':'gt',
+      'Guernsey':'gg','Honduras':'hn','Hong Kong':'hk','Hungary':'hu','Iceland':'is','India':'in',
+      'Indonesia':'id','Iran':'ir','Iraq':'iq','Ireland':'ie','Israel':'il','Italy':'it',
+      'Jamaica':'jm','Japan':'jp','Jersey':'je','Jordan':'jo','Kazakhstan':'kz','Kenya':'ke',
+      'Kuwait':'kw','Latvia':'lv','Lebanon':'lb','Libya':'ly','Lithuania':'lt','Luxembourg':'lu',
+      'Macao':'mo','Macau':'mo','Malaysia':'my','Malta':'mt','Mauritius':'mu','Mexico':'mx',
+      'Moldova':'md','Monaco':'mc','Mongolia':'mn','Montenegro':'me','Morocco':'ma','Mozambique':'mz',
+      'Myanmar':'mm','Namibia':'na','Nepal':'np','Netherlands':'nl','New Zealand':'nz','Nicaragua':'ni',
+      'Nigeria':'ng','North Macedonia':'mk','Norway':'no','Oman':'om','Pakistan':'pk','Panama':'pa',
+      'Paraguay':'py','Peru':'pe','Philippines':'ph','Poland':'pl','Portugal':'pt','Puerto Rico':'pr',
+      'Qatar':'qa','Romania':'ro','Russia':'ru','Saudi Arabia':'sa','Scotland':'gb-sct','Senegal':'sn',
+      'Serbia':'rs','Singapore':'sg','Slovakia':'sk','Slovenia':'si','South Africa':'za',
+      'South Korea':'kr','Spain':'es','Sri Lanka':'lk','Sweden':'se','Switzerland':'ch',
+      'Taiwan':'tw','Thailand':'th','Trinidad and Tobago':'tt','Tunisia':'tn','Turkey':'tr',
+      'Ukraine':'ua','United Arab Emirates':'ae','United Kingdom':'gb','United States':'us',
+      'Uruguay':'uy','Uzbekistan':'uz','Venezuela':'ve','Vietnam':'vn','Wales':'gb-wls',
+      'Zimbabwe':'zw',
+    };
 
-    function clubToFlag(club) {
-      if (!club) return '';
-      const map = {
-        'Iberia': '🇪🇸', 'DE-AT-CH': '🇩🇪', 'UK and I': '🇬🇧', 'Benelux': '🇳🇱',
-        'France': '🇫🇷', 'Italy': '🇮🇹', 'Brazil': '🇧🇷', 'Australia/NZ': '🇦🇺',
-        'Central-Eastern Europe': '🇵🇱', 'Scandinavia': '🇸🇪', 'Finland': '🇫🇮',
-        'International': '🌐', 'Hispanic America': '🇲🇽', 'Portugal': '🇵🇹',
-        'Canada': '🇨🇦', 'Japan': '🇯🇵', 'South Korea': '🇰🇷', 'China': '🇨🇳',
-        'India': '🇮🇳', 'Middle East': '🇦🇪', 'Greece': '🇬🇷', 'Turkey': '🇹🇷',
-        'Israel': '🇮🇱', 'South Africa': '🇿🇦', 'Russia': '🇷🇺',
-      };
-      if (map[club]) return map[club];
-      for (const [key, flag] of Object.entries(map)) {
-        if (club.includes(key) || key.includes(club)) return flag;
-      }
-      return '🏁';
+    function countryToFlag(country) {
+      if (!country || country === 'None') return '';
+      const iso = COUNTRY_TO_ISO[country];
+      if (!iso) return '';
+      return `<img class="flag-img" src="flags/${iso}.svg" onerror="this.style.display='none'" alt="${country}">`;
     }
 
     function getManufacturer(carMake) {
@@ -175,18 +189,6 @@
       return `background-position: ${bgX}px ${bgY}px; background-size: ${bgSize}px ${bgSize}px;`;
     }
 
-    const CLUB_FLAGS = {
-      1:'🇺🇸',2:'🇺🇸',3:'🇺🇸',4:'🇺🇸',5:'🇺🇸',6:'🇺🇸',7:'🇺🇸',8:'🇺🇸',9:'🇺🇸',10:'🇺🇸',
-      11:'🇺🇸',12:'🇺🇸',13:'🇺🇸',14:'🇺🇸',15:'🇺🇸',16:'🇺🇸',17:'🇺🇸',18:'🇺🇸',19:'🇺🇸',20:'🇺🇸',
-      21:'🇺🇸',22:'🇺🇸',23:'🇺🇸',24:'🇺🇸',25:'🇺🇸',26:'🇺🇸',
-      34:'🇬🇧',35:'🇩🇪',36:'🇫🇷',37:'🇪🇸',38:'🇮🇹',39:'🇸🇪',
-      40:'🇧🇷',41:'🇯🇵',42:'🇦🇺',43:'🇳🇱',44:'🇫🇮',45:'🏁',
-    };
-
-    function clubIdToFlag(clubId) {
-      if (!clubId || clubId === 0) return '';
-      return CLUB_FLAGS[clubId] || '';
-    }
 
     function licenseColor(lic) {
       if (!lic) return '#888';
@@ -223,7 +225,7 @@
         gap = '--';
       }
 
-      const flag = d.clubId ? clubIdToFlag(d.clubId) : ((d.country && d.country !== 'None' && d.country !== 'none') ? clubToFlag(d.country) : '');
+      const flag = countryToFlag(d.country);
       const licColor = licenseColor(d.safetyRating || d.license);
       const irStr = formatIR(d.iRating);
       const classColor = d.carClassColor || '#fff';
