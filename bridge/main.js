@@ -377,6 +377,7 @@ ipcMain.on('download-update', () => {
 });
 
 ipcMain.on('install-update', () => {
+  persistSettings(); // Save overlay state before update
   if (autoUpdater) autoUpdater.quitAndInstall();
 });
 

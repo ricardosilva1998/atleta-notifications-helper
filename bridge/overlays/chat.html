@@ -48,6 +48,19 @@
     let ws = null;
     let bridgeConnected = false;
 
+    // Load channel name from persisted settings
+    const _fs = require('fs');
+    const _path = require('path');
+    const _os = require('os');
+    let savedChannelName = '';
+    try {
+      const settingsFile = _path.join(_os.homedir(), 'Documents', 'Atleta Bridge', 'settings.json');
+      if (_fs.existsSync(settingsFile)) {
+        const all = JSON.parse(_fs.readFileSync(settingsFile, 'utf8'));
+        savedChannelName = (all.overlayCustom && all.overlayCustom.chat && all.overlayCustom.chat.twitchChannel) || '';
+      }
+    } catch(e) {}
+
     // ─── 7TV Emotes ────────────────────────────────────────────
     const emoteMap = new Map(); // name -> url
     let emotesLoaded = false;
@@ -246,9 +259,14 @@
       body.scrollTop = body.scrollHeight;
     }
 
+    // Show saved channel name immediately (before bridge connects)
+    if (savedChannelName) {
+      updateStatus('connecting', savedChannelName);
+    }
+
     connectBridge();
 
-    // Lock state support
+    // Lock state + overlay-settings IPC support
     try {
       const { ipcRenderer } = require('electron');
       ipcRenderer.on('lock-state', (event, locked) => {
@@ -256,6 +274,12 @@
         const header = document.querySelector('.overlay-header');
         if (header) header.style.cursor = locked ? 'default' : 'move';
       });
+      ipcRenderer.on('overlay-settings', (event, id, settings) => {
+        if (id === 'chat' && settings && settings.twitchChannel) {
+          updateStatus('connected', settings.twitchChannel);
+        }
+      });
+      ipcRenderer.send('get-overlay-settings', 'chat');
     } catch(e) {}
   </script>
 </body>
