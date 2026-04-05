@@ -231,6 +231,10 @@ async function startTelemetry(onStatusChange) {
                 trackName = weekendInfo?.TrackDisplayName || '';
                 log('[SessionInfo] Found! Drivers: ' + driverInfo.Drivers.length);
                 log('[SessionInfo] Track: ' + trackName);
+                // Dump ALL fields from first driver to discover country data
+                if (driverInfo.Drivers[0]) {
+                  log('[SessionInfo] ALL FIELDS D[0]: ' + JSON.stringify(driverInfo.Drivers[0]));
+                }
 
                 // Load track map: geo-key cache → server → .ibt files → manual mapping
                 const trackGeoKey = geoKeyFromSessionInfo(
