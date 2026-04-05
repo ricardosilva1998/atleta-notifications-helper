@@ -352,6 +352,19 @@ async function startTelemetry(onStatusChange) {
           fuelToFinish, fuelToAdd, lapsCompleted, lapCount: fuelHistory.length,
         }});
 
+        // === Driver Inputs ===
+        const throttle = ir.get(VARS.THROTTLE)?.[0] || 0;
+        const brake = ir.get(VARS.BRAKE)?.[0] || 0;
+        const rawClutch = ir.get(VARS.CLUTCH)?.[0] || 0;
+        const clutch = 1 - rawClutch; // iRacing: 1=released, 0=pressed → invert for display
+        const steer = ir.get(VARS.STEERING_WHEEL_ANGLE)?.[0] || 0;
+        const gear = ir.get(VARS.GEAR)?.[0] || 0;
+        const speed = ir.get(VARS.SPEED)?.[0] || 0; // m/s
+
+        broadcastToChannel('inputs', { type: 'data', channel: 'inputs', data: {
+          throttle, brake, clutch, steer, gear, speed,
+        }});
+
         // === Wind ===
         broadcastToChannel('wind', { type: 'data', channel: 'wind', data: {
           windDirection: ir.get(VARS.WIND_DIR)?.[0] || 0,
