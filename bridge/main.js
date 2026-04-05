@@ -44,7 +44,7 @@ const OVERLAYS = [
   { id: 'trackmap', name: 'Track Map', width: 300, height: 300 },
   { id: 'voicechat', name: 'Voice Chat', width: 340, height: 400 },
   { id: 'inputs', name: 'Driver Inputs', width: 520, height: 140 },
-  { id: 'discord', name: 'Discord Voice', width: 200, height: 300 },
+  // { id: 'discord', name: 'Discord Voice', width: 200, height: 300 }, // DISABLED — Railway doesn't support UDP for voice speaking detection
 ];
 
 const gotLock = app.requestSingleInstanceLock();
