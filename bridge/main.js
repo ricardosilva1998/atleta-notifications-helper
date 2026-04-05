@@ -4,6 +4,7 @@ const { startServer, stopServer } = require('./websocket');
 const { startTelemetry, stopTelemetry } = require('./telemetry');
 const { load: loadSettings, save: saveSettings } = require('./settings');
 const { startVoiceInput, stopVoiceInput, setVoiceChatWindow } = require('./voiceInput');
+const { connectToChannel: connectTwitchChat, disconnect: disconnectTwitchChat } = require('./twitchChat');
 
 // Auto-updater
 let autoUpdater;
@@ -102,6 +103,12 @@ app.on('ready', () => {
   // Start voice input system
   const { getStatus } = require('./telemetry');
   startVoiceInput({ settings, getStatus });
+
+  // Connect Twitch chat if channel is configured
+  const chatSettings = settings.overlayCustom?.chat;
+  if (chatSettings?.twitchChannel) {
+    connectTwitchChat(chatSettings.twitchChannel);
+  }
 
   showControlWindow();
 
@@ -312,6 +319,10 @@ ipcMain.on('save-overlay-settings', (event, overlayId, overlaySettings) => {
   // Reload the overlay window to apply new settings
   if (overlayWindows[overlayId] && !overlayWindows[overlayId].isDestroyed()) {
     overlayWindows[overlayId].reload();
+  }
+  // Reconnect Twitch chat if channel changed
+  if (overlayId === 'chat' && overlaySettings.twitchChannel !== undefined) {
+    connectTwitchChat(overlaySettings.twitchChannel);
   }
 });
 
