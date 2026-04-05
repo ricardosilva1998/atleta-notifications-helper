@@ -48,11 +48,11 @@
     }
     .avatar {
       width: 32px; height: 32px; border-radius: 50%;
-      border: 2px solid transparent;
-      transition: border-color 0.3s;
+      border: 2px solid rgba(255,255,255,0.12);
+      transition: border-color 0.3s, opacity 0.3s;
     }
-    .avatar.unmuted { border-color: #3ecf8e; }
-    .avatar.muted { border-color: rgba(255,255,255,0.1); filter: grayscale(30%); }
+    .avatar.unmuted { border-color: rgba(255,255,255,0.2); }
+    .avatar.muted { border-color: rgba(255,255,255,0.06); opacity: 0.5; }
     .member-info { flex: 1; min-width: 0; }
     .member-name {
       font-size: 12px; font-weight: 600; color: #e8e6f0;
