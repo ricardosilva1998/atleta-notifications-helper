@@ -52,10 +52,15 @@
     <div class="mic-select">
       Mic: <select id="mic-dropdown"><option value="">Loading...</option></select>
     </div>
+    <div style="padding:6px 10px; font-size:9px; color:rgba(255,255,255,0.35); background:rgba(255,255,255,0.02); border-bottom:1px solid rgba(255,255,255,0.04); line-height:1.5;">
+      <span style="color:#3ecf8e;">All chat:</span> "message all [text]"<br>
+      <span style="color:#9146ff;">By name:</span> "message [name] [text]"<br>
+      <span style="color:#9146ff;">By number:</span> "message number [#] [text]"<br>
+      <span style="color:#f79009;">Team:</span> "message team [text]"
+    </div>
     <div class="message-log" id="message-log">
       <div class="empty-state" id="empty-state">
-        Select your mic above, then press push-to-talk.<br>
-        Example: "message all good race everyone"
+        Press push-to-talk, speak, then click Stop Recording.
       </div>
     </div>
     <div class="stop-bar" id="stop-bar">
@@ -326,6 +331,19 @@
         if (!msg) return { error: 'Say "message team" followed by your message' };
         return { command: '/team ' + msg, targetLabel: 'To: Team', targetType: 'team', text: msg };
       }
+
+      // "number X [text]" — send to car number X directly
+      const numMatch = text.match(/^(?:number\s+)?(\d+)\s+(.+)/);
+      if (numMatch) {
+        const carNum = numMatch[1];
+        const msg = numMatch[2];
+        // Find driver name for display
+        const driver = drivers.find(d => String(d.carNumber) === carNum);
+        const driverLabel = driver ? driver.driverName + ' #' + carNum : 'Car #' + carNum;
+        return { command: '/#' + carNum + ' ' + msg, targetLabel: 'To: ' + driverLabel + ' (private)', targetType: '', text: msg };
+      }
+
+      // Try fuzzy driver name matching
       const words = text.split(/\s+/);
       const match = matchDriver(words);
       if (match) {
@@ -334,7 +352,7 @@
         const carNum = match.driver.carNumber || '0';
         return { command: '/#' + carNum + ' ' + msg, targetLabel: 'To: ' + match.driver.driverName + ' #' + carNum + ' (private)', targetType: '', text: msg };
       }
-      return { error: 'No driver found matching "' + words.slice(0, 3).join(' ') + '"' };
+      return { error: 'No driver found. Try "number [#] [text]" or "all [text]"' };
     }
     function processTranscript(transcript) {
       if (!transcript) { addError('No speech detected'); setState('idle'); return; }
