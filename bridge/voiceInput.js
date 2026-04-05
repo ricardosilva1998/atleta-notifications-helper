@@ -123,10 +123,12 @@ function startVoiceInput(opts) {
   // Toggle mode: press once to start, press again to stop
   let isRecording = false;
   let lastToggleTime = 0;
+  let recordingStartTime = 0;
 
   function handlePttToggle() {
     if (!isRecording) {
       isRecording = true;
+      recordingStartTime = Date.now();
       log('[VoiceInput] PTT toggle → START');
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
         voiceChatWindow.webContents.send('voice-start-recording');
@@ -142,6 +144,11 @@ function startVoiceInput(opts) {
         }
       }, 30000);
     } else {
+      // Ignore stop if recording started less than 2 seconds ago (prevents key repeat from stopping)
+      if (Date.now() - recordingStartTime < 2000) {
+        log('[VoiceInput] PTT toggle ignored (too soon, ' + (Date.now() - recordingStartTime) + 'ms)');
+        return;
+      }
       isRecording = false;
       if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
       log('[VoiceInput] PTT toggle → STOP');
