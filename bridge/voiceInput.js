@@ -34,111 +34,97 @@ let autoStopTimer = null;
 let settings = {};
 let getIracingStatus = null;
 
-// ─── Whisper Speech Recognition ──────────────────────────────
-let whisperPipeline = null;
-let whisperLoading = false;
+// ─── Whisper Worker Thread ──────────────────────────────────
+const { Worker } = require('worker_threads');
+let whisperWorker = null;
+let whisperReady = false;
+let transcribeCallbacks = new Map();
+let transcribeId = 0;
 
-async function initWhisper() {
-  if (whisperPipeline || whisperLoading) return;
-  whisperLoading = true;
-  log('[Whisper] Loading model (whisper-tiny.en)...');
-
-  try {
-    const { pipeline, env } = await import('@xenova/transformers');
-    const cacheDir = path.join(os.homedir(), 'Documents', 'Atleta Bridge', 'whisper-models');
-    env.cacheDir = cacheDir;
-    env.allowLocalModels = true;
-
-    const startTime = Date.now();
-    whisperPipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', {
-      quantized: true,
-    });
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    log('[Whisper] Model loaded in ' + elapsed + 's');
-
-    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-      voiceChatWindow.webContents.send('voice-whisper-ready');
-    }
-  } catch(e) {
-    log('[Whisper] Failed to load: ' + e.message);
-    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-      voiceChatWindow.webContents.send('voice-error', 'Whisper model failed to load: ' + e.message);
-    }
+function startWhisperWorker() {
+  // Find whisperWorker.js (same path logic as speechWorker.ps1)
+  const candidates = [
+    path.join(__dirname, 'whisperWorker.js'),
+    path.join(process.resourcesPath || __dirname, 'whisperWorker.js'),
+    __dirname.replace('app.asar', 'app.asar.unpacked') + path.sep + 'whisperWorker.js',
+  ];
+  let workerPath = null;
+  for (const p of candidates) {
+    if (fs.existsSync(p)) { workerPath = p; break; }
   }
-  whisperLoading = false;
-}
+  if (!workerPath) {
+    log('[Whisper] Worker script not found');
+    return;
+  }
+  log('[Whisper] Starting worker: ' + workerPath);
 
-async function transcribeWav(wavPath) {
-  if (!whisperPipeline) {
-    log('[Whisper] Pipeline not ready, initializing...');
-    await initWhisper();
-    if (!whisperPipeline) {
-      log('[Whisper] Still not ready, aborting');
+  whisperWorker = new Worker(workerPath, {
+    resourceLimits: {
+      maxOldGenerationSizeMb: 2048, // 2GB heap for Whisper
+    },
+  });
+
+  whisperWorker.on('message', (msg) => {
+    if (msg.type === 'log') {
+      log('[Whisper] ' + msg.msg);
+    } else if (msg.type === 'ready') {
+      whisperReady = true;
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-        voiceChatWindow.webContents.send('voice-error', 'Whisper not ready');
+        voiceChatWindow.webContents.send('voice-whisper-ready');
       }
-      return;
+    } else if (msg.type === 'result') {
+      const cb = transcribeCallbacks.get(msg.id);
+      if (cb) {
+        transcribeCallbacks.delete(msg.id);
+        cb(msg.text, msg.error);
+      }
     }
-  }
+  });
 
-  log('[Whisper] Transcribing: ' + wavPath);
-  const startTime = Date.now();
+  whisperWorker.on('error', (err) => {
+    log('[Whisper] Worker error: ' + err.message);
+  });
 
-  try {
-    // Read WAV file and extract PCM audio as Float32Array
-    const wavBuffer = fs.readFileSync(wavPath);
-    const audioData = decodeWav(wavBuffer);
-
-    const result = await whisperPipeline(audioData, {
-      language: 'english',
-      task: 'transcribe',
-    });
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    const transcript = (result.text || '').trim();
-    log('[Whisper] Result (' + elapsed + 's): "' + transcript + '"');
-
-    // Clean up temp file
-    try { fs.unlinkSync(wavPath); } catch(e) {}
-
-    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-      voiceChatWindow.webContents.send('voice-transcript', transcript);
-    }
-  } catch(e) {
-    log('[Whisper] Transcription error: ' + e.message);
-    try { fs.unlinkSync(wavPath); } catch(e2) {}
-    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
-      voiceChatWindow.webContents.send('voice-error', 'Transcription failed: ' + e.message);
-    }
-  }
+  whisperWorker.on('exit', (code) => {
+    log('[Whisper] Worker exited: ' + code);
+    whisperWorker = null;
+    whisperReady = false;
+  });
 }
 
-/**
- * Decode a WAV file buffer to Float32Array of audio samples.
- */
-function decodeWav(buffer) {
-  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  // Parse WAV header
-  const numChannels = view.getUint16(22, true);
-  const sampleRate = view.getUint32(24, true);
-  const bitsPerSample = view.getUint16(34, true);
-  // Find data chunk
-  let dataOffset = 44; // standard WAV header
-  const dataSize = view.getUint32(40, true);
-  const numSamples = dataSize / (bitsPerSample / 8) / numChannels;
-
-  const samples = new Float32Array(numSamples);
-  for (let i = 0; i < numSamples; i++) {
-    const offset = dataOffset + i * numChannels * (bitsPerSample / 8);
-    if (bitsPerSample === 16) {
-      samples[i] = view.getInt16(offset, true) / 32768;
-    } else if (bitsPerSample === 32) {
-      samples[i] = view.getFloat32(offset, true);
+function transcribeWav(wavPath) {
+  if (!whisperWorker) {
+    startWhisperWorker();
+  }
+  if (!whisperWorker) {
+    log('[Whisper] No worker available');
+    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+      voiceChatWindow.webContents.send('voice-error', 'Whisper not available');
     }
+    return;
   }
 
-  log('[Whisper] Audio: ' + sampleRate + 'Hz, ' + bitsPerSample + 'bit, ' + numSamples + ' samples (' + (numSamples / sampleRate).toFixed(1) + 's)');
-  return samples;
+  const id = ++transcribeId;
+  log('[Whisper] Transcribing: ' + wavPath);
+
+  if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+    voiceChatWindow.webContents.send('voice-whisper-loading');
+  }
+
+  transcribeCallbacks.set(id, (text, error) => {
+    if (error) {
+      log('[Whisper] Error: ' + error);
+      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+        voiceChatWindow.webContents.send('voice-error', 'Transcription failed');
+      }
+    } else {
+      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+        voiceChatWindow.webContents.send('voice-transcript', text);
+      }
+    }
+  });
+
+  whisperWorker.postMessage({ type: 'transcribe', wavPath, id });
 }
 
 // ─── Voice Input System ──────────────────────────────────────
@@ -297,12 +283,7 @@ function setVoiceChatWindow(win) {
   if (win && !win.isDestroyed()) {
     win.webContents.once('did-finish-load', () => {
       if (settings.voiceChat) win.webContents.send('voice-settings-update', settings.voiceChat);
-      // Tell overlay current Whisper status
-      if (whisperPipeline) {
-        win.webContents.send('voice-whisper-ready');
-      } else if (whisperLoading) {
-        win.webContents.send('voice-whisper-loading');
-      }
+      if (whisperReady) win.webContents.send('voice-whisper-ready');
     });
   }
 }

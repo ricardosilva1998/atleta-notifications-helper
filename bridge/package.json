@@ -40,8 +40,10 @@
     ],
     "asarUnpack": [
       "speechWorker.ps1",
+      "whisperWorker.js",
       "node_modules/@xenova/transformers/**",
-      "node_modules/onnxruntime-node/**"
+      "node_modules/onnxruntime-node/**",
+      "node_modules/onnxruntime-web/**"
     ],
     "files": [
       "**/*",
