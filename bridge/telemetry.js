@@ -33,8 +33,9 @@ let lastIntX = 0, lastIntY = 0; // Integrated position
 let lastRecordedPct = -1;
 let filledSlots = 0;
 
-// Track map cache — persisted so tracks load instantly on revisit
+// Track map sources: server DB → local cache → manual mapping
 const TRACK_MAPS_DIR = path.join(require('os').homedir(), 'Documents', 'Atleta Bridge', 'trackmaps');
+const TRACK_API_URL = 'https://atletanotifications.com/api/track-map';
 
 function loadCachedTrack(trackName) {
   try {
@@ -52,8 +53,52 @@ function saveCachedTrack(trackName, pathData) {
     if (!fs.existsSync(TRACK_MAPS_DIR)) fs.mkdirSync(TRACK_MAPS_DIR, { recursive: true });
     const file = path.join(TRACK_MAPS_DIR, trackName.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
     fs.writeFileSync(file, JSON.stringify(pathData));
-    log('[TrackMap] Cached track: ' + trackName + ' (' + pathData.length + ' points)');
+    log('[TrackMap] Cached locally: ' + trackName + ' (' + pathData.length + ' points)');
   } catch(e) { log('[TrackMap] Cache save error: ' + e.message); }
+}
+
+async function fetchTrackFromServer(trackName) {
+  try {
+    const https = require('https');
+    const url = TRACK_API_URL + '/' + encodeURIComponent(trackName);
+    return new Promise((resolve) => {
+      https.get(url, { timeout: 5000 }, (res) => {
+        if (res.statusCode !== 200) { res.resume(); return resolve(null); }
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (data.trackData && data.trackData.length > 50) {
+              log('[TrackMap] Fetched from server: ' + trackName + ' (' + data.trackData.length + ' points)');
+              resolve(data.trackData);
+            } else resolve(null);
+          } catch(e) { resolve(null); }
+        });
+      }).on('error', () => resolve(null)).on('timeout', function() { this.destroy(); resolve(null); });
+    });
+  } catch(e) { return null; }
+}
+
+function uploadTrackToServer(trackName, pathData) {
+  try {
+    const https = require('https');
+    const postData = JSON.stringify({ trackName, trackData: pathData });
+    const url = new URL(TRACK_API_URL);
+    const req = https.request({
+      hostname: url.hostname, port: 443, path: url.pathname, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+      timeout: 10000,
+    }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => log('[TrackMap] Upload response: ' + res.statusCode + ' ' + body));
+    });
+    req.on('error', (e) => log('[TrackMap] Upload error: ' + e.message));
+    req.on('timeout', () => { req.destroy(); });
+    req.write(postData);
+    req.end();
+  } catch(e) { log('[TrackMap] Upload error: ' + e.message); }
 }
 
 function buildTrackPath() {
@@ -187,14 +232,25 @@ async function startTelemetry(onStatusChange) {
                 log('[SessionInfo] Found! Drivers: ' + driverInfo.Drivers.length);
                 log('[SessionInfo] Track: ' + trackName);
 
-                // Load cached track map if available — instant track shape on revisit
+                // Load track map: server DB → local cache → will map by driving
                 if (trackName && !trackPathComplete && trackPathOutput.length === 0) {
+                  // Try local cache first (instant)
                   const cached = loadCachedTrack(trackName);
                   if (cached) {
                     trackPathOutput = cached;
                     trackPathComplete = true;
-                    filledSlots = TRACK_SLOTS; // Mark as fully mapped
-                    log('[TrackMap] Loaded cached track: ' + trackName + ' (' + cached.length + ' points)');
+                    filledSlots = TRACK_SLOTS;
+                    log('[TrackMap] Loaded from local cache: ' + trackName);
+                  } else {
+                    // Try server (async, non-blocking)
+                    fetchTrackFromServer(trackName).then(serverData => {
+                      if (serverData && !trackPathComplete) {
+                        trackPathOutput = serverData;
+                        trackPathComplete = true;
+                        filledSlots = TRACK_SLOTS;
+                        saveCachedTrack(trackName, serverData); // Cache locally too
+                      }
+                    });
                   }
                 }
                 driverInfo.Drivers.slice(0, 3).forEach((d, i) => {
@@ -472,7 +528,10 @@ async function startTelemetry(onStatusChange) {
             trackPathComplete = true;
             trackPathOutput = buildTrackPath();
             log('[TrackMap] Path complete: ' + trackPathOutput.length + ' points (' + filledSlots + '/' + TRACK_SLOTS + ' slots)');
-            if (trackName) saveCachedTrack(trackName, trackPathOutput);
+            if (trackName) {
+              saveCachedTrack(trackName, trackPathOutput);
+              uploadTrackToServer(trackName, trackPathOutput);
+            }
           }
 
           // Build partial path for progressive display every 50 polls

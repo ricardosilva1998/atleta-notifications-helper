@@ -101,6 +101,33 @@ app.use('/vtuber', vtuberRoutes);
 app.use('/sync', syncRoutes);
 app.use('/overlay', overlayRoutes);
 
+// Track map API (public, used by Bridge app)
+app.get('/api/track-map/:trackName', (req, res) => {
+  try {
+    const row = db.prepare('SELECT track_data FROM track_maps WHERE track_name = ?').get(req.params.trackName);
+    if (!row) return res.status(404).json({ error: 'Track not found' });
+    res.json({ trackName: req.params.trackName, trackData: JSON.parse(row.track_data) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/track-map', (req, res) => {
+  try {
+    const { trackName, trackData } = req.body;
+    if (!trackName || !trackData || !Array.isArray(trackData) || trackData.length < 50) {
+      return res.status(400).json({ error: 'Invalid track data' });
+    }
+    const json = JSON.stringify(trackData);
+    const existing = db.prepare('SELECT point_count FROM track_maps WHERE track_name = ?').get(trackName);
+    if (existing && existing.point_count >= trackData.length) {
+      return res.json({ status: 'exists', message: 'Better or equal track already stored' });
+    }
+    db.prepare(`INSERT INTO track_maps (track_name, track_data, point_count) VALUES (?, ?, ?)
+      ON CONFLICT(track_name) DO UPDATE SET track_data = excluded.track_data, point_count = excluded.point_count, updated_at = datetime('now')
+    `).run(trackName, json, trackData.length);
+    res.json({ status: 'ok', points: trackData.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Language switch
 app.post('/set-language', (req, res) => {
   const lang = SUPPORTED_LANGS.includes(req.body.lang) ? req.body.lang : 'en';
