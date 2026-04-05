@@ -52,10 +52,11 @@
     <div class="mic-select">
       Mic: <select id="mic-dropdown"><option value="">Loading...</option></select>
     </div>
+    <div id="whisper-status" style="padding:4px 8px; font-size:9px; color:#f79009; background:rgba(247,144,9,0.08); border-bottom:1px solid rgba(247,144,9,0.15); display:block;">Loading Whisper model (first time downloads ~75MB)...</div>
     <div class="message-log" id="message-log">
       <div class="empty-state" id="empty-state">
         Select your mic above, then press push-to-talk.<br>
-        Example: "message Max good race"
+        Example: "message all good race everyone"
       </div>
     </div>
     <div class="stop-bar" id="stop-bar">
@@ -349,6 +350,10 @@
     ipcRenderer.on('voice-transcript', (event, text) => { processTranscript(text); });
     ipcRenderer.on('voice-error', (event, err) => { addError('Speech error: ' + err); setState('idle'); });
     ipcRenderer.on('voice-send-result', (event, r) => { if (!r.success) addError('Failed: ' + (r.reason || 'unknown')); });
+    ipcRenderer.on('voice-whisper-ready', () => {
+      const el = document.getElementById('whisper-status');
+      if (el) { el.textContent = 'Whisper ready'; el.style.color = '#3ecf8e'; el.style.background = 'rgba(62,207,142,0.08)'; el.style.borderColor = 'rgba(62,207,142,0.15)'; setTimeout(() => { el.style.display = 'none'; }, 3000); }
+    });
     ipcRenderer.on('voice-settings-update', () => {});
     ipcRenderer.on('lock-state', (event, locked) => {
       document.body.style.pointerEvents = locked ? 'none' : 'auto';

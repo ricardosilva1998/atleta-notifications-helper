@@ -2,12 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const os = require('os');
 const { ipcMain } = require('electron');
 const { uIOhook, UiohookKey } = require('uiohook-napi');
 const { sendChatCommand } = require('./keyboardSim');
 
-const logPath = path.join(require('os').homedir(), 'atleta-bridge.log');
+const logPath = path.join(os.homedir(), 'atleta-bridge.log');
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   console.log(msg);
@@ -22,63 +22,119 @@ let voiceChatWindow = null;
 let pushToTalkKeyCode = null;
 let pushToTalkIsMouseButton = false;
 let pushToTalkMouseButton = null;
-let isKeyHeld = false;
 let autoStopTimer = null;
 let settings = {};
 let getIracingStatus = null;
-let scriptPath = null;
 
-function findSpeechScript() {
-  if (process.platform !== 'win32') return null;
-  const candidates = [
-    path.join(__dirname, 'speechWorker.ps1'),
-    path.join(process.resourcesPath || __dirname, 'speechWorker.ps1'),
-    path.join(__dirname, '..', 'speechWorker.ps1'),
-    __dirname.replace('app.asar', 'app.asar.unpacked') + path.sep + 'speechWorker.ps1',
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      log('[Speech] Found script: ' + p);
-      return p;
+// ─── Whisper Speech Recognition ──────────────────────────────
+let whisperPipeline = null;
+let whisperLoading = false;
+
+async function initWhisper() {
+  if (whisperPipeline || whisperLoading) return;
+  whisperLoading = true;
+  log('[Whisper] Loading model (whisper-base.en)...');
+
+  try {
+    const { pipeline, env } = await import('@xenova/transformers');
+    // Cache models in app data directory
+    const cacheDir = path.join(os.homedir(), 'Documents', 'Atleta Bridge', 'whisper-models');
+    env.cacheDir = cacheDir;
+    env.allowLocalModels = true;
+
+    const startTime = Date.now();
+    whisperPipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base.en', {
+      quantized: true,
+    });
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    log('[Whisper] Model loaded in ' + elapsed + 's');
+
+    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+      voiceChatWindow.webContents.send('voice-whisper-ready');
+    }
+  } catch(e) {
+    log('[Whisper] Failed to load: ' + e.message);
+    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+      voiceChatWindow.webContents.send('voice-error', 'Whisper model failed to load: ' + e.message);
     }
   }
-  log('[Speech] Script not found');
-  return null;
+  whisperLoading = false;
 }
 
-/**
- * Transcribe a WAV file using Windows SAPI.
- * @param {string} wavPath - Path to the WAV file
- */
-function transcribeWav(wavPath) {
-  if (!scriptPath) { log('[Speech] No script'); return; }
-  log('[Speech] Transcribing: ' + wavPath);
+async function transcribeWav(wavPath) {
+  if (!whisperPipeline) {
+    log('[Whisper] Pipeline not ready, initializing...');
+    await initWhisper();
+    if (!whisperPipeline) {
+      log('[Whisper] Still not ready, aborting');
+      if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+        voiceChatWindow.webContents.send('voice-error', 'Whisper not ready');
+      }
+      return;
+    }
+  }
 
-  const proc = spawn('powershell', [
-    '-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath, wavPath
-  ], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  log('[Whisper] Transcribing: ' + wavPath);
+  const startTime = Date.now();
 
-  let stdout = '';
-  proc.stdout.on('data', (d) => { stdout += d.toString(); });
-  proc.stderr.on('data', (d) => {
-    d.toString().split('\n').forEach(line => {
-      const t = line.trim();
-      if (t) log('[Speech] ' + t);
+  try {
+    // Read WAV file and extract PCM audio as Float32Array
+    const wavBuffer = fs.readFileSync(wavPath);
+    const audioData = decodeWav(wavBuffer);
+
+    const result = await whisperPipeline(audioData, {
+      language: 'english',
+      task: 'transcribe',
     });
-  });
 
-  proc.on('exit', (code) => {
-    const transcript = stdout.trim();
-    log('[Speech] Transcription done (code ' + code + '): "' + transcript + '"');
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const transcript = (result.text || '').trim();
+    log('[Whisper] Result (' + elapsed + 's): "' + transcript + '"');
+
     // Clean up temp file
     try { fs.unlinkSync(wavPath); } catch(e) {}
 
     if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
       voiceChatWindow.webContents.send('voice-transcript', transcript);
     }
-  });
+  } catch(e) {
+    log('[Whisper] Transcription error: ' + e.message);
+    try { fs.unlinkSync(wavPath); } catch(e2) {}
+    if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
+      voiceChatWindow.webContents.send('voice-error', 'Transcription failed: ' + e.message);
+    }
+  }
 }
 
+/**
+ * Decode a WAV file buffer to Float32Array of audio samples.
+ */
+function decodeWav(buffer) {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  // Parse WAV header
+  const numChannels = view.getUint16(22, true);
+  const sampleRate = view.getUint32(24, true);
+  const bitsPerSample = view.getUint16(34, true);
+  // Find data chunk
+  let dataOffset = 44; // standard WAV header
+  const dataSize = view.getUint32(40, true);
+  const numSamples = dataSize / (bitsPerSample / 8) / numChannels;
+
+  const samples = new Float32Array(numSamples);
+  for (let i = 0; i < numSamples; i++) {
+    const offset = dataOffset + i * numChannels * (bitsPerSample / 8);
+    if (bitsPerSample === 16) {
+      samples[i] = view.getInt16(offset, true) / 32768;
+    } else if (bitsPerSample === 32) {
+      samples[i] = view.getFloat32(offset, true);
+    }
+  }
+
+  log('[Whisper] Audio: ' + sampleRate + 'Hz, ' + bitsPerSample + 'bit, ' + numSamples + ' samples (' + (numSamples / sampleRate).toFixed(1) + 's)');
+  return samples;
+}
+
+// ─── Voice Input System ──────────────────────────────────────
 function startVoiceInput(opts) {
   settings = opts.settings;
   getIracingStatus = opts.getStatus;
@@ -87,37 +143,32 @@ function startVoiceInput(opts) {
     applyPushToTalkKey(settings.voiceChat.pushToTalkKey);
   }
 
-  scriptPath = findSpeechScript();
+  // Pre-load Whisper model in background
+  initWhisper();
 
-  // Toggle mode: press once to start recording, press again to stop
-  // (keyup detection is unreliable during audio capture)
+  // Toggle mode: press once to start, press again to stop
   let isRecording = false;
+  let lastToggleTime = 0;
 
   function handlePttToggle() {
     if (!isRecording) {
-      // Start recording
       isRecording = true;
-      isKeyHeld = true;
       log('[VoiceInput] PTT toggle → START');
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
         voiceChatWindow.webContents.send('voice-start-recording');
       }
-      // Auto-stop after 30 seconds max
       if (autoStopTimer) clearTimeout(autoStopTimer);
       autoStopTimer = setTimeout(() => {
         if (isRecording) {
           log('[VoiceInput] Auto-stop after 30s');
           isRecording = false;
-          isKeyHeld = false;
           if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
             voiceChatWindow.webContents.send('voice-stop-recording');
           }
         }
       }, 30000);
     } else {
-      // Stop recording
       isRecording = false;
-      isKeyHeld = false;
       if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
       log('[VoiceInput] PTT toggle → STOP');
       if (voiceChatWindow && !voiceChatWindow.isDestroyed()) {
@@ -126,13 +177,10 @@ function startVoiceInput(opts) {
     }
   }
 
-  // Time-based debounce (500ms) — keyup is unreliable during audio capture
-  let lastToggleTime = 0;
-
   uIOhook.on('keydown', (e) => {
     if (pushToTalkKeyCode !== null && !pushToTalkIsMouseButton && e.keycode === pushToTalkKeyCode) {
       const now = Date.now();
-      if (now - lastToggleTime < 500) return; // debounce key repeat
+      if (now - lastToggleTime < 500) return;
       lastToggleTime = now;
       handlePttToggle();
     }
@@ -155,7 +203,7 @@ function startVoiceInput(opts) {
     transcribeWav(wavPath);
   });
 
-  // IPC: Manual stop from overlay button — reset toggle state
+  // IPC: Manual stop from overlay button
   ipcMain.on('voice-manual-stop', () => {
     isRecording = false;
     if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
@@ -232,6 +280,7 @@ function setVoiceChatWindow(win) {
   if (win && !win.isDestroyed() && settings.voiceChat) {
     win.webContents.once('did-finish-load', () => {
       win.webContents.send('voice-settings-update', settings.voiceChat);
+      if (whisperPipeline) win.webContents.send('voice-whisper-ready');
     });
   }
 }
