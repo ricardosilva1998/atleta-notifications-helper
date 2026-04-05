@@ -268,6 +268,7 @@
         { key: 'autoHide', label: 'Auto-hide when iRacing closes', type: 'checkbox', default: true },
       ],
       voicechat: [
+        { key: 'openaiKey', label: 'OpenAI API Key (for Whisper)', type: 'text', default: '', placeholder: 'sk-...' },
         { key: 'pushToTalk', label: 'Push-to-Talk Key', type: 'hotkey', default: null },
         { key: 'chatKey', label: 'iRacing Chat Key', type: 'select', default: 'T', options: [
           { value: 'T', label: 'T (default)' },
@@ -383,6 +384,7 @@
         if (settings.wakeWordEnabled !== undefined) voiceUpdate.wakeWordEnabled = settings.wakeWordEnabled;
         if (settings.language !== undefined) voiceUpdate.language = settings.language;
         if (settings.chatKey !== undefined) voiceUpdate.chatKey = settings.chatKey;
+        if (settings.openaiKey !== undefined) voiceUpdate.openaiKey = settings.openaiKey;
         ipcRenderer.send('voice-settings-update', voiceUpdate);
       }
       closeCustomize();

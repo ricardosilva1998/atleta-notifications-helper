@@ -56,11 +56,13 @@ function findSpeechScript() {
 
 function transcribeWav(wavPath) {
   if (!scriptPath) { log('[Speech] No script'); return; }
-  log('[Speech] Transcribing: ' + wavPath);
+  const apiKey = (settings.voiceChat && settings.voiceChat.openaiKey) || '';
+  log('[Speech] Transcribing: ' + wavPath + (apiKey ? ' (Whisper API)' : ' (SAPI fallback)'));
 
-  const proc = spawn('powershell', [
-    '-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath, wavPath
-  ], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  const args = ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath, wavPath];
+  if (apiKey) args.push(apiKey);
+
+  const proc = spawn('powershell', args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 
   let stdout = '';
   proc.stdout.on('data', (d) => { stdout += d.toString(); });
