@@ -32,6 +32,8 @@
     .license { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
     .irating { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.6); }
     .flag { font-size: 12px; line-height: 1; }
+    .driver-cell { position: relative; overflow: hidden; }
+    .driver-cell::after { content: attr(data-brand); position: absolute; right: -5px; top: 50%; transform: translateY(-50%); font-size: 14px; font-weight: 900; opacity: 0.08; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -113,6 +115,26 @@
       return '🏁';
     }
 
+    function getManufacturer(carMake) {
+      if (!carMake) return '';
+      const first = carMake.split(' ')[0].toLowerCase();
+      const map = { amr: 'aston martin', 'aston': 'aston martin' };
+      return (map[first] || first);
+    }
+
+    const CLUB_FLAGS = {
+      1:'🇺🇸',2:'🇺🇸',3:'🇺🇸',4:'🇺🇸',5:'🇺🇸',6:'🇺🇸',7:'🇺🇸',8:'🇺🇸',9:'🇺🇸',10:'🇺🇸',
+      11:'🇺🇸',12:'🇺🇸',13:'🇺🇸',14:'🇺🇸',15:'🇺🇸',16:'🇺🇸',17:'🇺🇸',18:'🇺🇸',19:'🇺🇸',20:'🇺🇸',
+      21:'🇺🇸',22:'🇺🇸',23:'🇺🇸',24:'🇺🇸',25:'🇺🇸',26:'🇺🇸',
+      34:'🇬🇧',35:'🇩🇪',36:'🇫🇷',37:'🇪🇸',38:'🇮🇹',39:'🇸🇪',
+      40:'🇧🇷',41:'🇯🇵',42:'🇦🇺',43:'🇳🇱',44:'🇫🇮',45:'🏁',
+    };
+
+    function clubIdToFlag(clubId) {
+      if (!clubId || clubId === 0) return '';
+      return CLUB_FLAGS[clubId] || '';
+    }
+
     function licenseColor(lic) {
       if (!lic) return '#888';
       const letter = lic.charAt(0).toUpperCase();
@@ -148,22 +170,17 @@
         gap = '--';
       }
 
-      const flag = (d.country && d.country !== 'None' && d.country !== 'none') ? clubToFlag(d.country) : '';
+      const flag = d.clubId ? clubIdToFlag(d.clubId) : ((d.country && d.country !== 'None' && d.country !== 'none') ? clubToFlag(d.country) : '');
       const licColor = licenseColor(d.safetyRating || d.license);
       const irStr = formatIR(d.iRating);
       const classColor = d.carClassColor || '#fff';
-      const classLabel = d.carClass || '';
       const carBrand = d.carMake || '';
       const pitMark = d.inPit ? ' <span class="pit-indicator">PIT</span>' : '';
       const disconnCls = d.disconnected ? ' disconnected' : '';
 
       const numCell = `<span style="background:${classColor};color:#000;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;">${d.carNumber || ''}</span>`;
 
-      let badgeLine = '';
-      if (carBrand) badgeLine += `<span style="font-size:8px;color:rgba(255,255,255,0.45);">${carBrand}</span>`;
-      const badgeCell = badgeLine
-        ? `<div class="driver-name">${d.driverName || ''}${pitMark}</div><div style="margin-top:1px;">${badgeLine}</div>`
-        : `<div class="driver-name">${d.driverName || ''}${pitMark}</div>`;
+      const badgeCell = `<div class="driver-name driver-cell" data-brand="${getManufacturer(carBrand)}">${d.driverName || ''}${pitMark}</div>`;
 
       const licCell = d.safetyRating || d.license
         ? `<span style="background:${licColor};color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;">${d.safetyRating || d.license}</span>`
