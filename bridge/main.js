@@ -32,6 +32,7 @@ const OVERLAYS = [
   { id: 'chat', name: 'Streaming Chat', width: 340, height: 500 },
   { id: 'trackmap', name: 'Track Map', width: 300, height: 300 },
   { id: 'voicechat', name: 'Voice Chat', width: 340, height: 400 },
+  { id: 'inputs', name: 'Driver Inputs', width: 520, height: 140 },
 ];
 
 const gotLock = app.requestSingleInstanceLock();
