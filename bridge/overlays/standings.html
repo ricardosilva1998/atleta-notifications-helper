@@ -122,8 +122,9 @@
     }
 
     // Sprite positions (col, row) in 1024x1024 sprite, 8 columns, ~128px each
+    // Sprite positions from car-icons-sprite.png (1024x1024, 8 cols x 128px)
     const BRAND_SPRITE = {
-      'dallara':    { x: 0, y: 0 },
+      // Row 0: iRacing, Audi, BMW, Mercedes, Ford, Chevrolet, Ferrari, Lamborghini
       'audi':       { x: 128, y: 0 },
       'bmw':        { x: 256, y: 0 },
       'mercedes':   { x: 384, y: 0 },
@@ -131,23 +132,34 @@
       'chevrolet':  { x: 640, y: 0 },
       'ferrari':    { x: 768, y: 0 },
       'lamborghini':{ x: 896, y: 0 },
+      // Row 1: McLaren, Porsche, Dallara, Aston Martin, VW, Honda, Corvette, Toyota
       'mclaren':    { x: 0, y: 128 },
       'porsche':    { x: 128, y: 128 },
-      'cadillac':   { x: 256, y: 128 },
-      'honda':      { x: 384, y: 128 },
+      'dallara':    { x: 256, y: 128 },
+      'aston martin':{ x: 384, y: 128 },
       'volkswagen': { x: 512, y: 128 },
-      'hyundai':    { x: 640, y: 128 },
+      'honda':      { x: 640, y: 128 },
       'toyota':     { x: 896, y: 128 },
-      'mazda':      { x: 0, y: 256 },
-      'renault':    { x: 256, y: 256 },
+      // Row 2: Pontiac, Mazda, LucasOil, Renault, Subaru, Holden, Lotus, Cadillac
+      'pontiac':    { x: 0, y: 256 },
+      'mazda':      { x: 128, y: 256 },
+      'renault':    { x: 384, y: 256 },
+      'subaru':     { x: 512, y: 256 },
+      'holden':     { x: 640, y: 256 },
       'lotus':      { x: 768, y: 256 },
+      'cadillac':   { x: 896, y: 256 },
+      // Row 3: Kia, Lexus, Nissan, Riley, ?, RUF, CTMP, Radical
       'kia':        { x: 0, y: 384 },
       'lexus':      { x: 128, y: 384 },
       'nissan':     { x: 256, y: 384 },
-      'jaguar':     { x: 384, y: 384 },
-      'ruf':        { x: 512, y: 384 },
-      'radical':    { x: 640, y: 384 },
-      'acura':      { x: 512, y: 512 },
+      'riley':      { x: 384, y: 384 },
+      'ruf':        { x: 640, y: 384 },
+      'radical':    { x: 896, y: 384 },
+      // Row 4: ?, Hyundai, Ligier, Acura, Buick
+      'hyundai':    { x: 128, y: 512 },
+      'ligier':     { x: 256, y: 512 },
+      'acura':      { x: 384, y: 512 },
+      'buick':      { x: 512, y: 512 },
     };
 
     function getBrandLogoStyle(carMake) {
