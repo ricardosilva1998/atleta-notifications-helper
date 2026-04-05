@@ -510,6 +510,14 @@ async function startTelemetry(onStatusChange) {
         // iRacing TrackSurface: 1=OffTrack, 2=InPitStall, 3=ApproachPits, 4=OnTrack
         const isOnTrack = trackSurface >= 3 && trackSurface <= 4;
 
+        // Diagnostic: log track map state periodically
+        if (pollCount === 50 || pollCount === 300) {
+          log('[TrackMap] Diag: speed=' + playerSpeed.toFixed(1) + ' surface=' + trackSurface +
+            ' isOnTrack=' + isOnTrack + ' pct=' + playerPct.toFixed(3) +
+            ' slots=' + filledSlots + '/' + TRACK_SLOTS +
+            ' complete=' + trackPathComplete + ' outputLen=' + trackPathOutput.length);
+        }
+
         if (!trackPathComplete && playerSpeed > 5 && isOnTrack) {
           // Integrate position from heading + speed
           const dt = 0.1;
