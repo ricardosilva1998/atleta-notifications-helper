@@ -752,6 +752,17 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_overlay_events_streamer_date ON overlay_events(streamer_id, created_at)`);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS track_maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_name TEXT NOT NULL UNIQUE,
+    track_data TEXT NOT NULL,
+    point_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )
+`);
+
 // --- Seed: ensure enterprise subscriptions for specific users ---
 const _enterpriseUsers = ['Ricardo Apple', 'andre_vilela'];
 for (const name of _enterpriseUsers) {
