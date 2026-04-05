@@ -187,7 +187,7 @@ function showControlWindow() {
 
   controlWindow = new BrowserWindow({
     width: 540,
-    height: 640,
+    height: 680,
     resizable: false,
     maximizable: false,
     title: 'Atleta Bridge',
