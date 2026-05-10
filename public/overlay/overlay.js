@@ -1117,31 +1117,34 @@ function playRedemption(event) {
   const masterVolume  = Math.min(Math.max(overlayConfig.volume != null ? overlayConfig.volume : 0.8, 0), 1);
   const finalVolume   = masterVolume * rewardVolume;
 
+  console.log('[Redemption] play', { mediaType, mediaUrl, finalVolume, masterVolume, rewardVolume });
   stopRedemption(false);
 
   if (mediaType === 'video') {
     const vid = document.getElementById('redemption-video');
-    if (!vid) { setTimeout(playNext, 200); return; }
+    if (!vid) { console.error('[Redemption] #redemption-video element missing'); setTimeout(playNext, 200); return; }
 
     const rect = resolveRedemptionRect(data);
     applyRectToElement(vid, rect);
     vid.src = mediaUrl;
     vid.volume = finalVolume;
     vid.style.display = 'block';
+    vid.onerror = () => console.error('[Redemption] video error', vid.error, 'src=', vid.currentSrc);
 
     _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
     vid.onended = () => stopRedemption(true);
-    vid.play().catch(() => {});
+    vid.play().catch(err => console.error('[Redemption] video.play() rejected:', err.message, 'src=', vid.currentSrc));
   } else {
     const aud = document.getElementById('redemption-audio');
-    if (!aud) { setTimeout(playNext, 200); return; }
+    if (!aud) { console.error('[Redemption] #redemption-audio element missing'); setTimeout(playNext, 200); return; }
 
     aud.src = mediaUrl;
     aud.volume = finalVolume;
+    aud.onerror = () => console.error('[Redemption] audio error', aud.error, 'src=', aud.currentSrc);
 
     _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
     aud.onended = () => stopRedemption(true);
-    aud.play().catch(() => {});
+    aud.play().catch(err => console.error('[Redemption] audio.play() rejected:', err.message, 'src=', aud.currentSrc));
   }
 }
 
