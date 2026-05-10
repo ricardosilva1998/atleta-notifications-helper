@@ -279,6 +279,26 @@ try {
   }
 } catch {}
 
+// Migration: Add multistream relay columns to streamers (Twitch + YouTube passthrough via MediaMTX)
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('multistream_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN multistream_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN multistream_token TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_stream_key_enc TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_stream_id TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_privacy TEXT DEFAULT 'public';
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_category_id TEXT DEFAULT '20';
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_default_title TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_active_broadcast_id TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_last_started_at INTEGER;
+    `);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_multistream_token ON streamers(multistream_token) WHERE multistream_token IS NOT NULL');
+    console.log('[DB] Added multistream relay columns to streamers');
+  }
+} catch (e) { _migrationLog('multistream columns', e); }
+
 // Migration: Create overlay_designs table
 db.exec(`
   CREATE TABLE IF NOT EXISTS overlay_designs (
@@ -2537,6 +2557,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_volume', 'streamelements_jwt',
   'overlay_raid_enabled', 'overlay_raid_duration',
   'cp_rewards_enabled',
+  'overlay_giveaway_enabled', 'overlay_giveaway_duration',
 ]);
 
 function updateOverlayConfig(streamerId, config) {
@@ -3250,6 +3271,70 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_redemptions_streamer_date ON channel_point_redemptions(streamer_id, created_at)`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_redemptions_twitch_id ON channel_point_redemptions(twitch_redemption_id)`);
+
+// Migration: Giveaways tables
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS giveaways (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      keyword TEXT NOT NULL,
+      prize TEXT,
+      status TEXT DEFAULT 'open',
+      subs_only INTEGER DEFAULT 0,
+      duration_seconds INTEGER,
+      winners_count INTEGER DEFAULT 1,
+      started_at TEXT DEFAULT (datetime('now')),
+      ends_at TEXT,
+      closed_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+} catch (e) { _migrationLog('giveaways', e); }
+
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_giveaways_streamer_status ON giveaways(streamer_id, status)`);
+} catch (e) { _migrationLog('idx_giveaways_streamer_status', e); }
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS giveaway_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      giveaway_id INTEGER NOT NULL,
+      twitch_user_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      is_subscriber INTEGER DEFAULT 0,
+      is_winner INTEGER DEFAULT 0,
+      is_redrawn_out INTEGER DEFAULT 0,
+      entered_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (giveaway_id) REFERENCES giveaways(id) ON DELETE CASCADE,
+      UNIQUE (giveaway_id, twitch_user_id)
+    )
+  `);
+} catch (e) { _migrationLog('giveaway_entries', e); }
+
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_giveaway_entries_gid ON giveaway_entries(giveaway_id)`);
+} catch (e) { _migrationLog('idx_giveaway_entries_gid', e); }
+
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('overlay_giveaway_enabled')) {
+    db.exec('ALTER TABLE streamers ADD COLUMN overlay_giveaway_enabled INTEGER DEFAULT 1');
+    console.log('[DB] Added overlay_giveaway_enabled column to streamers');
+  }
+} catch (e) { _migrationLog('overlay_giveaway_enabled', e); }
+
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('overlay_giveaway_duration')) {
+    db.exec('ALTER TABLE streamers ADD COLUMN overlay_giveaway_duration INTEGER DEFAULT 8');
+    console.log('[DB] Added overlay_giveaway_duration column to streamers');
+  }
+  // One-time fix for the 8000ms default that shipped briefly in dev — should be 8 seconds, matching other overlay_*_duration columns
+  try { db.exec('UPDATE streamers SET overlay_giveaway_duration = 8 WHERE overlay_giveaway_duration = 8000'); } catch (_) {}
+} catch (e) { _migrationLog('overlay_giveaway_duration', e); }
 
 // Migration: Add channel point columns to streamers
 try {
@@ -4209,6 +4294,206 @@ function clearStreamerBroadcasterScopes(streamerId) {
   db.prepare('UPDATE streamers SET broadcaster_scopes = NULL WHERE id = ?').run(streamerId);
 }
 
+// --- Multistream relay queries ---
+
+function getMultistreamConfig(streamerId) {
+  return db.prepare(`
+    SELECT
+      id,
+      multistream_enabled,
+      multistream_token,
+      multistream_youtube_stream_key_enc,
+      multistream_youtube_stream_id,
+      multistream_youtube_privacy,
+      multistream_youtube_category_id,
+      multistream_youtube_default_title,
+      multistream_active_broadcast_id,
+      multistream_last_started_at
+    FROM streamers WHERE id = ?
+  `).get(streamerId);
+}
+
+function setMultistreamConfig(streamerId, fields) {
+  // Partial update — only sets keys present in `fields`. Allowed keys map directly to columns.
+  const allowed = {
+    enabled: 'multistream_enabled',
+    youtubePrivacy: 'multistream_youtube_privacy',
+    youtubeCategoryId: 'multistream_youtube_category_id',
+    youtubeDefaultTitle: 'multistream_youtube_default_title',
+  };
+  const sets = [];
+  const values = [];
+  for (const [key, col] of Object.entries(allowed)) {
+    if (key in fields) {
+      sets.push(`${col} = ?`);
+      const v = fields[key];
+      values.push(key === 'enabled' ? (v ? 1 : 0) : v);
+    }
+  }
+  if (sets.length === 0) return;
+  values.push(streamerId);
+  db.prepare(`UPDATE streamers SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
+function ensureMultistreamToken(streamerId) {
+  const row = db.prepare('SELECT multistream_token FROM streamers WHERE id = ?').get(streamerId);
+  if (row && row.multistream_token) return row.multistream_token;
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(24).toString('base64url');
+  db.prepare('UPDATE streamers SET multistream_token = ? WHERE id = ?').run(token, streamerId);
+  return token;
+}
+
+function getStreamerByMultistreamToken(token) {
+  return db.prepare(`
+    SELECT
+      id,
+      twitch_user_id, twitch_username, twitch_display_name,
+      broadcaster_access_token, broadcaster_refresh_token, broadcaster_token_expires_at, broadcaster_scopes,
+      yt_access_token, yt_refresh_token, yt_token_expires_at, yt_channel_name,
+      multistream_enabled, multistream_token,
+      multistream_youtube_stream_key_enc, multistream_youtube_stream_id,
+      multistream_youtube_privacy, multistream_youtube_category_id, multistream_youtube_default_title,
+      multistream_active_broadcast_id
+    FROM streamers WHERE multistream_token = ?
+  `).get(token);
+}
+
+function setMultistreamYoutubeStream(streamerId, streamId, encryptedKey) {
+  db.prepare(`
+    UPDATE streamers
+    SET multistream_youtube_stream_id = ?,
+        multistream_youtube_stream_key_enc = ?
+    WHERE id = ?
+  `).run(streamId, encryptedKey, streamerId);
+}
+
+function clearMultistreamYoutubeStream(streamerId) {
+  db.prepare(`
+    UPDATE streamers
+    SET multistream_youtube_stream_id = NULL,
+        multistream_youtube_stream_key_enc = NULL,
+        multistream_active_broadcast_id = NULL
+    WHERE id = ?
+  `).run(streamerId);
+}
+
+function setMultistreamActiveBroadcast(streamerId, broadcastId) {
+  db.prepare('UPDATE streamers SET multistream_active_broadcast_id = ? WHERE id = ?').run(broadcastId, streamerId);
+}
+
+function markMultistreamStarted(streamerId) {
+  db.prepare('UPDATE streamers SET multistream_last_started_at = ? WHERE id = ?').run(Date.now(), streamerId);
+}
+
+// ── Giveaway queries ────────────────────────────────────────────────
+
+function getActiveGiveaway(streamerId) {
+  return db.prepare(
+    "SELECT * FROM giveaways WHERE streamer_id = ? AND status = 'open' ORDER BY id DESC LIMIT 1"
+  ).get(streamerId) || null;
+}
+
+function getAllOpenGiveaways() {
+  return db.prepare("SELECT * FROM giveaways WHERE status = 'open'").all();
+}
+
+function getGiveawayById(id, streamerId) {
+  return db.prepare('SELECT * FROM giveaways WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+function getGiveawaysHistory(streamerId, limit) {
+  return db.prepare(
+    "SELECT * FROM giveaways WHERE streamer_id = ? AND status = 'closed' ORDER BY started_at DESC LIMIT ?"
+  ).all(streamerId, limit || 25);
+}
+
+function insertGiveaway(fields) {
+  const result = db.prepare(`
+    INSERT INTO giveaways (streamer_id, keyword, prize, status, subs_only, duration_seconds, winners_count, ends_at)
+    VALUES (@streamer_id, @keyword, @prize, @status, @subs_only, @duration_seconds, @winners_count, @ends_at)
+  `).run({
+    streamer_id: fields.streamer_id,
+    keyword: fields.keyword,
+    prize: fields.prize || null,
+    status: fields.status || 'open',
+    subs_only: fields.subs_only ? 1 : 0,
+    duration_seconds: fields.duration_seconds || null,
+    winners_count: fields.winners_count || 1,
+    ends_at: fields.ends_at || null,
+  });
+  return db.prepare('SELECT * FROM giveaways WHERE id = ?').get(result.lastInsertRowid);
+}
+
+const _GIVEAWAY_UPDATABLE = new Set([
+  'keyword', 'prize', 'status', 'subs_only', 'duration_seconds',
+  'winners_count', 'ends_at', 'closed_at',
+]);
+
+function updateGiveaway(id, streamerId, fields) {
+  const sets = [];
+  const values = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (!_GIVEAWAY_UPDATABLE.has(k)) continue;
+    sets.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (sets.length === 0) return getGiveawayById(id, streamerId);
+  values.push(id, streamerId);
+  db.prepare(`UPDATE giveaways SET ${sets.join(', ')} WHERE id = ? AND streamer_id = ?`).run(...values);
+  return getGiveawayById(id, streamerId);
+}
+
+function closeGiveaway(id, streamerId) {
+  const result = db.prepare(
+    "UPDATE giveaways SET status = 'closed', closed_at = datetime('now') WHERE id = ? AND streamer_id = ? AND status = 'open'"
+  ).run(id, streamerId);
+  return result.changes;
+}
+
+function deleteGiveaway(id, streamerId) {
+  return db.prepare('DELETE FROM giveaways WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+}
+
+function insertEntry(fields) {
+  const result = db.prepare(
+    'INSERT OR IGNORE INTO giveaway_entries (giveaway_id, twitch_user_id, username, is_subscriber) VALUES (?, ?, ?, ?)'
+  ).run(fields.giveaway_id, fields.twitch_user_id, fields.username, fields.is_subscriber ? 1 : 0);
+  return result.changes;
+}
+
+function getEntries(giveawayId) {
+  return db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? ORDER BY entered_at ASC').all(giveawayId);
+}
+
+function getEntryCount(giveawayId) {
+  return db.prepare('SELECT COUNT(*) AS count FROM giveaway_entries WHERE giveaway_id = ?').get(giveawayId).count;
+}
+
+function getEligibleEntries(giveawayId) {
+  return db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? AND is_redrawn_out = 0').all(giveawayId);
+}
+
+function markWinners(giveawayId, entryIds) {
+  if (!entryIds || entryIds.length === 0) return;
+  const placeholders = entryIds.map(() => '?').join(', ');
+  db.transaction(() => {
+    db.prepare(`UPDATE giveaway_entries SET is_winner = 1 WHERE id IN (${placeholders})`).run(...entryIds);
+  })();
+}
+
+function markRedrawnOut(giveawayId, entryIds) {
+  if (!entryIds || entryIds.length === 0) return;
+  const placeholders = entryIds.map(() => '?').join(', ');
+  db.transaction(() => {
+    db.prepare(`UPDATE giveaway_entries SET is_redrawn_out = 1 WHERE id IN (${placeholders})`).run(...entryIds);
+  })();
+}
+
+function getWinners(giveawayId) {
+  return db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? AND is_winner = 1 ORDER BY id').all(giveawayId);
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -4507,6 +4792,29 @@ module.exports = {
   getRedemptionsRecent,
   updateStreamerCpSync,
   clearStreamerBroadcasterScopes,
+  getMultistreamConfig,
+  setMultistreamConfig,
+  ensureMultistreamToken,
+  getStreamerByMultistreamToken,
+  setMultistreamYoutubeStream,
+  clearMultistreamYoutubeStream,
+  setMultistreamActiveBroadcast,
+  markMultistreamStarted,
+  getActiveGiveaway,
+  getAllOpenGiveaways,
+  getGiveawayById,
+  getGiveawaysHistory,
+  insertGiveaway,
+  updateGiveaway,
+  closeGiveaway,
+  deleteGiveaway,
+  insertEntry,
+  getEntries,
+  getEntryCount,
+  getEligibleEntries,
+  markWinners,
+  markRedrawnOut,
+  getWinners,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
 };

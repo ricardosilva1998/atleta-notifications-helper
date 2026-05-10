@@ -24,6 +24,7 @@ router.get('/events/:token', (req, res) => {
     subscription: { enabled: streamer.overlay_sub_enabled, duration: streamer.overlay_sub_duration },
     bits: { enabled: streamer.overlay_bits_enabled, duration: streamer.overlay_bits_duration },
     donation: { enabled: streamer.overlay_donation_enabled, duration: streamer.overlay_donation_duration },
+    giveaway_winner: { enabled: streamer.overlay_giveaway_enabled, duration: streamer.overlay_giveaway_duration },
     volume: streamer.overlay_volume,
   };
 

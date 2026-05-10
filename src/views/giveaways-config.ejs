@@ -1,0 +1,740 @@
+<%- include('header', { title: 'Giveaways', streamer: streamer }) %>
+
+<style>
+  /* ── Layout helpers ──────────────────────────────── */
+  .gw-label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: 6px;
+    font-family: var(--font-display); text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .gw-input {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text-primary);
+    font-family: var(--font-body); font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .gw-input:focus { border-color: var(--accent); }
+  .gw-input::placeholder { color: var(--text-muted); }
+
+  /* ── Active panel ────────────────────────────────── */
+  .gw-active {
+    border: 1px solid rgba(245,158,11,0.35);
+    background: rgba(245,158,11,0.06);
+    border-radius: var(--radius);
+    padding: 24px; margin-bottom: 24px;
+  }
+  .kw-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-display); font-weight: 800;
+    font-size: 22px; letter-spacing: -0.5px;
+    color: #f59e0b; background: rgba(245,158,11,0.12);
+    border: 1.5px solid rgba(245,158,11,0.3);
+    padding: 6px 16px; border-radius: 8px;
+  }
+  .gw-copy-btn {
+    cursor: pointer; background: none; border: none;
+    color: var(--text-muted); padding: 4px 8px;
+    border-radius: 6px; transition: color 0.15s, background 0.15s;
+    font-size: 11px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .gw-copy-btn:hover { color: #f59e0b; background: rgba(245,158,11,0.08); }
+  .gw-badge {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 3px 10px; border-radius: 20px;
+    background: var(--bg-elevated); color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .gw-badge.subs { background: rgba(145,71,255,0.12); color: #9146ff; }
+  .gw-badge.open { background: rgba(62,207,142,0.12); color: var(--success); }
+  .gw-badge.live { background: rgba(240,68,56,0.12); color: var(--danger); }
+
+  /* ── Live count + countdown ──────────────────────── */
+  .gw-live-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin: 16px 0;
+  }
+  .gw-count-box {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 18px; text-align: center;
+  }
+  .gw-count-num {
+    font-family: var(--font-display); font-size: 28px; font-weight: 800;
+    color: #f59e0b; line-height: 1;
+  }
+  .gw-count-label {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.06em; margin-top: 2px;
+  }
+  .gw-countdown {
+    font-family: var(--font-display); font-size: 16px; font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  /* ── Entrants table ──────────────────────────────── */
+  .gw-entrants-wrap {
+    max-height: 220px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-top: 12px; background: var(--bg-base);
+  }
+  .gw-entrants-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  .gw-entrants-table th {
+    text-align: left; padding: 8px 12px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg-elevated);
+  }
+  .gw-entrants-table td {
+    padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .gw-entrants-table tr:last-child td { border-bottom: none; }
+  .sub-badge {
+    font-size: 9px; font-weight: 700; padding: 1px 6px;
+    border-radius: 8px; background: rgba(145,71,255,0.12); color: #9146ff;
+    margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  /* ── Action buttons row ──────────────────────────── */
+  .gw-actions {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px;
+    padding-top: 16px; border-top: 1px solid var(--border);
+    align-items: center;
+  }
+
+  /* ── Start form ──────────────────────────────────── */
+  .gw-form-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    margin-bottom: 20px;
+  }
+  .gw-form-grid .full { grid-column: 1 / -1; }
+
+  .gw-keyword-wrap {
+    display: flex; align-items: center;
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .gw-keyword-wrap:focus-within { border-color: var(--accent); }
+  .gw-keyword-prefix {
+    padding: 10px 10px 10px 14px; font-family: var(--font-display);
+    font-weight: 700; color: var(--text-muted); font-size: 15px;
+    background: var(--bg-elevated); border-right: 1px solid var(--border);
+    user-select: none;
+  }
+  .gw-keyword-input {
+    flex: 1; padding: 10px 14px;
+    background: transparent; border: none; outline: none;
+    color: var(--text-primary); font-family: var(--font-body); font-size: 13px;
+  }
+
+  /* ── Duration radios ─────────────────────────────── */
+  .gw-radio-group {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .gw-radio-group label {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); cursor: pointer;
+    font-size: 13px; transition: all 0.15s;
+    background: var(--bg-base);
+  }
+  .gw-radio-group label:hover { border-color: rgba(145,70,255,0.4); }
+  .gw-radio-group input[type=radio] { accent-color: var(--accent); }
+
+  #custom-duration-wrap {
+    display: none; align-items: center; gap: 8px; margin-top: 8px;
+  }
+  #custom-duration-wrap.visible { display: flex; }
+
+  /* ── Toggle ──────────────────────────────────────── */
+  .gw-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .gw-toggle input { opacity: 0; width: 0; height: 0; }
+  .gw-toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: 0.2s; }
+  .gw-toggle-slider:before { position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+  .gw-toggle input:checked + .gw-toggle-slider { background: var(--success); }
+  .gw-toggle input:checked + .gw-toggle-slider:before { transform: translateX(20px); }
+
+  /* ── Winner card ─────────────────────────────────── */
+  .gw-winner {
+    border: 2px solid rgba(245,158,11,0.35);
+    text-align: center;
+  }
+  .gw-winner h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-muted); margin-bottom: 12px; font-family: var(--font-display);
+  }
+  .gw-winner-name {
+    font-family: var(--font-display); font-size: 26px; font-weight: 800;
+    color: #f59e0b; margin-bottom: 4px; line-height: 1.1;
+  }
+  .gw-winner-prize { font-size: 14px; color: var(--text-secondary); margin-bottom: 4px; }
+
+  /* ── History table ────────────────────────────────── */
+  .gw-history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .gw-history-table th {
+    text-align: left; padding: 10px 14px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .gw-history-table td {
+    padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top;
+  }
+  .gw-history-table tr:last-child td { border-bottom: none; }
+  .gw-history-table details summary {
+    cursor: pointer; list-style: none; color: var(--text-secondary);
+    transition: color 0.15s;
+  }
+  .gw-history-table details summary::marker,
+  .gw-history-table details summary::-webkit-details-marker { display: none; }
+  .gw-history-table details summary:hover { color: var(--accent); }
+  .gw-history-expand {
+    margin-top: 8px; padding: 10px; background: var(--bg-elevated);
+    border-radius: 6px; font-size: 12px; color: var(--text-muted); min-height: 32px;
+  }
+  .gw-chip {
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    background: rgba(62,207,142,0.12); color: var(--success);
+  }
+
+  /* ── Toast ───────────────────────────────────────── */
+  #gw-toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    padding: 12px 20px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; pointer-events: none;
+    opacity: 0; transition: opacity 0.25s;
+    background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary);
+  }
+  #gw-toast.visible { opacity: 1; }
+  #gw-toast.success { background: rgba(62,207,142,0.15); border-color: rgba(62,207,142,0.3); color: var(--success); }
+  #gw-toast.error { background: rgba(240,68,56,0.1); border-color: rgba(240,68,56,0.3); color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .gw-form-grid { grid-template-columns: 1fr; }
+    .gw-form-grid .full { grid-column: 1; }
+  }
+</style>
+
+<!-- Toast -->
+<div id="gw-toast"></div>
+
+<!-- Back link + header -->
+<a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  Back to Dashboard
+</a>
+<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in">Giveaways</h2>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
+  Run keyword giveaways in Twitch chat — viewers type <code>!keyword</code> to enter, you pick a winner.
+</p>
+
+<!-- ─────────────────────────────────────────────────── -->
+<!-- ACTIVE GIVEAWAY PANEL (shown when active exists)    -->
+<!-- ─────────────────────────────────────────────────── -->
+<% if (typeof active !== 'undefined' && active) { %>
+<div class="gw-active animate-in" id="gw-active-panel">
+  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+    <span class="gw-badge live">Live</span>
+    <span class="kw-chip" id="kw-display">!<%= active.keyword %></span>
+    <button class="gw-copy-btn" onclick="copyKeyword()" title="Copy to clipboard">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Copy
+    </button>
+    <% if (active.prize) { %>
+      <span style="font-size: 14px; color: var(--text-secondary);">Prize: <strong style="color: var(--text-primary);"><%= active.prize %></strong></span>
+    <% } %>
+    <% if (active.subs_only) { %>
+      <span class="gw-badge subs">Subscribers only</span>
+    <% } else { %>
+      <span class="gw-badge open">Open to all</span>
+    <% } %>
+  </div>
+
+  <div class="gw-live-row">
+    <div class="gw-count-box">
+      <div class="gw-count-num" id="gw-entry-count">–</div>
+      <div class="gw-count-label">Entrants</div>
+    </div>
+    <% if (active.ends_at) { %>
+    <div>
+      <div class="gw-countdown" id="gw-countdown">–</div>
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">remaining</div>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- Entrants list — auto-refreshed every 2 s -->
+  <div>
+    <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+      <span>Entrants (first 50 shown)</span>
+    </div>
+    <div class="gw-entrants-wrap">
+      <table class="gw-entrants-table">
+        <thead><tr><th>#</th><th>Username</th></tr></thead>
+        <tbody id="gw-entrants-body">
+          <tr><td colspan="2" style="color: var(--text-muted); font-style: italic; text-align: center; padding: 16px;">Waiting for entries...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="gw-actions">
+    <button class="btn btn-primary" id="btn-pick-winner" onclick="pickWinner(false)" disabled>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 5px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Pick Winner Now
+    </button>
+    <button class="btn btn-secondary" onclick="closeGiveaway()">
+      Close (No Winner)
+    </button>
+    <button class="btn btn-danger" onclick="cancelGiveaway()" style="margin-left: auto;">
+      Cancel &amp; Delete
+    </button>
+  </div>
+</div>
+
+<% } else { %>
+<!-- ─────────────────────────────────────────────────── -->
+<!-- START FORM (shown when no active giveaway)          -->
+<!-- ─────────────────────────────────────────────────── -->
+<div class="card animate-in" id="gw-start-form">
+  <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Start a Giveaway</h3>
+  <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">Viewers type the keyword in chat to enter.</p>
+
+  <div class="gw-form-grid">
+
+    <!-- Keyword -->
+    <div>
+      <label class="gw-label" for="gw-keyword">Keyword</label>
+      <div class="gw-keyword-wrap">
+        <span class="gw-keyword-prefix">!</span>
+        <input
+          class="gw-keyword-input"
+          id="gw-keyword"
+          type="text"
+          placeholder="gw"
+          maxlength="25"
+          autocomplete="off"
+          oninput="this.value = this.value.replace(/[^a-zA-Z0-9]/g, '')">
+      </div>
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Letters and numbers only, max 25 chars</div>
+    </div>
+
+    <!-- Prize -->
+    <div>
+      <label class="gw-label" for="gw-prize">Prize <span style="font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted);">(optional)</span></label>
+      <input class="gw-input" id="gw-prize" type="text" placeholder="e.g. Steam key, $10 gift card" maxlength="100">
+    </div>
+
+    <!-- Duration (full width) -->
+    <div class="full">
+      <label class="gw-label">Duration</label>
+      <div class="gw-radio-group">
+        <label><input type="radio" name="gw-duration" value="0" checked onchange="onDurationChange(this)"><span>Manual end</span></label>
+        <label><input type="radio" name="gw-duration" value="60" onchange="onDurationChange(this)"><span>1 min</span></label>
+        <label><input type="radio" name="gw-duration" value="300" onchange="onDurationChange(this)"><span>5 min</span></label>
+        <label><input type="radio" name="gw-duration" value="600" onchange="onDurationChange(this)"><span>10 min</span></label>
+        <label><input type="radio" name="gw-duration" value="1800" onchange="onDurationChange(this)"><span>30 min</span></label>
+        <label><input type="radio" name="gw-duration" value="custom" onchange="onDurationChange(this)"><span>Custom</span></label>
+      </div>
+      <div id="custom-duration-wrap">
+        <input class="gw-input" id="gw-custom-seconds" type="number" min="30" max="86400" placeholder="seconds" style="width: 140px;">
+        <span style="font-size: 13px; color: var(--text-muted);">seconds (30–86400)</span>
+      </div>
+    </div>
+
+    <!-- Subscribers only -->
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <label class="gw-toggle" title="Subscribers only">
+        <input type="checkbox" id="gw-subs-only">
+        <span class="gw-toggle-slider"></span>
+      </label>
+      <div>
+        <div style="font-size: 14px; font-weight: 600;">Subscribers only</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Only channel subscribers can enter</div>
+      </div>
+    </div>
+
+    <!-- Winners count -->
+    <div>
+      <label class="gw-label" for="gw-winners-count">Number of winners</label>
+      <input class="gw-input" id="gw-winners-count" type="number" min="1" max="10" value="1" style="width: 100px;">
+    </div>
+
+  </div>
+
+  <button class="btn btn-primary" onclick="startGiveaway()" id="btn-start">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 5px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    Start Giveaway
+  </button>
+</div>
+<% } %>
+
+<!-- ─────────────────────────────────────────────────── -->
+<!-- LAST WINNERS CARD                                   -->
+<!-- ─────────────────────────────────────────────────── -->
+<% if (typeof recentWinners !== 'undefined' && recentWinners && recentWinners.length > 0 && !(typeof active !== 'undefined' && active)) { %>
+<div class="card animate-in gw-winner" style="margin-top: 24px; margin-bottom: 0;">
+  <h3>Last Winner<%= recentWinners.length > 1 ? 's' : '' %></h3>
+  <% recentWinners.forEach(function(w) { %>
+    <div class="gw-winner-name">@<%= w.username %></div>
+    <% if (typeof history !== 'undefined' && history && history.length > 0 && history[0].prize) { %>
+      <div class="gw-winner-prize">won <%= history[0].prize %></div>
+    <% } %>
+  <% }); %>
+  <% if (typeof history !== 'undefined' && history && history.length > 0) { %>
+  <div style="margin-top: 16px;">
+    <button class="btn btn-secondary" onclick="redrawWinner(<%= history[0].id %>)" style="font-size: 13px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+      Re-draw Winner
+    </button>
+  </div>
+  <% } %>
+</div>
+<% } %>
+
+<!-- ─────────────────────────────────────────────────── -->
+<!-- HISTORY TABLE                                        -->
+<!-- ─────────────────────────────────────────────────── -->
+<% if (typeof history !== 'undefined' && history && history.length > 0) { %>
+<div class="card animate-in" style="margin-top: 24px;">
+  <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">
+    Recent Giveaways
+    <span style="font-size: 12px; font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; margin-left: 6px; color: var(--text-muted);">
+      <%= history.length %>
+    </span>
+  </h3>
+  <table class="gw-history-table">
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Keyword</th>
+        <th>Prize</th>
+        <th>Entries</th>
+        <th>Winners</th>
+      </tr>
+    </thead>
+    <tbody>
+    <% history.forEach(function(g) { %>
+      <tr>
+        <td>
+          <details>
+            <summary title="Click to expand entries">
+              <span data-ts="<%= g.started_at %>"><%= g.started_at %></span>
+            </summary>
+            <div class="gw-history-expand" id="expand-<%= g.id %>">
+              <span style="color: var(--text-muted);">Loading...</span>
+            </div>
+          </details>
+        </td>
+        <td><code style="font-size: 12px; color: #f59e0b; background: rgba(245,158,11,0.08); padding: 2px 6px; border-radius: 4px;">!<%= g.keyword %></code></td>
+        <td style="color: var(--text-secondary);"><%= g.prize || '–' %></td>
+        <td id="hist-count-<%= g.id %>" style="color: var(--text-muted);">–</td>
+        <td><span class="gw-chip"><%= g.winners_count || 1 %></span></td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+<% } else if (!(typeof active !== 'undefined' && active)) { %>
+<div class="card animate-in" style="margin-top: 24px; text-align: center; padding: 48px 24px; border: 1px dashed var(--border);">
+  <div style="font-size: 32px; margin-bottom: 8px;">🎁</div>
+  <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px;">No giveaways yet</h4>
+  <p style="font-size: 13px; color: var(--text-muted);">Start your first giveaway above — it takes 30 seconds.</p>
+</div>
+<% } %>
+
+<script>
+var ACTIVE_ID = <% if (typeof active !== 'undefined' && active) { %><%= active.id %><% } else { %>null<% } %>;
+var ACTIVE_ENDS_AT = <% if (typeof active !== 'undefined' && active && active.ends_at) { %>'<%= active.ends_at %>'<% } else { %>null<% } %>;
+var _pollTimer = null;
+var _countdownTimer = null;
+
+// ── Toast ─────────────────────────────────────────────
+var _toastTimer = null;
+function showToast(msg, type) {
+  var el = document.getElementById('gw-toast');
+  el.textContent = msg;
+  el.className = 'visible' + (type ? ' ' + type : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { el.className = ''; }, 3500);
+}
+
+// ── HTML escape ───────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Keyword copy ──────────────────────────────────────
+function copyKeyword() {
+  var kw = document.getElementById('kw-display');
+  if (!kw) return;
+  navigator.clipboard.writeText(kw.textContent.trim()).then(function() {
+    showToast('Keyword copied!', 'success');
+  });
+}
+
+// ── Duration radio ────────────────────────────────────
+function onDurationChange(radio) {
+  var wrap = document.getElementById('custom-duration-wrap');
+  if (!wrap) return;
+  if (radio.value === 'custom') {
+    wrap.classList.add('visible');
+  } else {
+    wrap.classList.remove('visible');
+  }
+}
+
+// ── Live poll ─────────────────────────────────────────
+function pollEntries() {
+  if (!ACTIVE_ID) return;
+  fetch('/dashboard/giveaways/' + ACTIVE_ID + '/entries')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var countEl = document.getElementById('gw-entry-count');
+      if (countEl) countEl.textContent = d.count;
+
+      var btn = document.getElementById('btn-pick-winner');
+      if (btn) btn.disabled = (d.count < 1);
+
+      var tbody = document.getElementById('gw-entrants-body');
+      if (tbody && Array.isArray(d.entries)) {
+        if (d.entries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="2" style="color: var(--text-muted); font-style: italic; text-align: center; padding: 16px;">No entries yet</td></tr>';
+        } else {
+          tbody.innerHTML = d.entries.slice(0, 50).map(function(e, i) {
+            return '<tr>'
+              + '<td style="color: var(--text-muted);">' + (i + 1) + '</td>'
+              + '<td>' + escHtml(e.username) + (e.is_subscriber ? '<span class="sub-badge">Sub</span>' : '') + '</td>'
+              + '</tr>';
+          }).join('');
+        }
+      }
+    })
+    .catch(function() { /* network blip — keep polling */ });
+}
+
+// ── Countdown ─────────────────────────────────────────
+function updateCountdown() {
+  if (!ACTIVE_ENDS_AT) return;
+  var el = document.getElementById('gw-countdown');
+  if (!el) return;
+  var endsMs = new Date(ACTIVE_ENDS_AT + 'Z').getTime();
+  var diff = Math.max(0, Math.floor((endsMs - Date.now()) / 1000));
+  var m = Math.floor(diff / 60);
+  var s = diff % 60;
+  el.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+if (ACTIVE_ID) {
+  pollEntries();
+  _pollTimer = setInterval(pollEntries, 2000);
+  if (ACTIVE_ENDS_AT) {
+    updateCountdown();
+    _countdownTimer = setInterval(updateCountdown, 1000);
+  }
+}
+
+// ── Start giveaway ────────────────────────────────────
+function startGiveaway() {
+  var keyword = (document.getElementById('gw-keyword').value || '').trim();
+  if (!keyword || !/^[a-zA-Z0-9]{1,25}$/.test(keyword)) {
+    showToast('Keyword must be 1–25 letters and numbers', 'error');
+    return;
+  }
+  var prize = (document.getElementById('gw-prize').value || '').trim();
+  var subsOnly = document.getElementById('gw-subs-only').checked;
+  var winnersCount = parseInt(document.getElementById('gw-winners-count').value, 10) || 1;
+
+  var durRadio = document.querySelector('input[name="gw-duration"]:checked');
+  var durVal = durRadio ? durRadio.value : '0';
+  var durationSeconds = null;
+  if (durVal === 'custom') {
+    durationSeconds = parseInt(document.getElementById('gw-custom-seconds').value, 10);
+    if (!durationSeconds || durationSeconds < 30 || durationSeconds > 86400) {
+      showToast('Custom duration must be 30–86400 seconds', 'error');
+      return;
+    }
+  } else if (durVal !== '0') {
+    durationSeconds = parseInt(durVal, 10);
+  }
+
+  var btn = document.getElementById('btn-start');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  fetch('/dashboard/giveaways/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      keyword: keyword,
+      prize: prize || null,
+      subs_only: subsOnly ? 1 : 0,
+      duration_seconds: durationSeconds,
+      winners_count: winnersCount,
+    }),
+  })
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+  .then(function(res) {
+    if (!res.ok) {
+      showToast(res.d.error || 'Failed to start giveaway', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Start Giveaway';
+      return;
+    }
+    showToast('Giveaway started!', 'success');
+    setTimeout(function() { location.reload(); }, 800);
+  })
+  .catch(function() {
+    showToast('Network error — try again', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Start Giveaway';
+  });
+}
+
+// ── Pick winner ───────────────────────────────────────
+function pickWinner(redraw) {
+  if (!ACTIVE_ID) return;
+  var btn = document.getElementById('btn-pick-winner');
+  if (btn) { btn.disabled = true; btn.textContent = 'Picking...'; }
+
+  fetch('/dashboard/giveaways/' + ACTIVE_ID + '/pick', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ redraw: !!redraw }),
+  })
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+  .then(function(res) {
+    if (!res.ok || !res.d.winners || res.d.winners.length === 0) {
+      showToast((res.d && (res.d.message || res.d.error)) || 'No eligible entries', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Pick Winner Now'; }
+      return;
+    }
+    var names = res.d.winners.map(function(w) { return '@' + w.username; }).join(', ');
+    showToast(names + ' won!', 'success');
+    setTimeout(function() { location.reload(); }, 1200);
+  })
+  .catch(function() {
+    showToast('Network error — try again', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Pick Winner Now'; }
+  });
+}
+
+// ── Re-draw ───────────────────────────────────────────
+function redrawWinner(giveawayId) {
+  fetch('/dashboard/giveaways/' + giveawayId + '/pick', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ redraw: true }),
+  })
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+  .then(function(res) {
+    if (!res.ok || !res.d.winners || res.d.winners.length === 0) {
+      showToast((res.d && (res.d.message || res.d.error)) || 'No more eligible entries', 'error');
+      return;
+    }
+    var names = res.d.winners.map(function(w) { return '@' + w.username; }).join(', ');
+    showToast(names + ' won!', 'success');
+    setTimeout(function() { location.reload(); }, 1200);
+  })
+  .catch(function() { showToast('Network error — try again', 'error'); });
+}
+
+// ── Close giveaway (no winner) ────────────────────────
+function closeGiveaway() {
+  if (!ACTIVE_ID) return;
+  if (!confirm('Close this giveaway without picking a winner?')) return;
+  fetch('/dashboard/giveaways/' + ACTIVE_ID + '/close', { method: 'POST' })
+    .then(function(r) {
+      if (r.ok) {
+        showToast('Giveaway closed', 'success');
+        setTimeout(function() { location.reload(); }, 800);
+      } else {
+        showToast('Failed to close giveaway', 'error');
+      }
+    })
+    .catch(function() { showToast('Network error', 'error'); });
+}
+
+// ── Cancel / delete giveaway ──────────────────────────
+function cancelGiveaway() {
+  if (!ACTIVE_ID) return;
+  if (!confirm('Cancel and delete this giveaway? All entries will be permanently lost.')) return;
+  fetch('/dashboard/giveaways/' + ACTIVE_ID + '/close', { method: 'POST' })
+    .then(function() {
+      return fetch('/dashboard/giveaways/' + ACTIVE_ID, { method: 'DELETE' });
+    })
+    .then(function(r) {
+      if (r.ok) {
+        showToast('Giveaway cancelled', 'success');
+        setTimeout(function() { location.reload(); }, 800);
+      } else {
+        return r.json().then(function(d) { showToast(d.error || 'Failed to cancel', 'error'); });
+      }
+    })
+    .catch(function() { showToast('Network error', 'error'); });
+}
+
+// ── History row: expand on details toggle ─────────────
+document.querySelectorAll('.gw-history-table details').forEach(function(det) {
+  det.addEventListener('toggle', function() {
+    if (!det.open) return;
+    var expandEl = det.querySelector('.gw-history-expand');
+    if (!expandEl || expandEl.dataset.loaded) return;
+    var rowId = expandEl.id.replace('expand-', '');
+    fetch('/dashboard/giveaways/' + rowId + '/entries')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        expandEl.dataset.loaded = '1';
+        var countEl = document.getElementById('hist-count-' + rowId);
+        if (countEl) countEl.textContent = d.count;
+        if (!d.entries || d.entries.length === 0) {
+          expandEl.textContent = 'No entries recorded.';
+          return;
+        }
+        var winners = d.entries.filter(function(e) { return e.is_winner; });
+        var others = d.entries.filter(function(e) { return !e.is_winner; });
+        var html = '';
+        if (winners.length) {
+          html += '<div style="margin-bottom: 6px; font-weight: 700; color: #f59e0b;">Winner' + (winners.length > 1 ? 's' : '') + ':</div>';
+          html += '<div>' + winners.map(function(e) {
+            return escHtml(e.username) + (e.is_subscriber ? '<span class="sub-badge">Sub</span>' : '');
+          }).join(' &bull; ') + '</div>';
+        }
+        if (others.length) {
+          html += '<div style="margin: 8px 0 4px; font-weight: 600; color: var(--text-muted);">Entrants (' + others.length + '):</div>';
+          html += '<div style="columns: 2; gap: 4px;">' + others.slice(0, 40).map(function(e) {
+            return '<div>' + escHtml(e.username) + '</div>';
+          }).join('') + '</div>';
+          if (others.length > 40) {
+            html += '<div style="color: var(--text-muted); margin-top: 4px;">+' + (others.length - 40) + ' more</div>';
+          }
+        }
+        expandEl.innerHTML = html;
+      })
+      .catch(function() { expandEl.textContent = 'Failed to load entries.'; });
+  });
+});
+
+// ── Relative timestamps ───────────────────────────────
+function relTime(dateStr) {
+  var diff = Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 1000);
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+document.querySelectorAll('[data-ts]').forEach(function(el) {
+  el.textContent = relTime(el.dataset.ts);
+});
+</script>
+
+<%- include('footer') %>

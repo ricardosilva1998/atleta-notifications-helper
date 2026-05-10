@@ -339,15 +339,16 @@ function playNext() {
 // ─── Card class mapping ────────────────────────────────────────
 function getCardClass(type) {
   const map = {
-    follow:        'follow-card',
-    subscription:  'sub-card',
-    bits:          'bits-card',
-    donation:      'donation-card',
-    raid:          'raid-card',
-    yt_superchat:  'yt-superchat-card',
-    yt_member:     'yt-member-card',
-    yt_giftmember: 'yt-giftmember-card',
-    timed:         'timed-card',
+    follow:           'follow-card',
+    subscription:     'sub-card',
+    bits:             'bits-card',
+    donation:         'donation-card',
+    raid:             'raid-card',
+    yt_superchat:     'yt-superchat-card',
+    yt_member:        'yt-member-card',
+    yt_giftmember:    'yt-giftmember-card',
+    timed:            'timed-card',
+    giveaway_winner:  'giveaway-winner-card',
   };
   return map[type] || 'follow-card';
 }
@@ -552,6 +553,24 @@ function buildBannerContent(event) {
         </div>`;
     }
 
+    case 'giveaway_winner': {
+      const prizeHtml = event.data.prize
+        ? `<div class="detail">won <b>${esc(event.data.prize)}</b> 🎁</div>`
+        : '';
+      const body = `<div class="event-label">Giveaway Winner!</div>
+          <div class="username">@${esc(event.data.username)}</div>
+          ${prizeHtml}`;
+      return `<div class="top-accent"></div>
+        <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
+        <div class="car-track">
+          <div class="race-line"></div>
+          <div class="speed-dot fsd1"></div>
+          <div class="speed-dot fsd2"></div>
+          <div class="speed-dot fsd3"></div>
+          <div class="track-car">🏎️</div>
+        </div>`;
+    }
+
     default: return '';
   }
 }
@@ -574,6 +593,7 @@ function spawnEffects(type) {
       bits: 'gold', yt_superchat: 'gold',
       donation: 'money', yt_giftmember: 'money',
       raid: 'robots',
+      giveaway_winner: 'confetti',
     };
     effect = defaults[type] || 'none';
   }

@@ -489,6 +489,30 @@
       <a href="/dashboard/donations" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Donation Settings</a>
     </div>
 
+    <!-- Multistream Card -->
+    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #9146ff, #ff0000); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Multistream</h3>
+          <span style="color: var(--text-muted); font-size: 12px;">Stream to Twitch + YouTube at once</span>
+        </div>
+      </div>
+      <% if (streamer.multistream_enabled) { %>
+        <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Active — point OBS at your ingest URL
+        </p>
+      <% } else { %>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          Stream once from OBS, broadcast to Twitch and YouTube. Zero extra CPU on your PC.
+        </p>
+      <% } %>
+      <a href="/dashboard/multistream" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Multistream Settings</a>
+    </div>
+
     <!-- Channel Point Rewards Card -->
     <% {
       const _hasScope = typeof hasScope !== 'undefined' ? hasScope : false;
@@ -526,6 +550,30 @@
       <a href="/dashboard/redemptions" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Manage Rewards</a>
     </div>
     <% } %>
+
+    <!-- Giveaways Card -->
+    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245,158,11,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Giveaways</h3>
+          <% if (typeof activeGiveaway !== 'undefined' && activeGiveaway) { %>
+            <span style="color: var(--danger); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--danger); display: inline-block; animation: pulse 1.2s ease-in-out infinite;"></span>
+              Live: !<%= activeGiveaway.keyword %>
+            </span>
+          <% } else { %>
+            <span style="color: var(--text-muted); font-size: 12px;">No active giveaway</span>
+          <% } %>
+        </div>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+        Run quick !keyword giveaways in chat — pick winners, show on overlay.
+      </p>
+      <a href="/dashboard/giveaways" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Manage Giveaways</a>
+    </div>
 
     <!-- Custom Overlays Card — DISABLED for now
     <a href="/dashboard/custom-overlays" class="card" style="text-decoration:none;">

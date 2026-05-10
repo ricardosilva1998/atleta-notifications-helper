@@ -218,6 +218,9 @@ router.get('/', (req, res) => {
   const { hasRedemptionScope } = require('../services/twitch');
   const hasScope = hasRedemptionScope(req.streamer);
 
+  let activeGiveaway = null;
+  try { activeGiveaway = db.getActiveGiveaway(req.streamer.id); } catch (e) {}
+
   res.render('dashboard', {
     streamer: req.streamer,
     guilds: enrichedGuilds,
@@ -233,6 +236,7 @@ router.get('/', (req, res) => {
     iracingSettings,
     vtuberUrl,
     hasScope,
+    activeGiveaway,
   });
 });
 
@@ -1956,6 +1960,93 @@ router.post('/redemptions/settings', (req, res) => {
   const enabled = req.body.cp_rewards_enabled !== undefined ? (req.body.cp_rewards_enabled ? 1 : 0) : undefined;
   if (enabled === undefined) return res.status(400).json({ error: 'cp_rewards_enabled required' });
   db.updateOverlayConfig(req.streamer.id, { cp_rewards_enabled: enabled });
+  res.json({ ok: true });
+});
+
+// --- Giveaways ---
+
+router.get('/giveaways', (req, res) => {
+  const streamerId = req.streamer.id;
+  const active = db.getActiveGiveaway(streamerId);
+  const history = db.getGiveawaysHistory(streamerId, 25);
+  let recentWinners = [];
+  if (history.length > 0) {
+    try { recentWinners = db.getWinners(history[0].id); } catch (e) {}
+  }
+  res.render('giveaways-config', { streamer: req.streamer, active, history, recentWinners });
+});
+
+router.post('/giveaways/start', (req, res) => {
+  const streamerId = req.streamer.id;
+  const { keyword, prize, subs_only, duration_seconds, winners_count } = req.body;
+  try {
+    const giveawayMgr = require('../services/giveawayManager');
+    const row = giveawayMgr.startGiveaway(streamerId, {
+      keyword,
+      prize: prize || null,
+      subsOnly: !!subs_only,
+      durationSeconds: duration_seconds || null,
+      winnersCount: winners_count || 1,
+    });
+    res.status(201).json(row);
+  } catch (e) {
+    if (e.message === 'already_active') return res.status(409).json({ error: 'A giveaway is already active' });
+    if (e.message === 'invalid_keyword') return res.status(400).json({ error: 'Keyword must be 1-25 alphanumeric characters' });
+    if (e.message === 'invalid_duration') return res.status(400).json({ error: 'Duration must be between 30 and 86400 seconds' });
+    if (e.message === 'invalid_winners_count') return res.status(400).json({ error: 'Winners count must be between 1 and 10' });
+    if (e.message === 'invalid_prize') return res.status(400).json({ error: 'Prize must be 100 characters or fewer' });
+    console.error('[Giveaway] start error:', e.message);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+router.post('/giveaways/:id/close', (req, res) => {
+  const streamerId = req.streamer.id;
+  const id = parseInt(req.params.id, 10);
+  const giveaway = db.getGiveawayById(id, streamerId);
+  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  const giveawayMgr = require('../services/giveawayManager');
+  const result = giveawayMgr.closeGiveaway(streamerId, { silent: false });
+  if (!result) {
+    // Already closed — return current state
+    return res.json({ ok: true, giveaway: db.getGiveawayById(id, streamerId), entryCount: db.getEntryCount(id) });
+  }
+  res.json({ ok: true, giveaway: result.giveaway, entryCount: result.entryCount });
+});
+
+router.post('/giveaways/:id/pick', (req, res) => {
+  const streamerId = req.streamer.id;
+  const id = parseInt(req.params.id, 10);
+  const giveaway = db.getGiveawayById(id, streamerId);
+  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  const redraw = !!(req.body && req.body.redraw);
+  const giveawayMgr = require('../services/giveawayManager');
+  const result = giveawayMgr.pickWinners(id, streamerId, { redraw });
+  if (result.error) return res.status(404).json({ error: result.error });
+  if (result.winners.length === 0) return res.json({ winners: [], message: 'No eligible entries' });
+  res.json({ winners: result.winners });
+});
+
+router.get('/giveaways/:id/entries', (req, res) => {
+  const streamerId = req.streamer.id;
+  const id = parseInt(req.params.id, 10);
+  const giveaway = db.getGiveawayById(id, streamerId);
+  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  res.json({
+    count: db.getEntryCount(id),
+    entries: db.getEntries(id),
+    endsAt: giveaway.ends_at,
+    status: giveaway.status,
+  });
+});
+
+router.delete('/giveaways/:id', (req, res) => {
+  const streamerId = req.streamer.id;
+  const id = parseInt(req.params.id, 10);
+  const giveaway = db.getGiveawayById(id, streamerId);
+  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  if (giveaway.status === 'open') return res.status(409).json({ error: 'Close the giveaway before deleting' });
+  db.deleteGiveaway(id, streamerId);
   res.json({ ok: true });
 });
 

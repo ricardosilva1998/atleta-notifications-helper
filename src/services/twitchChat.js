@@ -83,6 +83,18 @@ async function handleMessage(channel, tags, message, self) {
     }
   }
 
+  // Giveaway entry hook — keyword owned by the active giveaway while one is open
+  if (message.startsWith('!')) {
+    try {
+      const giveawayMgr = require('./giveawayManager');
+      const handled = giveawayMgr.tryAddEntry(streamer.id, tags, message);
+      if (handled) return; // exclusive — keyword owned by the giveaway
+    } catch (e) {
+      console.error('[Giveaway] tryAddEntry error:', e.message);
+      // fall through to !commands path
+    }
+  }
+
   if (!message.startsWith('!')) return;
 
   const commandName = message.split(' ')[0].substring(1).toLowerCase();

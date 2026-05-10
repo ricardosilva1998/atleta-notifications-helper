@@ -403,6 +403,47 @@
         <% } %>
       </div>
     </div>
+    <!-- Giveaway Winner -->
+    <div class="alert-card">
+      <div class="alert-card-header">
+        <div class="alert-card-info">
+          <span class="alert-card-icon">🎁</span>
+          <div>
+            <div class="alert-card-title">Giveaway Winner</div>
+            <div class="alert-card-desc">Alert when a giveaway winner is drawn</div>
+          </div>
+        </div>
+        <label class="pill-toggle">
+          <input type="checkbox" name="overlay_giveaway_enabled" value="1" <%= streamer.overlay_giveaway_enabled !== 0 ? 'checked' : '' %>>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="alert-card-controls">
+        <div class="alert-ctrl">
+          <span class="alert-ctrl-label">Duration</span>
+          <input type="number" name="overlay_giveaway_duration" value="<%= Math.round((streamer.overlay_giveaway_duration || 8000) / 1000) %>" min="1" max="30">
+          <span style="font-size: 12px; color: var(--text-muted);">s</span>
+        </div>
+        <div class="alert-ctrl">
+          <span class="alert-ctrl-label">Volume</span>
+          <input type="range" min="0" max="100" value="<%= Math.round((streamer.overlay_volume != null ? streamer.overlay_volume : 0.8) * 100) %>" class="volume-slider" oninput="updateVolume(this)">
+          <span class="vol-val"><%= Math.round((streamer.overlay_volume != null ? streamer.overlay_volume : 0.8) * 100) %>%</span>
+        </div>
+        <div class="sound-row" style="margin-left: auto;">
+          <span class="sound-badge" id="sound-status-giveaway_winner">Default</span>
+          <button type="button" onclick="previewSound('giveaway_winner')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">▶ Play</button>
+          <button type="button" onclick="openTrimModal('giveaway_winner')" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px;">Upload</button>
+          <button type="button" onclick="removeSound('giveaway_winner')" class="btn btn-secondary" id="remove-btn-giveaway_winner" style="font-size: 13px; padding: 7px 14px; color: var(--danger); display: none;">✕</button>
+        </div>
+        <% if (overlayUrl) { %>
+        <button type="button" onclick="openPreview('giveaway_winner')" class="btn btn-primary" style="font-size: 13px; padding: 8px 18px; display: flex; align-items: center; gap: 6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Preview Alert
+        </button>
+        <% } %>
+      </div>
+    </div>
+
     </div><!-- end alert-tab-twitch -->
 
     <!-- YOUTUBE ALERTS -->

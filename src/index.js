@@ -45,6 +45,8 @@ client.once('ready', async () => {
     const { timedNotificationManager } = require('./services/timedNotifications');
     timedNotificationManager.startAll();
 
+    require('./services/giveawayManager').init();
+
     console.log('[YT Chat] YouTube Live Chat manager ready (starts when streams go live)');
 
     // Start web dashboard
