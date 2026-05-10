@@ -1601,7 +1601,7 @@ function clamp(val, min, max) {
 
 function validateRewardFields(fields, res) {
   const { title, cost, prompt, position_preset } = fields;
-  if (!title || String(title).length > 45) {
+  if (!title) {
     res.status(400).json({ error: 'Title required and must be ≤45 characters' });
     return false;
   }
@@ -1765,7 +1765,6 @@ router.patch('/redemptions/:id', async (req, res) => {
   const updates = {};
 
   if (body.title !== undefined) {
-    if (String(body.title).length > 45) return res.status(400).json({ error: 'Title must be ≤45 characters' });
     updates.title = String(body.title).trim();
   }
   if (body.cost !== undefined) {

@@ -272,9 +272,8 @@
     <div class="cp-form-grid">
       <!-- Title -->
       <div class="full">
-        <label class="cp-label">Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(max 45 chars)</span></label>
-        <input type="text" id="f-title" class="cp-input" maxlength="45" placeholder="e.g. Air Horn" oninput="updateCharCount('f-title','title-count',45)">
-        <div class="cp-char-counter"><span id="title-count">0</span> / 45</div>
+        <label class="cp-label">Title</label>
+        <input type="text" id="f-title" class="cp-input" placeholder="e.g. Air Horn">
       </div>
 
       <!-- Cost -->
@@ -698,7 +697,6 @@ function openAddModal() {
   document.querySelector('input[name="position_preset"][value="center-large"]').checked = true;
   document.getElementById('dropzone-filename').style.display = 'none';
   document.getElementById('existing-file-note').style.display = 'none';
-  document.getElementById('title-count').textContent = '0';
   document.getElementById('prompt-count').textContent = '0';
   onMediaTypeChange();
   updatePositionPreview();
@@ -750,7 +748,6 @@ function openEditModal(id) {
   } else {
     note.style.display = 'none';
   }
-  updateCharCount('f-title', 'title-count', 45);
   updateCharCount('f-prompt', 'prompt-count', 200);
   document.getElementById('reward-modal').classList.add('open');
 }
