@@ -272,8 +272,8 @@
     <div class="cp-form-grid">
       <!-- Title -->
       <div class="full">
-        <label class="cp-label">Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(max 45 chars)</span></label>
-        <input type="text" id="f-title" class="cp-input" maxlength="45" placeholder="e.g. Air Horn">
+        <label class="cp-label">Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(2–45 chars)</span></label>
+        <input type="text" id="f-title" class="cp-input" minlength="2" maxlength="45" placeholder="e.g. Air Horn">
       </div>
 
       <!-- Cost -->
@@ -779,7 +779,7 @@ async function submitReward() {
   var cw = parseFloat((parseInt(document.getElementById('f-cw').value) / 100).toFixed(4));
   var ch = parseFloat((parseInt(document.getElementById('f-ch').value) / 100).toFixed(4));
 
-  if (!title) return showToast('Title is required', 'error');
+  if (title.length < 2 || title.length > 45) return showToast('Title must be 2–45 characters', 'error');
   if (cost < 1 || cost > 1000000) return showToast('Cost must be 1-1,000,000', 'error');
 
   var btn = document.getElementById('modal-submit-btn');
