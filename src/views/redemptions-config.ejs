@@ -812,7 +812,7 @@ async function submitReward() {
     } else {
       if (!_selectedFile) { showToast('Please select a media file', 'error'); btn.disabled = false; btn.textContent = origText; return; }
       var ext = _selectedFile.name.split('.').pop().toLowerCase();
-      var params = new URLSearchParams({ name: title, cost: cost, cooldown: cooldown, prompt: prompt || '', chat_template: chatTemplate || '', auto_fulfill: autoFulfill, volume: volume, max_play_seconds: maxPlay, media_type: mediaType, position_preset: posPreset, custom_x: cx, custom_y: cy, custom_w: cw, custom_h: ch, ext: ext });
+      var params = new URLSearchParams({ title: title, cost: cost, cooldown_seconds: cooldown, prompt: prompt || '', chat_message_template: chatTemplate || '', auto_fulfill: autoFulfill, volume: volume, max_play_seconds: maxPlay, media_type: mediaType, position_preset: posPreset, custom_x: cx, custom_y: cy, custom_w: cw, custom_h: ch, ext: ext });
       var uploadRes = await fetch('/dashboard/redemptions/upload?' + params.toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
