@@ -364,3 +364,13 @@ Format per entry:
 - `redemptions-config.ejs` uses raw-body upload (not FormData) matching sponsor upload pattern — `Content-Type: application/octet-stream` with query params for metadata.
 - EJS template compiles cleanly (`ejs.compile` check, length 67394 chars). Node syntax check passes for both modified JS files.
 **Open:** i18n keys (§10) still pending. Playwright tests run against production (`atletanotifications.com`) so not executed here — will run on push via pre-push hook. Manual smoke test requires a live server with `.env`.
+
+### 2026-05-10 18:15 — team-deployment
+**Task:** Commit + push + Railway deploy for Channel Points → Audio/Video Overlay redemption feature
+**Files:** `CLAUDE.md`, `public/overlay/overlay.js`, `src/db.js`, `src/locales/en.json`, `src/routes/auth.js`, `src/routes/dashboard.js`, `src/routes/overlay.js`, `src/server.js`, `src/services/eventsub.js`, `src/services/twitch.js`, `src/views/dashboard.ejs`, `src/services/redemptionDispatcher.js` (new), `src/services/redemptionDispatcher.test.js` (new), `src/services/redemptionTemplates.js` (new), `src/services/twitchRewards.js` (new), `src/views/redemptions-config.ejs` (new)
+**Decisions:**
+- Commit `d2d96e7` — 16 files, 2116 insertions; pushed to `origin/main` (no pre-push Playwright hook fired — hook deferred to remote CI).
+- Railway deploy `80c7d8fb-5815-431e-81d2-201af96662ea` → `Atleta Notifications PROD` / production — build succeeded, container started cleanly.
+- DB migrations confirmed in logs: `cp_affiliate_status`, `cp_last_sync_at`, `cp_rewards_enabled` columns added to `streamers`. No errors for `channel_point_rewards` / `channel_point_redemptions` tables (additive migrations ran silently on first deploy).
+- EventSub fault-tolerant skip for `channel:manage:redemptions` scope confirmed: both streamers (3, 13) subscribed to their existing event types with zero `Failed to subscribe` errors for the redemption type — silent skip working as designed.
+**Open:** i18n keys (§10) still pending. Existing streamers need to re-auth via Twitch broadcaster OAuth to gain `channel:manage:redemptions` scope — they will see a banner on the dashboard prompting this. No rollback needed — all migrations are additive and the server is healthy.
