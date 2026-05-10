@@ -165,7 +165,7 @@ router.get('/broadcaster', (req, res) => {
     client_id: config.twitch.clientId,
     redirect_uri: `${config.app.url}/auth/broadcaster/callback`,
     response_type: 'code',
-    scope: 'channel:read:subscriptions moderator:read:followers bits:read',
+    scope: 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions',
     state: String(req.streamer.id),
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
@@ -198,7 +198,16 @@ router.get('/broadcaster/callback', async (req, res) => {
       Date.now() + data.expires_in * 1000 - 60_000
     );
 
-    db.updateBroadcasterScopes(parseInt(streamerId), 'channel:read:subscriptions moderator:read:followers bits:read');
+    db.updateBroadcasterScopes(parseInt(streamerId), 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions');
+
+    // Re-subscribe EventSub so the new scope's subscription type is picked up immediately.
+    // startForStreamer is idempotent — it stops any running connection before reconnecting.
+    try {
+      const { eventSubManager } = require('../services/eventsub');
+      eventSubManager.startForStreamer(parseInt(streamerId));
+    } catch (e) {
+      console.error('[Auth] EventSub restart after broadcaster auth failed:', e.message);
+    }
 
     console.log(`[Auth] Broadcaster ${streamerId} authorized for sub sync`);
     res.redirect('/dashboard?msg=broadcaster_authorized');

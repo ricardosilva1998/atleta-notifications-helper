@@ -489,6 +489,45 @@
       <a href="/dashboard/donations" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Donation Settings</a>
     </div>
 
+    <!-- Channel Point Rewards Card -->
+    <% {
+      const { hasRedemptionScope } = require('../services/twitch');
+      const _hasScope = hasRedemptionScope(streamer);
+      const _affiliateOk = streamer.cp_affiliate_status === 'ok';
+      const _enabled = !!streamer.cp_rewards_enabled;
+      let _dotColor, _dotLabel;
+      if (_affiliateOk && _hasScope && _enabled) {
+        _dotColor = 'var(--success)'; _dotLabel = 'Active';
+      } else if (!_hasScope && streamer.broadcaster_access_token) {
+        _dotColor = 'var(--warning)'; _dotLabel = 'Reconnect Twitch';
+      } else if (streamer.cp_affiliate_status === 'not_affiliate') {
+        _dotColor = 'var(--danger)'; _dotLabel = 'Affiliate required';
+      } else {
+        _dotColor = 'var(--text-muted)'; _dotLabel = 'Not configured';
+      }
+    %>
+    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(145,71,255,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Channel Point Rewards</h3>
+          <span style="color: <%= _dotColor %>; font-size: 12px; font-weight: 600;">● <%= _dotLabel %></span>
+        </div>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+        Let viewers spend Twitch points to trigger audio or video clips on your stream.
+      </p>
+      <% if (!_hasScope && streamer.broadcaster_access_token) { %>
+        <p style="font-size: 12px; color: var(--warning); margin-bottom: 10px;">
+          <a href="/auth/broadcaster" style="color: var(--warning);">Reconnect Twitch</a> to enable Channel Point Rewards.
+        </p>
+      <% } %>
+      <a href="/dashboard/redemptions" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Manage Rewards</a>
+    </div>
+    <% } %>
+
     <!-- Custom Overlays Card — DISABLED for now
     <a href="/dashboard/custom-overlays" class="card" style="text-decoration:none;">
       <div class="card-icon">🎨</div>

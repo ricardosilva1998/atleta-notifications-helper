@@ -1,0 +1,839 @@
+<%- include('header', { title: 'Channel Point Rewards', streamer: streamer }) %>
+
+<style>
+  /* ── Layout helpers ─────────────────────────────── */
+  .cp-label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: 6px;
+    font-family: var(--font-display); text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .cp-input {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text-primary);
+    font-family: var(--font-body); font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .cp-input:focus { border-color: var(--accent); }
+  .cp-input::placeholder { color: var(--text-muted); }
+  textarea.cp-input { resize: vertical; min-height: 68px; }
+
+  /* ── Toggle pill ─────────────────────────────────── */
+  .cp-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .cp-toggle input { opacity: 0; width: 0; height: 0; }
+  .cp-toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: 0.2s; }
+  .cp-toggle-slider:before { position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+  .cp-toggle input:checked + .cp-toggle-slider { background: var(--success); }
+  .cp-toggle input:checked + .cp-toggle-slider:before { transform: translateX(20px); }
+
+  /* ── Banner ─────────────────────────────────────── */
+  .cp-banner {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 18px; border-radius: var(--radius-sm);
+    font-size: 13px; margin-bottom: 20px; border: 1px solid;
+  }
+  .cp-banner.warn { background: var(--warning-bg); color: var(--warning); border-color: rgba(247,144,9,0.25); }
+  .cp-banner.danger { background: var(--danger-bg); color: var(--danger); border-color: rgba(240,68,56,0.25); }
+  .cp-banner a { color: inherit; font-weight: 600; }
+
+  /* ── Reward cards ────────────────────────────────── */
+  .reward-card {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-bottom: 12px;
+    transition: border-color 0.2s; cursor: grab;
+  }
+  .reward-card:hover { border-color: rgba(145,70,255,0.3); }
+  .reward-card.dragging { opacity: 0.5; cursor: grabbing; }
+  .reward-card-header { display: flex; align-items: center; gap: 10px; padding: 16px 18px; flex-wrap: wrap; }
+  .reward-drag-handle { color: var(--text-muted); cursor: grab; flex-shrink: 0; }
+  .reward-icon { font-size: 18px; flex-shrink: 0; }
+  .reward-info { flex: 1; min-width: 0; }
+  .reward-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .reward-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .reward-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sync-chip {
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .sync-chip.orphaned { background: rgba(240,68,56,0.15); color: var(--danger); }
+  .sync-chip.create_failed { background: rgba(240,68,56,0.15); color: var(--danger); }
+  .sync-chip.no_affiliate { background: var(--warning-bg); color: var(--warning); }
+
+  /* ── Position preview pane ───────────────────────── */
+  .pos-preview {
+    width: 100%; aspect-ratio: 16/9;
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); position: relative; overflow: hidden;
+  }
+  .pos-preview-rect {
+    position: absolute; background: rgba(145,70,255,0.25);
+    border: 2px solid rgba(145,70,255,0.7); border-radius: 4px;
+    transition: all 0.15s;
+  }
+
+  /* ── Modal ───────────────────────────────────────── */
+  .cp-modal-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .cp-modal-backdrop.open { display: flex; }
+  .cp-modal {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px;
+    width: 680px; max-width: 96vw;
+    max-height: 90vh; overflow-y: auto;
+    position: relative;
+  }
+  .cp-modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+  .cp-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .cp-form-grid .full { grid-column: 1 / -1; }
+
+  .cp-char-counter { font-size: 11px; color: var(--text-muted); text-align: right; margin-top: 2px; }
+
+  /* ── Radio groups ────────────────────────────────── */
+  .cp-radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cp-radio-group label {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); cursor: pointer;
+    font-size: 13px; transition: all 0.15s;
+    background: var(--bg-base);
+  }
+  .cp-radio-group input[type=radio] { accent-color: var(--accent); }
+
+  /* ── File dropzone ───────────────────────────────── */
+  .cp-dropzone {
+    border: 2px dashed var(--border); border-radius: var(--radius-sm);
+    padding: 28px 16px; text-align: center; cursor: pointer;
+    transition: all 0.2s; background: var(--bg-base);
+  }
+  .cp-dropzone:hover, .cp-dropzone.drag-over { border-color: var(--accent); background: rgba(145,70,255,0.05); }
+  .cp-dropzone-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .cp-dropzone-hint { font-size: 11px; color: var(--text-muted); }
+  .cp-dropzone-filename { font-size: 12px; color: var(--success); margin-top: 6px; font-weight: 600; }
+
+  /* ── Slider rows ─────────────────────────────────── */
+  .cp-slider-row { display: flex; align-items: center; gap: 10px; }
+  .cp-slider-row input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .cp-slider-val { font-family: var(--font-display); font-weight: 600; font-size: 13px; min-width: 42px; text-align: right; }
+
+  /* ── Custom XY group ─────────────────────────────── */
+  .cp-custom-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── Redemption history table ────────────────────── */
+  .rh-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rh-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  .rh-table td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+  .rh-table tr:last-child td { border-bottom: none; }
+  .outcome-chip { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .outcome-chip.played { background: rgba(62,207,142,0.15); color: var(--success); }
+  .outcome-chip.refunded_no_file { background: var(--warning-bg); color: var(--warning); }
+  .outcome-chip.disabled { background: var(--bg-elevated); color: var(--text-muted); }
+  .outcome-chip.error { background: var(--danger-bg); color: var(--danger); }
+  .outcome-chip.test { background: rgba(88,101,242,0.15); color: #5865f2; }
+
+  /* ── Toast ───────────────────────────────────────── */
+  #cp-toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    padding: 12px 20px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; pointer-events: none;
+    opacity: 0; transition: opacity 0.25s;
+    background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary);
+  }
+  #cp-toast.visible { opacity: 1; }
+  #cp-toast.success { background: rgba(62,207,142,0.15); border-color: rgba(62,207,142,0.3); color: var(--success); }
+  #cp-toast.error   { background: var(--danger-bg); border-color: rgba(240,68,56,0.3); color: var(--danger); }
+
+  /* ── Empty states ────────────────────────────────── */
+  .cp-empty {
+    text-align: center; padding: 48px 24px;
+    background: var(--bg-surface); border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .cp-empty h4 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .cp-empty p { font-size: 13px; color: var(--text-muted); }
+</style>
+
+<!-- Toast -->
+<div id="cp-toast"></div>
+
+<!-- Back link + header -->
+<a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  Back to Dashboard
+</a>
+<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in">Channel Point Rewards</h2>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
+  Let viewers spend Twitch Channel Points to trigger audio or video clips on your stream.
+</p>
+
+<!-- Banners -->
+<% if (!hasScope) { %>
+  <div class="cp-banner warn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span>Reconnect Twitch to enable Channel Point Rewards. <a href="/auth/broadcaster">Reconnect now &rarr;</a></span>
+  </div>
+<% } %>
+<% if (affiliateStatus === 'not_affiliate') { %>
+  <div class="cp-banner danger">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <span>Channel Points require Twitch Affiliate or Partner status.</span>
+  </div>
+<% } %>
+
+<!-- Master toggle + sync -->
+<div class="card animate-in" style="margin-bottom: 20px;">
+  <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+    <label class="cp-toggle" title="Enable Channel Point Rewards">
+      <input type="checkbox" id="cp-master-toggle" <%= cpRewardsEnabled ? 'checked' : '' %>>
+      <span class="cp-toggle-slider"></span>
+    </label>
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 14px; font-weight: 600;">Enable Channel Point Rewards</div>
+      <div style="font-size: 12px; color: var(--text-muted);">Allow redemptions to trigger overlay media</div>
+    </div>
+    <button type="button" class="btn btn-secondary" onclick="syncRewards()" style="font-size: 13px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Sync from Twitch
+    </button>
+    <% if (lastSyncAt) { %>
+      <span style="font-size: 12px; color: var(--text-muted);" id="last-sync-label">Last synced: <span data-ts="<%= lastSyncAt %>"></span></span>
+    <% } %>
+  </div>
+</div>
+
+<!-- Rewards list header -->
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+  <h3 style="font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em;">
+    Rewards
+    <span style="font-size: 12px; font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; margin-left: 6px; color: var(--text-muted); letter-spacing: 0;" id="reward-count"><%= rewards.length %></span>
+  </h3>
+  <button type="button" class="btn btn-primary" onclick="openAddModal()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add Reward
+  </button>
+</div>
+
+<% if (rewards.length === 0) { %>
+  <div class="cp-empty animate-in" id="rewards-empty">
+    <h4>No rewards yet</h4>
+    <p>Click "Add Reward" above to create your first Channel Point reward.</p>
+  </div>
+<% } %>
+
+<div id="rewards-list">
+<% rewards.forEach(function(r) { %>
+  <div class="reward-card" id="reward-card-<%= r.id %>" data-id="<%= r.id %>">
+    <div class="reward-card-header">
+      <span class="reward-drag-handle" title="Drag to reorder">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+      </span>
+      <span class="reward-icon"><%= r.media_type === 'video' ? '&#127916;' : '&#128266;' %></span>
+      <div class="reward-info">
+        <div class="reward-title"><%= r.title %></div>
+        <div class="reward-meta">
+          <%= r.cost.toLocaleString() %> pts &middot; <%= r.position_preset %>
+          <% if (r.twitch_sync_status && r.twitch_sync_status !== 'ok') { %>
+            <span class="sync-chip <%= r.twitch_sync_status %>"><%= r.twitch_sync_status.replace(/_/g, ' ') %></span>
+          <% } %>
+        </div>
+      </div>
+      <div class="reward-actions">
+        <label class="cp-toggle" title="<%= r.enabled ? 'Enabled' : 'Disabled' %>">
+          <input type="checkbox" <%= r.enabled ? 'checked' : '' %> onchange="toggleReward(<%= r.id %>, this.checked)">
+          <span class="cp-toggle-slider"></span>
+        </label>
+        <button type="button" class="btn btn-secondary" onclick="testReward(<%= r.id %>, this)" style="font-size: 12px; padding: 6px 12px;" title="Test overlay">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Test
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="openEditModal(<%= r.id %>)" style="font-size: 12px; padding: 6px 12px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </button>
+        <button type="button" class="btn btn-danger" onclick="deleteReward(<%= r.id %>)" style="font-size: 12px; padding: 6px 12px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+<% }); %>
+</div>
+
+<!-- Add/Edit Reward Modal -->
+<div class="cp-modal-backdrop" id="reward-modal">
+  <div class="cp-modal">
+    <h3 id="modal-title">Add Reward</h3>
+
+    <div class="cp-form-grid">
+      <!-- Title -->
+      <div class="full">
+        <label class="cp-label">Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(max 45 chars)</span></label>
+        <input type="text" id="f-title" class="cp-input" maxlength="45" placeholder="e.g. Air Horn" oninput="updateCharCount('f-title','title-count',45)">
+        <div class="cp-char-counter"><span id="title-count">0</span> / 45</div>
+      </div>
+
+      <!-- Cost -->
+      <div>
+        <label class="cp-label">Cost (Channel Points)</label>
+        <input type="number" id="f-cost" class="cp-input" min="1" max="1000000" value="500" placeholder="500">
+      </div>
+
+      <!-- Cooldown -->
+      <div>
+        <label class="cp-label">Cooldown (seconds)</label>
+        <input type="number" id="f-cooldown" class="cp-input" min="0" max="86400" value="0" placeholder="0">
+      </div>
+
+      <!-- Prompt -->
+      <div class="full">
+        <label class="cp-label">Prompt <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(optional, max 200 chars)</span></label>
+        <textarea id="f-prompt" class="cp-input" maxlength="200" placeholder="Viewer sees this before redeeming" oninput="updateCharCount('f-prompt','prompt-count',200)" rows="2"></textarea>
+        <div class="cp-char-counter"><span id="prompt-count">0</span> / 200</div>
+      </div>
+
+      <!-- Media type -->
+      <div class="full">
+        <label class="cp-label">Media Type</label>
+        <div class="cp-radio-group">
+          <label><input type="radio" name="media_type" value="audio" checked onchange="onMediaTypeChange()"> Audio (mp3 / wav / ogg)</label>
+          <label><input type="radio" name="media_type" value="video" onchange="onMediaTypeChange()"> Video (mp4 / webm)</label>
+        </div>
+      </div>
+
+      <!-- File dropzone -->
+      <div class="full" id="dropzone-wrap">
+        <label class="cp-label" id="file-label">Audio File <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(&le; 5 MB)</span></label>
+        <div class="cp-dropzone" id="dropzone" onclick="document.getElementById('f-file').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <div class="cp-dropzone-label">Drop file here or click to browse</div>
+          <div class="cp-dropzone-hint" id="dropzone-hint">Accepted: mp3, wav, ogg &mdash; max 5 MB</div>
+          <div class="cp-dropzone-filename" id="dropzone-filename" style="display:none;"></div>
+        </div>
+        <input type="file" id="f-file" style="display:none;" accept=".mp3,.wav,.ogg" onchange="onFileSelected(this)">
+        <div id="existing-file-note" style="display:none; font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
+      </div>
+
+      <!-- Position preset -->
+      <div class="full">
+        <label class="cp-label">Position</label>
+        <div class="cp-radio-group">
+          <label><input type="radio" name="position_preset" value="center-large" checked onchange="updatePositionPreview()"> Center (large)</label>
+          <label><input type="radio" name="position_preset" value="fullscreen" onchange="updatePositionPreview()"> Full screen</label>
+          <label><input type="radio" name="position_preset" value="top-right-small" onchange="updatePositionPreview()"> Top right (small)</label>
+          <label><input type="radio" name="position_preset" value="bottom-banner" onchange="updatePositionPreview()"> Bottom banner</label>
+          <label><input type="radio" name="position_preset" value="custom" onchange="updatePositionPreview()"> Custom</label>
+        </div>
+      </div>
+
+      <!-- Custom XY sliders (hidden unless custom) -->
+      <div class="full" id="custom-xy-group" style="display:none;">
+        <div class="cp-custom-fields">
+          <div>
+            <label class="cp-label">X (left) <span id="cx-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">20%</span></label>
+            <input type="range" min="0" max="100" value="20" id="f-cx" oninput="document.getElementById('cx-val').textContent=this.value+'%'; updatePositionPreview()">
+          </div>
+          <div>
+            <label class="cp-label">Y (top) <span id="cy-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">20%</span></label>
+            <input type="range" min="0" max="100" value="20" id="f-cy" oninput="document.getElementById('cy-val').textContent=this.value+'%'; updatePositionPreview()">
+          </div>
+          <div>
+            <label class="cp-label">Width <span id="cw-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">60%</span></label>
+            <input type="range" min="5" max="100" value="60" id="f-cw" oninput="document.getElementById('cw-val').textContent=this.value+'%'; updatePositionPreview()">
+          </div>
+          <div>
+            <label class="cp-label">Height <span id="ch-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">60%</span></label>
+            <input type="range" min="5" max="100" value="60" id="f-ch" oninput="document.getElementById('ch-val').textContent=this.value+'%'; updatePositionPreview()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Position preview -->
+      <div class="full">
+        <label class="cp-label">Position Preview</label>
+        <div class="pos-preview" id="pos-preview">
+          <div class="pos-preview-rect" id="pos-rect" style="top:20%;left:20%;width:60%;height:60%;"></div>
+        </div>
+      </div>
+
+      <!-- Volume -->
+      <div class="full">
+        <label class="cp-label">Volume</label>
+        <div class="cp-slider-row">
+          <input type="range" min="0" max="100" value="100" id="f-volume" oninput="document.getElementById('vol-val').textContent=this.value+'%'">
+          <span class="cp-slider-val" id="vol-val">100%</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Multiplied by the overlay master volume</div>
+      </div>
+
+      <!-- Max play time -->
+      <div>
+        <label class="cp-label">Max play time (seconds)</label>
+        <div class="cp-slider-row">
+          <input type="range" min="5" max="60" value="15" id="f-maxplay" oninput="document.getElementById('maxplay-val').textContent=this.value+'s'">
+          <span class="cp-slider-val" id="maxplay-val">15s</span>
+        </div>
+      </div>
+
+      <!-- Auto-fulfill -->
+      <div style="display:flex;align-items:center;gap:10px;padding-top:6px;">
+        <label class="cp-toggle">
+          <input type="checkbox" id="f-autofulfill" checked>
+          <span class="cp-toggle-slider"></span>
+        </label>
+        <div>
+          <div style="font-size:13px;font-weight:600;">Auto-fulfill</div>
+          <div style="font-size:11px;color:var(--text-muted);">Mark FULFILLED on Twitch after playback</div>
+        </div>
+      </div>
+
+      <!-- Chat message template -->
+      <div class="full">
+        <label class="cp-label">Chat message <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(optional)</span></label>
+        <input type="text" id="f-chat-template" class="cp-input" placeholder="{user} redeemed {title} for {cost} points!">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Supports: <code>{user}</code> <code>{title}</code> <code>{cost}</code></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+      <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="modal-submit-btn" onclick="submitReward()">Add Reward</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recent redemptions -->
+<div class="card animate-in" style="margin-top: 32px; margin-bottom: 32px;">
+  <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px; display:flex;align-items:center;gap:8px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Recent Redemptions
+    <span style="font-size:12px;font-weight:600;background:var(--bg-elevated);border:1px solid var(--border);border-radius:20px;padding:1px 8px;color:var(--text-muted);letter-spacing:0;"><%= recentRedemptions.length %></span>
+  </h3>
+
+  <% if (recentRedemptions.length === 0) { %>
+    <div style="text-align:center;padding:32px 16px;color:var(--text-muted);font-size:13px;">No redemptions yet.</div>
+  <% } else { %>
+    <div style="overflow-x:auto;">
+      <table class="rh-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>User</th>
+            <th>Reward</th>
+            <th>Cost</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% recentRedemptions.forEach(function(r) {
+            const rewardRow = rewards.find(function(rw) { return rw.id === r.reward_id; });
+          %>
+            <tr>
+              <td style="color:var(--text-muted);white-space:nowrap;" data-ts="<%= r.created_at %>"><%= r.created_at %></td>
+              <td style="font-weight:500;"><%= r.user_login || '&mdash;' %></td>
+              <td style="color:var(--text-secondary);"><%= rewardRow ? rewardRow.title : (r.twitch_reward_id || '&mdash;') %></td>
+              <td style="font-family:var(--font-display);"><%= r.cost ? Number(r.cost).toLocaleString() + ' pts' : '&mdash;' %></td>
+              <td>
+                <span class="outcome-chip <%= r.is_test ? 'test' : (r.outcome || 'error') %>">
+                  <%= r.is_test ? 'TEST' : (r.outcome || 'error') %>
+                </span>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<!-- Embed reward data for edit modal -->
+<script>
+const REWARDS_DATA = <%- JSON.stringify(rewards) %>;
+
+// ── Relative time helper ──────────────────────────────────────
+function relativeTime(isoStr) {
+  if (!isoStr) return '';
+  const date = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+document.querySelectorAll('[data-ts]').forEach(function(el) {
+  var v = relativeTime(el.getAttribute('data-ts'));
+  if (v) el.textContent = v;
+});
+
+// ── Toast ────────────────────────────────────────────────────
+function showToast(msg, type) {
+  var el = document.getElementById('cp-toast');
+  el.textContent = msg;
+  el.className = 'visible ' + (type || '');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(function() { el.className = ''; }, 3000);
+}
+
+// ── Master toggle ─────────────────────────────────────────────
+document.getElementById('cp-master-toggle').addEventListener('change', async function() {
+  var enabled = this.checked ? 1 : 0;
+  var self = this;
+  var r = await fetch('/dashboard/redemptions/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cp_rewards_enabled: enabled }),
+  });
+  if (r.ok) {
+    showToast(enabled ? 'Channel Point Rewards enabled' : 'Disabled', 'success');
+  } else {
+    showToast('Failed to save', 'error');
+    self.checked = !self.checked;
+  }
+});
+
+// ── Sync ────────────────────────────────────────────────────
+async function syncRewards() {
+  showToast('Syncing from Twitch...', '');
+  try {
+    var r = await fetch('/dashboard/redemptions/sync', { method: 'POST' });
+    var data = await r.json();
+    if (r.ok) {
+      showToast('Sync complete', 'success');
+      setTimeout(function() { location.reload(); }, 800);
+    } else {
+      showToast(data.error || 'Sync failed', 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+}
+
+// ── Toggle a reward ──────────────────────────────────────────
+async function toggleReward(id, enabled) {
+  var r = await fetch('/dashboard/redemptions/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: enabled ? 1 : 0 }),
+  });
+  if (!r.ok) { showToast('Update failed', 'error'); }
+}
+
+// ── Test a reward ────────────────────────────────────────────
+async function testReward(id, btn) {
+  var original = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    var r = await fetch('/dashboard/redemptions/' + id + '/test', { method: 'POST' });
+    if (r.ok) {
+      showToast('Test fired', 'success');
+      btn.textContent = 'Done';
+    } else {
+      var d = await r.json().catch(function() { return {}; });
+      showToast(d.error || 'Test failed', 'error');
+      btn.innerHTML = original;
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+    btn.innerHTML = original;
+  }
+  setTimeout(function() { btn.disabled = false; btn.innerHTML = original; }, 2000);
+}
+
+// ── Delete a reward ──────────────────────────────────────────
+async function deleteReward(id) {
+  if (!confirm('Delete this reward? This cannot be undone.')) return;
+  var r = await fetch('/dashboard/redemptions/' + id, { method: 'DELETE' });
+  if (r.ok) {
+    var card = document.getElementById('reward-card-' + id);
+    if (card) card.remove();
+    var count = document.querySelectorAll('.reward-card').length;
+    document.getElementById('reward-count').textContent = count;
+    if (count === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'cp-empty animate-in';
+      empty.id = 'rewards-empty';
+      empty.innerHTML = '<h4>No rewards yet</h4><p>Click "Add Reward" above to create your first Channel Point reward.</p>';
+      var list = document.getElementById('rewards-list');
+      list.innerHTML = '';
+      list.before(empty);
+    }
+    showToast('Reward deleted', 'success');
+  } else {
+    var d = await r.json().catch(function() { return {}; });
+    showToast(d.error || 'Delete failed', 'error');
+  }
+}
+
+// ── Drag-to-reorder ──────────────────────────────────────────
+var _dragSrc = null;
+
+document.getElementById('rewards-list').addEventListener('dragstart', function(e) {
+  var card = e.target.closest('.reward-card');
+  if (!card) return;
+  _dragSrc = card;
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+
+document.getElementById('rewards-list').addEventListener('dragover', function(e) {
+  e.preventDefault();
+  var card = e.target.closest('.reward-card');
+  if (!card || card === _dragSrc) return;
+  var list = document.getElementById('rewards-list');
+  var cards = Array.prototype.slice.call(list.querySelectorAll('.reward-card'));
+  var srcIdx = cards.indexOf(_dragSrc);
+  var tgtIdx = cards.indexOf(card);
+  if (srcIdx < tgtIdx) list.insertBefore(_dragSrc, card.nextSibling);
+  else list.insertBefore(_dragSrc, card);
+});
+
+document.getElementById('rewards-list').addEventListener('dragend', async function() {
+  if (_dragSrc) _dragSrc.classList.remove('dragging');
+  _dragSrc = null;
+  var ids = Array.prototype.slice.call(document.querySelectorAll('.reward-card')).map(function(c) { return parseInt(c.dataset.id); });
+  await fetch('/dashboard/redemptions/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: ids }),
+  });
+});
+
+document.querySelectorAll('.reward-card').forEach(function(c) { c.setAttribute('draggable', 'true'); });
+
+// ── Position preview ─────────────────────────────────────────
+function updatePositionPreview() {
+  var preset = (document.querySelector('input[name="position_preset"]:checked') || {}).value || 'center-large';
+  var isCustom = preset === 'custom';
+  document.getElementById('custom-xy-group').style.display = isCustom ? '' : 'none';
+
+  var rect = document.getElementById('pos-rect');
+  switch (preset) {
+    case 'fullscreen':
+      rect.style.cssText = 'top:0%;left:0%;width:100%;height:100%;right:auto;bottom:auto;';
+      break;
+    case 'top-right-small':
+      rect.style.cssText = 'top:5%;right:5%;width:20%;height:30%;left:auto;bottom:auto;';
+      break;
+    case 'bottom-banner':
+      rect.style.cssText = 'bottom:0%;left:0%;width:100%;height:25%;top:auto;right:auto;';
+      break;
+    case 'custom': {
+      var cx = parseInt(document.getElementById('f-cx').value);
+      var cy = parseInt(document.getElementById('f-cy').value);
+      var cw = parseInt(document.getElementById('f-cw').value);
+      var ch = parseInt(document.getElementById('f-ch').value);
+      rect.style.cssText = 'top:' + cy + '%;left:' + cx + '%;width:' + cw + '%;height:' + ch + '%;right:auto;bottom:auto;';
+      break;
+    }
+    default:
+      rect.style.cssText = 'top:20%;left:20%;width:60%;height:60%;right:auto;bottom:auto;';
+  }
+}
+
+// ── Character counter ─────────────────────────────────────────
+function updateCharCount(inputId, countId, max) {
+  var len = document.getElementById(inputId).value.length;
+  var countEl = document.getElementById(countId);
+  countEl.textContent = len;
+  countEl.style.color = len > max * 0.85 ? 'var(--warning)' : '';
+}
+
+// ── File dropzone ─────────────────────────────────────────────
+var _selectedFile = null;
+
+function handleDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('drag-over'); }
+function handleDragLeave() { document.getElementById('dropzone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag-over');
+  var file = e.dataTransfer.files[0];
+  if (file) setFile(file);
+}
+function onFileSelected(input) { if (input.files[0]) setFile(input.files[0]); }
+
+function setFile(file) {
+  _selectedFile = file;
+  var fnEl = document.getElementById('dropzone-filename');
+  fnEl.textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
+  fnEl.style.display = '';
+}
+
+function onMediaTypeChange() {
+  var type = (document.querySelector('input[name="media_type"]:checked') || {}).value || 'audio';
+  var isVideo = type === 'video';
+  document.getElementById('f-file').setAttribute('accept', isVideo ? '.mp4,.webm' : '.mp3,.wav,.ogg');
+  document.getElementById('file-label').innerHTML = (isVideo ? 'Video' : 'Audio') + ' File <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(&le; ' + (isVideo ? 20 : 5) + ' MB)</span>';
+  document.getElementById('dropzone-hint').textContent = isVideo
+    ? 'Accepted: mp4, webm — max 20 MB'
+    : 'Accepted: mp3, wav, ogg — max 5 MB';
+  _selectedFile = null;
+  document.getElementById('dropzone-filename').style.display = 'none';
+  document.getElementById('f-file').value = '';
+}
+
+// ── Modal state ───────────────────────────────────────────────
+var _editId = null;
+
+function openAddModal() {
+  _editId = null;
+  _selectedFile = null;
+  document.getElementById('modal-title').textContent = 'Add Reward';
+  document.getElementById('modal-submit-btn').textContent = 'Add Reward';
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-cost').value = 500;
+  document.getElementById('f-cooldown').value = 0;
+  document.getElementById('f-prompt').value = '';
+  document.getElementById('f-chat-template').value = '';
+  document.getElementById('f-autofulfill').checked = true;
+  document.getElementById('f-volume').value = 100;
+  document.getElementById('vol-val').textContent = '100%';
+  document.getElementById('f-maxplay').value = 15;
+  document.getElementById('maxplay-val').textContent = '15s';
+  document.querySelector('input[name="media_type"][value="audio"]').checked = true;
+  document.querySelector('input[name="position_preset"][value="center-large"]').checked = true;
+  document.getElementById('dropzone-filename').style.display = 'none';
+  document.getElementById('existing-file-note').style.display = 'none';
+  document.getElementById('title-count').textContent = '0';
+  document.getElementById('prompt-count').textContent = '0';
+  onMediaTypeChange();
+  updatePositionPreview();
+  document.getElementById('reward-modal').classList.add('open');
+}
+
+function openEditModal(id) {
+  var r = null;
+  for (var i = 0; i < REWARDS_DATA.length; i++) { if (REWARDS_DATA[i].id === id) { r = REWARDS_DATA[i]; break; } }
+  if (!r) return;
+  _editId = id;
+  _selectedFile = null;
+  document.getElementById('modal-title').textContent = 'Edit Reward';
+  document.getElementById('modal-submit-btn').textContent = 'Save Changes';
+  document.getElementById('f-title').value = r.title || '';
+  document.getElementById('f-cost').value = r.cost || 500;
+  document.getElementById('f-cooldown').value = r.cooldown_seconds || 0;
+  document.getElementById('f-prompt').value = r.prompt || '';
+  document.getElementById('f-chat-template').value = r.chat_message_template || '';
+  document.getElementById('f-autofulfill').checked = !!r.auto_fulfill;
+  var vol = Math.round((r.volume != null ? r.volume : 1) * 100);
+  document.getElementById('f-volume').value = vol;
+  document.getElementById('vol-val').textContent = vol + '%';
+  var mp = r.max_play_seconds || 15;
+  document.getElementById('f-maxplay').value = mp;
+  document.getElementById('maxplay-val').textContent = mp + 's';
+  var mt = r.media_type || 'audio';
+  var mtEl = document.querySelector('input[name="media_type"][value="' + mt + '"]');
+  if (mtEl) mtEl.checked = true;
+  onMediaTypeChange();
+  var pp = r.position_preset || 'center-large';
+  var ppEl = document.querySelector('input[name="position_preset"][value="' + pp + '"]');
+  if (ppEl) ppEl.checked = true;
+  if (pp === 'custom') {
+    document.getElementById('f-cx').value = Math.round((r.custom_x || 0) * 100);
+    document.getElementById('f-cy').value = Math.round((r.custom_y || 0) * 100);
+    document.getElementById('f-cw').value = Math.round((r.custom_w || 0.6) * 100);
+    document.getElementById('f-ch').value = Math.round((r.custom_h || 0.6) * 100);
+    document.getElementById('cx-val').textContent = document.getElementById('f-cx').value + '%';
+    document.getElementById('cy-val').textContent = document.getElementById('f-cy').value + '%';
+    document.getElementById('cw-val').textContent = document.getElementById('f-cw').value + '%';
+    document.getElementById('ch-val').textContent = document.getElementById('f-ch').value + '%';
+  }
+  updatePositionPreview();
+  var note = document.getElementById('existing-file-note');
+  if (r.media_filename) {
+    note.style.display = '';
+    note.textContent = 'Current file: ' + r.media_filename + ' — upload a new file below to replace it';
+  } else {
+    note.style.display = 'none';
+  }
+  updateCharCount('f-title', 'title-count', 45);
+  updateCharCount('f-prompt', 'prompt-count', 200);
+  document.getElementById('reward-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('reward-modal').classList.remove('open');
+  _editId = null;
+  _selectedFile = null;
+}
+
+document.getElementById('reward-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── Submit reward ─────────────────────────────────────────────
+async function submitReward() {
+  var title = document.getElementById('f-title').value.trim();
+  var cost = parseInt(document.getElementById('f-cost').value) || 500;
+  var cooldown = parseInt(document.getElementById('f-cooldown').value) || 0;
+  var prompt = document.getElementById('f-prompt').value.trim();
+  var chatTemplate = document.getElementById('f-chat-template').value.trim();
+  var autoFulfill = document.getElementById('f-autofulfill').checked ? 1 : 0;
+  var volume = parseFloat((parseInt(document.getElementById('f-volume').value) / 100).toFixed(2));
+  var maxPlay = parseInt(document.getElementById('f-maxplay').value) || 15;
+  var mediaType = (document.querySelector('input[name="media_type"]:checked') || {}).value || 'audio';
+  var posPreset = (document.querySelector('input[name="position_preset"]:checked') || {}).value || 'center-large';
+  var cx = parseFloat((parseInt(document.getElementById('f-cx').value) / 100).toFixed(4));
+  var cy = parseFloat((parseInt(document.getElementById('f-cy').value) / 100).toFixed(4));
+  var cw = parseFloat((parseInt(document.getElementById('f-cw').value) / 100).toFixed(4));
+  var ch = parseFloat((parseInt(document.getElementById('f-ch').value) / 100).toFixed(4));
+
+  if (!title) return showToast('Title is required', 'error');
+  if (cost < 1 || cost > 1000000) return showToast('Cost must be 1-1,000,000', 'error');
+
+  var btn = document.getElementById('modal-submit-btn');
+  btn.disabled = true;
+  var origText = btn.textContent;
+  btn.textContent = 'Saving...';
+
+  try {
+    if (_editId) {
+      var patchRes = await fetch('/dashboard/redemptions/' + _editId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, cost: cost, cooldown_seconds: cooldown, prompt: prompt || null, chat_message_template: chatTemplate || null, auto_fulfill: autoFulfill, volume: volume, max_play_seconds: maxPlay, position_preset: posPreset, custom_x: cx, custom_y: cy, custom_w: cw, custom_h: ch }),
+      });
+      if (!patchRes.ok) {
+        var d = await patchRes.json().catch(function() { return {}; });
+        showToast(d.error || 'Save failed', 'error');
+        btn.disabled = false; btn.textContent = origText; return;
+      }
+      if (_selectedFile) {
+        var ext2 = _selectedFile.name.split('.').pop().toLowerCase();
+        await fetch('/dashboard/redemptions/' + _editId + '/replace-media?media_type=' + mediaType + '&ext=' + ext2, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: _selectedFile,
+        });
+      }
+      showToast('Reward updated', 'success');
+      setTimeout(function() { location.reload(); }, 800);
+    } else {
+      if (!_selectedFile) { showToast('Please select a media file', 'error'); btn.disabled = false; btn.textContent = origText; return; }
+      var ext = _selectedFile.name.split('.').pop().toLowerCase();
+      var params = new URLSearchParams({ name: title, cost: cost, cooldown: cooldown, prompt: prompt || '', chat_template: chatTemplate || '', auto_fulfill: autoFulfill, volume: volume, max_play_seconds: maxPlay, media_type: mediaType, position_preset: posPreset, custom_x: cx, custom_y: cy, custom_w: cw, custom_h: ch, ext: ext });
+      var uploadRes = await fetch('/dashboard/redemptions/upload?' + params.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: _selectedFile,
+      });
+      if (!uploadRes.ok) {
+        var d2 = await uploadRes.json().catch(function() { return {}; });
+        showToast(d2.error || 'Upload failed', 'error');
+        btn.disabled = false; btn.textContent = origText; return;
+      }
+      showToast('Reward added', 'success');
+      setTimeout(function() { location.reload(); }, 800);
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+    btn.disabled = false; btn.textContent = origText;
+  }
+}
+</script>
+
+<%- include('footer') %>

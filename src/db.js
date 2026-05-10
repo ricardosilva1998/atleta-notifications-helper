@@ -2536,6 +2536,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_bits_duration', 'overlay_donation_duration',
   'overlay_volume', 'streamelements_jwt',
   'overlay_raid_enabled', 'overlay_raid_duration',
+  'cp_rewards_enabled',
 ]);
 
 function updateOverlayConfig(streamerId, config) {
@@ -3193,6 +3194,87 @@ try { db.prepare("DELETE FROM vtuber_models WHERE is_bundled = 1 AND filename IN
     }
   }
 }
+
+// Migration: Create channel_point_rewards table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS channel_point_rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    streamer_id INTEGER NOT NULL,
+    twitch_reward_id TEXT,
+    title TEXT NOT NULL,
+    cost INTEGER NOT NULL,
+    prompt TEXT,
+    cooldown_seconds INTEGER DEFAULT 0,
+    enabled INTEGER DEFAULT 1,
+    media_type TEXT NOT NULL,
+    media_filename TEXT NOT NULL,
+    media_mime TEXT,
+    media_size_bytes INTEGER,
+    media_duration_ms INTEGER,
+    position_preset TEXT DEFAULT 'center-large',
+    custom_x REAL, custom_y REAL,
+    custom_w REAL, custom_h REAL,
+    volume REAL DEFAULT 1.0,
+    max_play_seconds INTEGER DEFAULT 15,
+    chat_message_template TEXT,
+    auto_fulfill INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    twitch_sync_status TEXT DEFAULT 'ok',
+    twitch_sync_error TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_rewards_streamer ON channel_point_rewards(streamer_id)`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_rewards_twitch_id ON channel_point_rewards(twitch_reward_id) WHERE twitch_reward_id IS NOT NULL`);
+
+// Migration: Create channel_point_redemptions history log table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS channel_point_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    streamer_id INTEGER NOT NULL,
+    reward_id INTEGER,
+    twitch_redemption_id TEXT NOT NULL,
+    twitch_reward_id TEXT,
+    user_id TEXT, user_login TEXT, user_input TEXT,
+    cost INTEGER,
+    status TEXT,
+    outcome TEXT,
+    error_message TEXT,
+    is_test INTEGER DEFAULT 0,
+    redeemed_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_redemptions_streamer_date ON channel_point_redemptions(streamer_id, created_at)`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_redemptions_twitch_id ON channel_point_redemptions(twitch_redemption_id)`);
+
+// Migration: Add channel point columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('cp_rewards_enabled')) {
+    db.exec('ALTER TABLE streamers ADD COLUMN cp_rewards_enabled INTEGER DEFAULT 0');
+    console.log('[DB] Added cp_rewards_enabled column to streamers');
+  }
+} catch (e) { _migrationLog('cp_rewards_enabled', e); }
+
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('cp_affiliate_status')) {
+    db.exec('ALTER TABLE streamers ADD COLUMN cp_affiliate_status TEXT');
+    console.log('[DB] Added cp_affiliate_status column to streamers');
+  }
+} catch (e) { _migrationLog('cp_affiliate_status', e); }
+
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('cp_last_sync_at')) {
+    db.exec('ALTER TABLE streamers ADD COLUMN cp_last_sync_at TEXT');
+    console.log('[DB] Added cp_last_sync_at column to streamers');
+  }
+} catch (e) { _migrationLog('cp_last_sync_at', e); }
 
 // Hot path: getEnabledSponsorImages runs on every sponsor rotation tick.
 const _stmtGetSponsorImages = db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? ORDER BY sort_order, id');
@@ -4005,6 +4087,128 @@ function cleanupOldNotifications() {
   return _cleanupOldNotifications.run();
 }
 
+// ── Channel Point Rewards queries ───────────────────────────────────
+
+function getRewards(streamerId) {
+  return db.prepare('SELECT * FROM channel_point_rewards WHERE streamer_id = ? ORDER BY sort_order ASC, id ASC').all(streamerId);
+}
+
+function getEnabledRewards(streamerId) {
+  return db.prepare('SELECT * FROM channel_point_rewards WHERE streamer_id = ? AND enabled = 1 ORDER BY sort_order ASC, id ASC').all(streamerId);
+}
+
+function getRewardById(id, streamerId) {
+  return db.prepare('SELECT * FROM channel_point_rewards WHERE id = ? AND streamer_id = ?').get(id, streamerId);
+}
+
+function getRewardByTwitchId(streamerId, twitchRewardId) {
+  return db.prepare('SELECT * FROM channel_point_rewards WHERE streamer_id = ? AND twitch_reward_id = ?').get(streamerId, twitchRewardId);
+}
+
+function insertReward(fields) {
+  const result = db.prepare(`
+    INSERT INTO channel_point_rewards
+      (streamer_id, title, cost, prompt, cooldown_seconds, enabled, media_type, media_filename,
+       media_mime, media_size_bytes, position_preset, custom_x, custom_y, custom_w, custom_h,
+       volume, max_play_seconds, chat_message_template, auto_fulfill, sort_order, twitch_sync_status)
+    VALUES
+      (@streamer_id, @title, @cost, @prompt, @cooldown_seconds, @enabled, @media_type, @media_filename,
+       @media_mime, @media_size_bytes, @position_preset, @custom_x, @custom_y, @custom_w, @custom_h,
+       @volume, @max_play_seconds, @chat_message_template, @auto_fulfill, @sort_order, @twitch_sync_status)
+  `).run(fields);
+  return { id: result.lastInsertRowid, ...fields };
+}
+
+const _REWARD_UPDATABLE = new Set([
+  'title', 'cost', 'prompt', 'cooldown_seconds', 'enabled',
+  'media_filename', 'media_mime', 'media_size_bytes',
+  'position_preset', 'custom_x', 'custom_y', 'custom_w', 'custom_h',
+  'volume', 'max_play_seconds', 'chat_message_template', 'auto_fulfill',
+  'sort_order', 'twitch_sync_status', 'twitch_sync_error', 'twitch_reward_id',
+]);
+
+function updateReward(id, streamerId, fields) {
+  const sets = [];
+  const values = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (!_REWARD_UPDATABLE.has(k)) continue;
+    sets.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (sets.length === 0) return getRewardById(id, streamerId);
+  sets.push("updated_at = datetime('now')");
+  values.push(id, streamerId);
+  db.prepare(`UPDATE channel_point_rewards SET ${sets.join(', ')} WHERE id = ? AND streamer_id = ?`).run(...values);
+  return getRewardById(id, streamerId);
+}
+
+function deleteReward(id, streamerId) {
+  return db.prepare('DELETE FROM channel_point_rewards WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+}
+
+function setRewardTwitchId(id, twitchRewardId, syncStatus) {
+  db.prepare("UPDATE channel_point_rewards SET twitch_reward_id = ?, twitch_sync_status = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(twitchRewardId, syncStatus || 'ok', id);
+}
+
+function setRewardSyncStatus(id, status, error) {
+  db.prepare("UPDATE channel_point_rewards SET twitch_sync_status = ?, twitch_sync_error = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(status, error || null, id);
+}
+
+function reorderRewards(streamerId, ids) {
+  const stmt = db.prepare('UPDATE channel_point_rewards SET sort_order = ? WHERE id = ? AND streamer_id = ?');
+  const txn = db.transaction((orderedIds) => {
+    orderedIds.forEach((id, index) => stmt.run(index, id, streamerId));
+  });
+  txn(ids);
+}
+
+function logRedemption(fields) {
+  const result = db.prepare(`
+    INSERT INTO channel_point_redemptions
+      (streamer_id, reward_id, twitch_redemption_id, twitch_reward_id,
+       user_id, user_login, user_input, cost, status, outcome, error_message, is_test, redeemed_at)
+    VALUES
+      (@streamer_id, @reward_id, @twitch_redemption_id, @twitch_reward_id,
+       @user_id, @user_login, @user_input, @cost, @status, @outcome, @error_message, @is_test, @redeemed_at)
+  `).run({
+    streamer_id: fields.streamer_id,
+    reward_id: fields.reward_id || null,
+    twitch_redemption_id: fields.twitch_redemption_id,
+    twitch_reward_id: fields.twitch_reward_id || null,
+    user_id: fields.user_id || null,
+    user_login: fields.user_login || null,
+    user_input: fields.user_input || null,
+    cost: fields.cost || null,
+    status: fields.status || null,
+    outcome: fields.outcome || null,
+    error_message: fields.error_message || null,
+    is_test: fields.is_test ? 1 : 0,
+    redeemed_at: fields.redeemed_at || null,
+  });
+  return result.lastInsertRowid;
+}
+
+function getRedemptionsRecent(streamerId, limit) {
+  return db.prepare('SELECT * FROM channel_point_redemptions WHERE streamer_id = ? ORDER BY created_at DESC LIMIT ?')
+    .all(streamerId, limit || 50);
+}
+
+function updateStreamerCpSync(streamerId, fields) {
+  const sets = [];
+  const values = [];
+  if ('affiliate_status' in fields) { sets.push('cp_affiliate_status = ?'); values.push(fields.affiliate_status); }
+  if ('last_sync_at' in fields) { sets.push('cp_last_sync_at = ?'); values.push(fields.last_sync_at); }
+  if (sets.length === 0) return;
+  values.push(streamerId);
+  db.prepare(`UPDATE streamers SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
+function clearStreamerBroadcasterScopes(streamerId) {
+  db.prepare('UPDATE streamers SET broadcaster_scopes = NULL WHERE id = ?').run(streamerId);
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -4289,6 +4493,20 @@ module.exports = {
   createNotificationForBridgeUsers,
   hasNotification,
   cleanupOldNotifications,
+  getRewards,
+  getEnabledRewards,
+  getRewardById,
+  getRewardByTwitchId,
+  insertReward,
+  updateReward,
+  deleteReward,
+  setRewardTwitchId,
+  setRewardSyncStatus,
+  reorderRewards,
+  logRedemption,
+  getRedemptionsRecent,
+  updateStreamerCpSync,
+  clearStreamerBroadcasterScopes,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
 };

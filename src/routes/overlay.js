@@ -263,6 +263,9 @@ router.get('/:token', (req, res) => {
 <body>
   <div id="notification-container"></div>
   <div id="timed-container"></div>
+  <video id="redemption-video" playsinline preload="auto"
+         style="position:absolute; display:none; pointer-events:none; object-fit:contain; z-index:90;"></video>
+  <audio id="redemption-audio" preload="auto"></audio>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
   <script src="/overlay/overlay.js"></script>
 </body>

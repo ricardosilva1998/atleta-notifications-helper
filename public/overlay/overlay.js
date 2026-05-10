@@ -261,6 +261,18 @@ function connectSSE() {
     // Sponsor events handled by separate /overlay/sponsors/:token page
     if (data.type === 'sponsor') return;
 
+    // Redemption events bypass per-type enabled check — backend gates each one
+    if (data.type === 'redemption') {
+      const MAX_QUEUE = 50;
+      if (queue.length >= MAX_QUEUE) {
+        console.warn('[Overlay] Queue full (' + queue.length + '), dropping oldest event');
+        queue.shift();
+      }
+      queue.push(data);
+      if (!isPlaying) playNext();
+      return;
+    }
+
     // Check if event type is enabled
     const eventType = data.type;
     const typeConfig = overlayConfig[eventType];
@@ -317,7 +329,11 @@ function playNext() {
   if (queue.length === 0) { isPlaying = false; return; }
   isPlaying = true;
   const event = queue.shift();
-  showNotification(event);
+  if (event.type === 'redemption') {
+    playRedemption(event);
+  } else {
+    showNotification(event);
+  }
 }
 
 // ─── Card class mapping ────────────────────────────────────────
@@ -347,6 +363,8 @@ function stopCurrentSound() {
     } catch (e) {}
     currentAudio = null;
   }
+  // Also stop any in-progress redemption media
+  stopRedemption(false);
 }
 
 function showNotification(event) {
@@ -1027,6 +1045,103 @@ function applyCustomDesign(card, eventType) {
     card.classList.remove('entering');
     const speed = design.animation_speed || 1.0;
     card.style.animation = `${design.entrance_animation} ${0.4 / speed}s ease-out forwards`;
+  }
+}
+
+// ─── Channel Point Redemption playback ────────────────────────
+let _redemptionCapTimer = null;
+
+function resolveRedemptionRect(data) {
+  const preset = data.position && data.position.preset;
+  switch (preset) {
+    case 'fullscreen':
+      return { top: '0%', left: '0%', width: '100%', height: '100%', right: '', bottom: '' };
+    case 'top-right-small':
+      return { top: '5%', right: '5%', width: '20%', height: 'auto', left: '', bottom: '' };
+    case 'bottom-banner':
+      return { bottom: '0%', left: '0%', width: '100%', height: '25%', top: '', right: '' };
+    case 'custom': {
+      const p = data.position;
+      const x = (p.x != null ? p.x : 0.2) * 100;
+      const y = (p.y != null ? p.y : 0.2) * 100;
+      const w = (p.w != null ? p.w : 0.6) * 100;
+      const h = (p.h != null ? p.h : 0.6) * 100;
+      return { top: y + '%', left: x + '%', width: w + '%', height: h + '%', right: '', bottom: '' };
+    }
+    case 'center-large':
+    default:
+      return { top: '20%', left: '20%', width: '60%', height: '60%', right: '', bottom: '' };
+  }
+}
+
+function applyRectToElement(el, rect) {
+  el.style.top    = rect.top    || '';
+  el.style.left   = rect.left   || '';
+  el.style.right  = rect.right  || '';
+  el.style.bottom = rect.bottom || '';
+  el.style.width  = rect.width  || '';
+  el.style.height = rect.height || '';
+}
+
+function stopRedemption(andPlayNext) {
+  if (_redemptionCapTimer) { clearTimeout(_redemptionCapTimer); _redemptionCapTimer = null; }
+
+  const vid = document.getElementById('redemption-video');
+  const aud = document.getElementById('redemption-audio');
+
+  if (vid) {
+    try { vid.pause(); } catch (e) {}
+    vid.removeAttribute('src');
+    try { vid.load(); } catch (e) {}
+    vid.style.display = 'none';
+    vid.onended = null;
+  }
+  if (aud) {
+    try { aud.pause(); } catch (e) {}
+    aud.removeAttribute('src');
+    try { aud.load(); } catch (e) {}
+    aud.onended = null;
+  }
+
+  if (andPlayNext !== false) {
+    setTimeout(playNext, 200);
+  }
+}
+
+function playRedemption(event) {
+  const data = event.data || {};
+  const mediaType     = data.mediaType || 'audio';
+  const mediaUrl      = data.mediaUrl || '';
+  const maxPlaySec    = Math.min(Math.max(data.maxPlaySeconds || 15, 1), 60);
+  const rewardVolume  = Math.min(Math.max(data.volume != null ? data.volume : 1, 0), 1);
+  const masterVolume  = Math.min(Math.max(overlayConfig.volume != null ? overlayConfig.volume : 0.8, 0), 1);
+  const finalVolume   = masterVolume * rewardVolume;
+
+  stopRedemption(false);
+
+  if (mediaType === 'video') {
+    const vid = document.getElementById('redemption-video');
+    if (!vid) { setTimeout(playNext, 200); return; }
+
+    const rect = resolveRedemptionRect(data);
+    applyRectToElement(vid, rect);
+    vid.src = mediaUrl;
+    vid.volume = finalVolume;
+    vid.style.display = 'block';
+
+    _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
+    vid.onended = () => stopRedemption(true);
+    vid.play().catch(() => {});
+  } else {
+    const aud = document.getElementById('redemption-audio');
+    if (!aud) { setTimeout(playNext, 200); return; }
+
+    aud.src = mediaUrl;
+    aud.volume = finalVolume;
+
+    _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
+    aud.onended = () => stopRedemption(true);
+    aud.play().catch(() => {});
   }
 }
 

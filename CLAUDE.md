@@ -344,4 +344,23 @@ Format per entry:
 **Open:** <followups, or "none">
 ```
 
-(No entries yet — the next `/dev-team` round will append here.)
+### 2026-05-10 15:30 — backend-dev
+**Task:** Implement Channel Points → Audio/Video Overlay redemption feature (§1–§6, §9 of plan)
+**Files:** `src/db.js`, `src/routes/auth.js`, `src/routes/dashboard.js`, `src/server.js`, `src/services/eventsub.js`, `src/services/twitch.js`, `src/services/twitchRewards.js` (new), `src/services/redemptionDispatcher.js` (new), `src/services/redemptionDispatcher.test.js` (new), `src/services/redemptionTemplates.js` (new)
+**Decisions:**
+- `formatChatTemplate` extracted to `redemptionTemplates.js` (pure, no external deps) so it can be unit-tested without env vars — same pattern as `incidentTracker.js` / `flagState.js` in bridge; `redemptionDispatcher.js` imports it from there.
+- Regex single-pass replacement prevents double-substitution when user value contains a placeholder string (e.g. user=`{cost}`).
+- `GET /dashboard/redemptions` renders `redemptions-config.ejs` which does not exist yet — frontend-dev must create it; Express will throw a clear 500 until it does.
+- `cp_rewards_enabled` added to `OVERLAY_COLUMNS` whitelist so `updateOverlayConfig()` accepts it via the existing settings route.
+**Open:** Frontend-dev needs `src/views/redemptions-config.ejs` + card in `src/views/dashboard.ejs` (§7–§8). i18n keys (§10) pending.
+
+### 2026-05-10 17:45 — frontend-dev
+**Task:** Implement Channel Points redemption UI — overlay rendering (§7) and dashboard management page (§8)
+**Files:** `src/routes/overlay.js`, `public/overlay/overlay.js`, `src/views/redemptions-config.ejs` (new), `src/views/dashboard.ejs`
+**Decisions:**
+- `playRedemption()` + `stopRedemption()` added to `public/overlay/overlay.js`; `_redemptionCapTimer` scoped at module level to handle both audio and video hard-cap; `stopCurrentSound()` now calls `stopRedemption(false)` so a `clear` event during redemption playback cleans up both elements.
+- `stopRedemption` is a regular `function` declaration (hoisted), so the call from `stopCurrentSound()` (which appears earlier in the file) works correctly at runtime.
+- Dashboard card in `src/views/dashboard.ejs` uses `require('../services/twitch').hasRedemptionScope(streamer)` inline per plan — path resolves relative to `src/views/` in Express/EJS server-side context.
+- `redemptions-config.ejs` uses raw-body upload (not FormData) matching sponsor upload pattern — `Content-Type: application/octet-stream` with query params for metadata.
+- EJS template compiles cleanly (`ejs.compile` check, length 67394 chars). Node syntax check passes for both modified JS files.
+**Open:** i18n keys (§10) still pending. Playwright tests run against production (`atletanotifications.com`) so not executed here — will run on push via pre-push hook. Manual smoke test requires a live server with `.env`.

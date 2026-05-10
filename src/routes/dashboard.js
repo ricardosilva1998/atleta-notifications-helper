@@ -1583,6 +1583,376 @@ router.post('/sponsor-messages/:id/test', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Channel Point Rewards ---
+
+const VALID_POSITION_PRESETS = new Set(['center-large', 'fullscreen', 'top-right-small', 'bottom-banner', 'custom']);
+const VALID_AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg']);
+const VALID_VIDEO_EXTS = new Set(['mp4', 'webm']);
+
+function clamp(val, min, max) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+function validateRewardFields(fields, res) {
+  const { title, cost, prompt, position_preset } = fields;
+  if (!title || String(title).length > 45) {
+    res.status(400).json({ error: 'Title required and must be ≤45 characters' });
+    return false;
+  }
+  const costNum = parseInt(cost, 10);
+  if (isNaN(costNum) || costNum < 1 || costNum > 1000000) {
+    res.status(400).json({ error: 'Cost must be 1–1,000,000' });
+    return false;
+  }
+  if (prompt && String(prompt).length > 200) {
+    res.status(400).json({ error: 'Prompt must be ≤200 characters' });
+    return false;
+  }
+  if (position_preset !== undefined && !VALID_POSITION_PRESETS.has(position_preset)) {
+    res.status(400).json({ error: 'Invalid position_preset' });
+    return false;
+  }
+  return true;
+}
+
+router.get('/redemptions', (req, res) => {
+  const { hasRedemptionScope } = require('../services/twitch');
+  const streamerId = req.streamer.id;
+  const rewards = db.getRewards(streamerId);
+  const recentRedemptions = db.getRedemptionsRecent(streamerId, 50);
+  res.render('redemptions-config', {
+    streamer: req.streamer,
+    rewards,
+    recentRedemptions,
+    cpRewardsEnabled: req.streamer.cp_rewards_enabled,
+    affiliateStatus: req.streamer.cp_affiliate_status,
+    lastSyncAt: req.streamer.cp_last_sync_at,
+    hasScope: hasRedemptionScope(req.streamer),
+  });
+});
+
+router.post('/redemptions/sync', async (req, res) => {
+  try {
+    const { syncRewards } = require('../services/twitchRewards');
+    const result = await syncRewards(req.streamer.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/redemptions/upload', async (req, res) => {
+  const mediaType = (req.query.media_type || '').toLowerCase();
+  if (mediaType !== 'audio' && mediaType !== 'video') {
+    return res.status(400).json({ error: 'media_type must be audio or video' });
+  }
+
+  const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  if (mediaType === 'audio' && !VALID_AUDIO_EXTS.has(ext)) {
+    return res.status(400).json({ error: 'Audio ext must be mp3, wav, or ogg' });
+  }
+  if (mediaType === 'video' && !VALID_VIDEO_EXTS.has(ext)) {
+    return res.status(400).json({ error: 'Video ext must be mp4 or webm' });
+  }
+
+  const maxBytes = mediaType === 'video' ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+  let buf;
+  try { buf = await readBoundedBody(req, res, maxBytes); }
+  catch (e) { return; }
+
+  const title = String(req.query.title || '').trim();
+  const cost = parseInt(req.query.cost, 10);
+  const prompt = String(req.query.prompt || '').trim() || null;
+  const positionPreset = req.query.position_preset || 'center-large';
+
+  if (!validateRewardFields({ title, cost, prompt, position_preset: positionPreset }, res)) return;
+
+  const cooldownSeconds = Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0);
+  const maxPlaySeconds = clamp(req.query.max_play_seconds, 1, 60);
+  const volume = clamp(req.query.volume !== undefined ? req.query.volume : 1, 0, 1);
+  const customX = req.query.custom_x != null ? clamp(req.query.custom_x, 0, 1) : null;
+  const customY = req.query.custom_y != null ? clamp(req.query.custom_y, 0, 1) : null;
+  const customW = req.query.custom_w != null ? clamp(req.query.custom_w, 0, 1) : null;
+  const customH = req.query.custom_h != null ? clamp(req.query.custom_h, 0, 1) : null;
+  const chatMessageTemplate = String(req.query.chat_message_template || '').trim() || null;
+  const autoFulfill = req.query.auto_fulfill === '0' ? 0 : 1;
+
+  const streamerId = req.streamer.id;
+
+  // Step 1: insert local DB row (placeholder filename, will update after file write)
+  const row = db.insertReward({
+    streamer_id: streamerId,
+    title,
+    cost,
+    prompt,
+    cooldown_seconds: cooldownSeconds,
+    enabled: 1,
+    media_type: mediaType,
+    media_filename: `pending_${Date.now()}.${ext}`,
+    media_mime: mediaType === 'audio'
+      ? { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg' }[ext]
+      : { mp4: 'video/mp4', webm: 'video/webm' }[ext],
+    media_size_bytes: buf.length,
+    position_preset: positionPreset,
+    custom_x: customX,
+    custom_y: customY,
+    custom_w: customW,
+    custom_h: customH,
+    volume,
+    max_play_seconds: maxPlaySeconds,
+    chat_message_template: chatMessageTemplate,
+    auto_fulfill: autoFulfill,
+    sort_order: db.getRewards(streamerId).length,
+    twitch_sync_status: 'ok',
+  });
+
+  const rowId = row.id;
+
+  // Step 2: write file
+  const filename = `${rowId}_${Date.now()}.${ext}`;
+  const rewardDir = path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId));
+  try { await fs.promises.mkdir(rewardDir, { recursive: true }); } catch (e) {}
+  try { await fs.promises.writeFile(path.join(rewardDir, filename), buf); }
+  catch (e) {
+    db.deleteReward(rowId, streamerId);
+    return res.status(500).json({ error: 'File write failed' });
+  }
+
+  // Step 3: update media_filename in DB
+  db.updateReward(rowId, streamerId, { media_filename: filename });
+
+  // Step 4: create reward on Twitch
+  let affiliateGated = false;
+  try {
+    const { createReward: twitchCreate } = require('../services/twitchRewards');
+    const created = await twitchCreate(req.streamer, {
+      title,
+      cost,
+      prompt: prompt || undefined,
+      is_global_cooldown_enabled: cooldownSeconds > 0,
+      global_cooldown_seconds: cooldownSeconds > 0 ? cooldownSeconds : undefined,
+      is_paused: false,
+    });
+    if (created && created.affiliateGated) {
+      db.setRewardSyncStatus(rowId, 'no_affiliate', null);
+      db.updateStreamerCpSync(streamerId, { affiliate_status: 'not_affiliate' });
+      affiliateGated = true;
+    } else if (created && created.id) {
+      // Step 5: persist twitch_reward_id
+      db.setRewardTwitchId(rowId, created.id, 'ok');
+    }
+  } catch (e) {
+    db.setRewardSyncStatus(rowId, 'create_failed', e.message);
+  }
+
+  const reward = db.getRewardById(rowId, streamerId);
+  res.json({ ok: true, reward, affiliateGated: affiliateGated || undefined });
+});
+
+router.patch('/redemptions/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const streamerId = req.streamer.id;
+  const reward = db.getRewardById(id, streamerId);
+  if (!reward) return res.status(404).json({ error: 'Not found' });
+
+  const body = req.body || {};
+  const updates = {};
+
+  if (body.title !== undefined) {
+    if (String(body.title).length > 45) return res.status(400).json({ error: 'Title must be ≤45 characters' });
+    updates.title = String(body.title).trim();
+  }
+  if (body.cost !== undefined) {
+    const c = parseInt(body.cost, 10);
+    if (isNaN(c) || c < 1 || c > 1000000) return res.status(400).json({ error: 'Cost must be 1–1,000,000' });
+    updates.cost = c;
+  }
+  if (body.prompt !== undefined) {
+    if (body.prompt && String(body.prompt).length > 200) return res.status(400).json({ error: 'Prompt must be ≤200 characters' });
+    updates.prompt = body.prompt ? String(body.prompt).trim() : null;
+  }
+  if (body.cooldown_seconds !== undefined) updates.cooldown_seconds = Math.max(0, parseInt(body.cooldown_seconds, 10) || 0);
+  if (body.enabled !== undefined) updates.enabled = body.enabled ? 1 : 0;
+  if (body.volume !== undefined) updates.volume = clamp(body.volume, 0, 1);
+  if (body.max_play_seconds !== undefined) updates.max_play_seconds = clamp(body.max_play_seconds, 1, 60);
+  if (body.chat_message_template !== undefined) updates.chat_message_template = body.chat_message_template || null;
+  if (body.auto_fulfill !== undefined) updates.auto_fulfill = body.auto_fulfill ? 1 : 0;
+  if (body.position_preset !== undefined) {
+    if (!VALID_POSITION_PRESETS.has(body.position_preset)) return res.status(400).json({ error: 'Invalid position_preset' });
+    updates.position_preset = body.position_preset;
+  }
+  if (body.custom_x !== undefined) updates.custom_x = clamp(body.custom_x, 0, 1);
+  if (body.custom_y !== undefined) updates.custom_y = clamp(body.custom_y, 0, 1);
+  if (body.custom_w !== undefined) updates.custom_w = clamp(body.custom_w, 0, 1);
+  if (body.custom_h !== undefined) updates.custom_h = clamp(body.custom_h, 0, 1);
+
+  db.updateReward(id, streamerId, updates);
+
+  // Push Twitch-relevant fields upstream if we have a reward ID
+  if (reward.twitch_reward_id) {
+    const twitchPatch = {};
+    if (updates.title !== undefined) twitchPatch.title = updates.title;
+    if (updates.cost !== undefined) twitchPatch.cost = updates.cost;
+    if (updates.prompt !== undefined) twitchPatch.prompt = updates.prompt;
+    if (updates.cooldown_seconds !== undefined) {
+      twitchPatch.is_global_cooldown_enabled = updates.cooldown_seconds > 0;
+      twitchPatch.global_cooldown_seconds = updates.cooldown_seconds > 0 ? updates.cooldown_seconds : undefined;
+    }
+    // enabled in our DB inverts to is_paused on Twitch
+    if (updates.enabled !== undefined) twitchPatch.is_paused = !updates.enabled;
+
+    if (Object.keys(twitchPatch).length > 0) {
+      try {
+        const { updateReward: twitchUpdate } = require('../services/twitchRewards');
+        await twitchUpdate(req.streamer, reward.twitch_reward_id, twitchPatch);
+      } catch (e) {
+        console.error('[Rewards] Twitch PATCH failed:', e.message);
+      }
+    }
+  }
+
+  res.json({ ok: true, reward: db.getRewardById(id, streamerId) });
+});
+
+router.post('/redemptions/:id/replace-media', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const streamerId = req.streamer.id;
+  const reward = db.getRewardById(id, streamerId);
+  if (!reward) return res.status(404).json({ error: 'Not found' });
+
+  const mediaType = (req.query.media_type || reward.media_type || '').toLowerCase();
+  const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  if (mediaType === 'audio' && !VALID_AUDIO_EXTS.has(ext)) {
+    return res.status(400).json({ error: 'Audio ext must be mp3, wav, or ogg' });
+  }
+  if (mediaType === 'video' && !VALID_VIDEO_EXTS.has(ext)) {
+    return res.status(400).json({ error: 'Video ext must be mp4 or webm' });
+  }
+
+  const maxBytes = mediaType === 'video' ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+  let buf;
+  try { buf = await readBoundedBody(req, res, maxBytes); }
+  catch (e) { return; }
+
+  const rewardDir = path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId));
+  try { await fs.promises.mkdir(rewardDir, { recursive: true }); } catch (e) {}
+
+  const newFilename = `${id}_${Date.now()}.${ext}`;
+  try { await fs.promises.writeFile(path.join(rewardDir, newFilename), buf); }
+  catch (e) { return res.status(500).json({ error: 'File write failed' }); }
+
+  // Update DB first, then delete old file
+  db.updateReward(id, streamerId, {
+    media_filename: newFilename,
+    media_type: mediaType,
+    media_size_bytes: buf.length,
+    media_mime: mediaType === 'audio'
+      ? { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg' }[ext]
+      : { mp4: 'video/mp4', webm: 'video/webm' }[ext],
+  });
+
+  if (reward.media_filename && reward.media_filename !== newFilename) {
+    try { fs.unlinkSync(path.join(rewardDir, reward.media_filename)); } catch (e) {}
+  }
+
+  res.json({ ok: true, reward: db.getRewardById(id, streamerId) });
+});
+
+router.delete('/redemptions/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const streamerId = req.streamer.id;
+  const reward = db.getRewardById(id, streamerId);
+  if (!reward) return res.status(404).json({ error: 'Not found' });
+
+  if (reward.twitch_reward_id) {
+    try {
+      const { deleteReward: twitchDelete } = require('../services/twitchRewards');
+      await twitchDelete(req.streamer, reward.twitch_reward_id);
+    } catch (e) {
+      // 403/404 are expected for orphaned or foreign rewards — ignore them
+      if (!e.status || (e.status !== 403 && e.status !== 404)) {
+        console.error('[Rewards] Twitch delete failed:', e.message);
+      }
+    }
+  }
+
+  db.deleteReward(id, streamerId);
+
+  if (reward.media_filename) {
+    try {
+      fs.unlinkSync(path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId), reward.media_filename));
+    } catch (e) {} // ENOENT is fine
+  }
+
+  res.json({ ok: true });
+});
+
+router.post('/redemptions/:id/test', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const streamerId = req.streamer.id;
+  const reward = db.getRewardById(id, streamerId);
+  if (!reward) return res.status(404).json({ error: 'Not found' });
+
+  const bus = require('../services/overlayBus');
+  const fakeRedemptionId = `test-${id}-${Date.now()}`;
+
+  const overlayEvent = {
+    type: 'redemption',
+    data: {
+      rewardId: reward.id,
+      mediaUrl: `/redemptions/${streamerId}/${reward.media_filename}`,
+      mediaType: reward.media_type,
+      position: {
+        preset: reward.position_preset,
+        x: reward.custom_x,
+        y: reward.custom_y,
+        w: reward.custom_w,
+        h: reward.custom_h,
+      },
+      volume: reward.volume,
+      maxPlaySeconds: reward.max_play_seconds,
+      title: reward.title,
+      username: req.streamer.twitch_display_name || 'TestUser',
+      userInput: null,
+      twitchRedemptionId: fakeRedemptionId,
+    },
+  };
+
+  bus.emit(`overlay:${streamerId}`, overlayEvent);
+
+  const rowId = db.logRedemption({
+    streamer_id: streamerId,
+    reward_id: reward.id,
+    twitch_redemption_id: fakeRedemptionId,
+    twitch_reward_id: reward.twitch_reward_id,
+    user_id: null,
+    user_login: req.streamer.twitch_display_name || 'TestUser',
+    cost: reward.cost,
+    status: 'FULFILLED',
+    outcome: 'test',
+    is_test: 1,
+    redeemed_at: new Date().toISOString(),
+  });
+
+  res.json({ ok: true, redemptionId: rowId });
+});
+
+router.post('/redemptions/reorder', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+  db.reorderRewards(req.streamer.id, ids);
+  res.json({ ok: true });
+});
+
+router.post('/redemptions/settings', (req, res) => {
+  const enabled = req.body.cp_rewards_enabled !== undefined ? (req.body.cp_rewards_enabled ? 1 : 0) : undefined;
+  if (enabled === undefined) return res.status(400).json({ error: 'cp_rewards_enabled required' });
+  db.updateOverlayConfig(req.streamer.id, { cp_rewards_enabled: enabled });
+  res.json({ ok: true });
+});
+
 // --- Overlay Builder ---
 
 router.get('/overlay-builder', async (req, res) => {

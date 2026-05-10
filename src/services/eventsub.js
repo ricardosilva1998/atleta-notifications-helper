@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { refreshBroadcasterToken } = require('./twitch');
+const { refreshBroadcasterToken, hasRedemptionScope } = require('./twitch');
 const { chatManager } = require('./twitchChat');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
@@ -14,6 +14,7 @@ const SUBSCRIPTION_TYPES = [
   { type: 'channel.subscription.message', version: '1' },
   { type: 'channel.cheer', version: '1' },
   { type: 'channel.raid', version: '1', conditionKey: 'to_broadcaster_user_id' },
+  { type: 'channel.channel_points_custom_reward_redemption.add', version: '1' },
 ];
 
 class EventSubClient {
@@ -87,6 +88,14 @@ class EventSubClient {
 
         const normalized = this.normalizeEvent(subType, event);
         if (normalized) {
+          // Channel point redemptions are handled by the dispatcher — not the generic overlay path
+          if (normalized.type === 'redemption') {
+            const { handleRedemption } = require('./redemptionDispatcher');
+            handleRedemption(this.streamerId, normalized.data)
+              .catch(err => console.error('[Redemption] dispatch error:', err.message));
+            return;
+          }
+
           const streamer = db.getStreamerById(this.streamerId);
 
           // Emit to overlay — giftsub shows as subscription banner
@@ -123,15 +132,29 @@ class EventSubClient {
         break;
       }
 
-      case 'revocation':
-        console.warn(`[EventSub] Subscription revoked for streamer ${this.streamerId}:`,
-          msg.payload.subscription.type, msg.payload.subscription.status);
+      case 'revocation': {
+        const revokedType = msg.payload.subscription.type;
+        const revokedStatus = msg.payload.subscription.status;
+        console.warn(`[EventSub] Subscription revoked for streamer ${this.streamerId}:`, revokedType, revokedStatus);
+        if (
+          revokedType === 'channel.channel_points_custom_reward_redemption.add' &&
+          revokedStatus === 'authorization_revoked'
+        ) {
+          db.clearStreamerBroadcasterScopes(this.streamerId);
+          console.warn(`[EventSub] Cleared broadcaster scopes for streamer ${this.streamerId} — reconnect required`);
+        }
         break;
+      }
     }
   }
 
   async createSubscription(sessionId, subType) {
     let streamer = db.getStreamerById(this.streamerId);
+
+    if (subType.type === 'channel.channel_points_custom_reward_redemption.add' && !hasRedemptionScope(streamer)) {
+      return;
+    }
+
     let token = streamer.broadcaster_access_token;
 
     const conditionKey = subType.conditionKey || 'broadcaster_user_id';
@@ -240,6 +263,22 @@ class EventSubClient {
           data: {
             username: event.from_broadcaster_user_name,
             viewers: event.viewers,
+          },
+        };
+
+      case 'channel.channel_points_custom_reward_redemption.add':
+        return {
+          type: 'redemption',
+          data: {
+            twitchRedemptionId: event.id,
+            twitchRewardId: event.reward.id,
+            rewardTitle: event.reward.title,
+            rewardCost: event.reward.cost,
+            username: event.user_name,
+            userId: event.user_id,
+            userInput: event.user_input || null,
+            status: event.status,
+            redeemedAt: event.redeemed_at,
           },
         };
 

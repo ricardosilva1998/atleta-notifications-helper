@@ -78,6 +78,10 @@ app.use('/pitwall/overlays', express.static(path.join(__dirname, '..', 'bridge',
 app.use('/overlay/sounds', express.static(path.join(__dirname, '..', 'data', 'sounds')));
 // Serve sponsor images from persistent data volume
 app.use('/sponsors', express.static(path.join(__dirname, '..', 'data', 'sponsors')));
+// Serve channel point redemption media from persistent data volume
+app.use('/redemptions', express.static(path.join(__dirname, '..', 'data', 'redemptions'), {
+  setHeaders: (res) => { res.set('Cache-Control', 'public, max-age=86400'); }
+}));
 // Serve uploaded avatars from persistent data volume
 app.use('/avatars', express.static(path.join(__dirname, '..', 'data', 'avatars')));
 // Serve issue screenshots from persistent data volume

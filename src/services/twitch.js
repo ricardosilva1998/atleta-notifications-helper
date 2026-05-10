@@ -249,4 +249,8 @@ async function getFollowAge(broadcasterLogin, userLogin) {
   }
 }
 
-module.exports = { getStream, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge };
+function hasRedemptionScope(streamer) {
+  return (streamer.broadcaster_scopes || '').split(' ').includes('channel:manage:redemptions');
+}
+
+module.exports = { getStream, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope };
