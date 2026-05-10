@@ -491,8 +491,7 @@
 
     <!-- Channel Point Rewards Card -->
     <% {
-      const { hasRedemptionScope } = require('../services/twitch');
-      const _hasScope = hasRedemptionScope(streamer);
+      const _hasScope = typeof hasScope !== 'undefined' ? hasScope : false;
       const _affiliateOk = streamer.cp_affiliate_status === 'ok';
       const _enabled = !!streamer.cp_rewards_enabled;
       let _dotColor, _dotLabel;

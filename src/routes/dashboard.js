@@ -215,6 +215,9 @@ router.get('/', (req, res) => {
   let iracingSettings = [];
   try { iracingSettings = db.getIracingOverlaySettings(req.streamer.id); } catch (e) {}
 
+  const { hasRedemptionScope } = require('../services/twitch');
+  const hasScope = hasRedemptionScope(req.streamer);
+
   res.render('dashboard', {
     streamer: req.streamer,
     guilds: enrichedGuilds,
@@ -229,6 +232,7 @@ router.get('/', (req, res) => {
     overlayStats,
     iracingSettings,
     vtuberUrl,
+    hasScope,
   });
 });
 
