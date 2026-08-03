@@ -24,9 +24,15 @@ class EventSubClient {
     this.keepaliveTimer = null;
     this.reconnectDelay = 1000;
     this.running = false;
+    this.needsReauth = false;
   }
 
   async connect() {
+    // A reconnect timer scheduled just before the token was found to be dead can
+    // still fire afterwards. Re-authorizing builds a fresh client, so a client
+    // that has given up must never reconnect itself.
+    if (this.needsReauth) return;
+
     const streamer = db.getStreamerById(this.streamerId);
     if (!streamer || !streamer.broadcaster_access_token || !streamer.twitch_user_id) {
       console.log(`[EventSub] Streamer ${this.streamerId}: not configured, skipping`);
@@ -40,7 +46,6 @@ class EventSubClient {
 
     this.ws.on('open', () => {
       console.log(`[EventSub] Connected for streamer ${this.streamerId}`);
-      this.reconnectDelay = 1000;
     });
 
     this.ws.on('message', (data) => this.handleMessage(data));
@@ -48,16 +53,41 @@ class EventSubClient {
     this.ws.on('close', (code) => {
       console.log(`[EventSub] Disconnected for streamer ${this.streamerId} (code: ${code})`);
       this.clearKeepalive();
-      if (this.running && code !== 1000) {
-        console.log(`[EventSub] Reconnecting in ${this.reconnectDelay / 1000}s...`);
-        setTimeout(() => this.connect(), this.reconnectDelay);
-        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 60000);
-      }
+      if (code !== 1000) this.scheduleReconnect();
     });
 
     this.ws.on('error', (err) => {
       console.error(`[EventSub] Error for streamer ${this.streamerId}:`, err.message);
     });
+  }
+
+  scheduleReconnect() {
+    if (!this.running) return;
+    if (this.needsReauth) {
+      console.warn(`[EventSub] Streamer ${this.streamerId} needs re-authorization — not reconnecting`);
+      this.running = false;
+      return;
+    }
+    console.log(`[EventSub] Reconnecting in ${this.reconnectDelay / 1000}s...`);
+    setTimeout(() => this.connect(), this.reconnectDelay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 60000);
+  }
+
+  // The broadcaster's refresh token is permanently dead. Clearing the scopes is
+  // the same signal the 'revocation' handler uses, so the dashboard's existing
+  // needsReauth banner lights up on its own. Then stop reconnecting — without
+  // this the socket reopens every second forever, because the socket itself
+  // always connects fine and only the subscribe calls fail.
+  markNeedsReauth() {
+    if (this.needsReauth) return;
+    this.needsReauth = true;
+    try {
+      db.clearStreamerBroadcasterScopes(this.streamerId);
+    } catch (e) {
+      console.error(`[EventSub] Could not clear scopes for streamer ${this.streamerId}:`, e.message);
+    }
+    console.warn(`[EventSub] Broadcaster token is permanently invalid for streamer ${this.streamerId} — cleared scopes and stopped reconnecting until re-authorization`);
+    this.disconnect();
   }
 
   async handleMessage(raw) {
@@ -71,8 +101,20 @@ class EventSubClient {
         console.log(`[EventSub] Session ${sessionId} for streamer ${this.streamerId} (keepalive: ${timeout}s)`);
         this.resetKeepalive(timeout);
 
+        let subscribed = 0;
         for (const subType of SUBSCRIPTION_TYPES) {
-          await this.createSubscription(sessionId, subType);
+          if (this.needsReauth) break;
+          if (await this.createSubscription(sessionId, subType)) subscribed++;
+        }
+
+        // Only a session that actually subscribed to something earns a backoff
+        // reset. Resetting on socket 'open' instead meant a dead token looped
+        // forever at 1s, because the socket always opens and Twitch then closes
+        // it with 4003 once no subscription shows up.
+        if (subscribed > 0) {
+          this.reconnectDelay = 1000;
+        } else if (!this.needsReauth) {
+          console.warn(`[EventSub] No subscriptions created for streamer ${this.streamerId} — next retry in ${this.reconnectDelay / 1000}s`);
         }
         break;
       }
@@ -125,9 +167,7 @@ class EventSubClient {
           console.error(`[EventSub] Reconnect error for streamer ${this.streamerId}:`, err.message);
         });
         this.ws.on('close', (code) => {
-          if (this.running && code !== 1000) {
-            setTimeout(() => this.connect(), this.reconnectDelay);
-          }
+          if (code !== 1000) this.scheduleReconnect();
         });
         break;
       }
@@ -148,11 +188,14 @@ class EventSubClient {
     }
   }
 
+  // Returns true only when Twitch accepted the subscription.
   async createSubscription(sessionId, subType) {
+    if (this.needsReauth) return false;
+
     let streamer = db.getStreamerById(this.streamerId);
 
     if (subType.type === 'channel.channel_points_custom_reward_redemption.add' && !hasRedemptionScope(streamer)) {
-      return;
+      return false;
     }
 
     let token = streamer.broadcaster_access_token;
@@ -196,17 +239,19 @@ class EventSubClient {
         });
       } catch (err) {
         console.error(`[EventSub] Token refresh failed for streamer ${this.streamerId}:`, err.message);
-        return;
+        if (err.code === 'INVALID_REFRESH_TOKEN') this.markNeedsReauth();
+        return false;
       }
     }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error(`[EventSub] Failed to subscribe ${subType.type} for streamer ${this.streamerId}:`, err.message || res.status);
-      return;
+      return false;
     }
 
     console.log(`[EventSub] Subscribed to ${subType.type} for streamer ${this.streamerId}`);
+    return true;
   }
 
   normalizeEvent(subType, event) {

@@ -215,8 +215,9 @@ router.get('/', (req, res) => {
   let iracingSettings = [];
   try { iracingSettings = db.getIracingOverlaySettings(req.streamer.id); } catch (e) {}
 
-  const { hasRedemptionScope } = require('../services/twitch');
+  const { hasRedemptionScope, needsBroadcasterReauth } = require('../services/twitch');
   const hasScope = hasRedemptionScope(req.streamer);
+  const needsReauth = needsBroadcasterReauth(req.streamer);
 
   let activeGiveaway = null;
   try { activeGiveaway = db.getActiveGiveaway(req.streamer.id); } catch (e) {}
@@ -236,6 +237,7 @@ router.get('/', (req, res) => {
     iracingSettings,
     vtuberUrl,
     hasScope,
+    needsReauth,
     activeGiveaway,
   });
 });
@@ -787,9 +789,7 @@ router.get('/overlay', (req, res) => {
   const streamer = req.streamer;
   const appUrl = config.app.url || `${req.protocol}://${req.get('host')}`;
   const overlayUrl = streamer.overlay_token ? `${appUrl}/overlay/${streamer.overlay_token}` : null;
-  const needsReauth = !streamer.broadcaster_scopes ||
-    !streamer.broadcaster_scopes.includes('moderator:read:followers') ||
-    !streamer.broadcaster_scopes.includes('bits:read');
+  const needsReauth = require('../services/twitch').needsBroadcasterReauth(streamer);
 
   res.render('overlay-config', {
     streamer,

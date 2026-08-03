@@ -24,6 +24,18 @@
 <% if (msg === 'spotify_connected') { %><div class="alert alert-success">Spotify account connected! Viewers can now use !song.</div><% } %>
 <% if (msg === 'spotify_error') { %><div class="alert alert-danger">Failed to connect Spotify. Please try again.</div><% } %>
 
+<%# Shown when broadcaster auth was completed at some point but the grant no longer works —
+    either scopes were never granted, or the refresh token died and EventSub/SubSync cleared
+    them. Streamers who never authorized get the separate "enable" CTA further down instead. %>
+<% if (needsReauth && streamer.broadcaster_access_token) { %>
+  <div class="alert alert-warning">
+    <strong>Reconnect Twitch.</strong>
+    Your broadcaster authorization has expired or was revoked, so follow, subscription, bits and
+    raid alerts &mdash; and Discord sub-role sync &mdash; are currently paused.
+    <a href="/auth/broadcaster" style="color: var(--warning); text-decoration: underline; margin-left: 6px;">Reconnect now &rarr;</a>
+  </div>
+<% } %>
+
 <!-- Platform Tabs -->
 <div class="tab-bar animate-in animate-in-delay-1">
   <button class="tab-btn tab-discord" data-tab="discord">

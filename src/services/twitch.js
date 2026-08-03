@@ -169,7 +169,18 @@ async function getGameNames(gameIds) {
   return (data.data || []).map((g) => g.name);
 }
 
+// Throws with err.code = 'INVALID_REFRESH_TOKEN' when the grant is permanently
+// dead (Twitch answers 400 after the streamer disconnects the app, changes
+// their password, or revokes access). Callers must treat that as terminal —
+// retrying can never succeed and just hammers id.twitch.tv with a bad grant on
+// the shared client id. Every other failure stays transient and retryable.
 async function refreshBroadcasterToken(streamer) {
+  if (!streamer.broadcaster_refresh_token) {
+    const err = new Error('No broadcaster refresh token');
+    err.code = 'INVALID_REFRESH_TOKEN';
+    throw err;
+  }
+
   const params = new URLSearchParams({
     client_id: config.twitch.clientId,
     client_secret: config.twitch.clientSecret,
@@ -182,7 +193,11 @@ async function refreshBroadcasterToken(streamer) {
     body: params,
   });
 
-  if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(`Token refresh failed: ${res.status}`);
+    if (res.status === 400) err.code = 'INVALID_REFRESH_TOKEN';
+    throw err;
+  }
 
   const data = await res.json();
   db.updateStreamerBroadcasterTokens(
@@ -253,4 +268,53 @@ function hasRedemptionScope(streamer) {
   return (streamer.broadcaster_scopes || '').split(' ').includes('channel:manage:redemptions');
 }
 
-module.exports = { getStream, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope };
+function hasStreamKeyScope(streamer) {
+  return (streamer.broadcaster_scopes || '').split(' ').includes('channel:read:stream_key');
+}
+
+// Scopes the overlay's core alerts depend on. A streamer missing any of them
+// either never finished broadcaster auth, or had their scopes cleared after the
+// refresh token died — see refreshBroadcasterToken's INVALID_REFRESH_TOKEN path.
+const REQUIRED_BROADCASTER_SCOPES = ['moderator:read:followers', 'bits:read'];
+
+function needsBroadcasterReauth(streamer) {
+  if (!streamer) return false;
+  const scopes = (streamer.broadcaster_scopes || '').split(' ');
+  return REQUIRED_BROADCASTER_SCOPES.some((scope) => !scopes.includes(scope));
+}
+
+// Fetch the broadcaster's RTMP stream key. Requires the channel:read:stream_key scope.
+// Auto-refreshes the broadcaster token if expired.
+async function getStreamKey(streamer) {
+  if (!streamer.twitch_user_id) throw new Error('Twitch not linked');
+  if (!streamer.broadcaster_access_token) throw new Error('Broadcaster not authorized');
+  if (!hasStreamKeyScope(streamer)) {
+    throw new Error('Missing channel:read:stream_key scope — re-authorize broadcaster');
+  }
+
+  let token = streamer.broadcaster_access_token;
+  if (streamer.broadcaster_token_expires_at && Date.now() >= streamer.broadcaster_token_expires_at) {
+    token = await refreshBroadcasterToken(streamer);
+  }
+
+  const doFetch = async (bearer) => fetch(
+    `https://api.twitch.tv/helix/streams/key?broadcaster_id=${encodeURIComponent(streamer.twitch_user_id)}`,
+    { headers: { Authorization: `Bearer ${bearer}`, 'Client-Id': config.twitch.clientId } }
+  );
+
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    token = await refreshBroadcasterToken(streamer);
+    res = await doFetch(token);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Twitch streams/key failed: ${res.status} ${text}`);
+  }
+  const data = await res.json();
+  const key = data.data?.[0]?.stream_key;
+  if (!key) throw new Error('Twitch returned no stream key');
+  return key;
+}
+
+module.exports = { getStream, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, getStreamKey, needsBroadcasterReauth };

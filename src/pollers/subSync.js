@@ -37,7 +37,20 @@ async function checkStreamer(streamer) {
 
   let accessToken = streamer.broadcaster_access_token;
   if (Date.now() >= streamer.broadcaster_token_expires_at) {
-    accessToken = await refreshBroadcasterToken(streamer);
+    try {
+      accessToken = await refreshBroadcasterToken(streamer);
+    } catch (error) {
+      // A dead refresh token can never recover on its own. Clear the scopes so
+      // the dashboard prompts for re-authorization, and stop retrying every
+      // poll — this is also the only detector when overlays (and therefore the
+      // EventSub client) are disabled for this streamer.
+      if (error.code === 'INVALID_REFRESH_TOKEN') {
+        db.clearStreamerBroadcasterScopes(streamer.id);
+        console.warn(`[SubSync] ${streamer.twitch_username}: broadcaster token permanently invalid — cleared scopes, re-authorization required`);
+        return;
+      }
+      throw error;
+    }
   }
 
   const subscribers = await getSubscribers(broadcasterId, accessToken);
