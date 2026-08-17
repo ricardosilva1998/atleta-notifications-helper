@@ -16,7 +16,9 @@ process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err && err.stack || err);
 });
 
-client.once('ready', async () => {
+// 'ready' still fires in discord.js v14 but is deprecated and will be dropped
+// in v15; 'clientReady' is emitted alongside it today.
+client.once('clientReady', async () => {
   console.log(`Bot online as ${client.user.tag}`);
   console.log(`Serving ${client.guilds.cache.size} guilds`);
   console.log(`${db.getAllStreamers().length} registered streamers`);
