@@ -906,7 +906,70 @@ router.get('/overlay/sounds/status', (req, res) => {
 
 // Donation settings page
 router.get('/donations', (req, res) => {
-  res.render('donation-settings', { streamer: req.streamer, appUrl: config.app.url });
+  const goalOverlayUrl = req.streamer.overlay_token
+    ? `${config.app.url}/overlay/goal/${req.streamer.overlay_token}`
+    : null;
+  res.render('donation-settings', {
+    streamer: req.streamer,
+    appUrl: config.app.url,
+    activeGoal: db.getActiveTipGoal(req.streamer.id),
+    goalHistory: db.getTipGoalHistory(req.streamer.id, 10),
+    goalOverlayUrl,
+    goalError: req.query.goal_error || null,
+  });
+});
+
+// --- Tip goals ---
+
+const TIP_GOAL_CURRENCIES = ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'];
+
+function parseTipGoalFields(b) {
+  const title = String(b.title || '').trim().substring(0, 60);
+  const target = Math.round(parseFloat(b.target_amount) * 100) / 100;
+  const barColor = /^#[0-9a-f]{6}$/i.test(b.bar_color || '') ? b.bar_color : '#22c55e';
+  if (!title) return { error: 'Goal title is required' };
+  if (!Number.isFinite(target) || target <= 0 || target > 10000000) return { error: 'Target must be a positive amount' };
+  return { title, target_amount: target, bar_color: barColor };
+}
+
+function goalRedirect(res, error) {
+  res.redirect('/dashboard/donations' + (error ? `?goal_error=${encodeURIComponent(error)}` : '') + '#tip-goal');
+}
+
+router.post('/donations/goal', (req, res) => {
+  const fields = parseTipGoalFields(req.body);
+  if (fields.error) return goalRedirect(res, fields.error);
+  const currency = TIP_GOAL_CURRENCIES.includes(req.body.currency) ? req.body.currency : (req.streamer.donation_currency || 'EUR');
+  const start = parseFloat(req.body.current_amount);
+  db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: Number.isFinite(start) ? start : 0 });
+  require('../services/tipGoals').broadcast(req.streamer.id);
+  goalRedirect(res);
+});
+
+router.post('/donations/goal/:id/update', (req, res) => {
+  const fields = parseTipGoalFields(req.body);
+  if (fields.error) return goalRedirect(res, fields.error);
+  db.updateTipGoal(parseInt(req.params.id), req.streamer.id, fields);
+  require('../services/tipGoals').broadcast(req.streamer.id);
+  goalRedirect(res);
+});
+
+// Manual correction — e.g. donations received outside Atleta or in another currency. Negative values subtract.
+router.post('/donations/goal/:id/adjust', (req, res) => {
+  const goal = db.getActiveTipGoal(req.streamer.id);
+  const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+  if (!goal || goal.id !== parseInt(req.params.id)) return goalRedirect(res, 'Goal not found');
+  if (!Number.isFinite(amount) || amount === 0) return goalRedirect(res, 'Enter a non-zero amount');
+  const result = db.addToTipGoal(goal.id, amount);
+  const justCompleted = !!result && !result.before.completed_at && !!result.after.completed_at;
+  require('../services/tipGoals').broadcast(req.streamer.id, amount > 0 ? { added: amount, justCompleted } : {});
+  goalRedirect(res);
+});
+
+router.post('/donations/goal/:id/end', (req, res) => {
+  db.endTipGoal(parseInt(req.params.id), req.streamer.id);
+  require('../services/tipGoals').broadcast(req.streamer.id);
+  goalRedirect(res);
 });
 
 router.post('/donations', (req, res) => {

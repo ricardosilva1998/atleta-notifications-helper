@@ -37,8 +37,12 @@ class StreamElementsClient {
       console.error(`[StreamElements] Auth failed for streamer ${this.streamerId} — check JWT token`);
     });
 
-    const handleTip = (event) => {
+    const handleTip = (event, isTest) => {
       if (event.type === 'tip') {
+        // Real tips count toward the tip goal even if the overlay alert is off; SE test events don't
+        if (!isTest) {
+          require('./tipGoals').recordDonation(this.streamerId, event.data.amount, event.data.currency);
+        }
         const s = db.getStreamerById(this.streamerId);
         if (s && s.overlay_donation_enabled) {
           bus.emit(`overlay:${this.streamerId}`, {
@@ -61,8 +65,8 @@ class StreamElementsClient {
       }
     };
 
-    this.socket.on('event', handleTip);
-    this.socket.on('event:test', handleTip);
+    this.socket.on('event', (event) => handleTip(event, false));
+    this.socket.on('event:test', (event) => handleTip(event, true));
 
     this.socket.on('disconnect', () => {
       console.log(`[StreamElements] Disconnected for streamer ${this.streamerId}`);

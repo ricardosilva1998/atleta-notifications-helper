@@ -1,0 +1,168 @@
+/* Tip goal overlay — progress bar. Fills the OBS browser source width
+   (recommended source size: 800 x 160). */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+}
+
+#goal-root {
+  padding: 40px 16px 16px;
+}
+
+.goal-card {
+  --goal-color: #22c55e;
+  position: relative;
+  background: linear-gradient(135deg, rgba(15, 15, 20, 0.92), rgba(28, 28, 38, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 18px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 18px color-mix(in srgb, var(--goal-color) 25%, transparent);
+  color: #fff;
+  overflow: visible;
+  animation: goal-enter 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.goal-accent {
+  position: absolute;
+  top: 0; left: 18px; right: 18px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--goal-color);
+  box-shadow: 0 0 10px var(--goal-color);
+}
+
+.goal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.goal-title {
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.goal-amounts {
+  font-weight: 700;
+  font-size: 17px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.goal-current { color: var(--goal-color); }
+.goal-sep, .goal-target { color: rgba(255, 255, 255, 0.6); }
+
+.goal-track {
+  position: relative;
+  height: 26px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.goal-fill {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 0;
+  border-radius: 13px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--goal-color) 65%, #000), var(--goal-color));
+  box-shadow: 0 0 14px var(--goal-color);
+  transition: width 1.2s cubic-bezier(0.25, 1, 0.5, 1);
+  overflow: hidden;
+}
+
+/* Racing-stripe shimmer running across the filled part */
+.goal-shine {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.14) 0 10px, transparent 10px 20px);
+  background-size: 28px 28px;
+  animation: goal-stripes 1s linear infinite;
+}
+
+.goal-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Checkered finish line at the end of the track */
+.goal-flag {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 14px;
+  background:
+    conic-gradient(#fff 25%, #111 0 50%, #fff 0 75%, #111 0) 0 0 / 7px 7px;
+  opacity: 0.85;
+}
+
+.goal-card.completed .goal-fill { width: 100% !important; }
+.goal-card.completed .goal-track { border-color: var(--goal-color); }
+
+.goal-card.bump { animation: goal-bump 0.5s ease; }
+.goal-card.celebrate { animation: goal-glow 1s ease-in-out 4; }
+
+.goal-pop {
+  position: absolute;
+  right: 18px;
+  top: -12px;
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--goal-color);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: goal-pop 2.2s ease-out forwards;
+  pointer-events: none;
+}
+
+.goal-confetti {
+  position: absolute;
+  top: 40%;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  pointer-events: none;
+  animation: goal-confetti 2.4s ease-out forwards;
+}
+
+@keyframes goal-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes goal-stripes {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+@keyframes goal-bump {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+}
+@keyframes goal-glow {
+  0%, 100% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 18px color-mix(in srgb, var(--goal-color) 25%, transparent); }
+  50% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 40px var(--goal-color); }
+}
+@keyframes goal-pop {
+  0% { opacity: 0; transform: translateY(10px) scale(0.8); }
+  15% { opacity: 1; transform: translateY(-14px) scale(1.1); }
+  70% { opacity: 1; transform: translateY(-18px) scale(1); }
+  100% { opacity: 0; transform: translateY(-22px); }
+}
+@keyframes goal-confetti {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  100% { opacity: 0; transform: translate(var(--dx), 90px) rotate(var(--rot)); }
+}

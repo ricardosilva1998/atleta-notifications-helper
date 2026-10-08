@@ -3336,6 +3336,27 @@ try {
   try { db.exec('UPDATE streamers SET overlay_giveaway_duration = 8 WHERE overlay_giveaway_duration = 8000'); } catch (_) {}
 } catch (e) { _migrationLog('overlay_giveaway_duration', e); }
 
+// Migration: Tip goals (donation progress bar overlay)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tip_goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      target_amount REAL NOT NULL,
+      current_amount REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      bar_color TEXT DEFAULT '#22c55e',
+      status TEXT NOT NULL DEFAULT 'active',
+      completed_at TEXT,
+      ended_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tip_goals_streamer_status ON tip_goals(streamer_id, status)`);
+} catch (e) { _migrationLog('tip_goals', e); }
+
 // Migration: Add channel point columns to streamers
 try {
   const cols = db.pragma('table_info(streamers)').map(c => c.name);
@@ -4494,6 +4515,74 @@ function getWinners(giveawayId) {
   return db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? AND is_winner = 1 ORDER BY id').all(giveawayId);
 }
 
+// --- Tip goals ---
+
+function getActiveTipGoal(streamerId) {
+  return db.prepare(
+    "SELECT * FROM tip_goals WHERE streamer_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1"
+  ).get(streamerId) || null;
+}
+
+function getTipGoalHistory(streamerId, limit) {
+  return db.prepare(
+    "SELECT * FROM tip_goals WHERE streamer_id = ? AND status = 'ended' ORDER BY id DESC LIMIT ?"
+  ).all(streamerId, limit || 10);
+}
+
+// Starting a new goal ends any currently active one (one active goal per streamer).
+function createTipGoal(streamerId, fields) {
+  return db.transaction(() => {
+    db.prepare(
+      "UPDATE tip_goals SET status = 'ended', ended_at = datetime('now') WHERE streamer_id = ? AND status = 'active'"
+    ).run(streamerId);
+    const current = Math.max(0, Math.round((fields.current_amount || 0) * 100) / 100);
+    const result = db.prepare(`
+      INSERT INTO tip_goals (streamer_id, title, target_amount, current_amount, currency, bar_color, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? >= ? THEN datetime('now') ELSE NULL END)
+    `).run(streamerId, fields.title, fields.target_amount, current, fields.currency, fields.bar_color,
+      current, fields.target_amount);
+    return db.prepare('SELECT * FROM tip_goals WHERE id = ?').get(result.lastInsertRowid);
+  })();
+}
+
+function updateTipGoal(id, streamerId, fields) {
+  db.prepare(`
+    UPDATE tip_goals SET title = ?, target_amount = ?, bar_color = ?,
+      completed_at = CASE
+        WHEN current_amount >= ? THEN COALESCE(completed_at, datetime('now'))
+        ELSE NULL
+      END
+    WHERE id = ? AND streamer_id = ? AND status = 'active'
+  `).run(fields.title, fields.target_amount, fields.bar_color, fields.target_amount, id, streamerId);
+  return db.prepare('SELECT * FROM tip_goals WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+// Adds (or subtracts, for manual corrections) an amount to the goal. Never goes below 0.
+// Returns { before, after } rows so the caller can detect the moment the goal is reached.
+function addToTipGoal(id, amount) {
+  return db.transaction(() => {
+    const before = db.prepare('SELECT * FROM tip_goals WHERE id = ?').get(id);
+    if (!before) return null;
+    db.prepare(`
+      UPDATE tip_goals SET current_amount = MAX(0, ROUND(current_amount + ?, 2)) WHERE id = ?
+    `).run(amount, id);
+    db.prepare(`
+      UPDATE tip_goals SET completed_at = CASE
+        WHEN current_amount >= target_amount THEN COALESCE(completed_at, datetime('now'))
+        ELSE NULL
+      END WHERE id = ?
+    `).run(id);
+    const after = db.prepare('SELECT * FROM tip_goals WHERE id = ?').get(id);
+    return { before, after };
+  })();
+}
+
+function endTipGoal(id, streamerId) {
+  return db.prepare(
+    "UPDATE tip_goals SET status = 'ended', ended_at = datetime('now') WHERE id = ? AND streamer_id = ? AND status = 'active'"
+  ).run(id, streamerId);
+}
+
 module.exports = {
   db,
   getStreamerByDiscordId,
@@ -4815,6 +4904,12 @@ module.exports = {
   markWinners,
   markRedrawnOut,
   getWinners,
+  getActiveTipGoal,
+  getTipGoalHistory,
+  createTipGoal,
+  updateTipGoal,
+  addToTipGoal,
+  endTipGoal,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
 };

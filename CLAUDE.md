@@ -61,6 +61,7 @@ src/
 │   ├── streamKeyCrypto.js    # AES-256-GCM helpers for at-rest stream key encryption
 │   ├── twitchRewards.js      # Channel Points Helix client — see docs/features/channel-point-rewards.md
 │   ├── redemptionDispatcher.js # Channel point redemption flow
+│   ├── tipGoals.js       # Tip goal progress — recordDonation() from PayPal/StreamElements, broadcasts on `tipgoal:<id>`
 │   └── redemptionTemplates.js  # Pure formatChatTemplate helper (unit-tested)
 ├── routes/
 │   ├── auth.js           # Discord + Twitch + YouTube + Spotify OAuth flows + Racing account linking
@@ -81,6 +82,7 @@ public/
     ├── overlay.css       # Alert card styles — centered cards with per-event themes, full-screen effects
     ├── overlay.js        # SSE client, event queue, card rendering, custom design application, redemption playback
     ├── sponsors.js       # Sponsor overlay — independent OBS browser source
+    ├── goal.js, goal.css # Tip goal progress bar — independent OBS browser source at /overlay/goal/TOKEN
     └── scenes.js, bar.js, custom-alerts.js  # All DISABLED (custom overlays feature)
 tests/                    # Playwright E2E (public pages, authenticated flows, custom overlays)
 data/                     # bot.db (SQLite), sounds/, sponsors/, redemptions/{streamerId}/  (persistent volume)
@@ -104,6 +106,7 @@ docs/
 - **Sound System:** Per-event sounds with synthesized racing defaults (engine revs, turbo blow-off, tire screeches via Web Audio API). Custom mp3 upload with client-side trim. Custom sounds stored in `data/sounds/` (persistent volume). Overlay tries custom mp3 first, falls back to synthesized.
 - **Sponsor Rotation:** Streamers upload sponsor images (`data/sponsors/`). `timedNotifications.js` cycles enabled sponsors at a configurable interval, emits `type: 'sponsor'` to overlay + optional chat msg. Independent OBS browser source at `/overlay/sponsors/TOKEN` via `sponsors.js`.
 - **Donations (PayPal):** Streamers configure their PayPal email in `/dashboard/donations`. Public tip page at `/tip/:username` uses PayPal Checkout API with `payee: { email_address }` — money goes directly to streamer. On capture, fires overlay alert + chatbot message. Donation details stored in cookies during PayPal redirect. Logged to `overlay_events`. Legacy `/donate` for "Buy me a coffee".
+- **Tip Goals:** One active donation goal per streamer (`tip_goals` table), managed on `/dashboard/donations` (start, edit title/target/bar color, manual +/- adjust, end; past goals listed). Real PayPal tips (`tip.js` capture) and StreamElements tips (not `event:test`) call `tipGoals.recordDonation()`; only donations in the goal's currency count (missing currency = match). Updates go on bus channel `tipgoal:<streamerId>` — NOT `overlay:<id>`, because the main alert overlay queues unknown event types as cards. Progress bar overlay is a separate OBS browser source at `/overlay/goal/:token` (`public/overlay/goal.js` + `goal.css`), hidden when no goal is active. Dashboard test alerts never count.
 - **Channel Point Rewards** → `docs/features/channel-point-rewards.md`. Native Twitch Channel Points → audio/video clips on the OBS overlay. Streamer creates rewards in `/dashboard/redemptions`; viewer redeems → EventSub → `redemptionDispatcher` plays the clip and posts an optional chat message.
 - **Multistream (Twitch + YouTube passthrough)** → `docs/features/multistream.md`. OBS → MediaMTX relay (Oracle Cloud free tier) → ffmpeg passthrough to both Twitch and YouTube. Status as of 2026-05-10: code shipped, infra pending — feature shows "relay not configured" warning until Oracle VM + DNS + Railway env vars are deployed.
 - **Session Capture Pipeline** → `docs/features/session-capture.md`. Bridge captures per-lap data + 10Hz telemetry traces during P/Q/R/Offline Testing sessions and uploads progressively (`POST /api/session` → `POST /api/session/:id/lap` → `PATCH /api/session/:id/finish`). Telemetry stored gzip-compressed in `lap_telemetry` table.

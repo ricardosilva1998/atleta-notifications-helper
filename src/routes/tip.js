@@ -138,6 +138,7 @@ router.get('/:username/success', async (req, res) => {
           },
         });
         try { db.logOverlayEvent(streamer.id, 'donation', donorName, { amount: parseFloat(amount), currency }); } catch (e) {}
+        require('../services/tipGoals').recordDonation(streamer.id, amount, currency);
 
         // Fire chatbot message
         try {

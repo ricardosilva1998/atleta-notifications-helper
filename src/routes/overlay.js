@@ -202,6 +202,60 @@ router.get('/sponsors/:token', (req, res) => {
 </html>`);
 });
 
+// Tip goal SSE endpoint — progress bar overlay
+router.get('/goal/events/:token', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+
+  const tipGoals = require('../services/tipGoals');
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  res.write(`data: ${JSON.stringify({ type: 'config', serverVersion: SERVER_INSTANCE_ID })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: 'tip_goal', goal: tipGoals.toPayload(db.getActiveTipGoal(streamer.id)) })}\n\n`);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+  }, 30000);
+
+  const listener = (event) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+  };
+
+  bus.on(tipGoals.channel(streamer.id), listener);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    bus.off(tipGoals.channel(streamer.id), listener);
+  });
+});
+
+// Tip goal overlay page — separate OBS browser source
+router.get('/goal/:token', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tip Goal Overlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/overlay/goal.css">
+</head>
+<body>
+  <div id="goal-root"></div>
+  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script src="/overlay/goal.js"></script>
+</body>
+</html>`);
+});
+
 // Custom overlay routes — DISABLED for now
 // const { setupSSE: customSSE, servePage: customPage } = require('./customOverlays');
 // router.get('/scenes/events/:token', (req, res) => customSSE(req, res, 'scene'));
