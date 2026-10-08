@@ -145,4 +145,12 @@ function celebrate() {
   setTimeout(() => card.classList.remove('celebrate'), 4000);
 }
 
-connectSSE();
+if (window.GOAL_DEMO) {
+  // Preview mode (dashboard iframe) — state comes from the parent page, same origin only
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin) return;
+    if (e.data && e.data.type === 'tip_goal') renderGoal(e.data.goal, e.data);
+  });
+} else {
+  connectSSE();
+}

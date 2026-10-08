@@ -101,25 +101,20 @@
     <div style="background: var(--danger-bg); color: var(--danger); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; margin-bottom: 16px;"><%= goalError %></div>
   <% } %>
 
-  <% if (activeGoal) {
-       const _pct = activeGoal.target_amount > 0 ? Math.min(100, (activeGoal.current_amount / activeGoal.target_amount) * 100) : 0; %>
-    <div style="background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px;">
-        <strong style="font-family: var(--font-display); font-size: 16px;"><%= activeGoal.title %></strong>
-        <span style="font-size: 14px; white-space: nowrap;">
-          <strong style="color: <%= activeGoal.bar_color %>;"><%= _fmt(activeGoal.current_amount, activeGoal.currency) %></strong>
-          <span style="color: var(--text-muted);">/ <%= _fmt(activeGoal.target_amount, activeGoal.currency) %></span>
-        </span>
-      </div>
-      <div style="height: 12px; background: var(--bg-elevated); border-radius: 6px; overflow: hidden;">
-        <div style="height: 100%; width: <%= _pct.toFixed(1) %>%; background: <%= activeGoal.bar_color %>; border-radius: 6px;"></div>
-      </div>
-      <div style="font-size: 12px; color: <%= activeGoal.completed_at ? 'var(--success)' : 'var(--text-muted)' %>; margin-top: 6px;">
-        <%= activeGoal.completed_at ? '🏁 Goal reached!' : Math.floor(_pct) + '% complete' %>
-      </div>
-    </div>
+  <!-- Live preview — same overlay page OBS loads, driven by the form below (nothing is saved or counted) -->
+  <div style="background: repeating-conic-gradient(#1a1a22 0 25%, #22222c 0 50%) 0 0 / 20px 20px; border-radius: var(--radius-sm); overflow: hidden;">
+    <iframe id="goal-preview" src="/overlay/goal-demo" title="Goal overlay preview" style="display: block; width: 100%; height: 160px; border: 0;"></iframe>
+  </div>
+  <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; align-items: center; margin: 8px 0 16px;">
+    <span style="font-size: 12px; color: var(--text-muted);">Preview — how the bar looks in OBS. Simulated donations are only shown here and don't count.</span>
+    <span style="display: flex; gap: 8px;">
+      <button type="button" id="goal-sim" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Simulate donation</button>
+      <button type="button" id="goal-sim-reset" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Reset</button>
+    </span>
+  </div>
 
-    <form method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/update" style="margin-bottom: 16px;">
+  <% if (activeGoal) { %>
+    <form id="goal-form" method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/update" style="margin-bottom: 16px;">
       <div class="goal-grid">
         <div class="form-group" style="margin-bottom: 0;">
           <label>Title</label>
@@ -153,7 +148,7 @@
     </div>
     <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Use manual adjust for donations received elsewhere or in another currency. Negative values subtract.</p>
   <% } else { %>
-    <form method="POST" action="/dashboard/donations/goal">
+    <form id="goal-form" method="POST" action="/dashboard/donations/goal">
       <div class="goal-grid">
         <div class="form-group" style="margin-bottom: 0;">
           <label>Title</label>
@@ -195,16 +190,11 @@
   </h3>
   <% if (goalOverlayUrl) { %>
     <p style="color: var(--text-muted); font-size: 13px; margin: 8px 0 10px;">Add this as a separate <strong>Browser Source</strong> in OBS (recommended size 800 × 160). It updates live and hides itself when no goal is active.</p>
-    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px;">
+    <div style="display: flex; gap: 8px; align-items: center;">
       <input type="text" value="<%= goalOverlayUrl %>" readonly id="goal-overlay-url"
         style="flex: 1; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
       <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('goal-overlay-url').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500);" class="btn btn-secondary" style="flex-shrink: 0;">Copy</button>
     </div>
-    <% if (activeGoal) { %>
-      <div style="background: repeating-conic-gradient(#1a1a22 0 25%, #22222c 0 50%) 0 0 / 20px 20px; border-radius: var(--radius-sm); overflow: hidden;">
-        <iframe src="<%= goalOverlayUrl %>" title="Goal overlay preview" style="display: block; width: 100%; height: 160px; border: 0;"></iframe>
-      </div>
-    <% } %>
   <% } else { %>
     <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
       You need an overlay URL first — generate one in <a href="/dashboard/overlay" style="color: var(--accent);">Overlay Settings</a>.
@@ -225,6 +215,51 @@
     </div>
   </div>
 <% } %>
+
+<script>
+  (function () {
+    var frame = document.getElementById('goal-preview');
+    var form = document.getElementById('goal-form');
+    if (!frame || !form) return;
+    // Saved state of the active goal (null while creating a new one)
+    var saved = <%- JSON.stringify(activeGoal ? { current: activeGoal.current_amount, currency: activeGoal.currency } : null).replace(/</g, '\\u003c') %>;
+    var simAdded = 0;
+
+    function read() {
+      var f = form.elements;
+      var target = parseFloat(f.target_amount.value) || parseFloat(f.target_amount.placeholder) || 100;
+      var start = saved ? saved.current : (parseFloat(f.current_amount.value) || 0);
+      var current = Math.round((start + simAdded) * 100) / 100;
+      return {
+        id: 'demo',
+        title: f.title.value.trim() || f.title.placeholder || 'My goal',
+        target: target,
+        current: current,
+        currency: saved ? saved.currency : f.currency.value,
+        barColor: f.bar_color.value,
+        percent: Math.min(100, Math.round((current / target) * 10000) / 100),
+        completed: current >= target,
+      };
+    }
+
+    function send(extra) {
+      if (!frame.contentWindow) return;
+      var msg = { type: 'tip_goal', goal: read() };
+      for (var k in (extra || {})) msg[k] = extra[k];
+      frame.contentWindow.postMessage(msg, location.origin);
+    }
+
+    frame.addEventListener('load', function () { send(); });
+    form.addEventListener('input', function () { send(); });
+    document.getElementById('goal-sim').addEventListener('click', function () {
+      var before = read();
+      var step = Math.max(1, Math.round(before.target * 0.15));
+      simAdded += step;
+      send({ added: step, justCompleted: !before.completed && read().completed });
+    });
+    document.getElementById('goal-sim-reset').addEventListener('click', function () { simAdded = 0; send(); });
+  })();
+</script>
 
 <style>
   .goal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }

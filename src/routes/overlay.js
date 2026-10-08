@@ -233,13 +233,8 @@ router.get('/goal/events/:token', (req, res) => {
   });
 });
 
-// Tip goal overlay page — separate OBS browser source
-router.get('/goal/:token', (req, res) => {
-  const streamer = db.getStreamerByOverlayToken(req.params.token);
-  if (!streamer) return res.status(404).send('Invalid overlay token');
-
-  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.send(`<!DOCTYPE html>
+function goalPageHtml(bootScript) {
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -250,10 +245,26 @@ router.get('/goal/:token', (req, res) => {
 </head>
 <body>
   <div id="goal-root"></div>
-  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script>${bootScript}</script>
   <script src="/overlay/goal.js"></script>
 </body>
-</html>`);
+</html>`;
+}
+
+// Tip goal preview page — no token, no SSE. Driven by postMessage from the
+// donation settings page so streamers can see the bar before starting a goal.
+router.get('/goal-demo', (req, res) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(goalPageHtml('window.GOAL_DEMO = true;'));
+});
+
+// Tip goal overlay page — separate OBS browser source
+router.get('/goal/:token', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(goalPageHtml(`window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};`));
 });
 
 // Custom overlay routes — DISABLED for now
