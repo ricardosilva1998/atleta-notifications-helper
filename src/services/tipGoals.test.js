@@ -83,3 +83,30 @@ test('justCompleted fires only on the donation that crosses the target', () => {
   assert.deepEqual(events.map(e => e.justCompleted), [false, true, false]);
   assert.equal(events[2].goal.completed, true);
 });
+
+test('sendTest broadcasts a sanitized simulated state without touching the goal', () => {
+  const ok = tipGoals.sendTest(7, {
+    goal: { title: 'x'.repeat(100), target: 20, current: 25, currency: 'XXX', barColor: 'red;background:url(x)' },
+    added: 5, justCompleted: true,
+  });
+  tipGoals.endTest(7);
+  assert.equal(ok, true);
+  assert.equal(_goal.current_amount, 0);
+  const e = events[0];
+  assert.equal(e.test, true);
+  assert.equal(e.goal.id, 1);
+  assert.equal(e.goal.title.length, 60);
+  assert.equal(e.goal.currency, 'EUR');
+  assert.equal(e.goal.barColor, '#22c55e');
+  assert.equal(e.goal.completed, true);
+  assert.equal(e.justCompleted, true);
+  // endTest re-broadcasts the real state
+  assert.equal(events[1].test, undefined);
+  assert.equal(events[1].goal.current, 0);
+});
+
+test('sendTest rejects invalid targets', () => {
+  assert.equal(tipGoals.sendTest(7, { goal: { target: 0, current: 1 } }), false);
+  assert.equal(tipGoals.sendTest(7, { goal: { target: 'abc', current: 1 } }), false);
+  assert.equal(events.length, 0);
+});

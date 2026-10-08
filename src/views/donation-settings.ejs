@@ -111,13 +111,24 @@
   <div style="background: repeating-conic-gradient(#1a1a22 0 25%, #22222c 0 50%) 0 0 / 20px 20px; border-radius: var(--radius-sm); overflow: hidden;">
     <iframe id="goal-preview" src="/overlay/goal-demo" title="Goal overlay preview" style="display: block; width: 100%; height: 160px; border: 0;"></iframe>
   </div>
-  <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; align-items: center; margin: 8px 0 16px;">
-    <span style="font-size: 12px; color: var(--text-muted);">Preview — how the bar looks in OBS. Simulated donations are only shown here and don't count.</span>
-    <span style="display: flex; gap: 8px;">
-      <button type="button" id="goal-sim" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Simulate donation</button>
-      <button type="button" id="goal-sim-reset" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Reset</button>
-    </span>
+  <div class="goal-test">
+    <div class="goal-test-buttons" role="group" aria-label="Test the goal bar">
+      <span class="goal-test-label">Test</span>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="small">+ Small donation</button>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="big">+ Big donation</button>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="reach">🏁 Reach goal</button>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="reset">Reset</button>
+    </div>
+    <% if (goalOverlayUrl) { %>
+      <label class="goal-test-live">
+        <input type="checkbox" id="goal-test-live" checked>
+        Also show tests on my OBS overlay
+      </label>
+    <% } %>
   </div>
+  <p id="goal-test-status" style="font-size: 12px; color: var(--text-muted); margin: 6px 0 16px;" aria-live="polite">
+    Tests are never saved or counted, and go back to the real amount after 10 seconds.
+  </p>
 
   <% if (activeGoal) { %>
     <form id="goal-form" method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/update" style="margin-bottom: 16px;">
@@ -230,12 +241,18 @@
     // Saved state of the active goal (null while creating a new one)
     var saved = <%- JSON.stringify(activeGoal ? { current: activeGoal.current_amount, currency: activeGoal.currency } : null).replace(/</g, '\\u003c') %>;
     var simAdded = 0;
+    var REVERT_MS = 10000;
+    var revertTimer = null, countdown = null;
+    var liveBox = document.getElementById('goal-test-live');
+    var statusEl = document.getElementById('goal-test-status');
+    var statusDefault = statusEl.textContent;
+
+    function start() { return saved ? saved.current : (parseFloat(form.elements.current_amount.value) || 0); }
 
     function read() {
       var f = form.elements;
       var target = parseFloat(f.target_amount.value) || parseFloat(f.target_amount.placeholder) || 100;
-      var start = saved ? saved.current : (parseFloat(f.current_amount.value) || 0);
-      var current = Math.round((start + simAdded) * 100) / 100;
+      var current = Math.round((start() + simAdded) * 100) / 100;
       return {
         id: 'demo',
         title: f.title.value.trim() || f.title.placeholder || 'My goal',
@@ -255,19 +272,69 @@
       frame.contentWindow.postMessage(msg, location.origin);
     }
 
+    // Mirror a test onto the live OBS overlay (server reverts it after REVERT_MS)
+    function sendLive(body) {
+      if (!liveBox || !liveBox.checked) return;
+      fetch('/dashboard/donations/goal/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(function () {});
+    }
+
+    function resetTest(live) {
+      clearTimeout(revertTimer); clearInterval(countdown);
+      simAdded = 0;
+      send();
+      statusEl.textContent = statusDefault;
+      if (live) sendLive({ reset: true });
+    }
+
+    function scheduleRevert() {
+      clearTimeout(revertTimer); clearInterval(countdown);
+      var left = REVERT_MS / 1000;
+      var where = liveBox && liveBox.checked ? 'Showing on preview + OBS overlay' : 'Showing on preview only';
+      statusEl.textContent = where + ' — back to the real amount in ' + left + 's';
+      countdown = setInterval(function () {
+        left -= 1;
+        if (left > 0) statusEl.textContent = where + ' — back to the real amount in ' + left + 's';
+      }, 1000);
+      revertTimer = setTimeout(function () { resetTest(false); }, REVERT_MS);
+    }
+
+    function runTest(kind) {
+      if (kind === 'reset') return resetTest(true);
+      var before = read();
+      var added, justCompleted;
+      if (kind === 'reach') {
+        added = Math.max(0, Math.round((before.target - before.current) * 100) / 100);
+        justCompleted = true; // replay the celebration even if the goal is already reached
+      } else {
+        added = Math.max(1, Math.round(before.target * (kind === 'big' ? 0.25 : 0.05)));
+      }
+      simAdded += added;
+      var after = read();
+      if (kind !== 'reach') justCompleted = !before.completed && after.completed;
+      var extra = { added: added || undefined, justCompleted: justCompleted };
+      send(extra);
+      sendLive({ goal: after, added: extra.added, justCompleted: justCompleted });
+      scheduleRevert();
+    }
+
     frame.addEventListener('load', function () { send(); });
     form.addEventListener('input', function () { send(); });
-    document.getElementById('goal-sim').addEventListener('click', function () {
-      var before = read();
-      var step = Math.max(1, Math.round(before.target * 0.15));
-      simAdded += step;
-      send({ added: step, justCompleted: !before.completed && read().completed });
+    document.querySelectorAll('.goal-test-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { runTest(btn.getAttribute('data-test')); });
     });
-    document.getElementById('goal-sim-reset').addEventListener('click', function () { simAdded = 0; send(); });
   })();
 </script>
 
 <style>
+  .goal-test { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-top: 10px; }
+  .goal-test-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .goal-test-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: var(--text-muted); margin-right: 2px; }
+  .goal-test-btn { font-size: 12px !important; padding: 6px 12px !important; }
+  .goal-test-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
   .goal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
   .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
   .pill-toggle input { opacity: 0; width: 0; height: 0; }

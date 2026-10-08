@@ -69,4 +69,53 @@ function recordDonation(streamerId, amount, currency) {
   }
 }
 
-module.exports = { channel, toPayload, currencyMatches, broadcast, recordDonation };
+// --- Test mode (dashboard test buttons) ---
+// Shows a simulated state on the live goal overlay without touching the DB, then
+// reverts to the real state so a forgotten test never leaves fake numbers on stream.
+
+const TEST_REVERT_MS = 10000;
+const TEST_CURRENCIES = ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'];
+const testTimers = new Map();
+
+function sendTest(streamerId, input) {
+  const g = (input && input.goal) || {};
+  const target = round2(parseFloat(g.target));
+  const current = round2(parseFloat(g.current));
+  const added = round2(parseFloat(input && input.added));
+  if (!Number.isFinite(target) || target <= 0 || target > 10000000) return false;
+  if (!Number.isFinite(current) || current < 0 || current > 100000000) return false;
+
+  const active = db.getActiveTipGoal(streamerId);
+  const goal = {
+    id: active ? active.id : 'test',
+    title: String(g.title || 'My goal').substring(0, 60),
+    current,
+    target,
+    currency: TEST_CURRENCIES.includes(g.currency) ? g.currency : 'EUR',
+    barColor: /^#[0-9a-f]{6}$/i.test(g.barColor || '') ? g.barColor : '#22c55e',
+    percent: Math.min(100, round2((current / target) * 100)),
+    completed: current >= target,
+  };
+  bus.emit(channel(streamerId), {
+    type: 'tip_goal',
+    goal,
+    added: Number.isFinite(added) && added > 0 ? added : undefined,
+    justCompleted: !!(input && input.justCompleted),
+    test: true,
+  });
+
+  clearTimeout(testTimers.get(streamerId));
+  const t = setTimeout(() => { testTimers.delete(streamerId); broadcast(streamerId); }, TEST_REVERT_MS);
+  t.unref();
+  testTimers.set(streamerId, t);
+  return true;
+}
+
+// Immediately drop any test state and show the real goal again.
+function endTest(streamerId) {
+  clearTimeout(testTimers.get(streamerId));
+  testTimers.delete(streamerId);
+  broadcast(streamerId);
+}
+
+module.exports = { channel, toPayload, currencyMatches, broadcast, recordDonation, sendTest, endTest, TEST_REVERT_MS };

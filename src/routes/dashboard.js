@@ -1011,6 +1011,17 @@ router.post('/donations/goal', (req, res) => {
   goalRedirect(res);
 });
 
+// Test buttons — simulated state on the live OBS goal overlay (never saved, auto-reverts)
+router.post('/donations/goal/test', (req, res) => {
+  const tipGoals = require('../services/tipGoals');
+  if (req.body && req.body.reset) {
+    tipGoals.endTest(req.streamer.id);
+    return res.json({ ok: true });
+  }
+  if (!tipGoals.sendTest(req.streamer.id, req.body)) return res.status(400).json({ error: 'Invalid test goal' });
+  res.json({ ok: true, revertMs: tipGoals.TEST_REVERT_MS });
+});
+
 router.post('/donations/goal/:id/update', (req, res) => {
   const fields = parseTipGoalFields(req.body);
   if (fields.error) return goalRedirect(res, fields.error);
