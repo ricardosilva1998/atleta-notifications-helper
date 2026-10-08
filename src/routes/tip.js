@@ -139,6 +139,7 @@ router.get('/:username/success', async (req, res) => {
         });
         try { db.logOverlayEvent(streamer.id, 'donation', donorName, { amount: parseFloat(amount), currency }); } catch (e) {}
         require('../services/tipGoals').recordDonation(streamer.id, amount, currency);
+        try { db.logDonation(streamer.id, { source: 'paypal', donor_name: donorName, amount, currency, message, external_id: orderId }); } catch (e) { console.error('[Tip] logDonation error:', e.message); }
 
         // Fire chatbot message
         try {

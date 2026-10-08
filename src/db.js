@@ -3357,6 +3357,41 @@ try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tip_goals_streamer_status ON tip_goals(streamer_id, status)`);
 } catch (e) { _migrationLog('tip_goals', e); }
 
+// Migration: Donation history (365-day retention). On first creation, backfill
+// from the donation rows still in overlay_events (30-day retention) so history
+// doesn't start empty. Backfilled rows have source 'legacy' (origin unknown, no message).
+try {
+  const _donationsExisted = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'donations'").get();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS donations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      donor_name TEXT,
+      amount REAL NOT NULL,
+      currency TEXT,
+      message TEXT,
+      external_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_donations_streamer_date ON donations(streamer_id, created_at)`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_donations_source_external ON donations(source, external_id) WHERE external_id IS NOT NULL`);
+  if (!_donationsExisted) {
+    const r = db.prepare(`
+      INSERT INTO donations (streamer_id, source, donor_name, amount, currency, created_at)
+      SELECT streamer_id, 'legacy', username,
+             CAST(json_extract(data, '$.amount') AS REAL),
+             UPPER(COALESCE(json_extract(data, '$.currency'), 'USD')),
+             created_at
+      FROM overlay_events
+      WHERE event_type = 'donation' AND CAST(json_extract(data, '$.amount') AS REAL) > 0
+    `).run();
+    console.log(`[DB] Created donations table, backfilled ${r.changes} donation(s) from overlay_events`);
+  }
+} catch (e) { _migrationLog('donations', e); }
+
 // Migration: Add channel point columns to streamers
 try {
   const cols = db.pragma('table_info(streamers)').map(c => c.name);
@@ -4515,6 +4550,65 @@ function getWinners(giveawayId) {
   return db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? AND is_winner = 1 ORDER BY id').all(giveawayId);
 }
 
+// --- Donation history ---
+
+// Real donations only (PayPal capture, StreamElements tip). external_id dedupes replays.
+function logDonation(streamerId, d) {
+  const amount = Math.round(parseFloat(d.amount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  db.prepare(`
+    INSERT OR IGNORE INTO donations (streamer_id, source, donor_name, amount, currency, message, external_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(streamerId, d.source, (d.donor_name || 'Anonymous').substring(0, 100), amount,
+    d.currency ? String(d.currency).toUpperCase() : null, d.message ? String(d.message).substring(0, 500) : null,
+    d.external_id || null);
+}
+
+function _donationFilter(streamerId, opts) {
+  const where = ["streamer_id = ?", "created_at >= datetime('now', ?)"];
+  const params = [streamerId, `-${parseInt(opts.sinceDays) || 365} days`];
+  if (opts.source) { where.push('source = ?'); params.push(opts.source); }
+  return { where: where.join(' AND '), params };
+}
+
+function getDonations(streamerId, opts) {
+  const f = _donationFilter(streamerId, opts);
+  return db.prepare(`SELECT * FROM donations WHERE ${f.where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
+    .all(...f.params, opts.limit || 50, opts.offset || 0);
+}
+
+function countDonations(streamerId, opts) {
+  const f = _donationFilter(streamerId, opts);
+  return db.prepare(`SELECT COUNT(*) AS n FROM donations WHERE ${f.where}`).get(...f.params).n;
+}
+
+// Totals per currency — amounts in different currencies are never summed together.
+function getDonationTotals(streamerId, opts) {
+  const f = _donationFilter(streamerId, opts);
+  return db.prepare(`
+    SELECT COALESCE(currency, '?') AS currency, COUNT(*) AS count, ROUND(SUM(amount), 2) AS total, MAX(amount) AS biggest
+    FROM donations WHERE ${f.where} GROUP BY COALESCE(currency, '?') ORDER BY total DESC
+  `).all(...f.params);
+}
+
+// Monthly totals in one currency over the last 12 months (months with no donations are omitted).
+function getDonationMonthly(streamerId, currency, source) {
+  const f = _donationFilter(streamerId, { sinceDays: 366, source });
+  return db.prepare(`
+    SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS count, ROUND(SUM(amount), 2) AS total
+    FROM donations WHERE ${f.where} AND COALESCE(currency, '?') = ? GROUP BY month ORDER BY month
+  `).all(...f.params, currency);
+}
+
+function deleteDonation(id, streamerId) {
+  return db.prepare('DELETE FROM donations WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+}
+
+function cleanupOldDonations() {
+  const result = db.prepare("DELETE FROM donations WHERE created_at < datetime('now', '-365 days')").run();
+  if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} donations older than 1 year`);
+}
+
 // --- Tip goals ---
 
 function getActiveTipGoal(streamerId) {
@@ -4904,6 +4998,13 @@ module.exports = {
   markWinners,
   markRedrawnOut,
   getWinners,
+  logDonation,
+  getDonations,
+  countDonations,
+  getDonationTotals,
+  getDonationMonthly,
+  deleteDonation,
+  cleanupOldDonations,
   getActiveTipGoal,
   getTipGoalHistory,
   createTipGoal,

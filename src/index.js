@@ -67,6 +67,10 @@ client.once('clientReady', async () => {
     setInterval(() => { try { db.cleanupOldOverlayEvents(); } catch (e) {} }, 6 * 60 * 60 * 1000);
     db.cleanupOldOverlayEvents();
 
+    // Donation history keeps 1 year (every 24 hours)
+    setInterval(() => { try { db.cleanupOldDonations(); } catch (e) {} }, 24 * 60 * 60 * 1000);
+    try { db.cleanupOldDonations(); } catch (e) {}
+
     // Clean up old bridge logs (every 6 hours)
     setInterval(() => { try { db.cleanupOldBridgeLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
     db.cleanupOldBridgeLogs();

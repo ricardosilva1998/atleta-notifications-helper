@@ -919,6 +919,71 @@ router.get('/donations', (req, res) => {
   });
 });
 
+// --- Donation history (1 year) ---
+
+const DONATION_RANGES = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
+const DONATION_SOURCES = ['paypal', 'streamelements', 'legacy'];
+
+function donationHistoryFilters(q) {
+  const range = DONATION_RANGES[q.range] ? q.range : '30d';
+  const source = DONATION_SOURCES.includes(q.source) ? q.source : '';
+  return { range, source, sinceDays: DONATION_RANGES[range] };
+}
+
+router.get('/donations/history', (req, res) => {
+  const f = donationHistoryFilters(req.query);
+  const perPage = 50;
+  const total = db.countDonations(req.streamer.id, f);
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const page = Math.min(pages, Math.max(1, parseInt(req.query.page) || 1));
+  const totals = db.getDonationTotals(req.streamer.id, f);
+
+  // Chart one currency: the streamer's donation currency if they've received any, else the biggest
+  const yearTotals = db.getDonationTotals(req.streamer.id, { sinceDays: 366, source: f.source });
+  const preferred = req.streamer.donation_currency || 'EUR';
+  const chartCurrency = yearTotals.some(t => t.currency === preferred) ? preferred : (yearTotals[0] && yearTotals[0].currency) || null;
+  const byMonth = {};
+  if (chartCurrency) db.getDonationMonthly(req.streamer.id, chartCurrency, f.source).forEach(m => { byMonth[m.month] = m; });
+  const months = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const key = d.toISOString().slice(0, 7);
+    months.push({ month: key, total: byMonth[key] ? byMonth[key].total : 0, count: byMonth[key] ? byMonth[key].count : 0 });
+  }
+
+  res.render('donation-history', {
+    streamer: req.streamer,
+    filters: f,
+    donations: db.getDonations(req.streamer.id, { ...f, limit: perPage, offset: (page - 1) * perPage }),
+    total, page, pages, totals, months, chartCurrency,
+    otherCurrencies: yearTotals.filter(t => t.currency !== chartCurrency).map(t => t.currency),
+  });
+});
+
+router.get('/donations/history.csv', (req, res) => {
+  const f = donationHistoryFilters(req.query);
+  const rows = db.getDonations(req.streamer.id, { ...f, limit: 100000, offset: 0 });
+  // Quote every field; prefix spreadsheet formula triggers since donor names/messages are viewer-controlled
+  const cell = (v) => {
+    let str = v == null ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(str)) str = "'" + str;
+    return '"' + str.replace(/"/g, '""') + '"';
+  };
+  const lines = [['date_utc', 'donor', 'amount', 'currency', 'source', 'message'].join(',')];
+  rows.forEach(r => lines.push([r.created_at, r.donor_name, r.amount.toFixed(2), r.currency, r.source, r.message].map(cell).join(',')));
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="donations-${f.range}${f.source ? '-' + f.source : ''}.csv"`);
+  res.send('\uFEFF' + lines.join('\r\n'));
+});
+
+router.post('/donations/history/:id/delete', (req, res) => {
+  db.deleteDonation(parseInt(req.params.id), req.streamer.id);
+  const back = new URLSearchParams();
+  ['range', 'source', 'page'].forEach(k => { if (req.body[k]) back.set(k, String(req.body[k])); });
+  res.redirect('/dashboard/donations/history' + (back.toString() ? '?' + back : ''));
+});
+
 // --- Tip goals ---
 
 const TIP_GOAL_CURRENCIES = ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'];

@@ -1,0 +1,204 @@
+<%- include('header', { title: 'Donation History', streamer: streamer }) %>
+<%
+  const _fmt = (v, c) => { try { return new Intl.NumberFormat('en', { style: 'currency', currency: c }).format(v); } catch (e) { return (c || '') + ' ' + Number(v).toFixed(2); } };
+  const _qs = (o) => { const p = new URLSearchParams(); const m = Object.assign({ range: filters.range, source: filters.source }, o); Object.keys(m).forEach(k => { if (m[k]) p.set(k, m[k]); }); return p.toString(); };
+  const _sourceLabels = { paypal: 'PayPal', streamelements: 'StreamElements', legacy: 'Imported' };
+  const _rangeLabels = { '7d': '7 days', '30d': '30 days', '90d': '90 days', '1y': '1 year' };
+  const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const _max = Math.max(0, ...months.map(m => m.total));
+%>
+
+<a href="/dashboard/donations" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  Back to Donation Settings
+</a>
+<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in">Donation History</h2>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">PayPal and StreamElements donations from the last year. Donations older than 1 year are removed automatically — export a CSV to keep them longer.</p>
+
+<!-- Filters -->
+<div class="dh-filters animate-in">
+  <div class="dh-pills" role="group" aria-label="Date range">
+    <% Object.keys(_rangeLabels).forEach(function (r) { %>
+      <a href="?<%= _qs({ range: r }) %>" class="dh-pill <%= filters.range === r ? 'active' : '' %>"><%= _rangeLabels[r] %></a>
+    <% }) %>
+  </div>
+  <select aria-label="Source" onchange="location.search = this.value">
+    <option value="<%= _qs({ source: '' }) %>" <%= !filters.source ? 'selected' : '' %>>All sources</option>
+    <% Object.keys(_sourceLabels).forEach(function (s) { %>
+      <option value="<%= _qs({ source: s }) %>" <%= filters.source === s ? 'selected' : '' %>><%= _sourceLabels[s] %></option>
+    <% }) %>
+  </select>
+  <a href="/dashboard/donations/history.csv?<%= _qs({}) %>" class="btn btn-secondary dh-export">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export CSV
+  </a>
+</div>
+
+<!-- Totals per currency (never summed across currencies) -->
+<div class="dh-stats animate-in animate-in-delay-1">
+  <% if (totals.length === 0) { %>
+    <div class="card dh-stat"><div class="dh-stat-label">Total · last <%= _rangeLabels[filters.range] %></div><div class="dh-stat-value">—</div><div class="dh-stat-sub">No donations in this period</div></div>
+  <% } %>
+  <% totals.forEach(function (t) { %>
+    <div class="card dh-stat">
+      <div class="dh-stat-label">Total <%= t.currency %> · last <%= _rangeLabels[filters.range] %></div>
+      <div class="dh-stat-value"><%= _fmt(t.total, t.currency) %></div>
+      <div class="dh-stat-sub"><%= t.count %> donation<%= t.count === 1 ? '' : 's' %> · biggest <%= _fmt(t.biggest, t.currency) %></div>
+    </div>
+  <% }) %>
+</div>
+
+<!-- Monthly chart -->
+<% if (chartCurrency) { %>
+  <div class="card animate-in animate-in-delay-2" style="margin-bottom: 16px;">
+    <h3 style="margin-bottom: 4px;">Monthly donations (<%= chartCurrency %>)</h3>
+    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Last 12 months<%= filters.source ? ' · ' + _sourceLabels[filters.source] : '' %><%= otherCurrencies.length ? ' · ' + otherCurrencies.join(', ') + ' not included' : '' %></p>
+    <div class="dh-chart" id="dh-chart">
+      <div class="dh-gridline dh-maxline"><span><%= _max > 0 ? _fmt(_max, chartCurrency) : '' %></span></div>
+      <div class="dh-gridline dh-baseline"></div>
+      <% months.forEach(function (m) {
+           const h = _max > 0 ? (m.total / _max) * 100 : 0;
+           const label = _monthNames[parseInt(m.month.slice(5)) - 1] + ' ' + m.month.slice(0, 4);
+           const tip = label + ': ' + _fmt(m.total, chartCurrency) + ' · ' + m.count + ' donation' + (m.count === 1 ? '' : 's'); %>
+        <div class="dh-col" tabindex="0" data-tip="<%= tip %>" aria-label="<%= tip %>">
+          <div class="dh-bar-area"><div class="dh-bar" style="height: <%= m.total > 0 ? Math.max(h, 1.5).toFixed(2) : 0 %>%;"></div></div>
+          <div class="dh-xlabel"><%= _monthNames[parseInt(m.month.slice(5)) - 1] %></div>
+        </div>
+      <% }) %>
+      <div class="dh-tooltip" id="dh-tooltip" role="status"></div>
+    </div>
+  </div>
+<% } %>
+
+<!-- Table -->
+<div class="card animate-in animate-in-delay-3" style="margin-bottom: 16px; padding: 0; overflow: hidden;">
+  <div style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px;">
+    <h3 style="margin: 0;">Donations</h3>
+    <span style="color: var(--text-muted); font-size: 12px;"><%= total %> in the last <%= _rangeLabels[filters.range] %></span>
+  </div>
+  <% if (donations.length === 0) { %>
+    <p style="color: var(--text-muted); font-size: 13px; padding: 0 20px 20px;">No donations yet for this period. New PayPal and StreamElements tips will show up here automatically.</p>
+  <% } else { %>
+    <div style="overflow-x: auto;">
+      <table class="dh-table">
+        <thead><tr><th>Date</th><th>Donor</th><th style="text-align: right;">Amount</th><th>Source</th><th>Message</th><th></th></tr></thead>
+        <tbody>
+          <% donations.forEach(function (d) { %>
+            <tr>
+              <td class="dh-date" style="white-space: nowrap;"><time data-utc="<%= d.created_at %>"><%= d.created_at.slice(0, 16) %> UTC</time></td>
+              <td class="dh-donor"><%= d.donor_name || 'Anonymous' %></td>
+              <td class="dh-amount" style="text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600;"><%= _fmt(d.amount, d.currency || 'USD') %></td>
+              <td class="dh-source"><span class="dh-badge"><%= _sourceLabels[d.source] || d.source %></span></td>
+              <td class="dh-msg"><%= d.message || '' %></td>
+              <td class="dh-actions" style="text-align: right;">
+                <form method="POST" action="/dashboard/donations/history/<%= d.id %>/delete" onsubmit="return confirm('Remove this donation from your history? (e.g. if it was refunded)');" style="margin: 0;">
+                  <input type="hidden" name="range" value="<%= filters.range %>">
+                  <input type="hidden" name="source" value="<%= filters.source %>">
+                  <input type="hidden" name="page" value="<%= page %>">
+                  <button type="submit" class="dh-delete" title="Remove from history" aria-label="Remove donation">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                  </button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% if (pages > 1) { %>
+      <div style="display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px; border-top: 1px solid var(--border); font-size: 13px;">
+        <% if (page > 1) { %><a href="?<%= _qs({ page: page - 1 }) %>" class="btn btn-secondary" style="padding: 6px 12px;">← Newer</a><% } %>
+        <span style="color: var(--text-muted);">Page <%= page %> of <%= pages %></span>
+        <% if (page < pages) { %><a href="?<%= _qs({ page: page + 1 }) %>" class="btn btn-secondary" style="padding: 6px 12px;">Older →</a><% } %>
+      </div>
+    <% } %>
+  <% } %>
+</div>
+
+<script>
+  // Show dates in the viewer's local time
+  document.querySelectorAll('time[data-utc]').forEach(function (el) {
+    var d = new Date(el.getAttribute('data-utc').replace(' ', 'T') + 'Z');
+    if (!isNaN(d)) el.textContent = d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  });
+
+  // Chart hover / focus tooltip
+  (function () {
+    var chart = document.getElementById('dh-chart');
+    var tip = document.getElementById('dh-tooltip');
+    if (!chart || !tip) return;
+    function show(col) {
+      tip.textContent = col.getAttribute('data-tip');
+      tip.style.display = 'block';
+      var c = chart.getBoundingClientRect(), r = col.getBoundingClientRect();
+      var left = r.left - c.left + r.width / 2 - tip.offsetWidth / 2;
+      tip.style.left = Math.max(0, Math.min(c.width - tip.offsetWidth, left)) + 'px';
+      chart.querySelectorAll('.dh-col').forEach(function (x) { x.classList.toggle('hover', x === col); });
+    }
+    function hide() { tip.style.display = 'none'; chart.querySelectorAll('.dh-col.hover').forEach(function (x) { x.classList.remove('hover'); }); }
+    chart.querySelectorAll('.dh-col').forEach(function (col) {
+      col.addEventListener('mouseenter', function () { show(col); });
+      col.addEventListener('focus', function () { show(col); });
+      col.addEventListener('blur', hide);
+    });
+    chart.addEventListener('mouseleave', hide);
+  })();
+</script>
+
+<style>
+  .dh-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .dh-pills { display: inline-flex; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px; }
+  .dh-pill { padding: 6px 12px; font-size: 13px; color: var(--text-secondary); border-radius: 6px; text-decoration: none; white-space: nowrap; }
+  .dh-pill.active { background: var(--accent); color: #fff; }
+  .dh-filters select { padding: 8px 12px; font-size: 13px; background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .dh-export { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 13px; }
+
+  .dh-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .dh-stat { padding: 18px 20px; margin: 0; }
+  .dh-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .dh-stat-value { font-family: var(--font-display); font-size: 28px; font-weight: 700; margin: 4px 0 2px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .dh-stat-sub { font-size: 12px; color: var(--text-secondary); }
+
+  /* Plot area = between padding-top (26px) and the x-label row (22px); gridlines are pinned to those edges */
+  .dh-chart { position: relative; display: flex; gap: 6px; height: 220px; padding: 26px 0 0; }
+  .dh-gridline { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border); pointer-events: none; }
+  .dh-maxline { top: 26px; }
+  .dh-baseline { bottom: 22px; border-top-style: solid; }
+  .dh-gridline span { position: absolute; left: 0; top: -17px; font-size: 11px; color: var(--text-muted); }
+  .dh-col { flex: 1; display: flex; flex-direction: column; min-width: 0; cursor: default; outline: none; border-radius: 6px; }
+  .dh-bar-area { flex: 1; display: flex; align-items: flex-end; justify-content: center; }
+  .dh-bar { width: 70%; max-width: 44px; background: var(--accent); border-radius: 4px 4px 0 0; transition: opacity 0.15s; }
+  .dh-col.hover .dh-bar, .dh-col:focus-visible .dh-bar { opacity: 0.75; }
+  .dh-col:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .dh-xlabel { height: 22px; line-height: 22px; text-align: center; font-size: 11px; color: var(--text-muted); }
+  .dh-tooltip { display: none; position: absolute; top: -6px; padding: 6px 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-primary); white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+
+  .dh-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .dh-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; padding: 10px 20px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .dh-table td { padding: 10px 20px; border-bottom: 1px solid var(--border); color: var(--text-primary); vertical-align: top; }
+  .dh-table tr:last-child td { border-bottom: 0; }
+  .dh-msg { color: var(--text-secondary) !important; min-width: 180px; max-width: 360px; word-break: break-word; }
+  .dh-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
+  .dh-delete { background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; }
+  .dh-delete:hover { color: var(--danger); background: var(--danger-bg); }
+
+  @media (max-width: 600px) {
+    .dh-export { margin-left: 0; }
+    .dh-chart { gap: 3px; }
+    .dh-xlabel { font-size: 9px; }
+    /* Stacked rows instead of a wide table */
+    .dh-table thead { display: none; }
+    .dh-table tr { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "donor amount del" "date source del" "msg msg msg"; gap: 4px 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .dh-table tr:last-child { border-bottom: 0; }
+    .dh-table td { padding: 0; border: 0; }
+    .dh-donor { grid-area: donor; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+    .dh-amount { grid-area: amount; }
+    .dh-date { grid-area: date; color: var(--text-muted) !important; font-size: 12px; }
+    .dh-source { grid-area: source; text-align: right; }
+    .dh-msg { grid-area: msg; min-width: 0 !important; max-width: none !important; }
+    .dh-msg:empty { display: none; }
+    .dh-actions { grid-area: del; align-self: center; }
+  }
+</style>
+
+<%- include('footer') %>

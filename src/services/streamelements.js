@@ -42,6 +42,12 @@ class StreamElementsClient {
         // Real tips count toward the tip goal even if the overlay alert is off; SE test events don't
         if (!isTest) {
           require('./tipGoals').recordDonation(this.streamerId, event.data.amount, event.data.currency);
+          try {
+            db.logDonation(this.streamerId, {
+              source: 'streamelements', donor_name: event.data.username, amount: event.data.amount,
+              currency: event.data.currency, message: event.data.message, external_id: event._id || null,
+            });
+          } catch (e) { console.error('[StreamElements] logDonation error:', e.message); }
         }
         const s = db.getStreamerById(this.streamerId);
         if (s && s.overlay_donation_enabled) {

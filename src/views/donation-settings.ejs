@@ -4,7 +4,13 @@
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
   Back to Dashboard
 </a>
-<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in">Donation Settings</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 8px;" class="animate-in">
+  <h2 style="margin: 0; font-size: 24px; font-weight: 700;">Donation Settings</h2>
+  <a href="/dashboard/donations/history" class="btn btn-secondary" style="text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+    Donation History
+  </a>
+</div>
 <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">Set up PayPal donations so viewers can support you with overlay alerts on stream.</p>
 
 <form method="POST" action="/dashboard/donations">
