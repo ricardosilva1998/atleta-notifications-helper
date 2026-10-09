@@ -1404,6 +1404,13 @@ function syncPhase1Controls() {
     const el = document.getElementById(id);
     if (el) el.style.display = isObject ? 'none' : '';
   });
+  // Fix round 1, Important: the resize handles are siblings of #preview-card
+  // inside #preview-card-container and only ever mutate that (now-hidden)
+  // legacy card, so dragging them does nothing visible on object tabs.
+  ['resize-se', 'resize-e'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isObject ? 'none' : '';
+  });
 }
 
 function updatePreview() {
@@ -1431,12 +1438,43 @@ function updatePreview() {
     // misrepresent what the streamer actually gets. No loadGoogleFont() call —
     // objects use Oxanium/Saira Condensed from the page's own <link>, not the
     // per-design font path.
+    //
+    // Fix round 1, Critical 2: positionCard() has its own pre-existing
+    // custom-position branch that silently overrides 'top-center' whenever
+    // this type's workingDesigns has card_custom_x/y set (from a drag).
+    // Objects must never honor that — the live overlay never consults stored
+    // position for them either — but a dragged position must not be
+    // permanently erased: phase 2 will want it back. Blank the two fields
+    // just for this one call, then restore them immediately after
+    // (synchronous, so there is no gap where another reader could observe
+    // the blanked state).
+    const posDesign = workingDesigns[currentType];
+    const savedCustomX = posDesign ? posDesign.card_custom_x : undefined;
+    const savedCustomY = posDesign ? posDesign.card_custom_y : undefined;
+    if (posDesign) {
+      posDesign.card_custom_x = null;
+      posDesign.card_custom_y = null;
+    }
     positionCard('top-center', 420);
+    if (posDesign) {
+      posDesign.card_custom_x = savedCustomX;
+      posDesign.card_custom_y = savedCustomY;
+    }
     updateOverlayGuide();
     renderScreenEffect('none');
     return;
   }
-  legacyCard.style.display = '';
+  // Fix round 1, Critical 1: don't clobber the Sponsor/Timed tab. switchTab()
+  // calls updateSponsorPreview() BEFORE updatePreview() when opening 'timed',
+  // and that function sets #preview-card to display:none to show the sponsor
+  // image in its place whenever rotation is enabled. This unconditional
+  // restore used to un-hide it again right after, stacking the legacy
+  // "Pit Crew Member" card on top of the sponsor image. 'timed' already owns
+  // #preview-card's display lifecycle (updateSponsorPreview / stopSponsorPreview) —
+  // leave it alone here.
+  if (currentType !== 'timed') {
+    legacyCard.style.display = '';
+  }
   objHost.style.display = 'none';
 
   const d = getControlValues();
