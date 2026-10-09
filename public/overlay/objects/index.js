@@ -37,7 +37,21 @@ var OBJECTS = {
     key: 'subscription',
     anim: { in: 'hold', dur: '1.26s', ease: 'linear' },
     exit: { out: 'exGateFall', dur: '0.40s', ease: 'cubic-bezier(.5,0,.9,.4)' },
-    render: function (d) { return ''; },
+    render: function (d) {
+      var meta = 'Tier ' + esc(d.tier || '1');
+      if (d.months) meta += ' · ' + esc(d.months) + ' months';
+      return '<div class="obj o-sub">'
+        + '<div class="o-sub-pillar l"></div><div class="o-sub-pillar r"></div>'
+        + '<div class="o-sub-base l"></div><div class="o-sub-base r"></div>'
+        + '<div class="o-sub-dust"></div>'
+        + '<div class="o-sub-kasagi"></div><div class="o-sub-nuki"></div>'
+        + '<div class="o-sub-cords"></div>'
+        + '<div class="o-sub-gaku"><div class="o-mesh"></div>'
+        +   '<div class="o-sub-mark">Subscriber</div>'
+        +   '<div class="o-name">' + esc(d.username) + '</div>'
+        +   '<div class="o-meta">' + meta + '</div>'
+        + '</div></div>';
+    },
   },
   bits: {
     key: 'bits',

@@ -73,3 +73,24 @@ describe('follow — iaido band', () => {
     assert.match(html, /class="obj o-follow"/);
   });
 });
+
+describe('subscription — torii gate', () => {
+  test('puts the text inside the gaku plaque, not loose on the gate', () => {
+    const html = OBJECTS.subscription.render({ username: 'RacerDan', tier: '1', months: 4 });
+    const gakuAt = html.indexOf('o-sub-gaku');
+    const nameAt = html.indexOf('RacerDan');
+    assert.ok(gakuAt > -1, 'gaku plaque must exist — it is the legibility fix');
+    assert.ok(nameAt > gakuAt, 'username must render inside the gaku');
+  });
+
+  test('renders tier and months when supplied', () => {
+    const html = OBJECTS.subscription.render({ username: 'RacerDan', tier: '1', months: 4 });
+    assert.match(html, /Tier 1/);
+    assert.match(html, /4 months/);
+  });
+
+  test('omits the months clause when months is absent', () => {
+    const html = OBJECTS.subscription.render({ username: 'RacerDan', tier: '1' });
+    assert.ok(!html.includes('months'), 'no months data means no months text');
+  });
+});
