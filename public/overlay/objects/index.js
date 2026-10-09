@@ -57,7 +57,22 @@ var OBJECTS = {
     key: 'bits',
     anim: { in: 'oBitsIn', dur: '0.20s', ease: 'cubic-bezier(.2,1,.2,1)' },
     exit: { out: 'exBoardTip', dur: '0.34s', ease: 'ease-in' },
-    render: function (d) { return ''; },
+    render: function (d) {
+      var digits = String(Math.max(0, parseInt(d.bits, 10) || 0));
+      var tiles = '';
+      for (var i = 0; i < digits.length; i++) {
+        tiles += '<span class="o-bits-tile" style="--rdelay:calc('
+              + (0.20 + i * 0.12).toFixed(2) + 's / var(--spd))">' + digits.charAt(i) + '</span>';
+      }
+      return '<div class="obj o-bits">'
+        + '<div class="o-bits-br tl"></div><div class="o-bits-br tr"></div>'
+        + '<div class="o-bits-br bl"></div><div class="o-bits-br rb"></div>'
+        + '<div class="o-bits-cells">' + tiles + '</div>'
+        + '<div class="o-bits-who o-name">' + esc(d.username) + '</div>'
+        + '<div class="o-bits-unit o-meta">bits</div>'
+        + '<div class="o-blade"></div>'
+        + '</div>';
+    },
   },
   donation: {
     key: 'donation',

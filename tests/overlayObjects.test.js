@@ -94,3 +94,24 @@ describe('subscription — torii gate', () => {
     assert.ok(!html.includes('months'), 'no months data means no months text');
   });
 });
+
+describe('bits — tally board', () => {
+  test('emits one tile per digit, in order', () => {
+    const html = OBJECTS.bits.render({ username: 'TurboTina', bits: 500 });
+    const tiles = [...html.matchAll(/class="o-bits-tile"[^>]*>(\d)</g)].map(m => m[1]);
+    assert.deepEqual(tiles, ['5', '0', '0']);
+  });
+
+  test('staggers each tile so they flip left to right', () => {
+    const html = OBJECTS.bits.render({ username: 'TurboTina', bits: 500 });
+    const delays = [...html.matchAll(/--rdelay:calc\(([\d.]+)s/g)].map(m => parseFloat(m[1]));
+    assert.equal(delays.length, 3);
+    assert.ok(delays[1] > delays[0] && delays[2] > delays[1], 'delays must increase left to right');
+  });
+
+  test('handles a single-digit amount', () => {
+    const html = OBJECTS.bits.render({ username: 'T', bits: 1 });
+    const tiles = [...html.matchAll(/class="o-bits-tile"[^>]*>(\d)</g)].map(m => m[1]);
+    assert.deepEqual(tiles, ['1']);
+  });
+});
