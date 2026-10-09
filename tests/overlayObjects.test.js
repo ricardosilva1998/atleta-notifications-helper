@@ -27,3 +27,34 @@ describe('object registry contract', () => {
     }
   });
 });
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+describe('objects.css integrity', () => {
+  const css = fs.readFileSync(
+    path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+  const defined = new Set([...css.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map(m => m[1]));
+
+  test('every keyframe named by the registry exists in objects.css', () => {
+    const missing = [];
+    for (const k of KEYS) {
+      if (!defined.has(OBJECTS[k].anim.in)) missing.push(`${k}.anim.in=${OBJECTS[k].anim.in}`);
+      if (!defined.has(OBJECTS[k].exit.out)) missing.push(`${k}.exit.out=${OBJECTS[k].exit.out}`);
+    }
+    assert.deepEqual(missing, [], 'keyframes referenced but not defined');
+  });
+
+  test('defines the shared positioning wrapper and blade', () => {
+    assert.match(css, /\.alert-pos\s*\{/, '.alert-pos must exist — centering lives here, not in keyframes');
+    assert.match(css, /\.o-blade\s*\{/, '.o-blade must exist — shared cut flash');
+  });
+
+  test('no object-internal class escapes its .o- prefix', () => {
+    // Guards the collision that pinned the byobu frame rail to the wrong edge.
+    const generic = ['.rail{', '.rail {', '.panel{', '.panel {', '.seal{', '.seal {'];
+    for (const g of generic) {
+      assert.ok(!css.includes(g), `bare generic selector "${g.trim()}" will collide on the builder page`);
+    }
+  });
+});
