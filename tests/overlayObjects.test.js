@@ -58,3 +58,18 @@ describe('objects.css integrity', () => {
     }
   });
 });
+
+describe('follow — iaido band', () => {
+  test('renders the username and escapes HTML', () => {
+    const html = OBJECTS.follow.render({ username: '<img src=x>Ap&x' });
+    assert.ok(html.includes('&lt;img src=x&gt;Ap&amp;x'), 'must escape user input');
+    assert.ok(!html.includes('<img src=x>'), 'must not emit raw user HTML');
+  });
+
+  test('includes the blade and scar elements the animation drives', () => {
+    const html = OBJECTS.follow.render({ username: 'ApexAndre' });
+    assert.match(html, /class="o-blade"/);
+    assert.match(html, /class="o-follow-scar"/);
+    assert.match(html, /class="obj o-follow"/);
+  });
+});

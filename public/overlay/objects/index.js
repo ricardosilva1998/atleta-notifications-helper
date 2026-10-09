@@ -21,7 +21,17 @@ var OBJECTS = {
     key: 'follow',
     anim: { in: 'cutWipe', dur: '0.40s', ease: 'cubic-bezier(.25,0,.15,1)' },
     exit: { out: 'exSheathe', dur: '0.34s', ease: 'cubic-bezier(.5,0,.9,.3)' },
-    render: function (d) { return ''; },
+    render: function (d) {
+      return '<div class="obj o-follow">'
+        + '<div class="o-follow-hatch"></div><div class="o-mesh"></div>'
+        + '<div class="o-follow-glyph">✦</div>'
+        + '<div class="o-follow-txt">'
+        +   '<div class="o-name">' + esc(d.username) + '</div>'
+        +   '<div class="o-meta">started following</div>'
+        + '</div>'
+        + '<div class="o-follow-scar"></div><div class="o-blade"></div>'
+        + '</div>';
+    },
   },
   subscription: {
     key: 'subscription',
