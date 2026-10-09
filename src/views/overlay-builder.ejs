@@ -927,6 +927,13 @@
         </div>
       </div>
 
+      <div id="phase1-notice" style="display:none; padding:12px 14px; margin-bottom:12px;
+           border-left:3px solid #D81E26; background:rgba(216,30,38,0.08);
+           font-size:13px; line-height:1.5;">
+        This alert now uses a fixed design with its own built-in animation.
+        Colour and animation controls will return in a future update.
+      </div>
+
       <!-- Theme Section -->
       <div class="section collapsed" id="section-theme">
         <div class="section-header" onclick="toggleSection('theme')">
@@ -1386,7 +1393,21 @@ const PREVIEW_DATA = {
   raid:         { username: 'GridWalker', viewers: 42 },
 };
 
+// Phase 1: the five object event types ignore saved styles, so their controls
+// are hidden rather than left live and inert.
+function syncPhase1Controls() {
+  const isObject = !!(window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType]);
+  const notice = document.getElementById('phase1-notice');
+  if (notice) notice.style.display = isObject ? '' : 'none';
+  ['section-theme', 'section-text', 'section-sideicon',
+   'section-animation', 'section-size'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isObject ? 'none' : '';
+  });
+}
+
 function updatePreview() {
+  syncPhase1Controls();
   const objDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType];
   const objHost = document.getElementById('preview-object-host');
   const legacyCard = document.getElementById('preview-card');
