@@ -3426,7 +3426,7 @@ try {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN design_version INTEGER DEFAULT 0`);
     console.log('[DB] Added design_version to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('design_version', e); }
 
 try {
   const existing = db.prepare(
@@ -3437,7 +3437,7 @@ try {
     const n = db.prepare('SELECT COUNT(*) c FROM overlay_designs_v0_backup').get().c;
     console.log(`[DB] Snapshotted ${n} overlay_designs rows to overlay_designs_v0_backup`);
   }
-} catch {}
+} catch (e) { _migrationLog('overlay_designs_v0_backup', e); }
 
 try {
   const info = db.prepare(`
@@ -3445,7 +3445,7 @@ try {
     WHERE design_version = 0
       AND event_type IN ('follow','subscription','bits','donation','raid')`).run();
   if (info.changes > 0) console.log(`[DB] Marked ${info.changes} overlay_designs rows as design_version=1`);
-} catch {}
+} catch (e) { _migrationLog('design_version backfill', e); }
 
 // Hot path: getEnabledSponsorImages runs on every sponsor rotation tick.
 const _stmtGetSponsorImages = db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? ORDER BY sort_order, id');

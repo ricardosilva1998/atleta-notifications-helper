@@ -93,26 +93,52 @@ describe('subscription — torii gate', () => {
     const html = OBJECTS.subscription.render({ username: 'RacerDan', tier: '1' });
     assert.ok(!html.includes('months'), 'no months data means no months text');
   });
+
+  test('surfaces the message (e.g. a gift bomb) when present, escaped', () => {
+    const html = OBJECTS.subscription.render({
+      username: 'GiftKing', tier: '1', message: '<b>Gifted 5 subs!</b>',
+    });
+    assert.match(html, /class="o-sub-msg"/);
+    assert.ok(html.includes('&lt;b&gt;Gifted 5 subs!&lt;/b&gt;'), 'must escape the message');
+    assert.ok(!html.includes('<b>Gifted 5 subs!</b>'), 'must not emit raw user HTML');
+  });
+
+  test('omits the message element when message is absent', () => {
+    const html = OBJECTS.subscription.render({ username: 'RacerDan', tier: '1', months: 4 });
+    assert.ok(!html.includes('o-sub-msg'), 'no message data means no message element');
+  });
 });
 
 describe('bits — tally board', () => {
+  // Shape matches the real producers (src/services/eventsub.js channel.cheer,
+  // src/routes/overlay.js and dashboard.js test routes): {username, amount, message}.
   test('emits one tile per digit, in order', () => {
-    const html = OBJECTS.bits.render({ username: 'TurboTina', bits: 500 });
+    const html = OBJECTS.bits.render({ username: 'TurboTina', amount: 500, message: 'cheer!' });
     const tiles = [...html.matchAll(/class="o-bits-tile"[^>]*>(\d)</g)].map(m => m[1]);
     assert.deepEqual(tiles, ['5', '0', '0']);
   });
 
   test('staggers each tile so they flip left to right', () => {
-    const html = OBJECTS.bits.render({ username: 'TurboTina', bits: 500 });
+    const html = OBJECTS.bits.render({ username: 'TurboTina', amount: 500, message: 'cheer!' });
     const delays = [...html.matchAll(/--rdelay:calc\(([\d.]+)s/g)].map(m => parseFloat(m[1]));
     assert.equal(delays.length, 3);
     assert.ok(delays[1] > delays[0] && delays[2] > delays[1], 'delays must increase left to right');
   });
 
   test('handles a single-digit amount', () => {
-    const html = OBJECTS.bits.render({ username: 'T', bits: 1 });
+    const html = OBJECTS.bits.render({ username: 'T', amount: 1, message: null });
     const tiles = [...html.matchAll(/class="o-bits-tile"[^>]*>(\d)</g)].map(m => m[1]);
     assert.deepEqual(tiles, ['1']);
+  });
+
+  test('renders the real overlay.js test-event payload (src/routes/overlay.js:91)', () => {
+    // Exact shape fired by router.post('/overlay/test/:eventType')'s 'bits' case.
+    // Regression pin: the old code read d.bits (always undefined on this shape)
+    // and silently rendered a single "0" tile for every real cheer.
+    const payload = { username: 'NitroFan', amount: 500, message: 'Take my bits!' };
+    const html = OBJECTS.bits.render(payload);
+    const tiles = [...html.matchAll(/class="o-bits-tile"[^>]*>(\d)</g)].map(m => m[1]);
+    assert.equal(tiles.join(''), '500', 'must read d.amount — the shape every real producer emits');
   });
 });
 
@@ -138,6 +164,21 @@ describe('donation — byobu screen', () => {
   test('falls back to the raw currency code when unknown', () => {
     const html = OBJECTS.donation.render({ username: 'A', amount: '5.00', currency: 'SEK' });
     assert.ok(html.includes('SEK5.00'));
+  });
+
+  test('renders the donor message below the amount, escaped', () => {
+    const html = OBJECTS.donation.render({
+      username: 'PitBoss92', amount: '25.00', currency: 'EUR', message: '<i>nice</i> race!',
+    });
+    assert.match(html, /class="o-don-msg"/);
+    assert.ok(html.includes('&lt;i&gt;nice&lt;/i&gt; race!'), 'must escape the message');
+    assert.ok(!html.includes('<i>nice</i>'), 'must not emit raw user HTML');
+    assert.ok(html.indexOf('o-don-amt') < html.indexOf('o-don-msg'), 'message must render below the amount');
+  });
+
+  test('omits the message element when message is absent', () => {
+    const html = OBJECTS.donation.render({ username: 'A', amount: '5.00', currency: 'EUR' });
+    assert.ok(!html.includes('o-don-msg'), 'no message data means no message element');
   });
 });
 

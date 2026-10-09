@@ -56,6 +56,7 @@ var OBJECTS = {
         +   '<div class="o-sub-mark">Subscriber</div>'
         +   '<div class="o-name">' + esc(d.username) + '</div>'
         +   '<div class="o-meta">' + meta + '</div>'
+        +   (d.message ? '<div class="o-sub-msg">' + esc(d.message) + '</div>' : '')
         + '</div></div>';
     },
   },
@@ -64,7 +65,9 @@ var OBJECTS = {
     anim: { in: 'oBitsIn', dur: '0.20s', ease: 'cubic-bezier(.2,1,.2,1)' },
     exit: { out: 'exBoardTip', dur: '0.34s', ease: 'ease-in' },
     render: function (d) {
-      var digits = String(Math.max(0, parseInt(d.bits, 10) || 0));
+      // Every real producer (eventsub.js, overlay.js test route, dashboard.js
+      // test routes) emits `amount`; `bits` is kept only as a defensive fallback.
+      var digits = String(Math.max(0, parseInt(d.amount != null ? d.amount : d.bits, 10) || 0));
       var tiles = '';
       for (var i = 0; i < digits.length; i++) {
         tiles += '<span class="o-bits-tile" style="--rdelay:calc('
@@ -96,6 +99,7 @@ var OBJECTS = {
         + '<div class="o-don-face">'
         +   '<div class="o-don-head">Tribute</div>'
         +   '<div class="o-don-amt">' + esc(money(d.amount, d.currency)) + '</div>'
+        +   (d.message ? '<div class="o-don-msg">&quot;' + esc(d.message) + '&quot;</div>' : '')
         +   '<div class="o-don-from">' + esc(d.username) + '</div>'
         + '</div></div>';
     },
