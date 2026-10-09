@@ -115,3 +115,28 @@ describe('bits — tally board', () => {
     assert.deepEqual(tiles, ['1']);
   });
 });
+
+describe('donation — byobu screen', () => {
+  test('unfolds exactly six panels with increasing delay', () => {
+    const html = OBJECTS.donation.render({ username: 'PitBoss92', amount: '25.00', currency: 'EUR' });
+    const panels = [...html.matchAll(/class="o-don-panel"/g)];
+    assert.equal(panels.length, 6, 'six panels — the most built-up object in the set');
+    const delays = [...html.matchAll(/--rdelay:calc\(([\d.]+)s/g)].map(m => parseFloat(m[1]));
+    assert.equal(delays.length, 6);
+    for (let i = 1; i < delays.length; i++) {
+      assert.ok(delays[i] > delays[i - 1], `panel ${i} must unfold after panel ${i - 1}`);
+    }
+  });
+
+  test('formats the amount with its currency symbol', () => {
+    const eur = OBJECTS.donation.render({ username: 'A', amount: '25.00', currency: 'EUR' });
+    assert.ok(eur.includes('€25.00'), 'EUR renders as the euro sign');
+    const usd = OBJECTS.donation.render({ username: 'A', amount: '10.00', currency: 'USD' });
+    assert.ok(usd.includes('$10.00'), 'USD renders as a dollar sign');
+  });
+
+  test('falls back to the raw currency code when unknown', () => {
+    const html = OBJECTS.donation.render({ username: 'A', amount: '5.00', currency: 'SEK' });
+    assert.ok(html.includes('SEK5.00'));
+  });
+});

@@ -16,6 +16,12 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+var CURRENCY = { EUR: '€', USD: '$', GBP: '£', BRL: 'R$', JPY: '¥' };
+function money(amount, currency) {
+  var sym = CURRENCY[String(currency || '').toUpperCase()] || String(currency || '');
+  return sym + String(amount == null ? '' : amount);
+}
+
 var OBJECTS = {
   follow: {
     key: 'follow',
@@ -78,7 +84,21 @@ var OBJECTS = {
     key: 'donation',
     anim: { in: 'hold', dur: '1.12s', ease: 'linear' },
     exit: { out: 'exScreenFold', dur: '0.36s', ease: 'cubic-bezier(.5,0,.9,.4)' },
-    render: function (d) { return ''; },
+    render: function (d) {
+      var panels = '';
+      for (var i = 0; i < 6; i++) {
+        panels += '<div class="o-don-panel" style="--rdelay:calc('
+               + (0.06 * (i + 1)).toFixed(2) + 's / var(--spd))"><div class="o-mesh"></div></div>';
+      }
+      return '<div class="obj o-don">'
+        + '<div class="o-don-screen">' + panels + '</div>'
+        + '<div class="o-don-rail t"></div><div class="o-don-rail b"></div>'
+        + '<div class="o-don-face">'
+        +   '<div class="o-don-head">Tribute</div>'
+        +   '<div class="o-don-amt">' + esc(money(d.amount, d.currency)) + '</div>'
+        +   '<div class="o-don-from">' + esc(d.username) + '</div>'
+        + '</div></div>';
+    },
   },
   raid: {
     key: 'raid',
