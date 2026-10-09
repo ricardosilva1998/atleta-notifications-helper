@@ -1,0 +1,706 @@
+<meta charset="utf-8">
+<title>Five Alert Objects</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
+<style>
+/* ══ Page tokens ═══════════════════════════════════════════
+   Brand values sampled from roninsportswear.com computed styles:
+   red #B50000, ink #070B10, paper #FFFDF9.                   */
+:root{
+  --r-red:#D81E26;
+  --r-red-deep:#B50000;
+  --r-ink:#070B10;
+
+  --paper:#FFFDF9;
+  --paper-2:#F2EFE9;
+  --panel:#FFFFFF;
+  --ink:#070B10;
+  --ink-2:#4E5560;
+  --ink-3:#8A9099;
+  --rule:#D9D5CD;
+  --rule-soft:#EBE7DF;
+  --accent:#B50000;
+  --accent-soft:#FBEAEA;
+  --stage:#070B10;
+
+  --disp:"Oxanium",system-ui,-apple-system,sans-serif;
+  --cond:"Saira Condensed","Arial Narrow",sans-serif;
+
+  --hex:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0l14 8v16l-14 8L0 24V8z' fill='none' stroke='%23ffffff' stroke-opacity='.07'/%3E%3C/svg%3E");
+
+  --spd:1;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#070B10; --paper-2:#0E141B; --panel:#111820;
+    --ink:#F2EFE9; --ink-2:#A3ACB6; --ink-3:#6F7984;
+    --rule:#232C36; --rule-soft:#19212A;
+    --accent:#FF3B3B; --accent-soft:#1E0F10;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#070B10; --paper-2:#0E141B; --panel:#111820;
+  --ink:#F2EFE9; --ink-2:#A3ACB6; --ink-3:#6F7984;
+  --rule:#232C36; --rule-soft:#19212A;
+  --accent:#FF3B3B; --accent-soft:#1E0F10;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 15px/1.55 var(--disp);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto;padding:0 20px;padding-block:0 76px}
+
+/* ══ Masthead ══════════════════════════════════════════════ */
+header.mast{border-bottom:3px solid var(--accent);background:var(--paper-2)}
+.mast-in{max-width:1200px;margin:0 auto;padding:32px 20px 26px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-end;justify-content:space-between}
+.mast h1{font-weight:800;font-size:clamp(28px,4.8vw,46px);line-height:.98;margin:0;letter-spacing:.004em;text-transform:uppercase;transform:skewX(-7deg);transform-origin:left bottom}
+.mast .sub{margin:13px 0 0;color:var(--ink-2);max-width:62ch;font-size:14.5px}
+.rev{font:600 10.5px/1.6 var(--cond);color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em;text-align:right;white-space:nowrap}
+.rev b{color:var(--accent);font-weight:700}
+
+/* ══ Control rail ══════════════════════════════════════════ */
+.rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:60;background:var(--paper);border-bottom:1px solid var(--rule)}
+.rail-in{max-width:1200px;margin:0 auto;padding:11px 20px;display:flex;flex-wrap:wrap;gap:9px 20px;align-items:center}
+.grp{display:flex;gap:8px;align-items:center}
+.lab{font:600 10px/1 var(--cond);color:var(--ink-3);text-transform:uppercase;letter-spacing:.16em}
+.seg{display:flex;border:1px solid var(--rule);overflow:hidden}
+.seg button{font:600 11px/1 var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);background:transparent;border:0;border-right:1px solid var(--rule);padding:7px 11px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.seg button:hover:not([aria-pressed="true"]){background:var(--accent-soft);color:var(--accent)}
+input[type=range]{accent-color:var(--accent);width:92px;height:20px}
+.val{font:700 11.5px/1 var(--disp);color:var(--ink);min-width:36px;font-variant-numeric:tabular-nums}
+.btn{font:700 11px/1 var(--cond);text-transform:uppercase;letter-spacing:.14em;background:var(--ink);color:var(--paper);border:0;padding:10px 15px;cursor:pointer;clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px)}
+.btn:hover{background:var(--accent);color:#fff}
+.btn.ghost{background:transparent;color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--rule)}
+.btn.ghost:hover{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+:is(button,a,input,select):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ══ Sections ══════════════════════════════════════════════ */
+.sec{margin:54px 0 0}
+.sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:2px solid var(--ink);padding-bottom:7px}
+.sec-head h2{font-weight:800;font-size:19px;line-height:1.1;margin:0;text-transform:uppercase;letter-spacing:.02em}
+.sec-head .ct{font:600 10.5px/1 var(--cond);color:var(--ink-3);margin-left:auto;white-space:nowrap;text-transform:uppercase;letter-spacing:.14em}
+.sec p.intro{color:var(--ink-2);margin:14px 0 22px;max-width:70ch;font-size:14.5px}
+
+/* ══ Stage — neutral, never branded ════════════════════════ */
+.stage{position:relative;overflow:hidden;cursor:pointer;height:252px;background:var(--stage)}
+.stage::after{content:"REPLAY";position:absolute;right:11px;bottom:9px;font:600 9.5px/1 var(--cond);letter-spacing:.2em;color:rgba(255,255,255,.3);opacity:0;transition:opacity .18s}
+.stage:hover::after,.stage:focus-visible::after{opacity:1}
+[data-ground="dark"] .stage{
+  background-color:var(--stage);
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:36px 36px,36px 36px;
+}
+[data-ground="mid"] .stage{background:#6E7873}
+[data-ground="light"] .stage{background:#DCE0DB}
+[data-ground="light"] .stage::after{color:rgba(0,0,0,.42)}
+[data-ground="feed"] .stage{
+  background:
+    radial-gradient(112% 78% at 18% 8%,rgba(255,255,255,.15),transparent 56%),
+    radial-gradient(90% 70% at 82% 90%,rgba(150,130,104,.26),transparent 62%),
+    linear-gradient(168deg,#2B323A,#49423A 54%,#161A1E);
+}
+
+/* ══ Shared discipline ═════════════════════════════════════ */
+.pos{position:absolute;left:50%;top:30px;transform:translateX(-50%);width:min(420px,88%)}
+.obj{position:relative;will-change:transform,opacity,clip-path}
+.o-name{font-weight:800;font-size:24px;line-height:1.08;letter-spacing:.004em;text-transform:uppercase}
+.o-meta{font-family:var(--cond);font-weight:600;font-size:11.5px;line-height:1;text-transform:uppercase;letter-spacing:.2em}
+
+/* ── The cut: shared blade flash ─────────────────────────── */
+.blade{
+  position:absolute;top:-24%;bottom:-24%;width:3px;left:-14%;
+  background:#fff;box-shadow:0 0 16px 3px #fff,0 0 42px 9px var(--r-red);
+  transform:rotate(22deg);opacity:0;pointer-events:none;z-index:4;
+}
+@keyframes bladeRun{0%{left:-14%;opacity:0}9%{opacity:1}88%{opacity:1}100%{left:116%;opacity:0}}
+@keyframes cutWipe{
+  0%  {clip-path:polygon(-40% 0,-14% 0,-40% 100%,-66% 100%)}
+  100%{clip-path:polygon(-40% 0,166% 0,140% 100%,-66% 100%)}
+}
+@keyframes hardIn{from{opacity:0}to{opacity:1}}
+@keyframes struck{from{opacity:0;filter:blur(7px)}to{opacity:1;filter:blur(0)}}
+@keyframes hold{from{opacity:1}to{opacity:1}}
+
+/* ── 01 follow — iaido band ──────────────────────────────── */
+.o-follow{
+  transform:skewX(-11deg);background:linear-gradient(100deg,var(--r-red-deep),var(--r-red) 58%,#F0343C);
+  width:min(408px,94%);margin:0 auto;overflow:hidden;
+  display:flex;align-items:center;gap:14px;padding:13px 20px;
+  box-shadow:0 14px 32px rgba(0,0,0,.58);
+}
+.o-follow>*{transform:skewX(11deg)}
+.o-follow .hatch{position:absolute;left:0;top:0;bottom:0;width:66px;transform:none;background:repeating-linear-gradient(112deg,rgba(0,0,0,.34) 0 10px,transparent 10px 20px);background-size:24px 24px}
+.o-follow .mesh{position:absolute;inset:0;transform:none;background:var(--hex);opacity:.9;pointer-events:none}
+.o-follow .scar{position:absolute;top:-20%;bottom:-20%;left:50%;width:2px;transform:rotate(22deg);background:rgba(255,255,255,.95);box-shadow:0 0 12px 2px rgba(255,255,255,.7);opacity:0;z-index:3}
+.o-follow .glyph{font-weight:800;font-size:26px;line-height:1;color:rgba(255,255,255,.9);z-index:1}
+.o-follow .txt{z-index:1;min-width:0}
+.o-follow .o-name{color:#fff;font-size:22px}
+.o-follow .o-meta{color:rgba(255,255,255,.82);margin-top:4px}
+@keyframes scarFade{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+
+/* ── 02 subscription — torii gate + gaku name plaque ─────── */
+.o-sub{height:172px}
+.o-sub .kasagi{
+  position:absolute;left:-5%;right:-5%;top:0;height:18px;
+  background:linear-gradient(#F0343C,var(--r-red) 42%,#8E0A10);
+  clip-path:polygon(0 0,100% 0,96% 100%,4% 100%);
+  box-shadow:0 3px 0 rgba(0,0,0,.45);
+}
+.o-sub .nuki{
+  position:absolute;left:3%;right:3%;top:36px;height:12px;
+  background:linear-gradient(#D8282F,#9A0C13);
+  box-shadow:0 2px 0 rgba(0,0,0,.4);
+}
+.o-sub .pillar{
+  position:absolute;top:11px;bottom:0;width:18px;
+  background:linear-gradient(90deg,#8E0A10,var(--r-red) 38%,#F0343C 56%,#9A0C13);
+  box-shadow:inset -2px 0 0 rgba(0,0,0,.32);
+}
+.o-sub .pillar.l{left:7%}
+.o-sub .pillar.r{right:7%}
+.o-sub .base{position:absolute;bottom:0;height:6px;width:36px;background:#2A0205}
+.o-sub .base.l{left:calc(7% - 9px)}
+.o-sub .base.r{right:calc(7% - 9px)}
+/* the gaku — the name plaque a real torii carries between its beams.
+   Solves the legibility problem architecturally rather than with a scrim. */
+.o-sub .gaku{
+  position:absolute;left:15%;right:15%;top:52px;
+  background:linear-gradient(162deg,#131B24,#070B10);
+  box-shadow:0 12px 28px rgba(0,0,0,.66),inset 0 0 0 1px rgba(216,30,38,.55),inset 0 1px 0 rgba(255,255,255,.09);
+  clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%,0 10px);
+  padding:14px 14px 16px;text-align:center;transform-origin:50% -18px;z-index:2;
+}
+.o-sub .gaku .mesh{position:absolute;inset:0;background:var(--hex);opacity:.5;pointer-events:none}
+.o-sub .cords{position:absolute;left:24%;right:24%;top:46px;height:8px;z-index:1}
+.o-sub .cords::before,.o-sub .cords::after{content:"";position:absolute;top:0;bottom:0;width:2px;background:#C9CDD2;opacity:.65}
+.o-sub .cords::before{left:0}
+.o-sub .cords::after{right:0}
+.o-sub .mark{font-family:var(--cond);font-size:10.5px;color:#FF6B6B;margin-bottom:8px;letter-spacing:.4em;text-transform:uppercase;position:relative}
+.o-sub .o-name{color:#FFFDF9;position:relative}
+.o-sub .o-meta{color:#C9636A;margin-top:9px;position:relative}
+.o-sub .dust{position:absolute;bottom:0;left:0;right:0;height:26px;background:radial-gradient(60% 100% at 14% 100%,rgba(255,255,255,.3),transparent 70%),radial-gradient(60% 100% at 86% 100%,rgba(255,255,255,.3),transparent 70%);opacity:0;pointer-events:none}
+@keyframes pillarDrive{from{transform:translateY(-240%)}to{transform:translateY(0)}}
+@keyframes beamDrop{0%{transform:translateY(-330%)}78%{transform:translateY(5%)}100%{transform:translateY(0)}}
+@keyframes dustPuff{0%{opacity:0;transform:scaleY(.4)}30%{opacity:.85}100%{opacity:0;transform:scaleY(1.5)}}
+@keyframes gakuHang{0%{transform:translateY(-46px) scaleY(.5);opacity:0}62%{opacity:1}100%{transform:translateY(0) scaleY(1);opacity:1}}
+
+/* ── 03 bits — tally board, tiles flipped by the cut ─────── */
+.o-bits{
+  background:linear-gradient(162deg,#1A0609,#0A0407);
+  padding:17px 20px 13px;
+  box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3);
+}
+.o-bits .br{position:absolute;width:15px;height:15px;border:2px solid #AEB5BD;z-index:3}
+.o-bits .br.tl{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.o-bits .br.tr{top:-1px;right:-1px;border-left:0;border-bottom:0}
+.o-bits .br.bl{bottom:-1px;left:-1px;border-right:0;border-top:0}
+.o-bits .br.rb{bottom:-1px;right:-1px;border-left:0;border-top:0}
+.o-bits .cells{display:flex;gap:6px;justify-content:center;position:relative;z-index:2}
+.o-bits .tile{
+  width:48px;height:60px;display:grid;place-items:center;
+  background:linear-gradient(160deg,#36090F,#1A050A);
+  box-shadow:inset 0 0 0 1px rgba(216,30,38,.45),0 4px 10px rgba(0,0,0,.5);
+  border-bottom:2px solid var(--r-red);
+  font-weight:800;font-size:33px;color:#FFFDF9;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 18px rgba(216,30,38,.75);
+  transform-origin:50% 50%;
+}
+.o-bits .who{text-align:center;margin-top:13px;color:#FFFDF9;position:relative;z-index:2}
+.o-bits .unit{text-align:center;color:#C9636A;margin-top:5px;position:relative;z-index:2}
+@keyframes oBitsIn{0%{transform:scale(.93);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes tileFlip{0%{transform:perspective(340px) rotateX(-94deg);opacity:0}54%{opacity:1}78%{transform:perspective(340px) rotateX(9deg)}100%{transform:perspective(340px) rotateX(0deg);opacity:1}}
+@keyframes boardFlash{0%,100%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3)}40%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(255,66,71,.9),0 0 34px rgba(216,30,38,.5)}}
+
+/* ── 04 donation — byobu folding screen (the big one) ────── */
+.o-don{height:178px;width:min(416px,96%);margin:0 auto}
+.o-don .screen{position:absolute;inset:0;display:flex;perspective:1100px}
+.o-don .panel{
+  position:relative;flex:1;transform-origin:left center;
+  background:linear-gradient(166deg,#20060A,#34080F 42%,#140408);
+  box-shadow:inset -1px 0 0 rgba(216,30,38,.6),inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.o-don .panel .mesh{position:absolute;inset:0;background:var(--hex);opacity:.5;pointer-events:none}
+.o-don .brail{position:absolute;left:-7px;right:-7px;height:10px;z-index:3;background:linear-gradient(#F0343C,var(--r-red) 48%,#8E0A10);box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.o-don .brail.t{top:-6px}
+.o-don .brail.b{bottom:-6px;box-shadow:0 -3px 0 rgba(0,0,0,.4)}
+.o-don .face{position:absolute;inset:0;display:grid;place-content:center;text-align:center;z-index:4}
+.o-don .r-head{font-family:var(--cond);font-weight:600;font-size:11px;letter-spacing:.34em;color:#FF6B6B;text-transform:uppercase}
+.o-don .r-amt{font-weight:800;font-size:50px;line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;color:#FFFDF9;margin-top:8px;text-shadow:0 0 32px rgba(216,30,38,.8),0 3px 10px rgba(0,0,0,.6)}
+.o-don .r-from{font-family:var(--cond);font-weight:600;font-size:13px;margin-top:10px;text-transform:uppercase;letter-spacing:.2em;color:#C9636A}
+@keyframes panelUnfold{from{transform:rotateY(-84deg)}to{transform:rotateY(0deg)}}
+@keyframes railSnap{from{transform:scaleX(.1);opacity:0}to{transform:scaleX(1);opacity:1}}
+
+/* ── 05 raid — sashimono banner rank ─────────────────────── */
+.o-raid{height:182px}
+.o-raid .rank{position:absolute;left:0;right:0;top:0;height:132px;display:flex;align-items:flex-start;justify-content:center;gap:7px}
+.o-raid .ban{
+  position:relative;transform-origin:50% 0;
+  background:linear-gradient(170deg,#8E0A10,#5E070C 70%,#3A0407);
+  clip-path:polygon(0 0,100% 0,100% 84%,50% 100%,0 84%);
+  box-shadow:0 12px 26px rgba(0,0,0,.6);
+}
+.o-raid .ban::before{content:"";position:absolute;left:-3px;right:-3px;top:0;height:5px;background:#C9CDD2;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.o-raid .ban.s{width:26px;height:96px}
+.o-raid .ban.m{width:34px;height:112px}
+.o-raid .ban.main{
+  width:118px;height:132px;
+  background:linear-gradient(168deg,#F0343C,var(--r-red) 40%,#A50F16);
+}
+.o-raid .ban.main .mesh{position:absolute;inset:0;background:var(--hex);opacity:.85;pointer-events:none}
+.o-raid .cnt{font-weight:800;font-size:46px;line-height:1;color:#fff;letter-spacing:-.045em;font-variant-numeric:tabular-nums;text-align:center;margin-top:22px;text-shadow:0 3px 10px rgba(0,0,0,.5)}
+.o-raid .clbl{font-family:var(--cond);font-weight:700;font-size:9.5px;letter-spacing:.24em;color:rgba(255,255,255,.82);text-transform:uppercase;text-align:center;margin-top:4px}
+.o-raid .plaque{
+  position:absolute;left:8%;right:8%;bottom:0;
+  background:linear-gradient(160deg,#141C26,#070B10);
+  border-left:3px solid var(--r-red);
+  border-right:3px solid var(--r-red);
+  padding:9px 14px 10px;text-align:center;
+  box-shadow:0 12px 26px rgba(0,0,0,.6);
+}
+.o-raid .o-name{color:#FFFDF9;font-size:21px}
+.o-raid .o-meta{color:#C9636A;margin-top:5px}
+@keyframes banPlant{
+  0%  {transform:translateY(-210%) skewX(0deg)}
+  56% {transform:translateY(0) skewX(0deg)}
+  71% {transform:translateY(0) skewX(4.5deg)}
+  86% {transform:translateY(0) skewX(-2deg)}
+  100%{transform:translateY(0) skewX(0deg)}
+}
+@keyframes plaqueIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+
+/* ══ Playback ══════════════════════════════════════════════ */
+.playing .obj{animation:var(--in) calc(var(--dur) / var(--spd)) var(--ease) both}
+
+/* 01 follow */
+.playing .o-follow .blade {animation:bladeRun calc(.40s / var(--spd)) cubic-bezier(.25,0,.15,1) both}
+.playing .o-follow .scar  {animation:scarFade calc(.44s / var(--spd)) ease-out calc(.16s / var(--spd)) both}
+.playing .o-follow .hatch {animation:hardIn .01s linear calc(.19s / var(--spd)) both}
+.playing .o-follow .glyph {animation:hardIn .01s linear calc(.25s / var(--spd)) both}
+.playing .o-follow .o-name{animation:hardIn .01s linear calc(.31s / var(--spd)) both}
+.playing .o-follow .o-meta{animation:hardIn .01s linear calc(.37s / var(--spd)) both}
+
+/* 02 subscription — pillars, beams, then the gaku hangs, then text */
+.playing .o-sub .pillar.l{animation:pillarDrive calc(.26s / var(--spd)) cubic-bezier(.4,0,.2,1) both}
+.playing .o-sub .pillar.r{animation:pillarDrive calc(.26s / var(--spd)) cubic-bezier(.4,0,.2,1) calc(.07s / var(--spd)) both}
+.playing .o-sub .base.l  {animation:hardIn .01s linear calc(.26s / var(--spd)) both}
+.playing .o-sub .base.r  {animation:hardIn .01s linear calc(.33s / var(--spd)) both}
+.playing .o-sub .dust    {animation:dustPuff calc(.46s / var(--spd)) ease-out calc(.27s / var(--spd)) both}
+.playing .o-sub .kasagi  {animation:beamDrop calc(.3s / var(--spd)) cubic-bezier(.4,0,.15,1) calc(.36s / var(--spd)) both}
+.playing .o-sub .nuki    {animation:beamDrop calc(.26s / var(--spd)) cubic-bezier(.4,0,.15,1) calc(.46s / var(--spd)) both}
+.playing .o-sub .cords   {animation:hardIn calc(.14s / var(--spd)) linear calc(.6s / var(--spd)) both}
+.playing .o-sub .gaku    {animation:gakuHang calc(.32s / var(--spd)) cubic-bezier(.3,0,.18,1) calc(.62s / var(--spd)) both}
+.playing .o-sub .mark    {animation:struck calc(.24s / var(--spd)) ease-out calc(.86s / var(--spd)) both}
+.playing .o-sub .o-name  {animation:struck calc(.24s / var(--spd)) ease-out calc(.93s / var(--spd)) both}
+.playing .o-sub .o-meta  {animation:struck calc(.24s / var(--spd)) ease-out calc(1.00s / var(--spd)) both}
+
+/* 03 bits — the blade crosses and flips each tile as it passes */
+.playing .o-bits{animation:oBitsIn calc(.2s / var(--spd)) cubic-bezier(.2,1,.2,1) both,boardFlash calc(.5s / var(--spd)) ease-out calc(.66s / var(--spd)) both}
+.playing .o-bits .blade{animation:bladeRun calc(.54s / var(--spd)) cubic-bezier(.3,0,.2,1) calc(.12s / var(--spd)) both}
+.playing .o-bits .tile {animation:tileFlip calc(.34s / var(--spd)) cubic-bezier(.3,0,.16,1) var(--rdelay) both}
+.playing .o-bits .who  {animation:hardIn calc(.18s / var(--spd)) ease-out calc(.70s / var(--spd)) both}
+.playing .o-bits .unit {animation:hardIn calc(.18s / var(--spd)) ease-out calc(.76s / var(--spd)) both}
+
+/* 04 donation — the screen unfolds, the rails snap across, the amount is struck */
+.playing .o-don .panel {animation:panelUnfold calc(.34s / var(--spd)) cubic-bezier(.3,0,.16,1) var(--rdelay) both}
+.playing .o-don .brail.t{animation:railSnap calc(.24s / var(--spd)) cubic-bezier(.3,0,.16,1) calc(.52s / var(--spd)) both}
+.playing .o-don .brail.b{animation:railSnap calc(.24s / var(--spd)) cubic-bezier(.3,0,.16,1) calc(.60s / var(--spd)) both}
+.playing .o-don .r-head{animation:struck calc(.24s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-don .r-amt {animation:struck calc(.28s / var(--spd)) ease-out calc(.79s / var(--spd)) both}
+.playing .o-don .r-from{animation:struck calc(.24s / var(--spd)) ease-out calc(.88s / var(--spd)) both}
+
+/* 05 raid — banners plant outside-in, the main one lands last */
+.playing .o-raid .ban  {animation:banPlant calc(.42s / var(--spd)) cubic-bezier(.4,0,.18,1) var(--rdelay) both}
+.playing .o-raid .cnt  {animation:hardIn .01s linear calc(.56s / var(--spd)) both}
+.playing .o-raid .clbl {animation:hardIn .01s linear calc(.62s / var(--spd)) both}
+.playing .o-raid .plaque{animation:plaqueIn calc(.28s / var(--spd)) cubic-bezier(.25,.9,.2,1) calc(.66s / var(--spd)) both}
+
+/* ── Exits ───────────────────────────────────────────────── */
+@keyframes exSheathe  {to{transform:skewX(-11deg) translateX(-124%);opacity:0}}
+@keyframes exGateFall {to{transform:translateY(34%);opacity:0}}
+@keyframes exBoardTip {to{transform:perspective(500px) rotateX(38deg);opacity:0}}
+@keyframes exScreenFold{to{transform:scaleX(.08);opacity:0}}
+@keyframes exStrike   {to{transform:translateY(-26%);opacity:0}}
+.exiting .obj{animation:var(--out) calc(var(--outdur) / var(--spd)) var(--outease) both}
+.exiting .obj *{animation:none}
+
+/* ══ Bay layout ════════════════════════════════════════════ */
+.bay{display:grid;grid-template-columns:minmax(0,1fr) 296px;border-top:1px solid var(--rule-soft)}
+.bay:last-of-type{border-bottom:1px solid var(--rule-soft)}
+.bay .stage{border-right:1px solid var(--rule-soft)}
+.bay-meta{padding:18px 0 20px 22px;border-left:1px solid var(--rule-soft);display:flex;flex-direction:column;gap:9px}
+.bay-meta .ek{font:600 10.5px/1 var(--cond);color:#fff;background:var(--accent);padding:5px 8px;letter-spacing:.14em;text-transform:uppercase;align-self:flex-start}
+.bay-meta .ek.nw{background:var(--ink)}
+.bay-meta h3{font-weight:800;font-size:18px;line-height:1.1;margin:0;text-transform:uppercase;letter-spacing:.01em}
+.bay-meta .why{color:var(--ink-2);font-size:13.5px;margin:0;line-height:1.5}
+.spex{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 11px;font-family:var(--cond);font-size:12.5px;line-height:1.45;margin-top:auto}
+.spex dt{color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em;font-weight:600;padding-top:1px}
+.spex dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
+
+/* ══ Channel test ══════════════════════════════════════════ */
+.ch{border:1px solid var(--rule);overflow:hidden;background:var(--panel)}
+.ch .stage{height:276px;cursor:default}
+.ch .stage::after{content:none}
+.ch-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:11px 14px;border-top:1px solid var(--rule)}
+.ch-bar .now{font:600 11.5px/1 var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);min-width:20ch}
+.ch-bar .now b{color:var(--accent);font-weight:700}
+.dots{display:flex;gap:5px;margin-left:auto}
+.dots i{width:16px;height:4px;background:var(--rule);transition:background .2s}
+.dots i.on{background:var(--accent)}
+
+/* ══ Notes ═════════════════════════════════════════════════ */
+.note{margin-top:22px;border:1px solid var(--rule);border-left:4px solid var(--accent);background:var(--panel);padding:19px 22px}
+.note h3{font-weight:800;font-size:15px;line-height:1.2;margin:0 0 9px;text-transform:uppercase;letter-spacing:.02em}
+.note p{margin:0 0 12px;color:var(--ink-2);font-size:14px;max-width:72ch}
+.note p:last-child{margin-bottom:0}
+code.inl{font-family:var(--cond);font-size:12.5px;background:var(--paper-2);border:1px solid var(--rule-soft);padding:1px 5px;color:var(--ink)}
+.tsys{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);overflow:hidden;margin-top:6px}
+.tsys div{background:var(--panel);padding:13px 15px}
+.tsys dt{font:600 10px/1 var(--cond);color:var(--ink-3);text-transform:uppercase;letter-spacing:.16em;margin-bottom:8px}
+.tsys dd{margin:0;font-size:13.5px;color:var(--ink-2);font-family:var(--cond)}
+.tsys dd b{color:var(--ink);font-weight:700}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);color:var(--ink-3);font-size:13px;display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:space-between;font-family:var(--cond)}
+
+/* ══ Responsive ════════════════════════════════════════════ */
+@media (max-width:880px){
+  .bay{grid-template-columns:minmax(0,1fr)}
+  .bay .stage{border-right:0;height:238px}
+  .bay-meta{border-left:0;border-top:1px solid var(--rule-soft);padding:16px 0 20px}
+  .spex{margin-top:4px}
+}
+@media (max-width:460px){
+  .rail-in{gap:8px 14px}
+  .stage,.ch .stage{height:224px}
+  .pos{top:24px;width:94%}
+  .o-name{font-size:20px}
+}
+@media (prefers-reduced-motion:reduce){
+  .playing .obj,.playing .obj *,.exiting .obj{animation-duration:1ms;animation-iteration-count:1}
+}
+</style>
+
+<header class="mast">
+  <div class="mast-in">
+    <div>
+      <h1>Five Alert Objects</h1>
+      <p class="sub">Donation rebuilt for <b>spectacle</b> &mdash; a six-panel byobu screen, now the most elaborate
+      object of the five. Bits restyled into a lacquer <b>tally board</b>. Raid plaque centred with rails on both
+      edges. Doctrine unchanged: <b>strike, then stillness</b>.</p>
+    </div>
+    <div class="rev">Direction 06 <b>&#9679;</b> live<br>1 rebuilt &middot; 1 restyled</div>
+  </div>
+</header>
+
+<div class="rail">
+  <div class="rail-in">
+    <div class="grp">
+      <span class="lab">Ground</span>
+      <div class="seg" id="ctl-ground">
+        <button type="button" data-g="dark" aria-pressed="true">dark</button>
+        <button type="button" data-g="feed" aria-pressed="false">feed</button>
+        <button type="button" data-g="mid" aria-pressed="false">mid</button>
+        <button type="button" data-g="light" aria-pressed="false">light</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lab">Speed</span>
+      <input type="range" id="ctl-speed" min="0.3" max="2" step="0.1" value="1" aria-label="Playback speed">
+      <span class="val" id="val-speed">1.0&times;</span>
+    </div>
+    <div class="grp" style="margin-left:auto">
+      <button type="button" class="btn" id="ctl-stream">Run as a stream</button>
+      <button type="button" class="btn ghost" id="ctl-all">Replay all</button>
+      <button type="button" class="btn ghost" id="ctl-exit">Play exits</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section class="sec">
+    <div class="sec-head">
+      <h2>What changed</h2>
+      <span class="ct">this round</span>
+    </div>
+    <dl class="tsys">
+      <div><dt>Donation, take four</dt><dd>You said it was not impressive enough, and that was right &mdash; real money
+        got a flat card while a raid got five planting banners. Now a <b>byobu</b>: six panels unfold, two rails snap
+        across, the amount is struck at <b>50px</b>, the largest figure in the set.</dd></div>
+      <div><dt>Bits, samurai</dt><dd>It was the odd one out &mdash; an LED module among lacquer and steel. Now a
+        <b>tally board</b> with iron corner brackets whose tiles <b>flip</b> face-up as the blade passes, instead of
+        scrolling like an odometer.</dd></div>
+      <div><dt>Raid plaque</dt><dd>Text centred, and the scarlet rail mirrored onto the right edge. The corner chamfer
+        came off because it cut straight through where the new rail sits.</dd></div>
+      <div><dt>A collision fixed</dt><dd>The byobu frame rails were class <code class="inl">rail</code>, same as this
+        page's sticky control bar &mdash; its <code class="inl">top:0</code> pinned the bottom rail to the wrong edge.
+        Renamed.</dd></div>
+    </dl>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head">
+      <h2>Channel test</h2>
+      <span class="ct">all five, one slot, in sequence</span>
+    </div>
+    <p class="intro">Three objects changed again, so play this before judging any single bay. The question is whether
+    the gate, the fan and the banner rank still read as the same channel as the band.</p>
+    <div class="ch">
+      <div class="stage" id="ch-stage"></div>
+      <div class="ch-bar">
+        <span class="now" id="ch-now">idle &mdash; press <b>Run as a stream</b></span>
+        <div class="dots" id="ch-dots"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head">
+      <h2>The objects</h2>
+      <span class="ct" id="ct-obj">5 specimens</span>
+    </div>
+    <p class="intro">Five silhouettes: skewed band, gate, chamfered module, fan, banner rank. Five mechanisms: cut,
+    assembly, digit-strike, radial unfold, planting. Drop to 0.3&times; to watch each resolve.</p>
+    <div id="bays"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head">
+      <h2>Still open</h2>
+      <span class="ct">worth your scrutiny</span>
+    </div>
+    <dl class="tsys">
+      <div><dt>Band on follows</dt><dd>Still the loudest object on your most frequent event. Trimmed to <b>0.40s</b>,
+        but forty a stream is forty. Say the word and I will quiet it.</dd></div>
+      <div><dt>Gate is tallest</dt><dd><b>172px</b> with the gaku. If that crowds the top of your layout the pillars
+        can shorten without losing the shape.</dd></div>
+      <div><dt>Raid runs longest</dt><dd><b>0.94s</b> for five banners to plant. It is the rarest event, so it can
+        afford the time &mdash; but it can be tightened to ~0.7s by halving the stagger.</dd></div>
+    </dl>
+
+    <div class="note">
+      <h3>Still true: the structural cost</h3>
+      <p>Your CLAUDE.md requires every event to share one structure
+      (<code class="inl">top-accent</code> + <code class="inl">card-body</code> + <code class="inl">car-track</code>).
+      Five objects breaks it, and the builder preview, OBS overlay and config preview each render independently &mdash;
+      so five structures hand-copied across three files is fifteen places to keep in sync. One object definition
+      consumed by all three renderers is the fix, and it is no longer optional.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Brainstorming artifact &mdash; none of this is in the repo yet.</span>
+    <span>overlay.css &middot; overlay.js &middot; overlay-builder.ejs</span>
+  </footer>
+</div>
+
+<script>
+var OBJECTS = [
+{
+  key:'follow', title:'Iaido band', cls:'o-follow', tag:'kept',
+  inAnim:'cutWipe', dur:'0.40s', ease:'cubic-bezier(.25,0,.15,1)',
+  out:'exSheathe', outdur:'0.34s', outease:'cubic-bezier(.5,0,.9,.3)',
+  material:'Scarlet gradient, hazard hatch, hex mesh',
+  silhouette:'Parallelogram, 11° skew, zero radius',
+  mech:'Blade crosses at 22°; the band is revealed along the cut; the scar glows, then fades',
+  why:'The one you liked. Unchanged this round.',
+  html:'<div class="hatch"></div><div class="mesh"></div><div class="glyph">✦</div>'
+      +'<div class="txt"><div class="o-name">ApexAndre</div><div class="o-meta">started following</div></div>'
+      +'<div class="scar"></div><div class="blade"></div>'
+},
+{
+  key:'subscription', title:'Torii gate', cls:'o-sub', tag:'fixed',
+  inAnim:'hold', dur:'1.26s', ease:'linear',
+  out:'exGateFall', outdur:'0.4s', outease:'cubic-bezier(.5,0,.9,.4)',
+  material:'Vermilion lacquer, dark gaku plaque, steel cords',
+  silhouette:'Gate — two pillars, two beams, plaque slung between them',
+  mech:'Pillars plant, dust puffs, beams slam on, then the gaku drops on its cords and the text is struck onto it',
+  why:'The legibility fix is the gaku — the name plaque a real torii carries. The text now has dark lacquer under it instead of your gameplay, and the plaque dropping adds a beat the gate was missing.',
+  html:'<div class="pillar l"></div><div class="pillar r"></div>'
+      +'<div class="base l"></div><div class="base r"></div><div class="dust"></div>'
+      +'<div class="kasagi"></div><div class="nuki"></div><div class="cords"></div>'
+      +'<div class="gaku"><div class="mesh"></div><div class="mark">Subscriber</div>'
+      +'<div class="o-name">RacerDan</div><div class="o-meta">Tier 1 · 4 months</div></div>'
+},
+{
+  key:'bits', title:'Tally board', cls:'o-bits', tag:'restyled',
+  inAnim:'oBitsIn', dur:'0.20s', ease:'cubic-bezier(.2,1,.2,1)',
+  out:'exBoardTip', outdur:'0.34s', outease:'ease-in',
+  material:'Lacquer board, iron corner brackets, scarlet-edged tiles',
+  silhouette:'Bracketed board holding three inset tiles',
+  mech:'The blade crosses and flips each lacquer tile face-up as it passes, left to right, then the board flashes',
+  why:'It was the odd one out \u2014 an LED module among lacquer and steel. Same cut-causes-the-number idea, but the digits now flip like wooden tiles instead of scrolling like an odometer.',
+  digits:'500',
+  html:'<div class="br tl"></div><div class="br tr"></div><div class="br bl"></div><div class="br rb"></div>'
+      +'<div class="cells"></div><div class="who o-name" style="font-size:16px">TurboTina</div>'
+      +'<div class="unit o-meta">bits</div><div class="blade"></div>'
+},
+{
+  key:'donation', title:'Byobu screen', cls:'o-don', tag:'rebuilt',
+  inAnim:'hold', dur:'1.34s', ease:'linear',
+  out:'exScreenFold', outdur:'0.36s', outease:'cubic-bezier(.5,0,.9,.4)',
+  material:'Six lacquer panels, scarlet frame rails, hex mesh',
+  silhouette:'Folding screen \u2014 widest and most built-up object in the set',
+  mech:'Six panels unfold left to right from edge-on, both frame rails snap across, then the amount is struck',
+  why:'Fourth rebuild, and the first one built for spectacle. Real money was getting the flattest object while a raid got five planting banners. Six panels, two rails and a struck amount make it the most elaborate build of the five \u2014 and at 50px the amount is now the largest figure anywhere in the set.',
+  panels:6,
+  html:'<div class="screen"></div>'
+      +'<div class="brail t"></div><div class="brail b"></div>'
+      +'<div class="face"><div class="r-head">Tribute</div><div class="r-amt">\u20ac25.00</div>'
+      +'<div class="r-from">PitBoss92</div></div>'
+},
+{
+  key:'raid', title:'Sashimono rank', cls:'o-raid', tag:'rebuilt',
+  inAnim:'hold', dur:'0.94s', ease:'linear',
+  out:'exStrike', outdur:'0.36s', outease:'cubic-bezier(.5,0,.9,.4)',
+  material:'Lacquer banners, steel crossbars, hex mesh on the standard',
+  silhouette:'Rank of five vertical banners, swallowtail hems, plaque below',
+  mech:'Banners plant from the outside in, each with one cloth ripple; the standard lands last carrying the count',
+  why:'The drum was a flat circle. Sashimono were the back banners identifying a samurai’s unit — five planting in sequence reads as a unit arriving, which is what a raid is. The count sits on the standard at 46px.',
+  banners:true,
+  html:'<div class="rank">'
+      +'<i class="ban s" style="--rdelay:calc(0s / var(--spd))"></i>'
+      +'<i class="ban m" style="--rdelay:calc(.1s / var(--spd))"></i>'
+      +'<div class="ban main" style="--rdelay:calc(.26s / var(--spd))"><div class="mesh"></div>'
+      +'<div class="cnt">42</div><div class="clbl">raiders</div></div>'
+      +'<i class="ban m" style="--rdelay:calc(.16s / var(--spd))"></i>'
+      +'<i class="ban s" style="--rdelay:calc(.05s / var(--spd))"></i>'
+      +'</div>'
+      +'<div class="plaque"><div class="o-name">GridWalker</div><div class="o-meta">brought the grid</div></div>'
+}
+];
+
+function objHTML(o){ return '<div class="pos"><div class="obj ' + o.cls + '">' + o.html + '</div></div>'; }
+
+function fillDigits(root, digits){
+  var cells = root.querySelector('.cells');
+  if (!cells) return;
+  var out = '';
+  for (var i = 0; i < digits.length; i++){
+    out += '<span class="tile" style="--rdelay:calc(' + (0.20 + i * 0.12).toFixed(2)
+         + 's / var(--spd))">' + digits.charAt(i) + '</span>';
+  }
+  cells.innerHTML = out;
+}
+
+function fillPanels(root, n){
+  var screen = root.querySelector('.screen');
+  if (!screen) return;
+  var out = '';
+  for (var i = 0; i < n; i++){
+    out += '<div class="panel" style="--rdelay:calc(' + (i * 0.06).toFixed(2)
+         + 's / var(--spd))"><div class="mesh"></div></div>';
+  }
+  screen.innerHTML = out;
+}
+
+function hydrate(stage, o){
+  stage.innerHTML = objHTML(o);
+  if (o.digits) fillDigits(stage, o.digits);
+  if (o.panels) fillPanels(stage, o.panels);
+  stage.style.setProperty('--in', o.inAnim);
+  stage.style.setProperty('--dur', o.dur);
+  stage.style.setProperty('--ease', o.ease);
+  stage.style.setProperty('--out', o.out);
+  stage.style.setProperty('--outdur', o.outdur);
+  stage.style.setProperty('--outease', o.outease);
+}
+
+function play(stage){ stage.classList.remove('playing','exiting'); void stage.offsetWidth; stage.classList.add('playing'); }
+function playExit(stage){ stage.classList.remove('exiting'); void stage.offsetWidth; stage.classList.add('exiting'); }
+
+var bays = document.getElementById('bays');
+OBJECTS.forEach(function(o, i){
+  var row = document.createElement('div');
+  row.className = 'bay';
+  row.innerHTML =
+      '<div><div class="stage" data-ix="' + i + '" role="button" tabindex="0" aria-label="Replay ' + o.title + '"></div></div>'
+    + '<div class="bay-meta">'
+    +   '<span class="ek' + (o.tag === 'rebuilt' || o.tag === 'fixed' ? ' nw' : '') + '">' + o.key + ' &middot; ' + o.tag + '</span>'
+    +   '<h3>' + o.title + '</h3>'
+    +   '<p class="why">' + o.why + '</p>'
+    +   '<dl class="spex">'
+    +     '<dt>material</dt><dd>' + o.material + '</dd>'
+    +     '<dt>shape</dt><dd>' + o.silhouette + '</dd>'
+    +     '<dt>mechanism</dt><dd>' + o.mech + '</dd>'
+    +     '<dt>strike</dt><dd>' + o.dur + '</dd>'
+    +     '<dt>sheathe</dt><dd>' + o.out.replace('ex','') + ' &middot; ' + o.outdur + '</dd>'
+    +   '</dl>'
+    + '</div>';
+  bays.appendChild(row);
+  hydrate(row.querySelector('.stage'), o);
+});
+
+function bayStages(){ return Array.prototype.slice.call(document.querySelectorAll('.bay .stage')); }
+
+var chStage = document.getElementById('ch-stage'),
+    chNow   = document.getElementById('ch-now'),
+    chDots  = document.getElementById('ch-dots'),
+    chTimers = [], chRunning = false;
+
+OBJECTS.forEach(function(){ chDots.appendChild(document.createElement('i')); });
+hydrate(chStage, OBJECTS[0]);
+
+function chClear(){ for (var i = 0; i < chTimers.length; i++) clearTimeout(chTimers[i]); chTimers = []; }
+
+function runStream(){
+  chClear();
+  chRunning = true;
+  var t = 0, dots = chDots.querySelectorAll('i'), spd = parseFloat(document.getElementById('ctl-speed').value) || 1;
+  OBJECTS.forEach(function(o, i){
+    var hold = (parseFloat(o.dur) + 1.6) / spd * 1000;
+    chTimers.push(setTimeout(function(){
+      hydrate(chStage, o);
+      play(chStage);
+      chNow.innerHTML = '<b>' + o.key + '</b> &mdash; ' + o.title;
+      for (var d = 0; d < dots.length; d++) dots[d].className = (d === i ? 'on' : '');
+    }, t));
+    t += hold;
+    chTimers.push(setTimeout(function(){ playExit(chStage); }, t - 440 / spd));
+  });
+  chTimers.push(setTimeout(function(){
+    chRunning = false;
+    chNow.innerHTML = 'sequence complete &mdash; press <b>Run as a stream</b>';
+    var dd = chDots.querySelectorAll('i');
+    for (var d = 0; d < dd.length; d++) dd[d].className = '';
+  }, t + 200));
+}
+
+document.addEventListener('click', function(ev){
+  var st = ev.target.closest ? ev.target.closest('.bay .stage') : null;
+  if (st) play(st);
+});
+document.addEventListener('keydown', function(ev){
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  var st = ev.target.closest ? ev.target.closest('.bay .stage') : null;
+  if (st){ ev.preventDefault(); play(st); }
+});
+document.getElementById('ctl-all').addEventListener('click', function(){
+  bayStages().forEach(function(s, i){ setTimeout(function(){ play(s); }, i * 115); });
+});
+document.getElementById('ctl-exit').addEventListener('click', function(){
+  bayStages().forEach(function(s, i){ setTimeout(function(){ playExit(s); }, i * 115); });
+});
+document.getElementById('ctl-stream').addEventListener('click', function(){
+  if (chRunning){ chClear(); chRunning = false; chNow.innerHTML = 'stopped &mdash; press <b>Run as a stream</b>'; return; }
+  document.querySelector('.ch').scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(runStream, 320);
+});
+document.getElementById('ctl-ground').addEventListener('click', function(ev){
+  var b = ev.target.closest('button');
+  if (!b) return;
+  var all = this.querySelectorAll('button');
+  for (var i = 0; i < all.length; i++) all[i].setAttribute('aria-pressed', String(all[i] === b));
+  document.documentElement.setAttribute('data-ground', b.getAttribute('data-g'));
+});
+var sp = document.getElementById('ctl-speed'), spv = document.getElementById('val-speed');
+sp.addEventListener('input', function(){
+  document.documentElement.style.setProperty('--spd', this.value);
+  spv.innerHTML = parseFloat(this.value).toFixed(1) + '&times;';
+});
+
+document.documentElement.setAttribute('data-ground','dark');
+if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  window.addEventListener('load', function(){
+    bayStages().forEach(function(s, i){ setTimeout(function(){ play(s); }, 260 + i * 150); });
+  });
+}
+</script>

@@ -3,6 +3,7 @@
 **Status:** look approved, spec pending review
 **Date:** 2026-10-09
 **Prototype:** https://claude.ai/artifact/Mivb7w5SWitZ2PNy8bGWL4 (Version 10)
+**Prototype source (committed):** `docs/superpowers/specs/assets/2026-10-09-alert-objects-prototype.html`
 
 ## Goal
 
@@ -62,15 +63,20 @@ difference is the point of the direction.
 
 ### The problem
 
-Today one card structure is rendered independently in three places:
+Today one card structure is rendered independently in **two** places:
 
-1. `public/overlay/overlay.js` — the real OBS overlay
-2. `src/views/overlay-builder.ejs` — the builder's live preview
-3. `src/views/overlay-config.ejs` — the config page preview iframe
+1. `public/overlay/overlay.js` — the real OBS overlay (`buildBannerContent()`, a switch over event type)
+2. `src/views/overlay-builder.ejs` — the builder's live preview, which is **not** a markup generator:
+   it is a block of static DOM (`#preview-card`, `#preview-top-accent`, `#preview-event-label`, …
+   at `overlay-builder.ejs:1105-1130`) mutated in place by `updatePreview()` at line 1363.
 
-They have already drifted: `checkerScroll` animates `left` in the builder and `transform` in
-`overlay.css`. With one structure that was a maintenance irritation. With five objects it becomes
-fifteen places to keep in sync, which is not sustainable.
+`src/views/overlay-config.ejs` is **not** a third path, despite what an earlier draft of this spec
+said. It previews by loading the real overlay page in an iframe (`iframe.src = overlayUrlBase`,
+`overlay-config.ejs:842`), so it inherits whatever the overlay renders and needs no changes at all.
+
+The two real paths have already drifted: `checkerScroll` animates `left` in the builder and
+`transform` in `overlay.css`. With one structure that was a maintenance irritation. With five
+objects it becomes ten places to keep in sync, which is not sustainable.
 
 ### The fix — one shared registry
 
@@ -129,8 +135,8 @@ registry becomes a browser global. No build step, consistent with the project's 
 |---|---|
 | `public/overlay/overlay.js` | `buildBannerContent()` — for the five keys, delegate to `OBJECTS[type].render()`. Other four cases unchanged. |
 | `public/overlay/overlay.js` | `applyCustomDesign()` — skip entirely for the five object types in phase 1 (see *Colour*). |
-| `src/views/overlay-builder.ejs` | Preview calls the registry instead of its own card builder. Remove its duplicated `@keyframes`. |
-| `src/views/overlay-config.ejs` | Same. |
+| `src/views/overlay-builder.ejs` | Replace the static preview DOM (`1105-1130`) with a container the registry renders into; `updatePreview()` calls `OBJECTS[type].render()`. Remove its duplicated `@keyframes`. |
+| `src/views/overlay-config.ejs` | **No change** — previews the real overlay in an iframe. |
 | `src/routes/overlay.js` | Add the `<script src>` and `objects.css` link to the overlay page HTML. |
 
 ### Positioning fix
@@ -241,9 +247,10 @@ This must be rewritten. The rule existed to stop the three render paths drifting
 enforces that better than a convention did. Proposed replacement:
 
 > **Object registry:** The five Twitch event types render from `public/overlay/objects/`. Any change
-> to an object's markup, keyframes or timing is made there and nowhere else — all three render paths
-> consume the same module. Remaining event types still share the legacy `top-accent` + `card-body` +
-> `car-track` structure.
+> to an object's markup, keyframes or timing is made there and nowhere else — both render paths (the
+> OBS overlay and the builder preview) consume the same module. `overlay-config.ejs` previews via an
+> iframe of the real overlay and needs no parallel change. Remaining event types still share the
+> legacy `top-accent` + `card-body` + `car-track` structure.
 
 ## Testing
 
@@ -264,12 +271,12 @@ enforces that better than a convention did. Proposed replacement:
 | `follow` is loud and frequent | Trimmed to 0.40s/408px. If it grates in production, a quieter variant is a CSS-only change. |
 | ~~Production design-row count unknown~~ | **Resolved** — 1 genuine customisation in production. No announcement needed. |
 | Builder loses controls in phase 1 | Explanatory note in the UI; phase 2 restores them. |
-| Oxanium is a substitute, not the brand face | Check licensing for self-hosting the real face before committing. |
+| ~~Oxanium is a substitute~~ | **Resolved** — staying on Oxanium. No licensing question to clear. |
 
 ## Open questions
 
 1. ~~Confirm the production count of `overlay_designs` rows.~~ **Answered 2026-10-09** — see
    *Measured against production*. 7 streamers, 8 relevant rows, 1 genuine customisation.
-2. Self-host The Last Shuriken, or stay on Oxanium?
+2. ~~Self-host The Last Shuriken, or stay on Oxanium?~~ **Answered 2026-10-09** — stay on Oxanium.
 3. Should phase 1 keep a per-streamer "use legacy card" escape hatch? Given only one customised row
    exists, the backup table alone now looks sufficient — recommend dropping the escape hatch.
