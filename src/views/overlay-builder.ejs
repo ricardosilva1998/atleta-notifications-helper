@@ -10,6 +10,10 @@
   <link id="google-fonts-base" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <link id="google-fonts-custom" href="" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Outfit&family=Inter&family=Poppins&family=Roboto+Mono&family=Press+Start+2P&family=Permanent+Marker&family=Bangers&display=swap" rel="stylesheet">
+  <!-- Alert object registry — shared with the live OBS overlay (public/overlay/overlay.js) -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/overlay/objects/objects.css">
+  <script src="/overlay/objects/index.js"></script>
   <style>
     :root {
       --bg-base: #0c0d14;
@@ -470,6 +474,16 @@
       transform-origin: top center;
       background: linear-gradient(160deg, rgb(9,9,22), #1a1a3e 40%, rgb(9,9,22));
     }
+    /* Object preview host — mirrors .preview-alert-card's own box model (relative,
+       420px) rather than the live overlay's .alert-pos (absolute + translateX(-50%)):
+       #preview-card-container is ALREADY position:absolute and places this host via
+       positionCard(), so .alert-pos here would double up the positioning and break
+       the layout. The .playing class still goes on this host — objects.css's rule
+       is the descendant selector `.playing .obj`, which matches regardless. */
+    #preview-object-host {
+      position: relative;
+      width: 420px;
+    }
     .preview-alert-card .top-accent {
       height: 3px; border-radius: 16px 16px 0 0;
     }
@@ -913,6 +927,13 @@
         </div>
       </div>
 
+      <div id="phase1-notice" style="display:none; padding:12px 14px; margin-bottom:12px;
+           border-left:3px solid #D81E26; background:rgba(216,30,38,0.08);
+           font-size:13px; line-height:1.5;">
+        This alert now uses a fixed design with its own built-in animation.
+        Colour and animation controls will return in a future update.
+      </div>
+
       <!-- Theme Section -->
       <div class="section collapsed" id="section-theme">
         <div class="section-header" onclick="toggleSection('theme')">
@@ -1129,6 +1150,9 @@
               <div class="track-car" id="preview-car">🏎️</div>
             </div>
           </div>
+          <!-- Object registry preview host (follow/subscription/bits/donation/raid) —
+               sibling of #preview-card, NOT given .alert-pos (see CSS comment above). -->
+          <div id="preview-object-host" style="display:none;"></div>
         </div>
       </div>
     </div>
@@ -1360,7 +1384,99 @@ function darken(hex, factor=0.35) {
 }
 
 // ─── Update preview card ──────────────────────────────────────────────────────
+// Sample payloads for the object preview — shapes match the real event.data
+const PREVIEW_DATA = {
+  follow:       { username: 'ApexAndre' },
+  subscription: { username: 'RacerDan', tier: '1', months: 4 },
+  bits:         { username: 'TurboTina', amount: 500 },
+  donation:     { username: 'PitBoss92', amount: '25.00', currency: 'EUR' },
+  raid:         { username: 'GridWalker', viewers: 42 },
+};
+
+// Phase 1: the five object event types ignore saved styles, so their controls
+// are hidden rather than left live and inert.
+function syncPhase1Controls() {
+  const isObject = !!(window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType]);
+  const notice = document.getElementById('phase1-notice');
+  if (notice) notice.style.display = isObject ? '' : 'none';
+  ['section-theme', 'section-text', 'section-sideicon',
+   'section-animation', 'section-size'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isObject ? 'none' : '';
+  });
+  // Fix round 1, Important: the resize handles are siblings of #preview-card
+  // inside #preview-card-container and only ever mutate that (now-hidden)
+  // legacy card, so dragging them does nothing visible on object tabs.
+  ['resize-se', 'resize-e'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isObject ? 'none' : '';
+  });
+}
+
 function updatePreview() {
+  syncPhase1Controls();
+  const objDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType];
+  const objHost = document.getElementById('preview-object-host');
+  const legacyCard = document.getElementById('preview-card');
+  if (objDef) {
+    legacyCard.style.display = 'none';
+    objHost.style.display = '';
+    objHost.innerHTML = objDef.render(PREVIEW_DATA[currentType] || {});
+    objHost.style.setProperty('--in', objDef.anim.in);
+    objHost.style.setProperty('--dur', objDef.anim.dur);
+    objHost.style.setProperty('--ease', objDef.anim.ease);
+    objHost.classList.remove('playing');
+    void objHost.offsetWidth;   // force reflow so the animation restarts
+    objHost.classList.add('playing');
+    // Ruling F: the legacy branch's tail (positionCard/updateOverlayGuide/
+    // renderScreenEffect) must still run before we bail, or the preview is left
+    // with a stale overlay guide, leftover .preview-fx from the previously
+    // selected event, and the container positioned for that previous event.
+    // Objects always self-position top-centre, so hardcode those two args.
+    // renderScreenEffect('none') is a clean clear: phase 1 skips spawnEffects()
+    // in the live overlay, so showing a saved screen effect here would
+    // misrepresent what the streamer actually gets. No loadGoogleFont() call —
+    // objects use Oxanium/Saira Condensed from the page's own <link>, not the
+    // per-design font path.
+    //
+    // Fix round 1, Critical 2: positionCard() has its own pre-existing
+    // custom-position branch that silently overrides 'top-center' whenever
+    // this type's workingDesigns has card_custom_x/y set (from a drag).
+    // Objects must never honor that — the live overlay never consults stored
+    // position for them either — but a dragged position must not be
+    // permanently erased: phase 2 will want it back. Blank the two fields
+    // just for this one call, then restore them immediately after
+    // (synchronous, so there is no gap where another reader could observe
+    // the blanked state).
+    const posDesign = workingDesigns[currentType];
+    const savedCustomX = posDesign ? posDesign.card_custom_x : undefined;
+    const savedCustomY = posDesign ? posDesign.card_custom_y : undefined;
+    if (posDesign) {
+      posDesign.card_custom_x = null;
+      posDesign.card_custom_y = null;
+    }
+    positionCard('top-center', 420);
+    if (posDesign) {
+      posDesign.card_custom_x = savedCustomX;
+      posDesign.card_custom_y = savedCustomY;
+    }
+    updateOverlayGuide();
+    renderScreenEffect('none');
+    return;
+  }
+  // Fix round 1, Critical 1: don't clobber the Sponsor/Timed tab. switchTab()
+  // calls updateSponsorPreview() BEFORE updatePreview() when opening 'timed',
+  // and that function sets #preview-card to display:none to show the sponsor
+  // image in its place whenever rotation is enabled. This unconditional
+  // restore used to un-hide it again right after, stacking the legacy
+  // "Pit Crew Member" card on top of the sponsor image. 'timed' already owns
+  // #preview-card's display lifecycle (updateSponsorPreview / stopSponsorPreview) —
+  // leave it alone here.
+  if (currentType !== 'timed') {
+    legacyCard.style.display = '';
+  }
+  objHost.style.display = 'none';
+
   const d = getControlValues();
   workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], d);
 

@@ -1,0 +1,243 @@
+/* Alert objects — the five Twitch events. Source of truth for their styles.
+   Consumed by public/overlay/overlay.js AND src/views/overlay-builder.ejs.
+   Every object-internal class MUST be namespaced under its .o-* prefix: a bare
+   .rail here collided with the builder page's sticky control bar. */
+:root{
+  --r-red:#D81E26;
+  --r-red-deep:#B50000;
+  --r-ink:#070B10;
+  --o-disp:"Oxanium",system-ui,-apple-system,sans-serif;
+  --o-cond:"Saira Condensed","Arial Narrow",sans-serif;
+  --o-hex:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0l14 8v16l-14 8L0 24V8z' fill='none' stroke='%23ffffff' stroke-opacity='.07'/%3E%3C/svg%3E");
+  --spd:1;
+}
+.alert-pos{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:min(420px,88%);z-index:10;pointer-events:none}
+.obj{position:relative;will-change:transform,opacity,clip-path}
+
+/* ══ Shared discipline ═════════════════════════════════════ */
+.o-name{font-weight:800;font-size:24px;line-height:1.08;letter-spacing:.004em;text-transform:uppercase}
+.o-meta{font-family:var(--o-cond);font-weight:600;font-size:11.5px;line-height:1;text-transform:uppercase;letter-spacing:.2em}
+
+/* ── The cut: shared blade flash ─────────────────────────── */
+.o-blade{
+  position:absolute;top:-24%;bottom:-24%;width:3px;left:-14%;
+  background:#fff;box-shadow:0 0 16px 3px #fff,0 0 42px 9px var(--r-red);
+  transform:rotate(22deg);opacity:0;pointer-events:none;z-index:4;
+}
+@keyframes bladeRun{0%{left:-14%;opacity:0}9%{opacity:1}88%{opacity:1}100%{left:116%;opacity:0}}
+@keyframes cutWipe{
+  0%  {clip-path:polygon(-40% 0,-14% 0,-40% 100%,-66% 100%)}
+  100%{clip-path:polygon(-40% 0,166% 0,140% 100%,-66% 100%)}
+}
+@keyframes hardIn{from{opacity:0}to{opacity:1}}
+@keyframes struck{from{opacity:0;filter:blur(7px)}to{opacity:1;filter:blur(0)}}
+@keyframes hold{from{opacity:1}to{opacity:1}}
+
+/* ── 01 follow — iaido band ──────────────────────────────── */
+.o-follow{
+  transform:skewX(-11deg);background:linear-gradient(100deg,var(--r-red-deep),var(--r-red) 58%,#F0343C);
+  width:min(408px,94%);margin:0 auto;overflow:hidden;
+  display:flex;align-items:center;gap:14px;padding:13px 20px;
+  box-shadow:0 14px 32px rgba(0,0,0,.58);
+}
+.o-follow>*{transform:skewX(11deg)}
+.o-follow .o-follow-hatch{position:absolute;left:0;top:0;bottom:0;width:66px;transform:none;background:repeating-linear-gradient(112deg,rgba(0,0,0,.34) 0 10px,transparent 10px 20px);background-size:24px 24px}
+.o-follow .o-mesh{position:absolute;inset:0;transform:none;background:var(--o-hex);opacity:.9;pointer-events:none}
+.o-follow .o-follow-scar{position:absolute;top:-20%;bottom:-20%;left:50%;width:2px;transform:rotate(22deg);background:rgba(255,255,255,.95);box-shadow:0 0 12px 2px rgba(255,255,255,.7);opacity:0;z-index:3}
+.o-follow .o-follow-glyph{font-weight:800;font-size:26px;line-height:1;color:rgba(255,255,255,.9);z-index:1}
+.o-follow .o-follow-txt{z-index:1;min-width:0}
+.o-follow .o-name{color:#fff;font-size:22px}
+.o-follow .o-meta{color:rgba(255,255,255,.82);margin-top:4px}
+@keyframes scarFade{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+
+/* ── 02 subscription — torii gate + gaku name plaque ─────── */
+.o-sub{height:172px}
+.o-sub .o-sub-kasagi{
+  position:absolute;left:-5%;right:-5%;top:0;height:18px;
+  background:linear-gradient(#F0343C,var(--r-red) 42%,#8E0A10);
+  clip-path:polygon(0 0,100% 0,96% 100%,4% 100%);
+  box-shadow:0 3px 0 rgba(0,0,0,.45);
+}
+.o-sub .o-sub-nuki{
+  position:absolute;left:3%;right:3%;top:36px;height:12px;
+  background:linear-gradient(#D8282F,#9A0C13);
+  box-shadow:0 2px 0 rgba(0,0,0,.4);
+}
+.o-sub .o-sub-pillar{
+  position:absolute;top:11px;bottom:0;width:18px;
+  background:linear-gradient(90deg,#8E0A10,var(--r-red) 38%,#F0343C 56%,#9A0C13);
+  box-shadow:inset -2px 0 0 rgba(0,0,0,.32);
+}
+.o-sub .o-sub-pillar.l{left:7%}
+.o-sub .o-sub-pillar.r{right:7%}
+.o-sub .o-sub-base{position:absolute;bottom:0;height:6px;width:36px;background:#2A0205}
+.o-sub .o-sub-base.l{left:calc(7% - 9px)}
+.o-sub .o-sub-base.r{right:calc(7% - 9px)}
+/* the gaku — the name plaque a real torii carries between its beams.
+   Solves the legibility problem architecturally rather than with a scrim. */
+.o-sub .o-sub-gaku{
+  position:absolute;left:15%;right:15%;top:52px;
+  background:linear-gradient(162deg,#131B24,#070B10);
+  box-shadow:0 12px 28px rgba(0,0,0,.66),inset 0 0 0 1px rgba(216,30,38,.55),inset 0 1px 0 rgba(255,255,255,.09);
+  clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%,0 10px);
+  padding:14px 14px 16px;text-align:center;transform-origin:50% -18px;z-index:2;
+}
+.o-sub .o-sub-gaku .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.5;pointer-events:none}
+.o-sub .o-sub-cords{position:absolute;left:24%;right:24%;top:46px;height:8px;z-index:1}
+.o-sub .o-sub-cords::before,.o-sub .o-sub-cords::after{content:"";position:absolute;top:0;bottom:0;width:2px;background:#C9CDD2;opacity:.65}
+.o-sub .o-sub-cords::before{left:0}
+.o-sub .o-sub-cords::after{right:0}
+.o-sub .o-sub-mark{font-family:var(--o-cond);font-size:10.5px;color:#FF6B6B;margin-bottom:8px;letter-spacing:.4em;text-transform:uppercase;position:relative}
+.o-sub .o-name{color:#FFFDF9;position:relative}
+.o-sub .o-meta{color:#C9636A;margin-top:9px;position:relative}
+/* Gift-sub context (e.g. "Gifted 5 subs!") — subtle, the gaku plaque is small */
+.o-sub .o-sub-msg{font-family:var(--o-cond);font-weight:600;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:#C9636A;opacity:.85;margin-top:6px;position:relative}
+.o-sub .o-sub-dust{position:absolute;bottom:0;left:0;right:0;height:26px;background:radial-gradient(60% 100% at 14% 100%,rgba(255,255,255,.3),transparent 70%),radial-gradient(60% 100% at 86% 100%,rgba(255,255,255,.3),transparent 70%);opacity:0;pointer-events:none}
+@keyframes pillarDrive{from{transform:translateY(-240%)}to{transform:translateY(0)}}
+@keyframes beamDrop{0%{transform:translateY(-330%)}78%{transform:translateY(5%)}100%{transform:translateY(0)}}
+@keyframes dustPuff{0%{opacity:0;transform:scaleY(.4)}30%{opacity:.85}100%{opacity:0;transform:scaleY(1.5)}}
+@keyframes gakuHang{0%{transform:translateY(-46px) scaleY(.5);opacity:0}62%{opacity:1}100%{transform:translateY(0) scaleY(1);opacity:1}}
+
+/* ── 03 bits — tally board, tiles flipped by the cut ─────── */
+.o-bits{
+  background:linear-gradient(162deg,#1A0609,#0A0407);
+  padding:17px 20px 13px;
+  box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3);
+}
+.o-bits .o-bits-br{position:absolute;width:15px;height:15px;border:2px solid #AEB5BD;z-index:3}
+.o-bits .o-bits-br.tl{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.o-bits .o-bits-br.tr{top:-1px;right:-1px;border-left:0;border-bottom:0}
+.o-bits .o-bits-br.bl{bottom:-1px;left:-1px;border-right:0;border-top:0}
+.o-bits .o-bits-br.rb{bottom:-1px;right:-1px;border-left:0;border-top:0}
+.o-bits .o-bits-cells{display:flex;gap:6px;justify-content:center;position:relative;z-index:2}
+.o-bits .o-bits-tile{
+  width:48px;height:60px;display:grid;place-items:center;
+  background:linear-gradient(160deg,#36090F,#1A050A);
+  box-shadow:inset 0 0 0 1px rgba(216,30,38,.45),0 4px 10px rgba(0,0,0,.5);
+  border-bottom:2px solid var(--r-red);
+  font-weight:800;font-size:33px;color:#FFFDF9;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 18px rgba(216,30,38,.75);
+  transform-origin:50% 50%;
+}
+.o-bits .o-bits-who{text-align:center;margin-top:13px;color:#FFFDF9;position:relative;z-index:2}
+.o-bits .o-bits-unit{text-align:center;color:#C9636A;margin-top:5px;position:relative;z-index:2}
+@keyframes oBitsIn{0%{transform:scale(.93);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes tileFlip{0%{transform:perspective(340px) rotateX(-94deg);opacity:0}54%{opacity:1}78%{transform:perspective(340px) rotateX(9deg)}100%{transform:perspective(340px) rotateX(0deg);opacity:1}}
+@keyframes boardFlash{0%,100%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3)}40%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(255,66,71,.9),0 0 34px rgba(216,30,38,.5)}}
+
+/* ── 04 donation — byobu folding screen (the big one) ────── */
+.o-don{height:178px;width:min(416px,96%);margin:0 auto}
+.o-don .o-don-screen{position:absolute;inset:0;display:flex;perspective:1100px}
+.o-don .o-don-panel{
+  position:relative;flex:1;transform-origin:left center;
+  background:linear-gradient(166deg,#20060A,#34080F 42%,#140408);
+  box-shadow:inset -1px 0 0 rgba(216,30,38,.6),inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.o-don .o-don-panel .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.5;pointer-events:none}
+.o-don .o-don-rail{position:absolute;left:-7px;right:-7px;height:10px;z-index:3;background:linear-gradient(#F0343C,var(--r-red) 48%,#8E0A10);box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.o-don .o-don-rail.t{top:-6px}
+.o-don .o-don-rail.b{bottom:-6px;box-shadow:0 -3px 0 rgba(0,0,0,.4)}
+.o-don .o-don-face{position:absolute;inset:0;display:grid;place-content:center;text-align:center;z-index:4}
+.o-don .o-don-head{font-family:var(--o-cond);font-weight:600;font-size:11px;letter-spacing:.34em;color:#FF6B6B;text-transform:uppercase}
+.o-don .o-don-amt{font-weight:800;font-size:50px;line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;color:#FFFDF9;margin-top:8px;text-shadow:0 0 32px rgba(216,30,38,.8),0 3px 10px rgba(0,0,0,.6)}
+/* Donor message — muted, well under the amount's 50px, wraps within the face
+   rather than overflowing it so the 6-panel screen behind stays untouched. */
+.o-don .o-don-msg{font-family:var(--o-cond);font-weight:500;font-style:italic;font-size:13px;line-height:1.3;color:#C9636A;opacity:.9;margin-top:8px;max-width:88%;margin-left:auto;margin-right:auto}
+.o-don .o-don-from{font-family:var(--o-cond);font-weight:600;font-size:13px;margin-top:10px;text-transform:uppercase;letter-spacing:.2em;color:#C9636A}
+@keyframes panelUnfold{from{transform:rotateY(-84deg)}to{transform:rotateY(0deg)}}
+@keyframes railSnap{from{transform:scaleX(.1);opacity:0}to{transform:scaleX(1);opacity:1}}
+
+/* ── 05 raid — sashimono banner rank ─────────────────────── */
+.o-raid{height:182px}
+.o-raid .o-raid-rank{position:absolute;left:0;right:0;top:0;height:132px;display:flex;align-items:flex-start;justify-content:center;gap:7px}
+.o-raid .o-raid-ban{
+  position:relative;transform-origin:50% 0;
+  background:linear-gradient(170deg,#8E0A10,#5E070C 70%,#3A0407);
+  clip-path:polygon(0 0,100% 0,100% 84%,50% 100%,0 84%);
+  box-shadow:0 12px 26px rgba(0,0,0,.6);
+}
+.o-raid .o-raid-ban::before{content:"";position:absolute;left:-3px;right:-3px;top:0;height:5px;background:#C9CDD2;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.o-raid .o-raid-ban.s{width:26px;height:96px}
+.o-raid .o-raid-ban.m{width:34px;height:112px}
+.o-raid .o-raid-ban.main{
+  width:118px;height:132px;
+  background:linear-gradient(168deg,#F0343C,var(--r-red) 40%,#A50F16);
+}
+.o-raid .o-raid-ban.main .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.85;pointer-events:none}
+.o-raid .o-raid-cnt{font-weight:800;font-size:46px;line-height:1;color:#fff;letter-spacing:-.045em;font-variant-numeric:tabular-nums;text-align:center;margin-top:22px;text-shadow:0 3px 10px rgba(0,0,0,.5)}
+.o-raid .o-raid-clbl{font-family:var(--o-cond);font-weight:700;font-size:9.5px;letter-spacing:.24em;color:rgba(255,255,255,.82);text-transform:uppercase;text-align:center;margin-top:4px}
+.o-raid .o-raid-plaque{
+  position:absolute;left:8%;right:8%;bottom:0;
+  background:linear-gradient(160deg,#141C26,#070B10);
+  border-left:3px solid var(--r-red);
+  border-right:3px solid var(--r-red);
+  padding:9px 14px 10px;text-align:center;
+  box-shadow:0 12px 26px rgba(0,0,0,.6);
+}
+.o-raid .o-name{color:#FFFDF9;font-size:21px}
+.o-raid .o-meta{color:#C9636A;margin-top:5px}
+@keyframes banPlant{
+  0%  {transform:translateY(-210%) skewX(0deg)}
+  56% {transform:translateY(0) skewX(0deg)}
+  71% {transform:translateY(0) skewX(4.5deg)}
+  86% {transform:translateY(0) skewX(-2deg)}
+  100%{transform:translateY(0) skewX(0deg)}
+}
+@keyframes plaqueIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+
+/* ══ Playback ══════════════════════════════════════════════ */
+.playing .obj{animation:var(--in) calc(var(--dur) / var(--spd)) var(--ease) both}
+
+/* 01 follow */
+.playing .o-follow .o-blade{animation:bladeRun calc(.40s / var(--spd)) cubic-bezier(.25,0,.15,1) both}
+.playing .o-follow .o-follow-scar{animation:scarFade calc(.44s / var(--spd)) ease-out calc(.16s / var(--spd)) both}
+.playing .o-follow .o-follow-hatch{animation:hardIn .01s linear calc(.19s / var(--spd)) both}
+.playing .o-follow .o-follow-glyph{animation:hardIn .01s linear calc(.25s / var(--spd)) both}
+.playing .o-follow .o-name{animation:hardIn .01s linear calc(.31s / var(--spd)) both}
+.playing .o-follow .o-meta{animation:hardIn .01s linear calc(.37s / var(--spd)) both}
+
+/* 02 subscription — pillars, beams, then the gaku hangs, then text */
+.playing .o-sub .o-sub-pillar.l{animation:pillarDrive calc(.26s / var(--spd)) cubic-bezier(.4,0,.2,1) both}
+.playing .o-sub .o-sub-pillar.r{animation:pillarDrive calc(.26s / var(--spd)) cubic-bezier(.4,0,.2,1) calc(.07s / var(--spd)) both}
+.playing .o-sub .o-sub-base.l{animation:hardIn .01s linear calc(.26s / var(--spd)) both}
+.playing .o-sub .o-sub-base.r{animation:hardIn .01s linear calc(.33s / var(--spd)) both}
+.playing .o-sub .o-sub-dust{animation:dustPuff calc(.46s / var(--spd)) ease-out calc(.27s / var(--spd)) both}
+.playing .o-sub .o-sub-kasagi{animation:beamDrop calc(.3s / var(--spd)) cubic-bezier(.4,0,.15,1) calc(.36s / var(--spd)) both}
+.playing .o-sub .o-sub-nuki{animation:beamDrop calc(.26s / var(--spd)) cubic-bezier(.4,0,.15,1) calc(.46s / var(--spd)) both}
+.playing .o-sub .o-sub-cords{animation:hardIn calc(.14s / var(--spd)) linear calc(.6s / var(--spd)) both}
+.playing .o-sub .o-sub-gaku{animation:gakuHang calc(.32s / var(--spd)) cubic-bezier(.3,0,.18,1) calc(.62s / var(--spd)) both}
+.playing .o-sub .o-sub-mark{animation:struck calc(.24s / var(--spd)) ease-out calc(.86s / var(--spd)) both}
+.playing .o-sub .o-name{animation:struck calc(.24s / var(--spd)) ease-out calc(.93s / var(--spd)) both}
+.playing .o-sub .o-meta{animation:struck calc(.24s / var(--spd)) ease-out calc(1.00s / var(--spd)) both}
+.playing .o-sub .o-sub-msg{animation:struck calc(.24s / var(--spd)) ease-out calc(1.07s / var(--spd)) both}
+
+/* 03 bits — the blade crosses and flips each tile as it passes */
+.playing .o-bits{animation:oBitsIn calc(.2s / var(--spd)) cubic-bezier(.2,1,.2,1) both,boardFlash calc(.5s / var(--spd)) ease-out calc(.66s / var(--spd)) both}
+.playing .o-bits .o-blade{animation:bladeRun calc(.54s / var(--spd)) cubic-bezier(.3,0,.2,1) calc(.12s / var(--spd)) both}
+.playing .o-bits .o-bits-tile{animation:tileFlip calc(.34s / var(--spd)) cubic-bezier(.3,0,.16,1) var(--rdelay) both}
+.playing .o-bits .o-bits-who{animation:hardIn calc(.18s / var(--spd)) ease-out calc(.70s / var(--spd)) both}
+.playing .o-bits .o-bits-unit{animation:hardIn calc(.18s / var(--spd)) ease-out calc(.76s / var(--spd)) both}
+
+/* 04 donation — the screen unfolds, the rails snap across, the amount is struck */
+.playing .o-don .o-don-panel{animation:panelUnfold calc(.34s / var(--spd)) cubic-bezier(.3,0,.16,1) var(--rdelay) both}
+.playing .o-don .o-don-rail.t{animation:railSnap calc(.24s / var(--spd)) cubic-bezier(.3,0,.16,1) calc(.52s / var(--spd)) both}
+.playing .o-don .o-don-rail.b{animation:railSnap calc(.24s / var(--spd)) cubic-bezier(.3,0,.16,1) calc(.60s / var(--spd)) both}
+.playing .o-don .o-don-head{animation:struck calc(.24s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-don .o-don-amt{animation:struck calc(.28s / var(--spd)) ease-out calc(.79s / var(--spd)) both}
+.playing .o-don .o-don-msg{animation:struck calc(.24s / var(--spd)) ease-out calc(.83s / var(--spd)) both}
+.playing .o-don .o-don-from{animation:struck calc(.24s / var(--spd)) ease-out calc(.88s / var(--spd)) both}
+
+/* 05 raid — banners plant outside-in, the main one lands last */
+.playing .o-raid .o-raid-ban{animation:banPlant calc(.42s / var(--spd)) cubic-bezier(.4,0,.18,1) var(--rdelay) both}
+.playing .o-raid .o-raid-cnt{animation:hardIn .01s linear calc(.56s / var(--spd)) both}
+.playing .o-raid .o-raid-clbl{animation:hardIn .01s linear calc(.62s / var(--spd)) both}
+.playing .o-raid .o-raid-plaque{animation:plaqueIn calc(.28s / var(--spd)) cubic-bezier(.25,.9,.2,1) calc(.66s / var(--spd)) both}
+
+/* ── Exits ───────────────────────────────────────────────── */
+@keyframes exSheathe{to{transform:skewX(-11deg) translateX(-124%);opacity:0}}
+@keyframes exGateFall{to{transform:translateY(34%);opacity:0}}
+@keyframes exBoardTip{to{transform:perspective(500px) rotateX(38deg);opacity:0}}
+@keyframes exScreenFold{to{transform:scaleX(.08);opacity:0}}
+@keyframes exStrike{to{transform:translateY(-26%);opacity:0}}
+.exiting .obj{animation:var(--out) calc(var(--outdur) / var(--spd)) var(--outease) both}
+.exiting .obj *{animation:none}

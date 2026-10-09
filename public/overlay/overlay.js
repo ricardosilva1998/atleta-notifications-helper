@@ -321,7 +321,7 @@ function clearOverlay() {
   isPlaying = false;
   stopCurrentSound();
   // Remove all alert cards and screen effects
-  document.querySelectorAll('.alert-card, .screen-effect').forEach(e => e.remove());
+  document.querySelectorAll('.alert-card, .alert-pos, .screen-effect').forEach(e => e.remove());
   console.log('[Overlay] Queue cleared, all cards removed');
 }
 
@@ -390,18 +390,32 @@ function showNotification(event) {
   });
 
   // Build card
+  const objectDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[event.type];
   const cardClass = getCardClass(event.type);
   const isSubLike = event.type === 'subscription' || event.type === 'yt_member';
   const card = document.createElement('div');
-  card.className = `alert-card ${cardClass}${isSubLike ? ' sub-shake' : ''} entering`;
-  card.innerHTML = buildBannerContent(event);
+
+  if (objectDef) {
+    // Objects position via .alert-pos and animate their own transform, so the
+    // legacy .alert-card/.entering classes (whose keyframes bake in
+    // translateX(-50%)) must not apply.
+    card.className = 'alert-pos';
+    card.innerHTML = buildBannerContent(event);
+    card.style.setProperty('--in', objectDef.anim.in);
+    card.style.setProperty('--dur', objectDef.anim.dur);
+    card.style.setProperty('--ease', objectDef.anim.ease);
+    card.classList.add('playing');
+  } else {
+    card.className = `alert-card ${cardClass}${isSubLike ? ' sub-shake' : ''} entering`;
+    card.innerHTML = buildBannerContent(event);
+  }
   container.appendChild(card);
 
-  // Apply custom overlay design if available
-  applyCustomDesign(card, event.type);
+  // Apply custom overlay design — phase 1 skips the object types entirely
+  if (!objectDef) applyCustomDesign(card, event.type);
 
-  // Spawn full-screen effects
-  spawnEffects(event.type);
+  // Spawn full-screen effects — objects carry their own motion
+  if (!objectDef) spawnEffects(event.type);
 
   // Dismiss after duration
   setTimeout(() => {
@@ -413,8 +427,16 @@ function showNotification(event) {
     });
 
     // Fade out and remove card
-    card.style.transition = 'opacity 0.3s ease-in';
-    card.style.opacity = '0';
+    if (objectDef) {
+      card.style.setProperty('--out', objectDef.exit.out);
+      card.style.setProperty('--outdur', objectDef.exit.dur);
+      card.style.setProperty('--outease', objectDef.exit.ease);
+      card.classList.remove('playing');
+      card.classList.add('exiting');
+    } else {
+      card.style.transition = 'opacity 0.3s ease-in';
+      card.style.opacity = '0';
+    }
     setTimeout(() => {
       card.remove();
       setTimeout(playNext, 500);
@@ -442,6 +464,13 @@ function wrapWithSideIcons(icon, bodyHtml) {
 }
 
 function buildBannerContent(event) {
+  // The five Twitch events render from the shared object registry.
+  // Everything else keeps the legacy top-accent + card-body + car-track card.
+  const objects = window.ATLETA_OBJECTS;
+  if (objects && objects[event.type]) {
+    return objects[event.type].render(event.data || {});
+  }
+
   const icon = getSideIcon(event.type);
 
   switch (event.type) {
@@ -920,6 +949,8 @@ function buildBottomAnimation(track, type, speed, accent, card) {
 function applyCustomDesign(card, eventType) {
   const design = overlayDesigns[eventType];
   if (!design) return;
+  // Phase 1: the five object event types ignore saved styles entirely.
+  if (window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[eventType]) return;
 
   // Background (with advanced theme)
   const bgOpacity = design.bg_opacity != null ? design.bg_opacity : 1.0;
