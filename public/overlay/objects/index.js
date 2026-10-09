@@ -104,7 +104,33 @@ var OBJECTS = {
     key: 'raid',
     anim: { in: 'hold', dur: '0.94s', ease: 'linear' },
     exit: { out: 'exStrike', dur: '0.36s', ease: 'cubic-bezier(.5,0,.9,.4)' },
-    render: function (d) { return ''; },
+    render: function (d) {
+      var count = Math.max(0, parseInt(d.viewers, 10) || 0);
+      // Delays plant the rank outside-in; the standard (main) lands last.
+      var rankDef = [
+        { cls: 'o-raid-ban s',    delay: 0.00 },
+        { cls: 'o-raid-ban m',    delay: 0.10 },
+        { cls: 'o-raid-ban main', delay: 0.26 },
+        { cls: 'o-raid-ban m',    delay: 0.16 },
+        { cls: 'o-raid-ban s',    delay: 0.05 },
+      ];
+      var rank = '';
+      for (var i = 0; i < rankDef.length; i++) {
+        var b = rankDef[i];
+        var inner = b.cls.indexOf('main') > -1
+          ? '<div class="o-mesh"></div><div class="o-raid-cnt">' + count + '</div>'
+            + '<div class="o-raid-clbl">raiders</div>'
+          : '';
+        rank += '<div class="' + b.cls + '" style="--rdelay:calc('
+             + b.delay.toFixed(2) + 's / var(--spd))">' + inner + '</div>';
+      }
+      return '<div class="obj o-raid">'
+        + '<div class="o-raid-rank">' + rank + '</div>'
+        + '<div class="o-raid-plaque">'
+        +   '<div class="o-name">' + esc(d.username) + '</div>'
+        +   '<div class="o-meta">brought the grid</div>'
+        + '</div></div>';
+    },
   },
 };
 

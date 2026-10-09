@@ -140,3 +140,26 @@ describe('donation — byobu screen', () => {
     assert.ok(html.includes('SEK5.00'));
   });
 });
+
+describe('raid — sashimono rank', () => {
+  test('plants five banners with the standard landing last', () => {
+    const html = OBJECTS.raid.render({ username: 'GridWalker', viewers: 42 });
+    const bans = [...html.matchAll(/class="o-raid-ban[^"]*"[^>]*--rdelay:calc\(([\d.]+)s/g)]
+      .map(m => parseFloat(m[1]));
+    assert.equal(bans.length, 5, 'five banners — a unit arriving');
+    const mainDelay = parseFloat(
+      html.match(/class="o-raid-ban main"[^>]*--rdelay:calc\(([\d.]+)s/)[1]);
+    assert.equal(mainDelay, Math.max(...bans), 'the standard must land last');
+  });
+
+  test('shows the raider count and name', () => {
+    const html = OBJECTS.raid.render({ username: 'GridWalker', viewers: 42 });
+    assert.match(html, />42</);
+    assert.ok(html.includes('GridWalker'));
+  });
+
+  test('defaults the count to 0 when viewers is missing', () => {
+    const html = OBJECTS.raid.render({ username: 'GridWalker' });
+    assert.match(html, />0</);
+  });
+});
