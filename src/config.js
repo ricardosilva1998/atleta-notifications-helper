@@ -53,6 +53,14 @@ module.exports = {
     token: process.env.GITHUB_TOKEN || '',
     repo: process.env.GITHUB_REPO || '',
   },
+  multistream: {
+    apiUrl: process.env.MEDIAMTX_API_URL || '',
+    ingestUrl: process.env.MEDIAMTX_INGEST_URL || 'rtmp://ingest.atletanotifications.com/live',
+    apiToken: process.env.MEDIAMTX_API_TOKEN || '',
+    webhookSecret: process.env.MEDIAMTX_WEBHOOK_SECRET || '',
+    keySecret: process.env.MULTISTREAM_KEY_SECRET || '',
+    enabled: !!(process.env.MEDIAMTX_API_URL && process.env.MULTISTREAM_KEY_SECRET),
+  },
   email: {
     user: process.env.EMAIL_USER || '',
     pass: process.env.EMAIL_PASS || '',

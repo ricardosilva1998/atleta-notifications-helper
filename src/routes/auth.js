@@ -165,7 +165,7 @@ router.get('/broadcaster', (req, res) => {
     client_id: config.twitch.clientId,
     redirect_uri: `${config.app.url}/auth/broadcaster/callback`,
     response_type: 'code',
-    scope: 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions',
+    scope: 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions channel:read:stream_key',
     state: String(req.streamer.id),
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
@@ -198,7 +198,7 @@ router.get('/broadcaster/callback', async (req, res) => {
       Date.now() + data.expires_in * 1000 - 60_000
     );
 
-    db.updateBroadcasterScopes(parseInt(streamerId), 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions');
+    db.updateBroadcasterScopes(parseInt(streamerId), 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions channel:read:stream_key');
 
     // Re-subscribe EventSub so the new scope's subscription type is picked up immediately.
     // startForStreamer is idempotent — it stops any running connection before reconnecting.

@@ -1,0 +1,241 @@
+<%- include('header', { title: 'Multistream', streamer: streamer }) %>
+
+<a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  Back to Dashboard
+</a>
+
+<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in">Multistream</h2>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
+  Stream once from OBS — we relay it to Twitch and YouTube at the same time. No extra CPU or upload bandwidth on your PC.
+</p>
+
+<% if (typeof query !== 'undefined' && query && query.saved) { %>
+  <div class="alert alert-success animate-in">Settings saved.</div>
+<% } %>
+<% if (typeof query !== 'undefined' && query && query.reset) { %>
+  <div class="alert alert-success animate-in">YouTube stream reset. A fresh stream will be created next time you go live.</div>
+<% } %>
+
+<% if (!relayConfigured) { %>
+  <div class="alert alert-warning animate-in">
+    Multistream relay is not configured on the server yet. Set <code>MEDIAMTX_API_URL</code>, <code>MEDIAMTX_WEBHOOK_SECRET</code>, and <code>MULTISTREAM_KEY_SECRET</code> in env vars.
+  </div>
+<% } %>
+
+<%# A go-live that only reached some destinations. Without this the streamer sees
+    "you're live" and assumes every platform got the feed. %>
+<% if (multistream.multistream_last_error) { %>
+  <div class="alert alert-warning animate-in">
+    <strong>Last go-live didn't reach every platform.</strong>
+    <div style="margin-top: 6px; font-family: monospace; font-size: 13px;"><%= multistream.multistream_last_error %></div>
+    <% if (multistream.multistream_last_error_at) { %>
+      <div style="margin-top: 6px; font-size: 12px; opacity: 0.8;">
+        <%= new Date(multistream.multistream_last_error_at).toLocaleString() %>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (isLive) { %>
+  <div class="alert alert-success animate-in" style="display: flex; align-items: center; gap: 10px;">
+    <span class="status-dot online"></span>
+    <span><strong>You're live</strong> — multistream is active and forwarding to your connected platforms.</span>
+  </div>
+<% } %>
+
+<form method="POST" action="/dashboard/multistream/save">
+
+  <div class="card animate-in animate-in-delay-1">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <div>
+        <h3 style="margin-bottom: 0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          Enable Multistream
+        </h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">When on, every stream you push to the ingest URL below is forwarded to your connected platforms.</p>
+      </div>
+      <label class="pill-toggle">
+        <input type="checkbox" name="enabled" value="1" <%= multistream.multistream_enabled ? 'checked' : '' %>>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="card animate-in animate-in-delay-2">
+    <h3>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
+      Destinations
+    </h3>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">We fetch your stream keys via OAuth — you never have to copy or paste them.</p>
+
+    <div class="dest-card">
+      <div class="dest-head">
+        <div class="dest-info">
+          <div class="dest-badge twitch">T</div>
+          <div>
+            <div class="dest-name">Twitch</div>
+            <div class="dest-status">
+              <% if (twitchAuthorized && twitchHasStreamKeyScope) { %>
+                <span style="color: var(--success);">● Connected as <strong><%= streamer.twitch_display_name || streamer.twitch_username %></strong></span>
+              <% } else if (twitchAuthorized) { %>
+                <span style="color: var(--warning);">● Authorized, but missing the stream-key permission. Re-authorize to enable multistream.</span>
+              <% } else { %>
+                <span style="color: var(--text-muted);">Not connected</span>
+              <% } %>
+            </div>
+          </div>
+        </div>
+        <div>
+          <% if (twitchAuthorized && twitchHasStreamKeyScope) { %>
+            <a href="/auth/broadcaster" class="btn btn-secondary btn-small">Re-authorize</a>
+          <% } else { %>
+            <a href="/auth/broadcaster" class="btn btn-primary btn-small" style="background: #9146ff;">Connect Twitch</a>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="dest-card" style="margin-top: 12px;">
+      <div class="dest-head">
+        <div class="dest-info">
+          <div class="dest-badge youtube">▶</div>
+          <div>
+            <div class="dest-name">YouTube</div>
+            <div class="dest-status">
+              <% if (youtubeConnected) { %>
+                <span style="color: var(--success);">● Connected as <strong><%= youtubeChannelName || 'YouTube account' %></strong></span>
+              <% } else { %>
+                <span style="color: var(--text-muted);">Not connected</span>
+              <% } %>
+            </div>
+          </div>
+        </div>
+        <div>
+          <% if (youtubeConnected) { %>
+            <a href="/auth/youtube" class="btn btn-secondary btn-small">Re-authorize</a>
+          <% } else { %>
+            <a href="/auth/youtube" class="btn btn-primary btn-small" style="background: #ff0000;">Connect YouTube</a>
+          <% } %>
+        </div>
+      </div>
+
+      <% if (youtubeConnected) { %>
+        <div style="border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px;">
+          <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px;">YouTube broadcast defaults — used every time you go live:</p>
+
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>Default title (optional)</label>
+            <input type="text" name="youtube_default_title" value="<%= multistream.multistream_youtube_default_title || '' %>" placeholder="Leave empty to use your current Twitch stream title" maxlength="100" style="width: 100%;">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Privacy</label>
+              <select name="youtube_privacy" style="width: 100%;">
+                <% const priv = multistream.multistream_youtube_privacy || 'public'; %>
+                <option value="public" <%= priv === 'public' ? 'selected' : '' %>>Public</option>
+                <option value="unlisted" <%= priv === 'unlisted' ? 'selected' : '' %>>Unlisted</option>
+                <option value="private" <%= priv === 'private' ? 'selected' : '' %>>Private</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Category</label>
+              <select name="youtube_category_id" style="width: 100%;">
+                <% const cat = multistream.multistream_youtube_category_id || '20'; %>
+                <option value="20" <%= cat === '20' ? 'selected' : '' %>>Gaming</option>
+                <option value="22" <%= cat === '22' ? 'selected' : '' %>>People & Blogs</option>
+                <option value="24" <%= cat === '24' ? 'selected' : '' %>>Entertainment</option>
+                <option value="17" <%= cat === '17' ? 'selected' : '' %>>Sports</option>
+                <option value="28" <%= cat === '28' ? 'selected' : '' %>>Science & Tech</option>
+                <option value="10" <%= cat === '10' ? 'selected' : '' %>>Music</option>
+              </select>
+            </div>
+          </div>
+
+          <% if (multistream.multistream_youtube_stream_id) { %>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px;">
+              YouTube stream linked.
+              <a href="#" onclick="event.preventDefault(); document.getElementById('reset-yt-form').submit();">Reset stream binding</a> if YouTube returns errors.
+            </p>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card animate-in animate-in-delay-3">
+    <h3>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      Your OBS Settings
+    </h3>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
+      Open OBS → Settings → Stream → Service: <strong>Custom</strong>. Paste these two values:
+    </p>
+
+    <div class="form-group">
+      <label>Server</label>
+      <div style="display: flex; gap: 8px;">
+        <input id="ms-server" type="text" value="<%= ingestUrl %>" readonly style="flex: 1; font-family: ui-monospace, monospace; font-size: 13px;">
+        <button type="button" class="btn btn-secondary" onclick="copyVal('ms-server', this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 0;">
+      <label>Stream Key</label>
+      <div style="display: flex; gap: 8px;">
+        <input id="ms-key" type="password" value="<%= streamKey %>" readonly style="flex: 1; font-family: ui-monospace, monospace; font-size: 13px;">
+        <button type="button" class="btn btn-secondary" onclick="toggleReveal('ms-key', this)">Show</button>
+        <button type="button" class="btn btn-secondary" onclick="copyVal('ms-key', this)">Copy</button>
+      </div>
+      <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Treat this like a password — anyone with it can stream as you.</p>
+    </div>
+
+    <div style="background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+      <strong style="color: var(--text-primary); font-family: var(--font-display);">Recommended OBS settings for 1080p60</strong><br>
+      Resolution: <code>1920×1080</code> · FPS: <code>60</code> · Encoder: <code>NVENC H.264</code> (or <code>x264</code>) · Bitrate: <code>6000 kbps</code> · Keyframe: <code>2 sec</code> · Audio: <code>160 kbps AAC</code>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: flex-end; margin: 24px 0;">
+    <button type="submit" class="btn btn-primary" style="padding: 12px 32px; font-size: 14px;">Save Settings</button>
+  </div>
+</form>
+
+<form id="reset-yt-form" method="POST" action="/dashboard/multistream/reset-youtube-stream" style="display: none;"></form>
+
+<style>
+  .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .pill-toggle input { opacity: 0; width: 0; height: 0; }
+  .pill-toggle .slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg-elevated); border-radius: 24px; border: 1px solid var(--border); transition: 0.3s; }
+  .pill-toggle .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+  .pill-toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .pill-toggle input:checked + .slider:before { transform: translateX(20px); }
+
+  .dest-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; }
+  .dest-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .dest-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+  .dest-badge { width: 32px; height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: var(--font-display); font-size: 16px; flex-shrink: 0; }
+  .dest-badge.twitch { background: #9146ff; color: white; }
+  .dest-badge.youtube { background: #ff0000; color: white; }
+  .dest-name { font-weight: 600; font-size: 14px; }
+  .dest-status { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .btn-small { padding: 7px 14px; font-size: 12px; white-space: nowrap; }
+</style>
+
+<script>
+  function copyVal(id, btn) {
+    const el = document.getElementById(id);
+    navigator.clipboard.writeText(el.value);
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  }
+  function toggleReveal(id, btn) {
+    const el = document.getElementById(id);
+    if (el.type === 'password') { el.type = 'text'; btn.textContent = 'Hide'; }
+    else { el.type = 'password'; btn.textContent = 'Show'; }
+  }
+</script>
+
+<%- include('footer') %>

@@ -299,6 +299,20 @@ try {
   }
 } catch (e) { _migrationLog('multistream columns', e); }
 
+// Migration: record why a go-live only reached some destinations, so a partial
+// forward (e.g. Twitch key unavailable) is visible on the dashboard instead of
+// silently streaming to one platform.
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('multistream_last_error')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN multistream_last_error TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_last_error_at INTEGER;
+    `);
+    console.log('[DB] Added multistream_last_error columns to streamers');
+  }
+} catch (e) { _migrationLog('multistream error columns', e); }
+
 // Migration: Create overlay_designs table
 db.exec(`
   CREATE TABLE IF NOT EXISTS overlay_designs (
@@ -4364,7 +4378,9 @@ function getMultistreamConfig(streamerId) {
       multistream_youtube_category_id,
       multistream_youtube_default_title,
       multistream_active_broadcast_id,
-      multistream_last_started_at
+      multistream_last_started_at,
+      multistream_last_error,
+      multistream_last_error_at
     FROM streamers WHERE id = ?
   `).get(streamerId);
 }
@@ -4440,6 +4456,31 @@ function setMultistreamActiveBroadcast(streamerId, broadcastId) {
 
 function markMultistreamStarted(streamerId) {
   db.prepare('UPDATE streamers SET multistream_last_started_at = ? WHERE id = ?').run(Date.now(), streamerId);
+}
+
+// message = null clears the warning after a clean go-live.
+function setMultistreamLastError(streamerId, message) {
+  db.prepare(`
+    UPDATE streamers
+    SET multistream_last_error = ?,
+        multistream_last_error_at = ?
+    WHERE id = ?
+  `).run(message || null, message ? Date.now() : null, streamerId);
+}
+
+// Streamers whose last go-live left a YouTube broadcast mid-flight. Used on boot
+// to finish work that a restart interrupted.
+function getStreamersWithActiveMultistreamBroadcast() {
+  return db.prepare(`
+    SELECT
+      id, twitch_username,
+      yt_access_token, yt_refresh_token, yt_token_expires_at,
+      multistream_token,
+      multistream_youtube_stream_id,
+      multistream_active_broadcast_id
+    FROM streamers
+    WHERE multistream_active_broadcast_id IS NOT NULL
+  `).all();
 }
 
 // ── Giveaway queries ────────────────────────────────────────────────
@@ -4983,6 +5024,8 @@ module.exports = {
   clearMultistreamYoutubeStream,
   setMultistreamActiveBroadcast,
   markMultistreamStarted,
+  setMultistreamLastError,
+  getStreamersWithActiveMultistreamBroadcast,
   getActiveGiveaway,
   getAllOpenGiveaways,
   getGiveawayById,

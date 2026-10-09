@@ -168,6 +168,10 @@ app.get('/pricing', (req, res) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/dashboard/multistream', require('./routes/multistream'));
+// Mounted ahead of the generic /api handler, so it needs its own limiter —
+// otherwise these webhook endpoints are the one unthrottled /api surface.
+app.use('/api/multistream', apiLimiter, require('./routes/multistream'));
 app.use('/dashboard', dashboardRoutes);
 // app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);

@@ -265,3 +265,14 @@ When this log grows past ~10 entries, archive the oldest to `docs/team-log-archi
 - `dashboard.ejs`: Added Giveaways card as 7th card in Twitch grid after Channel Point Rewards. Status dot is red+pulse when `activeGiveaway` (local already passed by backend-dev). `@keyframes pulse` already defined in `header.ejs`.
 - `giveaways-config.ejs`: Full page — active panel (keyword chip + copy, prize, eligibility badge, live entry count + countdown polling every 2s, entrants table with first 50, Pick/Close/Cancel actions); start form (keyword prefix `!`, prize, duration radios + custom seconds, subs-only toggle, winners count); last winners card with re-draw; history table with lazy-loaded `<details>` expand per row. All `fetch()` calls use JSON. Pure vanilla JS — no jQuery.
 **Open:** i18n keys (§7) not yet added. The SSE config route (`src/routes/overlay.js`) does not expose `overlay_giveaway_duration`/`overlay_giveaway_enabled` so the overlay always uses the fallback 5s duration and passes the enabled check silently. Both are cosmetic for v1 and require a backend-dev pass to fix cleanly.
+
+### 2026-05-10 20:30 — team-deployment
+**Task:** Commit + push + Railway deploy for Twitch chat-keyword giveaway feature
+**Files:** `CLAUDE.md`, `public/overlay/overlay.js`, `src/db.js`, `src/index.js`, `src/locales/en.json`, `src/routes/dashboard.js`, `src/routes/overlay.js`, `src/services/giveawayManager.js` (new), `src/services/giveawayManager.test.js` (new), `src/services/twitchChat.js`, `src/views/dashboard.ejs`, `src/views/giveaways-config.ejs` (new), `src/views/overlay-builder.ejs`, `src/views/overlay-config.ejs`
+**Decisions:**
+- Commit `cfcdc18` — 14 files, 1852 insertions; pushed to `origin/main` (remote bypassed PR-only rule as expected; no pre-push Playwright hook ran locally).
+- Railway deploy `cc447c8f-53c7-465e-850d-034045fad9f4` → `Atleta Notifications PROD` / production — build succeeded, container started cleanly.
+- DB migrations confirmed in startup logs: `[DB] Added overlay_giveaway_enabled column to streamers`, `[DB] Added overlay_giveaway_duration column to streamers`. `[Giveaway] init: rehydrated 0 active giveaways` as expected (no in-flight giveaways on old instance).
+- `/dashboard` healthcheck: 302 (login redirect) — not 500. All pollers, EventSub, chat bot, pitwall relay started without errors.
+- Multistream feature files left unstaged as instructed; working tree still has those unrelated changes for the next round.
+**Open:** `overlay_giveaway_duration`/`overlay_giveaway_enabled` not yet exposed via SSE config route — overlay uses 5s fallback (cosmetic, tracked in frontend-dev Open above). i18n keys for giveaway not yet localized. Pre-existing `ohnepixel` Unknown Channel errors are unrelated to this deploy.

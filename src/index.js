@@ -49,6 +49,11 @@ client.once('clientReady', async () => {
 
     require('./services/giveawayManager').init();
 
+    // Finish any multistream go-live a previous restart interrupted.
+    require('./services/youtubeBroadcast')
+      .reconcileActiveBroadcasts()
+      .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message));
+
     console.log('[YT Chat] YouTube Live Chat manager ready (starts when streams go live)');
 
     // Start web dashboard
