@@ -162,9 +162,36 @@ no row in `overlay_designs`.
 - **Saved row** → that row overrides colours, fonts, animations and sizes, and they would otherwise
   keep the old look.
 
-The local `data/bot.db` is an empty dev copy (0 streamers), so the production split is unmeasured.
-The Team Activity Log references EventSub subscribing "both streamers (3, 13)", suggesting a small
-production population — **confirm against Railway before deploying.**
+### Measured against production (2026-10-09)
+
+Queried read-only over `railway ssh` against `/app/data/bot.db` on the production volume
+(project `atleta-notification-helper`, service `Atleta Notifications PROD`):
+
+| Metric | Count |
+|---|---|
+| Streamers total | 7 |
+| With Twitch linked | 2 |
+| With overlay enabled | 2 |
+| `overlay_designs` rows (all types) | 14 |
+| Rows for the five Twitch types | 8 |
+| Streamers with any saved design | 2 |
+
+Classifying those 8 rows against the built-in `EVENT_DEFAULTS`:
+
+| Classification | Rows |
+|---|---|
+| Default-valued (opened the builder, saved without changing anything) | **7** |
+| Genuinely customised | **1** |
+
+The single customised row is streamer 3's `follow` alert — `#0c7ded` / `#00b4d8` with the
+`equalizer` car animation. That streamer has **no `twitch_username` linked**, so no Twitch events
+currently reach their overlay. Streamer 13 (`andre_vilela_`) has five saved designs, all untouched
+defaults.
+
+**Conclusion:** migration is effectively a non-event. Nobody loses a design they deliberately made,
+except one blue `follow` belonging to an account that is not receiving Twitch events. No user
+announcement is warranted. The backup table stays in the plan anyway — it costs 14 rows and removes
+the only irreversible risk.
 
 ### Plan
 
@@ -235,12 +262,14 @@ enforces that better than a convention did. Proposed replacement:
 | Risk | Mitigation |
 |---|---|
 | `follow` is loud and frequent | Trimmed to 0.40s/408px. If it grates in production, a quieter variant is a CSS-only change. |
-| Production design-row count unknown | Confirm against Railway before deploy. If many users customised, consider announcing the change. |
+| ~~Production design-row count unknown~~ | **Resolved** — 1 genuine customisation in production. No announcement needed. |
 | Builder loses controls in phase 1 | Explanatory note in the UI; phase 2 restores them. |
 | Oxanium is a substitute, not the brand face | Check licensing for self-hosting the real face before committing. |
 
 ## Open questions
 
-1. Confirm the production count of `overlay_designs` rows for the five event types.
+1. ~~Confirm the production count of `overlay_designs` rows.~~ **Answered 2026-10-09** — see
+   *Measured against production*. 7 streamers, 8 relevant rows, 1 genuine customisation.
 2. Self-host The Last Shuriken, or stay on Oxanium?
-3. Should phase 1 keep a per-streamer "use legacy card" escape hatch, or is the backup table enough?
+3. Should phase 1 keep a per-streamer "use legacy card" escape hatch? Given only one customised row
+   exists, the backup table alone now looks sufficient — recommend dropping the escape hatch.
