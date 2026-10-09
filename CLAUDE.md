@@ -16,7 +16,7 @@ Two-product platform: **Streamer** (Twitch/YouTube/Discord tools) and **Racing**
 - **Chatbot:** tmi.js (Twitch IRC) — single shared connection for all channels; YouTube Live Chat API polling
 - **i18n:** Custom JSON-based translation system (7 languages)
 - **Deployment:** Docker on Railway with persistent volume at `/app/data`
-- **Testing:** Playwright E2E tests, run via pre-push git hook (must pass before push)
+- **Testing:** `node --test` unit suites (run explicitly; `npm test` is a no-op) + Playwright E2E in `tests/*.spec.js`. NOTE: there is currently **no** pre-push git hook — `.git/hooks` contains only samples. `tests/playwright.config.js` points `baseURL` at production, so specs must build absolute URLs from `E2E_BASE_URL` and guard with `test.skip` rather than relying on `baseURL`
 - **Auth:** Discord OAuth (Streamer), bcryptjs username/password (Racing), linkable accounts
 
 For the Bridge desktop app stack (Electron 28, koffi FFI, etc.) see `bridge/CLAUDE.md`.

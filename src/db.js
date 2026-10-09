@@ -1059,7 +1059,9 @@ db.exec(`
     name TEXT NOT NULL,
     owner_id INTEGER NOT NULL REFERENCES racing_users(id),
     invite_code TEXT NOT NULL UNIQUE,
-    created_at DATETIME DEFAULT (datetime('now'))
+    created_at DATETIME DEFAULT (datetime('now')),
+    picture TEXT,
+    banner TEXT
   )
 `);
 
@@ -2724,8 +2726,15 @@ function updateModerationConfig(streamerId, config) {
 }
 
 // Hot path: called on every chat message when banned-word filter is on.
-const _stmtGetBannedWords = db.prepare('SELECT * FROM banned_words WHERE streamer_id = ? ORDER BY created_at DESC');
+// Prepared lazily: this statement sits ~390 lines above the CREATE TABLE for
+// banned_words, so compiling it at module load threw "no such table" on a brand
+// new database and the app could never finish starting. Still prepared once and
+// reused (chat hot path) - just on first call instead of at import time.
+let _stmtGetBannedWords = null;
 function getBannedWords(streamerId) {
+  if (!_stmtGetBannedWords) {
+    _stmtGetBannedWords = db.prepare('SELECT * FROM banned_words WHERE streamer_id = ? ORDER BY created_at DESC');
+  }
   return _stmtGetBannedWords.all(streamerId);
 }
 

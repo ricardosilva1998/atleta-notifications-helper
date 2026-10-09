@@ -450,7 +450,7 @@
 
 <!-- Embed reward data for edit modal -->
 <script>
-const REWARDS_DATA = <%- JSON.stringify(rewards) %>;
+const REWARDS_DATA = <%- JSON.stringify(rewards).replace(/</g, '\\u003c') %>;
 
 // ── Relative time helper ──────────────────────────────────────
 function relativeTime(isoStr) {

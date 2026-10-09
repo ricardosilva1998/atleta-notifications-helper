@@ -2232,8 +2232,11 @@ router.get('/overlay-builder', async (req, res) => {
   const sponsors = db.getSponsorImages(req.streamer.id);
   res.render('overlay-builder', {
     streamer: req.streamer,
-    designs: JSON.stringify(designs),
-    sponsors: JSON.stringify(sponsors),
+    // \u003c escaping: these are embedded raw into an inline <script> in the
+    // builder, and JSON.stringify does NOT neutralise a literal "</script>" in
+    // user-controlled text (event_label, detail_text, sponsor names).
+    designs: JSON.stringify(designs).replace(/</g, '\\u003c'),
+    sponsors: JSON.stringify(sponsors).replace(/</g, '\\u003c'),
     overlayUrl,
     streamThumbnail
   });
