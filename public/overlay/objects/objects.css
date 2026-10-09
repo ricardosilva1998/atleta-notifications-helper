@@ -11,7 +11,7 @@
   --o-hex:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0l14 8v16l-14 8L0 24V8z' fill='none' stroke='%23ffffff' stroke-opacity='.07'/%3E%3C/svg%3E");
   --spd:1;
 }
-.alert-pos{transform:translateX(-50%);width:min(420px,88%)}
+.alert-pos{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:min(420px,88%);z-index:10;pointer-events:none}
 .obj{position:relative;will-change:transform,opacity,clip-path}
 
 /* ══ Shared discipline ═════════════════════════════════════ */

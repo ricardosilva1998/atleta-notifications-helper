@@ -325,6 +325,8 @@ router.get('/:token', (req, res) => {
   <meta charset="UTF-8">
   <title>Stream Overlay</title>
   <link rel="stylesheet" href="/overlay/overlay.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/overlay/objects/objects.css">
 </head>
 <body>
   <div id="notification-container"></div>
@@ -333,6 +335,7 @@ router.get('/:token', (req, res) => {
          style="position:absolute; display:none; pointer-events:none; object-fit:contain; z-index:90;"></video>
   <audio id="redemption-audio" preload="auto"></audio>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script src="/overlay/objects/index.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>
 </html>`);
