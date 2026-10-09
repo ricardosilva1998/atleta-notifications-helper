@@ -3417,6 +3417,36 @@ try {
   }
 } catch (e) { _migrationLog('cp_last_sync_at', e); }
 
+// Migration: version overlay designs and snapshot v0 before the object rollout.
+// Phase 1 objects ignore saved style columns, so nothing is overwritten here —
+// the backup exists so a streamer's pre-object design can be restored on request.
+try {
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  if (!cols.includes('design_version')) {
+    db.exec(`ALTER TABLE overlay_designs ADD COLUMN design_version INTEGER DEFAULT 0`);
+    console.log('[DB] Added design_version to overlay_designs');
+  }
+} catch {}
+
+try {
+  const existing = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='overlay_designs_v0_backup'"
+  ).get();
+  if (!existing) {
+    db.exec(`CREATE TABLE overlay_designs_v0_backup AS SELECT * FROM overlay_designs`);
+    const n = db.prepare('SELECT COUNT(*) c FROM overlay_designs_v0_backup').get().c;
+    console.log(`[DB] Snapshotted ${n} overlay_designs rows to overlay_designs_v0_backup`);
+  }
+} catch {}
+
+try {
+  const info = db.prepare(`
+    UPDATE overlay_designs SET design_version = 1
+    WHERE design_version = 0
+      AND event_type IN ('follow','subscription','bits','donation','raid')`).run();
+  if (info.changes > 0) console.log(`[DB] Marked ${info.changes} overlay_designs rows as design_version=1`);
+} catch {}
+
 // Hot path: getEnabledSponsorImages runs on every sponsor rotation tick.
 const _stmtGetSponsorImages = db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? ORDER BY sort_order, id');
 const _stmtGetEnabledSponsorImages = db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? AND enabled = 1 ORDER BY sort_order, id');
