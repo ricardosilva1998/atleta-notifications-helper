@@ -139,6 +139,20 @@ function closeGiveaway(streamerId, opts) {
   return { giveaway, entryCount };
 }
 
+// The winners a giveaway has now (not the ones a re-draw replaced).
+function currentWinners(giveawayId) {
+  return db.getWinners(giveawayId).filter(w => !w.is_redrawn_out);
+}
+
+function publicWinner(w) {
+  return { id: w.id, username: w.username, twitch_user_id: w.twitch_user_id };
+}
+
+// Winners are drawn once. When a giveaway already has winners (a timed one draws
+// them itself when it ends), a pick answers those winners again with
+// alreadyDrawn: true, drawing and announcing nothing, so a late click on
+// "Pick Winner Now" cannot name a second set. Only the explicit re-draw
+// (opts.redraw) replaces them.
 function pickWinners(giveawayId, streamerId, opts) {
   const redraw = opts && opts.redraw;
 
@@ -150,8 +164,12 @@ function pickWinners(giveawayId, streamerId, opts) {
     closeGiveaway(streamerId, { silent: true });
   }
 
+  let alreadyDrawn = [];
   const selected = db.transaction(() => {
-    if (redraw) {
+    if (!redraw) {
+      alreadyDrawn = currentWinners(giveawayId);
+      if (alreadyDrawn.length > 0) return [];
+    } else {
       // Mark prior winners as redrawn-out so they're excluded from this draw
       const priorWinners = db.getWinners(giveawayId);
       if (priorWinners.length > 0) {
@@ -175,6 +193,7 @@ function pickWinners(giveawayId, streamerId, opts) {
     return winners;
   })();
 
+  if (alreadyDrawn.length > 0) return { winners: alreadyDrawn.map(publicWinner), alreadyDrawn: true };
   if (selected.length === 0) return { winners: [] };
 
   // Post chat messages + emit overlay events, staggered 1500ms per winner
@@ -217,9 +236,7 @@ function pickWinners(giveawayId, streamerId, opts) {
     overlayTimer.unref();
   });
 
-  return {
-    winners: selected.map(w => ({ id: w.id, username: w.username, twitch_user_id: w.twitch_user_id })),
-  };
+  return { winners: selected.map(publicWinner) };
 }
 
 function getActive(streamerId) {
