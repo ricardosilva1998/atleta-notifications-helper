@@ -235,11 +235,6 @@
                 </div>
               <% } %>
             </details>
-            <% if (analysis.can_fix) { %>
-              <button onclick="fixIssue(<%= issue.id %>, this)" class="btn btn-primary" style="padding: 6px 16px; font-size: 12px;">
-                Fix It &amp; Create PR
-              </button>
-            <% } %>
           </div>
         <% } else if (issue.agent_status === 'error' && issue.agent_analysis) { %>
           <div style="background: #e74c3c11; border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px; border-left: 3px solid #e74c3c;">
@@ -455,36 +450,6 @@
   }
   adminTabs.forEach(function(t) { t.addEventListener('click', function() { switchAdminTab(t.dataset.tab); }); });
   switchAdminTab('<%= activeTab || "stats" %>');
-
-  async function fixIssue(issueId, btn) {
-    if (!confirm('Apply the AI-generated fix and create a PR?')) return;
-    btn.disabled = true;
-    btn.textContent = 'Applying fix...';
-    try {
-      const res = await fetch(`/admin/issues/${issueId}/fix`, { method: 'POST' });
-      const data = await res.json();
-      if (data.ok) {
-        btn.textContent = 'PR Created!';
-        btn.style.background = 'var(--success)';
-        if (data.pr_url) {
-          const link = document.createElement('a');
-          link.href = data.pr_url;
-          link.target = '_blank';
-          link.textContent = 'View PR';
-          link.style.cssText = 'margin-left: 8px; color: var(--accent); font-size: 12px;';
-          btn.parentNode.appendChild(link);
-        }
-      } else {
-        alert('Fix failed: ' + (data.error || 'Unknown error'));
-        btn.disabled = false;
-        btn.textContent = 'Fix It & Create PR';
-      }
-    } catch (err) {
-      alert('Fix failed: ' + err.message);
-      btn.disabled = false;
-      btn.textContent = 'Fix It & Create PR';
-    }
-  }
 </script>
 
 <style>

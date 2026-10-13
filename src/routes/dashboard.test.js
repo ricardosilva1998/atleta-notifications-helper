@@ -83,6 +83,15 @@ const chatStub = {
   },
 };
 // The real one starts a polling interval when it loads.
+// The AI analysis would call the Anthropic API; this records which issues it was asked for.
+const analyses = [];
+const agentTriageStub = {
+  analyzeIssue: async (issueId) => {
+    analyses.push(issueId);
+    if (agentTriageStub.failWith) throw new Error(agentTriageStub.failWith);
+  },
+  failWith: null,
+};
 const ytPolling = new Set(); // streamer ids whose live chat is being polled
 const youtubeChatStub = {
   youtubeChatManager: {
@@ -201,6 +210,7 @@ before(async () => {
       if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/twitchChat') return chatStub;
       if (request === '../services/youtubeLiveChat') return youtubeChatStub;
+      if (request === '../services/agentTriage') return agentTriageStub;
       if (request === '../services/eventsub') return eventSubStub;
       if (request === '../services/streamelements') return streamElementsStub;
     }
@@ -275,6 +285,8 @@ beforeEach(() => {
   fileWrites.length = 0;
   fileRemovals.length = 0;
   chatCalls.length = 0;
+  analyses.length = 0;
+  agentTriageStub.failWith = null;
   ytPolling.clear();
   Object.assign(youtubeApi, { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [], channelInfo: null, infoCalls: [] });
   guilds.clear();
@@ -1464,5 +1476,134 @@ describe('the server page and the channels with a missing picture', () => {
     db.updateChannelState('somestreamer', { is_live: 1 });
     const res = await page();
     assert.equal(res.json().locals.watchedTwitchChannels[0].is_live, true);
+  });
+});
+
+// ── AI analysis of a reported issue: one at a time, once, five a day (N25) ──
+
+describe('the AI analysis of a reported issue', () => {
+  const config = require('../config');
+  let apiKey;
+  let id;
+  before(() => { apiKey = config.anthropic.apiKey; config.anthropic.apiKey = 'test-key'; });
+  after(() => { config.anthropic.apiKey = apiKey; });
+  beforeEach(() => { id = addStreamer(); });
+
+  const report = (streamer = id) => Number(db.createIssue(streamer, 'streamer', 'Overlay is blank', 'It shows nothing in OBS'));
+  const analyze = (issueId, streamer = id) => request('POST', `/dashboard/report/${issueId}/analyze`, { streamer });
+  const row = (issueId) => db.getIssueById(issueId);
+  const setAnalysis = (issueId, status, minutesAgo) => db.db.prepare('UPDATE issues SET agent_status = ?, agent_analyzed_at = ? WHERE id = ?')
+    .run(status, minutesAgo == null ? null : new Date(Date.now() - minutesAgo * 60_000).toISOString(), issueId);
+
+  test('starts an analysis: the issue is marked analyzing with its start time, and the analysis runs', async () => {
+    const issueId = report();
+    const res = await analyze(issueId);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true, status: 'analyzing' });
+    assert.equal(row(issueId).agent_status, 'analyzing');
+    assert.ok(Date.now() - Date.parse(row(issueId).agent_analyzed_at) < 5000);
+    assert.deepEqual(analyses, [issueId]);
+  });
+
+  test('refuses a second request while the issue is being analysed', async () => {
+    const issueId = report();
+    await analyze(issueId);
+    const again = await analyze(issueId);
+    assert.equal(again.status, 409);
+    assert.deepEqual(again.json(), { ok: false, status: 'analyzing', error: 'This issue is already being analyzed.' });
+    assert.deepEqual(analyses, [issueId], 'the analysis was not started a second time');
+  });
+
+  test('two requests at the same moment start one analysis', async () => {
+    const issueId = report();
+    const results = await Promise.all([analyze(issueId), analyze(issueId)]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+    assert.equal(analyses.length, 1);
+  });
+
+  test('refuses an issue that is done', async () => {
+    const issueId = report();
+    setAnalysis(issueId, 'done', 60 * 24 * 7);
+    const res = await analyze(issueId);
+    assert.equal(res.status, 409);
+    assert.deepEqual(res.json(), { ok: false, status: 'done', error: 'This issue has already been analyzed.' });
+    assert.deepEqual(analyses, []);
+    assert.equal(row(issueId).agent_status, 'done');
+  });
+
+  test('allows another try after an error, and after an analysis that died with a restart', async () => {
+    const failed = report();
+    setAnalysis(failed, 'error', 5);
+    assert.equal((await analyze(failed)).status, 200);
+
+    const stuck = report();
+    setAnalysis(stuck, 'analyzing', 20); // started 20 minutes ago: it never finished
+    assert.equal((await analyze(stuck)).status, 200);
+
+    const running = report();
+    setAnalysis(running, 'analyzing', 5); // started 5 minutes ago: still running
+    assert.equal((await analyze(running)).status, 409);
+
+    const unknownStart = report();
+    setAnalysis(unknownStart, 'analyzing', null);
+    assert.equal((await analyze(unknownStart)).status, 200);
+    assert.deepEqual(analyses, [failed, stuck, unknownStart]);
+  });
+
+  test('a streamer gets five analyses a day; the sixth is refused with a message and nothing is started', async () => {
+    for (let i = 0; i < 5; i++) {
+      const issueId = report();
+      assert.equal((await analyze(issueId)).status, 200, `analysis ${i + 1}`);
+    }
+    const sixth = report();
+    const res = await analyze(sixth);
+    assert.equal(res.status, 429);
+    assert.deepEqual(res.json(), { ok: false, status: 'limit', error: 'At most 5 issues can be analyzed per day. Please try again tomorrow.' });
+    assert.equal(analyses.length, 5);
+    assert.equal(row(sixth).agent_status, null, 'the refused issue was not claimed');
+  });
+
+  test('the limit counts the last 24 hours, and each streamer has their own', async () => {
+    const old = [];
+    for (let i = 0; i < 5; i++) { const issueId = report(); setAnalysis(issueId, 'done', 25 * 60); old.push(issueId); }
+    assert.equal((await analyze(report())).status, 200, 'five analyses 25 hours ago do not count');
+
+    const busy = addStreamer();
+    for (let i = 0; i < 5; i++) setAnalysis(report(busy), 'done', 60);
+    assert.equal((await analyze(report(busy), busy)).status, 429);
+    assert.equal((await analyze(report(), id)).status, 200, 'another streamer is not held up');
+  });
+
+  test('another streamer\'s issue and an unknown issue are 404', async () => {
+    const other = addStreamer();
+    const theirs = report(other);
+    const res = await analyze(theirs);
+    assert.equal(res.status, 404);
+    assert.equal((await analyze(99999)).status, 404);
+    assert.equal(row(theirs).agent_status, null);
+    assert.deepEqual(analyses, []);
+  });
+
+  test('without an API key it does nothing and claims nothing', async () => {
+    const issueId = report();
+    config.anthropic.apiKey = '';
+    try {
+      const res = await analyze(issueId);
+      assert.deepEqual(res.json(), { ok: true, status: 'skipped' });
+    } finally {
+      config.anthropic.apiKey = 'test-key';
+    }
+    assert.equal(row(issueId).agent_status, null);
+    assert.deepEqual(analyses, []);
+  });
+
+  test('an analysis that fails is stored as an error, so it can be tried again', async () => {
+    const issueId = report();
+    agentTriageStub.failWith = 'API down';
+    assert.equal((await analyze(issueId)).status, 200);
+    await until(() => row(issueId).agent_status === 'error');
+    assert.deepEqual(JSON.parse(row(issueId).agent_analysis), { error: 'API down' });
+    agentTriageStub.failWith = null;
+    assert.equal((await analyze(issueId)).status, 200);
   });
 });

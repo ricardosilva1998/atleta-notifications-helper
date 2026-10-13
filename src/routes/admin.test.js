@@ -256,3 +256,34 @@ describe('Remove', () => {
     assert.ok(db.getStreamerById(target));
   });
 });
+
+describe('the issues panel', () => {
+  test('has no auto-fix: the route that applied AI patches and pushed a branch is gone', async () => {
+    const reporter = addStreamer();
+    const issueId = Number(db.createIssue(reporter, 'reporter', 'Overlay is blank', 'It shows nothing'));
+    db.updateIssueAnalysis(issueId, JSON.stringify({ summary: 'x', root_cause: 'y', can_fix: true, confidence: 'high', patch: [{ file: 'a.js', old: 'a', new: 'b' }] }), 'done');
+
+    const res = await post(`/admin/issues/${issueId}/fix`, admin);
+
+    assert.equal(res.status, 404);
+    assert.equal(db.getIssueById(issueId).status, 'open', 'the issue was not touched');
+    assert.deepEqual(calls, []);
+  });
+
+  test('replying to an issue still works', async () => {
+    const reporter = addStreamer();
+    const issueId = Number(db.createIssue(reporter, 'reporter', 'Overlay is blank', 'It shows nothing'));
+    const res = await new Promise((resolve, reject) => {
+      const body = 'status=resolved&admin_reply=Fixed%20in%20the%20next%20release';
+      const req = http.request({ host: '127.0.0.1', port, path: `/admin/issues/${issueId}`, method: 'POST', agent: false, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body), 'x-test-streamer': String(admin) } }, (response) => {
+        response.resume();
+        response.on('end', () => resolve({ status: response.statusCode, headers: response.headers }));
+      });
+      req.on('error', reject);
+      req.end(body);
+    });
+    assert.equal(res.status, 302);
+    assert.equal(db.getIssueById(issueId).status, 'resolved');
+    assert.equal(db.getIssueById(issueId).admin_reply, 'Fixed in the next release');
+  });
+});

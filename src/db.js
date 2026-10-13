@@ -1159,6 +1159,8 @@ try { db.exec('ALTER TABLE watched_youtube_channels ADD COLUMN info_attempted_at
 try { db.exec("ALTER TABLE issues ADD COLUMN screenshots TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE issues ADD COLUMN agent_analysis TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE issues ADD COLUMN agent_status TEXT"); } catch(e) {}
+// When the AI analysis was started (ISO time): the daily limit counts these.
+try { db.exec("ALTER TABLE issues ADD COLUMN agent_analyzed_at TEXT"); } catch (e) { _migrationLog('issues.agent_analyzed_at', e); }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS bridge_bug_reports (
@@ -2723,6 +2725,27 @@ function updateIssueAnalysis(id, analysis, status) {
 
 function updateIssueAgentStatus(id, status) {
   _updateIssueAgentStatus.run(status, id);
+}
+
+// Starts an AI analysis of an issue, for exactly one caller: true if this call
+// moved the issue to 'analyzing', false if it was already being analyzed (since
+// `staleBefore`) or already done. An 'analyzing' that began before `staleBefore`
+// (or has no start time) is a run that died with a restart, and may be started again.
+const _claimIssueAnalysis = db.prepare(`
+  UPDATE issues SET agent_status = 'analyzing', agent_analyzed_at = @now
+  WHERE id = @id AND (
+    COALESCE(agent_status, '') NOT IN ('analyzing', 'done')
+    OR (agent_status = 'analyzing' AND (agent_analyzed_at IS NULL OR agent_analyzed_at < @staleBefore))
+  )
+`);
+function claimIssueAnalysis(id, now, staleBefore) {
+  return _claimIssueAnalysis.run({ id, now, staleBefore }).changes === 1;
+}
+
+// How many analyses of this streamer's issues were started at or after `since` (ISO time).
+const _countIssueAnalysesSince = db.prepare('SELECT COUNT(*) AS n FROM issues WHERE streamer_id = ? AND agent_analyzed_at >= ?');
+function countIssueAnalysesSince(streamerId, since) {
+  return _countIssueAnalysesSince.get(streamerId, since).n;
 }
 
 // --- Feedback ---
@@ -5125,6 +5148,8 @@ module.exports = {
   updateIssueScreenshots,
   updateIssueAnalysis,
   updateIssueAgentStatus,
+  claimIssueAnalysis,
+  countIssueAnalysesSince,
   getSubscription,
   getStreamerTier,
   createSubscription,

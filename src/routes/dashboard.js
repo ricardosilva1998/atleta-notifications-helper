@@ -27,6 +27,7 @@ const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUnique
 const { testCooldown } = require('../services/testCooldown');
 const { isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
+const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
 
 const router = Router();
@@ -1478,21 +1479,34 @@ router.post('/report/:id/screenshot', async (req, res) => {
   res.json({ ok: true, filename });
 });
 
-// Trigger AI analysis for an issue
+// Trigger AI analysis for an issue. Every analysis costs API money: one at a time
+// per issue, never again once done, and at most ANALYSES_PER_DAY a day per
+// streamer (services/issueAnalysis.js).
 router.post('/report/:id/analyze', (req, res) => {
-  const issueId = parseInt(req.params.id);
+  const t = res.locals.t;
+  const issueId = parseInt(req.params.id, 10);
   const issue = db.getIssueById(issueId);
   if (!issue || issue.streamer_id !== req.streamer.id) {
     return res.status(404).json({ ok: false, error: 'not_found' });
   }
 
-  const config = require('../config');
   if (!config.anthropic.apiKey) {
     console.log('[Dashboard] Skipping AI analysis — no ANTHROPIC_API_KEY');
     return res.json({ ok: true, status: 'skipped' });
   }
 
-  db.updateIssueAgentStatus(issueId, 'analyzing');
+  const now = Date.now();
+  const blocked = analysisBlockedReason(issue, now);
+  if (blocked) {
+    return res.status(409).json({ ok: false, status: blocked, error: t(`report.analyze.${blocked}`) });
+  }
+  if (db.countIssueAnalysesSince(req.streamer.id, dailyWindowStart(now)) >= ANALYSES_PER_DAY) {
+    return res.status(429).json({ ok: false, status: 'limit', error: t('report.analyze.limit', { max: ANALYSES_PER_DAY }) });
+  }
+  // Only one request gets to start it, even when two arrive together.
+  if (!db.claimIssueAnalysis(issueId, new Date(now).toISOString(), staleBefore(now))) {
+    return res.status(409).json({ ok: false, status: 'analyzing', error: t('report.analyze.analyzing') });
+  }
   res.json({ ok: true, status: 'analyzing' });
 
   // Fire async — don't await

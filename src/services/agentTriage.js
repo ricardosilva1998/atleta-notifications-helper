@@ -121,7 +121,7 @@ async function analyzeIssue(issueId) {
   });
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6-20250514',
+    model: config.anthropic.triageModel,
     max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content }],

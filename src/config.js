@@ -50,10 +50,8 @@ module.exports = {
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
-  },
-  github: {
-    token: process.env.GITHUB_TOKEN || '',
-    repo: process.env.GITHUB_REPO || '',
+    // The model that analyses reported issues (services/agentTriage.js).
+    triageModel: process.env.TRIAGE_MODEL || 'claude-sonnet-5-5',
   },
   multistream: {
     apiUrl: process.env.MEDIAMTX_API_URL || '',
