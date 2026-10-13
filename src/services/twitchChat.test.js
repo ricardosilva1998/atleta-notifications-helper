@@ -179,7 +179,7 @@ describe('chat overlay events', () => {
     streamer = streamerRow({ mod_banned_words_enabled: 1 });
     bannedWords = [{ id: 1, streamer_id: 1, word: 'scamlink', is_regex: 0, created_at: '2026-01-01 12:00:00' }];
     await chat('free stuff at scamlink', tags({ id: 'msg-a' }));
-    await chat('look https://example.com', tags({ id: 'msg-b' }));
+    await chat('look https://example.com', tags({ username: 'linkposter', id: 'msg-b' }));
     assert.deepEqual(emitted, []);
     assert.deepEqual(helixCalls.map((c) => c.url.match(/message_id=([\w-]+)/)[1]), ['msg-a', 'msg-b']);
   });

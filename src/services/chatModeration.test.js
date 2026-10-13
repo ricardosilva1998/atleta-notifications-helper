@@ -254,13 +254,16 @@ describe('!slow and !slowoff', () => {
   }
 
   test('post nothing when the request itself fails', async () => {
-    global.fetch = async (url) => {
-      if (String(url).includes('/oauth2/validate')) throw new Error('validate must already be cached');
-      throw new Error('socket hang up');
+    stubTwitch(200);
+    const answerTwitch = global.fetch;
+    global.fetch = async (url, opts) => {
+      if (String(url).startsWith('https://api.twitch.tv/helix/chat/settings')) throw new Error('socket hang up');
+      return answerTwitch(url, opts);
     };
     const client = fakeClient();
     await mod.handleModCommand(client, '#chan', modTags(), '!slow 10', slowOn());
     assert.deepEqual(client.said, []);
+    assert.ok(logs.some((l) => l.level === 'error' && l.text.includes('Chat settings update failed in #chan: socket hang up')));
   });
 
   test('log a missing bot scope once per streamer, not on every attempt', async () => {
