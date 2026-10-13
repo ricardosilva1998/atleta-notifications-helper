@@ -7,8 +7,10 @@ const {
   compileBannedWord,
   bannedWordLimitReason,
   limitMessage,
+  limitRegexInput,
   MAX_PATTERN_LENGTH,
   MAX_MESSAGE_CHARS,
+  MAX_REGEX_INPUT_UNITS,
   MAX_BANNED_WORDS,
   MAX_BANNED_PATTERNS,
 } = require('./safePattern');
@@ -127,31 +129,59 @@ describe('bannedWordLimitReason', () => {
 });
 
 describe('compileBannedWord', () => {
-  test('regex words match case-insensitively', () => {
-    const match = compileBannedWord('bad\\s*word', true);
-    assert.equal(match('this is a BAD   Word here'), true);
-    assert.equal(match('this is fine'), false);
+  test('a valid regex row gets a case-insensitive regex', () => {
+    const { regex } = compileBannedWord('bad\\s*word', true);
+    assert.equal(regex.test('this is a BAD   Word here'), true);
+    assert.equal(regex.test('this is fine'), false);
   });
 
-  test('plain words match as case-insensitive substrings', () => {
-    const match = compileBannedWord('Spoiler', false);
-    assert.equal(match('no SPOILERS please'), true);
-    assert.equal(match('nothing to see'), false);
+  test('plain rows get no regex and match as case-insensitive substrings', () => {
+    const { regex, literal } = compileBannedWord('Spoiler', false);
+    assert.equal(regex, null);
+    assert.equal(literal('no SPOILERS please'), true);
+    assert.equal(literal('nothing to see'), false);
     // Regex characters in a plain word are literal text.
-    assert.equal(compileBannedWord('a.b', false)('axb'), false);
-    assert.equal(compileBannedWord('a.b', false)('see A.B now'), true);
+    assert.equal(compileBannedWord('a.b', false).literal('axb'), false);
+    assert.equal(compileBannedWord('a.b', false).literal('see A.B now'), true);
   });
 
-  test('a legacy regex row that fails validation is matched as literal text', () => {
-    const match = compileBannedWord('(a+)+$', true);
-    assert.equal(match('quoting (A+)+$ in chat'), true);
+  test('a regex row also matches its own text literally, for the budget fallback', () => {
+    const { regex, literal } = compileBannedWord('sp[a@4]m', true);
+    assert.ok(regex);
+    assert.equal(literal('the text SP[A@4]M itself'), true);
+    assert.equal(literal('sp4m'), false);
+  });
+
+  test('a legacy regex row that fails validation gets no regex', () => {
+    const { regex, literal } = compileBannedWord('(a+)+$', true);
+    assert.equal(regex, null);
+    assert.equal(literal('quoting (A+)+$ in chat'), true);
     // As a regex this line would match; as literal text it does not.
-    assert.equal(match('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), false);
+    assert.equal(literal('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), false);
   });
 
   test('an empty word never matches', () => {
-    assert.equal(compileBannedWord('', false)('anything'), false);
-    assert.equal(compileBannedWord('', true)('anything'), false);
+    assert.equal(compileBannedWord('', false).literal('anything'), false);
+    const empty = compileBannedWord('', true);
+    assert.equal(empty.regex, null);
+    assert.equal(empty.literal('anything'), false);
+  });
+});
+
+describe('limitRegexInput', () => {
+  test(`keeps only the first ${MAX_REGEX_INPUT_UNITS} UTF-16 code units`, () => {
+    assert.equal(MAX_REGEX_INPUT_UNITS, 500);
+    assert.equal(limitRegexInput('x'.repeat(600)), 'x'.repeat(500));
+    assert.equal(limitRegexInput('short'), 'short');
+    // 300 emoji are 600 code units: a regex sees the first 250 emoji.
+    assert.equal(limitRegexInput('\u{1F600}'.repeat(300)), '\u{1F600}'.repeat(250));
+  });
+
+  test('a surrogate pair split at the boundary is just one more code unit', () => {
+    const cut = limitRegexInput('a' + '\u{1F600}'.repeat(300));
+    assert.equal(cut.length, 500);
+    assert.equal(cut.charCodeAt(499), 0xd83d, 'ends with the first half of an emoji');
+    assert.equal(/^a\S+$/i.test(cut), true);
   });
 });
 

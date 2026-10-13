@@ -20,12 +20,26 @@ const configStub = {
   twitch: { clientId: 'synthetic-app-client-id' },
 };
 
+// The regex time budget runs on a fake clock that only the tests move, so real
+// regex timing never trips it by accident.
+const budgetClock = { t: 0 };
+const budgetLogs = [];
+const { createRegexBudget } = require('./regexBudget');
+const budgetStub = {
+  createRegexBudget: (options) => createRegexBudget({
+    ...options,
+    now: () => budgetClock.t,
+    log: { log: (line) => budgetLogs.push(['log', line]), warn: (line) => budgetLogs.push(['warn', line]) },
+  }),
+};
+
 const Module = require('module');
 const origLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (parent && parent.filename.endsWith(`${path.sep}chatModeration.js`)) {
     if (request === '../db') return dbStub;
     if (request === '../config') return configStub;
+    if (request === './regexBudget') return budgetStub;
   }
   return origLoad.call(this, request, parent, isMain);
 };
@@ -364,5 +378,65 @@ describe('!permit', () => {
     const client = fakeClient();
     assert.equal(await mod.handleModCommand(client, '#chan', modTags(), '!permit some.thing!', streamerRow()), true);
     assert.deepEqual(client.said, []);
+  });
+});
+
+// ── Regex banned word guards (C5) ────────────────────────────────────
+
+describe('regex banned word guards', () => {
+  const realTest = RegExp.prototype.test;
+
+  test('each regex word is warmed up once, when it is compiled', (t) => {
+    const warmups = {};
+    t.mock.method(RegExp.prototype, 'test', function (input) {
+      if (input === '') warmups[this.source] = (warmups[this.source] || 0) + 1;
+      return realTest.call(this, input);
+    });
+    state.bannedWords = [bannedWord('w[a4]rmup', true), bannedWord('plainword')];
+    mod.checkBannedWords('first message', 1);
+    mod.checkBannedWords('second message', 1);
+    assert.deepEqual(warmups, { 'w[a4]rmup': 1 });
+
+    state.bannedWords.push(bannedWord('c[o0]ld', true));
+    mod.checkBannedWords('third message', 1);
+    assert.deepEqual(warmups, { 'w[a4]rmup': 1, 'c[o0]ld': 1 });
+  });
+
+  test('regex words see the first 500 UTF-16 code units, plain words 500 characters', () => {
+    state.bannedWords = [bannedWord('c[a@4]pt[e3]st', true), bannedWord('plaintail')];
+    const pad = '\u{1F600}'.repeat(260); // 260 characters, 520 code units
+    assert.equal(mod.checkBannedWords(pad + ' c4pt3st', 1), null);
+    assert.deepEqual(mod.checkBannedWords(pad + ' plaintail', 1), { violated: true, reason: 'Banned word' });
+    assert.deepEqual(mod.checkBannedWords('\u{1F600}'.repeat(240) + ' c4pt3st', 1), { violated: true, reason: 'Banned pattern' });
+  });
+
+  test('over 250 ms of regex matching in 10 s means plain-text matching for an hour', (t) => {
+    // Each run of this regex on a real message takes 130 ms on the fake clock.
+    let regexRuns = 0;
+    t.mock.method(RegExp.prototype, 'test', function (input) {
+      if (this.source === 'sl[o0]wpattern' && input !== '') {
+        regexRuns++;
+        budgetClock.t += 130;
+      }
+      return realTest.call(this, input);
+    });
+    state.bannedWords = [bannedWord('sl[o0]wpattern', true)];
+    const streamerId = 42; // no other test uses this streamer's budget
+    budgetLogs.length = 0;
+
+    assert.equal(mod.checkBannedWords('hello', streamerId), null);
+    assert.equal(mod.checkBannedWords('hello again', streamerId), null); // 260 ms: switched off
+    assert.equal(regexRuns, 2);
+    assert.deepEqual(budgetLogs.map(([level]) => level), ['warn']);
+
+    // While off, the word is matched as its own text and the regex no longer runs.
+    assert.equal(mod.checkBannedWords('sl0wpattern', streamerId), null);
+    assert.deepEqual(mod.checkBannedWords('typed sl[o0]wpattern as is', streamerId), { violated: true, reason: 'Banned pattern' });
+    assert.equal(regexRuns, 2);
+
+    budgetClock.t += 60 * 60 * 1000;
+    assert.deepEqual(mod.checkBannedWords('sl0wpattern', streamerId), { violated: true, reason: 'Banned pattern' });
+    assert.equal(regexRuns, 3);
+    assert.deepEqual(budgetLogs.map(([level]) => level), ['warn', 'log']);
   });
 });

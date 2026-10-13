@@ -2,8 +2,9 @@
 
 const db = require('../db');
 const config = require('../config');
-const { compileBannedWord, limitMessage } = require('./safePattern');
+const { compileBannedWord, limitMessage, limitRegexInput } = require('./safePattern');
 const { containsLink, capsPercent, symbolPercent } = require('./chatFilters');
+const { createRegexBudget } = require('./regexBudget');
 
 // ─── In-memory state ──────────────────────────────────────────────────────────
 // All keyed by `${channel}:${username}`. They grow forever in a long-lived
@@ -17,8 +18,10 @@ const raidProtectionTimers = new Map();
 // validated and compiled once instead of on every chat message. The key is the
 // word itself, so an edited or deleted word can never reuse a stale matcher; it
 // just stops being looked up and is swept.
-const bannedWordMatchers = new Map(); // value: { match, usedAt }
+const bannedWordMatchers = new Map(); // value: { regex, literal, usedAt }
 const chatSettingsWarnedAt = new Map(); // streamerId -> when a missing-scope warning was logged
+// Per-streamer regex matching time; over budget, regex words match as text.
+const regexBudget = createRegexBudget();
 
 // Sweep stale entries once a minute. Caps:
 //  - lastMessages: keep 5 min (only used for repetition window which defaults 30s)
@@ -27,6 +30,7 @@ const chatSettingsWarnedAt = new Map(); // streamerId -> when a missing-scope wa
 //  - offenseCounts: keep 24 h (escalation ladder must remember through a stream)
 //  - bannedWordMatchers: keep 10 min after last use
 //  - chatSettingsWarnedAt: keep 24 h, so the warning repeats at most once a day
+//  - regexBudget: drop idle streamers, end trips whose hour is over
 const FIVE_MIN = 5 * 60 * 1000;
 const TEN_MIN = 10 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -50,6 +54,7 @@ setInterval(() => {
   for (const [k, warnedAt] of chatSettingsWarnedAt) {
     if (now - warnedAt > ONE_DAY) chatSettingsWarnedAt.delete(k);
   }
+  regexBudget.sweep();
 }, 60 * 1000).unref?.();
 
 // ─── Check if user is exempt from moderation ─────────────────────────────────
@@ -66,28 +71,52 @@ function bannedWordMatcher(row) {
   const key = `${row.is_regex ? 1 : 0}:${row.word}`;
   let entry = bannedWordMatchers.get(key);
   if (!entry) {
-    entry = { match: compileBannedWord(row.word, !!row.is_regex), usedAt: 0 };
+    entry = { ...compileBannedWord(row.word, !!row.is_regex), usedAt: 0 };
+    // V8 runs a new regex in its bytecode interpreter the first time and only
+    // compiles it to native code for the next use, so that first run can be
+    // dozens of times slower. Spend it here, on an empty string, instead of on
+    // the first real chat message.
+    if (entry.regex) entry.regex.test('');
     bannedWordMatchers.set(key, entry);
   }
   entry.usedAt = Date.now();
-  return entry.match;
+  return entry;
 }
 
-// Runs on the shared event loop for every chat message, so regex words only run
-// if they passed validateBannedPattern() (see safePattern.js) and only ever see
-// the first 500 characters of the message.
+// Never name the word: the reason is posted in chat by the shared bot account
+// and also goes to the mod log and the Discord log.
+function bannedWordViolation(row) {
+  return { violated: true, reason: row.is_regex ? 'Banned pattern' : 'Banned word' };
+}
+
+// Runs on the shared event loop for every chat message. Regex words only run if
+// they passed validateBannedPattern() (see safePattern.js), only see the first
+// 500 UTF-16 code units, and are timed against the streamer's regex budget:
+// while it is spent they are matched as plain text, like plain words, which see
+// the first 500 characters.
 function checkBannedWords(message, streamerId) {
   const words = db.getBannedWords(streamerId);
   if (!words.length) return null;
+  const matchers = words.map((row) => ({ row, matcher: bannedWordMatcher(row) }));
+  const regexOn = regexBudget.allows(streamerId);
+
   const text = limitMessage(message);
-  for (const w of words) {
-    if (bannedWordMatcher(w)(text)) {
-      // Never name the word: the reason is posted in chat by the shared bot
-      // account and also goes to the mod log and the Discord log.
-      return { violated: true, reason: w.is_regex ? 'Banned pattern' : 'Banned word' };
-    }
+  for (const { row, matcher } of matchers) {
+    if ((!matcher.regex || !regexOn) && matcher.literal(text)) return bannedWordViolation(row);
   }
-  return null;
+  if (!regexOn || !matchers.some(({ matcher }) => matcher.regex)) return null;
+
+  const regexText = limitRegexInput(message);
+  const start = regexBudget.now();
+  try {
+    for (const { row, matcher } of matchers) {
+      if (matcher.regex && matcher.regex.test(regexText)) return bannedWordViolation(row);
+    }
+    return null;
+  } finally {
+    const end = regexBudget.now();
+    regexBudget.record(streamerId, end - start, end);
+  }
 }
 
 function checkLinks(message, channel, username, streamer) {

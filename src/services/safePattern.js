@@ -14,9 +14,11 @@
 //    of such parts;
 //  - a bounded number of repeats and | choices, since each one multiplies the
 //    paths the engine may try.
-// Matching also only looks at the first 500 characters of a message, and a
-// streamer can keep at most 100 banned words, at most 20 of them regex: the
-// cost of one message is the sum over every word in the list.
+// Matching only looks at the start of a message (500 characters for plain words,
+// 500 UTF-16 code units for regex words), and a streamer can keep at most 100
+// banned words, at most 20 of them regex: the cost of one message is the sum
+// over every word in the list. chatModeration.js also caps each streamer's
+// regex matching time (regexBudget.js).
 
 const MAX_PATTERN_LENGTH = 100;
 const MAX_MESSAGE_CHARS = 500; // Twitch's chat message limit
@@ -231,18 +233,20 @@ function validateBannedPattern(pattern) {
   return { ok: true };
 }
 
-// Returns text => boolean for one banned_words row. Matching is case-insensitive.
-// A regex row that fails validation (saved before validation existed) is matched
-// as literal text instead, so it can never run as a regex.
+// Returns { regex, literal } for one banned_words row; both match case-insensitively.
+//  - regex: the compiled RegExp, only for a regex row that passes validation;
+//    otherwise null. A regex row saved before validation existed that fails it
+//    can therefore never run as a regex.
+//  - literal(text): substring match of the row's text. Plain rows always use it,
+//    and regex rows fall back to it when they have no `regex` or while the
+//    streamer's regex time budget is spent (see regexBudget.js).
 function compileBannedWord(word, isRegex) {
   const text = typeof word === 'string' ? word : '';
-  if (isRegex && validateBannedPattern(text).ok) {
-    const regex = new RegExp(text, 'i');
-    return (message) => regex.test(message);
-  }
   const needle = text.toLowerCase();
-  if (!needle) return () => false;
-  return (message) => message.toLowerCase().includes(needle);
+  return {
+    regex: isRegex && validateBannedPattern(text).ok ? new RegExp(text, 'i') : null,
+    literal: needle ? (message) => message.toLowerCase().includes(needle) : () => false,
+  };
 }
 
 // Why one more banned word cannot be saved, or null when it can. `counts` holds
@@ -251,6 +255,18 @@ function bannedWordLimitReason(counts, isRegex) {
   if (counts.total >= MAX_BANNED_WORDS) return 'too_many_words';
   if (isRegex && counts.regex >= MAX_BANNED_PATTERNS) return 'too_many_patterns';
   return null;
+}
+
+// What a regex word is tested against: the first 500 UTF-16 code units. A regex
+// costs more on two-byte text (emoji, Cyrillic, CJK) and grows faster than
+// linearly with its length, so counting code units bounds the worst case: 500
+// characters of emoji would be 1000 units. A surrogate pair split at the
+// boundary is harmless, since a non-unicode regex already treats each half as
+// its own code unit.
+const MAX_REGEX_INPUT_UNITS = 500;
+
+function limitRegexInput(message) {
+  return String(message ?? '').slice(0, MAX_REGEX_INPUT_UNITS);
 }
 
 // The first MAX_MESSAGE_CHARS characters (code points) of a message.
@@ -269,8 +285,10 @@ module.exports = {
   compileBannedWord,
   bannedWordLimitReason,
   limitMessage,
+  limitRegexInput,
   MAX_PATTERN_LENGTH,
   MAX_MESSAGE_CHARS,
+  MAX_REGEX_INPUT_UNITS,
   MAX_BANNED_WORDS,
   MAX_BANNED_PATTERNS,
 };
