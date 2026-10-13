@@ -1,6 +1,8 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const config = require('./config');
+const { isAdminStreamer } = require('./adminAccess');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'bot.db');
 
@@ -1165,31 +1167,26 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_bridge_bug_reports_lookup ON bridge_bug_reports (bridge_id, status)`);
 
-// --- Seed: ensure enterprise subscriptions for specific users ---
-const _enterpriseUsers = ['Ricardo Apple', 'andre_vilela'];
-for (const name of _enterpriseUsers) {
+// --- Seed: ensure enterprise subscriptions for the admins ---
+// Matched by Discord user id, like admin access: names can be changed by anyone.
+for (const discordUserId of config.adminDiscordIds) {
   try {
-    const streamer = db.prepare("SELECT id FROM streamers WHERE discord_display_name = ? OR discord_username = ?").get(name, name);
+    const streamer = db.prepare("SELECT id FROM streamers WHERE discord_user_id = ?").get(discordUserId);
     if (streamer) {
       const hasSub = db.prepare("SELECT id FROM subscriptions WHERE streamer_id = ? AND tier = 'enterprise' AND status = 'active'").get(streamer.id);
       if (!hasSub) {
         db.prepare("UPDATE subscriptions SET status = 'cancelled', cancelled_at = datetime('now') WHERE streamer_id = ? AND status = 'active'").run(streamer.id);
         db.prepare("INSERT INTO subscriptions (streamer_id, tier, status) VALUES (?, 'enterprise', 'active')").run(streamer.id);
-        console.log(`[DB] Granted enterprise subscription to ${name}`);
+        console.log(`[DB] Granted enterprise subscription to streamer ${streamer.id}`);
       }
     }
   } catch {}
 }
 
 // --- Admin access control ---
-const ADMIN_USERS = ['Ricardo Apple', 'r1c4rd098'];
-
+// Admin is decided by Discord user id (config.adminDiscordIds), never by name.
 function isAdmin(streamerId) {
-  const streamer = _getStreamerById.get(streamerId);
-  if (!streamer) return false;
-  return ADMIN_USERS.some(name =>
-    streamer.discord_display_name === name || streamer.discord_username === name
-  );
+  return isAdminStreamer(_getStreamerById.get(streamerId), config.adminDiscordIds);
 }
 
 // --- Streamers ---
