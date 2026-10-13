@@ -36,10 +36,11 @@ const { client, fetchGuildChannel, sendToGuildChannel, sendNotification, streame
 const G1 = '100000000000000001';
 const G2 = '100000000000000002';
 
-function fakeChannel(id, guildId, { fail } = {}) {
+function fakeChannel(id, guildId, { fail, textBased = true } = {}) {
   const sent = [];
   return {
     id, guildId, name: `chan-${id}`, sent,
+    isTextBased: () => textBased,
     async send(payload) {
       if (fail) throw Object.assign(new Error(fail), { code: 50013, status: 403 });
       sent.push(payload);
@@ -64,18 +65,20 @@ function fakeGuild(id, channels, remote = []) {
   };
 }
 
-let mine, theirs, elsewhere, uncached, broken;
+let mine, theirs, elsewhere, uncached, broken, category, uncachedCategory;
 beforeEach(() => {
   for (const key of Object.keys(dbCalls)) dbCalls[key].length = 0;
   claims = {};
   mine = fakeChannel('200000000000000001', G1);
   broken = fakeChannel('200000000000000002', G1, { fail: 'Missing Permissions' });
   uncached = fakeChannel('200000000000000003', G1);
+  category = fakeChannel('200000000000000004', G1, { textBased: false });
+  uncachedCategory = fakeChannel('200000000000000005', G1, { textBased: false });
   theirs = fakeChannel('300000000000000001', G2);
   elsewhere = fakeChannel('300000000000000002', G2);
   client.guilds.cache.clear();
   // G1's fallback fetch also "finds" a channel of G2, which must still be refused.
-  client.guilds.cache.set(G1, fakeGuild(G1, [mine, broken], [uncached, elsewhere]));
+  client.guilds.cache.set(G1, fakeGuild(G1, [mine, broken, category], [uncached, elsewhere, uncachedCategory]));
   client.guilds.cache.set(G2, fakeGuild(G2, [theirs]));
 });
 
@@ -95,6 +98,17 @@ describe('fetchGuildChannel', () => {
   test('refuses a channel of another server, from the cache or from Discord', async () => {
     assert.equal(await fetchGuildChannel(G1, theirs.id), null);
     assert.equal(await fetchGuildChannel(G1, elsewhere.id), null);
+  });
+
+  test('refuses a channel that cannot hold messages, such as a category, cached or fetched', async () => {
+    assert.equal(await fetchGuildChannel(G1, category.id), null);
+    assert.equal(await fetchGuildChannel(G1, uncachedCategory.id), null);
+  });
+
+  test('refuses an object that does not say whether it holds messages', async () => {
+    const odd = { id: '200000000000000006', guildId: G1 };
+    client.guilds.cache.get(G1).channels.cache.set(odd.id, odd);
+    assert.equal(await fetchGuildChannel(G1, odd.id), null);
   });
 
   test('refuses unknown channels, servers the bot is not in, and missing ids', async () => {
@@ -119,6 +133,12 @@ describe('sendToGuildChannel', () => {
     assert.deepEqual(mine.sent, [{ content: 'hi' }]);
     assert.deepEqual(dbCalls.cleared, [[G1, 7, mine.id]]);
     assert.deepEqual(dbCalls.errors, []);
+  });
+
+  test('does not post into a category and records why', async () => {
+    assert.equal(await sendToGuildChannel(G1, 7, category.id, { content: 'hi' }), false);
+    assert.deepEqual(category.sent, []);
+    assert.deepEqual(dbCalls.errors, [[G1, 7, category.id, 'channel_unavailable']]);
   });
 
   test('does not post into another server\'s channel and records why', async () => {
@@ -178,5 +198,10 @@ describe('streamerGuildForChannel', () => {
     assert.equal(streamerGuildForChannel(7, theirs.id), null);
     assert.equal(streamerGuildForChannel(8, mine.id), null);
     assert.equal(streamerGuildForChannel(7, null), null);
+  });
+
+  test('null for a category, which cannot hold the log', () => {
+    claims = { 7: [{ guild_id: G1 }] };
+    assert.equal(streamerGuildForChannel(7, category.id), null);
   });
 });

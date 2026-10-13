@@ -69,6 +69,12 @@ function isChannelInGuild(channel, guildId) {
   return !!channel && !!guildId && channel.guildId != null && String(channel.guildId) === String(guildId);
 }
 
+// The bot can only post into a channel that holds messages. A category (or a
+// forum) can be saved by id but every post to it would fail.
+function isTextChannel(channel) {
+  return !!channel && typeof channel.isTextBased === 'function' && channel.isTextBased();
+}
+
 // Stored as a server's last delivery error when a saved channel is gone, the
 // bot can't see it, or it isn't a channel of that server.
 const DELIVERY_CHANNEL_UNAVAILABLE = 'channel_unavailable';
@@ -77,8 +83,14 @@ const DELIVERY_CHANNEL_UNAVAILABLE = 'channel_unavailable';
 // Only someone who may manage the Discord server can claim it. Answers are kept
 // for a minute per user and server so the dashboard's server list doesn't ask
 // Discord on every page load; a claim itself asks again ({ fresh: true }).
+// Only a real answer is kept: "not allowed" or "not a member". When Discord
+// could not answer at all (rate limit, outage), nothing is kept, so the next
+// page load asks again instead of showing a wrong "no" for a minute.
 const MANAGE_CHECK_TTL_MS = 60_000;
 const manageChecks = new Map(); // `${userId}:${guildId}` -> { ok, expiresAt }
+
+// Discord's error code for "Unknown Member": that person is not in the server.
+const DISCORD_UNKNOWN_MEMBER = 10007;
 
 setInterval(() => {
   const now = Date.now();
@@ -87,22 +99,44 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
-async function canManageGuild(guild, userId, { fresh = false } = {}) {
-  if (!guild || !userId) return false;
+async function lookUpManageGuild(guild, userId, fresh) {
   const key = `${userId}:${guild.id}`;
   if (!fresh) {
     const cached = manageChecks.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.ok;
   }
-  let ok = false;
+  let ok;
   try {
     const member = await guild.members.fetch(fresh ? { user: userId, force: true } : userId);
     ok = !!member && member.permissions.has(PermissionFlagsBits.ManageGuild);
-  } catch {
-    ok = false; // not a member of that server, or Discord could not answer
+  } catch (error) {
+    if (!error || error.code !== DISCORD_UNKNOWN_MEMBER) {
+      const why = error && error.code != null ? `code ${error.code}` : 'no code';
+      console.warn(`[Discord] Could not check Manage Server for user ${userId} in server ${guild.id} (${why}): ${error && error.message}`);
+      return false; // not an answer, so not remembered
+    }
+    ok = false; // not a member of that server
   }
   manageChecks.set(key, { ok, expiresAt: Date.now() + MANAGE_CHECK_TTL_MS });
   return ok;
+}
+
+// timeoutMs (optional): give up waiting after that long and answer false for
+// now; the lookup carries on in the background and is remembered when it ends.
+async function canManageGuild(guild, userId, { fresh = false, timeoutMs = 0 } = {}) {
+  if (!guild || !userId) return false;
+  const answer = lookUpManageGuild(guild, userId, fresh);
+  if (!(timeoutMs > 0)) return answer;
+  let timer;
+  const timedOut = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+    timer.unref();
+  });
+  try {
+    return await Promise.race([answer, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ─── Welcome message ──────────────────────────────────────────────────────────
@@ -128,6 +162,7 @@ module.exports = {
   roleFacts,
   botTopRolePosition,
   isChannelInGuild,
+  isTextChannel,
   DELIVERY_CHANNEL_UNAVAILABLE,
   canManageGuild,
   WELCOME_MESSAGE_MAX,

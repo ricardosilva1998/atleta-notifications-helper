@@ -194,16 +194,52 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     addWatchers(G2, streamerA); // nobody claims G2
     addWatchers(G1, streamerB); // G1 is claimed, but not by B
 
-    const first = db.deleteOrphanWatchers();
+    const first = db.deleteOrphanWatchers(() => {});
     assert.equal(first.total, 12);
     assert.equal(first.byTable.watched_channels, 2);
     assert.equal(watcherCount(G1, streamerA), 6);
     assert.equal(watcherCount(G2, streamerA), 0);
     assert.equal(watcherCount(G1, streamerB), 0);
 
-    const second = db.deleteOrphanWatchers();
+    const lines = [];
+    const second = db.deleteOrphanWatchers((line) => lines.push(line));
     assert.equal(second.total, 0);
+    assert.deepEqual(lines, [], 'nothing left to remove, nothing to log');
     assert.equal(watcherCount(G1, streamerA), 6);
+  });
+
+  test('the boot cleanup logs each row it removes, with the columns that identify it, before deleting it', () => {
+    db.upsertGuild(G1, streamerA, 'One');
+    addWatchers(G2, streamerA); // nobody claims G2
+    addWatchers(G1, streamerB); // G1 is claimed, but not by B
+
+    const lines = [];
+    const existedWhenLogged = [];
+    db.deleteOrphanWatchers((line) => {
+      lines.push(line);
+      const [, table, id] = line.match(/table=(\w+) id=(\d+)/);
+      existedWhenLogged.push(!!db.db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(Number(id)));
+    });
+
+    assert.equal(lines.length, 12);
+    assert.ok(existedWhenLogged.every(Boolean), 'each row is still there when its line is written');
+    for (const [table, column] of Object.entries(WATCHERS)) {
+      for (const [guildId, streamerId] of [[G2, streamerA], [G1, streamerB]]) {
+        const expected = new RegExp(`^\\[DB\\] Removing orphaned watcher: table=${table} id=\\d+ guild_id=${guildId} streamer_id=${streamerId} ${column}=${table}-${guildId}-${streamerId}$`);
+        assert.ok(lines.some((line) => expected.test(line)), `${table} ${guildId} ${streamerId}`);
+      }
+    }
+    assert.equal(watcherCount(G2, streamerA) + watcherCount(G1, streamerB), 0);
+  });
+
+  test('without a logger the boot cleanup writes its lines to the console', () => {
+    addWatchers(G2, streamerA);
+    const printed = [];
+    const original = console.log;
+    console.log = (line) => printed.push(line);
+    try { db.deleteOrphanWatchers(); } finally { console.log = original; }
+    assert.equal(printed.length, 6);
+    assert.ok(printed.every((line) => line.startsWith('[DB] Removing orphaned watcher: table=')));
   });
 
   test('the delivery error columns exist after the migrations', () => {

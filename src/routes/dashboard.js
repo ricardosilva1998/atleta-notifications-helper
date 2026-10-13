@@ -25,6 +25,10 @@ const {
 
 const router = Router();
 
+// Longest the dashboard home waits for Discord to say whether the person manages
+// one unclaimed server.
+const UNCLAIMED_CHECK_TIMEOUT_MS = 2500;
+
 // Helper: get tier limits for current user
 function getTierLimits(streamerId) {
   const tier = db.getStreamerTier(streamerId);
@@ -119,9 +123,8 @@ router.post('/claim/:guildId', async (req, res) => {
   const discordGuild = client.guilds.cache.get(guildId);
   if (!discordGuild) return res.redirect('/dashboard');
 
-  // Check if already claimed by another user
-  const allClaimed = db.getAllClaimedGuildIds();
-  if (allClaimed.has(guildId)) {
+  // A server that anyone has claimed cannot be claimed again.
+  if (db.isGuildClaimed(guildId)) {
     return res.redirect('/dashboard?msg=already_claimed');
   }
 
@@ -129,6 +132,12 @@ router.post('/claim/:guildId', async (req, res) => {
   if (!(await canManageGuild(discordGuild, req.streamer.discord_user_id, { fresh: true }))) {
     console.warn(`[Dashboard] ${req.streamer.discord_username} cannot manage guild ${guildId}; claim refused`);
     return res.redirect('/dashboard?msg=claim_not_allowed');
+  }
+
+  // Asking Discord takes a moment, and another manager may have claimed the
+  // server meanwhile. Nothing below waits, so this check and the claim are one step.
+  if (db.isGuildClaimed(guildId)) {
+    return res.redirect('/dashboard?msg=already_claimed');
   }
 
   // Check tier guild limit
@@ -229,11 +238,14 @@ router.get('/', async (req, res) => {
   });
 
   // Servers nobody has claimed yet (including this user), listed only to
-  // someone who may manage them — the same check a claim makes.
+  // someone who may manage them — the same check a claim makes. A server whose
+  // answer is slow is left off this load (and listed on a later one), so a slow
+  // Discord cannot hold the dashboard up.
   const myGuildIds = new Set(guilds.map((g) => g.guild_id));
   const allClaimed = db.getAllClaimedGuildIds();
   const candidates = [...client.guilds.cache.values()].filter((g) => !myGuildIds.has(g.id) && !allClaimed.has(g.id));
-  const manageable = await Promise.all(candidates.map((g) => canManageGuild(g, req.streamer.discord_user_id)));
+  const manageable = await Promise.all(candidates.map((g) =>
+    canManageGuild(g, req.streamer.discord_user_id, { timeoutMs: UNCLAIMED_CHECK_TIMEOUT_MS })));
   const unclaimedGuilds = candidates
     .filter((g, i) => manageable[i])
     .map((g) => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 64 }) }));

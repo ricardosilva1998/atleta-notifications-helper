@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const config = require('./config');
-const { isChannelInGuild, DELIVERY_CHANNEL_UNAVAILABLE } = require('./services/discordGuards');
+const { isChannelInGuild, isTextChannel, DELIVERY_CHANNEL_UNAVAILABLE } = require('./services/discordGuards');
 
 // Posted text (clip and video titles, creator names) comes from third parties,
 // so by default nothing the bot sends may ping @everyone, @here, roles or
@@ -11,23 +11,25 @@ const client = new Client({
 });
 
 // The only way to reach a channel before posting: it must be a channel of the
-// server the post is for. A saved channel id is never trusted on its own.
+// server the post is for, and one that holds messages (a saved category id
+// would otherwise fail every post). A saved channel id is never trusted on its own.
 async function fetchGuildChannel(guildId, channelId) {
   if (!guildId || typeof channelId !== 'string' || !/^\d{17,20}$/.test(channelId)) return null;
   const guild = client.guilds.cache.get(String(guildId));
   if (!guild) return null;
   const channel = guild.channels.cache.get(channelId)
     || await guild.channels.fetch(channelId).catch(() => null);
-  return isChannelInGuild(channel, guildId) ? channel : null;
+  return isChannelInGuild(channel, guildId) && isTextChannel(channel) ? channel : null;
 }
 
-// The moderation log has no server of its own: its channel must be one of a
-// server the streamer has claimed. Returns that server's id, or null.
+// The moderation log has no server of its own: its channel must be a channel
+// that holds messages in a server the streamer has claimed. Returns that
+// server's id, or null.
 function streamerGuildForChannel(streamerId, channelId) {
   if (!streamerId || !channelId) return null;
   const db = require('./db');
   const claim = db.getGuildsForStreamer(streamerId)
-    .find((g) => client.guilds.cache.get(g.guild_id)?.channels.cache.has(String(channelId)));
+    .find((g) => isTextChannel(client.guilds.cache.get(g.guild_id)?.channels.cache.get(String(channelId))));
   return claim ? claim.guild_id : null;
 }
 

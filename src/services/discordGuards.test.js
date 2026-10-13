@@ -6,7 +6,7 @@ const { PermissionFlagsBits: P } = require('discord.js');
 
 const {
   subRoleEligibility, roleFacts, PRIVILEGED_ROLE_PERMISSIONS,
-  isChannelInGuild, canManageGuild,
+  isChannelInGuild, isTextChannel, canManageGuild,
   clampWelcomeMessage, WELCOME_MESSAGE_MAX,
   BOT_INVITE_PERMISSIONS, botInviteUrl,
 } = require('./discordGuards');
@@ -77,6 +77,17 @@ describe('isChannelInGuild', () => {
   });
 });
 
+describe('isTextChannel', () => {
+  test('is true only for a channel that says it holds messages', () => {
+    assert.equal(isTextChannel({ isTextBased: () => true }), true);
+    assert.equal(isTextChannel({ isTextBased: () => false }), false, 'a category');
+    assert.equal(isTextChannel({ id: '1' }), false);
+    assert.equal(isTextChannel({ isTextBased: true }), false);
+    assert.equal(isTextChannel(null), false);
+    assert.equal(isTextChannel(undefined), false);
+  });
+});
+
 describe('canManageGuild', () => {
   // A fake guild whose members.fetch() resolves to a member with the given
   // permission bits (absent = not a member), recording each call.
@@ -126,6 +137,107 @@ describe('canManageGuild', () => {
     const b = fakeGuild('100000000000000005', { u9: P.SendMessages });
     assert.equal(await canManageGuild(a, 'u9'), true);
     assert.equal(await canManageGuild(b, 'u9'), false);
+  });
+
+  // The next fetch() calls run the given steps in order; each is a member's
+  // permission bits, an error to throw, or a function returning a promise.
+  function scriptedGuild(id, steps) {
+    const calls = [];
+    return {
+      id,
+      calls,
+      members: {
+        async fetch(arg) {
+          calls.push(arg);
+          const step = steps[Math.min(calls.length, steps.length) - 1];
+          if (typeof step === 'function') return step();
+          if (step instanceof Error) throw step;
+          return { permissions: { has: (flag) => (step & flag) === flag } };
+        },
+      },
+    };
+  }
+
+  function captureWarnings(fn) {
+    const warnings = [];
+    const original = console.warn;
+    console.warn = (...args) => warnings.push(args.join(' '));
+    return Promise.resolve().then(fn).then((result) => ({ result, warnings })).finally(() => { console.warn = original; });
+  }
+
+  test('someone who is not in the server is a real answer: false, and remembered', async () => {
+    const g = scriptedGuild('100000000000000006', [Object.assign(new Error('Unknown Member'), { code: 10007 }), P.ManageGuild]);
+    const { warnings } = await captureWarnings(async () => {
+      assert.equal(await canManageGuild(g, 'visitor'), false);
+      assert.equal(await canManageGuild(g, 'visitor'), false);
+    });
+    assert.equal(g.calls.length, 1, 'the second answer came from the cache');
+    assert.deepEqual(warnings, []);
+  });
+
+  test('a member without Manage Server is a real answer: false, and remembered', async () => {
+    const g = scriptedGuild('100000000000000007', [P.SendMessages, P.ManageGuild]);
+    assert.equal(await canManageGuild(g, 'plain-member'), false);
+    assert.equal(await canManageGuild(g, 'plain-member'), false);
+    assert.equal(g.calls.length, 1);
+  });
+
+  test('when Discord cannot answer, the failure is not remembered, and is logged once with its code', async () => {
+    const outage = Object.assign(new Error('You are being rate limited.'), { code: 429 });
+    const g = scriptedGuild('100000000000000008', [outage, P.ManageGuild]);
+    const first = await captureWarnings(() => canManageGuild(g, 'owner'));
+    assert.equal(first.result, false);
+    assert.equal(first.warnings.length, 1);
+    assert.match(first.warnings[0], /user owner in server 100000000000000008 \(code 429\): You are being rate limited\./);
+
+    const second = await captureWarnings(() => canManageGuild(g, 'owner'));
+    assert.equal(second.result, true, 'asked Discord again, and it answered this time');
+    assert.deepEqual(second.warnings, []);
+    assert.equal(g.calls.length, 2);
+  });
+
+  test('an error with no code (a timeout inside discord.js) is not remembered either', async () => {
+    const g = scriptedGuild('100000000000000009', [new Error('Members didn\'t arrive in time.'), P.ManageGuild]);
+    const first = await captureWarnings(() => canManageGuild(g, 'owner'));
+    assert.equal(first.result, false);
+    assert.match(first.warnings[0], /\(no code\): Members didn't arrive in time\./);
+    assert.equal((await captureWarnings(() => canManageGuild(g, 'owner'))).result, true);
+  });
+
+  test('a fresh check that fails does not keep the failure or overwrite an earlier answer', async () => {
+    const g = scriptedGuild('100000000000000010', [P.ManageGuild, Object.assign(new Error('boom'), { code: 500 })]);
+    assert.equal(await canManageGuild(g, 'owner'), true);
+    const fresh = await captureWarnings(() => canManageGuild(g, 'owner', { fresh: true }));
+    assert.equal(fresh.result, false);
+    assert.equal(g.calls.length, 2);
+    assert.equal(await canManageGuild(g, 'owner'), true, 'the earlier real answer is still the cached one');
+    assert.equal(g.calls.length, 2);
+  });
+
+  describe('with a time limit', () => {
+    test('stops waiting for a slow Discord and answers false', async () => {
+      const g = scriptedGuild('100000000000000011', [() => new Promise(() => {})]); // never answers
+      const started = Date.now();
+      assert.equal(await canManageGuild(g, 'owner', { timeoutMs: 25 }), false);
+      assert.ok(Date.now() - started < 1000, 'it did not wait for Discord');
+    });
+
+    test('a slow answer that arrives later is remembered for the next call', async () => {
+      let answer;
+      const g = scriptedGuild('100000000000000012', [() => new Promise((resolve) => { answer = resolve; })]);
+      assert.equal(await canManageGuild(g, 'owner', { timeoutMs: 20 }), false);
+      answer({ permissions: { has: () => true } });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(await canManageGuild(g, 'owner', { timeoutMs: 20 }), true);
+      assert.equal(g.calls.length, 1, 'answered from the cache, not by asking Discord again');
+    });
+
+    test('a quick answer is returned as it is, and no limit means no waiting limit', async () => {
+      const g = scriptedGuild('100000000000000013', [P.ManageGuild]);
+      assert.equal(await canManageGuild(g, 'owner', { timeoutMs: 2500 }), true);
+      const slow = scriptedGuild('100000000000000014', [() => new Promise((resolve) => setTimeout(() => resolve({ permissions: { has: () => true } }), 40))]);
+      assert.equal(await canManageGuild(slow, 'owner'), true, 'without a limit it waits for Discord');
+    });
   });
 });
 

@@ -9,7 +9,7 @@ router.use((req, res, next) => {
   next();
 });
 
-// Streamer must have claimed the guild before they can read its channel/role list.
+// Streamer must have claimed the guild before they can read its channel list.
 function requireGuildOwnership(req, res, next) {
   if (!/^\d{5,30}$/.test(req.params.guildId || '')) return res.status(400).json({ error: 'Bad guildId' });
   if (!db.getGuildConfig(req.params.guildId, req.streamer.id)) {
@@ -28,18 +28,6 @@ router.get('/guild/:guildId/channels', requireGuildOwnership, (req, res) => {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   res.json(channels);
-});
-
-router.get('/guild/:guildId/roles', requireGuildOwnership, (req, res) => {
-  const guild = client.guilds.cache.get(req.params.guildId);
-  if (!guild) return res.json([]);
-
-  const roles = guild.roles.cache
-    .filter((r) => !r.managed && r.name !== '@everyone')
-    .map((r) => ({ id: r.id, name: r.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  res.json(roles);
 });
 
 module.exports = router;

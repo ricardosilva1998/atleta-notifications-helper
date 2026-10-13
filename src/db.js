@@ -1364,10 +1364,24 @@ const WATCHER_TABLES = [
 ];
 const _deleteClaimWatchers = WATCHER_TABLES.map((table) =>
   db.prepare(`DELETE FROM ${table} WHERE guild_id = ? AND streamer_id = ?`));
-const _deleteOrphanWatchers = WATCHER_TABLES.map((table) => [table, db.prepare(`
-  DELETE FROM ${table}
-  WHERE NOT EXISTS (SELECT 1 FROM guilds g WHERE g.guild_id = ${table}.guild_id AND g.streamer_id = ${table}.streamer_id)
-`)]);
+
+// The column that says what a watcher watches, for the log line of a removal.
+const WATCHER_IDENTITY_COLUMN = {
+  watched_channels: 'twitch_username',
+  watched_youtube_channels: 'youtube_channel_id',
+  watched_instagram_accounts: 'instagram_username',
+  watched_tiktok_accounts: 'tiktok_username',
+  watched_twitter_accounts: 'twitter_username',
+  watched_iracing_drivers: 'customer_id',
+};
+const orphanWatcherCondition = (table) =>
+  `NOT EXISTS (SELECT 1 FROM guilds g WHERE g.guild_id = ${table}.guild_id AND g.streamer_id = ${table}.streamer_id)`;
+const _selectOrphanWatchers = WATCHER_TABLES.map((table) => db.prepare(`
+  SELECT id, guild_id, streamer_id, ${WATCHER_IDENTITY_COLUMN[table]} AS watches
+  FROM ${table} WHERE ${orphanWatcherCondition(table)}
+`));
+const _deleteOrphanWatchers = WATCHER_TABLES.map((table) =>
+  db.prepare(`DELETE FROM ${table} WHERE ${orphanWatcherCondition(table)}`));
 
 // Removing a server also stops everything that posted into it for this streamer.
 const _deleteGuildWithWatchers = db.transaction((guildId, streamerId) => {
@@ -1381,18 +1395,23 @@ function deleteGuild(guildId, streamerId) {
 
 // Boot cleanup: watchers left behind by servers removed before deleteGuild
 // took them along. Returns { total, byTable }; running it again removes nothing.
-const _deleteAllOrphanWatchers = db.transaction(() => {
+// The delete cannot be undone, so every row about to go is passed to `log`
+// first, with the columns that identify it.
+const _deleteAllOrphanWatchers = db.transaction((log) => {
   const byTable = {};
   let total = 0;
-  for (const [table, stmt] of _deleteOrphanWatchers) {
-    byTable[table] = stmt.run().changes;
+  WATCHER_TABLES.forEach((table, i) => {
+    for (const row of _selectOrphanWatchers[i].all()) {
+      log(`[DB] Removing orphaned watcher: table=${table} id=${row.id} guild_id=${row.guild_id} streamer_id=${row.streamer_id} ${WATCHER_IDENTITY_COLUMN[table]}=${row.watches}`);
+    }
+    byTable[table] = _deleteOrphanWatchers[i].run().changes;
     total += byTable[table];
-  }
+  });
   return { total, byTable };
 });
 
-function deleteOrphanWatchers() {
-  return _deleteAllOrphanWatchers();
+function deleteOrphanWatchers(log = console.log) {
+  return _deleteAllOrphanWatchers(log);
 }
 
 // Last failed post into a claimed server, shown on its settings page until a

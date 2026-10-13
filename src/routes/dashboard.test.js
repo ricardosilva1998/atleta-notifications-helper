@@ -563,3 +563,76 @@ describe('the overlay settings page', () => {
     assert.ok(!res.text.includes(JWT));
   });
 });
+
+// ── Claiming a server (C-a) and the server list (C-c) ────────────────────
+
+describe('claiming a server', () => {
+  test('two managers claiming at the same moment: only one gets it', async () => {
+    const G = '700000000000000001';
+    const a = addStreamer();
+    const b = addStreamer();
+    const guild = fakeGuild(G, { manage: [discordId(a), discordId(b)] });
+    guild.hold = true; // Discord's answers wait until the test lets them through
+    guilds.set(G, guild);
+
+    const first = request('POST', `/dashboard/claim/${G}`, { streamer: a });
+    const second = request('POST', `/dashboard/claim/${G}`, { streamer: b });
+    // Both are now waiting on Discord, past the "already claimed?" check.
+    for (let i = 0; i < 200 && guild.gates.length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(guild.gates.length, 2, 'both requests reached Discord');
+    guild.gates.forEach((answer) => answer());
+
+    const results = await Promise.all([first, second]);
+    const locations = results.map((r) => r.headers.location).sort();
+    assert.deepEqual(locations, [`/dashboard/guild/${G}`, '/dashboard?msg=already_claimed']);
+    assert.equal(count('guilds', 'guild_id = ?', G), 1, 'the server has exactly one owner');
+  });
+
+  test('a manager can claim a server nobody has', async () => {
+    const G = '700000000000000002';
+    const a = addStreamer();
+    guilds.set(G, fakeGuild(G, { manage: [discordId(a)] }));
+    const res = await request('POST', `/dashboard/claim/${G}`, { streamer: a });
+    assert.equal(res.headers.location, `/dashboard/guild/${G}`);
+    assert.ok(db.getGuildConfig(G, a));
+  });
+
+  test('someone who does not manage the server is refused', async () => {
+    const G = '700000000000000003';
+    const a = addStreamer();
+    guilds.set(G, fakeGuild(G, { manage: [] }));
+    const res = await request('POST', `/dashboard/claim/${G}`, { streamer: a });
+    assert.equal(res.headers.location, '/dashboard?msg=claim_not_allowed');
+    assert.equal(count('guilds', 'guild_id = ?', G), 0);
+  });
+
+  test('a server somebody already has is refused before Discord is asked', async () => {
+    const G = '700000000000000004';
+    const a = addStreamer();
+    const b = addStreamer();
+    db.upsertGuild(G, a, 'Taken');
+    const guild = fakeGuild(G, { manage: [discordId(b)] });
+    guilds.set(G, guild);
+    const res = await request('POST', `/dashboard/claim/${G}`, { streamer: b });
+    assert.equal(res.headers.location, '/dashboard?msg=already_claimed');
+    assert.deepEqual(guild.fetches, []);
+  });
+});
+
+describe('the dashboard home and Discord answering slowly', () => {
+  test('a server whose answer is slow is left off the list for now, and the page does not wait for it', async () => {
+    const a = addStreamer();
+    guilds.set('700000000000000010', fakeGuild('700000000000000010', { manage: [discordId(a)] }));
+    guilds.set('700000000000000011', fakeGuild('700000000000000011', { never: true }));
+    guilds.set('700000000000000012', fakeGuild('700000000000000012', { manage: [] }));
+
+    const started = Date.now();
+    const res = await request('GET', '/dashboard', { streamer: a, json: true });
+    const took = Date.now() - started;
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json().locals.unclaimedGuilds.map((g) => g.id), ['700000000000000010']);
+    assert.ok(took >= 2000, `it waited for the slow server up to the limit (${took} ms)`);
+    assert.ok(took < 5000, `and no longer than that (${took} ms)`);
+  });
+});
