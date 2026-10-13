@@ -60,11 +60,8 @@ function checkSymbolSpam(message, streamer) {
 }
 
 // ─── Run YouTube filters ─────────────────────────────────────────────────────
-function runFilters(message, key, streamerId, streamer) {
-  if (streamer.mod_banned_words_enabled) {
-    const r = checkBannedWords(message, streamerId);
-    if (r) return r;
-  }
+// Banned words are checked once, before this, by moderateYoutubeMessage.
+function runFilters(message, key, streamer) {
   if (streamer.mod_link_protection_enabled) {
     const r = checkLinks(message, key, streamer);
     if (r) return r;
@@ -209,7 +206,7 @@ async function moderateYoutubeMessage(streamerId, item, liveChatId, botToken) {
   if (exempt) return { moderated: false };
 
   const key = `yt:${streamerId}:${channelId}`;
-  const filterResult = runFilters(message, key, streamerId, streamer);
+  const filterResult = runFilters(message, key, streamer);
   if (filterResult && !filterResult.flagOnly) {
     const action = getAction(key, streamer);
     await executeAction(messageId, liveChatId, channelId, displayName, action, filterResult.reason, streamer, botToken);

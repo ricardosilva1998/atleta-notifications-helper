@@ -11,10 +11,11 @@ const path = require('path');
 
 let streamer;
 let bannedWords = [];
+let bannedWordReads = 0;
 
 const dbStub = {
   getStreamerById: (id) => (streamer && streamer.id === id ? { ...streamer } : null),
-  getBannedWords: () => bannedWords,
+  getBannedWords: () => { bannedWordReads++; return bannedWords; },
   addModLogEntry: () => {},
   getChatbotEnabledStreamers: () => [],
   getChatCommand: () => null,
@@ -109,6 +110,7 @@ beforeEach(() => {
   for (const level of ['log', 'warn', 'error']) console[level] = () => {};
   streamer = streamerRow();
   bannedWords = [];
+  bannedWordReads = 0;
   stubTwitch(200);
   chatManager.connect();
   chatManager.joinChannel(1, 'somestreamer');
@@ -196,5 +198,24 @@ describe('chat overlay events', () => {
     streamer = streamerRow({ overlay_enabled: 0 });
     await chat('hello there', tags());
     assert.deepEqual(emitted, []);
+  });
+});
+
+// ── Banned words: one pass per message (C5) ──────────────────────────
+
+describe('banned words', () => {
+  test('are tested once per message, and still apply to subs and VIPs exempt from other filters', async () => {
+    streamer = streamerRow({ mod_banned_words_enabled: 1 });
+    bannedWords = [{ id: 1, streamer_id: 1, word: 'scamlink', is_regex: 0, created_at: '2026-01-01 12:00:00' }];
+
+    await chat('just a normal message', tags());
+    assert.equal(bannedWordReads, 1, 'a regular viewer\'s message tests the list once');
+
+    await chat('scamlink from a sub', tags({ subscriber: true, id: 'msg-sub' }));
+    assert.equal(bannedWordReads, 2);
+    assert.match(helixCalls[0].url, /message_id=msg-sub/, 'the sub\'s message is still removed');
+
+    await chat('mods are not checked', tags({ username: 'somemod', mod: true }));
+    assert.equal(bannedWordReads, 2);
   });
 });

@@ -182,15 +182,13 @@ function checkFirstTimeChatter(tags) {
   return null;
 }
 
-// ─── Run all filters ──────────────────────────────────────────────────────────
+// ─── Run the other filters ────────────────────────────────────────────────────
+// Banned words are not checked here: the chat handler (twitchChat.js) checks
+// them first for everyone but mods and the broadcaster, and testing the list a
+// second time on every message only doubled the cost.
 async function runFilters(channel, tags, message, streamer) {
-  const streamerId = streamer.id;
   const username = tags.username;
 
-  if (streamer.mod_banned_words_enabled) {
-    const r = checkBannedWords(message, streamerId);
-    if (r) return r;
-  }
   if (streamer.mod_link_protection_enabled) {
     const r = checkLinks(message, channel, username, streamer);
     if (r) return r;
