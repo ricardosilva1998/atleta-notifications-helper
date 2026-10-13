@@ -26,6 +26,8 @@ const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } 
 const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
 const { isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
+const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
+const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
 
 const router = Router();
 
@@ -366,48 +368,36 @@ router.get('/guild/:guildId', async (req, res) => {
     }
   }
 
+  // Live status only reads our own tables. A missing picture or name is not looked up
+  // here (Twitch and YouTube would hold the page up): see the backfill below.
   const watchedTwitchChannels = db.getWatchedChannelsForGuild(guildId, req.streamer.id);
-
-  // Enrich Twitch channels with live status and backfill profile images
   for (const wc of watchedTwitchChannels) {
-    const state = db.getChannelState(wc.twitch_username);
-    wc.is_live = state?.is_live === 1;
-    if (!wc.profile_image_url) {
-      try {
-        const profile = await getUserProfile(wc.twitch_username);
-        if (profile?.profile_image_url) {
-          db.updateWatchedChannelProfileImage(wc.id, profile.profile_image_url);
-          wc.profile_image_url = profile.profile_image_url;
-        }
-      } catch (e) {
-        // Silently skip — will retry next page load
-      }
-    }
+    wc.is_live = db.getChannelState(wc.twitch_username)?.is_live === 1;
   }
-
   const watchedYoutubeChannels = db.getWatchedYoutubeChannelsForGuild(guildId, req.streamer.id);
-
-  // Enrich YouTube channels with live status and backfill profile images + names
   for (const wc of watchedYoutubeChannels) {
-    const state = db.getYoutubeChannelState(wc.youtube_channel_id);
-    wc.is_live = state?.is_live === 1;
-    if (!wc.profile_image_url || !wc.youtube_channel_name) {
-      try {
-        const info = await getChannelInfo(wc.youtube_channel_id);
-        if (info) {
-          if (info.profileImageUrl || info.channelName) {
-            db.updateWatchedYoutubeChannelInfo(wc.id, info.profileImageUrl, info.channelName);
-            wc.profile_image_url = info.profileImageUrl || wc.profile_image_url;
-            wc.youtube_channel_name = info.channelName || wc.youtube_channel_name;
-          }
-        }
-      } catch (e) {
-        // Skip — will retry on next page load
-      }
-    }
+    wc.is_live = db.getYoutubeChannelState(wc.youtube_channel_id)?.is_live === 1;
   }
+
+  // Rows missing a picture (or a YouTube name) that have not been tried in the last 24 h.
+  const missingInfo = {
+    twitchRows: twitchRowsDue(watchedTwitchChannels),
+    youtubeRows: youtubeRowsDue(watchedYoutubeChannels),
+  };
 
   const { tier, limits } = getTierLimits(req.streamer.id);
+
+  // Once the page has been sent, look the missing ones up; they show on the next load.
+  if (missingInfo.twitchRows.length || missingInfo.youtubeRows.length) {
+    res.once('finish', () => {
+      try {
+        backfillInBackground(missingInfo, { db, getUserProfile, getChannelInfo })
+          .catch((e) => console.error('[Dashboard] Channel info backfill failed:', e.message));
+      } catch (e) {
+        console.error('[Dashboard] Channel info backfill failed:', e.message);
+      }
+    });
+  }
 
   res.render('guild-config', {
     streamer: req.streamer,
@@ -1249,25 +1239,9 @@ router.get('/youtube-chatbot', async (req, res) => {
     ytPolling = youtubeChatManager.isPolling(req.streamer.id);
   } catch (e) {}
 
-  // Check if streamer is live on YouTube
-  let ytLive = false;
-  let ytLiveTitle = null;
-  if (req.streamer.yt_access_token) {
-    try {
-      const { refreshStreamerYoutubeToken, getActiveBroadcast } = require('../services/youtube');
-      let accessToken = req.streamer.yt_access_token;
-      if (req.streamer.yt_token_expires_at && Date.now() >= req.streamer.yt_token_expires_at) {
-        accessToken = await refreshStreamerYoutubeToken(req.streamer);
-      }
-      if (accessToken) {
-        const broadcast = await getActiveBroadcast(accessToken);
-        if (broadcast) {
-          ytLive = true;
-          ytLiveTitle = broadcast.title;
-        }
-      }
-    } catch (e) {}
-  }
+  // Is the streamer live on YouTube? Asked with a 3 s deadline; if YouTube does not
+  // answer, the page says it could not check instead of waiting or claiming "offline".
+  const liveStatus = await youtubeLiveStatus(req.streamer);
 
   const guilds = db.getGuildsForStreamer(req.streamer.id);
   res.render('youtube-chatbot-config', {
@@ -1275,8 +1249,9 @@ router.get('/youtube-chatbot', async (req, res) => {
     commands,
     guilds,
     ytPolling,
-    ytLive,
-    ytLiveTitle,
+    ytLive: liveStatus.live,
+    ytLiveTitle: liveStatus.title,
+    ytLiveUnknown: liveStatus.unknown,
     connected: req.query.connected,
     disconnected: req.query.disconnected,
     error: errorMessage(YT_CHATBOT_ERRORS, req.query.error, res.locals.t),
@@ -2135,37 +2110,9 @@ router.get('/overlay-builder', async (req, res) => {
     ? `${config.app.url}/overlay/${req.streamer.overlay_token}`
     : null;
 
-  // Fetch latest stream/VOD thumbnail for canvas background
-  let streamThumbnail = null;
-  if (req.streamer.twitch_username) {
-    try {
-      const { getStream } = require('../services/twitch');
-      const stream = await getStream(req.streamer.twitch_username);
-      if (stream && stream.thumbnail_url) {
-        // Replace {width} and {height} placeholders
-        streamThumbnail = stream.thumbnail_url.replace('{width}', '1280').replace('{height}', '720');
-      }
-    } catch (e) {}
-
-    // If not live, try to get latest VOD thumbnail
-    if (!streamThumbnail) {
-      try {
-        const { getVideos, getUserId } = require('../services/twitch');
-        let broadcasterId = req.streamer.twitch_user_id;
-        if (!broadcasterId && req.streamer.twitch_username) {
-          broadcasterId = await getUserId(req.streamer.twitch_username);
-        }
-        if (broadcasterId) {
-          const videos = await getVideos(broadcasterId);
-          if (videos && videos.length > 0 && videos[0].thumbnail_url) {
-            streamThumbnail = videos[0].thumbnail_url.replace('%{width}', '1280').replace('%{height}', '720').replace('{width}', '1280').replace('{height}', '720');
-          }
-        }
-      } catch (e) {
-        console.log('[Builder] VOD thumbnail fetch error:', e.message);
-      }
-    }
-  }
+  // The canvas background: the live stream's or latest VOD's thumbnail, within 3 s
+  // in total (the builder still works with its plain background without one).
+  const streamThumbnail = await findStreamThumbnail(req.streamer);
 
   const sponsors = db.getSponsorImages(req.streamer.id);
   res.render('overlay-builder', {

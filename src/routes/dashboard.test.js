@@ -23,6 +23,7 @@ for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET'
 const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
 const DASHBOARD_FILE = path.join(__dirname, 'dashboard.js');
+const PAGE_LOOKUPS_FILE = path.join(SRC, 'services', 'pageLookups.js');
 
 // ── Stubs the dashboard router is loaded with ────────────────────────────
 
@@ -30,7 +31,14 @@ const CH_LIVE = '500000000000000001';
 const CH_CLIPS = '500000000000000002';
 
 const guilds = new Map(); // id -> fake discord.js Guild
-const twitch = { users: {}, lookups: [], failWith: null, beforeAnswer: null };
+const twitch = { users: {}, lookups: [], failWith: null, beforeAnswer: null, stream: null, videos: [], hang: false, calls: [] };
+// Rejects when the call's own signal aborts, like a fetch that was given a deadline.
+const untilAborted = (options) => new Promise((_resolve, reject) => {
+  const signal = options && options.signal;
+  if (!signal) return;
+  if (signal.aborted) return reject(signal.reason);
+  signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+});
 const managerCalls = [];
 
 const discordStub = {
@@ -40,6 +48,9 @@ const discordStub = {
   streamerGuildForChannel: () => null,
 };
 const twitchStub = {
+  getStream: async (login, options) => { twitch.calls.push(['getStream', login]); return twitch.hang ? untilAborted(options) : twitch.stream; },
+  getUserId: async (login, options) => { twitch.calls.push(['getUserId', login]); return twitch.hang ? untilAborted(options) : '4242'; },
+  getVideos: async (id, _since, options) => { twitch.calls.push(['getVideos', id]); return twitch.hang ? untilAborted(options) : twitch.videos; },
   getUserProfile: async (login) => {
     twitch.lookups.push(login);
     if (twitch.beforeAnswer) await twitch.beforeAnswer(login);
@@ -50,11 +61,11 @@ const twitchStub = {
   needsBroadcasterReauth: () => false,
 };
 // What the stubbed YouTube API answers; the tests set these.
-const youtubeApi = { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [] };
+const youtubeApi = { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [], channelInfo: null, infoCalls: [] };
 const youtubeStub = {
   resolveChannelId: async () => null,
   getLatestVideos: async () => [],
-  getChannelInfo: async () => null,
+  getChannelInfo: async (channelId) => { youtubeApi.infoCalls.push(channelId); return youtubeApi.channelInfo; },
   refreshStreamerYoutubeToken: async () => youtubeApi.refreshed,
   getActiveBroadcast: async () => {
     if (youtubeApi.fail) throw new Error(youtubeApi.fail);
@@ -178,6 +189,11 @@ before(async () => {
       if (request === 'better-sqlite3') return function MemoryDatabase(_file, opts) { return new RealDatabase(':memory:', opts); };
       if (request === 'fs') return { ...realFs, existsSync: () => true, mkdirSync: () => {} };
     }
+    // The page lookups load Twitch and YouTube themselves.
+    if (from === PAGE_LOOKUPS_FILE) {
+      if (request === './twitch') return twitchStub;
+      if (request === './youtube') return youtubeStub;
+    }
     if (from === DASHBOARD_FILE) {
       if (request === 'fs') return fakeFs;
       if (request === '../discord') return discordStub;
@@ -194,12 +210,15 @@ before(async () => {
     saved[level] = console[level];
     console[level] = (...args) => logs.push([level, args.join(' ')]);
   }
+  // Nothing here may reach the network: an outbound call nobody stubbed fails loudly.
+  saved.fetch = global.fetch;
+  global.fetch = async (url) => { throw new Error(`unexpected outbound request in a test: ${url}`); };
 
   delete require.cache[DB_FILE];
   delete require.cache[DASHBOARD_FILE];
   db = require(DB_FILE);
-  // Production has the YouTube columns of the streamers table; on a fresh database
-  // their migrations run before the table exists and never apply.
+  // Production has the YouTube columns of the streamers table. On a fresh database
+  // their migrations run before the table exists, so only a second boot adds them.
   for (const column of [
     'yt_access_token TEXT', 'yt_refresh_token TEXT', 'yt_token_expires_at INTEGER', 'yt_channel_name TEXT', 'yt_chatbot_enabled INTEGER DEFAULT 0',
     'yt_chat_superchat_template TEXT', 'yt_chat_member_template TEXT', 'yt_chat_giftmember_template TEXT',
@@ -232,6 +251,7 @@ before(async () => {
 });
 
 after(async () => {
+  global.fetch = saved.fetch;
   for (const level of ['log', 'warn', 'error']) console[level] = saved[level];
   Module._load = saved.load;
   await new Promise((resolve) => server.close(resolve));
@@ -256,12 +276,16 @@ beforeEach(() => {
   fileRemovals.length = 0;
   chatCalls.length = 0;
   ytPolling.clear();
-  Object.assign(youtubeApi, { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [] });
+  Object.assign(youtubeApi, { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [], channelInfo: null, infoCalls: [] });
   guilds.clear();
   twitch.users = {};
   twitch.lookups = [];
   twitch.failWith = null;
   twitch.beforeAnswer = null;
+  twitch.stream = null;
+  twitch.videos = [];
+  twitch.hang = false;
+  twitch.calls = [];
 });
 
 // ── The disabled-account guard ───────────────────────────────────────────
@@ -1259,5 +1283,186 @@ describe('the YouTube chatbot page errors', () => {
     } finally {
       youtubeStub.sendYoutubeChatMessage = original;
     }
+  });
+});
+
+// ── Pages that wait on Twitch or YouTube have a deadline (N23) ───────────
+
+// Waits until `check()` is true (a background job finishing), up to `ms`.
+async function until(check, ms = 1500) {
+  const deadline = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error('timed out waiting for the background work');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+describe('the overlay builder page and a slow Twitch', () => {
+  let id;
+  beforeEach(() => { id = addStreamer({ twitch_username: 'somestreamer' }); });
+  const builder = () => request('GET', '/dashboard/overlay-builder', { streamer: id, json: true });
+
+  test('shows the live stream\'s thumbnail', async () => {
+    twitch.stream = { thumbnail_url: 'https://img.test/live-{width}x{height}.jpg' };
+    const res = await builder();
+    assert.equal(res.status, 200);
+    assert.equal(res.json().locals.streamThumbnail, 'https://img.test/live-1280x720.jpg');
+  });
+
+  test('not live: the latest VOD\'s thumbnail', async () => {
+    twitch.videos = [{ thumbnail_url: 'https://img.test/vod-%{width}x%{height}.jpg' }];
+    const res = await builder();
+    assert.equal(res.json().locals.streamThumbnail, 'https://img.test/vod-1280x720.jpg');
+  });
+
+  test('no stream and no VOD still gives the page, without a thumbnail', async () => {
+    const res = await builder();
+    assert.equal(res.status, 200);
+    assert.equal(res.json().locals.streamThumbnail, null);
+  });
+
+  test('a Twitch that never answers holds the page for 3 seconds in total, then the page comes without a thumbnail', async () => {
+    twitch.hang = true;
+    const started = Date.now();
+    const res = await builder();
+    const took = Date.now() - started;
+    assert.equal(res.status, 200);
+    assert.equal(res.json().locals.streamThumbnail, null);
+    assert.ok(took >= 2800 && took < 4500, `took ${took} ms`);
+    assert.deepEqual(twitch.calls.map((c) => c[0]), ['getStream'], 'the deadline was used up by the first call; the VOD calls were not tried');
+  });
+
+  test('the page also renders in full (the template compiles with the new local)', async () => {
+    twitch.stream = { thumbnail_url: 'https://img.test/live-{width}x{height}.jpg' };
+    const res = await request('GET', '/dashboard/overlay-builder', { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes('https://img.test/live-1280x720.jpg'));
+  });
+});
+
+describe('the YouTube chatbot page and a slow YouTube', () => {
+  const page = (over = {}) => request('GET', '/dashboard/youtube-chatbot', { streamer: addStreamer({ yt_access_token: 'yt-access', ...over }) });
+
+  test('live: shows LIVE and the broadcast title', async () => {
+    youtubeApi.broadcast = { liveChatId: 'chat-1', title: 'Race night' };
+    const res = await page();
+    assert.equal(res.status, 200);
+    assert.match(res.text, /LIVE/);
+    assert.ok(res.text.includes('Race night'));
+    assert.ok(!res.text.includes('id="yt-live-unknown"'));
+  });
+
+  test('not live: shows Offline', async () => {
+    const res = await page();
+    assert.match(res.text, />Offline</);
+    assert.ok(!res.text.includes('id="yt-live-unknown"'));
+  });
+
+  test('YouTube failing or not answering: the page still comes, and says it could not check instead of Offline', async () => {
+    youtubeApi.fail = 'socket hang up';
+    const res = await page();
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes('id="yt-live-unknown"'));
+    assert.ok(res.text.includes(t('en', 'ytChatbot.liveStatusUnknown')));
+    assert.doesNotMatch(res.text, />Offline</);
+  });
+
+  test('an expired token that cannot be renewed also says it could not check', async () => {
+    youtubeApi.refreshed = null;
+    const res = await page({ yt_token_expires_at: Date.now() - 1000 });
+    assert.ok(res.text.includes('id="yt-live-unknown"'));
+  });
+
+  test('without a connected account there is no live check at all', async () => {
+    youtubeApi.fail = 'must not be called';
+    const res = await request('GET', '/dashboard/youtube-chatbot', { streamer: addStreamer() });
+    assert.equal(res.status, 200);
+    assert.ok(!res.text.includes('id="yt-live-unknown"'));
+  });
+});
+
+describe('the server page and the channels with a missing picture', () => {
+  const G = '800000000000000001';
+  let id;
+  beforeEach(() => {
+    id = addStreamer();
+    db.upsertGuild(G, id, 'Server');
+    guilds.set(G, fakeGuild(G));
+  });
+  const page = () => request('GET', `/dashboard/guild/${G}?tab=twitch`, { streamer: id, json: true });
+  const twitchRow = (name = 'somestreamer') => db.getWatchedChannelsForGuild(G, id).find((w) => w.twitch_username === name);
+  const youtubeRow = () => db.getWatchedYoutubeChannelsForGuild(G, id)[0];
+
+  test('the page does not wait for Twitch: it comes at once while the picture is looked up afterwards', async () => {
+    db.addWatchedChannel(G, id, 'somestreamer', CH_LIVE, null, true, false, null);
+    twitch.beforeAnswer = () => new Promise(() => {}); // Twitch never answers
+    const started = Date.now();
+    const res = await page();
+    assert.equal(res.status, 200);
+    assert.ok(Date.now() - started < 1000, 'it did not wait for the lookup');
+    assert.equal(res.json().locals.watchedTwitchChannels[0].profile_image_url, null);
+    await until(() => twitch.lookups.length === 1);
+    assert.deepEqual(twitch.lookups, ['somestreamer']);
+  });
+
+  test('the picture that was found shows on the next load', async () => {
+    db.addWatchedChannel(G, id, 'somestreamer', CH_LIVE, null, true, false, null);
+    twitch.users.somestreamer = { id: '1', login: 'somestreamer', profile_image_url: 'https://img.test/a.png' };
+    const first = await page();
+    assert.equal(first.json().locals.watchedTwitchChannels[0].profile_image_url, null, 'not part of the first page');
+    await until(() => twitchRow().profile_image_url);
+    const second = await page();
+    assert.equal(second.json().locals.watchedTwitchChannels[0].profile_image_url, 'https://img.test/a.png');
+    assert.deepEqual(twitch.lookups, ['somestreamer'], 'a picture that is there is not looked up again');
+  });
+
+  test('a row is tried once per 24 hours: loading the page again does not repeat a failed or empty lookup', async () => {
+    db.addWatchedChannel(G, id, 'somestreamer', CH_LIVE, null, true, false, null);
+    twitch.failWith = 'Twitch API error: 500';
+    assert.equal((await page()).status, 200);
+    await until(() => twitchRow().info_attempted_at);
+    assert.equal(twitch.lookups.length, 1);
+
+    for (let i = 0; i < 3; i++) assert.equal((await page()).status, 200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(twitch.lookups.length, 1, 'no second attempt within 24 hours');
+
+    // 25 hours later the row is tried again.
+    db.db.prepare('UPDATE watched_channels SET info_attempted_at = ? WHERE id = ?').run(new Date(Date.now() - 25 * 3600_000).toISOString(), twitchRow().id);
+    await page();
+    await until(() => twitch.lookups.length === 2);
+    assert.match(twitchRow().info_attempted_at, /^\d{4}-\d{2}-\d{2}T/);
+    assert.ok(Date.now() - Date.parse(twitchRow().info_attempted_at) < 5000, 'the time of the new attempt was stored');
+  });
+
+  test('a row with a picture is never looked up, and neither is one tried an hour ago', async () => {
+    db.addWatchedChannel(G, id, 'haspicture', CH_LIVE, null, true, false, 'https://img.test/there.png');
+    db.addWatchedChannel(G, id, 'triedrecently', CH_LIVE, null, true, false, null);
+    db.db.prepare('UPDATE watched_channels SET info_attempted_at = ? WHERE twitch_username = ?').run(new Date(Date.now() - 3600_000).toISOString(), 'triedrecently');
+    assert.equal((await page()).status, 200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(twitch.lookups, []);
+  });
+
+  test('YouTube channels without a name or picture are filled in after the page too', async () => {
+    db.addWatchedYoutubeChannel(G, id, 'UCabc', null, CH_LIVE, null, null);
+    youtubeApi.channelInfo = { profileImageUrl: 'https://img.test/yt.png', channelName: 'Some Channel' };
+    const first = await page();
+    assert.equal(first.status, 200);
+    assert.equal(first.json().locals.watchedYoutubeChannels[0].youtube_channel_name, null);
+    await until(() => youtubeRow().youtube_channel_name);
+    assert.equal(youtubeRow().youtube_channel_name, 'Some Channel');
+    assert.equal(youtubeRow().profile_image_url, 'https://img.test/yt.png');
+    assert.deepEqual(youtubeApi.infoCalls, ['UCabc']);
+    await page();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(youtubeApi.infoCalls, ['UCabc'], 'filled in once, not looked up again');
+  });
+
+  test('live status is still shown (it only reads our own tables)', async () => {
+    db.addWatchedChannel(G, id, 'somestreamer', CH_LIVE, null, true, false, 'https://img.test/a.png');
+    db.updateChannelState('somestreamer', { is_live: 1 });
+    const res = await page();
+    assert.equal(res.json().locals.watchedTwitchChannels[0].is_live, true);
   });
 });

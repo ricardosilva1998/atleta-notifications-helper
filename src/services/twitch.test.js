@@ -214,3 +214,101 @@ describe('apiCall retries a 401 only once', () => {
     assert.deepEqual(calls, ['token', 'helix:401', 'token', 'helix:401']);
   });
 });
+
+// ── An optional deadline for the calls a page waits on (N23) ──────────
+
+describe('the optional signal of the Twitch getters', () => {
+  const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+  let helix; // [{ url, signal }]
+
+  // A fresh module per test, so the cached app token starts empty.
+  function freshTwitch() {
+    delete require.cache[require.resolve('./twitch')];
+    return require('./twitch');
+  }
+
+  // Answers the token request and Helix with `body`. `hang` leaves a request
+  // pending until its own signal aborts, like fetch does.
+  function stubTwitch({ body = { data: [{ id: '42' }] }, hangHelix = false, hangToken = false } = {}) {
+    helix = [];
+    const waitForAbort = (opts) => new Promise((_resolve, reject) => {
+      if (opts.signal && opts.signal.aborted) return reject(opts.signal.reason); // like fetch
+      if (opts.signal) opts.signal.addEventListener('abort', () => reject(opts.signal.reason), { once: true });
+    });
+    global.fetch = async (url, opts = {}) => {
+      if (String(url) === TOKEN_URL) {
+        if (hangToken) return new Promise(() => {}); // never answers, and has no signal of its own
+        return { ok: true, status: 200, json: async () => ({ access_token: 'app-token', expires_in: 3600 }), text: async () => '' };
+      }
+      helix.push({ url: String(url), signal: opts.signal });
+      if (hangHelix) return waitForAbort(opts);
+      return { ok: true, status: 200, json: async () => body, text: async () => '' };
+    };
+  }
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  test('the caller\'s signal is the one sent to Helix, for every getter that takes it', async () => {
+    const tw = freshTwitch();
+    stubTwitch({ body: { data: [{ id: '42', login: 'someone', display_name: 'Someone', profile_image_url: 'https://img.test/a.png' }] } });
+    const signal = AbortSignal.timeout(5000);
+
+    await tw.getStream('someone', { signal });
+    await tw.getUserId('someone', { signal });
+    await tw.getUserProfile('someone', { signal });
+    await tw.getVideos('42', undefined, { signal });
+
+    assert.equal(helix.length, 4);
+    for (const call of helix) assert.equal(call.signal, signal, call.url);
+  });
+
+  test('without a signal every call still has its own default timeout', async () => {
+    const tw = freshTwitch();
+    stubTwitch();
+    await tw.getStream('someone');
+    await tw.getUserId('someone', undefined);
+    await tw.getVideos('42', '2026-01-01T00:00:00Z');
+    for (const call of helix) {
+      assert.ok(call.signal instanceof AbortSignal, call.url);
+      assert.equal(call.signal.aborted, false);
+    }
+  });
+
+  test('a slow Helix answer is cut at the caller\'s deadline', async () => {
+    const tw = freshTwitch();
+    stubTwitch({ hangHelix: true });
+    const started = Date.now();
+    await assert.rejects(() => tw.getStream('someone', { signal: AbortSignal.timeout(40) }), (err) => err.name === 'TimeoutError');
+    assert.ok(Date.now() - started < 1000, 'it did not wait for the default 10 s');
+  });
+
+  test('one signal is one deadline for several calls: once it has passed, the next call is cut straight away', async () => {
+    const tw = freshTwitch();
+    stubTwitch({ hangHelix: true });
+    const signal = AbortSignal.timeout(40);
+    await assert.rejects(() => tw.getStream('someone', { signal }), (err) => err.name === 'TimeoutError');
+    const before = helix.length;
+    await assert.rejects(() => tw.getUserId('someone', { signal }), (err) => err.name === 'TimeoutError');
+    assert.equal(helix.length, before + 1, 'Helix was asked, and the passed signal ended it at once');
+  });
+
+  test('the wait for a token request someone else started also ends at the deadline', async () => {
+    const tw = freshTwitch();
+    stubTwitch({ hangToken: true });
+    const started = Date.now();
+    await assert.rejects(() => tw.getStream('someone', { signal: AbortSignal.timeout(40) }), (err) => err.name === 'TimeoutError');
+    assert.ok(Date.now() - started < 1000);
+    assert.equal(helix.length, 0, 'Helix was never reached');
+  });
+
+  test('a signal that is already aborted fails without any request', async () => {
+    const tw = freshTwitch();
+    stubTwitch({ hangToken: true });
+    const controller = new AbortController();
+    controller.abort(new Error('page gave up'));
+    await assert.rejects(() => tw.getStream('someone', { signal: controller.signal }), /page gave up/);
+    assert.equal(helix.length, 0);
+  });
+});

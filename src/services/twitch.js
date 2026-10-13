@@ -38,29 +38,48 @@ async function authenticate() {
 // A slow Helix response must not hang a poller or a page indefinitely.
 const HELIX_TIMEOUT_MS = 10_000;
 
-function helixFetch(endpoint) {
+function helixFetch(endpoint, signal) {
   return fetch(`https://api.twitch.tv/helix${endpoint}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Client-Id': config.twitch.clientId,
     },
-    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+    signal: signal || AbortSignal.timeout(HELIX_TIMEOUT_MS),
   });
 }
 
-async function apiCall(endpoint) {
+// Settles like `promise`, but rejects as soon as `signal` aborts. A caller with a
+// short deadline uses it to stop waiting on a token request that others share.
+function untilAborted(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); }
+    );
+  });
+}
+
+// `signal` (optional): a page that has to answer quickly passes its own deadline,
+// for example AbortSignal.timeout(3000). One signal can cover several calls, so
+// they share a single deadline. It replaces the default 10 s timeout of the
+// Helix request and also ends the wait for a token request.
+async function apiCall(endpoint, { signal } = {}) {
   if (!accessToken || Date.now() >= tokenExpiresAt) {
-    await authenticate();
+    await untilAborted(authenticate(), signal);
   }
 
-  let res = await helixFetch(endpoint);
+  let res = await helixFetch(endpoint, signal);
 
   // A 401 usually means the app token was revoked before it expired: get a
   // fresh one and retry once. If Twitch rejects the fresh token too, throw
   // below instead of looping on the token endpoint.
   if (res.status === 401) {
-    await authenticate();
-    res = await helixFetch(endpoint);
+    await untilAborted(authenticate(), signal);
+    res = await helixFetch(endpoint, signal);
   }
 
   if (!res.ok) {
@@ -70,18 +89,19 @@ async function apiCall(endpoint) {
   return res.json();
 }
 
-async function getStream(username) {
-  const data = await apiCall(`/streams?user_login=${encodeURIComponent(username)}`);
+// The getters below that take `options` pass it on to apiCall ({ signal }).
+async function getStream(username, options) {
+  const data = await apiCall(`/streams?user_login=${encodeURIComponent(username)}`, options);
   return data.data?.[0] || null;
 }
 
-async function getUserId(username) {
-  const data = await apiCall(`/users?login=${encodeURIComponent(username)}`);
+async function getUserId(username, options) {
+  const data = await apiCall(`/users?login=${encodeURIComponent(username)}`, options);
   return data.data?.[0]?.id || null;
 }
 
-async function getUserProfile(username) {
-  const data = await apiCall(`/users?login=${encodeURIComponent(username)}`);
+async function getUserProfile(username, options) {
+  const data = await apiCall(`/users?login=${encodeURIComponent(username)}`, options);
   const user = data.data?.[0];
   if (!user) return null;
   return { id: user.id, login: user.login, display_name: user.display_name, profile_image_url: user.profile_image_url };
@@ -135,13 +155,13 @@ async function getSubscribers(broadcasterId, broadcasterAccessToken) {
   return subs;
 }
 
-async function getVideos(broadcasterId, startedAfter) {
+async function getVideos(broadcasterId, startedAfter, options) {
   const params = new URLSearchParams({
     user_id: broadcasterId,
     type: 'archive',
     first: '20',
   });
-  const data = await apiCall(`/videos?${params}`);
+  const data = await apiCall(`/videos?${params}`, options);
   const videos = data.data || [];
   if (startedAfter) {
     return videos.filter((v) => v.created_at >= startedAfter);

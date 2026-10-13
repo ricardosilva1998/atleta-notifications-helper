@@ -1149,6 +1149,12 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_subscriptions_streamer_status ON s
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_watched_channels_username ON watched_channels(twitch_username)'); } catch(e) {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_watched_youtube_channels_channel ON watched_youtube_channels(youtube_channel_id)'); } catch(e) {}
 
+// --- Watched channels: when a missing picture or name was last looked up ---
+// The server page fills them in after it has rendered, at most once per 24 h per
+// row (services/channelInfoBackfill.js). ISO timestamp, NULL = never tried.
+try { db.exec('ALTER TABLE watched_channels ADD COLUMN info_attempted_at TEXT'); } catch (e) { _migrationLog('watched_channels.info_attempted_at', e); }
+try { db.exec('ALTER TABLE watched_youtube_channels ADD COLUMN info_attempted_at TEXT'); } catch (e) { _migrationLog('watched_youtube_channels.info_attempted_at', e); }
+
 // --- Issues: screenshots + AI triage columns ---
 try { db.exec("ALTER TABLE issues ADD COLUMN screenshots TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE issues ADD COLUMN agent_analysis TEXT"); } catch(e) {}
@@ -1870,6 +1876,11 @@ function updateWatchedChannelProfileImage(id, profileImageUrl) {
   _updateWatchedChannelProfileImage.run(profileImageUrl, id);
 }
 
+const _markWatchedChannelInfoAttempt = db.prepare('UPDATE watched_channels SET info_attempted_at = ? WHERE id = ?');
+function markWatchedChannelInfoAttempt(id, attemptedAt) {
+  _markWatchedChannelInfoAttempt.run(attemptedAt, id);
+}
+
 // Watcher edits are scoped to the server in the URL, whose channels the new
 // ids were checked against. Both return true when a row changed.
 const _updateWatchedChannel = db.prepare(`
@@ -2089,6 +2100,11 @@ const _updateWatchedYoutubeChannelInfo = db.prepare(`
 
 function updateWatchedYoutubeChannelInfo(id, profileImageUrl, channelName) {
   _updateWatchedYoutubeChannelInfo.run(profileImageUrl || null, channelName || null, id);
+}
+
+const _markWatchedYoutubeChannelInfoAttempt = db.prepare('UPDATE watched_youtube_channels SET info_attempted_at = ? WHERE id = ?');
+function markWatchedYoutubeChannelInfoAttempt(id, attemptedAt) {
+  _markWatchedYoutubeChannelInfoAttempt.run(attemptedAt, id);
 }
 
 function removeWatchedYoutubeChannel(id, streamerId) {
@@ -5144,9 +5160,11 @@ module.exports = {
   getGuildNotificationsOverTime,
   getGuildNotificationsByTypeOverTime,
   updateWatchedChannelProfileImage,
+  markWatchedChannelInfoAttempt,
   updateWatchedChannel,
   updateWatchedYoutubeChannel,
   updateWatchedYoutubeChannelInfo,
+  markWatchedYoutubeChannelInfoAttempt,
   addWatchedInstagram,
   removeWatchedInstagram,
   getWatchedInstagramForGuild,

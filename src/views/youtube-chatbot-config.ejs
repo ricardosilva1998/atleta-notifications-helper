@@ -59,6 +59,9 @@
         <span style="width: 10px; height: 10px; border-radius: 50%; background: #ff0000; display: inline-block; animation: pulse 1.5s ease-in-out infinite;"></span>
         <span style="color: #ff4444; font-size: 13px; font-weight: 600;">LIVE</span>
         <span style="color: var(--text-secondary); font-size: 13px;"><%= ytLiveTitle || 'Streaming now' %></span>
+      <% } else if (ytLiveUnknown) { %>
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
+        <span id="yt-live-unknown" style="color: var(--text-muted); font-size: 13px;"><%= t('ytChatbot.liveStatusUnknown') %></span>
       <% } else { %>
         <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
         <span style="color: var(--text-muted); font-size: 13px;">Offline</span>

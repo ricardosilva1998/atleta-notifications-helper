@@ -268,6 +268,7 @@
   "ytChatbot.error.noTemplate": "No message template is set for this event.",
   "ytChatbot.error.botToken": "The YouTube bot is not set up on this server yet.",
   "ytChatbot.error.sendFailed": "The test message could not be sent.",
+  "ytChatbot.liveStatusUnknown": "Could not check right now. Reload the page in a moment.",
 
   "overlay.sounds.error.invalidType": "This alert type cannot have a custom sound",
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",

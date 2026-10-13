@@ -3,6 +3,12 @@ const config = require('../config');
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
 
+// How long the calls below wait for YouTube when the caller gives no deadline.
+// A page that has to answer quickly passes its own `signal` in `options`
+// (for example AbortSignal.timeout(3000)); it replaces this timeout.
+const YOUTUBE_TIMEOUT_MS = 10_000;
+const deadline = (options) => (options && options.signal) || AbortSignal.timeout(YOUTUBE_TIMEOUT_MS);
+
 async function getLatestVideos(youtubeChannelId) {
   const url = `https://www.youtube.com/feeds/videos.xml?channel_id=${youtubeChannelId}`;
   const res = await fetch(url);
@@ -105,11 +111,12 @@ function parseChannelPage(html) {
   return { channelId, channelName, profileImageUrl };
 }
 
-async function fetchChannelPage(url) {
+async function fetchChannelPage(url, options) {
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Bot/1.0)' },
       redirect: 'follow',
+      signal: deadline(options),
     });
     if (!res.ok) return null;
     return await res.text();
@@ -141,8 +148,8 @@ async function resolveChannelId(input) {
   return { channelId: info.channelId, channelName: info.channelName, profileImageUrl: info.profileImageUrl };
 }
 
-async function getChannelInfo(channelId) {
-  const html = await fetchChannelPage(`https://www.youtube.com/channel/${channelId}`);
+async function getChannelInfo(channelId, options) {
+  const html = await fetchChannelPage(`https://www.youtube.com/channel/${channelId}`, options);
   if (!html) return null;
   return parseChannelPage(html);
 }
@@ -239,7 +246,7 @@ async function findActiveLiveStream(channelId, apiKey) {
   return data.items[0].id.videoId;
 }
 
-async function refreshStreamerYoutubeToken(streamer) {
+async function refreshStreamerYoutubeToken(streamer, options) {
   const db = require('../db');
   if (!streamer.yt_refresh_token) return null;
 
@@ -252,6 +259,7 @@ async function refreshStreamerYoutubeToken(streamer) {
       refresh_token: streamer.yt_refresh_token,
       grant_type: 'refresh_token',
     }),
+    signal: deadline(options),
   });
 
   if (!res.ok) return null;
@@ -268,10 +276,11 @@ async function refreshStreamerYoutubeToken(streamer) {
   return data.access_token;
 }
 
-async function getActiveBroadcast(accessToken) {
+async function getActiveBroadcast(accessToken, options) {
   // Use mine=true to get all broadcasts, then filter for active ones
   const res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&mine=true&maxResults=10', {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: deadline(options),
   });
   if (!res.ok) {
     const err = await res.text().catch(() => '');
