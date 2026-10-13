@@ -7,9 +7,10 @@
 // and PayPal says the money reached this streamer's PayPal account. The amount
 // and currency always come from PayPal's capture, never from the browser.
 //
-// PayPal Orders v2 fields relied on (the route asks for the capture with
-// `Prefer: return=representation`: the default minimal capture response has no
-// payee, the full order representation does):
+// PayPal Orders v2 fields relied on, in the capture response (the route asks for
+// it with `Prefer: return=representation`: the default minimal capture response
+// has no payee, the full order does) and in the order read (GET) used when the
+// capture's outcome is unknown or PayPal says the order is already captured:
 //   status                                    order status, must be COMPLETED
 //   purchase_units[0].payments.captures[0]    .status, .amount.value, .amount.currency_code
 //   purchase_units[0].payee                   .email_address and/or .merchant_id
@@ -55,22 +56,15 @@ function sameEmail(a, b) {
   return x !== '' && x === b.trim().toLowerCase();
 }
 
-// Every identifier PayPal gives for the account that received the money must
-// match this streamer, and at least one must be checkable: the email against
-// the streamer's PayPal email, the merchant id against the one PayPal named
-// when the order was created.
+// Did the money reach this streamer's PayPal account? The account id PayPal
+// named for the payee when the order was created is the strongest proof, so
+// when it was recorded and PayPal names an account id now, the two must be the
+// same account (the email PayPal shows can be another address of that account).
+// Otherwise the payee email must match the streamer's PayPal email.
 function payeeMatches(payee, streamer, pending) {
   if (!payee || typeof payee !== 'object') return false;
-  let checked = false;
-  if (payee.email_address) {
-    if (!sameEmail(payee.email_address, streamer.paypal_email)) return false;
-    checked = true;
-  }
-  if (payee.merchant_id && pending.payee_merchant_id) {
-    if (payee.merchant_id !== pending.payee_merchant_id) return false;
-    checked = true;
-  }
-  return checked;
+  if (pending.payee_merchant_id && payee.merchant_id) return payee.merchant_id === pending.payee_merchant_id;
+  return sameEmail(payee.email_address, streamer.paypal_email);
 }
 
 // Before PayPal is called: can this return be tied to this streamer's tip page?
@@ -129,33 +123,82 @@ function paypalIssue(res) {
   return [`order=${res.status || '?'}`, payment ? `capture=${payment.status || '?'}` : ''].filter(Boolean).join(' ');
 }
 
+// PayPal's answer when the order was captured already: by this same request
+// whose answer was lost or timed out, or by a reload that raced it. PayPal's
+// guidance for this error is to read the order to get the existing capture.
+function isAlreadyCaptured(res) {
+  return !!(res && Array.isArray(res.details) && res.details.some((d) => d && d.issue === 'ORDER_ALREADY_CAPTURED'));
+}
+
+// The page a refused return gets: HTTP status and locale key. Before PayPal is
+// called the link is just not usable; afterwards PayPal did not confirm the
+// payment, or (log_failed) it did but the tip could not be recorded yet.
+function tipErrorResponse(reason) {
+  switch (reason) {
+    case 'invalid_token':
+    case 'no_pending':
+    case 'streamer_mismatch':
+      return { status: 400, key: 'tip.error.expired' };
+    case 'capture_failed':
+      return { status: 502, key: 'tip.error.notConfirmed' };
+    case 'log_failed':
+      return { status: 500, key: 'tip.error.notRecorded' };
+    default:
+      return { status: 400, key: 'tip.error.notConfirmed' };
+  }
+}
+
 // The viewer's return from PayPal, start to finish. Every outside effect comes
 // in through `deps`, so this runs in tests without PayPal or a database:
 //   getPendingTip(orderId)   -> pending_tips row or null
-//   capture(orderId)         -> PayPal's capture response (may throw)
+//   capture(orderId)         -> PayPal's capture response; throws when the outcome
+//                               is unknown (network error, timeout, PayPal 5xx)
+//   getOrder(orderId)        -> the order as PayPal has it now (may throw)
+//   logDonation(donation)    -> true for a new donation row, false for one already
+//                               there, null when it could not be written
 //   markCaptured(orderId)    -> remember the order was handled (reloads become no-ops)
-//   logDonation(donation)    -> true only when a new donation row was written
 //   announce(donation)       -> overlay alert, chat thank-you and tip goal
-// The alert, chat and goal only happen for a new donation row, so a capture
-// that is handled twice is announced once.
+// The alert, chat and goal only happen for a new donation row. That row is
+// unique per PayPal order, so the tip is announced exactly once even when two
+// requests handle the same order.
 async function handleTipReturn({ streamer, orderId }, deps) {
   const pending = deps.getPendingTip(orderId);
   const early = checkPendingTip(streamer, pending);
   if (early === 'replay') return { ok: true, replay: true };
   if (early) return { ok: false, reason: early };
 
-  let capture;
+  let order = null;
+  let failure = null;
   try {
-    capture = await deps.capture(orderId);
+    order = await deps.capture(orderId);
   } catch (e) {
-    return { ok: false, reason: 'capture_failed', detail: e.message };
+    failure = e.message;
+  }
+  // The capture may have gone through even though this request did not see it:
+  // then the order itself says what was paid, and a real tip is never lost.
+  if (failure || isAlreadyCaptured(order)) {
+    try {
+      order = await deps.getOrder(orderId);
+    } catch (e) {
+      order = null;
+      failure = failure || e.message;
+    }
   }
 
-  const verdict = decideTipCapture({ streamer, pending, capture });
-  if (!verdict.ok) return { ok: false, reason: verdict.reason, detail: paypalIssue(capture) };
+  const verdict = decideTipCapture({ streamer, pending, capture: order });
+  if (!verdict.ok) {
+    // A request for the same order (a reload) may have finished it meanwhile.
+    const now = deps.getPendingTip(orderId);
+    if (now && now.captured_at) return { ok: true, replay: true };
+    const reason = failure && verdict.reason === 'not_completed' ? 'capture_failed' : verdict.reason;
+    return { ok: false, reason, detail: failure || paypalIssue(order) };
+  }
 
+  const isNew = deps.logDonation(verdict.donation);
+  // Not recorded: the order stays unmarked, so a reload comes back through the
+  // order read above and records it then. No alert without a new row.
+  if (isNew !== true && isNew !== false) return { ok: false, reason: 'log_failed' };
   deps.markCaptured(orderId);
-  const isNew = deps.logDonation(verdict.donation) === true;
   if (isNew) deps.announce(verdict.donation);
   return { ok: true, isNew, donation: verdict.donation };
 }
@@ -167,6 +210,7 @@ module.exports = {
   decideTipCapture,
   handleTipReturn,
   paypalIssue,
+  tipErrorResponse,
   DONOR_NAME_MAX,
   MESSAGE_MAX,
 };

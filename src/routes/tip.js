@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const config = require('../config');
 const db = require('../db');
-const { tipInput, orderPayeeMerchantId, handleTipReturn } = require('../services/tipCapture');
+const { tipInput, orderPayeeMerchantId, handleTipReturn, tipErrorResponse } = require('../services/tipCapture');
 
 const router = Router();
 
@@ -25,6 +25,8 @@ async function getPayPalToken() {
 
 // `Prefer: return=representation` returns the whole order. The default minimal
 // capture response has no purchase_units[0].payee, which the payee check needs.
+// A PayPal server error leaves the outcome unknown, so it throws like a timeout
+// and the order is read instead (services/tipCapture.js).
 async function capturePayPalOrder(orderId) {
   const token = await getPayPalToken();
   const res = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders/${orderId}/capture`, {
@@ -32,6 +34,18 @@ async function capturePayPalOrder(orderId) {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
     signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
   });
+  if (res.status >= 500) throw new Error(`PayPal capture failed (HTTP ${res.status})`);
+  return res.json();
+}
+
+// The order as PayPal has it now (the full order, payee and captures included).
+async function getPayPalOrder(orderId) {
+  const token = await getPayPalToken();
+  const res = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders/${orderId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`PayPal order lookup failed (HTTP ${res.status})`);
   return res.json();
 }
 
@@ -45,8 +59,10 @@ function renderTipPage(res, streamer, { status = 200, success = false, error = n
   res.status(status).render('tip', { streamer, avatarUrl: streamer.twitch_profile_image || null, success, error });
 }
 
-// A translated error on the tip page (or as plain text if the page has since been turned off).
-function tipError(res, streamer, status, key) {
+// The translated error for a refused return, on the tip page (or as plain text
+// if the page has since been turned off).
+function tipError(res, streamer, reason) {
+  const { status, key } = tipErrorResponse(reason);
   const message = res.locals.t(key);
   if (!tipPageAvailable(streamer)) return res.status(status).send(message);
   renderTipPage(res, streamer, { status, error: message });
@@ -152,14 +168,16 @@ router.get('/:username/success', async (req, res) => {
   if (!streamer) return res.status(404).send('Streamer not found.');
 
   const orderId = typeof req.query.token === 'string' ? req.query.token : ''; // PayPal passes the order id as 'token'
-  if (!/^[A-Z0-9-]{10,}$/i.test(orderId)) return tipError(res, streamer, 400, 'tip.error.expired');
+  if (!/^[A-Z0-9-]{10,}$/i.test(orderId)) return tipError(res, streamer, 'invalid_token');
 
   const result = await handleTipReturn({ streamer, orderId }, {
     getPendingTip: (id) => db.getPendingTip(id),
     capture: capturePayPalOrder,
+    getOrder: getPayPalOrder,
     markCaptured: (id) => {
       try { db.markPendingTipCaptured(id); } catch (e) { console.error('[Tip] markPendingTipCaptured error:', e.message); }
     },
+    // null (not false) on a database error, so it is not mistaken for a duplicate
     logDonation: (d) => {
       try {
         return db.logDonation(streamer.id, {
@@ -168,7 +186,7 @@ router.get('/:username/success', async (req, res) => {
         });
       } catch (e) {
         console.error('[Tip] logDonation error:', e.message);
-        return false;
+        return null;
       }
     },
     announce: (d) => announceTip(streamer, d),
@@ -176,9 +194,7 @@ router.get('/:username/success', async (req, res) => {
 
   if (!result.ok) {
     console.error(`[Tip] Order ${orderId} for ${streamer.twitch_username} not counted: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`);
-    const beforePayPal = result.reason === 'no_pending' || result.reason === 'streamer_mismatch';
-    return tipError(res, streamer, result.reason === 'capture_failed' ? 502 : 400,
-      beforePayPal ? 'tip.error.expired' : 'tip.error.notConfirmed');
+    return tipError(res, streamer, result.reason);
   }
 
   if (result.isNew) {

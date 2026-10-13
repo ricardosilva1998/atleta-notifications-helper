@@ -266,6 +266,7 @@
 
   "tip.error.expired": "This donation link has expired or is not valid. Please start your donation again.",
   "tip.error.notConfirmed": "PayPal could not confirm this payment, so no alert was sent. Please check your PayPal account before trying again.",
+  "tip.error.notRecorded": "PayPal took your payment, but the alert could not be sent yet. Please reload this page in a moment; do not pay again.",
 
   "dashboard.claimNotAllowed": "You need the Manage Server permission in that Discord server to claim it.",
   "guild.invalidChannel": "That channel is not in this Discord server. Pick a channel from the list.",

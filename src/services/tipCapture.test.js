@@ -4,7 +4,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  tipInput, orderPayeeMerchantId, checkPendingTip, decideTipCapture, handleTipReturn, paypalIssue,
+  tipInput, orderPayeeMerchantId, checkPendingTip, decideTipCapture, handleTipReturn, paypalIssue, tipErrorResponse,
   DONOR_NAME_MAX, MESSAGE_MAX,
 } = require('./tipCapture');
 
@@ -94,7 +94,8 @@ describe('decideTipCapture', () => {
   });
 
   test('PayPal errors and orders that are not completed are refused', () => {
-    const error = { name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'ORDER_ALREADY_CAPTURED' }], debug_id: 'abc123' };
+    // (An "already captured" answer never gets here: handleTipReturn reads the order instead.)
+    const error = { name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'INSTRUMENT_DECLINED' }], debug_id: 'abc123' };
     for (const capture of [error, captureResponse({ status: 'APPROVED' }), null, {}, { status: 'COMPLETED' }]) {
       const verdict = decideTipCapture({ streamer: STREAMER, pending: pendingRow(), capture });
       assert.deepEqual(verdict, { ok: false, reason: 'not_completed' });
@@ -128,12 +129,22 @@ describe('decideTipCapture', () => {
     assert.equal(decideTipCapture({ streamer: STREAMER, pending: pendingRow(), capture }).reason, 'payee_mismatch');
   });
 
-  test('email and merchant_id together must both match', () => {
-    const capture = captureResponse({ payee: { email_address: 'streamer@example.com', merchant_id: 'MERCHANT12345' } });
-    assert.equal(decideTipCapture({ streamer: STREAMER, pending: pendingRow({ payee_merchant_id: 'MERCHANT12345' }), capture }).ok, true);
-    assert.equal(decideTipCapture({ streamer: STREAMER, pending: pendingRow({ payee_merchant_id: 'OTHERMERCHANT' }), capture }).reason, 'payee_mismatch');
-    // The email alone is enough when no merchant id was recorded.
-    assert.equal(decideTipCapture({ streamer: STREAMER, pending: pendingRow(), capture }).ok, true);
+  test('a recorded merchant id decides whenever PayPal names one', () => {
+    const decide = (payee, recorded) => decideTipCapture({
+      streamer: STREAMER, pending: pendingRow({ payee_merchant_id: recorded }), capture: captureResponse({ payee }),
+    });
+    const same = 'streamer@example.com';
+    const other = 'primary@example.com';
+    // PayPal may show the account's other email; the recorded account id still proves the payee.
+    assert.equal(decide({ email_address: other, merchant_id: 'MERCHANT12345' }, 'MERCHANT12345').ok, true);
+    assert.equal(decide({ email_address: same, merchant_id: 'MERCHANT12345' }, 'MERCHANT12345').ok, true);
+    assert.equal(decide({ email_address: same, merchant_id: 'MERCHANT12345' }, 'OTHERMERCHANT').reason, 'payee_mismatch');
+    // Nothing recorded at order creation: the email decides.
+    assert.equal(decide({ email_address: same, merchant_id: 'MERCHANT12345' }, null).ok, true);
+    assert.equal(decide({ email_address: other, merchant_id: 'MERCHANT12345' }, null).reason, 'payee_mismatch');
+    // Recorded, but PayPal names the payee only by email: the email decides.
+    assert.equal(decide({ email_address: same }, 'MERCHANT12345').ok, true);
+    assert.equal(decide({ email_address: other }, 'MERCHANT12345').reason, 'payee_mismatch');
   });
 
   test('streamer ids are compared as numbers', () => {
@@ -153,16 +164,29 @@ describe('checkPendingTip', () => {
 
 // ── handleTipReturn: the whole return from PayPal with stubbed effects ──
 
-function harness({ pending = pendingRow(), capture = captureResponse(), captureThrows = null } = {}) {
+const ORDER = 'ORDER-1234567890';
+// PayPal's answer to a capture of an order that is already captured.
+const ALREADY_CAPTURED = {
+  name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'ORDER_ALREADY_CAPTURED' }], debug_id: 'abc123',
+};
+
+// `order` is what reading the order (GET) returns; tests swap deps for sequences.
+function harness({ pending = pendingRow(), capture = captureResponse(), captureThrows = null,
+  order = captureResponse(), orderThrows = null } = {}) {
   const rows = new Map(pending ? [[pending.order_id, { ...pending }]] : []);
   const logged = new Set();
-  const calls = { capture: 0, announce: [], logDonation: 0 };
+  const calls = { capture: 0, getOrder: 0, announce: [], logDonation: 0 };
   const deps = {
     getPendingTip: (id) => (rows.has(id) ? { ...rows.get(id) } : null),
     capture: async () => {
       calls.capture++;
       if (captureThrows) throw captureThrows;
       return capture;
+    },
+    getOrder: async () => {
+      calls.getOrder++;
+      if (orderThrows) throw orderThrows;
+      return order;
     },
     markCaptured: (id) => { if (rows.has(id)) rows.get(id).captured_at = '2026-10-13 12:01:00'; },
     // Same rule as db.logDonation: one row per (source, external_id)
@@ -236,12 +260,16 @@ describe('handleTipReturn', () => {
   });
 
   test('PayPal unreachable: reported as a failed capture with nothing recorded', async () => {
-    const h = harness({ captureThrows: new Error('The operation was aborted due to timeout') });
+    const h = harness({
+      captureThrows: new Error('The operation was aborted due to timeout'), orderThrows: new Error('fetch failed'),
+    });
     const result = await handleTipReturn({ streamer: STREAMER, orderId: 'ORDER-1234567890' }, h.deps);
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'capture_failed');
+    assert.equal(h.calls.getOrder, 1, 'the order was read before giving up');
     assert.equal(h.calls.logDonation, 0);
     assert.equal(h.calls.announce.length, 0);
+    assert.equal(h.rows.get(ORDER).captured_at, null);
   });
 
   test('a declined capture is reported with PayPal\'s status for the log', async () => {
@@ -249,7 +277,132 @@ describe('handleTipReturn', () => {
     const result = await handleTipReturn({ streamer: STREAMER, orderId: 'ORDER-1234567890' }, h.deps);
     assert.equal(result.reason, 'not_completed');
     assert.match(result.detail, /DECLINED/);
+    assert.equal(h.calls.getOrder, 0, 'a definite refusal is not looked up again');
     assert.equal(h.calls.announce.length, 0);
+  });
+
+  test('reload while the first capture is still running: both pages thank the viewer, announced once', async () => {
+    const h = harness();
+    let release;
+    let n = 0;
+    h.deps.capture = () => {
+      h.calls.capture++;
+      n++;
+      return n === 1 ? new Promise((resolve) => { release = () => resolve(captureResponse()); }) : Promise.resolve(ALREADY_CAPTURED);
+    };
+    const first = handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    const reload = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps); // the page the browser shows
+    release();
+    const firstResult = await first;
+    assert.equal(reload.ok, true);
+    assert.equal(firstResult.ok, true);
+    assert.equal(h.calls.getOrder, 1, 'the reload read the order PayPal had already captured');
+    assert.equal(h.calls.announce.length, 1);
+    assert.equal(h.logged.size, 1);
+  });
+
+  test('capture answer lost (timeout): the order is read and the tip counts once', async () => {
+    const h = harness({ captureThrows: new Error('The operation was aborted due to timeout') });
+    const first = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(first.ok, true);
+    assert.equal(first.isNew, true);
+    assert.equal(h.calls.getOrder, 1);
+    assert.equal(h.calls.announce.length, 1);
+    const reload = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.deepEqual(reload, { ok: true, replay: true });
+    assert.equal(h.calls.announce.length, 1);
+  });
+
+  test('capture answer lost and the order cannot be read yet: a reload recovers it', async () => {
+    const h = harness({ orderThrows: new Error('fetch failed') });
+    let n = 0;
+    h.deps.capture = async () => {
+      h.calls.capture++;
+      n++;
+      if (n === 1) throw new Error('The operation was aborted due to timeout');
+      return ALREADY_CAPTURED;
+    };
+    const first = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(first.reason, 'capture_failed');
+    assert.equal(h.calls.announce.length, 0);
+    h.deps.getOrder = async () => { h.calls.getOrder++; return captureResponse(); }; // PayPal reachable again
+    const reload = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(reload.ok, true);
+    assert.equal(reload.isNew, true);
+    assert.equal(h.calls.announce.length, 1);
+  });
+
+  test('a capture that never reached PayPal records nothing, and a reload captures normally', async () => {
+    const approved = { id: ORDER, status: 'APPROVED', purchase_units: [{ payee: { email_address: 'streamer@example.com' } }] };
+    const h = harness({ order: approved });
+    let n = 0;
+    h.deps.capture = async () => {
+      h.calls.capture++;
+      n++;
+      if (n === 1) throw new Error('fetch failed');
+      return captureResponse();
+    };
+    const first = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(first.reason, 'capture_failed');
+    assert.equal(h.calls.logDonation, 0);
+    assert.equal(h.rows.get(ORDER).captured_at, null);
+    const reload = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(reload.ok, true);
+    assert.equal(reload.isNew, true);
+    assert.equal(h.calls.announce.length, 1);
+  });
+
+  test('PayPal says already captured and the tip is already recorded: thank-you page, no new alert', async () => {
+    const h = harness({ capture: ALREADY_CAPTURED });
+    h.logged.add(ORDER);
+    const result = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(result.ok, true);
+    assert.equal(result.isNew, false);
+    assert.equal(h.calls.getOrder, 1);
+    assert.equal(h.calls.announce.length, 0);
+    assert.ok(h.rows.get(ORDER).captured_at);
+  });
+
+  test('a refusal after another request finished the tip meanwhile is answered as a replay', async () => {
+    const h = harness({ capture: ALREADY_CAPTURED });
+    h.deps.getOrder = async () => {
+      h.calls.getOrder++;
+      h.rows.get(ORDER).captured_at = '2026-10-13 12:01:00'; // the other request finishes first
+      throw new Error('fetch failed');
+    };
+    const result = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.deepEqual(result, { ok: true, replay: true });
+    assert.equal(h.calls.announce.length, 0);
+  });
+
+  test('the tip cannot be recorded: nothing announced, the order stays open, and a reload recovers it', async () => {
+    const h = harness();
+    const logDonation = h.deps.logDonation;
+    h.deps.logDonation = () => { h.calls.logDonation++; return null; }; // database error
+    const first = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.deepEqual(first, { ok: false, reason: 'log_failed' });
+    assert.equal(h.calls.announce.length, 0);
+    assert.equal(h.rows.get(ORDER).captured_at, null, 'not marked, so a reload retries');
+    h.deps.logDonation = logDonation;
+    h.deps.capture = async () => { h.calls.capture++; return ALREADY_CAPTURED; };
+    const reload = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(reload.ok, true);
+    assert.equal(reload.isNew, true);
+    assert.equal(h.calls.announce.length, 1);
+    assert.ok(h.rows.get(ORDER).captured_at);
+  });
+});
+
+describe('tipErrorResponse', () => {
+  test('maps each refusal to a status and a message key', () => {
+    for (const reason of ['invalid_token', 'no_pending', 'streamer_mismatch']) {
+      assert.deepEqual(tipErrorResponse(reason), { status: 400, key: 'tip.error.expired' }, reason);
+    }
+    for (const reason of ['not_completed', 'bad_amount', 'payee_mismatch']) {
+      assert.deepEqual(tipErrorResponse(reason), { status: 400, key: 'tip.error.notConfirmed' }, reason);
+    }
+    assert.deepEqual(tipErrorResponse('capture_failed'), { status: 502, key: 'tip.error.notConfirmed' });
+    assert.deepEqual(tipErrorResponse('log_failed'), { status: 500, key: 'tip.error.notRecorded' });
   });
 });
 
