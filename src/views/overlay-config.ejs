@@ -1055,35 +1055,6 @@ async function clearOverlayAlerts() {
     }
   } catch (e) {}
 }
-
-// Keep sendTestAlert for Preview Alert buttons (they still use the test endpoint internally)
-async function sendTestAlert(type, amount) {
-  const statusEl = document.getElementById('test-alert-status');
-  statusEl.style.display = 'block';
-  statusEl.style.color = 'var(--text-muted)';
-  statusEl.textContent = 'Sending test alert...';
-
-  try {
-    const res = await fetch('/overlay/test-alert', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, amount: parseInt(amount) || undefined }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      statusEl.style.color = 'var(--success)';
-      statusEl.textContent = `Test ${type} alert sent! Check your OBS overlay.`;
-    } else {
-      statusEl.style.color = 'var(--danger)';
-      statusEl.textContent = data.error || 'Failed to send test alert.';
-    }
-  } catch (e) {
-    statusEl.style.color = 'var(--danger)';
-    statusEl.textContent = 'Error sending test alert.';
-  }
-
-  setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
-}
 </script>
 
 <%- include('footer') %>

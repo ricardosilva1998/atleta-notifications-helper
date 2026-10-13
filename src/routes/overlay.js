@@ -78,58 +78,6 @@ router.get('/debug/:token', (req, res) => {
   });
 });
 
-// Test alert endpoint — sends a fake event to the overlay
-router.post('/test-alert', (req, res) => {
-  if (!req.streamer) return res.status(401).json({ error: 'Not authenticated' });
-  if (!req.streamer.overlay_enabled) return res.status(400).json({ error: 'Overlay not enabled' });
-
-  const { type, amount } = req.body;
-  const testEvents = {
-    follow: { type: 'follow', data: { username: 'TestViewer' } },
-    subscription: { type: 'subscription', data: { username: 'TestSubscriber', tier: '1', months: 3, message: 'Test subscription!' } },
-    giftsub: { type: 'subscription', data: { username: 'TestGifter', tier: '1', months: 1, message: `Gifted ${amount || 5} subs!`, isGift: true, giftAmount: amount || 5 } },
-    bits: { type: 'bits', data: { username: 'TestCheerer', amount: amount || 500, message: 'Test bits cheer!' } },
-    raid: { type: 'raid', data: { username: 'TestRaider', viewers: amount || 50 } },
-    donation: { type: 'donation', data: { username: 'TestDonor', amount: amount || 5, currency: 'EUR', message: 'Test donation!' } },
-  };
-
-  const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: 'Invalid event type' });
-
-  // Fire chatbot message in sync with the overlay
-  const { chatManager } = require('../services/twitchChat');
-  const chatType = type === 'giftsub' ? 'giftsub' : type;
-  chatManager.sendEventMessage(req.streamer.id, chatType, event.data);
-
-  // If testing giftsub, emit as 'subscription' type (matching real EventSub behavior)
-  // then send individual sub events that should be suppressed by dedup
-  if (type === 'giftsub') {
-    const giftCount = amount || 5;
-    // Main gift event — shows as subscription card with gift message + isGift flag
-    bus.emit(`overlay:${req.streamer.id}`, {
-      type: 'subscription',
-      isGift: true,
-      data: { username: event.data.username, tier: '1', months: 1, message: `Gifted ${giftCount} sub${giftCount > 1 ? 's' : ''}!` }
-    });
-    // Simulate individual sub events from each recipient (should be suppressed by overlay dedup)
-    if (giftCount > 1) {
-      for (let i = 0; i < giftCount; i++) {
-        setTimeout(() => {
-          bus.emit(`overlay:${req.streamer.id}`, {
-            type: 'subscription',
-            data: { username: `GiftRecipient${i + 1}`, tier: '1', months: 1, message: null }
-          });
-        }, 200 * (i + 1));
-      }
-    }
-  } else {
-    bus.emit(`overlay:${req.streamer.id}`, event);
-  }
-
-  console.log(`[Overlay] Test alert: ${type} for streamer ${req.streamer.id}`);
-  res.json({ ok: true, type });
-});
-
 // Clear overlay — removes all queued alerts and cards
 router.post('/clear', (req, res) => {
   if (!req.streamer) return res.status(401).json({ error: 'Not authenticated' });
