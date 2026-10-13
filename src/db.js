@@ -1303,9 +1303,15 @@ const _updateGuildConfig = db.prepare(`
 const _deleteGuild = db.prepare('DELETE FROM guilds WHERE guild_id = ? AND streamer_id = ?');
 
 const _getAllClaimedGuildIds = db.prepare('SELECT DISTINCT guild_id FROM guilds');
+const _isGuildClaimed = db.prepare('SELECT 1 FROM guilds WHERE guild_id = ? LIMIT 1');
 
 function getAllClaimedGuildIds() {
   return new Set(_getAllClaimedGuildIds.all().map((r) => r.guild_id));
+}
+
+// True while any streamer still has this Discord server claimed.
+function isGuildClaimed(guildId) {
+  return !!_isGuildClaimed.get(guildId);
 }
 
 function getGuildsForStreamer(streamerId) {
@@ -4767,6 +4773,7 @@ module.exports = {
   updateStreamerBroadcasterTokens,
   updateStreamerYoutube,
   getAllClaimedGuildIds,
+  isGuildClaimed,
   getGuildsForStreamer,
   getGuildConfig,
   getGuildConfigsByGuildId,

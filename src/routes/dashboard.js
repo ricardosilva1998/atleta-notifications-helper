@@ -387,8 +387,13 @@ router.post('/guild/:guildId', (req, res) => {
 // Remove a guild
 router.post('/guild/:guildId/remove', async (req, res) => {
   const { guildId } = req.params;
-  try { await client.guilds.cache.get(guildId)?.leave(); } catch (e) { console.error('[Dashboard] Failed to leave guild:', e.message); }
+  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
   db.deleteGuild(guildId, req.streamer.id);
+  // Several streamers can share a server: the bot leaves only once nobody
+  // has it claimed any more.
+  if (!db.isGuildClaimed(guildId)) {
+    try { await client.guilds.cache.get(guildId)?.leave(); } catch (e) { console.error('[Dashboard] Failed to leave guild:', e.message); }
+  }
   console.log(`[Dashboard] ${req.streamer.discord_username} removed guild ${guildId}`);
   res.redirect('/dashboard?msg=guild_removed');
 });
