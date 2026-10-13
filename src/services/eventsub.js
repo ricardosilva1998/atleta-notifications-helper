@@ -5,8 +5,31 @@ const bus = require('./overlayBus');
 const { refreshBroadcasterToken, hasRedemptionScope } = require('./twitch');
 const { chatManager } = require('./twitchChat');
 const { isStreamerDisabled } = require('./streamerAccess');
+const { createMessageDedupe } = require('./messageDedupe');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
+
+// Twitch's default keepalive. A session that has been silent for its keepalive
+// plus this grace is treated as lost.
+const DEFAULT_KEEPALIVE_SECONDS = 10;
+const KEEPALIVE_GRACE_SECONDS = 5;
+
+// Twitch can deliver a notification more than once (same message_id), for
+// example around a reconnect. Each one is acted on once.
+const NOTIFICATION_DEDUPE_TTL_MS = 10 * 60 * 1000;
+const seenNotifications = createMessageDedupe({ ttlMs: NOTIFICATION_DEDUPE_TTL_MS });
+setInterval(() => seenNotifications.sweep(), 60 * 1000).unref();
+
+// Closes a socket this client no longer uses. A connection that went silent is
+// cut (terminate) rather than waiting for a closing handshake that will not come.
+function closeSocket(ws, { terminate = false } = {}) {
+  try {
+    if (terminate) ws.terminate();
+    else ws.close(1000);
+  } catch (e) {
+    // already closed
+  }
+}
 
 const SUBSCRIPTION_TYPES = [
   { type: 'channel.follow', version: '2', needsModerator: true },
@@ -18,21 +41,31 @@ const SUBSCRIPTION_TYPES = [
   { type: 'channel.channel_points_custom_reward_redemption.add', version: '1' },
 ];
 
+// One streamer's EventSub connection. Only the session's own socket (`ws`)
+// counts. `pendingWs` is a socket opened on Twitch's reconnect_url, waiting for
+// its welcome. Whatever a socket the client has let go of still delivers is
+// ignored, so a streamer never has two live sessions (which made every alert,
+// thank-you and redemption happen twice). A client is used once: after
+// disconnect() it never connects again, and a restart builds a new client.
 class EventSubClient {
   constructor(streamerId) {
     this.streamerId = streamerId;
     this.ws = null;
+    this.pendingWs = null;
+    this.sessionId = null; // the live session; it survives a move to a reconnect socket
     this.keepaliveTimer = null;
+    this.keepaliveSeconds = DEFAULT_KEEPALIVE_SECONDS;
+    this.reconnectTimer = null;
     this.reconnectDelay = 1000;
-    this.running = false;
+    this.stopped = false;
     this.needsReauth = false;
   }
 
   async connect() {
-    // A reconnect timer scheduled just before the token was found to be dead can
-    // still fire afterwards. Re-authorizing builds a fresh client, so a client
-    // that has given up must never reconnect itself.
-    if (this.needsReauth) return;
+    // A stopped client never comes back, even from a reconnect timer that was
+    // already running. Neither does one that has given up on a dead token:
+    // re-authorizing builds a fresh client.
+    if (this.stopped || this.needsReauth || this.ws) return;
 
     const streamer = db.getStreamerById(this.streamerId);
     if (!streamer || !streamer.broadcaster_access_token || !streamer.twitch_user_id) {
@@ -45,37 +78,78 @@ class EventSubClient {
       return;
     }
 
-    this.running = true;
     console.log(`[EventSub] Connecting for streamer ${streamer.twitch_display_name || this.streamerId}...`);
-
-    this.ws = new WebSocket(EVENTSUB_URL);
-
-    this.ws.on('open', () => {
-      console.log(`[EventSub] Connected for streamer ${this.streamerId}`);
-    });
-
-    this.ws.on('message', (data) => this.handleMessage(data));
-
-    this.ws.on('close', (code) => {
-      console.log(`[EventSub] Disconnected for streamer ${this.streamerId} (code: ${code})`);
-      this.clearKeepalive();
-      if (code !== 1000) this.scheduleReconnect();
-    });
-
-    this.ws.on('error', (err) => {
-      console.error(`[EventSub] Error for streamer ${this.streamerId}:`, err.message);
-    });
+    this.ws = this.openSocket(EVENTSUB_URL);
   }
 
-  scheduleReconnect() {
-    if (!this.running) return;
-    if (this.needsReauth) {
-      console.warn(`[EventSub] Streamer ${this.streamerId} needs re-authorization — not reconnecting`);
-      this.running = false;
+  // Each handler checks which role the socket has when its event arrives, so a
+  // socket that was replaced or dropped can no longer do anything.
+  openSocket(url) {
+    const ws = new WebSocket(url);
+
+    ws.on('open', () => {
+      if (ws === this.ws) console.log(`[EventSub] Connected for streamer ${this.streamerId}`);
+      else if (ws === this.pendingWs) console.log(`[EventSub] Reconnect socket open for streamer ${this.streamerId}`);
+    });
+
+    ws.on('message', (data) => {
+      this.handleMessage(data, ws).catch((err) => {
+        console.error(`[EventSub] Could not handle a message for streamer ${this.streamerId}:`, err.message);
+      });
+    });
+
+    ws.on('close', (code) => this.handleClose(ws, code));
+
+    ws.on('error', (err) => {
+      if (ws === this.ws || ws === this.pendingWs) {
+        console.error(`[EventSub] Error for streamer ${this.streamerId}:`, err.message);
+      }
+    });
+
+    return ws;
+  }
+
+  handleClose(ws, code) {
+    if (ws === this.pendingWs) {
+      // The reconnect socket went away before its welcome. The session stays on
+      // its own socket until Twitch closes that one; then it starts over.
+      this.pendingWs = null;
+      console.warn(`[EventSub] Reconnect socket closed before its welcome for streamer ${this.streamerId} (code: ${code})`);
       return;
     }
+    if (ws !== this.ws) return; // a socket this client already let go of
+
+    console.log(`[EventSub] Disconnected for streamer ${this.streamerId} (code: ${code})`);
+    this.releaseSockets();
+    this.scheduleReconnect();
+  }
+
+  // Lets go of the session's socket and of a reconnect socket still waiting for
+  // its welcome: the session is over, and nothing either socket delivers counts.
+  releaseSockets({ terminate = false } = {}) {
+    const sockets = [this.ws, this.pendingWs].filter(Boolean);
+    this.ws = null;
+    this.pendingWs = null;
+    this.sessionId = null;
+    this.clearKeepalive();
+    for (const ws of sockets) closeSocket(ws, { terminate });
+  }
+
+  // At most one reconnect is ever waiting, and disconnect() cancels it.
+  scheduleReconnect() {
+    if (this.stopped) return;
+    if (this.needsReauth) {
+      console.warn(`[EventSub] Streamer ${this.streamerId} needs re-authorization — not reconnecting`);
+      return;
+    }
+    if (this.reconnectTimer) return;
     console.log(`[EventSub] Reconnecting in ${this.reconnectDelay / 1000}s...`);
-    setTimeout(() => this.connect(), this.reconnectDelay);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect().catch((err) => {
+        console.error(`[EventSub] Reconnect failed for streamer ${this.streamerId}:`, err.message);
+      });
+    }, this.reconnectDelay);
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 60000);
   }
 
@@ -96,88 +170,48 @@ class EventSubClient {
     this.disconnect();
   }
 
-  async handleMessage(raw) {
-    const msg = JSON.parse(raw.toString());
-    const messageType = msg.metadata.message_type;
+  async handleMessage(raw, ws) {
+    if (this.stopped) return;
+    const fromSession = ws === this.ws;
+    const fromReconnect = ws === this.pendingWs;
+    if (!fromSession && !fromReconnect) return; // a socket this client already let go of
+
+    let msg;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch (e) {
+      console.warn(`[EventSub] Unreadable message for streamer ${this.streamerId}`);
+      return;
+    }
+    const messageType = msg && msg.metadata && msg.metadata.message_type;
+
+    if (fromReconnect) {
+      // The reconnect socket only matters once Twitch welcomes it; until then the
+      // session's own socket still delivers the events.
+      if (messageType === 'session_welcome') this.switchToReconnectSocket(ws, msg.payload && msg.payload.session);
+      return;
+    }
+
+    // The welcome says how long the session may stay silent; any message from
+    // the session shows it is alive.
+    if (messageType === 'session_welcome') this.setKeepaliveSeconds(msg.payload && msg.payload.session && msg.payload.session.keepalive_timeout_seconds);
+    this.resetKeepalive();
 
     switch (messageType) {
-      case 'session_welcome': {
-        const sessionId = msg.payload.session.id;
-        const timeout = msg.payload.session.keepalive_timeout_seconds;
-        console.log(`[EventSub] Session ${sessionId} for streamer ${this.streamerId} (keepalive: ${timeout}s)`);
-        this.resetKeepalive(timeout);
-
-        let subscribed = 0;
-        for (const subType of SUBSCRIPTION_TYPES) {
-          if (this.needsReauth) break;
-          if (await this.createSubscription(sessionId, subType)) subscribed++;
-        }
-
-        // Only a session that actually subscribed to something earns a backoff
-        // reset. Resetting on socket 'open' instead meant a dead token looped
-        // forever at 1s, because the socket always opens and Twitch then closes
-        // it with 4003 once no subscription shows up.
-        if (subscribed > 0) {
-          this.reconnectDelay = 1000;
-        } else if (!this.needsReauth) {
-          console.warn(`[EventSub] No subscriptions created for streamer ${this.streamerId} — next retry in ${this.reconnectDelay / 1000}s`);
-        }
+      case 'session_welcome':
+        await this.subscribeAll(msg.payload.session.id);
         break;
-      }
 
       case 'session_keepalive':
-        this.resetKeepalive(msg.payload?.session?.keepalive_timeout_seconds || 10);
         break;
 
-      case 'notification': {
-        const subType = msg.metadata.subscription_type;
-        const event = msg.payload.event;
-        this.resetKeepalive(10);
-
-        const normalized = this.normalizeEvent(subType, event);
-        if (normalized) {
-          // Channel point redemptions are handled by the dispatcher — not the generic overlay path
-          if (normalized.type === 'redemption') {
-            const { handleRedemption } = require('./redemptionDispatcher');
-            handleRedemption(this.streamerId, normalized.data)
-              .catch(err => console.error('[Redemption] dispatch error:', err.message));
-            return;
-          }
-
-          const streamer = db.getStreamerById(this.streamerId);
-
-          // Emit to overlay — giftsub shows as subscription banner
-          const isGift = normalized.type === 'giftsub';
-          const overlayType = isGift ? 'subscription' : normalized.type;
-          const typeMap = { follow: 'follow', subscription: 'sub', giftsub: 'sub', bits: 'bits', donation: 'donation', raid: 'raid' };
-          const enabledKey = `overlay_${typeMap[overlayType] || overlayType}_enabled`;
-          if (streamer && streamer[enabledKey]) {
-            bus.emit(`overlay:${this.streamerId}`, { ...normalized, type: overlayType, isGift });
-          }
-          try { db.logOverlayEvent(this.streamerId, normalized.type, normalized.data?.username, normalized.data); } catch (e) {}
-
-          // Emit to chat service
-          chatManager.sendEventMessage(this.streamerId, normalized.type, normalized.data);
-          if (normalized.type === 'raid') chatManager.startRaidProtection(this.streamerId);
-        }
+      case 'notification':
+        this.handleNotification(msg);
         break;
-      }
 
-      case 'session_reconnect': {
-        const reconnectUrl = msg.payload.session.reconnect_url;
-        console.log(`[EventSub] Reconnect for streamer ${this.streamerId}`);
-        const oldWs = this.ws;
-        this.ws = new WebSocket(reconnectUrl);
-        this.ws.on('message', (data) => this.handleMessage(data));
-        this.ws.on('open', () => oldWs.close());
-        this.ws.on('error', (err) => {
-          console.error(`[EventSub] Reconnect error for streamer ${this.streamerId}:`, err.message);
-        });
-        this.ws.on('close', (code) => {
-          if (code !== 1000) this.scheduleReconnect();
-        });
+      case 'session_reconnect':
+        this.openReconnectSocket(msg.payload && msg.payload.session && msg.payload.session.reconnect_url);
         break;
-      }
 
       case 'revocation': {
         const revokedType = msg.payload.subscription.type;
@@ -193,6 +227,90 @@ class EventSubClient {
         break;
       }
     }
+  }
+
+  // A new session starts with no subscriptions: create one per event type.
+  async subscribeAll(sessionId) {
+    this.sessionId = sessionId;
+    console.log(`[EventSub] Session ${sessionId} for streamer ${this.streamerId} (keepalive: ${this.keepaliveSeconds}s)`);
+
+    let subscribed = 0;
+    for (const subType of SUBSCRIPTION_TYPES) {
+      // Stop once this session is over (stopped, lost, or the token died). A
+      // session Twitch moved to a reconnect socket is the same session: go on.
+      if (this.needsReauth || this.stopped || this.sessionId !== sessionId) break;
+      if (await this.createSubscription(sessionId, subType)) subscribed++;
+    }
+
+    // Only a session that actually subscribed to something earns a backoff
+    // reset. Resetting on socket 'open' instead meant a dead token looped
+    // forever at 1s, because the socket always opens and Twitch then closes
+    // it with 4003 once no subscription shows up.
+    if (subscribed > 0) {
+      this.reconnectDelay = 1000;
+    } else if (!this.needsReauth && !this.stopped) {
+      console.warn(`[EventSub] No subscriptions created for streamer ${this.streamerId} — next retry in ${this.reconnectDelay / 1000}s`);
+    }
+  }
+
+  handleNotification(msg) {
+    if (seenNotifications.isRepeat(msg.metadata.message_id)) return; // Twitch delivered this one already
+
+    const subType = msg.metadata.subscription_type;
+    const event = msg.payload.event;
+
+    const normalized = this.normalizeEvent(subType, event);
+    if (!normalized) return;
+
+    // Channel point redemptions are handled by the dispatcher — not the generic overlay path
+    if (normalized.type === 'redemption') {
+      const { handleRedemption } = require('./redemptionDispatcher');
+      handleRedemption(this.streamerId, normalized.data)
+        .catch(err => console.error('[Redemption] dispatch error:', err.message));
+      return;
+    }
+
+    const streamer = db.getStreamerById(this.streamerId);
+
+    // Emit to overlay — giftsub shows as subscription banner
+    const isGift = normalized.type === 'giftsub';
+    const overlayType = isGift ? 'subscription' : normalized.type;
+    const typeMap = { follow: 'follow', subscription: 'sub', giftsub: 'sub', bits: 'bits', donation: 'donation', raid: 'raid' };
+    const enabledKey = `overlay_${typeMap[overlayType] || overlayType}_enabled`;
+    if (streamer && streamer[enabledKey]) {
+      bus.emit(`overlay:${this.streamerId}`, { ...normalized, type: overlayType, isGift });
+    }
+    try { db.logOverlayEvent(this.streamerId, normalized.type, normalized.data?.username, normalized.data); } catch (e) {}
+
+    // Emit to chat service
+    chatManager.sendEventMessage(this.streamerId, normalized.type, normalized.data);
+    if (normalized.type === 'raid') chatManager.startRaidProtection(this.streamerId);
+  }
+
+  // Twitch is moving the session to another server: connect to the URL it gave
+  // (as it is). The session's own socket keeps delivering events until the new
+  // socket is welcomed (switchToReconnectSocket).
+  openReconnectSocket(url) {
+    if (typeof url !== 'string' || !url) return;
+    console.log(`[EventSub] Reconnect requested for streamer ${this.streamerId}`);
+    const previous = this.pendingWs; // an earlier reconnect that never got its welcome
+    this.pendingWs = null;
+    if (previous) closeSocket(previous);
+    this.pendingWs = this.openSocket(url);
+  }
+
+  // The reconnect socket is welcomed: it carries the session's subscriptions
+  // (Twitch moves them), so nothing is subscribed again. Only now is the old
+  // socket closed; from here on only the new one counts.
+  switchToReconnectSocket(ws, session) {
+    const old = this.ws;
+    this.ws = ws;
+    this.pendingWs = null;
+    if (session && session.id) this.sessionId = session.id;
+    this.setKeepaliveSeconds(session && session.keepalive_timeout_seconds);
+    this.resetKeepalive();
+    if (old) closeSocket(old);
+    console.log(`[EventSub] Streamer ${this.streamerId} moved to the reconnect socket (session ${session && session.id})`);
   }
 
   // Returns true only when Twitch accepted the subscription.
@@ -339,12 +457,28 @@ class EventSubClient {
     }
   }
 
-  resetKeepalive(timeoutSeconds) {
+  // The session's keepalive, from its welcome (a reconnect message carries none).
+  setKeepaliveSeconds(seconds) {
+    const n = Number(seconds);
+    if (Number.isFinite(n) && n > 0) this.keepaliveSeconds = n;
+  }
+
+  resetKeepalive() {
     this.clearKeepalive();
-    this.keepaliveTimer = setTimeout(() => {
-      console.warn(`[EventSub] Keepalive timeout for streamer ${this.streamerId}`);
-      if (this.ws) this.ws.close();
-    }, (timeoutSeconds + 5) * 1000);
+    this.keepaliveTimer = setTimeout(
+      () => this.onKeepaliveTimeout(),
+      (this.keepaliveSeconds + KEEPALIVE_GRACE_SECONDS) * 1000
+    );
+  }
+
+  // Twitch: no message for longer than the keepalive means the connection is
+  // lost. Connect again from scratch; the new session subscribes again.
+  onKeepaliveTimeout() {
+    this.keepaliveTimer = null;
+    if (this.stopped || !this.ws) return;
+    console.warn(`[EventSub] Keepalive timeout for streamer ${this.streamerId}`);
+    this.releaseSockets({ terminate: true });
+    this.scheduleReconnect();
   }
 
   clearKeepalive() {
@@ -355,12 +489,12 @@ class EventSubClient {
   }
 
   disconnect() {
-    this.running = false;
-    this.clearKeepalive();
-    if (this.ws) {
-      this.ws.close(1000);
-      this.ws = null;
+    this.stopped = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
+    this.releaseSockets();
   }
 }
 
@@ -399,4 +533,4 @@ const eventSubManager = {
   },
 };
 
-module.exports = { eventSubManager };
+module.exports = { eventSubManager, NOTIFICATION_DEDUPE_TTL_MS };
