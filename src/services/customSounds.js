@@ -79,6 +79,48 @@ async function storedSoundMimeType(file) {
   }
 }
 
+// The four sounds that used to be shared by every streamer. Owner decision
+// (2026-10-13): they belong to streamer #13.
+const LEGACY_SOUND_TYPES = ['follow', 'subscription', 'bits', 'donation'];
+const LEGACY_SOUND_OWNER_ID = 13;
+const ARCHIVE_DIR = '_archive';
+
+function isFile(file) {
+  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  return !!stat && stat.isFile();
+}
+
+// An archive path for a legacy sound that never replaces an archived file.
+function archivePath(root, type) {
+  const plain = path.join(root, ARCHIVE_DIR, `${type}.mp3`);
+  return fs.existsSync(plain) ? path.join(root, ARCHIVE_DIR, `${type}-${Date.now()}.mp3`) : plain;
+}
+
+// Boot migration, safe to run on every start: moves each legacy root sound
+// into streamer #13's folder when that streamer exists and has no sound of
+// that type yet, otherwise into data/sounds/_archive/. Nothing is deleted;
+// later runs find nothing to move. Returns the moves made.
+function migrateLegacySounds({ root = SOUNDS_DIR, ownerExists, logger = console } = {}) {
+  const moves = [];
+  for (const type of LEGACY_SOUND_TYPES) {
+    const from = path.join(root, `${type}.mp3`);
+    try {
+      if (!isFile(from)) continue;
+      const ownerFile = soundFilePath(LEGACY_SOUND_OWNER_ID, type, root);
+      const to = ownerExists(LEGACY_SOUND_OWNER_ID) && !fs.existsSync(ownerFile)
+        ? ownerFile
+        : archivePath(root, type);
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.renameSync(from, to);
+      moves.push({ type, from, to });
+      logger.log(`[Sounds] Moved shared ${type}.mp3 to ${path.relative(root, to)}`);
+    } catch (e) {
+      logger.error(`[Sounds] Could not move shared ${type}.mp3: ${e.message}`);
+    }
+  }
+  return moves;
+}
+
 module.exports = {
   SOUNDS_DIR,
   SOUND_TYPES,
@@ -87,4 +129,5 @@ module.exports = {
   soundUrls,
   soundStatus,
   storedSoundMimeType,
+  migrateLegacySounds,
 };

@@ -16,6 +16,17 @@ process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err && err.stack || err);
 });
 
+// Alert sounds used to be one set shared by every streamer. Move those files
+// into their owner's folder before anything serves sounds; later boots find
+// nothing to move.
+try {
+  require('./services/customSounds').migrateLegacySounds({
+    ownerExists: (id) => !!db.getStreamerById(id),
+  });
+} catch (e) {
+  console.error('[Sounds] Legacy sound migration failed:', e.message);
+}
+
 // 'ready' still fires in discord.js v14 but is deprecated and will be dropped
 // in v15; 'clientReady' is emitted alongside it today.
 client.once('clientReady', async () => {
