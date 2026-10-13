@@ -42,6 +42,7 @@
 .banned-word-add .mod-btn { padding: 9px 16px; font-size: 12px; font-weight: 600; font-family: var(--font-display); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
 .banned-word-add .mod-btn-add { background: var(--accent); border-color: var(--accent); color: #fff; }
 .banned-word-add .mod-btn-add:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.banned-word-error { margin-top: 8px; font-size: 12px; color: var(--danger); }
 .mod-checkbox { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--text-muted); font-family: var(--font-display); font-weight: 500; white-space: nowrap; user-select: none; }
 .mod-checkbox input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; border-radius: 4px; }
 .mod-exempt-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.2s; }
@@ -632,6 +633,7 @@
         </label>
         <button type="button" class="mod-btn mod-btn-add" onclick="addBannedWord()">+ Add</button>
       </div>
+      <div class="banned-word-error" id="banned-word-error" role="alert" hidden></div>
     </div>
 
     <div class="mod-card">
@@ -1015,12 +1017,20 @@ function addBannedWord() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ word, is_regex: isRegex })
   }).then(r => r.json()).then(data => {
+    showBannedWordError(data.ok ? '' : data.error);
     if (data.ok) {
       input.value = '';
       document.getElementById('new-banned-regex').checked = false;
       renderBannedWords(data.words);
     }
   });
+}
+
+// The server explains why a word was refused (e.g. an unsafe regex pattern).
+function showBannedWordError(message) {
+  const el = document.getElementById('banned-word-error');
+  el.textContent = message || '';
+  el.hidden = !message;
 }
 
 function removeBannedWord(id) {

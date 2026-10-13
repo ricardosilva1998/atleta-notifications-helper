@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const config = require('../config');
+const { compileBannedWord, limitMessage } = require('./safePattern');
 
 // ─── In-memory state ──────────────────────────────────────────────────────────
 // All keyed by `${channel}:${username}`. They grow forever in a long-lived
@@ -11,12 +12,18 @@ const lastMessages = new Map();     // value: { text, timestamp }
 const offenseCounts = new Map();    // value: { count, lastAt }
 const followCache = new Map();      // value: { age, fetchedAt }
 const raidProtectionTimers = new Map();
+// Compiled banned-word matchers keyed by `${is_regex}:${word}`, so each word is
+// validated and compiled once instead of on every chat message. The key is the
+// word itself, so an edited or deleted word can never reuse a stale matcher; it
+// just stops being looked up and is swept.
+const bannedWordMatchers = new Map(); // value: { match, usedAt }
 
 // Sweep stale entries once a minute. Caps:
 //  - lastMessages: keep 5 min (only used for repetition window which defaults 30s)
 //  - permits:      drop expired
 //  - followCache:  keep 10 min (acts as a cache, not state)
 //  - offenseCounts: keep 24 h (escalation ladder must remember through a stream)
+//  - bannedWordMatchers: keep 10 min after last use
 const FIVE_MIN = 5 * 60 * 1000;
 const TEN_MIN = 10 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -34,6 +41,9 @@ setInterval(() => {
   for (const [k, v] of offenseCounts) {
     if (now - (v?.lastOffense || 0) > ONE_DAY) offenseCounts.delete(k);
   }
+  for (const [k, v] of bannedWordMatchers) {
+    if (now - v.usedAt > TEN_MIN) bannedWordMatchers.delete(k);
+  }
 }, 60 * 1000).unref?.();
 
 // ─── URL detection regex ──────────────────────────────────────────────────────
@@ -49,21 +59,27 @@ function isExempt(tags, streamer) {
 
 // ─── Filter functions ─────────────────────────────────────────────────────────
 
+function bannedWordMatcher(row) {
+  const key = `${row.is_regex ? 1 : 0}:${row.word}`;
+  let entry = bannedWordMatchers.get(key);
+  if (!entry) {
+    entry = { match: compileBannedWord(row.word, !!row.is_regex), usedAt: 0 };
+    bannedWordMatchers.set(key, entry);
+  }
+  entry.usedAt = Date.now();
+  return entry.match;
+}
+
+// Runs on the shared event loop for every chat message, so regex words only run
+// if they passed validateBannedPattern() (see safePattern.js) and only ever see
+// the first 500 characters of the message.
 function checkBannedWords(message, streamerId) {
   const words = db.getBannedWords(streamerId);
   if (!words.length) return null;
-  const lower = message.toLowerCase();
+  const text = limitMessage(message);
   for (const w of words) {
-    if (w.is_regex) {
-      try {
-        if (new RegExp(w.word, 'i').test(message)) {
-          return { violated: true, reason: `Banned pattern: ${w.word}` };
-        }
-      } catch (e) { /* invalid regex, skip */ }
-    } else {
-      if (lower.includes(w.word.toLowerCase())) {
-        return { violated: true, reason: `Banned word: ${w.word}` };
-      }
+    if (bannedWordMatcher(w)(text)) {
+      return { violated: true, reason: w.is_regex ? `Banned pattern: ${w.word}` : `Banned word: ${w.word}` };
     }
   }
   return null;

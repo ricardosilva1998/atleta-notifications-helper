@@ -239,6 +239,16 @@
   "dashboard.cards.giveaways.cta": "Manage Giveaways",
   "dashboard.cards.giveaways.live": "Live: !{{keyword}}",
 
+  "chatbot.error.wordRequired": "Enter a word or phrase",
+  "chatbot.error.patternTooLong": "Regex patterns can be at most {{max}} characters",
+  "chatbot.error.patternInvalid": "This is not a valid regex pattern",
+  "chatbot.error.patternUnsupported": "This regex uses syntax that is not supported here",
+  "chatbot.error.patternBackreference": "Backreferences such as \\1 are not allowed",
+  "chatbot.error.patternLookaround": "Lookaheads and lookbehinds are not allowed",
+  "chatbot.error.patternNestedRepeat": "A repeated group cannot contain another repeat or a | choice, such as (a+)+ or (a|b)*",
+  "chatbot.error.patternOverlappingRepeats": "Two repeated parts can match the same character, such as a*a* or \\s*.*; combine them into one",
+  "chatbot.error.patternTooComplex": "This pattern is too complex; use fewer repeats or | choices",
+
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",
   "lang.es": "Espa\u00f1ol",

@@ -11,6 +11,7 @@ const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } 
 const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
 const iracing = require('../services/iracing');
 const { isAllowedScreenshot, redemptionMediaError } = require('../services/uploadValidation');
+const { validateBannedPattern, MAX_PATTERN_LENGTH } = require('../services/safePattern');
 
 const router = Router();
 
@@ -1210,10 +1211,32 @@ router.post('/chatbot/moderation', (req, res) => {
   res.redirect('/dashboard/chatbot?tab=moderation');
 });
 
+// validateBannedPattern() reasons -> locale keys for the dashboard error.
+const BANNED_PATTERN_ERRORS = {
+  too_long: 'chatbot.error.patternTooLong',
+  unsupported: 'chatbot.error.patternUnsupported',
+  backreference: 'chatbot.error.patternBackreference',
+  lookaround: 'chatbot.error.patternLookaround',
+  nested_quantifier: 'chatbot.error.patternNestedRepeat',
+  overlapping_repeats: 'chatbot.error.patternOverlappingRepeats',
+  too_complex: 'chatbot.error.patternTooComplex',
+};
+
 router.post('/chatbot/banned-words', (req, res) => {
-  const { word, is_regex } = req.body;
-  if (!word || !word.trim()) return res.json({ ok: false, error: 'Word is required' });
-  db.addBannedWord(req.streamer.id, word.trim(), is_regex ? 1 : 0);
+  const t = res.locals.t;
+  const word = typeof req.body.word === 'string' ? req.body.word.trim() : '';
+  const isRegex = !!req.body.is_regex;
+  if (!word) return res.json({ ok: false, error: t('chatbot.error.wordRequired') });
+  if (isRegex) {
+    // Regex words run against every chat message, so only patterns that cannot
+    // stall the shared event loop are accepted (see services/safePattern.js).
+    const check = validateBannedPattern(word);
+    if (!check.ok) {
+      const key = BANNED_PATTERN_ERRORS[check.reason] || 'chatbot.error.patternInvalid';
+      return res.json({ ok: false, error: t(key, { max: MAX_PATTERN_LENGTH }) });
+    }
+  }
+  db.addBannedWord(req.streamer.id, word, isRegex ? 1 : 0);
   res.json({ ok: true, words: db.getBannedWords(req.streamer.id) });
 });
 
