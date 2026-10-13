@@ -1751,14 +1751,18 @@ function quoteIdentifier(name) {
 // version of the app, or one added later): rows that point at the account
 // through a foreign key that would refuse the delete are deleted as well,
 // instead of the whole removal failing. CASCADE and SET NULL keys are left to
-// SQLite itself.
+// SQLite itself. Every table it clears is logged with its row count, so a
+// table that should be handled on purpose (kept, or listed below) is noticed.
 function deleteStrayForeignKeyRows(parentTable, id, named, tables) {
   for (const table of tables) {
     if (named.has(table)) continue;
     for (const fk of db.pragma(`foreign_key_list(${quoteIdentifier(table)})`)) {
       if (String(fk.table).toLowerCase() !== parentTable) continue;
       if (fk.on_delete === 'CASCADE' || fk.on_delete === 'SET NULL') continue;
-      db.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier(fk.from)} = ?`).run(id);
+      const deleted = db.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier(fk.from)} = ?`).run(id).changes;
+      if (deleted > 0) {
+        console.warn(`[DB] Removing ${parentTable} ${id}: also deleted ${deleted} row(s) from ${table} (${fk.from}), a table the removal does not list`);
+      }
     }
   }
 }
@@ -4241,12 +4245,23 @@ function updateRacingIracingName(id, iracingName) { return _updateRacingIracingN
 function updateRacingProfile(id, displayName, iracingName) { return _updateRacingProfile.run({ id, display_name: displayName || null, iracing_name: iracingName || null }); }
 const _updateRacingAvatar = db.prepare('UPDATE racing_users SET avatar = @avatar WHERE id = @id');
 function updateRacingAvatar(id, avatar) { return _updateRacingAvatar.run({ id, avatar }); }
+// The recorded sessions that go with a Racing account (parameters: its id, its
+// Bridge id): the ones tied to it, and the ones recorded under its Bridge id
+// before they were tied to any account. A Bridge id is not unique to an account
+// (two accounts can use one install), so a session tied to another account is
+// never matched by Bridge id. One shared predicate: the telemetry, lap and
+// session deletes below must select the same sessions.
+const RECORDED_SESSIONS_OF_RACING_USER =
+  "SELECT id FROM racing_sessions WHERE racing_user_id = ? OR (racing_user_id IS NULL AND bridge_id = ? AND bridge_id != '')";
+
 // Deletes a Racing account and everything it owns (see "Removing an account"
 // above): web sessions, notifications and reset tokens; the sessions it
-// recorded with their laps and telemetry (matched by account or by its Bridge
-// id, as the sessions list does); the teams it owns with their members and
-// invites; and its memberships and invites in other teams. A linked streamer
-// is a separate account and is not touched. True when the user existed.
+// recorded with their laps and telemetry (RECORDED_SESSIONS_OF_RACING_USER);
+// the teams it owns with their members and invites; and its memberships and
+// invites in other teams. A linked streamer is a separate account and is not
+// touched. Logs and diagnostic reports kept per Bridge id are left alone: they
+// belong to the install, which another account may still use. True when the
+// user existed.
 const _deleteRacingUserAndData = db.transaction((id) => {
   const user = db.prepare('SELECT bridge_id FROM racing_users WHERE id = ?').get(id);
   if (!user) return false;
@@ -4258,7 +4273,7 @@ const _deleteRacingUserAndData = db.transaction((id) => {
     if (tables.has(table)) db.prepare(sql).run(...params);
   };
 
-  const recorded = "SELECT id FROM racing_sessions WHERE racing_user_id = ? OR (bridge_id = ? AND bridge_id != '')";
+  const recorded = RECORDED_SESSIONS_OF_RACING_USER;
   clear('lap_telemetry', `DELETE FROM lap_telemetry WHERE lap_id IN (SELECT id FROM session_laps WHERE session_id IN (${recorded}))`, id, bridge);
   clear('session_laps', `DELETE FROM session_laps WHERE session_id IN (${recorded})`, id, bridge);
   clear('racing_sessions', `DELETE FROM racing_sessions WHERE id IN (${recorded})`, id, bridge);

@@ -98,6 +98,19 @@ function fillStreamer(id) {
 }
 
 
+// Runs fn and returns what it printed with console.warn.
+function warningsDuring(fn) {
+  const lines = [];
+  const original = console.warn;
+  console.warn = (...args) => lines.push(args.join(' '));
+  try {
+    fn();
+  } finally {
+    console.warn = original;
+  }
+  return lines;
+}
+
 // ── disabling ────────────────────────────────────────────────────────────
 
 describe('disabling an account', () => {
@@ -236,13 +249,31 @@ describe('removing a streamer', () => {
       const a = addStreamer();
       const b = addStreamer();
       sql.prepare('INSERT INTO legacy_notes (streamer_id, note) VALUES (?, ?)').run(a, 'old');
+      sql.prepare('INSERT INTO legacy_notes (streamer_id, note) VALUES (?, ?)').run(a, 'older');
       sql.prepare('INSERT INTO legacy_notes (streamer_id, note) VALUES (?, ?)').run(b, 'keep');
-      assert.equal(db.deleteStreamer(a), true);
+      const warnings = warningsDuring(() => assert.equal(db.deleteStreamer(a), true));
       assert.equal(count('legacy_notes', 'streamer_id = ?', a), 0);
       assert.equal(count('legacy_notes', 'streamer_id = ?', b), 1);
+      assert.deepEqual(warnings, [`[DB] Removing streamers ${a}: also deleted 2 row(s) from legacy_notes (streamer_id), a table the removal does not list`]);
     } finally {
       sql.exec('DROP TABLE legacy_notes');
     }
+  });
+
+  test('a table the removal does not list is only logged when it actually had rows to clear', () => {
+    sql.exec('CREATE TABLE legacy_notes (id INTEGER PRIMARY KEY, streamer_id INTEGER NOT NULL REFERENCES streamers(id), note TEXT)');
+    try {
+      const empty = addStreamer();
+      assert.deepEqual(warningsDuring(() => db.deleteStreamer(empty)), []);
+    } finally {
+      sql.exec('DROP TABLE legacy_notes');
+    }
+  });
+
+  test('a removal that the lists cover completely logs nothing from the safety net', () => {
+    const a = addStreamer();
+    fillStreamer(a);
+    assert.deepEqual(warningsDuring(() => db.deleteStreamer(a)), []);
   });
 
   test('is all or nothing: a failure part-way leaves the account exactly as it was', () => {
@@ -350,6 +381,70 @@ describe('removing a Racing user', () => {
     assert.equal(count('racing_sessions', 'id = ?', untied), 0);
     assert.equal(count('racing_sessions', 'id = ?', others), 1);
     assert.equal(count('racing_sessions', 'id = ?', blank), 1, 'an empty Bridge id matches nothing');
+  });
+
+  test('another account that uses the same Bridge id keeps its own recordings, laps and telemetry', () => {
+    // Nothing makes a Bridge id unique to an account: two accounts used from one install share it.
+    const user = addRacingUser({ bridge_id: 'bridge-shared' });
+    const other = addRacingUser({ bridge_id: 'bridge-shared' });
+    const recording = (owner) => {
+      const session = insertRow('racing_sessions', { racing_user_id: owner, bridge_id: 'bridge-shared' });
+      const lap = insertRow('session_laps', { session_id: session });
+      const telemetry = insertRow('lap_telemetry', { lap_id: lap });
+      return { session, lap, telemetry };
+    };
+    const mine = recording(user);
+    const theirs = recording(other);
+
+    assert.equal(db.deleteRacingUser(user), true);
+
+    assert.equal(count('racing_sessions', 'id = ?', mine.session), 0, 'the removed account\'s own recording is gone');
+    assert.equal(count('session_laps', 'id = ?', mine.lap), 0);
+    assert.equal(count('lap_telemetry', 'id = ?', mine.telemetry), 0);
+    assert.equal(count('racing_sessions', 'id = ?', theirs.session), 1, 'the other account\'s recording stays');
+    assert.equal(count('session_laps', 'id = ?', theirs.lap), 1, 'with its laps');
+    assert.equal(count('lap_telemetry', 'id = ?', theirs.telemetry), 1, 'and its telemetry');
+    assert.ok(db.getRacingUserById(other));
+    assert.deepEqual(sql.pragma('foreign_key_check'), []);
+  });
+
+  test('a recording tied to no account goes with the account whose Bridge id it carries; other accounts\' recordings do not', () => {
+    const user = addRacingUser({ bridge_id: 'bridge-shared-2' });
+    const other = addRacingUser({ bridge_id: 'bridge-shared-2' });
+    const untied = insertRow('racing_sessions', { racing_user_id: null, bridge_id: 'bridge-shared-2' });
+    const untiedLap = insertRow('session_laps', { session_id: untied });
+    const theirs = insertRow('racing_sessions', { racing_user_id: other, bridge_id: 'bridge-shared-2' });
+    db.deleteRacingUser(user);
+    assert.equal(count('racing_sessions', 'id = ?', untied), 0);
+    assert.equal(count('session_laps', 'id = ?', untiedLap), 0);
+    assert.equal(count('racing_sessions', 'id = ?', theirs), 1);
+  });
+
+  test('the logs and diagnostic reports kept per Bridge id are left for the install\'s other accounts', () => {
+    const user = addRacingUser({ bridge_id: 'bridge-shared-3' });
+    const other = addRacingUser({ bridge_id: 'bridge-shared-3' });
+    sql.prepare('INSERT INTO bridge_logs (bridge_id, lines) VALUES (?, ?)').run('bridge-shared-3', 'log line');
+    sql.prepare('INSERT INTO bridge_bug_reports (bridge_id, error_pattern, explanation, suggested_fix) VALUES (?, ?, ?, ?)').run('bridge-shared-3', 'p', 'e', 'f');
+    db.deleteRacingUser(user);
+    assert.equal(count('bridge_logs', 'bridge_id = ?', 'bridge-shared-3'), 1);
+    assert.equal(count('bridge_bug_reports', 'bridge_id = ?', 'bridge-shared-3'), 1);
+    assert.ok(db.getRacingUserById(other));
+  });
+
+  test('a table the removal does not know of, with a foreign key to the Racing user, is cleared and logged', () => {
+    sql.exec('CREATE TABLE legacy_laps (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES racing_users(id), note TEXT)');
+    try {
+      const user = addRacingUser();
+      const other = addRacingUser();
+      sql.prepare('INSERT INTO legacy_laps (user_id, note) VALUES (?, ?)').run(user, 'old');
+      sql.prepare('INSERT INTO legacy_laps (user_id, note) VALUES (?, ?)').run(other, 'keep');
+      const warnings = warningsDuring(() => assert.equal(db.deleteRacingUser(user), true));
+      assert.equal(count('legacy_laps', 'user_id = ?', user), 0);
+      assert.equal(count('legacy_laps', 'user_id = ?', other), 1);
+      assert.deepEqual(warnings, [`[DB] Removing racing_users ${user}: also deleted 1 row(s) from legacy_laps (user_id), a table the removal does not list`]);
+    } finally {
+      sql.exec('DROP TABLE legacy_laps');
+    }
   });
 
   test('a user without a Bridge id removes nothing it should not', () => {

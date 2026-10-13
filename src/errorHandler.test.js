@@ -59,6 +59,23 @@ before(async () => {
   });
   app.get('/teapot', (req, res, next) => next(Object.assign(new Error('nope'), { status: 418 })));
   app.get('/five-hundred-and-three', (req, res, next) => next(Object.assign(new Error('upstream down'), { status: 503 })));
+
+  // Addresses that carry a secret, mounted the way the real app does it.
+  const overlay = express.Router();
+  overlay.get('/events/:token', () => { throw new Error('stream failed'); });
+  overlay.get('/sounds/:token/:type', () => { throw new Error('sound failed'); });
+  overlay.get('/', () => { throw new Error('index failed'); });
+  app.use('/overlay', overlay);
+  const deep = express.Router();
+  const inner = express.Router();
+  inner.get('/leaf/:id', () => { throw new Error('leaf failed'); });
+  deep.use('/inner', inner);
+  app.use('/deep', deep);
+  app.get('/api/session/share/:token', () => { throw new Error('share failed'); });
+  app.get('/files/*rest', () => { throw new Error('wildcard failed'); });
+  app.get(['/first/:token', '/second/:token'], () => { throw new Error('array failed'); });
+  app.use('/early', (req, res, next) => next(new Error('failed before any route')));
+
   app.use(errorHandler);
 
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -153,6 +170,88 @@ describe('errorHandler: client errors keep their status', () => {
     const res = await request('GET', '/five-hundred-and-three', { headers: { Accept: 'application/json' } });
     assert.equal(res.status, 500);
     assert.deepEqual(JSON.parse(res.text), { error: 'Internal error' });
+  });
+});
+
+describe('errorHandler: the log does not keep the secrets in an address', () => {
+  const TOKEN = '0f8fad5b-d9cb-469f-a165-70867728950e';
+  const logText = () => logged.map(([, line]) => line).join('\n');
+  const firstLine = () => logged[0][1].split('\n')[0];
+
+  test('a route that matched is logged by its pattern, with the mount prefix and without the token', async () => {
+    const res = await request('GET', `/overlay/events/${TOKEN}`);
+    assert.equal(res.status, 500);
+    assert.equal(firstLine(), '[Error] GET /overlay/events/:token -> 500: Error: stream failed');
+    assert.ok(!logText().includes(TOKEN));
+  });
+
+  test('every parameter is replaced by its name', async () => {
+    await request('GET', `/overlay/sounds/${TOKEN}/follow`);
+    assert.match(firstLine(), /^\[Error\] GET \/overlay\/sounds\/:token\/:type -> 500/);
+    assert.ok(!logText().includes(TOKEN));
+    assert.ok(!logText().includes('/follow'));
+  });
+
+  test('a route defined straight on the app is logged by its pattern too', async () => {
+    await request('GET', '/api/session/share/abcdefghijklmnopqrstuvwx');
+    assert.match(firstLine(), /^\[Error\] GET \/api\/session\/share\/:token -> 500/);
+    assert.ok(!logText().includes('abcdefghijklmnopqrstuvwx'));
+  });
+
+  test('a router nested in a router keeps both mount points', async () => {
+    await request('GET', '/deep/inner/leaf/12345');
+    assert.match(firstLine(), /^\[Error\] GET \/deep\/inner\/leaf\/:id -> 500/);
+  });
+
+  test("a mounted router's root route is logged as the mount point", async () => {
+    await request('GET', '/overlay');
+    assert.match(firstLine(), /^\[Error\] GET \/overlay -> 500/);
+  });
+
+  test('the query string is never logged', async () => {
+    await request('GET', `/overlay/events/${TOKEN}?bridge_id=secret-bridge-id-value`);
+    assert.ok(!logText().includes('secret-bridge-id-value'));
+    assert.ok(!logText().includes(TOKEN));
+    assert.ok(!logText().includes('?bridge_id'));
+  });
+
+  test('when no route matched, opaque-looking segments are masked and the rest is kept', async () => {
+    await request('GET', `/early/${TOKEN}/status/12`);
+    assert.match(firstLine(), /^\[Error\] GET \/early\/\*\*\*\/status\/12 -> 500/);
+    assert.ok(!logText().includes(TOKEN));
+  });
+
+  test('a failure before routing (a body that does not parse) masks the address too', async () => {
+    const res = await request('POST', `/collect/${TOKEN}`, {
+      headers: { 'Content-Type': 'application/json', 'Content-Length': '8' }, body: '{"a": 1x',
+    });
+    assert.equal(res.status, 400);
+    assert.match(firstLine(), /^\[Error\] POST \/collect\/\*\*\* -> 400/);
+    assert.ok(!logText().includes(TOKEN));
+  });
+
+  test('a segment is masked from 20 characters of letters, digits, "-" and "_"', async () => {
+    const nineteen = 'a1B2c3D4e5F6g7H8i9J';
+    const twenty = `${nineteen}0`;
+    const underscored = 'abc_def-ghi_jkl-mnop';
+    const withDot = 'abcdefghij.klmnopqrstu';
+    await request('GET', `/early/${nineteen}/${twenty}/${underscored}/${withDot}`);
+    assert.equal(firstLine(), `[Error] GET /early/${nineteen}/***/***/${withDot} -> 500: Error: failed before any route`);
+  });
+
+  test('a wildcard or list pattern is not trusted: the address is masked instead', async () => {
+    await request('GET', `/files/${TOKEN}/more`);
+    assert.match(firstLine(), /^\[Error\] GET \/files\/\*\*\*\/more -> 500/);
+    logged.length = 0;
+    await request('GET', `/second/${TOKEN}`);
+    assert.match(firstLine(), /^\[Error\] GET \/second\/\*\*\* -> 500/);
+    assert.ok(!logText().includes(TOKEN));
+  });
+
+  test('the visitor still gets the same generic page', async () => {
+    const res = await request('GET', `/overlay/events/${TOKEN}`);
+    assert.match(res.text, /Something went wrong/);
+    assert.ok(!res.text.includes(TOKEN));
   });
 });
 
