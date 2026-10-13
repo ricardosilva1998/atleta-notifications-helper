@@ -267,6 +267,10 @@
   "tip.error.expired": "This donation link has expired or is not valid. Please start your donation again.",
   "tip.error.notConfirmed": "PayPal could not confirm this payment, so no alert was sent. Please check your PayPal account before trying again.",
 
+  "link.expired.title": "Link expired",
+  "link.expired.body": "This link has expired or is not valid. Links from /link work for {{minutes}} minutes.",
+  "link.expired.hint": "Run /link in the Discord server again to get a new link.",
+
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",
   "lang.es": "Espa\u00f1ol",

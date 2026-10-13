@@ -2,6 +2,7 @@ const { Router } = require('express');
 const crypto = require('crypto');
 const config = require('../config');
 const db = require('../db');
+const { signLink, verifyLink, linkSecret, LINK_TTL_SECONDS } = require('../services/linkSignature');
 
 const router = Router();
 
@@ -342,13 +343,26 @@ router.get('/spotify/callback', async (req, res) => {
 
 // --- User Linking (community members link Twitch for sub sync) ---
 
+// The /link URL is signed by the bot (src/services/linkSignature.js). Its
+// Discord user then rides through the Twitch login in a cookie that is signed
+// again, so neither the URL nor the cookie can be pointed at someone else.
+const LINK_ROUND_TRIP_SECONDS = 600;
+
+function refuseLink(res, reason) {
+  console.warn(`[Auth] Refused a /link request: ${reason}`);
+  return res.status(400).render('link-result', {
+    success: false, expired: true, linkMinutes: Math.round(LINK_TTL_SECONDS / 60), twitchName: null, streamer: null,
+  });
+}
+
 router.get('/link', (req, res) => {
-  const { streamer_id, discord_id } = req.query;
-  if (!streamer_id || !discord_id) return res.status(400).render('link-result', { success: false, twitchName: null, streamer: null });
+  const link = verifyLink(req.query, linkSecret());
+  if (!link.ok) return refuseLink(res, link.reason);
 
   const linkState = crypto.randomUUID();
-  req.app.locals.secureCookie(res, 'link_state', linkState, { maxAge: 600_000 });
-  req.app.locals.secureCookie(res, 'link_data', `${streamer_id}:${discord_id}`, { maxAge: 600_000 });
+  req.app.locals.secureCookie(res, 'link_state', linkState, { maxAge: LINK_ROUND_TRIP_SECONDS * 1000 });
+  const roundTrip = signLink({ streamerId: link.streamerId, discordId: link.discordId, ttlSeconds: LINK_ROUND_TRIP_SECONDS }, linkSecret());
+  req.app.locals.secureCookie(res, 'link_data', new URLSearchParams(roundTrip).toString(), { maxAge: LINK_ROUND_TRIP_SECONDS * 1000 });
 
   const params = new URLSearchParams({
     client_id: config.twitch.clientId,
@@ -368,10 +382,12 @@ router.get('/link/callback', async (req, res) => {
   const linkData = req.cookies?.link_data;
   res.clearCookie('link_state');
   res.clearCookie('link_data');
-  if (!expectedState || state !== expectedState || !linkData) return res.status(403).render('link-result', { success: false, twitchName: null, streamer: null });
+  // A missing cookie usually means the 10-minute round trip ran out.
+  if (!expectedState || state !== expectedState || !linkData) return refuseLink(res, 'state or link cookie missing');
 
-  const [streamerId, discordId] = linkData.split(':');
-  if (!streamerId || !discordId) return res.status(400).render('link-result', { success: false, twitchName: null, streamer: null });
+  const link = verifyLink(Object.fromEntries(new URLSearchParams(linkData)), linkSecret());
+  if (!link.ok) return refuseLink(res, link.reason);
+  const { streamerId, discordId } = link;
 
   try {
     const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -399,7 +415,7 @@ router.get('/link/callback', async (req, res) => {
     const userData = await userRes.json();
     const twitchUser = userData.data[0];
 
-    db.linkUser(parseInt(streamerId), discordId, twitchUser.id, twitchUser.login);
+    db.linkUser(streamerId, discordId, twitchUser.id, twitchUser.login);
     console.log(`[Auth] Linked Discord ${discordId} -> Twitch ${twitchUser.login}`);
 
     res.render('link-result', { success: true, twitchName: twitchUser.display_name, streamer: null });

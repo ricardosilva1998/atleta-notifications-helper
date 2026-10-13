@@ -71,6 +71,11 @@ module.exports = {
   features: {
     youtube: true,
   },
+  // Signs the /link URLs the bot hands out (src/services/linkSignature.js).
+  // Unset: a per-boot secret is used and links stop working after a restart.
+  link: {
+    signingSecret: process.env.LINK_SIGNING_SECRET || '',
+  },
   // Discord user ids with admin access: the built-in admin plus any
   // comma-separated ids in ADMIN_DISCORD_IDS. Names never grant admin.
   adminDiscordIds: parseAdminDiscordIds(process.env.ADMIN_DISCORD_IDS),

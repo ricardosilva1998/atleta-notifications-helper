@@ -2,6 +2,7 @@ const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 const { client, buildEmbed } = require('./discord');
 const config = require('./config');
 const db = require('./db');
+const { signLink, linkSecret, LINK_TTL_SECONDS } = require('./services/linkSignature');
 
 const linkCommand = new SlashCommandBuilder()
   .setName('link')
@@ -21,6 +22,8 @@ async function registerCommands() {
 }
 
 function start() {
+  linkSecret(); // warns at boot when LINK_SIGNING_SECRET is not set
+
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.commandName !== 'link') return;
@@ -35,12 +38,15 @@ function start() {
 
     // Find the config with sub sync enabled, or fall back to the first one
     const guildConfig = guildConfigs.find((c) => c.sub_sync_enabled) || guildConfigs[0];
-    const linkUrl = `${config.app.url}/auth/link?streamer_id=${guildConfig.streamer_id}&discord_id=${interaction.user.id}`;
+    // Signed and short-lived: only the Discord user who ran /link can be linked through it.
+    const link = signLink({ streamerId: guildConfig.streamer_id, discordId: interaction.user.id }, linkSecret());
+    const linkUrl = `${config.app.url}/auth/link?${new URLSearchParams(link)}`;
+    const minutes = Math.round(LINK_TTL_SECONDS / 60);
 
     const embed = buildEmbed({
       color: 0x9146ff,
       title: 'Link your Twitch Account',
-      description: `Click the link below to connect your Twitch account. If you're subscribed to **${guildConfig.twitch_username}**, you'll automatically get the subscriber role!\n\n[Click here to link your Twitch account](${linkUrl})`,
+      description: `Click the link below to connect your Twitch account. If you're subscribed to **${guildConfig.twitch_username}**, you'll automatically get the subscriber role!\n\n[Click here to link your Twitch account](${linkUrl})\n\nThis link is only for you and works for ${minutes} minutes.`,
       footer: { text: 'Your Twitch account will be linked to your Discord account' },
     });
 
