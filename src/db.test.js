@@ -129,6 +129,19 @@ describe('pending tips', () => {
   });
 });
 
+describe('addWatchedChannel', () => {
+  const GUILD = '400000000000000099';
+  const count = () => db.db.prepare('SELECT COUNT(*) AS n FROM watched_channels WHERE streamer_id = ?').get(streamerA).n;
+
+  test('says whether the channel was added: true once, false for the same channel in the same server', () => {
+    assert.equal(db.addWatchedChannel(GUILD, streamerA, 'Some_Streamer', '1', null, true, false, null), true);
+    assert.equal(db.addWatchedChannel(GUILD, streamerA, 'some_streamer', '2', null, true, false, null), false);
+    assert.equal(count(), 1);
+    assert.equal(db.db.prepare('SELECT live_channel_id FROM watched_channels WHERE streamer_id = ?').get(streamerA).live_channel_id, '1', 'the first one is kept as it was');
+    assert.equal(db.addWatchedChannel('400000000000000098', streamerA, 'some_streamer', '1', null, true, false, null), true, 'another server is a different watcher');
+  });
+});
+
 describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
   const G1 = '400000000000000001';
   const G2 = '400000000000000002';

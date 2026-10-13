@@ -8,6 +8,7 @@ const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
+const { errorHandler } = require('./errorHandler');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -1200,6 +1201,10 @@ app.post('/set-language', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => res.send('OK'));
+
+// Error handler: keep it the LAST middleware, after every route and parser, so
+// anything they throw ends in a generic page or JSON body instead of a stack.
+app.use(errorHandler);
 
 function start() {
   const port = config.app.port;

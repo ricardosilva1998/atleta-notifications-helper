@@ -71,6 +71,11 @@ module.exports = {
   features: {
     youtube: true,
   },
+  // Most Twitch channels one Discord server may watch. Adding past it is
+  // refused; a server already over it keeps what it has.
+  limits: {
+    twitchChannelsPerGuild: 25,
+  },
   // Signs the /link URLs the bot hands out (src/services/linkSignature.js).
   // Unset: a per-boot secret is used and links stop working after a restart.
   link: {

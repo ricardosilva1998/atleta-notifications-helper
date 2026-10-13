@@ -9,12 +9,10 @@ const {
   clampWelcomeMessage, WELCOME_MESSAGE_MAX, DELIVERY_CHANNEL_UNAVAILABLE,
 } = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
-const { requireActiveStreamer } = require('../services/streamerAccess');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
-const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPosts } = require('../services/instagram');
-const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
-const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
-const iracing = require('../services/iracing');
+const { requireActiveStreamer } = require('../services/streamerAccess');
+const { normalizeTwitchLogin } = require('../services/twitchLogin');
+const { parseOverlaySettings, giveawayDurationSeconds } = require('../services/overlaySettings');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
 const {
@@ -207,14 +205,6 @@ router.delete('/account/avatar', (req, res) => {
   res.json({ ok: true });
 });
 
-// Save YouTube API key
-router.post('/account/youtube-api-key', (req, res) => {
-  const apiKey = (req.body.youtube_api_key || '').trim();
-  db.updateStreamerYoutube(req.streamer.id, req.streamer.youtube_channel_id, apiKey || null);
-  console.log(`[Dashboard] YouTube API key ${apiKey ? 'saved' : 'cleared'} for ${req.streamer.discord_username}`);
-  res.redirect('/dashboard/account');
-});
-
 // Dashboard home — list guilds
 router.get('/', async (req, res) => {
   const guilds = db.getGuildsForStreamer(req.streamer.id);
@@ -390,10 +380,6 @@ router.get('/guild/:guildId', async (req, res) => {
       }
     }
   }
-  const watchedInstagramAccounts = db.getWatchedInstagramForGuild(guildId, req.streamer.id);
-  const watchedTikTokAccounts = db.getWatchedTikTokForGuild(guildId, req.streamer.id);
-  const watchedTwitterAccounts = db.getWatchedTwitterForGuild(guildId, req.streamer.id);
-  const watchedIracingDrivers = db.getWatchedIracingDriversForGuild(guildId, req.streamer.id);
 
   const { tier, limits } = getTierLimits(req.streamer.id);
 
@@ -409,10 +395,7 @@ router.get('/guild/:guildId', async (req, res) => {
     deliveryError: lastDeliveryError(guildConfig, channels, watchedTwitchChannels, watchedYoutubeChannels, req.streamer),
     watchedTwitchChannels,
     watchedYoutubeChannels,
-    watchedInstagramAccounts,
-    watchedTikTokAccounts,
-    watchedTwitterAccounts,
-    watchedIracingDrivers,
+    maxTwitchChannels: config.limits.twitchChannelsPerGuild,
     hasBroadcasterToken: !!req.streamer.broadcaster_access_token,
     broadcasterAuthUrl: `${config.app.url}/auth/broadcaster`,
     tier,
@@ -485,39 +468,45 @@ router.get('/guild/:guildId/channels', (req, res) => {
   res.redirect(`/dashboard/guild/${req.params.guildId}?tab=twitch`);
 });
 
+// Adds a Twitch channel to a server's list. The name is cleaned up and checked
+// before Twitch is asked, only a channel Twitch knows is added, and the page
+// says what happened: msg=added, or not_found / duplicate / channel_limit /
+// twitch_error / invalid_channel / missing_fields.
 router.post('/guild/:guildId/channels', async (req, res) => {
   const { guildId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  const { limits } = getTierLimits(req.streamer.id);
+  const back = (msg) => res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=${msg}`);
 
-  const twitchUsername = (req.body.twitch_username || '').trim().toLowerCase();
+  const typedName = typeof req.body.twitch_username === 'string' ? req.body.twitch_username.trim() : '';
   const liveChannelId = req.body.live_channel_id;
   const clipsChannelId = req.body.clips_channel_id;
 
-  if (!twitchUsername || (!liveChannelId && !clipsChannelId)) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=missing_fields`);
-  }
-  if (!(await channelsInGuild(guildId, [liveChannelId, clipsChannelId]))) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=invalid_channel`);
-  }
+  if (!typedName || (!liveChannelId && !clipsChannelId)) return back('missing_fields');
+  const twitchUsername = normalizeTwitchLogin(typedName);
+  if (!twitchUsername) return back('not_found'); // not something a Twitch channel can be called
+  if (!(await channelsInGuild(guildId, [liveChannelId, clipsChannelId]))) return back('invalid_channel');
 
-  // Check clips permission
-  if (clipsChannelId && !limits.twitchClips) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=upgrade_clips`);
-  }
+  // A server that is already over the cap keeps what it has; it just cannot add more.
+  const atCap = () => db.getWatchedChannelsForGuild(guildId, req.streamer.id).length >= config.limits.twitchChannelsPerGuild;
+  if (db.getWatchedChannelsForGuild(guildId, req.streamer.id).some((w) => w.twitch_username === twitchUsername)) return back('duplicate');
+  if (atCap()) return back('channel_limit');
 
-  // Check max channels for free tier
-  if (limits.maxTwitchChannels !== -1) {
-    const existing = db.getWatchedChannelsForGuild(guildId, req.streamer.id);
-    if (existing.length >= limits.maxTwitchChannels) {
-      return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=channel_limit`);
-    }
+  let profile;
+  try {
+    profile = await getUserProfile(twitchUsername);
+  } catch (e) {
+    console.error(`[Dashboard] Twitch lookup for ${twitchUsername} failed: ${e.message}`);
+    return back('twitch_error');
   }
+  if (!profile) return back('not_found');
 
-  const profile = await getUserProfile(twitchUsername);
-  db.addWatchedChannel(guildId, req.streamer.id, twitchUsername, liveChannelId, clipsChannelId, !!liveChannelId, !!clipsChannelId, profile?.profile_image_url || null);
+  // Twitch took a moment: look at the cap again before adding.
+  if (atCap()) return back('channel_limit');
+  if (!db.addWatchedChannel(guildId, req.streamer.id, twitchUsername, liveChannelId, clipsChannelId, !!liveChannelId, !!clipsChannelId, profile.profile_image_url || null)) {
+    return back('duplicate'); // added by a request that arrived first
+  }
   console.log(`[Dashboard] Added Twitch channel ${twitchUsername} for guild ${guildId}`);
-  res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=added`);
+  back('added');
 });
 
 router.post('/guild/:guildId/channels/:channelId/remove', (req, res) => {
@@ -552,11 +541,6 @@ router.post('/guild/:guildId/youtube', async (req, res) => {
   const { guildId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
 
-  const { limits } = getTierLimits(req.streamer.id);
-  if (!limits.youtube) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=upgrade_youtube`);
-  }
-
   const input = (req.body.youtube_channel || '').trim();
   const videosChannelId = req.body.videos_channel_id;
   const liveChannelId = req.body.live_channel_id;
@@ -581,14 +565,6 @@ router.post('/guild/:guildId/youtube', async (req, res) => {
   } catch (e) {
     console.error(`[Dashboard] YouTube resolve error: ${e.message}`);
     return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=yt_not_found`);
-  }
-
-  // Check max YouTube channels
-  if (limits.maxYoutubeChannels !== -1) {
-    const existing = db.getWatchedYoutubeChannelsForGuild(guildId, req.streamer.id);
-    if (existing.length >= limits.maxYoutubeChannels) {
-      return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=channel_limit`);
-    }
   }
 
   // Pre-populate known videos to avoid notifying about old content
@@ -636,236 +612,6 @@ router.post('/guild/:guildId/youtube/:channelId/edit', async (req, res) => {
   res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=updated`);
 });
 
-// --- Instagram ---
-router.post('/guild/:guildId/instagram', async (req, res) => {
-  const { guildId } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  const { limits } = getTierLimits(req.streamer.id);
-  if (!limits.instagram) return res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=upgrade_social`);
-
-  const input = (req.body.instagram_username || '').trim();
-  const notifyChannelId = req.body.notify_channel_id;
-  if (!input || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=missing_fields`);
-
-  // Check social account limit
-  if (limits.maxSocialAccounts !== -1) {
-    const igCount = db.getWatchedInstagramForGuild(guildId, req.streamer.id).length;
-    const ttCount = db.getWatchedTikTokForGuild(guildId, req.streamer.id).length;
-    const twCount = db.getWatchedTwitterForGuild(guildId, req.streamer.id).length;
-    if (igCount + ttCount + twCount >= limits.maxSocialAccounts) {
-      return res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=social_limit`);
-    }
-  }
-
-  const profile = await resolveInstagram(input);
-  const username = profile?.username || input.replace(/^@/, '').toLowerCase();
-
-  // Pre-populate known posts
-  let knownPostIds = null;
-  try {
-    const posts = await getLatestInstagramPosts(username);
-    if (posts && posts.length > 0) knownPostIds = JSON.stringify(posts.map(p => p.id));
-  } catch (e) { console.warn(`[Dashboard] Instagram pre-populate failed: ${e.message}`); }
-
-  db.addWatchedInstagram(guildId, req.streamer.id, username, profile?.displayName, profile?.profileImageUrl, notifyChannelId, knownPostIds);
-  console.log(`[Dashboard] Added Instagram account ${username} for guild ${guildId}`);
-  res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=added`);
-});
-
-router.post('/guild/:guildId/instagram/:id/edit', (req, res) => {
-  const { guildId, id } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  db.updateWatchedInstagramChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=updated`);
-});
-
-router.post('/guild/:guildId/instagram/:id/remove', (req, res) => {
-  const { guildId, id } = req.params;
-  db.removeWatchedInstagram(parseInt(id), req.streamer.id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=instagram&msg=removed`);
-});
-
-// --- TikTok ---
-router.post('/guild/:guildId/tiktok', async (req, res) => {
-  const { guildId } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  const { limits } = getTierLimits(req.streamer.id);
-  if (!limits.tiktok) return res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=upgrade_social`);
-
-  const input = (req.body.tiktok_username || '').trim();
-  const notifyChannelId = req.body.notify_channel_id;
-  if (!input || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=missing_fields`);
-
-  // Check social account limit
-  if (limits.maxSocialAccounts !== -1) {
-    const igCount = db.getWatchedInstagramForGuild(guildId, req.streamer.id).length;
-    const ttCount = db.getWatchedTikTokForGuild(guildId, req.streamer.id).length;
-    const twCount = db.getWatchedTwitterForGuild(guildId, req.streamer.id).length;
-    if (igCount + ttCount + twCount >= limits.maxSocialAccounts) {
-      return res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=social_limit`);
-    }
-  }
-
-  const profile = await resolveTikTok(input);
-  const username = profile?.username || input.replace(/^@/, '').toLowerCase();
-
-  // Pre-populate known videos
-  let knownVideoIds = null;
-  try {
-    const videos = await getLatestTikTokVideos(username);
-    if (videos && videos.length > 0) knownVideoIds = JSON.stringify(videos.map(v => v.id));
-  } catch (e) { console.warn(`[Dashboard] TikTok pre-populate failed: ${e.message}`); }
-
-  db.addWatchedTikTok(guildId, req.streamer.id, username, profile?.displayName, profile?.profileImageUrl, notifyChannelId, knownVideoIds);
-  console.log(`[Dashboard] Added TikTok account ${username} for guild ${guildId}`);
-  res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=added`);
-});
-
-router.post('/guild/:guildId/tiktok/:id/edit', (req, res) => {
-  const { guildId, id } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  db.updateWatchedTikTokChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=updated`);
-});
-
-router.post('/guild/:guildId/tiktok/:id/remove', (req, res) => {
-  const { guildId, id } = req.params;
-  db.removeWatchedTikTok(parseInt(id), req.streamer.id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=tiktok&msg=removed`);
-});
-
-// --- Twitter ---
-router.post('/guild/:guildId/twitter', async (req, res) => {
-  const { guildId } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  const { limits } = getTierLimits(req.streamer.id);
-  if (!limits.twitter) return res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=upgrade_social`);
-
-  const input = (req.body.twitter_username || '').trim();
-  const notifyChannelId = req.body.notify_channel_id;
-  if (!input || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=missing_fields`);
-
-  // Check social account limit
-  if (limits.maxSocialAccounts !== -1) {
-    const igCount = db.getWatchedInstagramForGuild(guildId, req.streamer.id).length;
-    const ttCount = db.getWatchedTikTokForGuild(guildId, req.streamer.id).length;
-    const twCount = db.getWatchedTwitterForGuild(guildId, req.streamer.id).length;
-    if (igCount + ttCount + twCount >= limits.maxSocialAccounts) {
-      return res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=social_limit`);
-    }
-  }
-
-  const profile = await resolveTwitter(input);
-  const username = profile?.username || input.replace(/^@/, '').toLowerCase();
-
-  // Pre-populate known tweets
-  let knownTweetIds = null;
-  try {
-    const tweets = await getLatestTweets(username);
-    if (tweets && tweets.length > 0) knownTweetIds = JSON.stringify(tweets.map(t => t.id));
-  } catch (e) { console.warn(`[Dashboard] Twitter pre-populate failed: ${e.message}`); }
-
-  db.addWatchedTwitter(guildId, req.streamer.id, username, profile?.displayName, profile?.profileImageUrl, notifyChannelId, knownTweetIds);
-  console.log(`[Dashboard] Added Twitter account ${username} for guild ${guildId}`);
-  res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=added`);
-});
-
-router.post('/guild/:guildId/twitter/:id/edit', (req, res) => {
-  const { guildId, id } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  db.updateWatchedTwitterChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=updated`);
-});
-
-router.post('/guild/:guildId/twitter/:id/remove', (req, res) => {
-  const { guildId, id } = req.params;
-  db.removeWatchedTwitter(parseInt(id), req.streamer.id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=twitter&msg=removed`);
-});
-
-// --- iRacing ---
-
-router.post('/guild/:guildId/iracing', async (req, res) => {
-  const { guildId } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  const { limits } = getTierLimits(req.streamer.id);
-  if (!limits.iracing) return res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=upgrade_iracing`);
-
-  const customerId = (req.body.customer_id || '').trim();
-  const notifyChannelId = req.body.notify_channel_id;
-  if (!customerId || !notifyChannelId) return res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=missing_fields`);
-
-  // Check driver limit
-  if (limits.maxIracingDrivers !== -1) {
-    const existing = db.getWatchedIracingDriversForGuild(guildId, req.streamer.id);
-    if (existing.length >= limits.maxIracingDrivers) {
-      return res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=iracing_limit`);
-    }
-  }
-
-  // Resolve driver name from iRacing API
-  let driverName = customerId;
-  if (iracing.isConfigured()) {
-    try {
-      const profile = await iracing.getDriverProfile(customerId);
-      if (profile?.displayName) driverName = profile.displayName;
-    } catch (e) {
-      console.warn(`[Dashboard] iRacing profile resolve failed: ${e.message}`);
-    }
-  }
-
-  db.addWatchedIracingDriver(guildId, req.streamer.id, customerId, driverName, notifyChannelId);
-
-  // Pre-populate known races to avoid old result spam
-  if (iracing.isConfigured()) {
-    try {
-      const recentRaces = await iracing.getRecentRaces(customerId);
-      if (recentRaces) {
-        for (const race of recentRaces.slice(0, 10)) {
-          db.upsertIracingRaceCache({
-            subsession_id: String(race.subsession_id),
-            customer_id: customerId,
-            driver_name: driverName,
-            series_name: 'Pre-populated',
-            track_name: '',
-            car_name: '',
-            category: '',
-            finish_position: 0,
-            starting_position: 0,
-            incidents: 0,
-            irating_change: 0,
-            new_irating: 0,
-            laps_completed: 0,
-            fastest_lap_time: null,
-            qualifying_time: null,
-            field_size: 0,
-            strength_of_field: 0,
-            race_date: race.start_time || new Date().toISOString(),
-          });
-        }
-      }
-    } catch (e) {
-      console.warn(`[Dashboard] iRacing pre-populate failed: ${e.message}`);
-    }
-  }
-
-  console.log(`[Dashboard] Added iRacing driver ${customerId} (${driverName}) for guild ${guildId}`);
-  res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=added`);
-});
-
-router.post('/guild/:guildId/iracing/:id/edit', (req, res) => {
-  const { guildId, id } = req.params;
-  if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  db.updateWatchedIracingDriverChannel(parseInt(id), req.streamer.id, req.body.notify_channel_id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=updated`);
-});
-
-router.post('/guild/:guildId/iracing/:id/remove', (req, res) => {
-  const { guildId, id } = req.params;
-  db.removeWatchedIracingDriver(parseInt(id), req.streamer.id);
-  res.redirect(`/dashboard/guild/${guildId}?tab=iracing&msg=removed`);
-});
-
 // --- Feedback ---
 
 router.post('/feedback', (req, res) => {
@@ -895,37 +641,33 @@ router.get('/overlay', (req, res) => {
   const overlayUrl = streamer.overlay_token ? `${appUrl}/overlay/${streamer.overlay_token}` : null;
   const needsReauth = require('../services/twitch').needsBroadcasterReauth(streamer);
 
+  // The StreamElements token is never sent to the page: it only learns whether
+  // one is saved (and offers to remove it).
+  const { streamelements_jwt: savedJwt, ...pageStreamer } = streamer;
+
   res.render('overlay-config', {
-    streamer,
+    streamer: pageStreamer,
+    hasStreamElementsJwt: !!savedJwt,
+    giveawayDurationSeconds: giveawayDurationSeconds(streamer.overlay_giveaway_duration),
     overlayUrl,
     needsReauth,
     appUrl,
   });
 });
 
-// Save overlay settings
+// Save overlay settings. Toggles, durations and volume are read and bounded by
+// parseOverlaySettings; a blank StreamElements field keeps the stored token.
 router.post('/overlay', (req, res) => {
-  const b = req.body;
-  db.updateOverlayConfig(req.streamer.id, {
-    overlay_enabled: b.overlay_enabled ? 1 : 0,
-    overlay_follow_enabled: b.overlay_follow_enabled ? 1 : 0,
-    overlay_sub_enabled: b.overlay_sub_enabled ? 1 : 0,
-    overlay_bits_enabled: b.overlay_bits_enabled ? 1 : 0,
-    overlay_donation_enabled: b.overlay_donation_enabled ? 1 : 0,
-    overlay_follow_duration: parseInt(b.overlay_follow_duration) || 5,
-    overlay_sub_duration: parseInt(b.overlay_sub_duration) || 7,
-    overlay_bits_duration: parseInt(b.overlay_bits_duration) || 6,
-    overlay_donation_duration: parseInt(b.overlay_donation_duration) || 6,
-    overlay_volume: b.overlay_volume != null && b.overlay_volume !== '' ? parseFloat(b.overlay_volume) : 0.8,
-    streamelements_jwt: b.streamelements_jwt || '',
-  });
+  const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
+  db.updateOverlayConfig(req.streamer.id, columns);
 
   try {
     const { eventSubManager } = require('../services/eventsub');
     const { streamElementsManager } = require('../services/streamelements');
-    if (b.overlay_enabled) {
+    if (columns.overlay_enabled) {
       eventSubManager.startForStreamer(req.streamer.id);
-      if (b.streamelements_jwt) streamElementsManager.startForStreamer(req.streamer.id);
+      if (streamElementsJwt) streamElementsManager.startForStreamer(req.streamer.id);
+      else streamElementsManager.stopForStreamer(req.streamer.id); // token removed (or never set)
     } else {
       eventSubManager.stopForStreamer(req.streamer.id);
       streamElementsManager.stopForStreamer(req.streamer.id);

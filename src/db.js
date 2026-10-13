@@ -1838,10 +1838,13 @@ const _updateChannelState = db.prepare(`
   WHERE twitch_username = ?
 `);
 
+// Returns true when the channel was added, false when this streamer already
+// watches it in this server (the insert is ignored, so nothing changes).
 function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl = null) {
-  _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl);
+  const added = _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl).changes > 0;
   // Ensure channel_state row exists
   _upsertChannelState.run(twitchUsername.toLowerCase());
+  return added;
 }
 
 function updateWatchedChannelProfileImage(id, profileImageUrl) {

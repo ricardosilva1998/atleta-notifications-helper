@@ -170,7 +170,7 @@
         <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">Configure each event alert individually.</p>
       </div>
       <div style="display: flex; gap: 8px;">
-        <button onclick="clearOverlayAlerts()" class="btn btn-danger" style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">Clear All Alerts</button>
+        <button type="button" onclick="clearOverlayAlerts()" class="btn btn-danger" style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">Clear All Alerts</button>
         <button type="submit" class="btn btn-primary" style="padding: 7px 16px; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Save Settings
@@ -421,7 +421,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label">Duration</span>
-          <input type="number" name="overlay_giveaway_duration" value="<%= Math.round((streamer.overlay_giveaway_duration || 8000) / 1000) %>" min="1" max="30">
+          <input type="number" name="overlay_giveaway_duration" value="<%= giveawayDurationSeconds %>" min="1" max="60">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -599,14 +599,18 @@
       <label for="streamelements_jwt">StreamElements JWT Token</label>
       <input type="password" name="streamelements_jwt" id="streamelements_jwt"
         placeholder="eyJhbGciOi..."
-        value="<%= streamer.streamelements_jwt || '' %>"
-        autocomplete="off">
+        autocomplete="new-password">
     </div>
-    <% if (streamer.streamelements_jwt) { %>
+    <% if (hasStreamElementsJwt) { %>
       <p style="color: var(--success); font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        JWT token is saved. Leave blank to remove it.
+        <%= t('overlay.se.saved') %>
       </p>
+      <p style="color: var(--text-muted); font-size: 12px; margin: 4px 0 0;"><%= t('overlay.se.replace') %></p>
+      <div class="toggle" style="margin-top: 10px;">
+        <input type="checkbox" id="streamelements_jwt_remove" name="streamelements_jwt_remove" value="1">
+        <label for="streamelements_jwt_remove"><%= t('overlay.se.remove') %></label>
+      </div>
     <% } %>
   </div>
 
