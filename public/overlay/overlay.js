@@ -261,6 +261,10 @@ function connectSSE() {
     // Sponsor events handled by separate /overlay/sponsors/:token page
     if (data.type === 'sponsor') return;
 
+    // Chat lines share this stream for the iRacing chat overlay; they are not
+    // alerts, and queueing them would hold up (or push out) real alerts.
+    if (data.type === 'chat') return;
+
     // Redemption events bypass per-type enabled check — backend gates each one
     if (data.type === 'redemption') {
       const MAX_QUEUE = 50;
