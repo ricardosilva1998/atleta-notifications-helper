@@ -69,12 +69,14 @@ test('a real tip is logged, counted toward the goal once, alerted and thanked', 
   assert.equal(calls.chat.length, 1);
 });
 
-test('a replayed tip (same StreamElements id) still shows but does not count toward the goal again', () => {
+test('a replayed tip (same StreamElements id) still shows but is not counted again', () => {
   logDonationResult = false;
   handleTip(7, tipEvent(), false);
   assert.equal(calls.logDonation.length, 1);
   assert.deepEqual(calls.recordDonation, []);
+  assert.deepEqual(calls.logOverlayEvent, [], 'a replay is not another donation in the 7-day stats');
   assert.equal(calls.alerts.length, 1);
+  assert.equal(calls.chat.length, 1);
 });
 
 test('StreamElements test tips play the alert but are not logged or counted', () => {

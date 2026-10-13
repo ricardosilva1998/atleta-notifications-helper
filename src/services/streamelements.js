@@ -4,15 +4,16 @@ const bus = require('./overlayBus');
 const { chatManager } = require('./twitchChat');
 
 // One StreamElements event. A real tip is logged once per StreamElements event
-// id, and only a newly logged tip counts toward the tip goal: a replayed event
-// (same id) plays the alert again but is not counted twice. Test tips from the
-// StreamElements dashboard only play the alert and the chat message.
+// id, and only a newly logged tip counts toward the tip goal and the 7-day
+// stats: a replayed event (same id) plays the alert again but is not counted
+// twice. Test tips from the StreamElements dashboard only play the alert and
+// the chat message.
 function handleTip(streamerId, event, isTest) {
   if (!event || event.type !== 'tip') return;
   const data = event.data || {};
+  let isNew = false;
   // Real tips count toward the tip goal even if the overlay alert is off
   if (!isTest) {
-    let isNew = false;
     try {
       isNew = db.logDonation(streamerId, {
         source: 'streamelements', donor_name: data.username, amount: data.amount,
@@ -32,8 +33,8 @@ function handleTip(streamerId, event, isTest) {
         currency: data.currency || 'USD',
       },
     });
-    // Test tips still play, but stay out of the dashboard's 7-day stats
-    if (!isTest) {
+    // Test tips and replays still play, but stay out of the dashboard's 7-day stats
+    if (!isTest && isNew) {
       try { db.logOverlayEvent(streamerId, 'donation', data.username, { amount: data.amount, currency: data.currency }); } catch (e) {}
     }
     chatManager.sendEventMessage(streamerId, 'donation', {
