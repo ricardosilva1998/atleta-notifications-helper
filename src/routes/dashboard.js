@@ -10,6 +10,7 @@ const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPost
 const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
 const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
 const iracing = require('../services/iracing');
+const { isAllowedScreenshot } = require('../services/uploadValidation');
 
 const router = Router();
 
@@ -1544,10 +1545,16 @@ router.post('/report/:id/screenshot', async (req, res) => {
   try { buf = await readBoundedBody(req, res, 5 * 1024 * 1024); }
   catch (e) { return; }
 
+  // Only real images are stored: the extension must be png/jpg/jpeg/webp/gif
+  // and the file's leading bytes must match it.
+  const ext = (req.query.ext || 'png').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'png';
+  if (!isAllowedScreenshot(ext, buf)) {
+    return res.status(400).json({ ok: false, error: 'invalid_image' });
+  }
+
   const issueDir = path.join(__dirname, '..', '..', 'data', 'issues', String(issueId));
   try { await fs.promises.mkdir(issueDir, { recursive: true }); } catch (e) {}
 
-  const ext = (req.query.ext || 'png').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'png';
   const filename = `shot_${Date.now()}.${ext}`;
   try { await fs.promises.writeFile(path.join(issueDir, filename), buf); }
   catch (e) { return res.status(500).json({ ok: false, error: 'write_failed' }); }
