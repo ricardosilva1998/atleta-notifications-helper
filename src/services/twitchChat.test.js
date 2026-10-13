@@ -219,3 +219,31 @@ describe('banned words', () => {
     assert.equal(bannedWordReads, 2);
   });
 });
+
+// ── An account an admin disabled ─────────────────────────────────────
+
+describe('an account an admin disabled', () => {
+  test('the chatbot does not join its channel (it joins an enabled one)', () => {
+    chatManager.stopForStreamer(1);
+    assert.deepEqual(chatManager.getJoinedChannels(), []);
+
+    streamer = streamerRow({ enabled: 0 });
+    chatManager.startForStreamer(1);
+    assert.deepEqual(chatManager.getJoinedChannels(), [], 'disabled: not joined');
+
+    streamer = streamerRow({ enabled: 1 });
+    chatManager.startForStreamer(1);
+    assert.deepEqual(chatManager.getJoinedChannels(), ['somestreamer'], 'enabled: joined');
+  });
+
+  test('event thank-yous are not posted for it, so a tip to its page cannot make the bot speak', () => {
+    streamer = streamerRow({ enabled: 0 });
+    chatManager.sendEventMessage(1, 'raid', { username: 'RaidLeader', viewers: 42 });
+    assert.deepEqual(tmiClient.said, []);
+
+    streamer = streamerRow({ enabled: 1 });
+    chatManager.sendEventMessage(1, 'raid', { username: 'RaidLeader', viewers: 42 });
+    assert.equal(tmiClient.said.length, 1);
+    assert.equal(tmiClient.said[0].text, 'Welcome raiders from RaidLeader!');
+  });
+});

@@ -5,9 +5,21 @@ const path = require('path');
 const db = require('../db');
 const bus = require('../services/overlayBus');
 const customSounds = require('../services/customSounds');
+const { accountDisabledChannel } = require('../services/streamerAccess');
 
 // Unique ID per server process — changes on every restart/deploy
 const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
+
+// Every overlay route looks the streamer up by token with
+// db.getStreamerByOverlayToken, which finds nobody for an account an admin has
+// disabled, so a disabled account's links answer like an unknown token. A stream
+// that was already open when the account was disabled is ended here.
+function endStreamWhenAccountDisabled(streamerId, req, res) {
+  const channel = accountDisabledChannel(streamerId);
+  const end = () => res.end();
+  bus.once(channel, end);
+  req.on('close', () => bus.off(channel, end));
+}
 
 // SSE endpoint — MUST be before /:token to avoid being caught by the wildcard
 router.get('/events/:token', (req, res) => {
@@ -59,6 +71,7 @@ router.get('/events/:token', (req, res) => {
   };
 
   bus.on(`overlay:${streamer.id}`, listener);
+  endStreamWhenAccountDisabled(streamer.id, req, res);
 
   req.on('close', () => {
     clearInterval(heartbeat);
@@ -144,6 +157,7 @@ router.get('/sponsors/events/:token', (req, res) => {
   };
 
   bus.on(`overlay:${streamer.id}`, listener);
+  endStreamWhenAccountDisabled(streamer.id, req, res);
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.off(`overlay:${streamer.id}`, listener);
@@ -196,6 +210,7 @@ router.get('/goal/events/:token', (req, res) => {
   };
 
   bus.on(tipGoals.channel(streamer.id), listener);
+  endStreamWhenAccountDisabled(streamer.id, req, res);
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.off(tipGoals.channel(streamer.id), listener);

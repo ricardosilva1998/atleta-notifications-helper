@@ -2,6 +2,7 @@ const io = require('socket.io-client');
 const db = require('../db');
 const bus = require('./overlayBus');
 const { chatManager } = require('./twitchChat');
+const { isStreamerDisabled } = require('./streamerAccess');
 
 // One StreamElements event. A real tip is logged once per StreamElements event
 // id, and only a newly logged tip counts toward the tip goal and the 7-day
@@ -57,6 +58,10 @@ class StreamElementsClient {
     const streamer = db.getStreamerById(this.streamerId);
     if (!streamer || !streamer.streamelements_jwt) {
       console.log(`[StreamElements] Streamer ${this.streamerId}: no JWT token, skipping`);
+      return;
+    }
+    if (isStreamerDisabled(streamer)) {
+      console.log(`[StreamElements] Streamer ${this.streamerId}: account disabled, skipping`);
       return;
     }
 

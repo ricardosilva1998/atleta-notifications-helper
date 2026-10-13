@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS } = require('./i18n');
+const { applyAccountStatus } = require('./services/streamerAccess');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -118,6 +119,9 @@ app.use((req, res, next) => {
   if (req.racingUser && req.racingUser.streamer_id && !req.streamer) {
     req.streamer = db.getStreamerById(req.racingUser.streamer_id);
   }
+
+  // An account an admin disabled is not logged in anywhere (/dashboard says why).
+  applyAccountStatus(req);
 
   res.locals.streamer = req.streamer || null;
   res.locals.racingUser = req.racingUser || null;

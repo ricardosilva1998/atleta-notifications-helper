@@ -4,6 +4,7 @@ const db = require('../db');
 const bus = require('./overlayBus');
 const { refreshBroadcasterToken, hasRedemptionScope } = require('./twitch');
 const { chatManager } = require('./twitchChat');
+const { isStreamerDisabled } = require('./streamerAccess');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 
@@ -36,6 +37,11 @@ class EventSubClient {
     const streamer = db.getStreamerById(this.streamerId);
     if (!streamer || !streamer.broadcaster_access_token || !streamer.twitch_user_id) {
       console.log(`[EventSub] Streamer ${this.streamerId}: not configured, skipping`);
+      return;
+    }
+    // A reconnect timer set before an admin disabled the account must not bring it back.
+    if (isStreamerDisabled(streamer)) {
+      console.log(`[EventSub] Streamer ${this.streamerId}: account disabled, skipping`);
       return;
     }
 

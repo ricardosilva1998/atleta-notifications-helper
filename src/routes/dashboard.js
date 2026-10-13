@@ -9,6 +9,7 @@ const {
   clampWelcomeMessage, WELCOME_MESSAGE_MAX, DELIVERY_CHANNEL_UNAVAILABLE,
 } = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
+const { requireActiveStreamer } = require('../services/streamerAccess');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
 const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPosts } = require('../services/instagram');
 const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
@@ -63,11 +64,9 @@ function readBoundedBody(req, res, maxBytes) {
   });
 }
 
-// All dashboard routes require auth
-router.use((req, res, next) => {
-  if (!req.streamer) return res.redirect('/auth/login');
-  next();
-});
+// All dashboard routes need a logged-in streamer whose account an admin has not
+// disabled (a disabled one is shown the account-disabled page instead).
+router.use(requireActiveStreamer);
 
 // Helper: get text channels for a guild
 function getDiscordChannels(guildId) {

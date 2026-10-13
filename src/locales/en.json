@@ -285,6 +285,15 @@
   "link.expired.body": "This link has expired or is not valid. Links from /link work for {{minutes}} minutes.",
   "link.expired.hint": "Run /link in the Discord server again to get a new link.",
 
+  "account.disabled.title": "Account disabled",
+  "account.disabled.body": "An administrator has disabled this account. The dashboard and your OBS overlays are switched off.",
+  "account.disabled.hint": "If you think this is a mistake, contact the site owner.",
+  "account.disabled.logout": "Log out",
+  "admin.msg.disabled": "Account disabled: its web sessions were closed and its live connections stopped.",
+  "admin.msg.enabled": "Account enabled: its live connections were restarted.",
+  "admin.msg.selfDisable": "You cannot disable your own account.",
+  "admin.msg.selfRemove": "You cannot remove your own account.",
+
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",
   "lang.es": "Espa\u00f1ol",

@@ -3,6 +3,7 @@ const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
 const { isExempt, runFilters, getAction, executeAction, handleModCommand, activateRaidProtection, checkBannedWords } = require('./chatModeration');
+const { isStreamerDisabled } = require('./streamerAccess');
 
 let client = null;
 const channelMap = new Map(); // channelName -> streamerId
@@ -224,7 +225,7 @@ const chatManager = {
     if (!client) return;
 
     const streamer = db.getStreamerById(streamerId);
-    if (!streamer || !streamer.chatbot_enabled || !streamer.twitch_username) return;
+    if (!streamer || isStreamerDisabled(streamer) || !streamer.chatbot_enabled || !streamer.twitch_username) return;
 
     const mappedType = chatTypeMap[eventType] || eventType;
 
@@ -268,7 +269,7 @@ const chatManager = {
   startAll() { this.connect(); },
   startForStreamer(streamerId) {
     const streamer = db.getStreamerById(streamerId);
-    if (streamer && streamer.twitch_username) {
+    if (streamer && streamer.twitch_username && !isStreamerDisabled(streamer)) {
       this.joinChannel(streamerId, streamer.twitch_username);
     }
   },

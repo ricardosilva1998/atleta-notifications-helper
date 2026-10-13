@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const db = require('../db');
+const accountLifecycle = require('../services/accountLifecycle');
 
 const router = Router();
 
@@ -75,25 +76,31 @@ router.get('/dashboard', requireAdmin, (req, res) => {
 
 // --- User management ---
 
+// Disabling closes the account's web sessions and stops its EventSub,
+// StreamElements and chat connections; enabling starts them again
+// (services/accountLifecycle.js).
 router.post('/streamers/:id/toggle', requireAdmin, (req, res) => {
   const s = db.getStreamerById(parseInt(req.params.id));
   if (!s) return res.redirect('/admin/dashboard?tab=users');
 
   if (s.enabled) {
-    db.disableStreamer(s.id, req.body.note || 'Disabled by admin');
+    // A disabled account has no access, the admin panel included: this would lock you out.
+    if (s.id === req.streamer.id) return res.redirect('/admin/dashboard?tab=users&msg=self_disable');
+    accountLifecycle.disableAccount(s.id, (req.body && req.body.note) || 'Disabled by admin');
     console.log(`[Admin] Disabled streamer ${s.discord_username} (${s.id})`);
-  } else {
-    db.enableStreamer(s.id);
-    console.log(`[Admin] Enabled streamer ${s.discord_username} (${s.id})`);
+    return res.redirect('/admin/dashboard?tab=users&msg=disabled');
   }
-  res.redirect('/admin/dashboard?tab=users');
+  accountLifecycle.enableAccount(s.id);
+  console.log(`[Admin] Enabled streamer ${s.discord_username} (${s.id})`);
+  res.redirect('/admin/dashboard?tab=users&msg=enabled');
 });
 
 router.post('/streamers/:id/remove', requireAdmin, (req, res) => {
   const s = db.getStreamerById(parseInt(req.params.id));
   if (!s) return res.redirect('/admin/dashboard?tab=users');
+  if (s.id === req.streamer.id) return res.redirect('/admin/dashboard?tab=users&msg=self_remove');
 
-  db.deleteStreamer(s.id);
+  accountLifecycle.removeAccount(s.id);
   console.log(`[Admin] Removed streamer ${s.discord_username} (${s.id})`);
   res.redirect('/admin/dashboard?tab=users&msg=removed');
 });

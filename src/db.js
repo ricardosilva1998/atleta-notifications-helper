@@ -1662,6 +1662,7 @@ function getGuildNotificationsByTypeOverTime(streamerId, guildId, period) {
 const _disableStreamer = db.prepare('UPDATE streamers SET enabled = 0, admin_note = ? WHERE id = ?');
 const _enableStreamer = db.prepare('UPDATE streamers SET enabled = 1, admin_note = NULL WHERE id = ?');
 const _deleteStreamer = db.prepare('DELETE FROM streamers WHERE id = ?');
+const _deleteSessionsForStreamer = db.prepare('DELETE FROM sessions WHERE streamer_id = ?');
 
 const _getAllStreamersAdmin = db.prepare(`
   SELECT s.*,
@@ -1690,16 +1691,105 @@ const _getRecentNotifications = db.prepare(`
   LIMIT 50
 `);
 
-function disableStreamer(id, note) {
+// Disabling also ends every web session of the account (a linked Racing login
+// included), so it cannot keep using the site with a cookie it already has.
+const _disableStreamerAndSessions = db.transaction((id, note) => {
   _disableStreamer.run(note || null, id);
+  _deleteSessionsForStreamer.run(id);
+});
+
+function disableStreamer(id, note) {
+  _disableStreamerAndSessions(id, note);
 }
 
 function enableStreamer(id) {
   _enableStreamer.run(id);
 }
 
+// ── Removing an account ───────────────────────────────────────────────────
+// Most foreign keys here were declared without ON DELETE CASCADE, so deleting a
+// streamer or Racing user failed outright (and the rows that had no foreign key
+// at all were left behind). These delete everything an account owns, children
+// before parents, in one transaction: either all of it goes or none.
+
+function existingTables() {
+  return new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name));
+}
+
+function quoteIdentifier(name) {
+  return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+// Safety net for tables the lists below do not name (a table from an older
+// version of the app, or one added later): rows that point at the account
+// through a foreign key that would refuse the delete are deleted as well,
+// instead of the whole removal failing. CASCADE and SET NULL keys are left to
+// SQLite itself.
+function deleteStrayForeignKeyRows(parentTable, id, named, tables) {
+  for (const table of tables) {
+    if (named.has(table)) continue;
+    for (const fk of db.pragma(`foreign_key_list(${quoteIdentifier(table)})`)) {
+      if (String(fk.table).toLowerCase() !== parentTable) continue;
+      if (fk.on_delete === 'CASCADE' || fk.on_delete === 'SET NULL') continue;
+      db.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier(fk.from)} = ?`).run(id);
+    }
+  }
+}
+
+// Everything a streamer owns, children before parents: [table, WHERE clause
+// that takes the streamer's id]. feedback and issues go with the account too:
+// the admin's confirmation reads "Delete this user and all their data?".
+const STREAMER_OWNED_ROWS = [
+  ['giveaway_entries', 'giveaway_id IN (SELECT id FROM giveaways WHERE streamer_id = ?)'],
+  ['giveaways', 'streamer_id = ?'],
+  ['channel_point_redemptions', 'streamer_id = ?'],
+  ['channel_point_rewards', 'streamer_id = ?'],
+  ['chat_commands', 'streamer_id = ?'],
+  ['custom_overlays', 'streamer_id = ?'],
+  ['overlay_designs', 'streamer_id = ?'],
+  ['overlay_designs_v0_backup', 'streamer_id = ?'],
+  ['sponsor_images', 'streamer_id = ?'],
+  ['sponsor_messages', 'streamer_id = ?'],
+  ['timed_notifications', 'streamer_id = ?'],
+  ['tip_goals', 'streamer_id = ?'],
+  ['vtuber_models', 'streamer_id = ?'],
+  ['banned_words', 'streamer_id = ?'],
+  ['donations', 'streamer_id = ?'],
+  ['iracing_overlay_settings', 'streamer_id = ?'],
+  ['moderation_log', 'streamer_id = ?'],
+  ['notification_log', 'streamer_id = ?'],
+  ['overlay_events', 'streamer_id = ?'],
+  ['pending_tips', 'streamer_id = ?'],
+  ['poller_state', 'streamer_id = ?'],
+  ['user_links', 'streamer_id = ?'],
+  ...WATCHER_TABLES.map((table) => [table, 'streamer_id = ?']),
+  ['transactions', 'streamer_id = ?'],
+  ['subscriptions', 'streamer_id = ?'],
+  ['feedback', 'streamer_id = ?'],
+  ['issues', 'streamer_id = ?'],
+  ['sessions', 'streamer_id = ?'],
+];
+
+const _deleteStreamerAndData = db.transaction((id) => {
+  const tables = existingTables();
+  const named = new Set(['streamers', 'racing_users']);
+  // A streamer points at its VTuber model and each model at its streamer.
+  if (tables.has('vtuber_models')) {
+    db.prepare('UPDATE streamers SET vtuber_model_id = NULL WHERE vtuber_model_id IN (SELECT id FROM vtuber_models WHERE streamer_id = ?)').run(id);
+  }
+  for (const [table, where] of STREAMER_OWNED_ROWS) {
+    named.add(table);
+    if (tables.has(table)) db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(id);
+  }
+  // A linked Racing account is a separate account: it only loses the link.
+  db.prepare('UPDATE racing_users SET streamer_id = NULL WHERE streamer_id = ?').run(id);
+  deleteStrayForeignKeyRows('streamers', id, named, tables);
+  return _deleteStreamer.run(id).changes > 0;
+});
+
+// True when the streamer existed.
 function deleteStreamer(id) {
-  _deleteStreamer.run(id);
+  return _deleteStreamerAndData(id);
 }
 
 function getAllStreamersAdmin() {
@@ -2611,14 +2701,19 @@ function getAllFeedback() {
 
 // --- Overlay ---
 
+// An overlay link belongs to an account: while an admin has the account
+// disabled (enabled = 0) its link finds nobody, so no overlay route serves it.
 function getStreamerByOverlayToken(token) {
-  return db.prepare('SELECT * FROM streamers WHERE overlay_token = ?').get(token);
+  return db.prepare('SELECT * FROM streamers WHERE overlay_token = ? AND COALESCE(enabled, 1) = 1').get(token);
 }
 
+// Disabled accounts are left out, so the managers that start from this list
+// at boot (EventSub, StreamElements, sponsor rotation) skip them.
 function getOverlayEnabledStreamers() {
   return db.prepare(`
     SELECT * FROM streamers
     WHERE overlay_enabled = 1
+    AND COALESCE(enabled, 1) = 1
     AND broadcaster_access_token IS NOT NULL
     AND broadcaster_access_token != ''
   `).all();
@@ -2665,10 +2760,12 @@ function updateBotTokens(streamerId, accessToken, refreshToken, expiresAt, usern
   `).run(accessToken, refreshToken, expiresAt, username, streamerId);
 }
 
+// Disabled accounts are left out, so the chatbot does not join their channel at boot.
 function getChatbotEnabledStreamers() {
   return db.prepare(`
     SELECT * FROM streamers
     WHERE chatbot_enabled = 1
+    AND COALESCE(enabled, 1) = 1
     AND twitch_username IS NOT NULL
   `).all();
 }
@@ -4078,12 +4175,43 @@ function updateRacingIracingName(id, iracingName) { return _updateRacingIracingN
 function updateRacingProfile(id, displayName, iracingName) { return _updateRacingProfile.run({ id, display_name: displayName || null, iracing_name: iracingName || null }); }
 const _updateRacingAvatar = db.prepare('UPDATE racing_users SET avatar = @avatar WHERE id = @id');
 function updateRacingAvatar(id, avatar) { return _updateRacingAvatar.run({ id, avatar }); }
+// Deletes a Racing account and everything it owns (see "Removing an account"
+// above): web sessions, notifications and reset tokens; the sessions it
+// recorded with their laps and telemetry (matched by account or by its Bridge
+// id, as the sessions list does); the teams it owns with their members and
+// invites; and its memberships and invites in other teams. A linked streamer
+// is a separate account and is not touched. True when the user existed.
+const _deleteRacingUserAndData = db.transaction((id) => {
+  const user = db.prepare('SELECT bridge_id FROM racing_users WHERE id = ?').get(id);
+  if (!user) return false;
+  const bridge = user.bridge_id || '';
+  const tables = existingTables();
+  const named = new Set(['racing_users', 'streamers']);
+  const clear = (table, sql, ...params) => {
+    named.add(table);
+    if (tables.has(table)) db.prepare(sql).run(...params);
+  };
+
+  const recorded = "SELECT id FROM racing_sessions WHERE racing_user_id = ? OR (bridge_id = ? AND bridge_id != '')";
+  clear('lap_telemetry', `DELETE FROM lap_telemetry WHERE lap_id IN (SELECT id FROM session_laps WHERE session_id IN (${recorded}))`, id, bridge);
+  clear('session_laps', `DELETE FROM session_laps WHERE session_id IN (${recorded})`, id, bridge);
+  clear('racing_sessions', `DELETE FROM racing_sessions WHERE id IN (${recorded})`, id, bridge);
+
+  const owned = 'SELECT id FROM teams WHERE owner_id = ?';
+  clear('team_invites', `DELETE FROM team_invites WHERE team_id IN (${owned}) OR invited_user_id = ? OR invited_by = ?`, id, id, id);
+  clear('team_members', `DELETE FROM team_members WHERE team_id IN (${owned}) OR user_id = ?`, id, id);
+  clear('teams', 'DELETE FROM teams WHERE owner_id = ?', id);
+
+  clear('notifications', 'DELETE FROM notifications WHERE user_id = ?', id);
+  clear('password_reset_tokens', 'DELETE FROM password_reset_tokens WHERE user_id = ?', id);
+  clear('sessions', 'DELETE FROM sessions WHERE racing_user_id = ?', id);
+
+  deleteStrayForeignKeyRows('racing_users', id, named, tables);
+  return db.prepare('DELETE FROM racing_users WHERE id = ?').run(id).changes > 0;
+});
+
 function deleteRacingUser(id) {
-  const txn = db.transaction(() => {
-    db.prepare('DELETE FROM sessions WHERE racing_user_id = ?').run(id);
-    db.prepare('DELETE FROM racing_users WHERE id = ?').run(id);
-  });
-  return txn();
+  return _deleteRacingUserAndData(id);
 }
 function createRacingSession(sid, racingUserId, expiresAt) { return _createRacingSession.run(sid, racingUserId, expiresAt); }
 function createLinkedSession(sid, streamerId, racingUserId, expiresAt) { return _createLinkedSession.run(sid, streamerId, racingUserId, expiresAt); }

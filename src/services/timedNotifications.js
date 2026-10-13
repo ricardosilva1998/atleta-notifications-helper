@@ -141,6 +141,13 @@ const timedNotificationManager = {
     startRotation(streamerId);
   },
 
+  // Stops the sponsor image and chat rotations (an admin disabled the account).
+  stopForStreamer(streamerId) {
+    stopRotation(streamerId);
+    stopChatRotation(streamerId);
+    currentSponsorEvent.delete(streamerId);
+  },
+
   restartChatForStreamer(streamerId) {
     stopChatRotation(streamerId);
     startChatRotation(streamerId);

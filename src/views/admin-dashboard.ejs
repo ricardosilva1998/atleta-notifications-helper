@@ -4,6 +4,10 @@
 
 <% if (msg === 'updated') { %><div class="alert alert-success">Updated successfully.</div><% } %>
 <% if (msg === 'removed') { %><div class="alert alert-success">User removed.</div><% } %>
+<% if (msg === 'disabled') { %><div class="alert alert-success"><%= t('admin.msg.disabled') %></div><% } %>
+<% if (msg === 'enabled') { %><div class="alert alert-success"><%= t('admin.msg.enabled') %></div><% } %>
+<% if (msg === 'self_disable') { %><div class="alert alert-danger"><%= t('admin.msg.selfDisable') %></div><% } %>
+<% if (msg === 'self_remove') { %><div class="alert alert-danger"><%= t('admin.msg.selfRemove') %></div><% } %>
 <% if (msg === 'tier_updated') { %><div class="alert alert-success">Subscription tier updated.</div><% } %>
 <% if (msg === 'created') { %><div class="alert alert-success">Created successfully.</div><% } %>
 <% if (msg && msg.startsWith('test_sent_')) { %><div class="alert alert-success">Test notification sent to <%= msg.split('_')[2] %> channel(s).</div><% } %>
