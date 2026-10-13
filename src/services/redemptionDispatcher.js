@@ -6,15 +6,16 @@ const { chatManager } = require('./twitchChat');
 const { formatChatTemplate } = require('./redemptionTemplates');
 const { unavailableReason, refundRedemption } = require('./twitchRewards');
 
-// A redemption of a reward that must not play (switched off here, or deleted here
-// while Twitch still has it): the viewer's channel points go back to them (the
-// redemption is canceled on Twitch) and the redemption is logged.
+// A redemption of a reward that must not play (switched off here, deleted here
+// while Twitch still has it, or Channel Point Rewards switched off): the viewer's
+// channel points go back to them (the redemption is canceled on Twitch) and the
+// outcome goes on the redemption's history row (logId).
 //   refunded_disabled / refunded_deleted - canceled
 //   disabled - nothing to cancel: only a redemption still waiting in the queue
 //              (status unfulfilled) can be, and this one was not
 //   error - Twitch did not cancel it (the reason is in error_message)
-async function refundUnavailableReward(streamerId, reward, eventData, reason) {
-  const { twitchRedemptionId, twitchRewardId, rewardCost, username, userId, userInput, status, redeemedAt } = eventData;
+async function refundUnavailableReward(streamerId, logId, eventData, reason) {
+  const { twitchRedemptionId, twitchRewardId, status } = eventData;
   let outcome = 'disabled';
   let errorMessage = null;
 
@@ -29,20 +30,7 @@ async function refundUnavailableReward(streamerId, reward, eventData, reason) {
     }
   }
 
-  db.logRedemption({
-    streamer_id: streamerId,
-    reward_id: reward.id,
-    twitch_redemption_id: twitchRedemptionId,
-    twitch_reward_id: twitchRewardId,
-    user_id: userId,
-    user_login: username,
-    user_input: userInput || null,
-    cost: rewardCost,
-    status,
-    outcome,
-    error_message: errorMessage,
-    redeemed_at: redeemedAt,
-  });
+  db.setRedemptionOutcome(logId, outcome, errorMessage);
 }
 
 async function handleRedemption(streamerId, eventData) {
@@ -58,55 +46,43 @@ async function handleRedemption(streamerId, eventData) {
     redeemedAt,
   } = eventData;
 
-  // Step 1: look up reward in our DB
+  // Step 1: look up reward in our DB. A reward this app does not manage (made on
+  // Twitch itself or by another app) is not ours to play or refund: it is left
+  // alone, with no history row and no sync.
   const reward = db.getRewardByTwitchId(streamerId, twitchRewardId);
-  if (!reward) {
-    db.logRedemption({
-      streamer_id: streamerId,
-      twitch_redemption_id: twitchRedemptionId,
-      twitch_reward_id: twitchRewardId,
-      user_id: userId,
-      user_login: username,
-      user_input: userInput || null,
-      cost: rewardCost,
-      status,
-      outcome: 'error',
-      error_message: 'reward_not_in_db',
-      redeemed_at: redeemedAt,
-    });
-    // Async sync — reward may have been just created on Twitch before local row was written
-    const { syncRewards } = require('./twitchRewards');
-    syncRewards(streamerId).catch(e => console.error('[Redemption] background sync error:', e.message));
-    return;
-  }
+  if (!reward) return;
 
-  // Step 2: a reward that is switched off here, or deleted here but still live on
-  // Twitch (the delete was refused), must not play: the viewer is refunded instead.
-  const unavailable = unavailableReason(reward);
+  // Step 2: record the redemption before anything is done for it. Twitch can
+  // deliver the same redemption more than once; only the first is acted on.
+  const logId = db.claimRedemption({
+    streamer_id: streamerId,
+    reward_id: reward.id,
+    twitch_redemption_id: twitchRedemptionId,
+    twitch_reward_id: twitchRewardId,
+    user_id: userId,
+    user_login: username,
+    user_input: userInput || null,
+    cost: rewardCost,
+    status,
+    redeemed_at: redeemedAt,
+  });
+  if (!logId) return;
+
+  // Step 3: a reward that is switched off here, or deleted here but still live on
+  // Twitch (the delete was refused), or any reward while "Enable Channel Point
+  // Rewards" is off, must not play: the viewer is refunded instead.
+  const streamer = db.getStreamerById(streamerId);
+  const unavailable = unavailableReason(reward) || (streamer && streamer.cp_rewards_enabled ? null : 'disabled');
   if (unavailable) {
-    await refundUnavailableReward(streamerId, reward, eventData, unavailable);
+    await refundUnavailableReward(streamerId, logId, eventData, unavailable);
     return;
   }
 
-  // Step 3: verify file exists
+  // Step 4: verify file exists
   const mediaPath = path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId), reward.media_filename);
   if (!fs.existsSync(mediaPath)) {
-    db.logRedemption({
-      streamer_id: streamerId,
-      reward_id: reward.id,
-      twitch_redemption_id: twitchRedemptionId,
-      twitch_reward_id: twitchRewardId,
-      user_id: userId,
-      user_login: username,
-      user_input: userInput || null,
-      cost: rewardCost,
-      status,
-      outcome: 'refunded_no_file',
-      error_message: 'media file missing',
-      redeemed_at: redeemedAt,
-    });
+    db.setRedemptionOutcome(logId, 'refunded_no_file', 'media file missing');
     try {
-      const streamer = db.getStreamerById(streamerId);
       const { fulfillRedemption } = require('./twitchRewards');
       await fulfillRedemption(streamer, twitchRewardId, twitchRedemptionId, 'CANCELED');
       if (streamer && streamer.twitch_username && streamer.chatbot_enabled) {
@@ -121,7 +97,7 @@ async function handleRedemption(streamerId, eventData) {
     return;
   }
 
-  // Step 4: emit to overlay
+  // Step 5: emit to overlay
   const overlayEvent = {
     type: 'redemption',
     data: {
@@ -145,9 +121,8 @@ async function handleRedemption(streamerId, eventData) {
   };
   bus.emit(`overlay:${streamerId}`, overlayEvent);
 
-  // Step 5: optional chat message
+  // Step 6: optional chat message
   if (reward.chat_message_template) {
-    const streamer = db.getStreamerById(streamerId);
     if (streamer && streamer.chatbot_enabled && streamer.twitch_username) {
       const msg = formatChatTemplate(reward.chat_message_template, {
         user: username,
@@ -158,15 +133,15 @@ async function handleRedemption(streamerId, eventData) {
     }
   }
 
-  // Step 6: auto-fulfill after playback window
+  // Step 7: auto-fulfill after playback window
   if (reward.auto_fulfill) {
     const delay = (reward.max_play_seconds * 1000) + 1000;
     const timer = setTimeout(async () => {
       try {
-        const streamer = db.getStreamerById(streamerId);
-        if (!streamer) return;
+        const latest = db.getStreamerById(streamerId); // its token may have been refreshed since
+        if (!latest) return;
         const { fulfillRedemption } = require('./twitchRewards');
-        await fulfillRedemption(streamer, twitchRewardId, twitchRedemptionId, 'FULFILLED');
+        await fulfillRedemption(latest, twitchRewardId, twitchRedemptionId, 'FULFILLED');
       } catch (e) {
         console.error('[Redemption] auto-fulfill error:', e.message);
       }
@@ -174,20 +149,8 @@ async function handleRedemption(streamerId, eventData) {
     timer.unref();
   }
 
-  // Step 7: log redemption
-  db.logRedemption({
-    streamer_id: streamerId,
-    reward_id: reward.id,
-    twitch_redemption_id: twitchRedemptionId,
-    twitch_reward_id: twitchRewardId,
-    user_id: userId,
-    user_login: username,
-    user_input: userInput || null,
-    cost: rewardCost,
-    status,
-    outcome: 'played',
-    redeemed_at: redeemedAt,
-  });
+  // Step 8: the outcome
+  db.setRedemptionOutcome(logId, 'played', null);
 }
 
 module.exports = { handleRedemption, formatChatTemplate };

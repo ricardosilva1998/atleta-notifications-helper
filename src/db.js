@@ -29,6 +29,29 @@ function _migrationLog(label, err) {
   console.error('[DB migration] ' + label + ':', msg);
 }
 
+// One-time data migrations: a change to stored values (not to the schema) that
+// must happen once. Each runs on the first boot that has it and is recorded by
+// name in data_migrations, so a later boot never repeats it and a value a
+// streamer changes afterwards is left alone.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS data_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+} catch (e) { _migrationLog('data_migrations', e); }
+
+function _runOnce(name, migrate) {
+  try {
+    db.transaction(() => {
+      if (db.prepare('SELECT 1 FROM data_migrations WHERE name = ?').get(name)) return;
+      migrate();
+      db.prepare('INSERT INTO data_migrations (name) VALUES (?)').run(name);
+    })();
+  } catch (e) { _migrationLog(name, e); }
+}
+
 // --- Migrations ---
 
 // Migration 1: drop old schema if it doesn't have discord_user_id
@@ -3677,6 +3700,19 @@ try {
   }
 } catch (e) { _migrationLog('cp_rewards_enabled', e); }
 
+// Migration: the "Enable Channel Point Rewards" switch was saved but never read,
+// so enabled rewards played whatever it said. Redemptions now honour it.
+// Switching it on, once, for every streamer who has an enabled reward keeps
+// what plays today playing; a streamer who switches it off afterwards stays off.
+_runOnce('cp_rewards_enabled_for_existing_rewards', () => {
+  const r = db.prepare(`
+    UPDATE streamers SET cp_rewards_enabled = 1
+    WHERE COALESCE(cp_rewards_enabled, 0) = 0
+      AND id IN (SELECT streamer_id FROM channel_point_rewards WHERE enabled = 1)
+  `).run();
+  if (r.changes > 0) console.log(`[DB] Switched Channel Point Rewards on for ${r.changes} streamer(s) with an enabled reward`);
+});
+
 try {
   const cols = db.pragma('table_info(streamers)').map(c => c.name);
   if (!cols.includes('cp_affiliate_status')) {
@@ -4665,15 +4701,8 @@ function reorderRewards(streamerId, ids) {
   txn(ids);
 }
 
-function logRedemption(fields) {
-  const result = db.prepare(`
-    INSERT INTO channel_point_redemptions
-      (streamer_id, reward_id, twitch_redemption_id, twitch_reward_id,
-       user_id, user_login, user_input, cost, status, outcome, error_message, is_test, redeemed_at)
-    VALUES
-      (@streamer_id, @reward_id, @twitch_redemption_id, @twitch_reward_id,
-       @user_id, @user_login, @user_input, @cost, @status, @outcome, @error_message, @is_test, @redeemed_at)
-  `).run({
+function _redemptionParams(fields) {
+  return {
     streamer_id: fields.streamer_id,
     reward_id: fields.reward_id || null,
     twitch_redemption_id: fields.twitch_redemption_id,
@@ -4687,8 +4716,41 @@ function logRedemption(fields) {
     error_message: fields.error_message || null,
     is_test: fields.is_test ? 1 : 0,
     redeemed_at: fields.redeemed_at || null,
-  });
+  };
+}
+
+function logRedemption(fields) {
+  const result = db.prepare(`
+    INSERT INTO channel_point_redemptions
+      (streamer_id, reward_id, twitch_redemption_id, twitch_reward_id,
+       user_id, user_login, user_input, cost, status, outcome, error_message, is_test, redeemed_at)
+    VALUES
+      (@streamer_id, @reward_id, @twitch_redemption_id, @twitch_reward_id,
+       @user_id, @user_login, @user_input, @cost, @status, @outcome, @error_message, @is_test, @redeemed_at)
+  `).run(_redemptionParams(fields));
   return result.lastInsertRowid;
+}
+
+// Records a redemption the first time Twitch delivers it, before anything is
+// done for it, with the outcome 'pending' (setRedemptionOutcome() sets the real
+// one). Returns the new row's id, or null when this redemption id is already
+// recorded: a repeat delivery, which must not be acted on again.
+function claimRedemption(fields) {
+  const result = db.prepare(`
+    INSERT INTO channel_point_redemptions
+      (streamer_id, reward_id, twitch_redemption_id, twitch_reward_id,
+       user_id, user_login, user_input, cost, status, outcome, error_message, is_test, redeemed_at)
+    VALUES
+      (@streamer_id, @reward_id, @twitch_redemption_id, @twitch_reward_id,
+       @user_id, @user_login, @user_input, @cost, @status, 'pending', NULL, 0, @redeemed_at)
+    ON CONFLICT (twitch_redemption_id) DO NOTHING
+  `).run(_redemptionParams(fields));
+  return result.changes > 0 ? result.lastInsertRowid : null;
+}
+
+function setRedemptionOutcome(id, outcome, errorMessage) {
+  db.prepare('UPDATE channel_point_redemptions SET outcome = ?, error_message = ? WHERE id = ?')
+    .run(outcome, errorMessage || null, id);
 }
 
 function getRedemptionsRecent(streamerId, limit) {
@@ -5407,6 +5469,8 @@ module.exports = {
   setRewardSyncStatus,
   reorderRewards,
   logRedemption,
+  claimRedemption,
+  setRedemptionOutcome,
   getRedemptionsRecent,
   updateStreamerCpSync,
   clearStreamerBroadcasterScopes,

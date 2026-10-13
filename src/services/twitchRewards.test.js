@@ -494,7 +494,8 @@ describe('syncing with Twitch', () => {
 
 describe('a redemption of a reward that is off or deleted', () => {
   let id;
-  beforeEach(() => { id = addStreamer(); });
+  // Channel Point Rewards switched on, so only the reward itself decides.
+  beforeEach(() => { id = addStreamer({ cp_rewards_enabled: 1 }); });
 
   const redemption = (over = {}) => ({
     twitchRedemptionId: `red-${++counter}`, twitchRewardId: 'tw-1', rewardTitle: 'Air Horn', rewardCost: 500,
