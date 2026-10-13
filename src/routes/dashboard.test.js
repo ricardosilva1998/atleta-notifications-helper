@@ -976,3 +976,140 @@ describe('the test buttons', () => {
     assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }]]);
   });
 });
+
+// ── Overlay builder: what may be saved (N17) ─────────────────────────────
+
+describe('saving an overlay design', () => {
+  const bus = require('../services/overlayBus');
+  let id;
+  beforeEach(() => { id = addStreamer(); });
+
+  // What the builder's getControlValues() posts for a follow alert.
+  const design = (over = {}) => ({
+    bg_color: '#1a1a3e', accent_color: '#8888cc', border_color: '#8888cc', text_color: '#ffffff',
+    font_family: 'Outfit', username_size: 24, event_label: 'New Pit Crew Member', detail_text: 'just joined the race',
+    entrance_animation: 'slideDown', car_animation: 'zoomLR', screen_effect: 'default', animation_speed: 1,
+    card_width: 420, card_position: 'top-center', card_custom_x: null, card_custom_y: null, border_radius: 16,
+    sponsor_animation: 'fade', label_font_family: null, label_font_size: 10, label_font_weight: 700, label_color: null,
+    username_font_family: null, username_font_weight: 800, username_color: null,
+    detail_font_family: null, detail_font_size: 13, detail_font_weight: 400, detail_color: null,
+    text_align: 'center', card_side_icon: null, effect_amount: 1, effect_size: 1, effect_direction: 'down',
+    bg_opacity: 1, gradient_direction: '160deg', border_thickness: 2, border_opacity: 0.5,
+    glow_intensity: 0.25, shadow_opacity: 0.6, shadow_blur: 32, shadow_spread: 0,
+    ...over,
+  });
+  const save = (eventType, body, streamer = id) => request('POST', '/dashboard/overlay-builder/save', { streamer, body: { eventType, design: body } });
+  const stored = (streamer = id) => db.getAllOverlayDesigns(streamer);
+
+  test('saves what the builder sends and tells the open overlay', async () => {
+    const pushed = [];
+    const listener = (event) => pushed.push(event);
+    bus.on(`overlay:${id}`, listener);
+    try {
+      const res = await save('follow', design({ bg_color: '#112233', card_side_icon: '\u{1F3C6}', username_size: 30 }));
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.json(), { ok: true });
+    } finally {
+      bus.off(`overlay:${id}`, listener);
+    }
+    const [row] = stored();
+    assert.equal(row.event_type, 'follow');
+    assert.equal(row.bg_color, '#112233');
+    assert.equal(row.card_side_icon, '\u{1F3C6}');
+    assert.equal(row.username_size, 30);
+    assert.equal(row.font_family, 'Outfit');
+    assert.equal(pushed.length, 1);
+    assert.equal(pushed[0].type, 'config-update');
+    assert.equal(pushed[0].designs.follow.bg_color, '#112233');
+  });
+
+  test('every tab of the builder can be saved', async () => {
+    const types = ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember', 'timed'];
+    for (const type of types) assert.equal((await save(type, design())).status, 200, type);
+    assert.deepEqual(stored().map((d) => d.event_type).sort(), [...types].sort());
+  });
+
+  test('another alert type is a 400 with a message, and nothing is stored', async () => {
+    for (const type of ['chat', '', 'FOLLOW', "follow' OR '1'='1", '__proto__', undefined, 5, ['follow']]) {
+      const res = await save(type, design());
+      assert.equal(res.status, 400, String(type));
+      assert.deepEqual(res.json(), { ok: false, error: 'That alert type cannot be designed here.' });
+    }
+    assert.deepEqual(stored(), []);
+  });
+
+  test('a value the builder cannot produce is a 400 naming the field, and nothing is stored', async () => {
+    const cases = [
+      ['bg_color', 'red'], ['text_color', 'url(javascript:alert(1))'], ['accent_color', '#12345'],
+      ['username_size', 9999], ['username_size', -1], ['card_width', 50], ['animation_speed', 99], ['shadow_blur', 1e9],
+      ['font_family', 'Comic Sans MS'], ['label_font_family', "x'; color: red"],
+      ['entrance_animation', 'explode'], ['card_position', 'top-middle'], ['text_align', 'justify'],
+      ['card_side_icon', '<img src=x onerror=alert(1)>'], ['card_side_icon', '\u{1F3C6}'.repeat(9)],
+      ['event_label', 'x'.repeat(101)], ['detail_text', 'x'.repeat(301)],
+    ];
+    for (const [field, value] of cases) {
+      const res = await save('follow', design({ [field]: value }));
+      assert.equal(res.status, 400, `${field}=${String(value).slice(0, 20)}`);
+      const body = res.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.field, field);
+      assert.equal(body.error, `This design could not be saved: the value for "${field}" is not allowed.`);
+    }
+    assert.deepEqual(stored(), []);
+  });
+
+  test('a design that is missing, or not an object, is a 400 (it used to be a 500 when it was bad JSON text)', async () => {
+    for (const bad of [undefined, null, 5, [], 'not json', '{"bg_color":']) {
+      const res = await save('follow', bad);
+      assert.equal(res.status, 400, JSON.stringify(bad));
+      assert.equal(res.json().field, 'design');
+    }
+    assert.deepEqual(stored(), []);
+  });
+
+  test('a design sent as JSON text is still accepted', async () => {
+    assert.equal((await save('follow', JSON.stringify(design({ bg_color: '#445566' })))).status, 200);
+    assert.equal(stored()[0].bg_color, '#445566');
+  });
+
+  test('missing optional fields fall back to the stored defaults', async () => {
+    assert.equal((await save('raid', { bg_color: '#010203' })).status, 200);
+    const [row] = stored();
+    assert.equal(row.bg_color, '#010203');
+    assert.equal(row.accent_color, '#8888cc');
+    assert.equal(row.username_size, 24);
+    assert.equal(row.card_position, 'top-center');
+  });
+
+  test('extra fields in the post are not saved', async () => {
+    const res = await save('follow', design({ id: 99, streamer_id: 12345, created_at: 'x', notes: '<script>' }));
+    assert.equal(res.status, 200);
+    const [row] = stored();
+    assert.notEqual(row.id, 99);
+    assert.equal(row.streamer_id, id);
+    assert.equal('notes' in row, false);
+  });
+
+  test('saving never touches another streamer\'s designs', async () => {
+    const other = addStreamer();
+    await save('follow', design({ bg_color: '#aaaaaa' }), other);
+    await save('follow', design({ bg_color: '#bbbbbb' }));
+    assert.equal(stored(other)[0].bg_color, '#aaaaaa');
+    assert.equal(stored()[0].bg_color, '#bbbbbb');
+  });
+
+  test('reset needs one of the builder\'s alert types, and removes only that design', async () => {
+    await save('follow', design());
+    await save('raid', design());
+    const reset = (eventType) => request('POST', '/dashboard/overlay-builder/reset', { streamer: id, body: { eventType } });
+    for (const bad of ['', 'chat', undefined, 5]) {
+      const res = await reset(bad);
+      assert.equal(res.status, 400, String(bad));
+      assert.equal(res.json().ok, false);
+    }
+    assert.equal(stored().length, 2);
+    const res = await reset('follow');
+    assert.deepEqual(res.json(), { ok: true });
+    assert.deepEqual(stored().map((d) => d.event_type), ['raid']);
+  });
+});

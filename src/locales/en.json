@@ -258,6 +258,8 @@
   "chatbot.test.noText": "There is no text to send.",
   "chatbot.test.tooLong": "A test message can be at most {{max}} characters.",
   "chatbot.test.failed": "The test message could not be sent.",
+  "overlayBuilder.error.eventType": "That alert type cannot be designed here.",
+  "overlayBuilder.error.invalidField": "This design could not be saved: the value for \"{{field}}\" is not allowed.",
 
   "overlay.sounds.error.invalidType": "This alert type cannot have a custom sound",
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",

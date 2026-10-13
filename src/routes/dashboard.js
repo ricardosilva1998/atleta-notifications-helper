@@ -25,6 +25,7 @@ const {
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
+const { isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 
 const router = Router();
 
@@ -2169,11 +2170,19 @@ router.get('/overlay-builder', async (req, res) => {
   });
 });
 
+// Only what the builder itself can produce is saved (services/overlayDesign.js);
+// anything else is a 400 that names the field.
 router.post('/overlay-builder/save', (req, res) => {
-  const { eventType, design } = req.body;
-  if (!eventType || !design) return res.status(400).json({ error: 'Missing data' });
-  const parsed = typeof design === 'string' ? JSON.parse(design) : design;
-  db.saveOverlayDesign(req.streamer.id, eventType, parsed);
+  const t = res.locals.t;
+  const { eventType, design } = req.body || {};
+  if (!isBuilderEventType(eventType)) {
+    return res.status(400).json({ ok: false, error: t('overlayBuilder.error.eventType') });
+  }
+  const checked = validateOverlayDesign(design);
+  if (!checked.ok) {
+    return res.status(400).json({ ok: false, field: checked.field, error: t('overlayBuilder.error.invalidField', { field: checked.field }) });
+  }
+  db.saveOverlayDesign(req.streamer.id, eventType, checked.design);
 
   // Push updated designs to running overlay so it updates without reconnecting
   const bus = require('../services/overlayBus');
@@ -2186,8 +2195,10 @@ router.post('/overlay-builder/save', (req, res) => {
 });
 
 router.post('/overlay-builder/reset', (req, res) => {
-  const { eventType } = req.body;
-  if (!eventType) return res.status(400).json({ error: 'Missing event type' });
+  const { eventType } = req.body || {};
+  if (!isBuilderEventType(eventType)) {
+    return res.status(400).json({ ok: false, error: res.locals.t('overlayBuilder.error.eventType') });
+  }
   db.deleteOverlayDesign(req.streamer.id, eventType);
 
   // Push updated designs to running overlay

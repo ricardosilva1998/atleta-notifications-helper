@@ -2071,6 +2071,8 @@ async function saveCurrentDesign() {
       status.textContent = 'Saved!';
       status.classList.add('visible');
       setTimeout(() => status.classList.remove('visible'), 2000);
+    } else {
+      alert(data.error || 'Save failed');
     }
   } catch(e) {
     alert('Save failed: ' + e.message);
