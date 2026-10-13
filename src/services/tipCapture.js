@@ -9,8 +9,8 @@
 //
 // PayPal Orders v2 fields relied on, in the capture response (the route asks for
 // it with `Prefer: return=representation`: the default minimal capture response
-// has no payee, the full order does) and in the order read (GET) used when the
-// capture's outcome is unknown or PayPal says the order is already captured:
+// has no payee, the full order does) and in the order read (GET) used whenever
+// the capture answer is not a completed order, and by the daily reconcile pass:
 //   status                                    order status, must be COMPLETED
 //   purchase_units[0].payments.captures[0]    .status, .amount.value, .amount.currency_code
 //   purchase_units[0].payee                   .email_address and/or .merchant_id
@@ -123,16 +123,18 @@ function paypalIssue(res) {
   return [`order=${res.status || '?'}`, payment ? `capture=${payment.status || '?'}` : ''].filter(Boolean).join(' ');
 }
 
-// PayPal's answer when the order was captured already: by this same request
-// whose answer was lost or timed out, or by a reload that raced it. PayPal's
-// guidance for this error is to read the order to get the existing capture.
-function isAlreadyCaptured(res) {
-  return !!(res && Array.isArray(res.details) && res.details.some((d) => d && d.issue === 'ORDER_ALREADY_CAPTURED'));
+// PayPal's answer while another capture request for the same order is still
+// running (a reload that raced the first request): the outcome is not known yet.
+function isCaptureInProgress(res) {
+  return !!(res && Array.isArray(res.details) && res.details.some((d) => d && d.issue === 'PREVIOUS_REQUEST_IN_PROGRESS'));
 }
 
 // The page a refused return gets: HTTP status and locale key. Before PayPal is
-// called the link is just not usable; afterwards PayPal did not confirm the
-// payment, or (log_failed) it did but the tip could not be recorded yet.
+// called the link is just not usable. Afterwards PayPal refused the payment
+// (notConfirmed), its outcome is not known yet (capture_failed: the page asks
+// for a reload, which finishes an approved order or reads back a captured one,
+// and never for a new payment), or (log_failed) PayPal took it but the tip could
+// not be recorded yet.
 function tipErrorResponse(reason) {
   switch (reason) {
     case 'invalid_token':
@@ -140,7 +142,7 @@ function tipErrorResponse(reason) {
     case 'streamer_mismatch':
       return { status: 400, key: 'tip.error.expired' };
     case 'capture_failed':
-      return { status: 502, key: 'tip.error.notConfirmed' };
+      return { status: 502, key: 'tip.error.notConfirmedYet' };
     case 'log_failed':
       return { status: 500, key: 'tip.error.notRecorded' };
     default:
@@ -167,16 +169,19 @@ async function handleTipReturn({ streamer, orderId }, deps) {
   if (early === 'replay') return { ok: true, replay: true };
   if (early) return { ok: false, reason: early };
 
-  let order = null;
+  let answer = null;
   let failure = null;
   try {
-    order = await deps.capture(orderId);
+    answer = await deps.capture(orderId);
   } catch (e) {
     failure = e.message;
   }
-  // The capture may have gone through even though this request did not see it:
-  // then the order itself says what was paid, and a real tip is never lost.
-  if (failure || isAlreadyCaptured(order)) {
+  // Anything but a completed order leaves room for doubt: the capture may have
+  // gone through anyway (its answer lost or timed out, the order captured
+  // already, or a reload racing the first request). Then the order itself says
+  // what was paid, so a real tip is never lost.
+  let order = answer;
+  if (failure || !answer || answer.status !== 'COMPLETED') {
     try {
       order = await deps.getOrder(orderId);
     } catch (e) {
@@ -190,8 +195,11 @@ async function handleTipReturn({ streamer, orderId }, deps) {
     // A request for the same order (a reload) may have finished it meanwhile.
     const now = deps.getPendingTip(orderId);
     if (now && now.captured_at) return { ok: true, replay: true };
-    const reason = failure && verdict.reason === 'not_completed' ? 'capture_failed' : verdict.reason;
-    return { ok: false, reason, detail: failure || paypalIssue(order) };
+    // Not captured, but not settled either: PayPal could not be asked, or was
+    // still capturing for another request. A reload finishes it or reads it back.
+    const unsettled = !!failure || isCaptureInProgress(answer);
+    const reason = unsettled && verdict.reason === 'not_completed' ? 'capture_failed' : verdict.reason;
+    return { ok: false, reason, detail: [paypalIssue(answer), failure].filter(Boolean).join('; ') };
   }
 
   const isNew = deps.logDonation(verdict.donation);
@@ -203,6 +211,48 @@ async function handleTipReturn({ streamer, orderId }, deps) {
   return { ok: true, isNew, donation: verdict.donation };
 }
 
+// Daily, before old pending rows are deleted: tips PayPal captured that the
+// return page never recorded (the capture answer was lost and the viewer did not
+// reload). Every unfinished row at least an hour old gets one order read; a
+// captured order that passes the same checks as the return page is recorded and
+// counted toward the tip goal, without the overlay alert or the chat thank-you
+// (hours later they would be stale). Anything else is left as it is, and a
+// failure only skips its own row.
+//   listUnfinished()           -> pending rows without captured_at, at least 1 h old
+//   getStreamer(id)            -> the streamer row, or null
+//   getOrder(orderId)          -> the order as PayPal has it now (may throw)
+//   logDonation(streamer, d)   -> true / false / null, as for handleTipReturn
+//   markCaptured(orderId)
+//   recordGoal(streamer, d)    -> tip goal progress
+//   log(line), logError(line)
+// Returns how many tips it recovered.
+async function reconcilePendingTips(deps) {
+  let recovered = 0;
+  for (const pending of deps.listUnfinished()) {
+    try {
+      const streamer = deps.getStreamer(pending.streamer_id);
+      if (!streamer) continue;
+      const order = await deps.getOrder(pending.order_id);
+      const verdict = decideTipCapture({ streamer, pending, capture: order });
+      if (!verdict.ok) continue;
+      const isNew = deps.logDonation(streamer, verdict.donation);
+      if (isNew !== true && isNew !== false) {
+        deps.logError(`[Tip] Reconcile: order ${pending.order_id} could not be recorded; left for the next run`);
+        continue;
+      }
+      deps.markCaptured(pending.order_id);
+      if (!isNew) continue;
+      deps.recordGoal(streamer, verdict.donation);
+      recovered++;
+      const d = verdict.donation;
+      deps.log(`[Tip] Recovered order ${pending.order_id} for ${streamer.twitch_username}: ${d.currency} ${d.amount} from ${d.donorName}, recorded without an alert`);
+    } catch (e) {
+      deps.logError(`[Tip] Reconcile: order ${pending.order_id} failed: ${e.message}`);
+    }
+  }
+  return recovered;
+}
+
 module.exports = {
   tipInput,
   orderPayeeMerchantId,
@@ -211,6 +261,7 @@ module.exports = {
   handleTipReturn,
   paypalIssue,
   tipErrorResponse,
+  reconcilePendingTips,
   DONOR_NAME_MAX,
   MESSAGE_MAX,
 };

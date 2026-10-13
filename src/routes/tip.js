@@ -1,7 +1,10 @@
 const { Router } = require('express');
 const config = require('../config');
 const db = require('../db');
-const { tipInput, orderPayeeMerchantId, handleTipReturn, tipErrorResponse } = require('../services/tipCapture');
+const {
+  tipInput, orderPayeeMerchantId, handleTipReturn, tipErrorResponse, reconcilePendingTips,
+} = require('../services/tipCapture');
+const { isStreamerDisabled } = require('../services/streamerAccess');
 
 const router = Router();
 
@@ -51,8 +54,9 @@ async function getPayPalOrder(orderId) {
 
 // --- Tip page rendering ---
 
+// An account an admin disabled has no tip page: it answers like an unknown one.
 function tipPageAvailable(streamer) {
-  return !!(streamer && streamer.donation_page_enabled && streamer.paypal_email);
+  return !!(streamer && !isStreamerDisabled(streamer) && streamer.donation_page_enabled && streamer.paypal_email);
 }
 
 function renderTipPage(res, streamer, { status = 200, success = false, error = null } = {}) {
@@ -86,6 +90,25 @@ function announceTip(streamer, d) {
       message: d.message,
     });
   } catch (e) {}
+}
+
+// A PayPal tip into the donation history: true for a new row, false if it was
+// already there, null (not false) on a database error, so an error is never
+// mistaken for a duplicate.
+function logPayPalDonation(streamer, d) {
+  try {
+    return db.logDonation(streamer.id, {
+      source: 'paypal', donor_name: d.donorName, amount: d.amount, currency: d.currency,
+      message: d.message, external_id: d.orderId,
+    });
+  } catch (e) {
+    console.error('[Tip] logDonation error:', e.message);
+    return null;
+  }
+}
+
+function markTipCaptured(orderId) {
+  try { db.markPendingTipCaptured(orderId); } catch (e) { console.error('[Tip] markPendingTipCaptured error:', e.message); }
 }
 
 // ─── Public tip page ──────────────────────────────────────────────────────────
@@ -168,27 +191,23 @@ router.get('/:username/success', async (req, res) => {
   if (!streamer) return res.status(404).send('Streamer not found.');
 
   const orderId = typeof req.query.token === 'string' ? req.query.token : ''; // PayPal passes the order id as 'token'
-  if (!/^[A-Z0-9-]{10,}$/i.test(orderId)) return tipError(res, streamer, 'invalid_token');
+  const validOrderId = /^[A-Z0-9-]{10,}$/i.test(orderId);
+  // A disabled account answers like an unknown one, except for an order already
+  // started on its page: that payment is still captured and recorded, so money
+  // paid moments before the account was disabled is not lost.
+  const disabled = isStreamerDisabled(streamer);
+  if (disabled) {
+    const pending = validOrderId ? db.getPendingTip(orderId) : null;
+    if (!pending || Number(pending.streamer_id) !== Number(streamer.id)) return res.status(404).send('Streamer not found.');
+  }
+  if (!validOrderId) return tipError(res, streamer, 'invalid_token');
 
   const result = await handleTipReturn({ streamer, orderId }, {
     getPendingTip: (id) => db.getPendingTip(id),
     capture: capturePayPalOrder,
     getOrder: getPayPalOrder,
-    markCaptured: (id) => {
-      try { db.markPendingTipCaptured(id); } catch (e) { console.error('[Tip] markPendingTipCaptured error:', e.message); }
-    },
-    // null (not false) on a database error, so it is not mistaken for a duplicate
-    logDonation: (d) => {
-      try {
-        return db.logDonation(streamer.id, {
-          source: 'paypal', donor_name: d.donorName, amount: d.amount, currency: d.currency,
-          message: d.message, external_id: d.orderId,
-        });
-      } catch (e) {
-        console.error('[Tip] logDonation error:', e.message);
-        return null;
-      }
-    },
+    markCaptured: markTipCaptured,
+    logDonation: (d) => logPayPalDonation(streamer, d),
     announce: (d) => announceTip(streamer, d),
   });
 
@@ -203,7 +222,29 @@ router.get('/:username/success', async (req, res) => {
   } else if (!result.replay) {
     console.log(`[Tip] Order ${orderId} for ${streamer.twitch_username} was already in the donation history`);
   }
+  // A disabled account has no tip page to go back to, so the viewer is thanked here.
+  if (disabled) return renderTipPage(res, streamer, { success: true });
   res.redirect(`/tip/${streamer.twitch_username}?success=1`);
 });
 
+// ─── Daily reconcile, run by the donation cleanup in index.js ────────────────
+
+// Tips PayPal captured that the return page never recorded are recorded and
+// counted toward the goal, without the alert or the chat thank-you (see
+// reconcilePendingTips in services/tipCapture.js). Resolves to how many it recovered.
+function reconcileTips() {
+  return reconcilePendingTips({
+    listUnfinished: () => db.getUnfinishedPendingTips(),
+    getStreamer: (id) => db.getStreamerById(id),
+    getOrder: getPayPalOrder,
+    logDonation: logPayPalDonation,
+    markCaptured: markTipCaptured,
+    recordGoal: (streamer, d) => require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency),
+    log: (line) => console.log(line),
+    logError: (line) => console.error(line),
+  });
+}
+
 module.exports = router;
+// Not a route: exported for the daily cleanup job, the way customOverlays.js exports its helpers.
+module.exports.reconcilePendingTips = reconcileTips;

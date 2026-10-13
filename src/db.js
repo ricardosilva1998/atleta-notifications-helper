@@ -4960,6 +4960,17 @@ function markPendingTipCaptured(orderId) {
   ).run(orderId).changes > 0;
 }
 
+// Unfinished PayPal tips for the daily reconcile pass, oldest first. Younger
+// than an hour may still be on their way back from PayPal; there is no upper
+// age bound, so a row is still checked on the run that is about to delete it.
+function getUnfinishedPendingTips(limit = 500) {
+  return db.prepare(`
+    SELECT * FROM pending_tips
+    WHERE captured_at IS NULL AND created_at <= datetime('now', '-1 hour')
+    ORDER BY created_at LIMIT ?
+  `).all(limit);
+}
+
 function cleanupOldPendingTips() {
   const result = db.prepare("DELETE FROM pending_tips WHERE created_at < datetime('now', '-1 day')").run();
   if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} pending PayPal tips older than 24 hours`);
@@ -5371,6 +5382,7 @@ module.exports = {
   createPendingTip,
   getPendingTip,
   markPendingTipCaptured,
+  getUnfinishedPendingTips,
   cleanupOldPendingTips,
   getActiveTipGoal,
   getTipGoalHistory,

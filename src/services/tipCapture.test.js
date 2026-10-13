@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   tipInput, orderPayeeMerchantId, checkPendingTip, decideTipCapture, handleTipReturn, paypalIssue, tipErrorResponse,
-  DONOR_NAME_MAX, MESSAGE_MAX,
+  reconcilePendingTips, DONOR_NAME_MAX, MESSAGE_MAX,
 } = require('./tipCapture');
 
 // ── Fixtures (synthetic values only) ────────────────────────────────
@@ -169,6 +169,10 @@ const ORDER = 'ORDER-1234567890';
 const ALREADY_CAPTURED = {
   name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'ORDER_ALREADY_CAPTURED' }], debug_id: 'abc123',
 };
+// PayPal's answer while another capture request for the order is still running.
+const IN_PROGRESS = { name: 'CONFLICT', details: [{ issue: 'PREVIOUS_REQUEST_IN_PROGRESS' }], debug_id: 'def456' };
+// An order the buyer approved that PayPal has not captured (yet).
+const APPROVED_ORDER = { id: ORDER, status: 'APPROVED', purchase_units: [{ payee: { email_address: 'streamer@example.com' } }] };
 
 // `order` is what reading the order (GET) returns; tests swap deps for sequences.
 function harness({ pending = pendingRow(), capture = captureResponse(), captureThrows = null,
@@ -391,6 +395,43 @@ describe('handleTipReturn', () => {
     assert.equal(h.calls.announce.length, 1);
     assert.ok(h.rows.get(ORDER).captured_at);
   });
+
+  test('a capture still running for another request: the order is read, and a captured one counts once', async () => {
+    const h = harness({ capture: IN_PROGRESS });
+    const result = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(result.ok, true);
+    assert.equal(result.isNew, true);
+    assert.equal(h.calls.getOrder, 1);
+    assert.equal(h.calls.announce.length, 1);
+  });
+
+  test('a capture still running whose order is not captured yet asks for a reload, not a refusal', async () => {
+    const h = harness({ capture: IN_PROGRESS, order: APPROVED_ORDER });
+    const result = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'capture_failed');
+    assert.match(result.detail, /PREVIOUS_REQUEST_IN_PROGRESS/);
+    assert.equal(h.calls.logDonation, 0);
+    assert.equal(h.calls.announce.length, 0);
+    assert.equal(h.rows.get(ORDER).captured_at, null);
+  });
+
+  test('any capture answer that is not a completed order is checked against the order', async () => {
+    // A declined payment method: PayPal still holds the order as approved, so it is refused.
+    const declined = { name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'INSTRUMENT_DECLINED' }], debug_id: 'abc123' };
+    for (const answer of [declined, { name: 'NOT_AUTHORIZED' }, { id: ORDER, status: 'APPROVED' }, {}]) {
+      const h = harness({ capture: answer, order: APPROVED_ORDER });
+      const result = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+      assert.equal(h.calls.getOrder, 1, JSON.stringify(answer));
+      assert.equal(result.reason, 'not_completed', JSON.stringify(answer));
+      assert.equal(h.calls.announce.length, 0);
+    }
+    // ...and a captured one is counted, whatever the capture call answered.
+    const h = harness({ capture: declined });
+    const counted = await handleTipReturn({ streamer: STREAMER, orderId: ORDER }, h.deps);
+    assert.equal(counted.ok, true);
+    assert.equal(h.calls.announce.length, 1);
+  });
 });
 
 describe('tipErrorResponse', () => {
@@ -401,8 +442,104 @@ describe('tipErrorResponse', () => {
     for (const reason of ['not_completed', 'bad_amount', 'payee_mismatch']) {
       assert.deepEqual(tipErrorResponse(reason), { status: 400, key: 'tip.error.notConfirmed' }, reason);
     }
-    assert.deepEqual(tipErrorResponse('capture_failed'), { status: 502, key: 'tip.error.notConfirmed' });
+    // Outcome unknown: the page asks for a reload (which finishes or reads back the order), never a new payment.
+    assert.deepEqual(tipErrorResponse('capture_failed'), { status: 502, key: 'tip.error.notConfirmedYet' });
     assert.deepEqual(tipErrorResponse('log_failed'), { status: 500, key: 'tip.error.notRecorded' });
+  });
+});
+
+// ── reconcilePendingTips: the daily pass with stubbed effects ──
+
+function reconcileWorld(rows, orders) {
+  const state = { rows: rows.map((r) => ({ ...r })), logged: new Set(), goal: [], lines: [], errors: [], reads: [] };
+  const deps = {
+    listUnfinished: () => state.rows.filter((r) => !r.captured_at).map((r) => ({ ...r })),
+    getStreamer: (id) => (Number(id) === STREAMER.id ? STREAMER : null),
+    getOrder: async (id) => {
+      state.reads.push(id);
+      if (orders[id] instanceof Error) throw orders[id];
+      return orders[id];
+    },
+    // Same rule as db.logDonation: one row per PayPal order
+    logDonation: (streamer, d) => {
+      if (state.logged.has(d.orderId)) return false;
+      state.logged.add(d.orderId);
+      return true;
+    },
+    markCaptured: (id) => { const row = state.rows.find((r) => r.order_id === id); if (row) row.captured_at = 'now'; },
+    recordGoal: (streamer, d) => state.goal.push(d),
+    log: (line) => state.lines.push(line),
+    logError: (line) => state.errors.push(line),
+  };
+  return { deps, state };
+}
+
+const capturedOrder = (id, over) => ({ ...captureResponse(over), id });
+
+describe('reconcilePendingTips', () => {
+  test('a captured order is recorded and counted toward the goal once; the next run does nothing', async () => {
+    const w = reconcileWorld([pendingRow({ order_id: 'O1' })], { O1: capturedOrder('O1') });
+    assert.equal(await reconcilePendingTips(w.deps), 1);
+    assert.deepEqual([...w.state.logged], ['O1']);
+    assert.equal(w.state.goal.length, 1);
+    assert.equal(w.state.goal[0].amount, 10);
+    assert.ok(w.state.rows[0].captured_at);
+    assert.equal(w.state.lines.length, 1);
+    assert.match(w.state.lines[0], /O1/);
+    assert.equal(await reconcilePendingTips(w.deps), 0);
+    assert.equal(w.state.goal.length, 1);
+    assert.deepEqual(w.state.reads, ['O1'], 'a recorded tip is not read again');
+  });
+
+  test('orders PayPal has not captured, refused captures and failed reads are left as they are', async () => {
+    const rows = ['O2', 'O3', 'O4'].map((order_id) => pendingRow({ order_id }));
+    const w = reconcileWorld(rows, {
+      O2: APPROVED_ORDER,
+      O3: new Error('fetch failed'),
+      O4: capturedOrder('O4', { payee: { email_address: 'someone-else@example.com' } }),
+    });
+    assert.equal(await reconcilePendingTips(w.deps), 0);
+    assert.equal(w.state.logged.size, 0);
+    assert.equal(w.state.goal.length, 0);
+    assert.ok(w.state.rows.every((r) => !r.captured_at));
+    assert.deepEqual(w.state.reads, ['O2', 'O3', 'O4']);
+    assert.equal(w.state.errors.length, 1);
+    assert.match(w.state.errors[0], /O3.*fetch failed/);
+  });
+
+  test('a failing row does not stop the others', async () => {
+    const rows = ['O5', 'O3', 'O1'].map((order_id) => pendingRow({ order_id }));
+    const w = reconcileWorld(rows, { O3: new Error('fetch failed'), O1: capturedOrder('O1') });
+    let lookups = 0;
+    w.deps.getStreamer = () => { lookups++; if (lookups === 1) throw new Error('database is locked'); return STREAMER; };
+    assert.equal(await reconcilePendingTips(w.deps), 1);
+    assert.equal(w.state.errors.length, 2);
+    assert.match(w.state.errors[0], /O5.*database is locked/);
+    assert.match(w.state.errors[1], /O3.*fetch failed/);
+    assert.deepEqual([...w.state.logged], ['O1']);
+  });
+
+  test('a tip that cannot be recorded is left unmarked for the next run', async () => {
+    const w = reconcileWorld([pendingRow({ order_id: 'O1' })], { O1: capturedOrder('O1') });
+    w.deps.logDonation = () => null; // database error
+    assert.equal(await reconcilePendingTips(w.deps), 0);
+    assert.equal(w.state.rows[0].captured_at, null);
+    assert.equal(w.state.goal.length, 0);
+    assert.equal(w.state.errors.length, 1);
+  });
+
+  test('a tip already in the history is only marked, not counted again', async () => {
+    const w = reconcileWorld([pendingRow({ order_id: 'O1' })], { O1: capturedOrder('O1') });
+    w.state.logged.add('O1');
+    assert.equal(await reconcilePendingTips(w.deps), 0);
+    assert.ok(w.state.rows[0].captured_at);
+    assert.equal(w.state.goal.length, 0);
+  });
+
+  test('a row whose streamer is gone is skipped without asking PayPal', async () => {
+    const w = reconcileWorld([pendingRow({ order_id: 'O1', streamer_id: 99 })], { O1: capturedOrder('O1') });
+    assert.equal(await reconcilePendingTips(w.deps), 0);
+    assert.deepEqual(w.state.reads, []);
   });
 });
 

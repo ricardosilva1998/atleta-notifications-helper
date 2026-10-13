@@ -33,12 +33,20 @@ let server;
 let port;
 let streamerA;
 let streamerB;
+let streamerC; // switched off by an admin in the disabled-account tests
+let tipRoutes;
 const saved = {};
 
 // ── Fake PayPal ──────────────────────────────────────────────────────
 
 const ALREADY_CAPTURED = { name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'ORDER_ALREADY_CAPTURED' }], debug_id: 'dbg1' };
+const IN_PROGRESS = { name: 'CONFLICT', details: [{ issue: 'PREVIOUS_REQUEST_IN_PROGRESS' }], debug_id: 'dbg2' };
 let paypal;
+
+// An order the buyer approved that PayPal has not captured (yet).
+function approvedOrder(id) {
+  return { id, status: 'APPROVED', purchase_units: [{ reference_id: 'default', payee: { email_address: 'tips-a@example.com', merchant_id: 'MERCHANT12345' } }] };
+}
 
 function reply(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -149,13 +157,15 @@ before(async () => {
     VALUES (?, ?, ?, ?, 1, 1, 'EUR')`);
   streamerA = Number(add.run('100000000000000001', 'a', 'tips_a', 'Tips-A@Example.com').lastInsertRowid);
   streamerB = Number(add.run('100000000000000002', 'b', 'tips_b', 'tips-b@example.com').lastInsertRowid);
+  streamerC = Number(add.run('100000000000000003', 'c', 'tips_c', 'tips-c@example.com').lastInsertRowid);
 
   const app = express();
   app.set('view engine', 'ejs');
   app.set('views', path.join(SRC, 'views'));
   app.use(express.urlencoded({ extended: true }));
   app.use((req, res, next) => { res.locals.t = (key, params) => t('en', key, params); next(); });
-  app.use('/tip', require('./tip'));
+  tipRoutes = require('./tip');
+  app.use('/tip', tipRoutes);
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   port = server.address().port;
 
@@ -340,10 +350,16 @@ describe('GET /tip/:username/success', () => {
       { name: 'declined capture', status: 400, key: 'tip.error.notConfirmed', reason: 'not_completed',
         setup: () => { paypal.capture = (id) => reply(201, completedOrder(id, { captureStatus: 'DECLINED' })); },
         run: async () => request('GET', `/tip/tips_a/success?token=${await startTip()}`) },
-      { name: 'PayPal unreachable', status: 502, key: 'tip.error.notConfirmed', reason: 'capture_failed',
+      { name: 'PayPal unreachable', status: 502, key: 'tip.error.notConfirmedYet', reason: 'capture_failed',
         setup: () => {
           paypal.capture = () => { throw new Error('fetch failed'); };
           paypal.getOrder = () => { throw new Error('fetch failed'); };
+        },
+        run: async () => request('GET', `/tip/tips_a/success?token=${await startTip()}`) },
+      { name: 'PayPal still capturing for another request', status: 502, key: 'tip.error.notConfirmedYet', reason: 'capture_failed',
+        setup: () => {
+          paypal.capture = () => reply(409, IN_PROGRESS);
+          paypal.getOrder = (id) => reply(200, approvedOrder(id));
         },
         run: async () => request('GET', `/tip/tips_a/success?token=${await startTip()}`) },
     ];
@@ -361,5 +377,118 @@ describe('GET /tip/:username/success', () => {
         }
       });
     }
+  });
+
+  test('when the outcome is not known yet, the page asks for a reload and warns against paying again', () => {
+    const message = t('en', 'tip.error.notConfirmedYet');
+    assert.match(message, /reload this page/i);
+    assert.match(message, /do not pay again/i);
+  });
+
+  test('a reload racing the first capture (PayPal: request in progress) reads the order and thanks the viewer once', async () => {
+    const order = await startTip();
+    paypal.capture = () => reply(409, IN_PROGRESS);
+    const res = await request('GET', `/tip/tips_a/success?token=${order}`);
+    assert.equal(res.headers.location, THANK_YOU);
+    assert.equal(orderReads().length, 1);
+    assertAnnouncedOnce();
+  });
+});
+
+describe('an account an admin disabled', () => {
+  const setEnabled = (on) => db.db.prepare('UPDATE streamers SET enabled = ? WHERE id = ?').run(on ? 1 : 0, streamerC);
+  beforeEach(() => setEnabled(false));
+  after(() => setEnabled(true));
+
+  test('its tip page, order creation and returns answer like an unknown streamer', async () => {
+    const pages = [
+      ['GET', '/tip/tips_c', '/tip/nobody'],
+      ['POST', '/tip/tips_c/create', '/tip/nobody/create'],
+      ['GET', '/tip/tips_c/success?token=TESTORDER99999999', '/tip/nobody/success?token=TESTORDER99999999'],
+    ];
+    for (const [method, disabledPath, unknownPath] of pages) {
+      const form = method === 'POST' ? { amount: '5' } : undefined;
+      const disabled = await request(method, disabledPath, form);
+      const unknown = await request(method, unknownPath, form);
+      assert.equal(disabled.status, 404, disabledPath);
+      assert.equal(disabled.status, unknown.status, disabledPath);
+      assert.equal(disabled.text, unknown.text, disabledPath);
+    }
+    assert.equal(paypal.calls.length, 0);
+    assert.equal(count('pending_tips'), 0);
+  });
+
+  test('an order started before it was disabled is still captured and recorded', async () => {
+    setEnabled(true);
+    const order = await startTip('tips_c');
+    setEnabled(false);
+    const res = await request('GET', `/tip/tips_c/success?token=${order}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes('Thank you for your donation'), 'the viewer is thanked on the spot');
+    assert.equal(captureCalls().length, 1);
+    const rows = db.db.prepare('SELECT * FROM donations').all();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].streamer_id, streamerC);
+    assert.equal(rows[0].external_id, order);
+    assert.ok(db.getPendingTip(order).captured_at);
+
+    const again = await request('GET', `/tip/tips_c/success?token=${order}`);
+    assert.equal(again.status, 200);
+    assert.equal(captureCalls().length, 1, 'a reload does not capture again');
+    assert.equal(count('donations'), 1);
+  });
+});
+
+describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
+  function addPending(orderId, hoursOld) {
+    db.createPendingTip({ order_id: orderId, streamer_id: streamerA, donor_name: 'Viewer One', message: 'gg', payee_merchant_id: 'MERCHANT12345' });
+    db.db.prepare("UPDATE pending_tips SET created_at = datetime('now', ?) WHERE order_id = ?").run(`-${Math.round(hoursOld * 60)} minutes`, orderId);
+  }
+
+  test('a captured order is recorded once, without an alert or chat; the next run does nothing', async () => {
+    addPending('RECONCILE00000001', 3);
+    assert.equal(await tipRoutes.reconcilePendingTips(), 1);
+    assert.equal(count('donations'), 1);
+    assert.equal(db.db.prepare('SELECT external_id FROM donations').get().external_id, 'RECONCILE00000001');
+    assert.equal(db.getActiveTipGoal(streamerA).current_amount, 7);
+    assert.equal(goalUpdates.length, 1, 'the goal counts it');
+    assert.equal(alerts.length, 0, 'no stale overlay alert');
+    assert.equal(chatSends.length, 0, 'no stale chat thank-you');
+    assert.equal(count('overlay_events'), 0);
+    assert.ok(db.getPendingTip('RECONCILE00000001').captured_at);
+    assert.ok(logs.some((l) => l.includes('Recovered order RECONCILE00000001')));
+    assert.equal(orderReads().length, 1);
+    assert.equal(orderReads()[0].timeout, true);
+
+    assert.equal(await tipRoutes.reconcilePendingTips(), 0);
+    assert.equal(count('donations'), 1);
+    assert.equal(goalUpdates.length, 1);
+    assert.equal(orderReads().length, 1, 'a recorded tip is not read again');
+  });
+
+  test('uncaptured orders and failed reads are left, rows under an hour are skipped, rows over 24 h are still deleted', async () => {
+    addPending('RECONCILE00000002', 2); // approved, never captured
+    addPending('RECONCILE00000003', 5); // the order read fails
+    addPending('RECONCILE00000004', 0.5); // too young: maybe still on its way back from PayPal
+    addPending('RECONCILE00000005', 30); // over 24 h and not captured
+    addPending('RECONCILE00000006', 26); // over 24 h and captured: its last chance before deletion
+    paypal.getOrder = (id) => {
+      if (id === 'RECONCILE00000003') throw new Error('fetch failed');
+      if (id === 'RECONCILE00000002' || id === 'RECONCILE00000005') return reply(200, approvedOrder(id));
+      return reply(200, completedOrder(id));
+    };
+    assert.equal(await tipRoutes.reconcilePendingTips(), 1);
+    const read = orderReads().map((c) => c.url.split('/').pop());
+    assert.ok(!read.includes('RECONCILE00000004'), 'rows under an hour old are not read');
+    assert.deepEqual(db.db.prepare('SELECT external_id FROM donations').all().map((r) => r.external_id), ['RECONCILE00000006']);
+    for (const id of ['RECONCILE00000002', 'RECONCILE00000003', 'RECONCILE00000004', 'RECONCILE00000005']) {
+      assert.equal(db.getPendingTip(id).captured_at, null, id);
+    }
+    assert.ok(logs.some((l) => l.includes('RECONCILE00000003') && l.includes('fetch failed')));
+    assert.equal(alerts.length, 0);
+
+    db.cleanupOldPendingTips();
+    const left = db.db.prepare('SELECT order_id FROM pending_tips ORDER BY order_id').all().map((r) => r.order_id);
+    assert.deepEqual(left, ['RECONCILE00000002', 'RECONCILE00000003', 'RECONCILE00000004']);
   });
 });

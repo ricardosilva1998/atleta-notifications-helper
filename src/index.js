@@ -96,9 +96,11 @@ client.once('clientReady', async () => {
     setInterval(() => { try { db.cleanupOldOverlayEvents(); } catch (e) {} }, 6 * 60 * 60 * 1000);
     db.cleanupOldOverlayEvents();
 
-    // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours)
-    const cleanupDonations = () => {
+    // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours).
+    // Before old pending tips are deleted, tips PayPal captured that were never recorded are recovered.
+    const cleanupDonations = async () => {
       try { db.cleanupOldDonations(); } catch (e) {}
+      try { await require('./routes/tip').reconcilePendingTips(); } catch (e) { console.error('[Tip] Reconcile error:', e.message); }
       try { db.cleanupOldPendingTips(); } catch (e) {}
     };
     setInterval(cleanupDonations, 24 * 60 * 60 * 1000);
