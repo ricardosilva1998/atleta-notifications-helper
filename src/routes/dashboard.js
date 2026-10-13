@@ -1231,6 +1231,15 @@ router.get('/chatbot/mod-log', (req, res) => {
 
 // --- YouTube Chatbot ---
 
+// Error codes of the YouTube chatbot page -> locale keys. The URL carries only a
+// code; the page turns a known one into text, so a link cannot make it say anything else.
+const YT_CHATBOT_ERRORS = {
+  not_connected: 'ytChatbot.error.notConnected',
+  token_refresh: 'ytChatbot.error.tokenRefresh',
+  no_live_stream: 'ytChatbot.error.noLiveStream',
+  connect_failed: 'ytChatbot.error.connectFailed',
+};
+
 // YouTube chatbot config page
 router.get('/youtube-chatbot', async (req, res) => {
   const commands = db.getChatCommands(req.streamer.id);
@@ -1270,7 +1279,7 @@ router.get('/youtube-chatbot', async (req, res) => {
     ytLiveTitle,
     connected: req.query.connected,
     disconnected: req.query.disconnected,
-    error: req.query.error,
+    error: errorMessage(YT_CHATBOT_ERRORS, req.query.error, res.locals.t),
   });
 });
 
@@ -1356,13 +1365,13 @@ router.post('/youtube-chatbot/test-chat/:eventType', limitTests, async (req, res
   try {
     const { youtubeChatManager } = require('../services/youtubeLiveChat');
     if (!youtubeChatManager.isPolling(req.streamer.id)) {
-      return res.json({ ok: false, error: 'Bot is not connected to live chat. Click "Connect to My Live Stream" first.' });
+      return res.json({ ok: false, error: res.locals.t('ytChatbot.error.botNotPolling') });
     }
 
     const streamer = req.streamer;
     const templateKey = `yt_chat_${type}_template`;
     const template = streamer[templateKey];
-    if (!template) return res.json({ ok: false, error: 'No template configured for this event.' });
+    if (!template) return res.json({ ok: false, error: res.locals.t('ytChatbot.error.noTemplate') });
 
     let message = template;
     for (const [key, value] of Object.entries(data)) {
@@ -1371,7 +1380,7 @@ router.post('/youtube-chatbot/test-chat/:eventType', limitTests, async (req, res
 
     const { refreshYoutubeBotToken, sendYoutubeChatMessage } = require('../services/youtube');
     const token = await refreshYoutubeBotToken();
-    if (!token) return res.json({ ok: false, error: 'Bot token not configured.' });
+    if (!token) return res.json({ ok: false, error: res.locals.t('ytChatbot.error.botToken') });
 
     const liveChatId = youtubeChatManager.getLiveChatId(req.streamer.id);
     await sendYoutubeChatMessage(liveChatId, message, token);
@@ -1379,18 +1388,19 @@ router.post('/youtube-chatbot/test-chat/:eventType', limitTests, async (req, res
     res.json({ ok: true });
   } catch (e) {
     console.error('[YT Chat] Test chat-only error:', e.message);
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: res.locals.t('ytChatbot.error.sendFailed') });
   }
 });
 
 // Connect to YouTube live stream
 router.post('/youtube-chatbot/connect', async (req, res) => {
+  const back = (code) => res.redirect(`/dashboard/youtube-chatbot?error=${code}`);
   try {
     const { refreshStreamerYoutubeToken, getActiveBroadcast } = require('../services/youtube');
     const streamer = req.streamer;
 
     if (!streamer.yt_access_token) {
-      return res.redirect('/dashboard/youtube-chatbot?error=YouTube account not connected. Click "Connect YouTube Account" first.');
+      return back('not_connected');
     }
 
     // Refresh token if expired
@@ -1398,14 +1408,14 @@ router.post('/youtube-chatbot/connect', async (req, res) => {
     if (streamer.yt_token_expires_at && Date.now() >= streamer.yt_token_expires_at) {
       accessToken = await refreshStreamerYoutubeToken(streamer);
       if (!accessToken) {
-        return res.redirect('/dashboard/youtube-chatbot?error=Failed to refresh YouTube token. Try reconnecting your account.');
+        return back('token_refresh');
       }
     }
 
     // Find active broadcast using the streamer's own token
     const broadcast = await getActiveBroadcast(accessToken);
     if (!broadcast || !broadcast.liveChatId) {
-      return res.redirect('/dashboard/youtube-chatbot?error=No active live stream found. Make sure you are live on YouTube.');
+      return back('no_live_stream');
     }
 
     // Auto-enable chatbot when connecting
@@ -1419,7 +1429,7 @@ router.post('/youtube-chatbot/connect', async (req, res) => {
     res.redirect('/dashboard/youtube-chatbot?connected=1');
   } catch (e) {
     console.error('[YT Chat] Connect error:', e.message);
-    res.redirect('/dashboard/youtube-chatbot?error=' + encodeURIComponent(e.message));
+    back('connect_failed');
   }
 });
 

@@ -49,7 +49,20 @@ const twitchStub = {
   hasRedemptionScope: () => true,
   needsBroadcasterReauth: () => false,
 };
-const youtubeStub = { resolveChannelId: async () => null, getLatestVideos: async () => [], getChannelInfo: async () => null };
+// What the stubbed YouTube API answers; the tests set these.
+const youtubeApi = { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [] };
+const youtubeStub = {
+  resolveChannelId: async () => null,
+  getLatestVideos: async () => [],
+  getChannelInfo: async () => null,
+  refreshStreamerYoutubeToken: async () => youtubeApi.refreshed,
+  getActiveBroadcast: async () => {
+    if (youtubeApi.fail) throw new Error(youtubeApi.fail);
+    return youtubeApi.broadcast;
+  },
+  refreshYoutubeBotToken: async () => youtubeApi.botToken,
+  sendYoutubeChatMessage: async (...args) => { youtubeApi.sent.push(args); },
+};
 const chatCalls = [];
 const chatStub = {
   chatManager: {
@@ -59,7 +72,15 @@ const chatStub = {
   },
 };
 // The real one starts a polling interval when it loads.
-const youtubeChatStub = { youtubeChatManager: { isPolling: () => false, getLiveChatId: () => null, startPolling() {}, stopPolling() {} } };
+const ytPolling = new Set(); // streamer ids whose live chat is being polled
+const youtubeChatStub = {
+  youtubeChatManager: {
+    isPolling: (id) => ytPolling.has(id),
+    getLiveChatId: () => 'live-chat-1',
+    startPolling: (...args) => managerCalls.push(['yt.start', ...args]),
+    stopPolling: (...args) => managerCalls.push(['yt.stop', ...args]),
+  },
+};
 const record = (name) => (...args) => managerCalls.push([name, ...args]);
 const eventSubStub = { eventSubManager: { startForStreamer: record('eventsub.start'), stopForStreamer: record('eventsub.stop') } };
 const streamElementsStub = { streamElementsManager: { startForStreamer: record('se.start'), stopForStreamer: record('se.stop') } };
@@ -177,6 +198,12 @@ before(async () => {
   delete require.cache[DB_FILE];
   delete require.cache[DASHBOARD_FILE];
   db = require(DB_FILE);
+  // Production has the YouTube columns of the streamers table; on a fresh database
+  // their migrations run before the table exists and never apply.
+  for (const column of [
+    'yt_access_token TEXT', 'yt_refresh_token TEXT', 'yt_token_expires_at INTEGER', 'yt_channel_name TEXT', 'yt_chatbot_enabled INTEGER DEFAULT 0',
+    'yt_chat_superchat_template TEXT', 'yt_chat_member_template TEXT', 'yt_chat_giftmember_template TEXT',
+  ]) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${column}`);
   ({ t } = require('../i18n'));
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');
@@ -228,6 +255,8 @@ beforeEach(() => {
   fileWrites.length = 0;
   fileRemovals.length = 0;
   chatCalls.length = 0;
+  ytPolling.clear();
+  Object.assign(youtubeApi, { refreshed: null, broadcast: null, fail: null, botToken: null, sent: [] });
   guilds.clear();
   twitch.users = {};
   twitch.lookups = [];
@@ -1111,5 +1140,124 @@ describe('saving an overlay design', () => {
     const res = await reset('follow');
     assert.deepEqual(res.json(), { ok: true });
     assert.deepEqual(stored().map((d) => d.event_type), ['raid']);
+  });
+});
+
+// ── YouTube chatbot: errors are codes, not text from the URL (N22) ───────
+
+describe('the YouTube chatbot page errors', () => {
+  let id;
+  beforeEach(() => { id = addStreamer({ yt_access_token: 'yt-access' }); });
+  const connect = (streamer = id) => request('POST', '/dashboard/youtube-chatbot/connect', { streamer });
+  const codeOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('error');
+  const html = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+
+  test('connecting without a linked YouTube account answers not_connected', async () => {
+    const res = await connect(addStreamer());
+    assert.equal(res.status, 302);
+    assert.equal(codeOf(res), 'not_connected');
+  });
+
+  test('a token that cannot be refreshed answers token_refresh', async () => {
+    db.db.prepare('UPDATE streamers SET yt_token_expires_at = ? WHERE id = ?').run(Date.now() - 1000, id);
+    youtubeApi.refreshed = null;
+    assert.equal(codeOf(await connect()), 'token_refresh');
+  });
+
+  test('no live stream answers no_live_stream', async () => {
+    youtubeApi.broadcast = null;
+    assert.equal(codeOf(await connect()), 'no_live_stream');
+    youtubeApi.broadcast = { title: 'No chat id' };
+    assert.equal(codeOf(await connect()), 'no_live_stream');
+  });
+
+  test('a failing YouTube call answers connect_failed, and its message never goes into the URL', async () => {
+    youtubeApi.fail = 'socket hang up at 10.1.2.3';
+    const res = await connect();
+    assert.equal(codeOf(res), 'connect_failed');
+    assert.ok(!decodeURIComponent(res.headers.location).includes('10.1.2.3'));
+    assert.ok(logs.some(([level, line]) => level === 'error' && line.includes('socket hang up')), 'it is logged on the server');
+  });
+
+  test('every redirect carries a code of letters and underscores, never sentences', async () => {
+    const outcomes = [];
+    outcomes.push(codeOf(await connect(addStreamer())));
+    youtubeApi.broadcast = null;
+    outcomes.push(codeOf(await connect()));
+    youtubeApi.fail = 'boom';
+    outcomes.push(codeOf(await connect()));
+    for (const code of outcomes) assert.match(code, /^[a-z_]+$/);
+  });
+
+  test('a live stream connects: the chatbot is switched on and polling starts', async () => {
+    youtubeApi.broadcast = { liveChatId: 'abc123', title: 'Racing' };
+    const res = await connect();
+    assert.equal(res.headers.location, '/dashboard/youtube-chatbot?connected=1');
+    assert.equal(db.getStreamerById(id).yt_chatbot_enabled, 1);
+    assert.deepEqual(managerCalls, [['yt.start', id, 'abc123']]);
+  });
+
+  test('the page shows the translated message for each code', async () => {
+    const messages = {
+      not_connected: t('en', 'ytChatbot.error.notConnected'),
+      token_refresh: t('en', 'ytChatbot.error.tokenRefresh'),
+      no_live_stream: t('en', 'ytChatbot.error.noLiveStream'),
+      connect_failed: t('en', 'ytChatbot.error.connectFailed'),
+    };
+    for (const [code, message] of Object.entries(messages)) {
+      const res = await request('GET', `/dashboard/youtube-chatbot?error=${code}`, { streamer: addStreamer() });
+      assert.equal(res.status, 200, code);
+      assert.ok(res.text.includes('id="yt-error"'), code);
+      assert.ok(res.text.includes(html(message)), `${code}: ${message}`);
+    }
+  });
+
+  test('text made up in the URL is not shown as an error', async () => {
+    const forged = 'Your channel was banned. Call 555-0100 to appeal.';
+    const res = await request('GET', `/dashboard/youtube-chatbot?error=${encodeURIComponent(forged)}`, { streamer: addStreamer() });
+    assert.equal(res.status, 200);
+    assert.ok(!res.text.includes('Call 555-0100'));
+    assert.ok(!res.text.includes('id="yt-error"'), 'no error banner');
+    const inherited = await request('GET', '/dashboard/youtube-chatbot?error=constructor', { streamer: addStreamer() });
+    assert.ok(!inherited.text.includes('id="yt-error"'), 'a name that exists on every object is not a code');
+  });
+
+  test('the chat-only test answers with translated messages', async () => {
+    const test = () => request('POST', '/dashboard/youtube-chatbot/test-chat/member', { streamer: addStreamer({ yt_chat_member_template: '' }) });
+    // not polling
+    assert.equal((await test()).json().error, t('en', 'ytChatbot.error.botNotPolling'));
+    // polling, but no template for the event
+    const noTemplate = addStreamer({ yt_chat_member_template: '' });
+    ytPolling.add(noTemplate);
+    const res = await request('POST', '/dashboard/youtube-chatbot/test-chat/member', { streamer: noTemplate });
+    assert.equal(res.json().error, t('en', 'ytChatbot.error.noTemplate'));
+    // polling with a template, but the bot has no token
+    const withTemplate = addStreamer({ yt_chat_member_template: 'Welcome {username}!' });
+    ytPolling.add(withTemplate);
+    youtubeApi.botToken = null;
+    const noToken = await request('POST', '/dashboard/youtube-chatbot/test-chat/member', { streamer: withTemplate });
+    assert.equal(noToken.json().error, t('en', 'ytChatbot.error.botToken'));
+    // and a send that works
+    const working = addStreamer({ yt_chat_member_template: 'Welcome {username}!' });
+    ytPolling.add(working);
+    youtubeApi.botToken = 'bot-token';
+    const sent = await request('POST', '/dashboard/youtube-chatbot/test-chat/member', { streamer: working });
+    assert.deepEqual(sent.json(), { ok: true });
+    assert.deepEqual(youtubeApi.sent, [['live-chat-1', 'Welcome NewFan!', 'bot-token']]);
+  });
+
+  test('a send that throws is a generic message, not the internal error', async () => {
+    const streamer = addStreamer({ yt_chat_member_template: 'Welcome {username}!' });
+    ytPolling.add(streamer);
+    youtubeApi.botToken = 'bot-token';
+    const original = youtubeStub.sendYoutubeChatMessage;
+    youtubeStub.sendYoutubeChatMessage = async () => { throw new Error('quota exceeded for key AIza-secret'); };
+    try {
+      const res = await request('POST', '/dashboard/youtube-chatbot/test-chat/member', { streamer });
+      assert.deepEqual(res.json(), { ok: false, error: t('en', 'ytChatbot.error.sendFailed') });
+      assert.ok(!res.text.includes('AIza-secret'));
+    } finally {
+      youtubeStub.sendYoutubeChatMessage = original;
+    }
   });
 });
