@@ -10,7 +10,7 @@ const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPost
 const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
 const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
 const iracing = require('../services/iracing');
-const { isAllowedScreenshot } = require('../services/uploadValidation');
+const { isAllowedScreenshot, redemptionMediaError } = require('../services/uploadValidation');
 
 const router = Router();
 
@@ -1745,8 +1745,6 @@ router.post('/sponsor-messages/:id/test', (req, res) => {
 // --- Channel Point Rewards ---
 
 const VALID_POSITION_PRESETS = new Set(['center-large', 'fullscreen', 'top-right-small', 'bottom-banner', 'custom']);
-const VALID_AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg']);
-const VALID_VIDEO_EXTS = new Set(['mp4', 'webm']);
 
 function clamp(val, min, max) {
   const n = parseFloat(val);
@@ -1805,17 +1803,9 @@ router.post('/redemptions/sync', async (req, res) => {
 
 router.post('/redemptions/upload', async (req, res) => {
   const mediaType = (req.query.media_type || '').toLowerCase();
-  if (mediaType !== 'audio' && mediaType !== 'video') {
-    return res.status(400).json({ error: 'media_type must be audio or video' });
-  }
-
   const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  if (mediaType === 'audio' && !VALID_AUDIO_EXTS.has(ext)) {
-    return res.status(400).json({ error: 'Audio ext must be mp3, wav, or ogg' });
-  }
-  if (mediaType === 'video' && !VALID_VIDEO_EXTS.has(ext)) {
-    return res.status(400).json({ error: 'Video ext must be mp4 or webm' });
-  }
+  const mediaError = redemptionMediaError(mediaType, ext);
+  if (mediaError) return res.status(400).json({ error: mediaError });
 
   const maxBytes = mediaType === 'video' ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
   let buf;
@@ -1985,12 +1975,9 @@ router.post('/redemptions/:id/replace-media', async (req, res) => {
 
   const mediaType = (req.query.media_type || reward.media_type || '').toLowerCase();
   const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  if (mediaType === 'audio' && !VALID_AUDIO_EXTS.has(ext)) {
-    return res.status(400).json({ error: 'Audio ext must be mp3, wav, or ogg' });
-  }
-  if (mediaType === 'video' && !VALID_VIDEO_EXTS.has(ext)) {
-    return res.status(400).json({ error: 'Video ext must be mp4 or webm' });
-  }
+  // Same rules as the upload route: audio or video only, per-type extensions.
+  const mediaError = redemptionMediaError(mediaType, ext);
+  if (mediaError) return res.status(400).json({ error: mediaError });
 
   const maxBytes = mediaType === 'video' ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
   let buf;

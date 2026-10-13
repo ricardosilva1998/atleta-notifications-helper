@@ -3,7 +3,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { isAllowedScreenshot } = require('./uploadValidation');
+const { isAllowedScreenshot, redemptionMediaError } = require('./uploadValidation');
 
 // Synthetic file starts: a real signature followed by filler bytes.
 const filler = Buffer.alloc(32, 0x41);
@@ -51,5 +51,28 @@ describe('isAllowedScreenshot', () => {
   test('does not treat inherited object keys as extensions', () => {
     assert.equal(isAllowedScreenshot('constructor', PNG), false);
     assert.equal(isAllowedScreenshot('toString', PNG), false);
+  });
+});
+
+describe('redemptionMediaError', () => {
+  const TYPE_ERROR = 'media_type must be audio or video';
+  const AUDIO_ERROR = 'Audio ext must be mp3, wav, or ogg';
+  const VIDEO_ERROR = 'Video ext must be mp4 or webm';
+
+  test('allows the audio and video extensions the upload route accepts', () => {
+    for (const ext of ['mp3', 'wav', 'ogg']) assert.equal(redemptionMediaError('audio', ext), null);
+    for (const ext of ['mp4', 'webm']) assert.equal(redemptionMediaError('video', ext), null);
+  });
+
+  test('rejects any media type other than audio or video', () => {
+    for (const type of ['', 'x', 'image', 'html', 'constructor', undefined, null]) {
+      assert.equal(redemptionMediaError(type, 'html'), TYPE_ERROR, `type ${type} must be rejected`);
+      assert.equal(redemptionMediaError(type, 'mp3'), TYPE_ERROR, `type ${type} must be rejected even with an audio ext`);
+    }
+  });
+
+  test('rejects extensions outside the allowlist for the media type', () => {
+    for (const ext of ['html', 'svg', 'js', 'mp4', '']) assert.equal(redemptionMediaError('audio', ext), AUDIO_ERROR);
+    for (const ext of ['html', 'svg', 'js', 'mp3', '']) assert.equal(redemptionMediaError('video', ext), VIDEO_ERROR);
   });
 });

@@ -32,4 +32,19 @@ function isAllowedScreenshot(ext, buf) {
   return format !== undefined && detectImageFormat(buf) === format;
 }
 
-module.exports = { isAllowedScreenshot };
+// Channel-point reward media: the extensions allowed per media type. Shared by
+// the upload and replace-media routes so the two can't drift apart.
+const REDEMPTION_MEDIA = new Map([
+  ['audio', { exts: new Set(['mp3', 'wav', 'ogg']), error: 'Audio ext must be mp3, wav, or ogg' }],
+  ['video', { exts: new Set(['mp4', 'webm']), error: 'Video ext must be mp4 or webm' }],
+]);
+
+// The error message for a reward media upload, or null when both the media
+// type and the extension are allowed.
+function redemptionMediaError(mediaType, ext) {
+  const rule = REDEMPTION_MEDIA.get(mediaType);
+  if (!rule) return 'media_type must be audio or video';
+  return rule.exts.has(ext) ? null : rule.error;
+}
+
+module.exports = { isAllowedScreenshot, redemptionMediaError };
