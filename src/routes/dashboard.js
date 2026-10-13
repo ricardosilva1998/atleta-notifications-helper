@@ -5,7 +5,7 @@ const config = require('../config');
 const db = require('../db');
 const { client, fetchGuildChannel, streamerGuildForChannel } = require('../discord');
 const {
-  canManageGuild, botInviteUrl: inviteUrlFor,
+  canManageGuild, botInviteUrl: inviteUrlFor, subRoleEligibility, roleFacts, botTopRolePosition,
   clampWelcomeMessage, WELCOME_MESSAGE_MAX, DELIVERY_CHANNEL_UNAVAILABLE,
 } = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
@@ -86,6 +86,13 @@ async function channelsInGuild(guildId, channelIds) {
     if (channelId && !(await fetchGuildChannel(guildId, channelId))) return false;
   }
   return true;
+}
+
+// Sub sync gives and takes its role, so only a plain role below the bot will do.
+async function subRoleUsable(guildId, roleId) {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return false;
+  return subRoleEligibility(roleFacts(guild.roles.cache.get(roleId)), await botTopRolePosition(guild)).ok;
 }
 
 // The server's last failed post, while that channel is still used by one of
@@ -328,12 +335,21 @@ router.get('/guild/:guildId', async (req, res) => {
 
   const discordGuild = client.guilds.cache.get(guildId);
   const channels = getDiscordChannels(guildId);
-  const roles = discordGuild
-    ? discordGuild.roles.cache
-        .filter((r) => !r.managed && r.name !== '@everyone')
-        .map((r) => ({ id: r.id, name: r.name }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : [];
+  // Only roles sub sync may give and take; a saved role that no longer
+  // qualifies is reported (sub sync skips it) instead of silently dropped.
+  let roles = [];
+  let subRoleProblem = null;
+  if (discordGuild) {
+    const botTop = await botTopRolePosition(discordGuild);
+    roles = discordGuild.roles.cache
+      .filter((r) => subRoleEligibility(roleFacts(r), botTop).ok)
+      .map((r) => ({ id: r.id, name: r.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (guildConfig.sub_role_id) {
+      const saved = subRoleEligibility(roleFacts(discordGuild.roles.cache.get(guildConfig.sub_role_id)), botTop);
+      if (!saved.ok) subRoleProblem = saved.reason;
+    }
+  }
 
   const watchedTwitchChannels = db.getWatchedChannelsForGuild(guildId, req.streamer.id);
 
@@ -389,6 +405,7 @@ router.get('/guild/:guildId', async (req, res) => {
     guildId,
     channels,
     roles,
+    subRoleProblem,
     welcomeMessageMax: WELCOME_MESSAGE_MAX,
     deliveryError: lastDeliveryError(guildConfig, channels, watchedTwitchChannels, watchedYoutubeChannels, req.streamer),
     watchedTwitchChannels,
@@ -417,6 +434,10 @@ router.post('/guild/:guildId', async (req, res) => {
   if (!(await channelsInGuild(guildId, [welcomeChannelId]))) {
     return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_channel`);
   }
+  const subRoleId = req.body.sub_role_id || null;
+  if (subRoleId && !(await subRoleUsable(guildId, subRoleId))) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_role`);
+  }
 
   db.updateGuildConfig(guildId, req.streamer.id, {
     // Legacy columns: not editable on the page and never used for posting,
@@ -425,7 +446,7 @@ router.post('/guild/:guildId', async (req, res) => {
     twitch_clips_channel_id: guildConfig.twitch_clips_channel_id,
     youtube_channel_id: guildConfig.youtube_channel_id,
     welcome_channel_id: welcomeChannelId,
-    sub_role_id: req.body.sub_role_id || null,
+    sub_role_id: subRoleId,
     welcome_message: clampWelcomeMessage(req.body.welcome_message) || null,
     twitch_live_enabled: req.body.twitch_live_enabled === 'on',
     twitch_clips_enabled: req.body.twitch_clips_enabled === 'on',

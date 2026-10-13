@@ -5,12 +5,62 @@ const assert = require('node:assert/strict');
 const { PermissionFlagsBits: P } = require('discord.js');
 
 const {
+  subRoleEligibility, roleFacts, PRIVILEGED_ROLE_PERMISSIONS,
   isChannelInGuild, canManageGuild,
   clampWelcomeMessage, WELCOME_MESSAGE_MAX,
   BOT_INVITE_PERMISSIONS, botInviteUrl,
 } = require('./discordGuards');
 
 const GUILD = '1485302029453627464';
+
+// A role as roleFacts() reports it; below a bot whose top role sits at 10.
+function role(overrides = {}) {
+  return { id: '1485308351456870641', guildId: GUILD, managed: false, position: 3, permissions: 0n, ...overrides };
+}
+
+describe('subRoleEligibility', () => {
+  test('a plain role below the bot can be the sub role', () => {
+    assert.deepEqual(subRoleEligibility(role(), 10), { ok: true });
+  });
+
+  test('a typical "Sub" role with everyday member permissions stays usable', () => {
+    const everyday = P.ViewChannel | P.SendMessages | P.ReadMessageHistory | P.AddReactions | P.EmbedLinks
+      | P.AttachFiles | P.UseExternalEmojis | P.Connect | P.Speak | P.Stream | P.ChangeNickname | P.CreateInstantInvite;
+    assert.deepEqual(subRoleEligibility(role({ permissions: everyday }), 10), { ok: true });
+  });
+
+  test('refuses a missing role, @everyone and integration-managed roles', () => {
+    assert.deepEqual(subRoleEligibility(null, 10), { ok: false, reason: 'missing' });
+    assert.deepEqual(subRoleEligibility(role({ id: GUILD, position: 0 }), 10), { ok: false, reason: 'everyone' });
+    assert.deepEqual(subRoleEligibility(role({ managed: true }), 10), { ok: false, reason: 'managed' });
+  });
+
+  test('refuses a role at or above the bot\'s highest role', () => {
+    assert.deepEqual(subRoleEligibility(role({ position: 10 }), 10), { ok: false, reason: 'above_bot' });
+    assert.deepEqual(subRoleEligibility(role({ position: 11 }), 10), { ok: false, reason: 'above_bot' });
+    assert.deepEqual(subRoleEligibility(role({ position: 0 }), -1), { ok: false, reason: 'above_bot' }, 'unknown bot position');
+    assert.deepEqual(subRoleEligibility(role(), undefined), { ok: false, reason: 'above_bot' });
+  });
+
+  test('refuses a role carrying any moderator or admin permission', () => {
+    assert.equal(PRIVILEGED_ROLE_PERMISSIONS.length, 9);
+    for (const name of PRIVILEGED_ROLE_PERMISSIONS) {
+      const perms = P.SendMessages | P[name];
+      assert.deepEqual(subRoleEligibility(role({ permissions: perms }), 10), { ok: false, reason: 'privileged' }, name);
+    }
+  });
+
+  test('accepts the permissions bitfield as a decimal string', () => {
+    assert.deepEqual(subRoleEligibility(role({ permissions: String(P.SendMessages) }), 10), { ok: true });
+    assert.deepEqual(subRoleEligibility(role({ permissions: String(P.Administrator) }), 10), { ok: false, reason: 'privileged' });
+  });
+
+  test('roleFacts reads a discord.js role', () => {
+    const djsRole = { id: '7', guild: { id: GUILD }, managed: false, position: 2, permissions: { bitfield: P.SendMessages } };
+    assert.deepEqual(roleFacts(djsRole), { id: '7', guildId: GUILD, managed: false, position: 2, permissions: P.SendMessages });
+    assert.equal(roleFacts(null), null);
+  });
+});
 
 describe('isChannelInGuild', () => {
   test('matches only a channel of the same server', () => {

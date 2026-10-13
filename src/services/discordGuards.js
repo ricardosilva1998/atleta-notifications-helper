@@ -1,8 +1,8 @@
 'use strict';
 
 // Rules that keep a streamer's Discord settings inside servers they run and
-// within Discord's limits: who may claim a server, which channels a server's
-// settings may point at, how long a welcome message may be, and the
+// within Discord's limits: who may claim a server, which channels and roles a
+// server's settings may point at, how long a welcome message may be, and the
 // permissions the bot asks for when it is invited.
 
 const { PermissionFlagsBits } = require('discord.js');
@@ -19,6 +19,47 @@ const BOT_INVITE_PERMISSIONS = BOT_INVITE_PERMISSION_NAMES.reduce((bits, name) =
 function botInviteUrl(clientId) {
   return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}`
     + `&permissions=${BOT_INVITE_PERMISSIONS}&scope=bot%20applications.commands`;
+}
+
+// ─── Sub-sync role ────────────────────────────────────────────────────────────
+// Sub sync gives its role to every linked subscriber and takes it from every
+// linked non-subscriber, so the role must be a plain one the bot may manage.
+const PRIVILEGED_ROLE_PERMISSIONS = [
+  'Administrator', 'ManageGuild', 'ManageRoles', 'ManageChannels', 'ManageWebhooks',
+  'KickMembers', 'BanMembers', 'ModerateMembers', 'MentionEveryone',
+];
+const PRIVILEGED_ROLE_BITS = PRIVILEGED_ROLE_PERMISSIONS.reduce((bits, name) => bits | PermissionFlagsBits[name], 0n);
+
+// role: { id, guildId, managed, position, permissions } (see roleFacts);
+// botTopPosition: position of the bot's highest role in that server.
+// Returns { ok: true } or { ok: false, reason } with reason one of
+// missing | everyone | managed | privileged | above_bot.
+function subRoleEligibility(role, botTopPosition) {
+  if (!role) return { ok: false, reason: 'missing' };
+  if (String(role.id) === String(role.guildId)) return { ok: false, reason: 'everyone' };
+  if (role.managed) return { ok: false, reason: 'managed' };
+  if ((BigInt(role.permissions || 0) & PRIVILEGED_ROLE_BITS) !== 0n) return { ok: false, reason: 'privileged' };
+  if (!Number.isFinite(botTopPosition) || !(role.position < botTopPosition)) return { ok: false, reason: 'above_bot' };
+  return { ok: true };
+}
+
+// The facts subRoleEligibility needs, read from a discord.js Role.
+function roleFacts(role) {
+  if (!role) return null;
+  return {
+    id: role.id,
+    guildId: role.guild.id,
+    managed: !!role.managed,
+    position: role.position,
+    permissions: role.permissions.bitfield,
+  };
+}
+
+// Position of the bot's highest role in a discord.js Guild (-1 when unknown,
+// which leaves no role eligible).
+async function botTopRolePosition(guild) {
+  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  return me ? me.roles.highest.position : -1;
 }
 
 // ─── Channels ─────────────────────────────────────────────────────────────────
@@ -82,6 +123,10 @@ function clampWelcomeMessage(text) {
 module.exports = {
   BOT_INVITE_PERMISSIONS,
   botInviteUrl,
+  PRIVILEGED_ROLE_PERMISSIONS,
+  subRoleEligibility,
+  roleFacts,
+  botTopRolePosition,
   isChannelInGuild,
   DELIVERY_CHANNEL_UNAVAILABLE,
   canManageGuild,

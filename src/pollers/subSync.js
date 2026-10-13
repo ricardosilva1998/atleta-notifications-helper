@@ -2,6 +2,19 @@ const config = require('../config');
 const db = require('../db');
 const { getSubscribers, getUserId, refreshBroadcasterToken } = require('../services/twitch');
 const { client } = require('../discord');
+const { subRoleEligibility, roleFacts, botTopRolePosition } = require('../services/discordGuards');
+
+// A refused sub role is logged once per streamer and server (again only if the
+// role or the reason changes), not every 10 minutes.
+const refusedRoles = new Map(); // `${streamerId}:${guildId}` -> `${roleId}:${reason}`
+
+function noteRefusedRole(streamer, guild, roleId, reason) {
+  const key = `${streamer.id}:${guild.id}`;
+  const value = `${roleId}:${reason}`;
+  if (refusedRoles.get(key) === value) return;
+  refusedRoles.set(key, value);
+  console.warn(`[SubSync] ${streamer.twitch_username}: sub role ${roleId} in ${guild.name} is not usable (${reason}) — skipping sync there`);
+}
 
 async function checkStreamer(streamer) {
   if (!streamer.broadcaster_access_token) {
@@ -54,38 +67,26 @@ async function checkStreamer(streamer) {
   }
 
   const subscribers = await getSubscribers(broadcasterId, accessToken);
-  console.log(`[SubSync] ${streamer.twitch_username}: ${subscribers.length} subscribers`);
-
   const subscriberTwitchIds = new Set(subscribers.map((s) => s.user_id));
   const linkedUsers = db.getLinkedUsers(streamer.id);
-  console.log(`[SubSync] ${streamer.twitch_username}: ${linkedUsers.length} linked users`);
-  linkedUsers.forEach(l => {
-    const isSub = subscriberTwitchIds.has(l.twitch_user_id);
-    console.log(`[SubSync]   linked: discord=${l.discord_user_id} twitch=${l.twitch_username} (${l.twitch_user_id}) isSub=${isSub}`);
-  });
-
-  const allGuilds = db.getGuildsForStreamer(streamer.id);
-  console.log(`[SubSync] ${streamer.twitch_username}: ${allGuilds.length} guilds total, checking sub_sync_enabled + sub_role_id`);
-  allGuilds.forEach(g => console.log(`[SubSync]   guild ${g.guild_id}: sub_sync_enabled=${g.sub_sync_enabled}, sub_role_id=${g.sub_role_id || 'NONE'}`));
-
-  const guilds = allGuilds.filter(
-    (g) => g.sub_sync_enabled && g.sub_role_id
-  );
-
-  if (guilds.length === 0) {
-    console.log(`[SubSync] ${streamer.twitch_username}: no guilds with sub sync enabled AND role set`);
-    return;
-  }
+  const guilds = db.getGuildsForStreamer(streamer.id).filter((g) => g.sub_sync_enabled && g.sub_role_id);
+  const linkedSubs = linkedUsers.filter((l) => subscriberTwitchIds.has(l.twitch_user_id)).length;
+  // Counts only: who is linked to whom stays in the database, not in the logs.
+  console.log(`[SubSync] ${streamer.twitch_username}: ${subscribers.length} subscribers, ${linkedUsers.length} linked users (${linkedSubs} subscribed), ${guilds.length} server(s) syncing`);
 
   for (const guildConfig of guilds) {
     const guild = client.guilds.cache.get(guildConfig.guild_id);
     if (!guild) continue;
 
+    // The role is re-checked every cycle: it may have been given moderator
+    // permissions, moved above the bot, or deleted since it was chosen.
     const role = guild.roles.cache.get(guildConfig.sub_role_id);
-    if (!role) {
-      console.log(`[SubSync] Role ${guildConfig.sub_role_id} not found in ${guild.name}`);
+    const eligibility = subRoleEligibility(roleFacts(role), await botTopRolePosition(guild));
+    if (!eligibility.ok) {
+      noteRefusedRole(streamer, guild, guildConfig.sub_role_id, eligibility.reason);
       continue;
     }
+    refusedRoles.delete(`${streamer.id}:${guild.id}`);
 
     for (const link of linkedUsers) {
       try {

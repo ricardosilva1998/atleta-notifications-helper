@@ -269,6 +269,13 @@
 
   "dashboard.claimNotAllowed": "You need the Manage Server permission in that Discord server to claim it.",
   "guild.invalidChannel": "That channel is not in this Discord server. Pick a channel from the list.",
+  "guild.invalidRole": "That role cannot be used for sub sync. Pick a role from the list.",
+  "guild.subRoleHint": "Only plain roles below the bot's role are listed: no admin or moderator permissions, and not managed by an integration.",
+  "guild.subRoleProblem.missing": "Sub sync is paused here: the saved subscriber role no longer exists. Pick another role and save.",
+  "guild.subRoleProblem.everyone": "Sub sync is paused here: @everyone cannot be the subscriber role. Pick another role and save.",
+  "guild.subRoleProblem.managed": "Sub sync is paused here: the saved subscriber role is managed by an integration. Pick another role and save.",
+  "guild.subRoleProblem.privileged": "Sub sync is paused here: the saved subscriber role has admin or moderator permissions. Remove them in Discord, or pick another role and save.",
+  "guild.subRoleProblem.above_bot": "Sub sync is paused here: the saved subscriber role is above the bot's highest role. In Discord, move the bot's role above it, or pick another role and save.",
   "guild.welcomeMessageHint": "Up to {{max}} characters.",
   "guild.deliveryError.title": "Last delivery problem",
   "guild.deliveryError.unavailable": "On {{when}} the bot could not post in {{channel}}: the channel is gone, the bot cannot see it, or it is not in this server. Pick another channel or check the bot's permissions in Discord.",
