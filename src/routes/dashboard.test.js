@@ -229,10 +229,15 @@ before(async () => {
   db = require(DB_FILE);
   // Production has the YouTube columns of the streamers table. On a fresh database
   // their migrations run before the table exists, so only a second boot adds them.
-  for (const column of [
-    'yt_access_token TEXT', 'yt_refresh_token TEXT', 'yt_token_expires_at INTEGER', 'yt_channel_name TEXT', 'yt_chatbot_enabled INTEGER DEFAULT 0',
-    'yt_chat_superchat_template TEXT', 'yt_chat_member_template TEXT', 'yt_chat_giftmember_template TEXT',
-  ]) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${column}`);
+  // Added here only where they are missing, so this keeps working once that is fixed.
+  const streamerColumns = new Set(db.db.pragma('table_info(streamers)').map((c) => c.name));
+  for (const [name, type] of [
+    ['yt_access_token', 'TEXT'], ['yt_refresh_token', 'TEXT'], ['yt_token_expires_at', 'INTEGER'], ['yt_channel_name', 'TEXT'],
+    ['yt_chatbot_enabled', 'INTEGER DEFAULT 0'], ['yt_chat_superchat_template', 'TEXT'], ['yt_chat_member_template', 'TEXT'],
+    ['yt_chat_giftmember_template', 'TEXT'],
+  ]) {
+    if (!streamerColumns.has(name)) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${type}`);
+  }
   ({ t } = require('../i18n'));
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');
@@ -254,6 +259,7 @@ before(async () => {
     next();
   });
   app.use('/dashboard', require('./dashboard'));
+  app.use('/auth', require('./auth'));
   app.use(errorHandler);
 
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -1103,14 +1109,36 @@ describe('saving an overlay design', () => {
     assert.deepEqual(stored(), []);
   });
 
-  test('a value the builder cannot produce is a 400 naming the field, and nothing is stored', async () => {
+  test('a design from an older builder is saved normalised, not refused', async () => {
+    const res = await save('follow', design({
+      username_size: 9999, card_width: 50, animation_speed: 99, shadow_blur: 1e9, border_radius: 18.5,
+      font_family: 'Comic Sans MS', label_font_family: "x'; color: red",
+      car_animation: 'bounce', screen_effect: 'goldRain', entrance_animation: 'explode', card_position: 'top-middle', text_align: 'justify',
+      card_side_icon: '<img src=x onerror=alert(1)>',
+      event_label: 'x'.repeat(101), detail_text: 'x'.repeat(301),
+    }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true });
+    const [row] = stored();
+    assert.deepEqual([row.username_size, row.card_width, row.animation_speed, row.shadow_blur, row.border_radius], [52, 200, 2, 80, 19], 'numbers moved into range');
+    assert.deepEqual([row.font_family, row.label_font_family], ['System Default', null], 'unknown fonts fall back');
+    assert.deepEqual(
+      [row.car_animation, row.screen_effect, row.entrance_animation, row.card_position, row.text_align],
+      ['zoomLR', 'default', 'slideDown', 'top-center', 'center'],
+      'unknown choices fall back to the default',
+    );
+    assert.equal(row.card_side_icon, null, 'an icon with markup in it is not stored');
+    assert.equal(row.event_label, 'x'.repeat(100));
+    assert.equal(row.detail_text, 'x'.repeat(300));
+  });
+
+  test('a value no builder could have sent is a 400 naming the field, and nothing is stored', async () => {
     const cases = [
       ['bg_color', 'red'], ['text_color', 'url(javascript:alert(1))'], ['accent_color', '#12345'],
-      ['username_size', 9999], ['username_size', -1], ['card_width', 50], ['animation_speed', 99], ['shadow_blur', 1e9],
-      ['font_family', 'Comic Sans MS'], ['label_font_family', "x'; color: red"],
-      ['entrance_animation', 'explode'], ['card_position', 'top-middle'], ['text_align', 'justify'],
-      ['card_side_icon', '<img src=x onerror=alert(1)>'], ['card_side_icon', '\u{1F3C6}'.repeat(9)],
-      ['event_label', 'x'.repeat(101)], ['detail_text', 'x'.repeat(301)],
+      ['username_size', '24'], ['card_width', true], ['animation_speed', []], ['shadow_blur', {}],
+      ['font_family', 5], ['label_font_family', ['Outfit']],
+      ['entrance_animation', 5], ['card_position', true], ['label_font_weight', '700'],
+      ['card_side_icon', 5], ['event_label', 5], ['detail_text', ['x']],
     ];
     for (const [field, value] of cases) {
       const res = await save('follow', design({ [field]: value }));
@@ -1256,6 +1284,46 @@ describe('the YouTube chatbot page errors', () => {
     assert.ok(!res.text.includes('id="yt-error"'), 'no error banner');
     const inherited = await request('GET', '/dashboard/youtube-chatbot?error=constructor', { streamer: addStreamer() });
     assert.ok(!inherited.text.includes('id="yt-error"'), 'a name that exists on every object is not a code');
+  });
+
+  // The Google sign-in lands on /auth/youtube/callback, which sends the streamer back
+  // to this page: the page must be able to say what happened.
+  test('the Google sign-in sends the streamer back with a code the page shows as a message', async () => {
+    const owner = addStreamer();
+    const cases = [
+      ['access denied at Google', `/auth/youtube/callback?error=access_denied&state=${owner}`, 'oauth_denied', 'ytChatbot.error.oauthDenied'],
+      ['no code and no state', '/auth/youtube/callback', 'oauth_state', 'ytChatbot.error.oauthState'],
+      ['a state that is not this streamer', `/auth/youtube/callback?code=abc&state=${owner + 1000}`, 'oauth_state', 'ytChatbot.error.oauthState'],
+    ];
+    for (const [label, url, code, key] of cases) {
+      const res = await request('GET', url, { streamer: owner });
+      assert.equal(res.status, 302, label);
+      assert.equal(res.headers.location, `/dashboard/youtube-chatbot?error=${code}`, label);
+      const page = await request('GET', res.headers.location, { streamer: owner });
+      assert.equal(page.status, 200, label);
+      assert.ok(page.text.includes('id="yt-error"'), `${label}: the page shows a banner`);
+      assert.ok(page.text.includes(html(t('en', key))), `${label}: ${t('en', key)}`);
+    }
+  });
+
+  test('a failed token exchange sends oauth_failed, and what went wrong stays in the server log', async () => {
+    const owner = addStreamer();
+    const guard = global.fetch;
+    const calls = [];
+    global.fetch = async (url) => { calls.push(String(url)); return { ok: false, status: 400, json: async () => ({}) }; };
+    let res;
+    try {
+      res = await request('GET', `/auth/youtube/callback?code=expired-code&state=${owner}`, { streamer: owner });
+    } finally {
+      global.fetch = guard;
+    }
+    assert.deepEqual(calls, ['https://oauth2.googleapis.com/token']);
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard/youtube-chatbot?error=oauth_failed');
+    assert.ok(!decodeURIComponent(res.headers.location).includes('Token exchange'), 'our own error text is not put in the URL');
+    assert.ok(logs.some(([level, line]) => level === 'error' && line.includes('Token exchange failed: 400')), 'it is logged on the server');
+    const page = await request('GET', res.headers.location, { streamer: owner });
+    assert.ok(page.text.includes(html(t('en', 'ytChatbot.error.oauthFailed'))));
   });
 
   test('the chat-only test answers with translated messages', async () => {

@@ -56,6 +56,22 @@ function reply(status, body) {
   return { ok: status >= 200 && status < 300, status, statusText: String(status), json: async () => body || {}, text: async () => JSON.stringify(body || {}) };
 }
 
+// What Twitch stores for a create or update request. The request has flat fields
+// (is_global_cooldown_enabled, global_cooldown_seconds); the reward it answers with,
+// and the list, carry them nested in global_cooldown_setting.
+function applyRequest(reward, body) {
+  const { is_global_cooldown_enabled: enabled, global_cooldown_seconds: seconds, ...rest } = body;
+  Object.assign(reward, rest);
+  if (enabled !== undefined || seconds !== undefined) {
+    const current = reward.global_cooldown_setting || { is_enabled: false, global_cooldown_seconds: 0 };
+    reward.global_cooldown_setting = {
+      is_enabled: enabled !== undefined ? enabled : current.is_enabled,
+      global_cooldown_seconds: seconds !== undefined ? seconds : current.global_cooldown_seconds,
+    };
+  }
+  return reward;
+}
+
 // Rewards Twitch has (`upstream`), every request made (`calls`), and failures to
 // hand out: helix.fail('DELETE', { status: 500 }) fails the next DELETE, and
 // helix.fail('PATCH', { status: 403, message: '...' }, { repeat: true }) every PATCH.
@@ -84,13 +100,13 @@ function newHelix() {
       const id = u.searchParams.get('id');
       if (method === 'GET') return reply(200, { data: state.upstream });
       if (method === 'POST') {
-        const created = { id: `created-${++state.created}`, ...body };
+        const created = applyRequest(upstreamOf(`created-${++state.created}`), body);
         state.upstream.push(created);
         return reply(200, { data: [created] });
       }
       const found = state.upstream.find((r) => r.id === id);
       if (!found) return reply(404, { message: 'reward not found' });
-      if (method === 'PATCH') { Object.assign(found, body); return reply(200, { data: [found] }); }
+      if (method === 'PATCH') { applyRequest(found, body); return reply(200, { data: [found] }); }
       if (method === 'DELETE') { state.upstream.splice(state.upstream.indexOf(found), 1); return { ok: true, status: 204, json: async () => null, text: async () => '' }; }
     }
     throw new Error(`unexpected request ${method} ${url}`);
@@ -126,10 +142,21 @@ function addReward(streamerId, { twitchId = null, ...over } = {}) {
   return Number(row.id);
 }
 
-// What Twitch has for a reward row.
-const upstreamOf = (twitchId, over = {}) => ({
-  id: twitchId, title: 'Air Horn', cost: 500, prompt: '', is_paused: false, is_global_cooldown_enabled: false, global_cooldown_seconds: 0, ...over,
-});
+// A custom reward as Twitch's Get Custom Reward lists it. The response nests the
+// cooldown and the per-stream limits in *_setting objects; the flat names
+// (is_global_cooldown_enabled, global_cooldown_seconds, is_max_per_stream_enabled, ...)
+// are request fields only. `over.cooldown` is the global_cooldown_setting object.
+const upstreamOf = (twitchId, over = {}) => {
+  const { cooldown = { is_enabled: false, global_cooldown_seconds: 0 }, ...rest } = over;
+  return {
+    id: twitchId, broadcaster_id: '777', title: 'Air Horn', cost: 500, prompt: '',
+    is_enabled: true, is_paused: false, is_in_stock: true, is_user_input_required: false, should_redemptions_skip_request_queue: false,
+    max_per_stream_setting: { is_enabled: false, max_per_stream: 0 },
+    max_per_user_per_stream_setting: { is_enabled: false, max_per_user_per_stream: 0 },
+    global_cooldown_setting: cooldown,
+    ...rest,
+  };
+};
 
 const row = (rewardId, streamerId) => db.getRewardById(rewardId, streamerId);
 const streamerOf = (id) => db.getStreamerById(id);
@@ -384,8 +411,8 @@ describe('syncing with Twitch', () => {
     const paused = addReward(id, { twitchId: 'tw-1', enabled: 1, cooldown_seconds: 0 });
     const running = addReward(id, { twitchId: 'tw-2', enabled: 0, cooldown_seconds: 120 });
     helix.upstream.push(
-      upstreamOf('tw-1', { title: 'Renamed on Twitch', cost: 900, prompt: 'Hello', is_paused: true, is_global_cooldown_enabled: true, global_cooldown_seconds: 45 }),
-      upstreamOf('tw-2', { is_paused: false, is_global_cooldown_enabled: false, global_cooldown_seconds: 300 }),
+      upstreamOf('tw-1', { title: 'Renamed on Twitch', cost: 900, prompt: 'Hello', is_paused: true, cooldown: { is_enabled: true, global_cooldown_seconds: 45 } }),
+      upstreamOf('tw-2', { is_paused: false, cooldown: { is_enabled: false, global_cooldown_seconds: 300 } }),
     );
 
     const result = await sync();
@@ -397,6 +424,73 @@ describe('syncing with Twitch', () => {
     const second = row(running, id);
     assert.deepEqual([second.enabled, second.cooldown_seconds], [1, 0], 'running on Twitch = on here; a cooldown that is off is 0');
     assert.equal(first.twitch_sync_status, 'ok');
+  });
+
+  test('a sync leaves an existing cooldown alone: Twitch reports it nested in global_cooldown_setting', async () => {
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 90 });
+    helix.upstream.push(upstreamOf('tw-1', { cooldown: { is_enabled: true, global_cooldown_seconds: 90 } }));
+    await sync();
+    assert.equal(row(rewardId, id).cooldown_seconds, 90, 'it used to become 0');
+  });
+
+  test('a cooldown that is off on Twitch is 0 here, whatever seconds Twitch still remembers', async () => {
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 90 });
+    helix.upstream.push(upstreamOf('tw-1', { cooldown: { is_enabled: false, global_cooldown_seconds: 300 } }));
+    await sync();
+    assert.equal(row(rewardId, id).cooldown_seconds, 0);
+  });
+
+  test('after a sync, saving the reward keeps its cooldown on Twitch', async () => {
+    // Twitch has a 90 s cooldown that this row does not know yet.
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 0 });
+    helix.upstream.push(upstreamOf('tw-1', { cooldown: { is_enabled: true, global_cooldown_seconds: 90 } }));
+    await sync();
+    assert.equal(row(rewardId, id).cooldown_seconds, 90, 'the sync took the cooldown from Twitch');
+
+    // The edit modal sends every field it shows, the cooldown with the new title.
+    const changes = { title: 'Big Horn', cooldown_seconds: row(rewardId, id).cooldown_seconds };
+    db.updateReward(rewardId, id, changes);
+    const result = await rewards.pushRewardChanges(streamerOf(id), rewardId, changes);
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(helix.callsTo('PATCH', '/custom_rewards')[0].body, { title: 'Big Horn', is_global_cooldown_enabled: true, global_cooldown_seconds: 90 });
+    assert.deepEqual(helix.upstream[0].global_cooldown_setting, { is_enabled: true, global_cooldown_seconds: 90 }, 'still 90 s on Twitch');
+  });
+
+  test('an unsent edit pushed whole after a sync keeps the cooldown Twitch reported', async () => {
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 0 });
+    helix.upstream.push(upstreamOf('tw-1', { cooldown: { is_enabled: true, global_cooldown_seconds: 90 } }));
+    await sync();
+    db.updateReward(rewardId, id, { title: 'Local title', twitch_sync_status: 'update_failed' });
+
+    const result = await rewards.retryPending(streamerOf(id), row(rewardId, id));
+
+    assert.equal(result.ok, true);
+    const body = helix.callsTo('PATCH', '/custom_rewards')[0].body;
+    assert.deepEqual([body.title, body.is_global_cooldown_enabled, body.global_cooldown_seconds], ['Local title', true, 90]);
+    assert.deepEqual(helix.upstream[0].global_cooldown_setting, { is_enabled: true, global_cooldown_seconds: 90 });
+  });
+
+  test('the flat field names are still understood, in case a response ever carries them', async () => {
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 0 });
+    helix.upstream.push({ id: 'tw-1', title: 'Air Horn', cost: 500, prompt: '', is_paused: false, is_global_cooldown_enabled: true, global_cooldown_seconds: 45 });
+    await sync();
+    assert.equal(row(rewardId, id).cooldown_seconds, 45);
+  });
+
+  test('when Twitch says nothing about the cooldown, the one here is left alone', async () => {
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 120 });
+    helix.upstream.push({ id: 'tw-1', title: 'Renamed', cost: 700, prompt: '', is_paused: false });
+    await sync();
+    const synced = row(rewardId, id);
+    assert.deepEqual([synced.title, synced.cost, synced.cooldown_seconds], ['Renamed', 700, 120]);
+  });
+
+  test('the nested setting wins when a reward carries both', async () => {
+    const rewardId = addReward(id, { twitchId: 'tw-1', cooldown_seconds: 0 });
+    helix.upstream.push({ ...upstreamOf('tw-1', { cooldown: { is_enabled: true, global_cooldown_seconds: 60 } }), is_global_cooldown_enabled: false, global_cooldown_seconds: 5 });
+    await sync();
+    assert.equal(row(rewardId, id).cooldown_seconds, 60);
   });
 
   test('an edit that Twitch never took is sent, not overwritten by Twitch\'s older values', async () => {
@@ -539,6 +633,25 @@ describe('a redemption of a reward that is off or deleted', () => {
     const entry = logged(event.twitchRedemptionId);
     assert.equal(entry.outcome, 'error');
     assert.match(entry.error_message, /refund failed.*Twitch is having a problem/);
+  });
+
+  test('a 403 about affiliate status (which helixBroadcaster does not throw) is a failed refund, never logged as a refund', async () => {
+    addReward(id, { twitchId: 'tw-1', enabled: 0 });
+    helix.fail('PATCH', { status: 403, message: 'The broadcaster must be an affiliate or partner' });
+    const event = redemption();
+    await dispatcher.handleRedemption(id, event);
+    assert.equal(helix.callsTo('PATCH', '/custom_rewards/redemptions').length, 1, 'the cancel was tried');
+    const entry = logged(event.twitchRedemptionId);
+    assert.equal(entry.outcome, 'error', 'not refunded_disabled');
+    assert.match(entry.error_message, /refund failed.*Affiliate or Partner/);
+  });
+
+  test('refundRedemption itself fails on that 403, and succeeds on a normal answer', async () => {
+    const streamer = streamerOf(id);
+    helix.fail('PATCH', { status: 403, message: 'The broadcaster must be an affiliate or partner' });
+    await assert.rejects(() => rewards.refundRedemption(streamer, 'tw-1', 'red-x'), (err) => err.status === 403 && /Affiliate or Partner/.test(err.message));
+    await rewards.refundRedemption(streamer, 'tw-1', 'red-y'); // the failure was handed out once
+    assert.deepEqual(helix.callsTo('PATCH', '/custom_rewards/redemptions').map((c) => c.query.id), ['red-x', 'red-y']);
   });
 
   test('a reward that is on is not refunded for being off (it takes the normal path)', async () => {

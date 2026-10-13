@@ -4,6 +4,7 @@ const bus = require('./overlayBus');
 const { refreshYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages } = require('./youtube');
 const { getBuiltinResponse, getCommandsList } = require('./builtinCommands');
 const { moderateYoutubeMessage, grantYoutubePermit } = require('./youtubeModeration');
+const { commandCooldownSeconds } = require('./chatCommands');
 
 let botAccessToken = null;
 const activePollers = new Map(); // streamerId -> { liveChatId, pageToken, timer }
@@ -106,6 +107,9 @@ async function handleChatMessage(streamerId, item) {
 
       const parts = message.split(' ');
       const commandName = parts[0].substring(1).toLowerCase();
+      // A lone "!" (or "! hello") names no command; a blank-named command saved
+      // earlier would otherwise answer it.
+      if (!commandName) return;
       const args = parts.slice(1);
       const streamer = db.getStreamerById(streamerId);
       if (!streamer) return;
@@ -176,7 +180,9 @@ async function handleChatMessage(streamerId, item) {
 
       const cmd = db.getChatCommand(streamerId, commandName);
       if (!cmd) return;
-      if (now - lastUsed < cmd.cooldown * 1000) return;
+      // 5-3600 s whatever was stored: an old zero or negative value must not let one
+      // viewer make the bot answer in a flood, nor a huge one silence the command.
+      if (now - lastUsed < commandCooldownSeconds(cmd.cooldown) * 1000) return;
 
       cooldowns.set(cooldownKey, now);
       console.log(`[YT Chat] Command !${commandName} from ${authorName}`);

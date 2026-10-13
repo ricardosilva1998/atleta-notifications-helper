@@ -138,15 +138,15 @@ describe('numbers match the builder\'s controls', () => {
     ['card_custom_x', 0, 1], ['card_custom_y', 0, 1],
   ];
 
-  test('the bounds themselves are accepted, and anything beyond them is refused', () => {
+  test('the bounds themselves are kept, and anything beyond them is moved to the nearest bound', () => {
     for (const [field, min, max] of ranges) {
       const step = Number.isInteger(min) && Number.isInteger(max) ? 1 : 0.01;
       assert.equal(accepts({ [field]: min })[field], min, `${field} min`);
       assert.equal(accepts({ [field]: max })[field], max, `${field} max`);
-      rejects({ [field]: min - step }, field);
-      rejects({ [field]: max + step }, field);
-      rejects({ [field]: 1e9 }, field);
-      rejects({ [field]: -1e9 }, field);
+      assert.equal(accepts({ [field]: min - step })[field], min, `${field} just under`);
+      assert.equal(accepts({ [field]: max + step })[field], max, `${field} just over`);
+      assert.equal(accepts({ [field]: 1e9 })[field], max, `${field} far over`);
+      assert.equal(accepts({ [field]: -1e9 })[field], min, `${field} far under`);
     }
   });
 
@@ -159,15 +159,28 @@ describe('numbers match the builder\'s controls', () => {
     }
   });
 
-  test('a whole-number field refuses a fraction', () => {
+  test('a whole-number field rounds a fraction', () => {
     for (const field of ['username_size', 'card_width', 'border_radius', 'border_thickness', 'shadow_blur', 'shadow_spread', 'label_font_size', 'detail_font_size']) {
-      rejects({ [field]: FIELD_SPECS[field].min + 0.5 }, field);
+      const { min, max } = FIELD_SPECS[field];
+      assert.equal(accepts({ [field]: min + 0.4 })[field], min, `${field} rounds down`);
+      assert.equal(accepts({ [field]: min + 0.6 })[field], min + 1, `${field} rounds up`);
+      assert.equal(accepts({ [field]: max - 0.4 })[field], max, `${field} near its top`);
+    }
+    assert.ok(Object.is(accepts({ shadow_spread: -0.4 }).shadow_spread, 0), 'never -0');
+  });
+
+  test('text, a boolean, a list, an object and NaN are not numbers', () => {
+    for (const field of ['username_size', 'animation_speed', 'bg_opacity', 'card_custom_x']) {
+      for (const bad of ['24', '1e3', 'abc', NaN, true, [], {}]) rejects({ [field]: bad }, field);
     }
   });
 
-  test('text, NaN and Infinity are not numbers', () => {
-    for (const field of ['username_size', 'animation_speed', 'bg_opacity', 'card_custom_x']) {
-      for (const bad of ['24', '1e3', 'abc', NaN, Infinity, -Infinity, true, [], {}]) rejects({ [field]: bad }, field);
+  test('a number too big for JSON to hold (1e999 reads as Infinity) is moved to the bound', () => {
+    const { design } = validateOverlayDesign('{"username_size":1e999,"shadow_spread":-1e999,"bg_opacity":1e999}');
+    assert.deepEqual([design.username_size, design.shadow_spread, design.bg_opacity], [52, -20, 1]);
+    for (const field of ['username_size', 'animation_speed']) {
+      assert.equal(accepts({ [field]: Infinity })[field], FIELD_SPECS[field].max, `${field} +Infinity`);
+      assert.equal(accepts({ [field]: -Infinity })[field], FIELD_SPECS[field].min, `${field} -Infinity`);
     }
   });
 
@@ -218,10 +231,16 @@ describe('fonts', () => {
     for (const field of fontFields) for (const name of OVERLAY_FONTS) assert.equal(accepts({ [field]: name })[field], name);
   });
 
-  test('another name is refused, whatever it contains', () => {
+  test('another name is replaced by the default (left out), whatever it contains, so it never reaches a stylesheet', () => {
     for (const field of fontFields) {
-      for (const bad of ['Comic Sans MS', 'inter', 'Inter, sans-serif', "Arial'; color: red", '</style><script>', 'url(x)', 'a'.repeat(5000), 5, true, []]) rejects({ [field]: bad }, field);
+      for (const other of ['Comic Sans MS', 'inter', 'Inter, sans-serif', "Arial'; color: red", '</style><script>', 'url(x)', 'a'.repeat(5000), 'Orbitron']) {
+        assert.equal(field in accepts({ [field]: other }), false, `${field}=${other.slice(0, 20)}`);
+      }
     }
+  });
+
+  test('something that is not a name at all is refused', () => {
+    for (const field of fontFields) for (const bad of [5, true, [], {}]) rejects({ [field]: bad }, field);
   });
 
   test('the per-text fonts may be null (inherit); the main font is just left out', () => {
@@ -254,15 +273,30 @@ describe('drop-down choices', () => {
     same(FIELD_SPECS.text_align.values, aligns);
   });
 
-  test('each choice is accepted and anything else is refused', () => {
-    const fields = ['entrance_animation', 'car_animation', 'screen_effect', 'effect_direction', 'sponsor_animation', 'card_position', 'text_align', 'gradient_direction', 'label_font_weight', 'username_font_weight', 'detail_font_weight'];
-    for (const field of fields) {
+  const choiceFields = ['entrance_animation', 'car_animation', 'screen_effect', 'effect_direction', 'sponsor_animation', 'card_position', 'text_align', 'gradient_direction', 'label_font_weight', 'username_font_weight', 'detail_font_weight'];
+  const isNumeric = (field) => typeof FIELD_SPECS[field].values[0] === 'number'; // the font weights
+
+  test('each choice is accepted', () => {
+    for (const field of choiceFields) {
       for (const value of FIELD_SPECS[field].values) {
         const design = accepts({ [field]: value });
         if (value === '' && field !== 'gradient_direction') assert.equal(field in design, false);
         else assert.equal(design[field], value, `${field}=${value}`);
       }
-      for (const bad of ['nope', 'SlideDown', 'x'.repeat(500), '<b>', 999, true, [], {}]) rejects({ [field]: bad }, field);
+    }
+  });
+
+  test('another choice is replaced by the default (left out), never saved', () => {
+    for (const field of choiceFields) {
+      const others = isNumeric(field) ? [0, 399, 650, 900, -1] : ['nope', 'SlideDown', 'x'.repeat(500), '<b>', 'bounce', 'goldRain'];
+      for (const other of others) assert.equal(field in accepts({ [field]: other }), false, `${field}=${String(other).slice(0, 20)}`);
+    }
+  });
+
+  test('a choice of the wrong kind (a number for a name, a name for a font weight, a boolean, a list) is refused', () => {
+    for (const field of choiceFields) {
+      const wrong = isNumeric(field) ? ['700', 'bold', true, [], {}] : [999, true, [], {}];
+      for (const bad of wrong) rejects({ [field]: bad }, field);
     }
   });
 
@@ -273,11 +307,19 @@ describe('drop-down choices', () => {
 });
 
 describe('text', () => {
-  test('the label is at most 100 characters and the detail at most 300', () => {
-    assert.equal(accepts({ event_label: 'x'.repeat(100) }).event_label.length, 100);
-    rejects({ event_label: 'x'.repeat(101) }, 'event_label');
-    assert.equal(accepts({ detail_text: 'x'.repeat(300) }).detail_text.length, 300);
-    rejects({ detail_text: 'x'.repeat(301) }, 'detail_text');
+  test('the label is kept up to 100 characters and the detail up to 300, and cut after that', () => {
+    assert.equal(accepts({ event_label: 'x'.repeat(100) }).event_label, 'x'.repeat(100));
+    assert.equal(accepts({ event_label: 'x'.repeat(101) }).event_label, 'x'.repeat(100));
+    assert.equal(accepts({ event_label: 'x'.repeat(5000) }).event_label.length, 100);
+    assert.equal(accepts({ detail_text: 'x'.repeat(300) }).detail_text, 'x'.repeat(300));
+    assert.equal(accepts({ detail_text: 'x'.repeat(301) }).detail_text, 'x'.repeat(300));
+  });
+
+  test('text is cut by characters, so an emoji is never split in half', () => {
+    const flag = '\u{1F3C1}';
+    const cut = accepts({ event_label: flag.repeat(101) }).event_label;
+    assert.equal(cut, flag.repeat(100));
+    assert.ok(Array.from(cut).every((c) => c === flag));
   });
 
   test('an empty text is what the streamer typed, and is kept', () => {
@@ -302,20 +344,104 @@ describe('side icon', () => {
     for (const icon of icons) assert.equal(accepts({ card_side_icon: icon }).card_side_icon, icon, icon);
   });
 
-  test('is at most 8 characters', () => {
+  test('up to 8 characters is kept; anything longer is not an icon, so the default icon applies', () => {
     assert.equal(ICON_MAX_CHARACTERS, 8);
     assert.equal(accepts({ card_side_icon: '\u{1F3C6}'.repeat(8) }).card_side_icon, '\u{1F3C6}'.repeat(8));
-    rejects({ card_side_icon: '\u{1F3C6}'.repeat(9) }, 'card_side_icon');
-    rejects({ card_side_icon: 'abcdefghi' }, 'card_side_icon');
+    assert.equal('card_side_icon' in accepts({ card_side_icon: '\u{1F3C6}'.repeat(9) }), false);
+    assert.equal('card_side_icon' in accepts({ card_side_icon: 'abcdefghi' }), false);
   });
 
-  test('cannot carry markup, quotes or control characters', () => {
-    for (const bad of ['<b>', '<img src=x onerror=alert(1)>', '"', "'", '&amp;', '`', 'a\nb', 'a\u0000', '</p>']) rejects({ card_side_icon: bad }, 'card_side_icon');
+  test('markup, quotes and control characters never get through: the icon is dropped', () => {
+    for (const bad of ['<b>', '<img src=x onerror=alert(1)>', '"', "'", '&amp;', '`', 'a\nb', 'a\u0000', '</p>']) {
+      assert.equal('card_side_icon' in accepts({ card_side_icon: bad }), false, JSON.stringify(bad));
+    }
   });
 
   test('is left out when null or empty (the event\'s default icon applies)', () => {
     assert.equal('card_side_icon' in accepts({ card_side_icon: null }), false);
     assert.equal('card_side_icon' in accepts({ card_side_icon: '' }), false);
     for (const bad of [5, true, ['x'], {}]) rejects({ card_side_icon: bad }, 'card_side_icon');
+  });
+});
+
+// ── Compatibility with designs saved by older builders ───────────────────
+
+describe('a design saved by an older builder', () => {
+  // The first builder (commit 9e01c54) offered these names, since renamed or removed:
+  // the car animation "bounce" and the screen effects "goldRain", "moneyRain", "tireMarks".
+  const retired = [['car_animation', 'bounce'], ['screen_effect', 'goldRain'], ['screen_effect', 'moneyRain'], ['screen_effect', 'tireMarks']];
+
+  // What the builder posts back for an alert whose saved design holds values it no longer offers.
+  const oldStyle = () => builderPayload({
+    username_size: 64, // past the slider's 52
+    font_family: 'Orbitron', // not in the picker
+    car_animation: 'bounce',
+    screen_effect: 'goldRain',
+    label_font_family: 'Orbitron',
+    label_font_size: 40,
+    card_width: 1400,
+    card_custom_x: -0.2,
+    card_custom_y: 1.4,
+    border_radius: 18.5,
+    event_label: 'x'.repeat(130),
+  });
+
+  test('is saved normalised, not refused: numbers into range, unknown fonts and choices replaced by the default', () => {
+    const result = validateOverlayDesign(oldStyle());
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const d = result.design;
+    assert.equal(d.username_size, 52);
+    assert.equal(d.label_font_size, 24);
+    assert.equal(d.card_width, 900);
+    assert.equal(d.card_custom_x, 0);
+    assert.equal(d.card_custom_y, 1);
+    assert.equal(d.border_radius, 19);
+    assert.equal(d.event_label, 'x'.repeat(100));
+    for (const field of ['font_family', 'label_font_family', 'car_animation', 'screen_effect']) assert.equal(field in d, false, `${field} falls back to the default`);
+  });
+
+  test('keeps everything else as it was sent', () => {
+    const sent = oldStyle();
+    const d = validateOverlayDesign(sent).design;
+    for (const field of ['bg_color', 'accent_color', 'text_color', 'entrance_animation', 'card_position', 'detail_text', 'bg_opacity', 'gradient_direction', 'shadow_blur']) {
+      assert.equal(d[field], sent[field], field);
+    }
+  });
+
+  test('is the same when it comes as JSON text', () => {
+    assert.deepEqual(validateOverlayDesign(JSON.stringify(oldStyle())), validateOverlayDesign(oldStyle()));
+  });
+
+  test('the names the first builder offered are replaced by the default', () => {
+    for (const [field, name] of retired) assert.equal(field in accepts({ [field]: name }), false, `${field}=${name}`);
+  });
+
+  test('saving what came out again changes nothing more', () => {
+    const once = validateOverlayDesign(oldStyle()).design;
+    assert.deepEqual(validateOverlayDesign(once), { ok: true, design: once });
+  });
+});
+
+describe('a design no builder could have sent is still refused', () => {
+  test('a value of the wrong kind names its field', () => {
+    const wrong = [
+      ['username_size', '24'], ['card_width', true], ['border_radius', {}], ['animation_speed', []], ['bg_opacity', NaN],
+      ['font_family', 5], ['entrance_animation', 5], ['label_font_weight', '700'], ['event_label', 5], ['detail_text', ['x']], ['card_side_icon', 5],
+    ];
+    for (const [field, bad] of wrong) rejects({ [field]: bad }, field);
+  });
+
+  test('a colour that is not #rrggbb names its field', () => {
+    for (const bad of ['red', '#fff', 'rgb(0,0,0)', 'url(javascript:alert(1))', '#12345', '#00ff7f;x', 7]) rejects({ text_color: bad }, 'text_color');
+  });
+
+  test('one bad value refuses the whole design, even next to values that only needed adjusting', () => {
+    assert.deepEqual(validateOverlayDesign(builderPayload({ username_size: 64, font_family: 'Orbitron', text_color: 'red' })), { ok: false, field: 'text_color' });
+  });
+
+  test('so does a design that is not an object', () => {
+    for (const bad of [undefined, null, 5, true, [], 'not json', '{"bg_color":', '[]']) {
+      assert.deepEqual(validateOverlayDesign(bad), { ok: false, field: 'design' }, String(bad));
+    }
   });
 });

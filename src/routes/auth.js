@@ -237,9 +237,12 @@ router.get('/youtube', (req, res) => {
 
 router.get('/youtube/callback', async (req, res) => {
   const { code, state: streamerId, error } = req.query;
-  if (error) return res.redirect('/dashboard/youtube-chatbot?error=' + encodeURIComponent(error));
-  if (!code || !streamerId) return res.redirect('/dashboard/youtube-chatbot?error=Missing parameters');
-  if (String(streamerId) !== String(req.streamer?.id)) return res.redirect('/dashboard/youtube-chatbot?error=Invalid state');
+  // The page shows only the codes it knows (YT_CHATBOT_ERRORS in dashboard.js), so
+  // the URL carries a code: neither what Google sent nor our own error text.
+  const back = (errorCode) => res.redirect(`/dashboard/youtube-chatbot?error=${errorCode}`);
+  if (error) return back('oauth_denied');
+  if (!code || !streamerId) return back('oauth_state');
+  if (String(streamerId) !== String(req.streamer?.id)) return back('oauth_state');
 
   try {
     const redirectUri = `${config.app.url}/auth/youtube/callback`;
@@ -278,7 +281,7 @@ router.get('/youtube/callback', async (req, res) => {
     res.redirect('/dashboard/youtube-chatbot?connected_yt=1');
   } catch (err) {
     console.error('[Auth] YouTube OAuth error:', err.message);
-    res.redirect('/dashboard/youtube-chatbot?error=' + encodeURIComponent(err.message));
+    back('oauth_failed');
   }
 });
 

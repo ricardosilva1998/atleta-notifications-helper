@@ -232,9 +232,13 @@ async function retryPending(streamer, row, options = {}) {
 }
 
 // Gives a viewer's channel points back (the redemption is canceled on Twitch).
-// Only a redemption still waiting in the queue can be canceled.
+// Only a redemption still waiting in the queue can be canceled. Throws when Twitch
+// did not cancel it, including the 403 about affiliate/partner status that
+// helixBroadcaster answers with { affiliateGated } instead of throwing.
 async function refundRedemption(streamer, twitchRewardId, redemptionId) {
-  return fulfillRedemption(streamer, twitchRewardId, redemptionId, 'CANCELED');
+  const result = await fulfillRedemption(streamer, twitchRewardId, redemptionId, 'CANCELED');
+  if (result && result.affiliateGated) throw affiliateRequired();
+  return result;
 }
 
 // Why a redemption of this reward must not play: 'deleted' (deleted here, but Twitch
@@ -243,6 +247,20 @@ function unavailableReason(reward) {
   if (reward.twitch_sync_status === SYNC_DELETE_FAILED) return 'deleted';
   if (!reward.enabled) return 'disabled';
   return null;
+}
+
+// The cooldown of a reward as Helix lists it, in seconds: 0 when it is off, and
+// null when the reward says nothing about one (the cooldown here is then left alone).
+// A response nests it as global_cooldown_setting: { is_enabled, global_cooldown_seconds };
+// the flat is_global_cooldown_enabled / global_cooldown_seconds are the names of the
+// request body, understood here as well in case a response ever carries them.
+function upstreamCooldownSeconds(reward) {
+  const nested = reward.global_cooldown_setting;
+  const hasNested = nested && typeof nested === 'object';
+  const enabled = hasNested ? nested.is_enabled : reward.is_global_cooldown_enabled;
+  const seconds = hasNested ? nested.global_cooldown_seconds : reward.global_cooldown_seconds;
+  if (typeof enabled !== 'boolean') return null;
+  return enabled ? (Number(seconds) || 0) : 0;
 }
 
 // Full reconciliation: syncs our local rows against the Twitch upstream list.
@@ -312,12 +330,13 @@ async function syncRewards(streamerId) {
         // Upstream exists — Twitch is source of truth for title, cost, prompt,
         // paused/enabled and the cooldown
         const up = upstreamById.get(local.twitch_reward_id);
+        const cooldown = upstreamCooldownSeconds(up);
         db.updateReward(local.id, streamerId, {
           title: up.title,
           cost: up.cost,
           prompt: up.prompt || null,
           enabled: up.is_paused ? 0 : 1,
-          cooldown_seconds: up.is_global_cooldown_enabled ? (up.global_cooldown_seconds || 0) : 0,
+          ...(cooldown === null ? {} : { cooldown_seconds: cooldown }),
           twitch_sync_status: 'ok',
           twitch_sync_error: null,
         });

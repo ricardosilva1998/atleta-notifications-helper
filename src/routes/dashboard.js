@@ -29,6 +29,7 @@ const { isBuilderEventType, validateOverlayDesign } = require('../services/overl
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
+const { SYNC_DELETE_FAILED } = require('../services/twitchRewards');
 
 const router = Router();
 
@@ -1229,6 +1230,10 @@ const YT_CHATBOT_ERRORS = {
   token_refresh: 'ytChatbot.error.tokenRefresh',
   no_live_stream: 'ytChatbot.error.noLiveStream',
   connect_failed: 'ytChatbot.error.connectFailed',
+  // Sent by the Google sign-in callback in routes/auth.js
+  oauth_denied: 'ytChatbot.error.oauthDenied',
+  oauth_state: 'ytChatbot.error.oauthState',
+  oauth_failed: 'ytChatbot.error.oauthFailed',
 };
 
 // YouTube chatbot config page
@@ -1706,7 +1711,7 @@ function validateRewardFields(fields, res) {
 // A reward the streamer deleted but Twitch refused to delete is kept (delete_failed)
 // so it is not forgotten while still live there; it is not part of the normal list.
 function isPendingDelete(reward) {
-  return reward.twitch_sync_status === 'delete_failed';
+  return reward.twitch_sync_status === SYNC_DELETE_FAILED;
 }
 
 router.get('/redemptions', (req, res) => {
@@ -1960,7 +1965,7 @@ router.post('/redemptions/:id/retry', async (req, res) => {
   const result = await retryPending(req.streamer, reward);
   if (result.nothingToRetry) return res.status(400).json({ ok: false, error: res.locals.t('redemptions.error.nothingToRetry') });
   if (!result.ok) {
-    const key = reward.twitch_sync_status === 'delete_failed' ? 'redemptions.error.deleteFailed' : 'redemptions.error.updateFailed';
+    const key = reward.twitch_sync_status === SYNC_DELETE_FAILED ? 'redemptions.error.deleteFailed' : 'redemptions.error.updateFailed';
     return res.status(502).json({ ok: false, error: res.locals.t(key), reward: db.getRewardById(id, streamerId) });
   }
   res.json({ ok: true, removed: !!result.removed, reward: db.getRewardById(id, streamerId) || null });

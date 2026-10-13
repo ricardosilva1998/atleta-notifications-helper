@@ -1,11 +1,24 @@
 'use strict';
 
-// What the overlay builder may save. The builder (src/views/overlay-builder.ejs)
-// only ever produces the values below, so the server accepts exactly those:
+// What the overlay builder may save, and how a design is cleaned up on the way in.
+// The builder (src/views/overlay-builder.ejs) only ever produces the values below:
 // the event types of its tabs, #rrggbb colours, the ranges of its controls, the
 // fonts of its picker (the ones the OBS overlay can load), and the option lists
 // of its drop-downs. src/services/overlayDesign.test.js reads the builder and
 // the overlay and fails when they drift apart from this file.
+//
+// A design saved by an older builder, or one the builder posts back from its saved
+// state, can still carry a value outside those lists (an animation that has since
+// been renamed, a number past a range). Refusing the whole design for that would
+// leave the streamer unable to save anything for the alert, so a value that is of
+// the right kind but not allowed is brought into what is allowed:
+//   - a number past its range is moved to the nearest end of the range (a
+//     whole-number field is rounded first), and text that is too long is cut
+//   - a font, a choice or an icon that is not one of the known ones is replaced by
+//     the default: it is left out of the design, so the database default applies
+// Only a design that cannot have come from a builder is refused, and the result
+// then names the field: not an object, a value of the wrong kind (text where a
+// number goes), or a colour that is not #rrggbb.
 
 const BUILDER_EVENT_TYPES = Object.freeze([
   'follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner',
@@ -79,32 +92,48 @@ const FIELD_SPECS = Object.freeze({
 const ICON_MAX_CHARACTERS = 8;
 // Never part of an icon, and the characters that would matter if one were put into markup.
 const ICON_FORBIDDEN = /[<>&"'`\u0000-\u001F\u007F]/;
+const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/;
 
 function isBuilderEventType(value) {
   return typeof value === 'string' && BUILDER_EVENT_TYPES.includes(value);
 }
 
-// True when `value` is acceptable for `spec`.
-function fits(spec, value) {
+// What becomes of one value that was sent: { value } to save (as it was, or brought
+// into what is allowed), { unset: true } to leave it out so the database default
+// applies, or { invalid: true } when it cannot have come from a builder.
+const UNSET = Object.freeze({ unset: true });
+const INVALID = Object.freeze({ invalid: true });
+
+function normalise(spec, value) {
+  if (typeof value === 'number' && Number.isNaN(value)) return INVALID;
   switch (spec.kind) {
     case 'hex':
-      return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+      return typeof value === 'string' && HEX_COLOUR.test(value) ? { value } : INVALID;
     case 'font':
-      return typeof value === 'string' && OVERLAY_FONTS.includes(value);
-    case 'text':
-      return typeof value === 'string' && value.length <= spec.max;
+      if (typeof value !== 'string') return INVALID;
+      return OVERLAY_FONTS.includes(value) ? { value } : UNSET;
+    case 'text': {
+      if (typeof value !== 'string') return INVALID;
+      // Cut by characters, not UTF-16 units, so an emoji is never split in two.
+      const characters = Array.from(value);
+      return { value: characters.length <= spec.max ? value : characters.slice(0, spec.max).join('') };
+    }
     case 'enum':
-      return spec.values.includes(value);
+      // The choices are all text, or all numbers (font weights): the other kind is a wrong kind.
+      if (typeof value !== typeof spec.values[0]) return INVALID;
+      return spec.values.includes(value) ? { value } : UNSET;
     case 'int':
-      return Number.isInteger(value) && value >= spec.min && value <= spec.max;
-    case 'number':
-      return typeof value === 'number' && Number.isFinite(value) && value >= spec.min && value <= spec.max;
+    case 'number': {
+      if (typeof value !== 'number') return INVALID;
+      const wanted = spec.kind === 'int' ? Math.round(value) : value;
+      const inRange = Math.min(spec.max, Math.max(spec.min, wanted));
+      return { value: inRange === 0 ? 0 : inRange }; // never -0
+    }
     case 'icon':
-      return typeof value === 'string'
-        && Array.from(value).length <= ICON_MAX_CHARACTERS
-        && !ICON_FORBIDDEN.test(value);
+      if (typeof value !== 'string') return INVALID;
+      return Array.from(value).length <= ICON_MAX_CHARACTERS && !ICON_FORBIDDEN.test(value) ? { value } : UNSET;
     default:
-      return false;
+      return INVALID;
   }
 }
 
@@ -116,9 +145,10 @@ function isUnset(spec, value) {
 }
 
 // The design the builder posted (an object, or JSON text of one): { ok: true,
-// design } with only the known, valid fields, or { ok: false, field } naming
-// the first thing that cannot be saved. Fields left out or null are left out of
-// the result, so the database defaults apply.
+// design } with only the known fields, each brought into what is allowed (see the
+// top of this file), or { ok: false, field } naming the first value that cannot
+// have come from a builder. Fields left out, null or empty are left out of the
+// result, and so are values replaced by their default, so the database defaults apply.
 function validateOverlayDesign(input) {
   let source = input;
   if (typeof source === 'string') {
@@ -130,8 +160,9 @@ function validateOverlayDesign(input) {
   for (const [field, spec] of Object.entries(FIELD_SPECS)) {
     const value = Object.prototype.hasOwnProperty.call(source, field) ? source[field] : undefined;
     if (isUnset(spec, value)) continue;
-    if (!fits(spec, value)) return { ok: false, field };
-    design[field] = value;
+    const result = normalise(spec, value);
+    if (result.invalid) return { ok: false, field };
+    if (!result.unset) design[field] = result.value;
   }
   return { ok: true, design };
 }
