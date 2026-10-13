@@ -3,6 +3,48 @@ const db = require('../db');
 const bus = require('./overlayBus');
 const { chatManager } = require('./twitchChat');
 
+// One StreamElements event. A real tip is logged once per StreamElements event
+// id, and only a newly logged tip counts toward the tip goal: a replayed event
+// (same id) plays the alert again but is not counted twice. Test tips from the
+// StreamElements dashboard only play the alert and the chat message.
+function handleTip(streamerId, event, isTest) {
+  if (!event || event.type !== 'tip') return;
+  const data = event.data || {};
+  // Real tips count toward the tip goal even if the overlay alert is off
+  if (!isTest) {
+    let isNew = false;
+    try {
+      isNew = db.logDonation(streamerId, {
+        source: 'streamelements', donor_name: data.username, amount: data.amount,
+        currency: data.currency, message: data.message, external_id: event._id || null,
+      });
+    } catch (e) { console.error('[StreamElements] logDonation error:', e.message); }
+    if (isNew) require('./tipGoals').recordDonation(streamerId, data.amount, data.currency);
+  }
+  const s = db.getStreamerById(streamerId);
+  if (s && s.overlay_donation_enabled) {
+    bus.emit(`overlay:${streamerId}`, {
+      type: 'donation',
+      data: {
+        username: data.username,
+        amount: data.amount,
+        message: data.message || null,
+        currency: data.currency || 'USD',
+      },
+    });
+    // Test tips still play, but stay out of the dashboard's 7-day stats
+    if (!isTest) {
+      try { db.logOverlayEvent(streamerId, 'donation', data.username, { amount: data.amount, currency: data.currency }); } catch (e) {}
+    }
+    chatManager.sendEventMessage(streamerId, 'donation', {
+      username: data.username,
+      amount: data.amount,
+      currency: data.currency || 'USD',
+      message: data.message || '',
+    });
+  }
+}
+
 class StreamElementsClient {
   constructor(streamerId) {
     this.streamerId = streamerId;
@@ -37,42 +79,8 @@ class StreamElementsClient {
       console.error(`[StreamElements] Auth failed for streamer ${this.streamerId} — check JWT token`);
     });
 
-    const handleTip = (event, isTest) => {
-      if (event.type === 'tip') {
-        // Real tips count toward the tip goal even if the overlay alert is off; SE test events don't
-        if (!isTest) {
-          require('./tipGoals').recordDonation(this.streamerId, event.data.amount, event.data.currency);
-          try {
-            db.logDonation(this.streamerId, {
-              source: 'streamelements', donor_name: event.data.username, amount: event.data.amount,
-              currency: event.data.currency, message: event.data.message, external_id: event._id || null,
-            });
-          } catch (e) { console.error('[StreamElements] logDonation error:', e.message); }
-        }
-        const s = db.getStreamerById(this.streamerId);
-        if (s && s.overlay_donation_enabled) {
-          bus.emit(`overlay:${this.streamerId}`, {
-            type: 'donation',
-            data: {
-              username: event.data.username,
-              amount: event.data.amount,
-              message: event.data.message || null,
-              currency: event.data.currency || 'USD',
-            },
-          });
-          try { db.logOverlayEvent(this.streamerId, 'donation', event.data.username, { amount: event.data.amount, currency: event.data.currency }); } catch (e) {}
-          chatManager.sendEventMessage(this.streamerId, 'donation', {
-            username: event.data.username,
-            amount: event.data.amount,
-            currency: event.data.currency || 'USD',
-            message: event.data.message || '',
-          });
-        }
-      }
-    };
-
-    this.socket.on('event', (event) => handleTip(event, false));
-    this.socket.on('event:test', (event) => handleTip(event, true));
+    this.socket.on('event', (event) => handleTip(this.streamerId, event, false));
+    this.socket.on('event:test', (event) => handleTip(this.streamerId, event, true));
 
     this.socket.on('disconnect', () => {
       console.log(`[StreamElements] Disconnected for streamer ${this.streamerId}`);
@@ -126,4 +134,4 @@ const streamElementsManager = {
   },
 };
 
-module.exports = { streamElementsManager };
+module.exports = { streamElementsManager, handleTip };
