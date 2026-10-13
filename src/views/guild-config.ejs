@@ -22,6 +22,19 @@
 <% if (msg === 'missing_fields') { %>
   <div class="alert alert-danger">Please fill in all required fields.</div>
 <% } %>
+<% if (msg === 'invalid_channel') { %>
+  <div class="alert alert-danger"><%= t('guild.invalidChannel') %></div>
+<% } %>
+<% if (deliveryError) { %>
+  <div class="alert alert-warning">
+    <strong><%= t('guild.deliveryError.title') %></strong> —
+    <% if (deliveryError.unavailable) { %>
+      <%= t('guild.deliveryError.unavailable', { channel: deliveryError.channel, when: deliveryError.when }) %>
+    <% } else { %>
+      <%= t('guild.deliveryError.failed', { channel: deliveryError.channel, when: deliveryError.when, error: deliveryError.error }) %>
+    <% } %>
+  </div>
+<% } %>
 <% if (msg === 'upgrade_clips') { %>
   <div class="alert alert-warning">Clip notifications require a <a href="/pricing">Starter plan or higher</a>.</div>
 <% } %>
@@ -344,7 +357,8 @@
       </div>
       <div class="form-group">
         <label>Custom message (leave blank for default)</label>
-        <textarea name="welcome_message" placeholder="Welcome to the server!"><%= guild.welcome_message || '' %></textarea>
+        <textarea name="welcome_message" maxlength="<%= welcomeMessageMax %>" placeholder="Welcome to the server!"><%= guild.welcome_message || '' %></textarea>
+        <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;"><%= t('guild.welcomeMessageHint', { max: welcomeMessageMax }) %></p>
       </div>
     </div>
 

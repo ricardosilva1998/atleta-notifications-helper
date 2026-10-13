@@ -267,6 +267,12 @@
   "tip.error.expired": "This donation link has expired or is not valid. Please start your donation again.",
   "tip.error.notConfirmed": "PayPal could not confirm this payment, so no alert was sent. Please check your PayPal account before trying again.",
 
+  "dashboard.claimNotAllowed": "You need the Manage Server permission in that Discord server to claim it.",
+  "guild.invalidChannel": "That channel is not in this Discord server. Pick a channel from the list.",
+  "guild.welcomeMessageHint": "Up to {{max}} characters.",
+  "guild.deliveryError.title": "Last delivery problem",
+  "guild.deliveryError.unavailable": "On {{when}} the bot could not post in {{channel}}: the channel is gone, the bot cannot see it, or it is not in this server. Pick another channel or check the bot's permissions in Discord.",
+  "guild.deliveryError.failed": "On {{when}} the bot could not post in {{channel}}. Discord said: {{error}}. Check the bot's permissions for that channel in Discord.",
   "link.expired.title": "Link expired",
   "link.expired.body": "This link has expired or is not valid. Links from /link work for {{minutes}} minutes.",
   "link.expired.hint": "Run /link in the Discord server again to get a new link.",

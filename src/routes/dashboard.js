@@ -3,7 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const db = require('../db');
-const { client } = require('../discord');
+const { client, fetchGuildChannel, streamerGuildForChannel } = require('../discord');
+const {
+  canManageGuild, botInviteUrl: inviteUrlFor,
+  clampWelcomeMessage, WELCOME_MESSAGE_MAX, DELIVERY_CHANNEL_UNAVAILABLE,
+} = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
 const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPosts } = require('../services/instagram');
@@ -75,8 +79,38 @@ function getDiscordChannels(guildId) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Every Discord channel id saved for a server must be one of that server's
+// channels (empty ids mean "off" and are fine).
+async function channelsInGuild(guildId, channelIds) {
+  for (const channelId of channelIds) {
+    if (channelId && !(await fetchGuildChannel(guildId, channelId))) return false;
+  }
+  return true;
+}
+
+// The server's last failed post, while that channel is still used by one of
+// its settings (an error about a channel already replaced is not shown).
+function lastDeliveryError(guildConfig, channels, twitchWatchers, youtubeWatchers, streamer) {
+  const channelId = guildConfig.last_delivery_error_channel_id;
+  if (!guildConfig.last_delivery_error || !channelId) return null;
+  const inUse = new Set([
+    guildConfig.welcome_channel_id,
+    streamer.mod_log_discord_enabled ? streamer.mod_log_discord_channel_id : null,
+    ...twitchWatchers.flatMap((w) => [w.live_channel_id, w.clips_channel_id]),
+    ...youtubeWatchers.flatMap((w) => [w.videos_channel_id, w.live_channel_id]),
+  ].filter(Boolean));
+  if (!inUse.has(channelId)) return null;
+  const known = channels.find((c) => c.id === channelId);
+  return {
+    channel: known ? `#${known.name}` : channelId,
+    when: `${guildConfig.last_delivery_error_at} UTC`,
+    unavailable: guildConfig.last_delivery_error === DELIVERY_CHANNEL_UNAVAILABLE,
+    error: guildConfig.last_delivery_error,
+  };
+}
+
 // Claim a guild for this streamer
-router.post('/claim/:guildId', (req, res) => {
+router.post('/claim/:guildId', async (req, res) => {
   const { guildId } = req.params;
   const discordGuild = client.guilds.cache.get(guildId);
   if (!discordGuild) return res.redirect('/dashboard');
@@ -85,6 +119,12 @@ router.post('/claim/:guildId', (req, res) => {
   const allClaimed = db.getAllClaimedGuildIds();
   if (allClaimed.has(guildId)) {
     return res.redirect('/dashboard?msg=already_claimed');
+  }
+
+  // Only someone who may manage the Discord server can claim it (asked fresh).
+  if (!(await canManageGuild(discordGuild, req.streamer.discord_user_id, { fresh: true }))) {
+    console.warn(`[Dashboard] ${req.streamer.discord_username} cannot manage guild ${guildId}; claim refused`);
+    return res.redirect('/dashboard?msg=claim_not_allowed');
   }
 
   // Check tier guild limit
@@ -170,7 +210,7 @@ router.post('/account/youtube-api-key', (req, res) => {
 });
 
 // Dashboard home — list guilds
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const guilds = db.getGuildsForStreamer(req.streamer.id);
   const msg = req.query.msg;
 
@@ -192,14 +232,17 @@ router.get('/', (req, res) => {
     };
   });
 
-  // Only show guilds NOT claimed by anyone (including this user)
+  // Servers nobody has claimed yet (including this user), listed only to
+  // someone who may manage them — the same check a claim makes.
   const myGuildIds = new Set(guilds.map((g) => g.guild_id));
   const allClaimed = db.getAllClaimedGuildIds();
-  const unclaimedGuilds = client.guilds.cache
-    .filter((g) => !myGuildIds.has(g.id) && !allClaimed.has(g.id))
+  const candidates = [...client.guilds.cache.values()].filter((g) => !myGuildIds.has(g.id) && !allClaimed.has(g.id));
+  const manageable = await Promise.all(candidates.map((g) => canManageGuild(g, req.streamer.discord_user_id)));
+  const unclaimedGuilds = candidates
+    .filter((g, i) => manageable[i])
     .map((g) => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 64 }) }));
 
-  const botInviteUrl = `https://discord.com/oauth2/authorize?client_id=${client.application.id}&permissions=8&scope=bot%20applications.commands&state=${req.streamer.id}`;
+  const botInviteUrl = inviteUrlFor(client.application.id);
   const { tier, limits } = getTierLimits(req.streamer.id);
 
   // Twitch tab data
@@ -346,6 +389,8 @@ router.get('/guild/:guildId', async (req, res) => {
     guildId,
     channels,
     roles,
+    welcomeMessageMax: WELCOME_MESSAGE_MAX,
+    deliveryError: lastDeliveryError(guildConfig, channels, watchedTwitchChannels, watchedYoutubeChannels, req.streamer),
     watchedTwitchChannels,
     watchedYoutubeChannels,
     watchedInstagramAccounts,
@@ -363,18 +408,25 @@ router.get('/guild/:guildId', async (req, res) => {
 });
 
 // Save guild config
-router.post('/guild/:guildId', (req, res) => {
+router.post('/guild/:guildId', async (req, res) => {
   const { guildId } = req.params;
   const guildConfig = db.getGuildConfig(guildId, req.streamer.id);
   if (!guildConfig) return res.redirect('/dashboard');
 
+  const welcomeChannelId = req.body.welcome_channel_id || null;
+  if (!(await channelsInGuild(guildId, [welcomeChannelId]))) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_channel`);
+  }
+
   db.updateGuildConfig(guildId, req.streamer.id, {
-    twitch_live_channel_id: req.body.twitch_live_channel_id || null,
-    twitch_clips_channel_id: req.body.twitch_clips_channel_id || null,
-    youtube_channel_id: req.body.youtube_channel_id || null,
-    welcome_channel_id: req.body.welcome_channel_id || null,
+    // Legacy columns: not editable on the page and never used for posting,
+    // so they keep their stored values instead of whatever the form sends.
+    twitch_live_channel_id: guildConfig.twitch_live_channel_id,
+    twitch_clips_channel_id: guildConfig.twitch_clips_channel_id,
+    youtube_channel_id: guildConfig.youtube_channel_id,
+    welcome_channel_id: welcomeChannelId,
     sub_role_id: req.body.sub_role_id || null,
-    welcome_message: req.body.welcome_message || null,
+    welcome_message: clampWelcomeMessage(req.body.welcome_message) || null,
     twitch_live_enabled: req.body.twitch_live_enabled === 'on',
     twitch_clips_enabled: req.body.twitch_clips_enabled === 'on',
     youtube_enabled: req.body.youtube_enabled === 'on',
@@ -425,6 +477,9 @@ router.post('/guild/:guildId/channels', async (req, res) => {
   if (!twitchUsername || (!liveChannelId && !clipsChannelId)) {
     return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=missing_fields`);
   }
+  if (!(await channelsInGuild(guildId, [liveChannelId, clipsChannelId]))) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=invalid_channel`);
+  }
 
   // Check clips permission
   if (clipsChannelId && !limits.twitchClips) {
@@ -451,13 +506,18 @@ router.post('/guild/:guildId/channels/:channelId/remove', (req, res) => {
   res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=removed`);
 });
 
-router.post('/guild/:guildId/channels/:channelId/edit', (req, res) => {
+router.post('/guild/:guildId/channels/:channelId/edit', async (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
   const liveChannelId = req.body.live_channel_id || null;
   const clipsChannelId = req.body.clips_channel_id || null;
+  if (!(await channelsInGuild(guildId, [liveChannelId, clipsChannelId]))) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=invalid_channel`);
+  }
   console.log(`[Dashboard] Editing Twitch channel ${channelId}: live=${liveChannelId}, clips=${clipsChannelId}`);
-  db.updateWatchedChannel(parseInt(channelId), req.streamer.id, liveChannelId, clipsChannelId);
+  if (!db.updateWatchedChannel(parseInt(channelId), req.streamer.id, guildId, liveChannelId, clipsChannelId)) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=twitch`); // not a watcher of this server
+  }
   console.log(`[Dashboard] Updated Twitch channel ${channelId} for guild ${guildId}`);
   res.redirect(`/dashboard/guild/${guildId}?tab=twitch&msg=updated`);
 });
@@ -483,6 +543,9 @@ router.post('/guild/:guildId/youtube', async (req, res) => {
 
   if (!input || (!videosChannelId && !liveChannelId)) {
     return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=missing_fields`);
+  }
+  if (!(await channelsInGuild(guildId, [videosChannelId, liveChannelId]))) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=invalid_channel`);
   }
 
   // Resolve @handle or channel ID
@@ -538,10 +601,17 @@ router.post('/guild/:guildId/youtube/:channelId/remove', (req, res) => {
   res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=removed`);
 });
 
-router.post('/guild/:guildId/youtube/:channelId/edit', (req, res) => {
+router.post('/guild/:guildId/youtube/:channelId/edit', async (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
-  db.updateWatchedYoutubeChannel(parseInt(channelId), req.streamer.id, req.body.videos_channel_id, req.body.live_channel_id);
+  const videosChannelId = req.body.videos_channel_id || null;
+  const liveChannelId = req.body.live_channel_id || null;
+  if (!(await channelsInGuild(guildId, [videosChannelId, liveChannelId]))) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=invalid_channel`);
+  }
+  if (!db.updateWatchedYoutubeChannel(parseInt(channelId), req.streamer.id, guildId, videosChannelId, liveChannelId)) {
+    return res.redirect(`/dashboard/guild/${guildId}?tab=youtube`); // not a watcher of this server
+  }
   console.log(`[Dashboard] Updated YouTube channel ${channelId} for guild ${guildId}`);
   res.redirect(`/dashboard/guild/${guildId}?tab=youtube&msg=updated`);
 });
@@ -1196,6 +1266,9 @@ router.post('/chatbot/builtins', (req, res) => {
 
 router.post('/chatbot/moderation', (req, res) => {
   const b = req.body;
+  // The Discord moderation log may only point at a channel of a server this streamer claimed.
+  const modLogChannelId = streamerGuildForChannel(req.streamer.id, b.mod_log_discord_channel_id)
+    ? String(b.mod_log_discord_channel_id) : null;
   db.updateModerationConfig(req.streamer.id, {
     mod_banned_words_enabled: b.mod_banned_words_enabled ? 1 : 0,
     mod_link_protection_enabled: b.mod_link_protection_enabled ? 1 : 0,
@@ -1218,7 +1291,7 @@ router.post('/chatbot/moderation', (req, res) => {
     mod_action_response: b.mod_action_response || 'delete',
     mod_escalation_enabled: b.mod_escalation_enabled ? 1 : 0,
     mod_log_discord_enabled: b.mod_log_discord_enabled ? 1 : 0,
-    mod_log_discord_channel_id: b.mod_log_discord_channel_id || null,
+    mod_log_discord_channel_id: modLogChannelId,
     mod_exempt_subs: b.mod_exempt_subs ? 1 : 0,
     mod_exempt_vips: b.mod_exempt_vips ? 1 : 0,
   });

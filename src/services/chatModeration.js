@@ -454,11 +454,13 @@ async function executeAction(client, channel, tags, action, reason, streamer) {
 }
 
 // ─── Discord mod log ──────────────────────────────────────────────────────────
+// Posted only into a channel of one of the streamer's claimed servers.
 function logToDiscord(streamer, username, reason, action) {
   try {
-    const { client: discordClient } = require('../discord');
-    const ch = discordClient.channels.cache.get(streamer.mod_log_discord_channel_id);
-    if (!ch) return;
+    const { streamerGuildForChannel, sendToGuildChannel } = require('../discord');
+    const channelId = streamer.mod_log_discord_channel_id;
+    const guildId = streamerGuildForChannel(streamer.id, channelId);
+    if (!guildId) return;
     const actionLabels = {
       warn: 'Warning (message deleted)',
       delete: 'Message deleted',
@@ -467,7 +469,7 @@ function logToDiscord(streamer, username, reason, action) {
       timeout_600: 'Timeout 10min',
       timeout_1800: 'Timeout 30min',
     };
-    ch.send({
+    sendToGuildChannel(guildId, streamer.id, channelId, {
       embeds: [{
         title: 'Moderation Action',
         color: 0xff4444,

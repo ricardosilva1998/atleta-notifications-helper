@@ -1355,8 +1355,62 @@ function updateGuildConfig(guildId, streamerId, config) {
   );
 }
 
-function deleteGuild(guildId, streamerId) {
+// Every table of watchers that post into a claimed server, keyed by
+// (guild_id, streamer_id). A watcher only belongs to a streamer's claim on
+// that server: once the claim is gone nobody can see or edit it.
+const WATCHER_TABLES = [
+  'watched_channels', 'watched_youtube_channels', 'watched_instagram_accounts',
+  'watched_tiktok_accounts', 'watched_twitter_accounts', 'watched_iracing_drivers',
+];
+const _deleteClaimWatchers = WATCHER_TABLES.map((table) =>
+  db.prepare(`DELETE FROM ${table} WHERE guild_id = ? AND streamer_id = ?`));
+const _deleteOrphanWatchers = WATCHER_TABLES.map((table) => [table, db.prepare(`
+  DELETE FROM ${table}
+  WHERE NOT EXISTS (SELECT 1 FROM guilds g WHERE g.guild_id = ${table}.guild_id AND g.streamer_id = ${table}.streamer_id)
+`)]);
+
+// Removing a server also stops everything that posted into it for this streamer.
+const _deleteGuildWithWatchers = db.transaction((guildId, streamerId) => {
+  for (const stmt of _deleteClaimWatchers) stmt.run(guildId, streamerId);
   _deleteGuild.run(guildId, streamerId);
+});
+
+function deleteGuild(guildId, streamerId) {
+  _deleteGuildWithWatchers(guildId, streamerId);
+}
+
+// Boot cleanup: watchers left behind by servers removed before deleteGuild
+// took them along. Returns { total, byTable }; running it again removes nothing.
+const _deleteAllOrphanWatchers = db.transaction(() => {
+  const byTable = {};
+  let total = 0;
+  for (const [table, stmt] of _deleteOrphanWatchers) {
+    byTable[table] = stmt.run().changes;
+    total += byTable[table];
+  }
+  return { total, byTable };
+});
+
+function deleteOrphanWatchers() {
+  return _deleteAllOrphanWatchers();
+}
+
+// Last failed post into a claimed server, shown on its settings page until a
+// later post into the same channel succeeds.
+const DELIVERY_ERROR_MAX = 300;
+
+function recordDeliveryError(guildId, streamerId, channelId, message) {
+  db.prepare(`
+    UPDATE guilds SET last_delivery_error = ?, last_delivery_error_at = datetime('now'), last_delivery_error_channel_id = ?
+    WHERE guild_id = ? AND streamer_id = ?
+  `).run(String(message || 'error').slice(0, DELIVERY_ERROR_MAX), channelId ? String(channelId) : null, guildId, streamerId);
+}
+
+function clearDeliveryError(guildId, streamerId, channelId) {
+  db.prepare(`
+    UPDATE guilds SET last_delivery_error = NULL, last_delivery_error_at = NULL, last_delivery_error_channel_id = NULL
+    WHERE guild_id = ? AND streamer_id = ? AND last_delivery_error_channel_id = ?
+  `).run(guildId, streamerId, String(channelId));
 }
 
 // --- Poller State ---
@@ -1704,32 +1758,34 @@ function updateWatchedChannelProfileImage(id, profileImageUrl) {
   _updateWatchedChannelProfileImage.run(profileImageUrl, id);
 }
 
+// Watcher edits are scoped to the server in the URL, whose channels the new
+// ids were checked against. Both return true when a row changed.
 const _updateWatchedChannel = db.prepare(`
   UPDATE watched_channels SET live_channel_id = ?, clips_channel_id = ?,
     notify_live = ?, notify_clips = ?
-  WHERE id = ? AND streamer_id = ?
+  WHERE id = ? AND streamer_id = ? AND guild_id = ?
 `);
 
-function updateWatchedChannel(id, streamerId, liveChannelId, clipsChannelId) {
-  _updateWatchedChannel.run(
+function updateWatchedChannel(id, streamerId, guildId, liveChannelId, clipsChannelId) {
+  return _updateWatchedChannel.run(
     liveChannelId || null, clipsChannelId || null,
     liveChannelId ? 1 : 0, clipsChannelId ? 1 : 0,
-    id, streamerId
-  );
+    id, streamerId, guildId
+  ).changes > 0;
 }
 
 const _updateWatchedYoutubeChannel = db.prepare(`
   UPDATE watched_youtube_channels SET videos_channel_id = ?, live_channel_id = ?,
     notify_videos = ?, notify_live = ?
-  WHERE id = ? AND streamer_id = ?
+  WHERE id = ? AND streamer_id = ? AND guild_id = ?
 `);
 
-function updateWatchedYoutubeChannel(id, streamerId, videosChannelId, liveChannelId) {
-  _updateWatchedYoutubeChannel.run(
+function updateWatchedYoutubeChannel(id, streamerId, guildId, videosChannelId, liveChannelId) {
+  return _updateWatchedYoutubeChannel.run(
     videosChannelId || null, liveChannelId || null,
     videosChannelId ? 1 : 0, liveChannelId ? 1 : 0,
-    id, streamerId
-  );
+    id, streamerId, guildId
+  ).changes > 0;
 }
 
 function removeWatchedChannel(id, streamerId) {
@@ -3500,6 +3556,18 @@ try {
   if (info.changes > 0) console.log(`[DB] Marked ${info.changes} overlay_designs rows as design_version=1`);
 } catch (e) { _migrationLog('design_version backfill', e); }
 
+// Migration: last failed post into a claimed server (see recordDeliveryError),
+// shown on the server's settings page.
+try {
+  const cols = db.pragma('table_info(guilds)').map(c => c.name);
+  for (const [col, type] of [['last_delivery_error', 'TEXT'], ['last_delivery_error_at', 'TEXT'], ['last_delivery_error_channel_id', 'TEXT']]) {
+    if (!cols.includes(col)) {
+      db.exec(`ALTER TABLE guilds ADD COLUMN ${col} ${type}`);
+      console.log(`[DB] Added ${col} column to guilds`);
+    }
+  }
+} catch (e) { _migrationLog('guilds delivery error', e); }
+
 // Hot path: getEnabledSponsorImages runs on every sponsor rotation tick.
 const _stmtGetSponsorImages = db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? ORDER BY sort_order, id');
 const _stmtGetEnabledSponsorImages = db.prepare('SELECT * FROM sponsor_images WHERE streamer_id = ? AND enabled = 1 ORDER BY sort_order, id');
@@ -4835,6 +4903,9 @@ module.exports = {
   upsertGuild,
   updateGuildConfig,
   deleteGuild,
+  deleteOrphanWatchers,
+  recordDeliveryError,
+  clearDeliveryError,
   getPollerState,
   updatePollerState,
   getLinkedUsers,

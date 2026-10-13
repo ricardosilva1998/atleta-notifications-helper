@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const config = require('./config');
+const { isChannelInGuild, DELIVERY_CHANNEL_UNAVAILABLE } = require('./services/discordGuards');
 
 // Posted text (clip and video titles, creator names) comes from third parties,
 // so by default nothing the bot sends may ping @everyone, @here, roles or
@@ -9,25 +10,70 @@ const client = new Client({
   allowedMentions: { parse: [] },
 });
 
+// The only way to reach a channel before posting: it must be a channel of the
+// server the post is for. A saved channel id is never trusted on its own.
+async function fetchGuildChannel(guildId, channelId) {
+  if (!guildId || typeof channelId !== 'string' || !/^\d{17,20}$/.test(channelId)) return null;
+  const guild = client.guilds.cache.get(String(guildId));
+  if (!guild) return null;
+  const channel = guild.channels.cache.get(channelId)
+    || await guild.channels.fetch(channelId).catch(() => null);
+  return isChannelInGuild(channel, guildId) ? channel : null;
+}
+
+// The moderation log has no server of its own: its channel must be one of a
+// server the streamer has claimed. Returns that server's id, or null.
+function streamerGuildForChannel(streamerId, channelId) {
+  if (!streamerId || !channelId) return null;
+  const db = require('./db');
+  const claim = db.getGuildsForStreamer(streamerId)
+    .find((g) => client.guilds.cache.get(g.guild_id)?.channels.cache.has(String(channelId)));
+  return claim ? claim.guild_id : null;
+}
+
+// Bookkeeping must never turn a delivered post into a failure (or hide one).
+function noteDelivery(guildId, streamerId, channelId, error) {
+  if (!guildId || !streamerId) return;
+  try {
+    const db = require('./db');
+    if (error) db.recordDeliveryError(guildId, streamerId, channelId, error);
+    else db.clearDeliveryError(guildId, streamerId, channelId);
+  } catch (e) {
+    console.error(`[Discord] Could not record delivery status: ${e.message}`);
+  }
+}
+
+// Posts into a channel of a claimed server for one streamer. Returns false when
+// the channel isn't a channel of that server the bot can reach; rethrows what
+// Discord rejects. Either failure is kept for the server's settings page, and
+// a later success in the same channel clears it.
+async function sendToGuildChannel(guildId, streamerId, channelId, payload) {
+  const channel = await fetchGuildChannel(guildId, channelId);
+  if (!channel) {
+    noteDelivery(guildId, streamerId, channelId, DELIVERY_CHANNEL_UNAVAILABLE);
+    return false;
+  }
+  try {
+    await channel.send(payload);
+  } catch (error) {
+    noteDelivery(guildId, streamerId, channelId, error.message);
+    throw error;
+  }
+  noteDelivery(guildId, streamerId, channelId, null);
+  return true;
+}
+
 async function sendNotification(channelId, embed, meta) {
   const db = require('./db');
+  const guildId = meta?.guildId;
   try {
-    const channel = await client.channels.fetch(channelId);
-    if (!channel) {
-      console.error(`Channel ${channelId} not found`);
-      if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, false);
-      return;
-    }
-    if (meta?.contentOnly) {
-      await channel.send(meta.contentOnly);
-    } else {
-      const payload = { embeds: [embed] };
-      await channel.send(payload);
-    }
-    if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, true);
+    const payload = meta?.contentOnly ? meta.contentOnly : { embeds: [embed] };
+    const sent = await sendToGuildChannel(guildId, meta?.streamerId, channelId, payload);
+    if (!sent) console.error(`[Discord] Channel ${channelId} is not a channel of server ${guildId} the bot can reach`);
+    if (meta) db.logNotification(meta.streamerId, guildId, meta.type, sent);
   } catch (error) {
     console.error(`Discord send error: ${error.message} (code: ${error.code}, status: ${error.status})`);
-    if (meta) db.logNotification(meta.streamerId, meta.guildId, meta.type, false);
+    if (meta) db.logNotification(meta.streamerId, guildId, meta.type, false);
     throw error;
   }
 }
@@ -202,4 +248,4 @@ function buildIracingResultEmbed(raceData) {
   });
 }
 
-module.exports = { client, sendNotification, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };
+module.exports = { client, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendNotification, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };

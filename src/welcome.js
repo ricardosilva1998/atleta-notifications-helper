@@ -1,5 +1,6 @@
-const { client, buildEmbed } = require('./discord');
+const { client, buildEmbed, sendToGuildChannel } = require('./discord');
 const db = require('./db');
+const { clampWelcomeMessage } = require('./services/discordGuards');
 
 const DEFAULT_WELCOME_MESSAGE = `What's up and welcome! You've officially joined the community — the best place for stream updates, community chats, clips, memes, gaming talk, and all-around good vibes.
 
@@ -19,10 +20,8 @@ function start() {
 
     for (const config of configs) {
       try {
-        const channel = await client.channels.fetch(config.welcome_channel_id);
-        if (!channel) continue;
-
-        const message = config.welcome_message || DEFAULT_WELCOME_MESSAGE;
+        // Messages saved before the length cap can still be over the embed limit.
+        const message = clampWelcomeMessage(config.welcome_message) || DEFAULT_WELCOME_MESSAGE;
         const streamerName = config.twitch_username || 'the community';
 
         const embed = buildEmbed({
@@ -33,9 +32,12 @@ function start() {
           timestamp: new Date(),
         });
 
-        // The client blocks all mentions by default; ping only the new member.
-        await channel.send({ content: `Hey <@${member.id}>!`, embeds: [embed], allowedMentions: { users: [member.id] } });
-        console.log(`[Welcome] Welcomed ${member.user.username} in ${member.guild.name}`);
+        // Only a channel of the server the member joined; the client blocks all
+        // mentions by default, so ping only the new member.
+        const sent = await sendToGuildChannel(member.guild.id, config.streamer_id, config.welcome_channel_id,
+          { content: `Hey <@${member.id}>!`, embeds: [embed], allowedMentions: { users: [member.id] } });
+        if (sent) console.log(`[Welcome] Welcomed ${member.user.username} in ${member.guild.name}`);
+        else console.error(`[Welcome] Welcome channel ${config.welcome_channel_id} is not available in ${member.guild.name}`);
       } catch (error) {
         console.error(`[Welcome] Error in ${member.guild.name}: ${error.message}`);
       }

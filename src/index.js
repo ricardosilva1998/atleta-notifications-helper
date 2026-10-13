@@ -27,6 +27,19 @@ try {
   console.error('[Sounds] Legacy sound migration failed:', e.message);
 }
 
+// "Remove server" used to leave the server's watchers behind, and they kept
+// posting there. Removing a server now takes them along; this clears what
+// older removals left (later boots find nothing).
+try {
+  const { total, byTable } = db.deleteOrphanWatchers();
+  if (total > 0) {
+    const detail = Object.entries(byTable).filter(([, n]) => n > 0).map(([table, n]) => `${table}=${n}`).join(', ');
+    console.log(`[DB] Removed ${total} watchers of servers their streamer no longer has (${detail})`);
+  }
+} catch (e) {
+  console.error('[DB] Orphaned watcher cleanup failed:', e.message);
+}
+
 // 'ready' still fires in discord.js v14 but is deprecated and will be dropped
 // in v15; 'clientReady' is emitted alongside it today.
 client.once('clientReady', async () => {
@@ -111,8 +124,8 @@ client.once('clientReady', async () => {
 // Handle bot joining a new guild
 client.on('guildCreate', (guild) => {
   console.log(`[Guild] Joined: ${guild.name} (${guild.id})`);
-  // Guild-streamer linking happens via the dashboard invite URL (state param)
-  // We just log it here; the actual record is created when the streamer configures it
+  // Nothing is recorded here: a streamer claims the server from the dashboard,
+  // which requires Manage Server in it.
 });
 
 // Handle bot being removed from a guild
