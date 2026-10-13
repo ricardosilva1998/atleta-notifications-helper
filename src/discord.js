@@ -1,7 +1,13 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const config = require('./config');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates] });
+// Posted text (clip and video titles, creator names) comes from third parties,
+// so by default nothing the bot sends may ping @everyone, @here, roles or
+// users. A send that should ping someone opts in with its own allowedMentions.
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates],
+  allowedMentions: { parse: [] },
+});
 
 async function sendNotification(channelId, embed, meta) {
   const db = require('./db');

@@ -33,7 +33,8 @@ function start() {
           timestamp: new Date(),
         });
 
-        await channel.send({ content: `Hey <@${member.id}>!`, embeds: [embed] });
+        // The client blocks all mentions by default; ping only the new member.
+        await channel.send({ content: `Hey <@${member.id}>!`, embeds: [embed], allowedMentions: { users: [member.id] } });
         console.log(`[Welcome] Welcomed ${member.user.username} in ${member.guild.name}`);
       } catch (error) {
         console.error(`[Welcome] Error in ${member.guild.name}: ${error.message}`);
