@@ -196,3 +196,170 @@ describe('banned word warnings', () => {
     assert.ok(!everything.includes('w[o0]rse'));
   });
 });
+
+// ── M14: !slow, raid protection and !permit ──────────────────────────
+
+const modTags = (overrides = {}) => viewerTags({ username: 'somemod', 'display-name': 'SomeMod', mod: true, ...overrides });
+const SETTINGS_URL = 'https://api.twitch.tv/helix/chat/settings?broadcaster_id=111&moderator_id=999';
+
+// Lets the async work behind a fired (mocked) timer finish.
+async function flush() {
+  for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+function assertSettingsRequest(call, body) {
+  assert.equal(call.url, SETTINGS_URL);
+  assert.equal(call.method, 'PATCH');
+  assert.equal(call.headers.Authorization, 'Bearer synthetic-bot-token');
+  assert.equal(call.headers['Client-ID'], 'synthetic-bot-client-id');
+  assert.equal(call.headers['Content-Type'], 'application/json');
+  assert.ok(call.signal instanceof AbortSignal, 'the request has a timeout');
+  assert.deepEqual(call.body, body);
+}
+
+describe('!slow and !slowoff', () => {
+  const slowOn = () => streamerRow({ mod_slow_mode_cmd_enabled: 1 });
+
+  test('set slow mode through Helix and announce it after Twitch accepts', async () => {
+    stubTwitch(200);
+    const client = fakeClient();
+    assert.equal(await mod.handleModCommand(client, '#chan', modTags(), '!slow 45', slowOn()), true);
+    assert.equal(helixCalls.length, 1);
+    assertSettingsRequest(helixCalls[0], { slow_mode: true, slow_mode_wait_time: 45 });
+    assert.deepEqual(client.said, [{ channel: '#chan', text: 'Slow mode enabled (45s).' }]);
+
+    await mod.handleModCommand(client, '#chan', modTags(), '!slowoff', slowOn());
+    assertSettingsRequest(helixCalls[1], { slow_mode: false });
+    assert.equal(client.said[1].text, 'Slow mode disabled.');
+  });
+
+  test('keep the wait time inside the 3-120 s range Twitch accepts', async () => {
+    stubTwitch(200);
+    const client = fakeClient();
+    for (const message of ['!slow', '!slow 500', '!slow 1', '!slow abc']) {
+      await mod.handleModCommand(client, '#chan', modTags(), message, slowOn());
+    }
+    assert.deepEqual(helixCalls.map((c) => c.body.slow_mode_wait_time), [30, 120, 3, 30]);
+  });
+
+  for (const status of [401, 403, 500]) {
+    test(`post nothing when Twitch answers ${status}`, async () => {
+      stubTwitch(status);
+      const client = fakeClient();
+      await mod.handleModCommand(client, '#chan', modTags(), '!slow 10', slowOn());
+      await mod.handleModCommand(client, '#chan', modTags(), '!slowoff', slowOn());
+      assert.equal(helixCalls.length, 2);
+      assert.deepEqual(client.said, []);
+    });
+  }
+
+  test('post nothing when the request itself fails', async () => {
+    global.fetch = async (url) => {
+      if (String(url).includes('/oauth2/validate')) throw new Error('validate must already be cached');
+      throw new Error('socket hang up');
+    };
+    const client = fakeClient();
+    await mod.handleModCommand(client, '#chan', modTags(), '!slow 10', slowOn());
+    assert.deepEqual(client.said, []);
+  });
+
+  test('log a missing bot scope once per streamer, not on every attempt', async () => {
+    // Streamers 3 and 4 have not been warned by earlier tests (the record is
+    // module state, kept for a day).
+    const first = streamerRow({ id: 3, twitch_user_id: '111', mod_slow_mode_cmd_enabled: 1 });
+    const second = streamerRow({ id: 4, twitch_user_id: '111', mod_slow_mode_cmd_enabled: 1 });
+    const scopeWarnings = () => logs.filter((l) => l.level === 'warn' && l.text.includes('moderator:manage:chat_settings'));
+    const client = fakeClient();
+
+    stubTwitch(401);
+    for (let i = 0; i < 3; i++) await mod.handleModCommand(client, '#first', modTags(), '!slow 10', first);
+    await mod.handleModCommand(client, '#second', modTags(), '!slow 10', second);
+    assert.deepEqual(scopeWarnings().map((l) => l.text.match(/#\w+ \(\d+\)/)[0]), ['#first (401)', '#second (401)']);
+
+    // Once Twitch accepts a change again (token fixed), a later refusal is logged again.
+    stubTwitch(200);
+    await mod.handleModCommand(client, '#first', modTags(), '!slow 10', first);
+    stubTwitch(403);
+    await mod.handleModCommand(client, '#first', modTags(), '!slow 10', first);
+    assert.equal(scopeWarnings().length, 3);
+    assert.match(scopeWarnings()[2].text, /#first \(403\)/);
+    assert.deepEqual(client.said, [{ channel: '#first', text: 'Slow mode enabled (10s).' }]);
+  });
+
+  test('only work for mods, and only when the streamer enabled the command', async () => {
+    stubTwitch(200);
+    const client = fakeClient();
+    assert.equal(await mod.handleModCommand(client, '#chan', viewerTags(), '!slow 10', slowOn()), false);
+    assert.equal(await mod.handleModCommand(client, '#chan', modTags(), '!slow 10', streamerRow()), false);
+    assert.equal(helixCalls.length, 0);
+    assert.deepEqual(client.said, []);
+  });
+});
+
+describe('raid protection', () => {
+  const protectedRow = (overrides = {}) => streamerRow({ mod_raid_protection_enabled: 1, mod_raid_protection_duration: 120, ...overrides });
+
+  test('turns on followers-only mode, then off again after the configured time', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    stubTwitch(200);
+    const client = fakeClient();
+    await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
+    assert.equal(helixCalls.length, 1);
+    assertSettingsRequest(helixCalls[0], { follower_mode: true, follower_mode_duration: 10 });
+    assert.deepEqual(client.said, [{ channel: 'somestreamer', text: 'Raid protection activated for 120 seconds. Followers-only mode enabled.' }]);
+
+    t.mock.timers.tick(119_000);
+    await flush();
+    assert.equal(helixCalls.length, 1, 'still on before the duration ends');
+
+    t.mock.timers.tick(1_000);
+    await flush();
+    assert.equal(helixCalls.length, 2);
+    assertSettingsRequest(helixCalls[1], { follower_mode: false });
+    assert.equal(client.said[1].text, 'Raid protection ended. Followers-only mode disabled.');
+  });
+
+  test('announces nothing and schedules nothing when Twitch refuses', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    stubTwitch(403);
+    const client = fakeClient();
+    await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
+    t.mock.timers.tick(600_000);
+    await flush();
+    assert.equal(helixCalls.length, 1);
+    assert.deepEqual(client.said, []);
+  });
+
+  test('does nothing when the streamer has not enabled it', async () => {
+    stubTwitch(200);
+    const client = fakeClient();
+    await mod.activateRaidProtection(client, 'somestreamer', streamerRow());
+    assert.equal(helixCalls.length, 0);
+    assert.deepEqual(client.said, []);
+  });
+});
+
+describe('!permit', () => {
+  test('grants a single link pass for the dashboard permit duration', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+    const client = fakeClient();
+    const streamer = streamerRow({ mod_link_permit_seconds: 90 });
+    assert.equal(await mod.handleModCommand(client, '#chan', modTags(), '!permit @Viewer', streamer), true);
+    assert.deepEqual(client.said, [{ channel: '#chan', text: '@viewer has been permitted to post a link for 90 seconds.' }]);
+
+    assert.equal(await mod.runFilters('#chan', viewerTags(), 'my clip: https://clips.example.com/x', streamer), null);
+    const second = await mod.runFilters('#chan', viewerTags(), 'and https://example.com', streamer);
+    assert.equal(second.reason, 'Link posted without permission');
+
+    await mod.handleModCommand(client, '#chan', modTags(), '!permit viewer', streamer);
+    t.mock.timers.tick(91_000);
+    const late = await mod.runFilters('#chan', viewerTags(), 'https://example.com', streamer);
+    assert.equal(late.reason, 'Link posted without permission', 'the pass expires');
+  });
+
+  test('ignores names that cannot be Twitch logins', async () => {
+    const client = fakeClient();
+    assert.equal(await mod.handleModCommand(client, '#chan', modTags(), '!permit some.thing!', streamerRow()), true);
+    assert.deepEqual(client.said, []);
+  });
+});

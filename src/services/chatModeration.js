@@ -18,6 +18,7 @@ const raidProtectionTimers = new Map();
 // word itself, so an edited or deleted word can never reuse a stale matcher; it
 // just stops being looked up and is swept.
 const bannedWordMatchers = new Map(); // value: { match, usedAt }
+const chatSettingsWarnedAt = new Map(); // streamerId -> when a missing-scope warning was logged
 
 // Sweep stale entries once a minute. Caps:
 //  - lastMessages: keep 5 min (only used for repetition window which defaults 30s)
@@ -25,6 +26,7 @@ const bannedWordMatchers = new Map(); // value: { match, usedAt }
 //  - followCache:  keep 10 min (acts as a cache, not state)
 //  - offenseCounts: keep 24 h (escalation ladder must remember through a stream)
 //  - bannedWordMatchers: keep 10 min after last use
+//  - chatSettingsWarnedAt: keep 24 h, so the warning repeats at most once a day
 const FIVE_MIN = 5 * 60 * 1000;
 const TEN_MIN = 10 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -44,6 +46,9 @@ setInterval(() => {
   }
   for (const [k, v] of bannedWordMatchers) {
     if (now - v.usedAt > TEN_MIN) bannedWordMatchers.delete(k);
+  }
+  for (const [k, warnedAt] of chatSettingsWarnedAt) {
+    if (now - warnedAt > ONE_DAY) chatSettingsWarnedAt.delete(k);
   }
 }, 60 * 1000).unref?.();
 
@@ -303,6 +308,54 @@ async function helixBanUser(broadcasterId, userId, duration, reason) {
   }
 }
 
+// Twitch removed the IRC /slow and /followers commands in 2023, so chat settings
+// go through Helix. That needs the moderator:manage:chat_settings scope on
+// BOT_TWITCH_TOKEN and the bot to be a moderator in the channel.
+const HELIX_TIMEOUT_MS = 10_000;
+
+// Returns true only when Twitch accepted the change (2xx).
+async function updateChatSettings(channel, streamer, settings) {
+  const broadcasterId = await resolveBroadcasterId(channel, streamer);
+  const moderatorId = await getBotUserId();
+  if (!broadcasterId || !moderatorId) {
+    console.error(`[Mod] Cannot change chat settings in ${channel}: no broadcaster or bot user ID`);
+    return false;
+  }
+  const token = config.bot.twitchToken.replace(/^oauth:/, '');
+  const params = new URLSearchParams({ broadcaster_id: broadcasterId, moderator_id: moderatorId });
+  let res;
+  try {
+    res = await fetch(`https://api.twitch.tv/helix/chat/settings?${params}`, {
+      method: 'PATCH',
+      headers: {
+        'Client-ID': botClientId || config.twitch.clientId,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+      signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+    });
+  } catch (e) {
+    console.error(`[Mod] Chat settings update failed in ${channel}:`, e.message);
+    return false;
+  }
+  if (res.ok) {
+    chatSettingsWarnedAt.delete(streamer.id);
+    return true;
+  }
+  const body = (await res.text().catch(() => '')).slice(0, 300);
+  if (res.status === 401 || res.status === 403) {
+    // Expected until the token is regenerated, so say it once per streamer a day.
+    if (!chatSettingsWarnedAt.has(streamer.id)) {
+      chatSettingsWarnedAt.set(streamer.id, Date.now());
+      console.warn(`[Mod] Twitch refused a chat settings change in ${channel} (${res.status}): BOT_TWITCH_TOKEN needs the moderator:manage:chat_settings scope and the bot must be a moderator there. ${body}`);
+    }
+  } else {
+    console.error(`[Mod] Chat settings update failed in ${channel} (${res.status}):`, body);
+  }
+  return false;
+}
+
 // ─── Resolve broadcaster ID ───────────────────────────────────────────────────
 const broadcasterIdCache = new Map();
 
@@ -409,24 +462,72 @@ function grantPermit(channel, username, durationSeconds) {
   permits.set(key, Date.now() + durationSeconds * 1000);
 }
 
+// parseInt with the "|| default" fallback the settings always had, then clamped.
+function clampInt(value, min, max, fallback) {
+  return Math.min(max, Math.max(min, parseInt(value, 10) || fallback));
+}
+
+// ─── Mod-only chat commands ───────────────────────────────────────────────────
+// !permit <user>, plus !slow [seconds] and !slowoff when the streamer turned on
+// the Slow Mode Command. Returns true when the message was one of them.
+async function handleModCommand(client, channel, tags, message, streamer) {
+  if (!message.startsWith('!') || !(tags.mod || tags.badges?.broadcaster)) return false;
+  const parts = message.split(' ');
+  const command = parts[0].substring(1).toLowerCase();
+
+  if (command === 'permit' && parts[1]) {
+    const target = parts[1].replace(/^@/, '').toLowerCase();
+    if (!/^[a-z0-9_]{1,25}$/.test(target)) return true; // not a Twitch login
+    // The dashboard's "Permit duration" setting (10-600 s).
+    const seconds = clampInt(streamer.mod_link_permit_seconds, 10, 600, 60);
+    grantPermit(channel, target, seconds);
+    client.say(channel, `@${target} has been permitted to post a link for ${seconds} seconds.`).catch(() => {});
+    return true;
+  }
+
+  if ((command === 'slow' || command === 'slowoff') && streamer.mod_slow_mode_cmd_enabled) {
+    if (command === 'slow') {
+      const seconds = clampInt(parts[1], 3, 120, 30); // the range Helix accepts
+      if (await updateChatSettings(channel, streamer, { slow_mode: true, slow_mode_wait_time: seconds })) {
+        client.say(channel, `Slow mode enabled (${seconds}s).`).catch(() => {});
+      }
+    } else if (await updateChatSettings(channel, streamer, { slow_mode: false })) {
+      client.say(channel, 'Slow mode disabled.').catch(() => {});
+    }
+    return true;
+  }
+
+  return false;
+}
+
 // ─── Raid protection ──────────────────────────────────────────────────────────
-function activateRaidProtection(client, channel, streamer) {
+// After a real raid: followers-only mode (10-minute follow age, as before) for
+// the configured time. Nothing is announced unless Twitch accepted the change.
+const RAID_FOLLOWER_MINUTES = 10;
+
+async function activateRaidProtection(client, channel, streamer) {
   if (!streamer.mod_raid_protection_enabled) return;
-  const duration = streamer.mod_raid_protection_duration || 120;
-  const clean = channel.replace(/^#/, '').toLowerCase();
+  const seconds = clampInt(streamer.mod_raid_protection_duration, 30, 600, 120);
+  const key = channel.replace(/^#/, '').toLowerCase();
 
-  const existing = raidProtectionTimers.get(clean);
-  if (existing) clearTimeout(existing);
+  const enabled = await updateChatSettings(channel, streamer, {
+    follower_mode: true,
+    follower_mode_duration: RAID_FOLLOWER_MINUTES,
+  });
+  if (!enabled) return;
 
-  client.followers(channel, 10).catch(() => {});
-  client.say(channel, `Raid protection activated for ${duration} seconds. Followers-only mode enabled.`).catch(() => {});
-
-  const timer = setTimeout(() => {
-    client.followersoff(channel).catch(() => {});
-    client.say(channel, `Raid protection ended. Followers-only mode disabled.`).catch(() => {});
-    raidProtectionTimers.delete(clean);
-  }, duration * 1000);
-  raidProtectionTimers.set(clean, timer);
+  // Only replace the switch-off timer once followers-only mode is on, so a
+  // failed request can never cancel the end of an earlier raid's protection.
+  clearTimeout(raidProtectionTimers.get(key));
+  client.say(channel, `Raid protection activated for ${seconds} seconds. Followers-only mode enabled.`).catch(() => {});
+  const timer = setTimeout(async () => {
+    raidProtectionTimers.delete(key);
+    if (await updateChatSettings(channel, streamer, { follower_mode: false })) {
+      client.say(channel, 'Raid protection ended. Followers-only mode disabled.').catch(() => {});
+    }
+  }, seconds * 1000);
+  timer.unref?.();
+  raidProtectionTimers.set(key, timer);
 }
 
 module.exports = {
@@ -436,5 +537,6 @@ module.exports = {
   getAction,
   executeAction,
   grantPermit,
+  handleModCommand,
   activateRaidProtection,
 };

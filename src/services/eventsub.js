@@ -152,6 +152,7 @@ class EventSubClient {
 
           // Emit to chat service
           chatManager.sendEventMessage(this.streamerId, normalized.type, normalized.data);
+          if (normalized.type === 'raid') chatManager.startRaidProtection(this.streamerId);
         }
         break;
       }

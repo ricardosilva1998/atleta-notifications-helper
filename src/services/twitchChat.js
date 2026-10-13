@@ -2,7 +2,7 @@ const tmi = require('tmi.js');
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { isExempt, runFilters, getAction, executeAction, grantPermit, activateRaidProtection, checkBannedWords } = require('./chatModeration');
+const { isExempt, runFilters, getAction, executeAction, handleModCommand, activateRaidProtection, checkBannedWords } = require('./chatModeration');
 
 let client = null;
 const channelMap = new Map(); // channelName -> streamerId
@@ -56,32 +56,8 @@ async function handleMessage(channel, tags, message, self) {
     }
   }
 
-  // Mod-only commands
-  if (message.startsWith('!') && (tags.mod || tags.badges?.broadcaster)) {
-    const parts = message.split(' ');
-    const modCmd = parts[0].substring(1).toLowerCase();
-
-    if (modCmd === 'permit' && parts[1]) {
-      const targetUser = parts[1].replace(/^@/, '').toLowerCase();
-      const duration = streamer.mod_permit_duration || 60;
-      grantPermit(channel, targetUser, duration);
-      client.say(channel, `@${targetUser} has been permitted to post a link for ${duration} seconds.`).catch(() => {});
-      return;
-    }
-
-    if (modCmd === 'slow') {
-      const seconds = parseInt(parts[1], 10) || 30;
-      client.slow(channel, seconds).catch(() => {});
-      client.say(channel, `Slow mode enabled (${seconds}s).`).catch(() => {});
-      return;
-    }
-
-    if (modCmd === 'slowoff') {
-      client.slowoff(channel).catch(() => {});
-      client.say(channel, `Slow mode disabled.`).catch(() => {});
-      return;
-    }
-  }
+  // Mod-only commands (!permit, !slow, !slowoff)
+  if (await handleModCommand(client, channel, tags, message, streamer)) return;
 
   // Giveaway entry hook — keyword owned by the active giveaway while one is open
   if (message.startsWith('!')) {
@@ -266,10 +242,18 @@ const chatManager = {
     client.say(streamer.twitch_username, message).catch((err) => {
       console.error(`[Chat] Failed to send event message for streamer ${streamerId}:`, err.message);
     });
+  },
 
-    if (eventType === 'raid' && client) {
-      activateRaidProtection(client, streamer.twitch_username, streamer);
-    }
+  // Real raids only (EventSub). It is separate from sendEventMessage because the
+  // dashboard's test alerts call that, and must never change chat settings; it
+  // also no longer depends on the raid thank-you message being enabled.
+  startRaidProtection(streamerId) {
+    if (!client) return;
+    const streamer = db.getStreamerById(streamerId);
+    if (!streamer || !streamer.chatbot_enabled || !streamer.twitch_username) return;
+    activateRaidProtection(client, streamer.twitch_username, streamer).catch((err) => {
+      console.error(`[Mod] Raid protection failed for streamer ${streamerId}:`, err.message);
+    });
   },
 
   sendRawMessage(channel, message) {
