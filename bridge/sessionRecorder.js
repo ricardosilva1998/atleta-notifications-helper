@@ -229,7 +229,7 @@ function createSessionOnServer(firstLap, telemetryData) {
 }
 
 function appendLapToServer(sessionId, lap, telemetryData) {
-  const payload = { lap, telemetry: telemetryData || null };
+  const payload = { bridge_id: _bridgeId, lap, telemetry: telemetryData || null };
   apiRequest('/api/session/' + sessionId + '/lap', payload, (err) => {
     if (err) {
       log('Failed to append lap ' + lap.lap_number + ': ' + err.message);
@@ -242,6 +242,7 @@ function appendLapToServer(sessionId, lap, telemetryData) {
 function finishSession(finishPosition, iratingChange) {
   if (_serverSessionId) {
     const payload = {
+      bridge_id: _bridgeId,
       finish_position: finishPosition || null,
       irating_change: iratingChange || null,
       best_lap_time: _bestLapTime || null,

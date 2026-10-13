@@ -1004,12 +1004,60 @@ app.get('/api/session/:id/telemetry/:lapId', (req, res) => {
   }
 });
 
+// Ownership guard for the two progressive session-upload endpoints below.
+//
+// Session ids are sequential integers, so without this check anyone could
+// append laps to -- or rewrite the result of -- another driver's session.
+// Installed Bridges predate `bridge_id` on these payloads, so a MISSING id is
+// still accepted (and logged) rather than breaking an in-progress session; a
+// WRONG id is always rejected. Once updated Bridges are the floor, set
+// STRICT_SESSION_OWNERSHIP=1 to reject the unidentified ones too.
+//
+// Returns the session row, or null after having already sent the error response.
+const SESSION_WRITE_WINDOW_MS = 48 * 60 * 60 * 1000; // 2x the longest real session (24h endurance)
+const STRICT_SESSION_OWNERSHIP = process.env.STRICT_SESSION_OWNERSHIP === '1';
+
+function authorizeSessionWrite(req, res, sessionId) {
+  const session = db.getRacingSessionById(sessionId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return null; }
+
+  const bridgeId = req.query.bridge_id || (req.body || {}).bridge_id;
+  if (bridgeId) {
+    if (bridgeId !== session.bridge_id) {
+      console.warn('[Session Write] Rejected bridge_id mismatch on session ' + sessionId);
+      res.status(403).json({ error: 'Access denied' });
+      return null;
+    }
+  } else if (STRICT_SESSION_OWNERSHIP) {
+    res.status(403).json({ error: 'bridge_id required' });
+    return null;
+  } else {
+    console.warn('[Session Write] Unverified write to session ' + sessionId + ' (legacy Bridge, no bridge_id)');
+  }
+
+  // Even when unverified, refuse writes to a long-stale session: a Bridge only
+  // appends to a session it created in the current run, so a legitimate write
+  // always lands within that session's own lifetime.
+  // SQLite stores 'YYYY-MM-DD HH:MM:SS' in UTC -- parse it as UTC, since V8
+  // reads the bare space-separated form as LOCAL time. Unparseable: fail open.
+  const createdMs = session.created_at
+    ? Date.parse(String(session.created_at).replace(' ', 'T') + 'Z')
+    : NaN;
+  if (!Number.isNaN(createdMs) && Date.now() - createdMs > SESSION_WRITE_WINDOW_MS) {
+    console.warn('[Session Write] Rejected write to stale session ' + sessionId);
+    res.status(409).json({ error: 'Session closed to further updates' });
+    return null;
+  }
+
+  return session;
+}
+
 // Append a single lap to an existing session (progressive upload)
 app.post('/api/session/:id/lap', express.json({ limit: '5mb' }), (req, res) => {
   try {
     const sessionId = parseInt(req.params.id);
-    const session = db.getRacingSessionById(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = authorizeSessionWrite(req, res, sessionId);
+    if (!session) return;
     const { lap, telemetry } = req.body;
     if (!lap || !lap.lap_number || !lap.lap_time) return res.status(400).json({ error: 'Missing lap data' });
 
@@ -1040,13 +1088,16 @@ app.post('/api/session/:id/lap', express.json({ limit: '5mb' }), (req, res) => {
 app.patch('/api/session/:id/finish', express.json(), (req, res) => {
   try {
     const sessionId = parseInt(req.params.id);
+    const session = authorizeSessionWrite(req, res, sessionId);
+    if (!session) return;
     const { finish_position, irating_change, best_lap_time } = req.body;
     db.updateSessionFinish(sessionId, finish_position, irating_change, best_lap_time);
 
     // Notifications for race results + iRating milestones
+    // (reuses the row the guard already fetched; updateSessionFinish touches
+    //  none of the fields read below)
     try {
-      const session = db.getRacingSessionById(sessionId);
-      if (session && session.session_type === 'race') {
+      if (session.session_type === 'race') {
         const user = session.bridge_id ? db.getRacingUserByBridgeId(session.bridge_id) : null;
         if (user) {
           // Race result notification
