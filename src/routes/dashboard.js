@@ -1224,8 +1224,9 @@ const BANNED_PATTERN_ERRORS = {
 
 router.post('/chatbot/banned-words', (req, res) => {
   const t = res.locals.t;
-  const word = typeof req.body.word === 'string' ? req.body.word.trim() : '';
-  const isRegex = !!req.body.is_regex;
+  const body = req.body || {}; // Express 5 leaves it undefined when nothing was parsed
+  const word = typeof body.word === 'string' ? body.word.trim() : '';
+  const isRegex = !!body.is_regex;
   if (!word) return res.json({ ok: false, error: t('chatbot.error.wordRequired') });
   if (isRegex) {
     // Regex words run against every chat message, so only patterns that cannot
