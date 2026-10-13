@@ -27,10 +27,11 @@ Native Twitch Channel Points → audio/video clips on the OBS overlay. Streamers
 **Viewer redeems.** EventSub fires `channel.channel_points_custom_reward_redemption.add`. `eventsub.js` hands off to `redemptionDispatcher.handleRedemption()`:
 
 1. Looks up reward by `twitch_reward_id`.
-2. Verifies file on disk. If missing → auto-CANCELED + chat warning.
-3. Emits `redemption` event to `overlayBus`.
-4. Optionally posts chat message (template formatted via `redemptionTemplates.formatChatTemplate`).
-5. Schedules auto-fulfill via Helix PATCH at `maxPlaySeconds + 1s`.
+2. A reward that is switched off here, or deleted here while Twitch still has it (`delete_failed`, see Edits and Deletes), does not play: the redemption is CANCELED on Twitch so the viewer gets their points back (`refundUnavailableReward()`; only a redemption still `unfulfilled` can be canceled).
+3. Verifies file on disk. If missing → auto-CANCELED + chat warning.
+4. Emits `redemption` event to `overlayBus`.
+5. Optionally posts chat message (template formatted via `redemptionTemplates.formatChatTemplate`).
+6. Schedules auto-fulfill via Helix PATCH at `maxPlaySeconds + 1s`.
 
 **Overlay plays.** `playRedemption()` in `public/overlay/overlay.js` queues the event and plays the clip in dedicated `<audio id="redemption-audio">` / `<video id="redemption-video">` elements (separate from the alert-card path). `finalVolume = overlayMaster × rewardVolume`.
 
@@ -42,15 +43,30 @@ Native Twitch Channel Points → audio/video clips on the OBS overlay. Streamers
 - EventSub silently skips the redemption subscribe call for streamers without the scope (no log noise; other notifications keep working).
 - Twitch Affiliate or Partner status required. `createReward` returns `{ affiliateGated: true }` on 403; UI shows red banner.
 
+## Edits and Deletes
+
+An edit or delete in the dashboard is reported as done only when Twitch took it (`twitchRewards.js`). `channel_point_rewards.twitch_sync_status` records what is owed to Twitch, with the reason in `twitch_sync_error`:
+
+| `twitch_sync_status` | Meaning |
+|---|---|
+| `ok` | In step with Twitch |
+| `update_failed` | An edit is saved here but Twitch refused it. The reward shows a warning and a Retry button; the next edit (or a retry, or a sync) sends everything Twitch keeps (title, cost, prompt, cooldown, paused), not only that edit |
+| `delete_failed` | Deleted here but Twitch refused to delete it (not a 404, which means it is already gone). The row is kept, hidden from the list and shown under "Not deleted on Twitch" with a Retry button; redemptions of it are refunded |
+| `create_failed`, `no_affiliate`, `orphaned` | Unchanged: creation failed, not an affiliate, no longer on Twitch |
+
+A PATCH or DELETE the dashboard sends answers `502 { ok: false, error, reward }` when Twitch refused it. `POST /dashboard/redemptions/:id/retry` retries whichever is pending. Every Helix request has a 10 s timeout.
+
 ## Sync
 
 `syncRewards()` reconciles local DB with upstream:
-- **Twitch is source of truth** for title, cost, and prompt.
+- **Twitch is source of truth** for title, cost, prompt, **paused** (`is_paused` = disabled here) and the **cooldown** (an off cooldown is 0), for a reward that is in step.
+- A reward with `update_failed` is **sent** to Twitch instead (what is here wins until Twitch has it); one with `delete_failed` is **deleted** again, or dropped when Twitch no longer lists it.
+- A reward Twitch no longer lists is `orphaned`; a reward never created there is created.
 - **Local-only fields:** media file, position, volume, chat template.
 
 ## History
 
-Logged to `channel_point_redemptions` with `outcome` ∈ `{ played, refunded_no_file, disabled, error, test }`.
+Logged to `channel_point_redemptions` with `outcome` ∈ `{ played, refunded_no_file, refunded_disabled, refunded_deleted, disabled, error, test }`. `refunded_disabled` / `refunded_deleted` mean a redemption of a reward that is off / waiting to be deleted was canceled; `disabled` is such a redemption that could not be canceled (it was not `unfulfilled`); `error` with `refund failed: ...` is a cancel Twitch refused.
 
 ## DB Columns Added on `streamers`
 
@@ -68,10 +84,11 @@ The dashboard route MUST pre-compute `hasScope` via `hasRedemptionScope(req.stre
 
 ## Files
 
-- `src/services/twitchRewards.js` — Helix client (list/create/update/delete, fulfill/cancel, syncRewards, Affiliate-gate detection)
-- `src/services/redemptionDispatcher.js` — full redemption flow
+- `src/services/twitchRewards.js` — Helix client (list/create/update/delete, fulfill/cancel, syncRewards, Affiliate-gate detection) and the sync-status logic: `pushRewardChanges()`, `removeReward()`, `retryPending()`, `refundRedemption()`, `unavailableReason()`
+- `src/services/redemptionDispatcher.js` — full redemption flow (`refundUnavailableReward()` for rewards that are off or waiting to be deleted)
 - `src/services/redemptionTemplates.js` — pure `formatChatTemplate` helper
-- `src/services/redemptionDispatcher.test.js` — unit tests
+- `src/services/redemptionDispatcher.test.js` — unit tests for the template helper
+- `src/services/twitchRewards.test.js` — sync-status transitions, sync, refunds (in-memory DB, fake Helix)
 - `src/routes/dashboard.js` — `/dashboard/redemptions` GET/POST (precomputes `hasScope`)
 - `src/views/redemptions-config.ejs` — UI: affiliate/scope banners, master toggle, sync button, drag-reorder reward cards, add/edit modal with media upload + position picker + live preview, recent redemptions table
 - `public/overlay/overlay.js` — `playRedemption()`, `stopRedemption()`, `_redemptionCapTimer`

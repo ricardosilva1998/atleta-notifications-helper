@@ -5,7 +5,7 @@
 // everything that would leave the machine (Discord, Twitch, the connection
 // managers). All ids, names and tokens are synthetic.
 
-const { test, describe, before, after, beforeEach } = require('node:test');
+const { test, describe, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const http = require('http');
@@ -1605,5 +1605,218 @@ describe('the AI analysis of a reported issue', () => {
     assert.deepEqual(JSON.parse(row(issueId).agent_analysis), { error: 'API down' });
     agentTriageStub.failWith = null;
     assert.equal((await analyze(issueId)).status, 200);
+  });
+});
+
+// ── Channel point rewards: edits and deletes are only done when Twitch took them (N15) ──
+
+describe('channel point rewards', () => {
+  let id;
+  let guard;
+  let helix;
+  let rewardCounter = 0; // makes titles, files, Twitch reward ids and Twitch user ids unique
+
+  // A small fake Helix: `fail` makes every request with that method answer that status.
+  function fakeHelix() {
+    const state = { calls: [], fail: {} };
+    global.fetch = async (url, opts = {}) => {
+      const u = new URL(url);
+      const method = opts.method || 'GET';
+      state.calls.push({ method, path: u.pathname.replace('/helix', ''), query: Object.fromEntries(u.searchParams), body: opts.body ? JSON.parse(opts.body) : undefined });
+      const failure = state.fail[method];
+      if (failure) return { ok: false, status: failure.status, statusText: String(failure.status), json: async () => ({ message: failure.message || 'failed' }), text: async () => '' };
+      if (method === 'DELETE') return { ok: true, status: 204, json: async () => null, text: async () => '' };
+      return { ok: true, status: 200, json: async () => ({ data: [{}] }), text: async () => '' };
+    };
+    return state;
+  }
+
+  beforeEach(() => {
+    guard = global.fetch;
+    helix = fakeHelix();
+    id = addStreamer({ twitch_user_id: `tw-user-${++rewardCounter}`, broadcaster_access_token: 'synthetic-token', broadcaster_refresh_token: 'synthetic-refresh' });
+  });
+  afterEach(() => { global.fetch = guard; });
+
+  function addReward(streamerId, over = {}) {
+    const row = db.insertReward({
+      streamer_id: streamerId, title: `Reward ${++rewardCounter}`, cost: 500, prompt: null, cooldown_seconds: 0, enabled: 1,
+      media_type: 'audio', media_filename: `zz-route-test-${rewardCounter}.mp3`, media_mime: 'audio/mpeg', media_size_bytes: 10,
+      position_preset: 'center-large', custom_x: null, custom_y: null, custom_w: null, custom_h: null,
+      volume: 1, max_play_seconds: 15, chat_message_template: null, auto_fulfill: 1, sort_order: rewardCounter, twitch_sync_status: 'ok',
+      ...over,
+    });
+    db.setRewardTwitchId(row.id, over.twitch_reward_id || `route-tw-${rewardCounter}`, over.twitch_sync_status || 'ok');
+    return Number(row.id);
+  }
+  const rewardRow = (rewardId, streamerId = id) => db.getRewardById(rewardId, streamerId);
+  const patch = (rewardId, body, streamer = id) => request('PATCH', `/dashboard/redemptions/${rewardId}`, { streamer, body });
+  const del = (rewardId, streamer = id) => request('DELETE', `/dashboard/redemptions/${rewardId}`, { streamer });
+  const retry = (rewardId, streamer = id) => request('POST', `/dashboard/redemptions/${rewardId}/retry`, { streamer });
+
+  test('an edit Twitch takes is saved and reported as done', async () => {
+    const rewardId = addReward(id);
+    const res = await patch(rewardId, { title: 'Big Horn', enabled: 0 });
+    assert.equal(res.status, 200);
+    const body = res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.reward.title, 'Big Horn');
+    assert.equal(body.reward.twitch_sync_status, 'ok');
+    assert.deepEqual(helix.calls.find((c) => c.method === 'PATCH').body, { title: 'Big Horn', is_paused: true });
+  });
+
+  test('an edit Twitch refuses is saved here but reported as an error, and the reward is marked', async () => {
+    const rewardId = addReward(id);
+    helix.fail.PATCH = { status: 500, message: 'Twitch is having a problem' };
+    const res = await patch(rewardId, { enabled: 0 });
+    assert.equal(res.status, 502);
+    const body = res.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.error, t('en', 'redemptions.error.updateFailed'));
+    assert.equal(body.reward.enabled, 0);
+    assert.equal(body.reward.twitch_sync_status, 'update_failed');
+    assert.equal(rewardRow(rewardId).enabled, 0, 'saved here');
+    assert.equal(rewardRow(rewardId).twitch_sync_status, 'update_failed');
+  });
+
+  test('a bad value is still a 400 before anything is sent to Twitch', async () => {
+    const rewardId = addReward(id);
+    assert.equal((await patch(rewardId, { title: 'x' })).status, 400);
+    assert.equal((await patch(rewardId, { cost: 0 })).status, 400);
+    assert.deepEqual(helix.calls, []);
+  });
+
+  test('a delete Twitch takes removes the reward', async () => {
+    const rewardId = addReward(id);
+    const res = await del(rewardId);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true });
+    assert.equal(rewardRow(rewardId), undefined);
+    assert.equal(helix.calls.find((c) => c.method === 'DELETE').query.id, `route-tw-${rewardCounter}`);
+  });
+
+  test('a delete Twitch refuses is an error, and the reward is kept, marked, and listed apart', async () => {
+    const rewardId = addReward(id, { title: 'Stubborn Reward' });
+    const other = addReward(id, { title: 'Normal Reward' });
+    helix.fail.DELETE = { status: 500, message: 'Twitch is having a problem' };
+
+    const res = await del(rewardId);
+
+    assert.equal(res.status, 502);
+    const body = res.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.error, t('en', 'redemptions.error.deleteFailed'));
+    assert.equal(body.reward.twitch_sync_status, 'delete_failed');
+    assert.equal(rewardRow(rewardId).twitch_sync_status, 'delete_failed');
+
+    const list = await request('GET', '/dashboard/redemptions', { streamer: id, json: true });
+    const { rewards, pendingDeletes, allRewards } = list.json().locals;
+    assert.deepEqual(rewards.map((r) => r.id), [other], 'not in the normal list');
+    assert.deepEqual(pendingDeletes.map((r) => r.id), [rewardId]);
+    assert.equal(allRewards.length, 2);
+  });
+
+  test('a reward that is waiting to be deleted cannot be edited, replaced or tested', async () => {
+    const rewardId = addReward(id, { twitch_sync_status: 'delete_failed' });
+    assert.equal((await patch(rewardId, { title: 'New title' })).status, 404);
+    assert.equal((await request('POST', `/dashboard/redemptions/${rewardId}/test`, { streamer: id })).status, 404);
+    assert.equal((await request('POST', `/dashboard/redemptions/${rewardId}/replace-media?media_type=audio&ext=mp3`, { streamer: id, rawBody: 'x', contentType: 'application/octet-stream' })).status, 404);
+    assert.deepEqual(helix.calls, []);
+    assert.equal(fileWrites.length, 0);
+  });
+
+  test('deleting it again retries the delete', async () => {
+    const rewardId = addReward(id, { twitch_sync_status: 'delete_failed' });
+    const res = await del(rewardId);
+    assert.deepEqual(res.json(), { ok: true });
+    assert.equal(rewardRow(rewardId), undefined);
+  });
+
+  test('retry: a delete that works removes the reward', async () => {
+    const rewardId = addReward(id, { twitch_sync_status: 'delete_failed' });
+    const res = await retry(rewardId);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true, removed: true, reward: null });
+    assert.equal(rewardRow(rewardId), undefined);
+  });
+
+  test('retry: an edit that works clears the warning', async () => {
+    const rewardId = addReward(id, { title: 'Local title', twitch_sync_status: 'update_failed' });
+    const res = await retry(rewardId);
+    assert.equal(res.status, 200);
+    const body = res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.removed, false);
+    assert.equal(body.reward.twitch_sync_status, 'ok');
+    assert.equal(helix.calls.find((c) => c.method === 'PATCH').body.title, 'Local title');
+  });
+
+  test('retry that Twitch refuses again is an error and the reward keeps its status', async () => {
+    const stuck = addReward(id, { twitch_sync_status: 'delete_failed' });
+    const edited = addReward(id, { twitch_sync_status: 'update_failed' });
+    helix.fail.DELETE = { status: 500 };
+    helix.fail.PATCH = { status: 500 };
+    const first = await retry(stuck);
+    assert.equal(first.status, 502);
+    assert.equal(first.json().error, t('en', 'redemptions.error.deleteFailed'));
+    const second = await retry(edited);
+    assert.equal(second.status, 502);
+    assert.equal(second.json().error, t('en', 'redemptions.error.updateFailed'));
+    assert.equal(rewardRow(stuck).twitch_sync_status, 'delete_failed');
+    assert.equal(rewardRow(edited).twitch_sync_status, 'update_failed');
+  });
+
+  test('retry of a reward with nothing pending is a 400', async () => {
+    const rewardId = addReward(id);
+    const res = await retry(rewardId);
+    assert.equal(res.status, 400);
+    assert.equal(res.json().error, t('en', 'redemptions.error.nothingToRetry'));
+    assert.deepEqual(helix.calls, []);
+  });
+
+  test('another streamer\'s reward can be neither edited, deleted nor retried', async () => {
+    const other = addStreamer({ twitch_user_id: `tw-user-${++rewardCounter}`, broadcaster_access_token: 'tok2' });
+    const theirs = addReward(other, { twitch_sync_status: 'delete_failed' });
+    assert.equal((await patch(theirs, { title: 'Mine now' })).status, 404);
+    assert.equal((await del(theirs)).status, 404);
+    assert.equal((await retry(theirs)).status, 404);
+    assert.equal(rewardRow(theirs, other).twitch_sync_status, 'delete_failed');
+    assert.deepEqual(helix.calls, []);
+  });
+
+  test('the page shows the warning and retry for an edit Twitch did not take, and the rewards waiting to be deleted', async () => {
+    addReward(id, { title: 'Edited Reward', twitch_sync_status: 'update_failed' });
+    addReward(id, { title: 'Stubborn Reward', twitch_sync_status: 'delete_failed' });
+    addReward(id, { title: 'Fine Reward' });
+    const res = await request('GET', '/dashboard/redemptions', { streamer: id });
+    assert.equal(res.status, 200);
+    const html = (text) => text.replace(/&/g, '&amp;').replace(/"/g, '&#34;');
+    assert.ok(res.text.includes(html(t('en', 'redemptions.updateFailed.warning'))));
+    assert.ok(res.text.includes(t('en', 'redemptions.status.updateFailed')));
+    assert.ok(res.text.includes('id="pending-deletes"'));
+    assert.ok(res.text.includes(t('en', 'redemptions.deleteFailed.title')));
+    assert.ok(res.text.includes(html(t('en', 'redemptions.deleteFailed.help'))));
+    assert.match(res.text, /id="pending-delete-\d+"[\s\S]*Stubborn Reward/);
+    const normalList = res.text.slice(res.text.indexOf('id="rewards-list"'));
+    assert.ok(!normalList.slice(0, normalList.indexOf('reward-modal')).includes('Stubborn Reward'), 'not in the normal list');
+    assert.ok(normalList.includes('Edited Reward') && normalList.includes('Fine Reward'));
+  });
+
+  test('without any problem the page has no warning and no pending list', async () => {
+    addReward(id, { title: 'Fine Reward' });
+    const res = await request('GET', '/dashboard/redemptions', { streamer: id });
+    assert.ok(!res.text.includes('id="pending-deletes"'));
+    assert.ok(!res.text.includes('class="reward-warning"'));
+  });
+
+  test('refunded redemptions are labelled in the history', async () => {
+    const rewardId = addReward(id, { title: 'Off Reward', enabled: 0 });
+    for (const [n, outcome] of [[1, 'refunded_disabled'], [2, 'refunded_deleted']]) {
+      db.logRedemption({ streamer_id: id, reward_id: rewardId, twitch_redemption_id: `route-red-${id}-${n}`, twitch_reward_id: 'x', user_login: 'viewer', cost: 100, status: 'unfulfilled', outcome, redeemed_at: '2026-10-13T12:00:00Z' });
+    }
+    const res = await request('GET', '/dashboard/redemptions', { streamer: id });
+    assert.ok(res.text.includes(t('en', 'redemptions.outcome.refundedDisabled')));
+    assert.ok(res.text.includes(t('en', 'redemptions.outcome.refundedDeleted')));
+    assert.ok(res.text.includes('Off Reward'));
   });
 });

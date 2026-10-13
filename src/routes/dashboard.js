@@ -1703,14 +1703,24 @@ function validateRewardFields(fields, res) {
   return true;
 }
 
+// A reward the streamer deleted but Twitch refused to delete is kept (delete_failed)
+// so it is not forgotten while still live there; it is not part of the normal list.
+function isPendingDelete(reward) {
+  return reward.twitch_sync_status === 'delete_failed';
+}
+
 router.get('/redemptions', (req, res) => {
   const { hasRedemptionScope } = require('../services/twitch');
   const streamerId = req.streamer.id;
-  const rewards = db.getRewards(streamerId);
+  const allRewards = db.getRewards(streamerId);
+  const rewards = allRewards.filter((r) => !isPendingDelete(r));
+  const pendingDeletes = allRewards.filter(isPendingDelete);
   const recentRedemptions = db.getRedemptionsRecent(streamerId, 50);
   res.render('redemptions-config', {
     streamer: req.streamer,
     rewards,
+    pendingDeletes,
+    allRewards,
     recentRedemptions,
     cpRewardsEnabled: req.streamer.cp_rewards_enabled,
     affiliateStatus: req.streamer.cp_affiliate_status,
@@ -1833,7 +1843,7 @@ router.patch('/redemptions/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward) return res.status(404).json({ error: 'Not found' });
+  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: 'Not found' });
 
   const body = req.body || {};
   const updates = {};
@@ -1869,37 +1879,23 @@ router.patch('/redemptions/:id', async (req, res) => {
 
   db.updateReward(id, streamerId, updates);
 
-  // Push Twitch-relevant fields upstream if we have a reward ID
-  if (reward.twitch_reward_id) {
-    const twitchPatch = {};
-    if (updates.title !== undefined) twitchPatch.title = updates.title;
-    if (updates.cost !== undefined) twitchPatch.cost = updates.cost;
-    if (updates.prompt !== undefined) twitchPatch.prompt = updates.prompt;
-    if (updates.cooldown_seconds !== undefined) {
-      twitchPatch.is_global_cooldown_enabled = updates.cooldown_seconds > 0;
-      twitchPatch.global_cooldown_seconds = updates.cooldown_seconds > 0 ? updates.cooldown_seconds : undefined;
-    }
-    // enabled in our DB inverts to is_paused on Twitch
-    if (updates.enabled !== undefined) twitchPatch.is_paused = !updates.enabled;
-
-    if (Object.keys(twitchPatch).length > 0) {
-      try {
-        const { updateReward: twitchUpdate } = require('../services/twitchRewards');
-        await twitchUpdate(req.streamer, reward.twitch_reward_id, twitchPatch);
-      } catch (e) {
-        console.error('[Rewards] Twitch PATCH failed:', e.message);
-      }
-    }
+  // Send what Twitch keeps (title, cost, prompt, cooldown, paused) to Twitch. The
+  // edit stays saved here either way; if Twitch did not take it the row says so
+  // (update_failed) and the answer is an error, not a success.
+  const { pushRewardChanges } = require('../services/twitchRewards');
+  const pushed = await pushRewardChanges(req.streamer, id, updates);
+  const saved = db.getRewardById(id, streamerId);
+  if (!pushed.ok) {
+    return res.status(502).json({ ok: false, error: res.locals.t('redemptions.error.updateFailed'), reward: saved });
   }
-
-  res.json({ ok: true, reward: db.getRewardById(id, streamerId) });
+  res.json({ ok: true, reward: saved });
 });
 
 router.post('/redemptions/:id/replace-media', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward) return res.status(404).json({ error: 'Not found' });
+  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: 'Not found' });
 
   const mediaType = (req.query.media_type || reward.media_type || '').toLowerCase();
   const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -1942,34 +1938,39 @@ router.delete('/redemptions/:id', async (req, res) => {
   const reward = db.getRewardById(id, streamerId);
   if (!reward) return res.status(404).json({ error: 'Not found' });
 
-  if (reward.twitch_reward_id) {
-    try {
-      const { deleteReward: twitchDelete } = require('../services/twitchRewards');
-      await twitchDelete(req.streamer, reward.twitch_reward_id);
-    } catch (e) {
-      // 403/404 are expected for orphaned or foreign rewards — ignore them
-      if (!e.status || (e.status !== 403 && e.status !== 404)) {
-        console.error('[Rewards] Twitch delete failed:', e.message);
-      }
-    }
+  // The reward is gone here only once Twitch no longer has it. If Twitch refuses,
+  // the row is kept as delete_failed (listed with a retry, and redemptions of it are
+  // refunded) instead of leaving a live reward this app has forgotten.
+  const { removeReward } = require('../services/twitchRewards');
+  const result = await removeReward(req.streamer, reward);
+  if (!result.removed) {
+    return res.status(502).json({ ok: false, error: res.locals.t('redemptions.error.deleteFailed'), reward: db.getRewardById(id, streamerId) });
   }
-
-  db.deleteReward(id, streamerId);
-
-  if (reward.media_filename) {
-    try {
-      fs.unlinkSync(path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId), reward.media_filename));
-    } catch (e) {} // ENOENT is fine
-  }
-
   res.json({ ok: true });
+});
+
+// Try again whatever Twitch has not taken yet: a delete or an edit.
+router.post('/redemptions/:id/retry', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const streamerId = req.streamer.id;
+  const reward = db.getRewardById(id, streamerId);
+  if (!reward) return res.status(404).json({ error: 'Not found' });
+
+  const { retryPending } = require('../services/twitchRewards');
+  const result = await retryPending(req.streamer, reward);
+  if (result.nothingToRetry) return res.status(400).json({ ok: false, error: res.locals.t('redemptions.error.nothingToRetry') });
+  if (!result.ok) {
+    const key = reward.twitch_sync_status === 'delete_failed' ? 'redemptions.error.deleteFailed' : 'redemptions.error.updateFailed';
+    return res.status(502).json({ ok: false, error: res.locals.t(key), reward: db.getRewardById(id, streamerId) });
+  }
+  res.json({ ok: true, removed: !!result.removed, reward: db.getRewardById(id, streamerId) || null });
 });
 
 router.post('/redemptions/:id/test', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward) return res.status(404).json({ error: 'Not found' });
+  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: 'Not found' });
 
   const bus = require('../services/overlayBus');
   const fakeRedemptionId = `test-${id}-${Date.now()}`;

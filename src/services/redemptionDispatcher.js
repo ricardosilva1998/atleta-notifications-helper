@@ -4,6 +4,46 @@ const db = require('../db');
 const bus = require('./overlayBus');
 const { chatManager } = require('./twitchChat');
 const { formatChatTemplate } = require('./redemptionTemplates');
+const { unavailableReason, refundRedemption } = require('./twitchRewards');
+
+// A redemption of a reward that must not play (switched off here, or deleted here
+// while Twitch still has it): the viewer's channel points go back to them (the
+// redemption is canceled on Twitch) and the redemption is logged.
+//   refunded_disabled / refunded_deleted - canceled
+//   disabled - nothing to cancel: only a redemption still waiting in the queue
+//              (status unfulfilled) can be, and this one was not
+//   error - Twitch did not cancel it (the reason is in error_message)
+async function refundUnavailableReward(streamerId, reward, eventData, reason) {
+  const { twitchRedemptionId, twitchRewardId, rewardCost, username, userId, userInput, status, redeemedAt } = eventData;
+  let outcome = 'disabled';
+  let errorMessage = null;
+
+  if (String(status).toLowerCase() === 'unfulfilled') {
+    try {
+      await refundRedemption(db.getStreamerById(streamerId), twitchRewardId, twitchRedemptionId);
+      outcome = reason === 'deleted' ? 'refunded_deleted' : 'refunded_disabled';
+    } catch (e) {
+      console.error(`[Redemption] could not refund ${twitchRedemptionId}: ${e.message}`);
+      outcome = 'error';
+      errorMessage = `refund failed: ${e.message}`;
+    }
+  }
+
+  db.logRedemption({
+    streamer_id: streamerId,
+    reward_id: reward.id,
+    twitch_redemption_id: twitchRedemptionId,
+    twitch_reward_id: twitchRewardId,
+    user_id: userId,
+    user_login: username,
+    user_input: userInput || null,
+    cost: rewardCost,
+    status,
+    outcome,
+    error_message: errorMessage,
+    redeemed_at: redeemedAt,
+  });
+}
 
 async function handleRedemption(streamerId, eventData) {
   const {
@@ -40,21 +80,11 @@ async function handleRedemption(streamerId, eventData) {
     return;
   }
 
-  // Step 2: check enabled
-  if (!reward.enabled) {
-    db.logRedemption({
-      streamer_id: streamerId,
-      reward_id: reward.id,
-      twitch_redemption_id: twitchRedemptionId,
-      twitch_reward_id: twitchRewardId,
-      user_id: userId,
-      user_login: username,
-      user_input: userInput || null,
-      cost: rewardCost,
-      status,
-      outcome: 'disabled',
-      redeemed_at: redeemedAt,
-    });
+  // Step 2: a reward that is switched off here, or deleted here but still live on
+  // Twitch (the delete was refused), must not play: the viewer is refunded instead.
+  const unavailable = unavailableReason(reward);
+  if (unavailable) {
+    await refundUnavailableReward(streamerId, reward, eventData, unavailable);
     return;
   }
 

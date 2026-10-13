@@ -59,6 +59,17 @@
   .sync-chip.orphaned { background: rgba(240,68,56,0.15); color: var(--danger); }
   .sync-chip.create_failed { background: rgba(240,68,56,0.15); color: var(--danger); }
   .sync-chip.no_affiliate { background: var(--warning-bg); color: var(--warning); }
+  .sync-chip.update_failed { background: var(--warning-bg); color: var(--warning); }
+  .sync-chip.delete_failed { background: rgba(240,68,56,0.15); color: var(--danger); }
+  .reward-warning {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 18px; border-top: 1px solid rgba(247,144,9,0.2);
+    background: var(--warning-bg); color: var(--warning); font-size: 12px;
+  }
+  .reward-warning span { flex: 1; min-width: 200px; }
+  .pending-delete-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid rgba(240,68,56,0.2); font-size: 13px; }
+  .pending-delete-row:first-of-type { border-top: none; }
+  .pending-delete-row .reward-title { flex: 1; }
 
   /* ── Position preview pane ───────────────────────── */
   .pos-preview {
@@ -131,6 +142,7 @@
   .outcome-chip { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
   .outcome-chip.played { background: rgba(62,207,142,0.15); color: var(--success); }
   .outcome-chip.refunded_no_file { background: var(--warning-bg); color: var(--warning); }
+  .outcome-chip.refunded_disabled, .outcome-chip.refunded_deleted { background: var(--warning-bg); color: var(--warning); }
   .outcome-chip.disabled { background: var(--bg-elevated); color: var(--text-muted); }
   .outcome-chip.error { background: var(--danger-bg); color: var(--danger); }
   .outcome-chip.test { background: rgba(88,101,242,0.15); color: #5865f2; }
@@ -205,6 +217,23 @@
   </div>
 </div>
 
+<!-- Rewards Twitch refused to delete: still live there, kept until they are gone -->
+<% if (pendingDeletes.length > 0) { %>
+  <div class="cp-banner danger" id="pending-deletes" style="flex-direction: column; gap: 6px;">
+    <strong><%= t('redemptions.deleteFailed.title') %></strong>
+    <span><%= t('redemptions.deleteFailed.help') %></span>
+    <div style="width: 100%;">
+      <% pendingDeletes.forEach(function(r) { %>
+        <div class="pending-delete-row" id="pending-delete-<%= r.id %>">
+          <span class="reward-title"><%= r.title %></span>
+          <span style="color: var(--text-muted);"><%= r.cost.toLocaleString() %> pts</span>
+          <button type="button" class="btn btn-secondary" onclick="retryReward(<%= r.id %>, this)" style="font-size: 12px; padding: 6px 12px;"><%= t('redemptions.retry') %></button>
+        </div>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
 <!-- Rewards list header -->
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
   <h3 style="font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em;">
@@ -237,7 +266,7 @@
         <div class="reward-meta">
           <%= r.cost.toLocaleString() %> pts &middot; <%= r.position_preset %>
           <% if (r.twitch_sync_status && r.twitch_sync_status !== 'ok') { %>
-            <span class="sync-chip <%= r.twitch_sync_status %>"><%= r.twitch_sync_status.replace(/_/g, ' ') %></span>
+            <span class="sync-chip <%= r.twitch_sync_status %>"><%= r.twitch_sync_status === 'update_failed' ? t('redemptions.status.updateFailed') : r.twitch_sync_status.replace(/_/g, ' ') %></span>
           <% } %>
         </div>
       </div>
@@ -260,6 +289,12 @@
         </button>
       </div>
     </div>
+    <% if (r.twitch_sync_status === 'update_failed') { %>
+      <div class="reward-warning">
+        <span><%= t('redemptions.updateFailed.warning') %></span>
+        <button type="button" class="btn btn-secondary" onclick="retryReward(<%= r.id %>, this)" style="font-size: 12px; padding: 6px 12px;"><%= t('redemptions.retry') %></button>
+      </div>
+    <% } %>
   </div>
 <% }); %>
 </div>
@@ -428,7 +463,8 @@
         </thead>
         <tbody>
           <% recentRedemptions.forEach(function(r) {
-            const rewardRow = rewards.find(function(rw) { return rw.id === r.reward_id; });
+            const rewardRow = allRewards.find(function(rw) { return rw.id === r.reward_id; });
+            const outcomeLabels = { refunded_disabled: t('redemptions.outcome.refundedDisabled'), refunded_deleted: t('redemptions.outcome.refundedDeleted') };
           %>
             <tr>
               <td style="color:var(--text-muted);white-space:nowrap;" data-ts="<%= r.created_at %>"><%= r.created_at %></td>
@@ -437,7 +473,7 @@
               <td style="font-family:var(--font-display);"><%= r.cost ? Number(r.cost).toLocaleString() + ' pts' : '&mdash;' %></td>
               <td>
                 <span class="outcome-chip <%= r.is_test ? 'test' : (r.outcome || 'error') %>">
-                  <%= r.is_test ? 'TEST' : (r.outcome || 'error') %>
+                  <%= r.is_test ? 'TEST' : (outcomeLabels[r.outcome] || r.outcome || 'error') %>
                 </span>
               </td>
             </tr>
@@ -518,7 +554,30 @@ async function toggleReward(id, enabled) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: enabled ? 1 : 0 }),
   });
-  if (!r.ok) { showToast('Update failed', 'error'); }
+  if (!r.ok) {
+    var d = await r.json().catch(function() { return {}; });
+    showToast(d.error || 'Update failed', 'error');
+    // Saved here but not on Twitch: reload to show the warning on the reward.
+    if (d.reward) setTimeout(function() { location.reload(); }, 2500);
+  }
+}
+
+// ── Retry what Twitch has not taken yet (an edit or a delete) ─
+async function retryReward(id, btn) {
+  btn.disabled = true;
+  try {
+    var r = await fetch('/dashboard/redemptions/' + id + '/retry', { method: 'POST' });
+    var d = await r.json().catch(function() { return {}; });
+    if (r.ok) {
+      showToast(d.removed ? <%- JSON.stringify(t('redemptions.retry.deleted')).replace(/</g, '\\u003c') %> : <%- JSON.stringify(t('redemptions.retry.sent')).replace(/</g, '\\u003c') %>, 'success');
+      setTimeout(function() { location.reload(); }, 800);
+      return;
+    }
+    showToast(d.error || 'Retry failed', 'error');
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+  btn.disabled = false;
 }
 
 // ── Test a reward ────────────────────────────────────────────
@@ -565,6 +624,8 @@ async function deleteReward(id) {
   } else {
     var d = await r.json().catch(function() { return {}; });
     showToast(d.error || 'Delete failed', 'error');
+    // Twitch kept the reward: reload so it appears under "Not deleted on Twitch".
+    if (d.reward) setTimeout(function() { location.reload(); }, 2500);
   }
 }
 
@@ -794,10 +855,14 @@ async function submitReward() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: title, cost: cost, cooldown_seconds: cooldown, prompt: prompt || null, chat_message_template: chatTemplate || null, auto_fulfill: autoFulfill, volume: volume, max_play_seconds: maxPlay, position_preset: posPreset, custom_x: cx, custom_y: cy, custom_w: cw, custom_h: ch }),
       });
+      var twitchMessage = null; // the edit is saved here, but Twitch did not take it
       if (!patchRes.ok) {
         var d = await patchRes.json().catch(function() { return {}; });
-        showToast(d.error || 'Save failed', 'error');
-        btn.disabled = false; btn.textContent = origText; return;
+        if (!d.reward) {
+          showToast(d.error || 'Save failed', 'error');
+          btn.disabled = false; btn.textContent = origText; return;
+        }
+        twitchMessage = d.error;
       }
       if (_selectedFile) {
         var ext2 = _selectedFile.name.split('.').pop().toLowerCase();
@@ -807,8 +872,8 @@ async function submitReward() {
           body: _selectedFile,
         });
       }
-      showToast('Reward updated', 'success');
-      setTimeout(function() { location.reload(); }, 800);
+      showToast(twitchMessage || 'Reward updated', twitchMessage ? 'error' : 'success');
+      setTimeout(function() { location.reload(); }, twitchMessage ? 2500 : 800);
     } else {
       if (!_selectedFile) { showToast('Please select a media file', 'error'); btn.disabled = false; btn.textContent = origText; return; }
       var ext = _selectedFile.name.split('.').pop().toLowerCase();
