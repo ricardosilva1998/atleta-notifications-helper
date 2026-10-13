@@ -3426,6 +3426,25 @@ try {
   }
 } catch (e) { _migrationLog('donations', e); }
 
+// Migration: PayPal tips between order creation and PayPal's redirect back.
+// The donor's name and message stay on the server, keyed by the PayPal order id,
+// instead of in browser cookies; captured_at marks an order already handled.
+// Rows older than 24 hours are removed by cleanupOldPendingTips().
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pending_tips (
+      order_id TEXT PRIMARY KEY,
+      streamer_id INTEGER NOT NULL,
+      donor_name TEXT NOT NULL,
+      message TEXT,
+      payee_merchant_id TEXT,
+      captured_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) { _migrationLog('pending_tips', e); }
+
 // Migration: Add channel point columns to streamers
 try {
   const cols = db.pragma('table_info(streamers)').map(c => c.name);
@@ -4644,15 +4663,18 @@ function getWinners(giveawayId) {
 // --- Donation history ---
 
 // Real donations only (PayPal capture, StreamElements tip). external_id dedupes replays.
+// Returns true only when a new row was written, so callers alert and count a
+// donation once even when PayPal or StreamElements delivers it again.
 function logDonation(streamerId, d) {
   const amount = Math.round(parseFloat(d.amount) * 100) / 100;
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  db.prepare(`
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  const result = db.prepare(`
     INSERT OR IGNORE INTO donations (streamer_id, source, donor_name, amount, currency, message, external_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(streamerId, d.source, (d.donor_name || 'Anonymous').substring(0, 100), amount,
     d.currency ? String(d.currency).toUpperCase() : null, d.message ? String(d.message).substring(0, 500) : null,
     d.external_id || null);
+  return result.changes > 0;
 }
 
 function _donationFilter(streamerId, opts) {
@@ -4698,6 +4720,31 @@ function deleteDonation(id, streamerId) {
 function cleanupOldDonations() {
   const result = db.prepare("DELETE FROM donations WHERE created_at < datetime('now', '-365 days')").run();
   if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} donations older than 1 year`);
+}
+
+// --- Pending PayPal tips (order created, waiting for PayPal's redirect back) ---
+
+function createPendingTip(t) {
+  db.prepare(`
+    INSERT INTO pending_tips (order_id, streamer_id, donor_name, message, payee_merchant_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(t.order_id, t.streamer_id, t.donor_name, t.message || null, t.payee_merchant_id || null);
+}
+
+function getPendingTip(orderId) {
+  return db.prepare('SELECT * FROM pending_tips WHERE order_id = ?').get(orderId) || null;
+}
+
+// Returns true when this call marked the order (false if it was already marked or is unknown).
+function markPendingTipCaptured(orderId) {
+  return db.prepare(
+    "UPDATE pending_tips SET captured_at = datetime('now') WHERE order_id = ? AND captured_at IS NULL"
+  ).run(orderId).changes > 0;
+}
+
+function cleanupOldPendingTips() {
+  const result = db.prepare("DELETE FROM pending_tips WHERE created_at < datetime('now', '-1 day')").run();
+  if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} pending PayPal tips older than 24 hours`);
 }
 
 // --- Tip goals ---
@@ -5100,6 +5147,10 @@ module.exports = {
   getDonationMonthly,
   deleteDonation,
   cleanupOldDonations,
+  createPendingTip,
+  getPendingTip,
+  markPendingTipCaptured,
+  cleanupOldPendingTips,
   getActiveTipGoal,
   getTipGoalHistory,
   createTipGoal,

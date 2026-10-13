@@ -255,6 +255,9 @@
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",
   "overlay.sounds.error.writeFailed": "The sound could not be saved, please try again",
 
+  "tip.error.expired": "This donation link has expired or is not valid. Please start your donation again.",
+  "tip.error.notConfirmed": "PayPal could not confirm this payment, so no alert was sent. Please check your PayPal account before trying again.",
+
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",
   "lang.es": "Espa\u00f1ol",

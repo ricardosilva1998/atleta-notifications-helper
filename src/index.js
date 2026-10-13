@@ -83,9 +83,13 @@ client.once('clientReady', async () => {
     setInterval(() => { try { db.cleanupOldOverlayEvents(); } catch (e) {} }, 6 * 60 * 60 * 1000);
     db.cleanupOldOverlayEvents();
 
-    // Donation history keeps 1 year (every 24 hours)
-    setInterval(() => { try { db.cleanupOldDonations(); } catch (e) {} }, 24 * 60 * 60 * 1000);
-    try { db.cleanupOldDonations(); } catch (e) {}
+    // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours)
+    const cleanupDonations = () => {
+      try { db.cleanupOldDonations(); } catch (e) {}
+      try { db.cleanupOldPendingTips(); } catch (e) {}
+    };
+    setInterval(cleanupDonations, 24 * 60 * 60 * 1000);
+    cleanupDonations();
 
     // Clean up old bridge logs (every 6 hours)
     setInterval(() => { try { db.cleanupOldBridgeLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);

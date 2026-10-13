@@ -35,6 +35,7 @@
     .tip-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     .tip-error { color: var(--danger); font-size: 12px; margin-bottom: 8px; display: none; }
     .tip-success { background: rgba(62,207,142,0.1); border: 1px solid rgba(62,207,142,0.3); border-radius: 8px; padding: 16px; margin-top: 16px; color: var(--success); font-weight: 600; }
+    .tip-alert { background: rgba(240,68,56,0.1); border: 1px solid rgba(240,68,56,0.3); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; color: var(--danger); font-size: 13px; font-weight: 600; }
     .tip-footer { margin-top: 20px; font-size: 11px; color: var(--text-muted); }
     .tip-footer a { color: var(--accent); text-decoration: none; }
   </style>
@@ -44,6 +45,10 @@
     <img class="tip-avatar" src="<%= avatarUrl || '/app-icon/honest_graphic-running-athlete-9715727.png' %>" alt="" onerror="this.src='/app-icon/honest_graphic-running-athlete-9715727.png'">
     <div class="tip-name"><%= streamer.twitch_display_name || streamer.twitch_username %></div>
     <div class="tip-sub">Support this streamer with a donation</div>
+
+    <% if (error) { %>
+      <div class="tip-alert" role="alert"><%= error %></div>
+    <% } %>
 
     <% if (success) { %>
       <div class="tip-success">Thank you for your donation! The streamer has been notified.</div>
