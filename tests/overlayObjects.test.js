@@ -110,8 +110,8 @@ describe('subscription — torii gate', () => {
 });
 
 describe('bits — tally board', () => {
-  // Shape matches the real producers (src/services/eventsub.js channel.cheer,
-  // src/routes/overlay.js and dashboard.js test routes): {username, amount, message}.
+  // Shape matches the real producers (src/services/eventsub.js channel.cheer
+  // and the dashboard.js test route): {username, amount, message}.
   test('emits one tile per digit, in order', () => {
     const html = OBJECTS.bits.render({ username: 'TurboTina', amount: 500, message: 'cheer!' });
     const tiles = [...html.matchAll(/class="o-bits-tile"[^>]*>(\d)</g)].map(m => m[1]);
@@ -131,7 +131,7 @@ describe('bits — tally board', () => {
     assert.deepEqual(tiles, ['1']);
   });
 
-  test('renders the real overlay.js test-event payload (src/routes/overlay.js:91)', () => {
+  test('renders the dashboard test-event payload (src/routes/dashboard.js)', () => {
     // Exact shape fired by router.post('/overlay/test/:eventType')'s 'bits' case.
     // Regression pin: the old code read d.bits (always undefined on this shape)
     // and silently rendered a single "0" tile for every real cheer.
