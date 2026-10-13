@@ -35,21 +35,32 @@ async function authenticate() {
   return _authInFlight;
 }
 
+// A slow Helix response must not hang a poller or a page indefinitely.
+const HELIX_TIMEOUT_MS = 10_000;
+
+function helixFetch(endpoint) {
+  return fetch(`https://api.twitch.tv/helix${endpoint}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Client-Id': config.twitch.clientId,
+    },
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+  });
+}
+
 async function apiCall(endpoint) {
   if (!accessToken || Date.now() >= tokenExpiresAt) {
     await authenticate();
   }
 
-  const res = await fetch(`https://api.twitch.tv/helix${endpoint}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Client-Id': config.twitch.clientId,
-    },
-  });
+  let res = await helixFetch(endpoint);
 
+  // A 401 usually means the app token was revoked before it expired: get a
+  // fresh one and retry once. If Twitch rejects the fresh token too, throw
+  // below instead of looping on the token endpoint.
   if (res.status === 401) {
     await authenticate();
-    return apiCall(endpoint);
+    res = await helixFetch(endpoint);
   }
 
   if (!res.ok) {

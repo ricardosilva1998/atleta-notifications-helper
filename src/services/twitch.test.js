@@ -147,3 +147,70 @@ describe('refreshBroadcasterToken error classification', () => {
     assert.ok(_savedTokens.expiresAt <= Date.now() + 3600_000 - 60_000);
   });
 });
+
+// ── apiCall: 401 handling (exercised through getStream) ───────────────
+
+describe('apiCall retries a 401 only once', () => {
+  const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+  let calls;
+  let helixSignals;
+
+  // A fresh module per test, so the cached app token starts empty and the
+  // first call always authenticates once before reaching Helix.
+  function freshTwitch() {
+    delete require.cache[require.resolve('./twitch')];
+    return require('./twitch');
+  }
+
+  // The token endpoint always succeeds; Helix answers with `statuses` in
+  // order (the last one repeats). A runaway loop fails fast instead of hanging.
+  function stubTwitch(statuses) {
+    calls = [];
+    helixSignals = [];
+    let helixCalls = 0;
+    global.fetch = async (url, opts = {}) => {
+      if (calls.length >= 20) throw new Error('runaway retry loop');
+      if (String(url) === TOKEN_URL) {
+        calls.push('token');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: `app-token-${calls.length}`, expires_in: 3600 }),
+          text: async () => '',
+        };
+      }
+      const status = statuses[Math.min(helixCalls++, statuses.length - 1)];
+      calls.push(`helix:${status}`);
+      helixSignals.push(opts.signal);
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => ({ data: [{ id: '42', user_login: 'somestreamer' }] }),
+        text: async () => (status === 401 ? 'Invalid OAuth token' : ''),
+      };
+    };
+  }
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  test('401 then 200 succeeds after exactly one re-auth', async () => {
+    const tw = freshTwitch();
+    stubTwitch([401, 200]);
+    const stream = await tw.getStream('somestreamer');
+    assert.deepEqual(stream, { id: '42', user_login: 'somestreamer' });
+    assert.deepEqual(calls, ['token', 'helix:401', 'token', 'helix:200']);
+    assert.ok(
+      helixSignals.every((s) => s instanceof AbortSignal),
+      'every Helix request carries a timeout signal'
+    );
+  });
+
+  test('401 then 401 throws after exactly one retry', async () => {
+    const tw = freshTwitch();
+    stubTwitch([401, 401]);
+    await assert.rejects(() => tw.getStream('somestreamer'), /Twitch API error: 401/);
+    assert.deepEqual(calls, ['token', 'helix:401', 'token', 'helix:401']);
+  });
+});
