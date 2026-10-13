@@ -22,7 +22,7 @@ delete require.cache[require.resolve('./youtube')];
 const youtube = require('./youtube');
 
 const realFetch = global.fetch;
-const realConsoleError = console.error;
+const realConsole = { log: console.log, error: console.error };
 let calls; // [{ url, signal }]
 
 // Answers with `json`; `hang` leaves the request pending until its own signal aborts, like fetch does.
@@ -42,12 +42,13 @@ function stubFetch({ json = {}, html = '', status = 200, hang = false } = {}) {
 
 beforeEach(() => {
   savedTokens.length = 0;
-  console.error = () => {}; // the helpers log failed page fetches
+  console.log = () => {}; // the helpers log what they find and what fails
+  console.error = () => {};
 });
 
 afterEach(() => {
   global.fetch = realFetch;
-  console.error = realConsoleError;
+  Object.assign(console, realConsole);
 });
 
 describe('getActiveBroadcast', () => {
