@@ -237,6 +237,9 @@ router.get('/iracing/:type/:token', (req, res) => {
     const setting = db.getIracingOverlaySetting(streamer.id, type);
     if (setting) settings = JSON.parse(setting.settings || '{}');
   } catch (e) {}
+  // < escaping: settings hold streamer-entered text and are embedded raw
+  // in the inline <script> below, where a literal "</script>" would end it.
+  const settingsJson = JSON.stringify(settings).replace(/</g, '\\u003c');
 
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.send(`<!DOCTYPE html>
@@ -252,7 +255,7 @@ router.get('/iracing/:type/:token', (req, res) => {
   <script>
     window.OVERLAY_TOKEN = ${JSON.stringify(req.params.token)};
     window.OVERLAY_TYPE = ${JSON.stringify(type)};
-    window.OVERLAY_SETTINGS = ${JSON.stringify(settings)};
+    window.OVERLAY_SETTINGS = ${settingsJson};
     window.STREAMER_ID = ${streamer.id};
   </script>
   <script src="/overlay/iracing/shared.js"></script>
