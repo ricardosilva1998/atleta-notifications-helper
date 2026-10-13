@@ -255,6 +255,15 @@
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",
   "overlay.sounds.error.writeFailed": "The sound could not be saved, please try again",
 
+  "donations.error.currency": "Choose one of the listed currencies",
+  "donations.error.minAmount": "Enter a minimum amount between {{min}} and {{max}}",
+  "donations.error.email": "Enter a valid PayPal email address (at most {{length}} characters)",
+  "donations.goal.error.titleRequired": "Goal title is required",
+  "donations.goal.error.targetInvalid": "Target must be a positive amount",
+  "donations.goal.error.notFound": "Goal not found",
+  "donations.goal.error.amountInvalid": "Enter a non-zero amount",
+  "donations.goal.currencyMismatch": "This goal counts {{goal}} tips, but your tip page asks for {{page}}, so PayPal tips are not added to it. Set the tip page currency to {{goal}}, or start a new goal in {{page}}.",
+
   "tip.error.expired": "This donation link has expired or is not valid. Please start your donation again.",
   "tip.error.notConfirmed": "PayPal could not confirm this payment, so no alert was sent. Please check your PayPal account before trying again.",
 

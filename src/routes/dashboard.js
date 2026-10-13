@@ -13,6 +13,10 @@ const iracing = require('../services/iracing');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
 const {
+  TIP_GOAL_CURRENCIES, SETTINGS_ERRORS, GOAL_ERRORS, MIN_AMOUNT_FLOOR, MIN_AMOUNT_CEIL, PAYPAL_EMAIL_MAX,
+  parseDonationSettings, parseTipGoalFields, errorMessage, goalCurrencyMismatch,
+} = require('../services/donationSettings');
+const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
 
@@ -926,16 +930,25 @@ router.get('/overlay/sounds/status', (req, res) => {
 
 // Donation settings page
 router.get('/donations', (req, res) => {
+  const t = res.locals.t;
   const goalOverlayUrl = req.streamer.overlay_token
     ? `${config.app.url}/overlay/goal/${req.streamer.overlay_token}`
     : null;
+  const activeGoal = db.getActiveTipGoal(req.streamer.id);
+  // PayPal tips only count toward a goal in the tip page's currency
+  const mismatch = goalCurrencyMismatch(activeGoal, req.streamer);
   res.render('donation-settings', {
     streamer: req.streamer,
     appUrl: config.app.url,
-    activeGoal: db.getActiveTipGoal(req.streamer.id),
+    activeGoal,
     goalHistory: db.getTipGoalHistory(req.streamer.id, 10),
     goalOverlayUrl,
-    goalError: req.query.goal_error || null,
+    // Only known error codes from the URL become messages; anything else shows nothing
+    settingsError: errorMessage(SETTINGS_ERRORS, req.query.error, t, {
+      min: MIN_AMOUNT_FLOOR.toFixed(2), max: MIN_AMOUNT_CEIL, length: PAYPAL_EMAIL_MAX,
+    }),
+    goalError: errorMessage(GOAL_ERRORS, req.query.goal_error, t),
+    goalCurrencyWarning: mismatch ? t('donations.goal.currencyMismatch', mismatch) : null,
   });
 });
 
@@ -1006,17 +1019,7 @@ router.post('/donations/history/:id/delete', (req, res) => {
 
 // --- Tip goals ---
 
-const TIP_GOAL_CURRENCIES = ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'];
-
-function parseTipGoalFields(b) {
-  const title = String(b.title || '').trim().substring(0, 60);
-  const target = Math.round(parseFloat(b.target_amount) * 100) / 100;
-  const barColor = /^#[0-9a-f]{6}$/i.test(b.bar_color || '') ? b.bar_color : '#22c55e';
-  if (!title) return { error: 'Goal title is required' };
-  if (!Number.isFinite(target) || target <= 0 || target > 10000000) return { error: 'Target must be a positive amount' };
-  return { title, target_amount: target, bar_color: barColor };
-}
-
+// `error` is a GOAL_ERRORS code (services/donationSettings.js), shown translated on the page.
 function goalRedirect(res, error) {
   res.redirect('/dashboard/donations' + (error ? `?goal_error=${encodeURIComponent(error)}` : '') + '#tip-goal');
 }
@@ -1054,8 +1057,8 @@ router.post('/donations/goal/:id/update', (req, res) => {
 router.post('/donations/goal/:id/adjust', (req, res) => {
   const goal = db.getActiveTipGoal(req.streamer.id);
   const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
-  if (!goal || goal.id !== parseInt(req.params.id)) return goalRedirect(res, 'Goal not found');
-  if (!Number.isFinite(amount) || amount === 0) return goalRedirect(res, 'Enter a non-zero amount');
+  if (!goal || goal.id !== parseInt(req.params.id)) return goalRedirect(res, 'not_found');
+  if (!Number.isFinite(amount) || amount === 0) return goalRedirect(res, 'amount_invalid');
   const result = db.addToTipGoal(goal.id, amount);
   const justCompleted = !!result && !result.before.completed_at && !!result.after.completed_at;
   require('../services/tipGoals').broadcast(req.streamer.id, amount > 0 ? { added: amount, justCompleted } : {});
@@ -1068,14 +1071,12 @@ router.post('/donations/goal/:id/end', (req, res) => {
   goalRedirect(res);
 });
 
+// The currency and minimum are used to build PayPal orders and are written into
+// the tip page's script, so they are validated here, not only by the form.
 router.post('/donations', (req, res) => {
-  const b = req.body;
-  db.updateDonationSettings(req.streamer.id, {
-    paypal_email: b.paypal_email ? b.paypal_email.trim() : null,
-    donation_page_enabled: b.donation_page_enabled ? 1 : 0,
-    donation_min_amount: parseFloat(b.donation_min_amount) || 1,
-    donation_currency: b.donation_currency || 'EUR',
-  });
+  const parsed = parseDonationSettings(req.body);
+  if (parsed.error) return res.redirect(`/dashboard/donations?error=${encodeURIComponent(parsed.error)}`);
+  db.updateDonationSettings(req.streamer.id, parsed.settings);
   res.redirect('/dashboard/donations');
 });
 
