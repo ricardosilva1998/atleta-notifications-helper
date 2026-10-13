@@ -573,7 +573,7 @@ async function retryReward(id, btn) {
       setTimeout(function() { location.reload(); }, 800);
       return;
     }
-    showToast(d.error || 'Retry failed', 'error');
+    showToast(d.error || <%- JSON.stringify(t('redemptions.error.updateFailed')).replace(/</g, '\\u003c') %>, 'error');
   } catch (e) {
     showToast('Network error', 'error');
   }

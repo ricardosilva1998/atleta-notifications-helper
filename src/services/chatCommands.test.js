@@ -4,7 +4,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const {
-  COMMAND_RESPONSE_MAX, COMMAND_NAME_MAX, COMMAND_ERRORS, singleLine, normalizeCommandName, parseCommand, isUniqueViolation,
+  COMMAND_RESPONSE_MAX, COMMAND_NAME_MAX, COMMAND_ERRORS, commandCooldownSeconds, singleLine, normalizeCommandName, parseCommand, isUniqueViolation,
 } = require('./chatCommands');
 
 describe('normalizeCommandName', () => {
@@ -82,6 +82,16 @@ describe('parseCommand', () => {
   test('every error code it can return has a message key', () => {
     for (const code of ['name_invalid', 'response_required', 'response_too_long']) assert.ok(COMMAND_ERRORS[code], code);
     assert.ok(COMMAND_ERRORS.duplicate);
+  });
+});
+
+describe('commandCooldownSeconds (also applied where the chat checks a stored cooldown)', () => {
+  test('is held to 5-3600 seconds, and 5 when there is nothing readable', () => {
+    for (const low of [-3600, -1, 0, 1, 4, 4.4]) assert.equal(commandCooldownSeconds(low), 5, String(low));
+    for (const high of [3601, 86400, 1e9]) assert.equal(commandCooldownSeconds(high), 3600, String(high));
+    for (const fine of [5, 30, 3600]) assert.equal(commandCooldownSeconds(fine), fine);
+    assert.equal(commandCooldownSeconds('45'), 45);
+    for (const missing of [undefined, null, '', 'abc', NaN]) assert.equal(commandCooldownSeconds(missing), 5, String(missing));
   });
 });
 

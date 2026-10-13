@@ -4,6 +4,7 @@ const db = require('../db');
 const bus = require('./overlayBus');
 const { isExempt, runFilters, getAction, executeAction, handleModCommand, activateRaidProtection, checkBannedWords } = require('./chatModeration');
 const { isStreamerDisabled } = require('./streamerAccess');
+const { commandCooldownSeconds } = require('./chatCommands');
 
 let client = null;
 const channelMap = new Map(); // channelName -> streamerId
@@ -118,7 +119,7 @@ async function handleMessage(channel, tags, message, self) {
   const cooldownKey = `${streamerId}:${commandName}`;
   const now = Date.now();
   const lastUsed = cooldowns.get(cooldownKey) || 0;
-  if (now - lastUsed < cmd.cooldown * 1000) return;
+  if (now - lastUsed < commandCooldownSeconds(cmd.cooldown) * 1000) return;
 
   cooldowns.set(cooldownKey, now);
   console.log(`[Chat] Sending response for !${commandName} in ${channel}`);

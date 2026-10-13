@@ -278,6 +278,18 @@ describe('custom commands in chat', () => {
     assert.deepEqual(tmiClient.said, []);
   });
 
+  test('a stored cooldown of zero or less still holds the command for 5 seconds, so it cannot be called in a flood', async () => {
+    for (const cooldown of [0, -10, 1]) {
+      tmiClient.said.length = 0;
+      chatCommands = { [`cmd${cooldown < 0 ? 'n' : ''}${Math.abs(cooldown)}`]: { ...command('x', 'Follow us!'), cooldown } };
+      const name = Object.keys(chatCommands)[0];
+      await chat(`!${name}`, tags());
+      await chat(`!${name}`, tags({ id: 'msg-2' }));
+      await chat(`!${name}`, tags({ id: 'msg-3' }));
+      assert.equal(tmiClient.said.length, 1, `cooldown ${cooldown}`);
+    }
+  });
+
   test('other messages that merely start with ! still reach their commands', async () => {
     chatCommands = { hi: command('hi', 'hello!') };
     await chat('!HI there', tags());

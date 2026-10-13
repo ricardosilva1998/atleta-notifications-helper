@@ -11,6 +11,14 @@ const COMMAND_NAME_MAX = 50;
 const COMMAND_RESPONSE_MAX = 500;
 const COMMAND_COOLDOWN_SECONDS = Object.freeze({ min: 5, max: 3600, fallback: 5 });
 
+// The cooldown to use for a command: 5-3600 seconds, 5 when it is missing or unreadable.
+// Saved this way, and applied this way again where the chat checks it, so a value
+// stored earlier (negative, zero) cannot let one viewer make the bot answer in a flood.
+function commandCooldownSeconds(value) {
+  const { min, max, fallback } = COMMAND_COOLDOWN_SECONDS;
+  return clampInt(value, min, max, fallback);
+}
+
 // Error codes of parseCommand() and the routes -> locale keys. The page turns a
 // code from the URL into text only if it is one of these.
 const COMMAND_ERRORS = {
@@ -48,8 +56,7 @@ function parseCommand(body) {
   if (!response) return { error: 'response_required' };
   if (response.length > COMMAND_RESPONSE_MAX) return { error: 'response_too_long' };
 
-  const { min, max, fallback } = COMMAND_COOLDOWN_SECONDS;
-  return { command, response, cooldown: clampInt(input.cooldown, min, max, fallback) };
+  return { command, response, cooldown: commandCooldownSeconds(input.cooldown) };
 }
 
 // better-sqlite3 error for a (streamer_id, command) that already exists.
@@ -62,6 +69,7 @@ module.exports = {
   COMMAND_RESPONSE_MAX,
   COMMAND_COOLDOWN_SECONDS,
   COMMAND_ERRORS,
+  commandCooldownSeconds,
   singleLine,
   normalizeCommandName,
   parseCommand,
