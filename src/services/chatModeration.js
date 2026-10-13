@@ -3,6 +3,7 @@
 const db = require('../db');
 const config = require('../config');
 const { compileBannedWord, limitMessage } = require('./safePattern');
+const { containsLink, capsPercent, symbolPercent } = require('./chatFilters');
 
 // ─── In-memory state ──────────────────────────────────────────────────────────
 // All keyed by `${channel}:${username}`. They grow forever in a long-lived
@@ -46,9 +47,6 @@ setInterval(() => {
   }
 }, 60 * 1000).unref?.();
 
-// ─── URL detection regex ──────────────────────────────────────────────────────
-const URL_REGEX = /(?:https?:\/\/|www\.)\S+|[\w-]+\.(?:com|net|org|io|gg|tv|co|me|info|xyz|live)\b/i;
-
 // ─── Check if user is exempt from moderation ─────────────────────────────────
 function isExempt(tags, streamer) {
   if (tags.mod || tags.badges?.broadcaster) return true;
@@ -79,14 +77,16 @@ function checkBannedWords(message, streamerId) {
   const text = limitMessage(message);
   for (const w of words) {
     if (bannedWordMatcher(w)(text)) {
-      return { violated: true, reason: w.is_regex ? `Banned pattern: ${w.word}` : `Banned word: ${w.word}` };
+      // Never name the word: the reason is posted in chat by the shared bot
+      // account and also goes to the mod log and the Discord log.
+      return { violated: true, reason: w.is_regex ? 'Banned pattern' : 'Banned word' };
     }
   }
   return null;
 }
 
 function checkLinks(message, channel, username, streamer) {
-  if (!URL_REGEX.test(message)) return null;
+  if (!containsLink(message)) return null;
   const key = `${channel}:${username.toLowerCase()}`;
   const permitExpiry = permits.get(key);
   if (permitExpiry && Date.now() < permitExpiry) {
@@ -96,13 +96,10 @@ function checkLinks(message, channel, username, streamer) {
   return { violated: true, reason: 'Link posted without permission' };
 }
 
-function checkCaps(message, streamer) {
+function checkCaps(message, tags, streamer) {
   if (message.length < streamer.mod_caps_min_length) return null;
-  const alpha = message.replace(/[^a-zA-Z]/g, '');
-  if (alpha.length === 0) return null;
-  const upper = alpha.replace(/[^A-Z]/g, '').length;
-  const percent = Math.round((upper / alpha.length) * 100);
-  if (percent > streamer.mod_caps_max_percent) {
+  const percent = capsPercent(message, tags.emotes);
+  if (percent !== null && percent > streamer.mod_caps_max_percent) {
     return { violated: true, reason: `Excessive caps (${percent}%)` };
   }
   return null;
@@ -135,10 +132,8 @@ function checkRepetition(message, channel, username, streamer) {
 }
 
 function checkSymbolSpam(message, streamer) {
-  if (message.length < 5) return null;
-  const nonAlphaSpace = message.replace(/[\w\s]/g, '').length;
-  const percent = Math.round((nonAlphaSpace / message.length) * 100);
-  if (percent > streamer.mod_symbol_max_percent) {
+  const percent = symbolPercent(message);
+  if (percent !== null && percent > streamer.mod_symbol_max_percent) {
     return { violated: true, reason: `Symbol spam (${percent}%)` };
   }
   return null;
@@ -196,7 +191,7 @@ async function runFilters(channel, tags, message, streamer) {
     if (r) return r;
   }
   if (streamer.mod_caps_enabled) {
-    const r = checkCaps(message, streamer);
+    const r = checkCaps(message, tags, streamer);
     if (r) return r;
   }
   if (streamer.mod_emote_spam_enabled) {

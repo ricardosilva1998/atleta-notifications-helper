@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const { checkBannedWords } = require('./chatModeration');
+const { containsLink, capsPercent, symbolPercent } = require('./chatFilters');
 const { deleteYoutubeChatMessage, banYoutubeChatUser } = require('./youtube');
 
 // ─── In-memory state (keyed by "yt:streamerId:channelId") ────────────────────
@@ -9,8 +10,6 @@ const permits = new Map();
 const lastMessages = new Map();
 const offenseCounts = new Map();
 const authorCache = new Map(); // "yt:streamerId:displayNameLower" -> channelId
-
-const URL_REGEX = /(?:https?:\/\/|www\.)\S+|[\w-]+\.(?:com|net|org|io|gg|tv|co|me|info|xyz|live)\b/i;
 
 // ─── Exempt check for YouTube ────────────────────────────────────────────────
 function isExempt(authorDetails, streamer) {
@@ -22,7 +21,7 @@ function isExempt(authorDetails, streamer) {
 // ─── YouTube-adapted filter functions ────────────────────────────────────────
 
 function checkLinks(message, key, streamer) {
-  if (!URL_REGEX.test(message)) return null;
+  if (!containsLink(message)) return null;
   const permitExpiry = permits.get(key);
   if (permitExpiry && Date.now() < permitExpiry) {
     permits.delete(key);
@@ -33,11 +32,8 @@ function checkLinks(message, key, streamer) {
 
 function checkCaps(message, streamer) {
   if (message.length < streamer.mod_caps_min_length) return null;
-  const alpha = message.replace(/[^a-zA-Z]/g, '');
-  if (alpha.length === 0) return null;
-  const upper = alpha.replace(/[^A-Z]/g, '').length;
-  const percent = Math.round((upper / alpha.length) * 100);
-  if (percent > streamer.mod_caps_max_percent) {
+  const percent = capsPercent(message, null); // YouTube sends no emote positions
+  if (percent !== null && percent > streamer.mod_caps_max_percent) {
     return { violated: true, reason: `Excessive caps (${percent}%)` };
   }
   return null;
@@ -56,10 +52,8 @@ function checkRepetition(message, key, streamer) {
 }
 
 function checkSymbolSpam(message, streamer) {
-  if (message.length < 5) return null;
-  const nonAlphaSpace = message.replace(/[\w\s]/g, '').length;
-  const percent = Math.round((nonAlphaSpace / message.length) * 100);
-  if (percent > streamer.mod_symbol_max_percent) {
+  const percent = symbolPercent(message);
+  if (percent !== null && percent > streamer.mod_symbol_max_percent) {
     return { violated: true, reason: `Symbol spam (${percent}%)` };
   }
   return null;
