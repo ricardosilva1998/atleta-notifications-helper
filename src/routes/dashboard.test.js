@@ -50,7 +50,16 @@ const twitchStub = {
   needsBroadcasterReauth: () => false,
 };
 const youtubeStub = { resolveChannelId: async () => null, getLatestVideos: async () => [], getChannelInfo: async () => null };
-const chatStub = { chatManager: { isConnected: () => false, sendEventMessage() {} } };
+const chatCalls = [];
+const chatStub = {
+  chatManager: {
+    isConnected: () => false,
+    sendEventMessage: (...args) => chatCalls.push(['event', ...args]),
+    sendRawMessage: (...args) => chatCalls.push(['raw', ...args]),
+  },
+};
+// The real one starts a polling interval when it loads.
+const youtubeChatStub = { youtubeChatManager: { isPolling: () => false, getLiveChatId: () => null, startPolling() {}, stopPolling() {} } };
 const record = (name) => (...args) => managerCalls.push([name, ...args]);
 const eventSubStub = { eventSubManager: { startForStreamer: record('eventsub.start'), stopForStreamer: record('eventsub.stop') } };
 const streamElementsStub = { streamElementsManager: { startForStreamer: record('se.start'), stopForStreamer: record('se.stop') } };
@@ -154,6 +163,7 @@ before(async () => {
       if (request === '../services/twitch') return twitchStub;
       if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/twitchChat') return chatStub;
+      if (request === '../services/youtubeLiveChat') return youtubeChatStub;
       if (request === '../services/eventsub') return eventSubStub;
       if (request === '../services/streamelements') return streamElementsStub;
     }
@@ -217,6 +227,7 @@ beforeEach(() => {
   managerCalls.length = 0;
   fileWrites.length = 0;
   fileRemovals.length = 0;
+  chatCalls.length = 0;
   guilds.clear();
   twitch.users = {};
   twitch.lookups = [];
@@ -850,5 +861,118 @@ describe('custom chat commands', () => {
     assert.ok(!forged.text.includes('id="command-error"'), 'no banner at all');
     const none = await shown('');
     assert.ok(!none.text.includes('chatbot.commands.error'));
+  });
+});
+
+// ── Test buttons: one cooldown per streamer, and a text cap (N11) ────────
+
+describe('the test buttons', () => {
+  const post = (urlPath, streamer, extra = {}) => request('POST', urlPath, { streamer, ...extra });
+  const customTest = (streamer, text) => post(`/dashboard/chatbot/test/custom?response=${encodeURIComponent(text)}`, streamer);
+
+  // Every route that makes the shared bots speak or spends shared API quota.
+  const testRoutes = [
+    '/dashboard/overlay/test/follow',
+    '/dashboard/chatbot/test/custom?response=hello',
+    '/dashboard/chatbot/test/follow',
+    '/dashboard/youtube-chatbot/test/yt_member',
+    '/dashboard/youtube-chatbot/test-chat/member',
+    '/dashboard/sponsor-messages/1/test',
+  ];
+
+  test('the first test goes through; every other test button is then held for the cooldown', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const first = await customTest(id, 'hello chat');
+    assert.equal(first.status, 200);
+    assert.deepEqual(first.json(), { ok: true });
+    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'hello chat']]);
+
+    for (const route of testRoutes) {
+      const res = await post(route, id);
+      assert.equal(res.status, 429, route);
+      const body = res.json();
+      assert.equal(body.ok, false, route);
+      assert.match(body.error, /^Please wait [1-5] seconds before sending another test\.$/, route);
+      assert.match(res.headers['retry-after'], /^[1-5]$/, route);
+    }
+    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'hello chat']], 'the bot was not asked again');
+  });
+
+  test('each streamer has their own cooldown', async () => {
+    const a = addStreamer({ twitch_username: 'channel_a' });
+    const b = addStreamer({ twitch_username: 'channel_b' });
+    assert.equal((await customTest(a, 'from a')).status, 200);
+    assert.equal((await customTest(a, 'again from a')).status, 429);
+    assert.equal((await customTest(b, 'from b')).status, 200, 'another streamer is not held up');
+    assert.deepEqual(chatCalls.map((c) => c[2]), ['from a', 'from b']);
+  });
+
+  test('every test button starts the cooldown, not only the custom one', async () => {
+    for (const route of testRoutes.filter((r) => !r.includes('sponsor-messages'))) {
+      const id = addStreamer({ twitch_username: 'somechannel' });
+      const first = await post(route, id);
+      assert.notEqual(first.status, 429, `${route} should go through the first time`);
+      assert.equal((await customTest(id, 'right after')).status, 429, `${route} should start the shared cooldown`);
+    }
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    db.addSponsorMessage(id, 'Thanks to our sponsors', null);
+    const messageId = db.getSponsorMessages(id)[0].id;
+    assert.equal((await post(`/dashboard/sponsor-messages/${messageId}/test`, id)).json().ok, true);
+    assert.equal((await customTest(id, 'right after')).status, 429);
+  });
+
+  test('a test message can be at most 500 characters', async () => {
+    const at500 = await customTest(addStreamer({ twitch_username: 'somechannel' }), 'x'.repeat(500));
+    assert.equal(at500.status, 200);
+    const over = await customTest(addStreamer({ twitch_username: 'somechannel' }), 'x'.repeat(501));
+    assert.equal(over.status, 400);
+    assert.deepEqual(over.json(), { ok: false, error: 'A test message can be at most 500 characters.' });
+    assert.equal(chatCalls.length, 1, 'only the 500-character message was sent');
+  });
+
+  test('a test message needs text, and must be plain text (an array from a repeated parameter is not)', async () => {
+    const empty = await post('/dashboard/chatbot/test/custom', addStreamer());
+    assert.equal(empty.status, 400);
+    assert.equal(empty.json().error, 'There is no text to send.');
+    const blank = await customTest(addStreamer(), '   ');
+    assert.equal(blank.status, 400);
+    const repeated = await post('/dashboard/chatbot/test/custom?response=a&response=b', addStreamer());
+    assert.equal(repeated.status, 400);
+    assert.deepEqual(chatCalls, []);
+  });
+
+  test('the text of a test is sent as one line, so it cannot add IRC commands', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const res = await customTest(id, 'hi\r\nPRIVMSG #other :spam');
+    assert.equal(res.status, 200);
+    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'hi PRIVMSG #other :spam']]);
+  });
+
+  test('the text can also come in the body', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const res = await post('/dashboard/chatbot/test/custom', id, { body: { response: 'from the body' } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'from the body']]);
+  });
+
+  test('a failure to send is a generic message, not the internal error text', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const original = chatStub.chatManager.sendRawMessage;
+    chatStub.chatManager.sendRawMessage = () => { throw new Error('socket at 10.0.0.5 is on fire'); };
+    try {
+      const res = await customTest(id, 'hello');
+      assert.equal(res.status, 500);
+      assert.deepEqual(res.json(), { ok: false, error: 'The test message could not be sent.' });
+      assert.ok(!res.text.includes('10.0.0.5'));
+    } finally {
+      chatStub.chatManager.sendRawMessage = original;
+    }
+  });
+
+  test('the overlay test still sends the alert and the matching chat message', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const res = await post('/dashboard/overlay/test/follow', id);
+    assert.deepEqual(res.json(), { ok: true });
+    assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }]]);
   });
 });

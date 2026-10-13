@@ -325,6 +325,7 @@ async function testEvent(eventType, btn) {
       btn.textContent = 'Overlay sent!';
     } else {
       btn.textContent = 'Error';
+      if (data.error) alert(data.error);
     }
   } catch (e) {
     btn.textContent = 'Error';

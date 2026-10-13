@@ -23,7 +23,8 @@ const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('../services/inputLimits');
-const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, isUniqueViolation } = require('../services/chatCommands');
+const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
+const { testCooldown } = require('../services/testCooldown');
 
 const router = Router();
 
@@ -71,6 +72,16 @@ function readBoundedBody(req, res, maxBytes) {
 // All dashboard routes need a logged-in streamer whose account an admin has not
 // disabled (a disabled one is shown the account-disabled page instead).
 router.use(requireActiveStreamer);
+
+// The buttons that make the shared bots speak or spend shared API quota share
+// one cooldown per streamer (see services/testCooldown.js).
+function limitTests(req, res, next) {
+  const waitMs = testCooldown.take(req.streamer.id);
+  if (waitMs === 0) return next();
+  const seconds = Math.ceil(waitMs / 1000);
+  res.set('Retry-After', String(seconds));
+  res.status(429).json({ ok: false, error: res.locals.t('dashboard.test.tooFast', { seconds }) });
+}
 
 // Helper: get text channels for a guild
 function getDiscordChannels(guildId) {
@@ -700,7 +711,7 @@ router.post('/overlay/generate-token', (req, res) => {
 });
 
 // Test notification
-router.post('/overlay/test/:eventType', (req, res) => {
+router.post('/overlay/test/:eventType', limitTests, (req, res) => {
   const bus = require('../services/overlayBus');
   const { chatManager } = require('../services/twitchChat');
   const type = req.params.eventType;
@@ -1122,20 +1133,27 @@ router.delete('/chatbot/banned-words/:id', (req, res) => {
 });
 
 // Test custom command — send raw message to chat (must be before :eventType wildcard)
-router.post('/chatbot/test/custom', (req, res) => {
-  const message = req.query.response || req.body.response;
-  if (!message) return res.status(400).json({ error: 'No response text' });
+router.post('/chatbot/test/custom', limitTests, (req, res) => {
+  const t = res.locals.t;
+  // One line of at most a chat message's length (the text is sent exactly as given).
+  const raw = req.query.response || (req.body || {}).response;
+  const message = typeof raw === 'string' ? singleLine(raw) : '';
+  if (!message) return res.status(400).json({ ok: false, error: t('chatbot.test.noText') });
+  if (message.length > COMMAND_RESPONSE_MAX) {
+    return res.status(400).json({ ok: false, error: t('chatbot.test.tooLong', { max: COMMAND_RESPONSE_MAX }) });
+  }
   try {
     const { chatManager } = require('../services/twitchChat');
     chatManager.sendRawMessage(req.streamer.twitch_username, message);
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[Dashboard] Test chat message failed:', e.message);
+    res.status(500).json({ ok: false, error: t('chatbot.test.failed') });
   }
 });
 
 // Test chat message
-router.post('/chatbot/test/:eventType', (req, res) => {
+router.post('/chatbot/test/:eventType', limitTests, (req, res) => {
   const type = req.params.eventType;
   const testData = {
     follow: { eventType: 'follow', data: { username: 'TestRacer' } },
@@ -1154,7 +1172,8 @@ router.post('/chatbot/test/:eventType', (req, res) => {
     chatManager.sendEventMessage(req.streamer.id, test.eventType, test.data);
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[Dashboard] Test chat message failed:', e.message);
+    res.status(500).json({ ok: false, error: res.locals.t('chatbot.test.failed') });
   }
 });
 
@@ -1274,7 +1293,7 @@ router.post('/youtube-chatbot', (req, res) => {
 });
 
 // Test YouTube chat event
-router.post('/youtube-chatbot/test/:eventType', async (req, res) => {
+router.post('/youtube-chatbot/test/:eventType', limitTests, async (req, res) => {
   const bus = require('../services/overlayBus');
   const type = req.params.eventType;
   const testEvents = {
@@ -1322,7 +1341,7 @@ router.post('/youtube-chatbot/test/:eventType', async (req, res) => {
 });
 
 // Test YouTube chat message only (no overlay)
-router.post('/youtube-chatbot/test-chat/:eventType', async (req, res) => {
+router.post('/youtube-chatbot/test-chat/:eventType', limitTests, async (req, res) => {
   const type = req.params.eventType;
   const testData = {
     superchat: { username: 'TestViewer', amount: '$10.00', message: 'Great stream!' },
@@ -1641,7 +1660,7 @@ router.post('/sponsor-messages/settings', (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/sponsor-messages/:id/test', (req, res) => {
+router.post('/sponsor-messages/:id/test', limitTests, (req, res) => {
   const msg = db.getSponsorMessages(req.streamer.id).find(m => m.id === parseInt(req.params.id));
   if (!msg) return res.json({ ok: false, error: 'Message not found' });
   const { chatManager } = require('../services/twitchChat');

@@ -314,11 +314,18 @@ async function testMessage(id) {
   const btn = document.getElementById('test-btn-' + id);
   btn.disabled = true;
   btn.textContent = 'Sending...';
+  const resetButton = () => { btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Test'; btn.disabled = false; };
   try {
-    await fetch(`/dashboard/sponsor-messages/${id}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-    btn.textContent = 'Sent!';
-    setTimeout(() => { btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Test'; btn.disabled = false; }, 2000);
-  } catch(e) { btn.textContent = 'Error'; btn.disabled = false; }
+    const res = await fetch(`/dashboard/sponsor-messages/${id}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const data = await res.json().catch(() => ({}));
+    if (data.ok) {
+      btn.textContent = 'Sent!';
+    } else {
+      btn.textContent = 'Failed';
+      if (data.error) showStatus(data.error);
+    }
+    setTimeout(resetButton, 2000);
+  } catch(e) { btn.textContent = 'Error'; setTimeout(resetButton, 2000); }
 }
 
 async function deleteMessage(id) {
