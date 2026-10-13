@@ -763,11 +763,14 @@
   };
 
   // ─── Sound status ────────────────────────────────────────────────────────────
-  let customSounds = {};
+  let customSounds = {};    // type -> true when this streamer uploaded a sound
+  let customSoundUrls = {}; // type -> that sound on the overlay's sound route
 
   async function loadSoundStatus() {
     const res = await fetch('/dashboard/overlay/sounds/status');
-    customSounds = await res.json();
+    const status = await res.json();
+    customSounds = status.custom || {};
+    customSoundUrls = status.urls || {};
     Object.keys(customSounds).forEach(type => {
       const statusEl = document.getElementById('sound-status-' + type);
       const removeBtn = document.getElementById('remove-btn-' + type);
@@ -793,9 +796,11 @@
 
   function previewSound(type) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    if (customSounds[type]) {
-      const audio = new Audio('/overlay/sounds/' + type + '.mp3?t=' + Date.now());
-      audio.volume = parseFloat(document.getElementById('overlay_volume').value) || 0.8;
+    // Custom sounds play from the overlay's sound route, so they need an
+    // overlay URL; the URL carries ?v= so a replaced sound is never stale.
+    if (customSoundUrls[type]) {
+      const audio = new Audio(customSoundUrls[type]);
+      audio.volume = parseFloat(document.querySelector('input[name="overlay_volume"]').value) || 0.8;
       audio.play().catch(() => {});
     } else if (defaultSounds[type]) {
       defaultSounds[type]();

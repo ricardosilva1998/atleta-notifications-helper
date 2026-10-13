@@ -74,8 +74,8 @@ app.use('/pitwall/overlays', express.static(path.join(__dirname, '..', 'bridge',
     }
   }
 }));
-// Serve custom sounds from persistent data volume (survives deploys)
-app.use('/overlay/sounds', express.static(path.join(__dirname, '..', 'data', 'sounds')));
+// Custom alert sounds are per streamer: served by GET /overlay/sounds/:token/:type
+// (routes/overlay.js), not from a shared static folder.
 // Serve sponsor images from persistent data volume
 app.use('/sponsors', express.static(path.join(__dirname, '..', 'data', 'sponsors')));
 // Serve channel point redemption media from persistent data volume

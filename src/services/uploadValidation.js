@@ -47,4 +47,37 @@ function redemptionMediaError(mediaType, ext) {
   return rule.exts.has(ext) ? null : rule.error;
 }
 
-module.exports = { isAllowedScreenshot, redemptionMediaError };
+// Custom alert sounds: the formats the dashboard uploader sends. Its file
+// picker offers mp3/wav/ogg/m4a, and its trim tool always uploads WAV.
+const SOUND_MIME_TYPES = new Map([
+  ['mp3', 'audio/mpeg'],
+  ['wav', 'audio/wav'],
+  ['ogg', 'audio/ogg'],
+  ['m4a', 'audio/mp4'],
+]);
+
+// Identify an audio file from its leading bytes; null when it isn't one.
+function detectAudioFormat(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12) return null;
+  // MP3 starts with an ID3 tag or directly with an MPEG frame sync
+  // (0xFF then 0xE?/0xF?).
+  if (buf.toString('latin1', 0, 3) === 'ID3') return 'mp3';
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return 'mp3';
+  if (buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WAVE') return 'wav';
+  if (buf.toString('latin1', 0, 4) === 'OggS') return 'ogg';
+  if (buf.toString('latin1', 4, 8) === 'ftyp') return 'm4a';
+  return null;
+}
+
+// A sound is stored only when its bytes really are one of those formats.
+function isAllowedSound(buf) {
+  return detectAudioFormat(buf) !== null;
+}
+
+// The Content-Type for a sound's leading bytes, or null when they are not a
+// known audio format.
+function soundMimeType(buf) {
+  return SOUND_MIME_TYPES.get(detectAudioFormat(buf)) || null;
+}
+
+module.exports = { isAllowedScreenshot, redemptionMediaError, isAllowedSound, soundMimeType };

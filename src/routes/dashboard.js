@@ -10,7 +10,8 @@ const { resolveProfile: resolveInstagram, getLatestPosts: getLatestInstagramPost
 const { resolveProfile: resolveTikTok, getLatestVideos: getLatestTikTokVideos } = require('../services/tiktok');
 const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services/twitter');
 const iracing = require('../services/iracing');
-const { isAllowedScreenshot, redemptionMediaError } = require('../services/uploadValidation');
+const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
+const customSounds = require('../services/customSounds');
 const { validateBannedPattern, MAX_PATTERN_LENGTH } = require('../services/safePattern');
 
 const router = Router();
@@ -871,42 +872,52 @@ router.post('/overlay/test/:eventType', (req, res) => {
   res.json({ ok: true });
 });
 
+// Custom alert sounds live in the logged-in streamer's own folder
+// (data/sounds/<streamerId>/), never in a folder shared with other streamers.
+
+// Send the streamer's open overlays their new sound URLs, so the next alert
+// uses the changed sound without reloading the OBS browser source.
+function pushSoundUrls(streamer) {
+  require('../services/overlayBus').emit(`overlay:${streamer.id}`, {
+    type: 'config-update',
+    sounds: customSounds.soundUrls(streamer),
+  });
+}
+
 // Upload custom sound for an event type
 router.post('/overlay/sounds/:eventType', async (req, res) => {
-  const validTypes = ['follow', 'subscription', 'bits', 'donation', 'raid', 'yt_superchat', 'yt_member', 'yt_giftmember'];
-  const type = req.params.eventType;
-  if (!validTypes.includes(type)) return res.status(400).json({ error: 'Invalid event type' });
+  const t = res.locals.t;
+  const file = customSounds.soundFilePath(req.streamer.id, req.params.eventType);
+  if (!file) return res.status(400).json({ error: t('overlay.sounds.error.invalidType') });
 
   let buf;
   try { buf = await readBoundedBody(req, res, 10 * 1024 * 1024); }
   catch (e) { return; }
-  const soundDir = path.join(__dirname, '..', '..', 'data', 'sounds');
-  try { await fs.promises.mkdir(soundDir, { recursive: true }); } catch (e) {}
-  try { await fs.promises.writeFile(path.join(soundDir, `${type}.mp3`), buf); }
-  catch (e) { return res.status(500).json({ error: 'Write failed' }); }
+  if (!isAllowedSound(buf)) return res.status(400).json({ error: t('overlay.sounds.error.notAudio') });
+
+  try {
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, buf);
+  } catch (e) {
+    return res.status(500).json({ error: t('overlay.sounds.error.writeFailed') });
+  }
+  pushSoundUrls(req.streamer);
   res.json({ ok: true });
 });
 
 // Delete custom sound
 router.post('/overlay/sounds/:eventType/delete', (req, res) => {
-  const validTypes = ['follow', 'subscription', 'bits', 'donation', 'raid', 'yt_superchat', 'yt_member', 'yt_giftmember'];
-  const type = req.params.eventType;
-  if (!validTypes.includes(type)) return res.status(400).json({ error: 'Invalid event type' });
+  const file = customSounds.soundFilePath(req.streamer.id, req.params.eventType);
+  if (!file) return res.status(400).json({ error: res.locals.t('overlay.sounds.error.invalidType') });
 
-  const soundPath = path.join(__dirname, '..', '..', 'data', 'sounds', `${type}.mp3`);
-  if (fs.existsSync(soundPath)) fs.unlinkSync(soundPath);
+  fs.rmSync(file, { force: true });
+  pushSoundUrls(req.streamer);
   res.json({ ok: true });
 });
 
-// Check which custom sounds exist
+// Which custom sounds the streamer has, with the URLs to preview them
 router.get('/overlay/sounds/status', (req, res) => {
-  const soundDir = path.join(__dirname, '..', '..', 'data', 'sounds');
-  const types = ['follow', 'subscription', 'bits', 'donation', 'raid', 'yt_superchat', 'yt_member', 'yt_giftmember'];
-  const status = {};
-  types.forEach(type => {
-    status[type] = fs.existsSync(path.join(soundDir, `${type}.mp3`));
-  });
-  res.json(status);
+  res.json(customSounds.soundStatus(req.streamer));
 });
 
 // --- Chatbot Config ---

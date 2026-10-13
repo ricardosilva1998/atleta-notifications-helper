@@ -249,6 +249,10 @@
   "chatbot.error.patternOverlappingRepeats": "Two repeated parts can match the same character, such as a*a* or \\s*.*; combine them into one",
   "chatbot.error.patternTooComplex": "This pattern is too complex; use fewer repeats or | choices",
 
+  "overlay.sounds.error.invalidType": "This alert type cannot have a custom sound",
+  "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",
+  "overlay.sounds.error.writeFailed": "The sound could not be saved, please try again",
+
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",
   "lang.es": "Espa\u00f1ol",

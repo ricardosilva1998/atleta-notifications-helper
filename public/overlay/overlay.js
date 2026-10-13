@@ -239,11 +239,13 @@ function connectSSE() {
     }
 
     if (data.type === 'config-update') {
-      console.log('[Overlay] Design config updated from builder');
+      console.log('[Overlay] Config updated from the dashboard');
       if (data.designs) {
         overlayDesigns = data.designs;
         loadDesignFonts(data.designs);
       }
+      // Sent after a custom sound is uploaded or removed
+      if (data.sounds) overlayConfig.sounds = data.sounds;
       return;
     }
 
@@ -379,19 +381,23 @@ function showNotification(event) {
   // Stop any currently playing sound before starting new one
   stopCurrentSound();
 
-  // Play notification sound — try custom mp3 first, fall back to synthesized
+  // Play notification sound — the streamer's custom sound when they set one,
+  // otherwise (or if it fails to play) the synthesized default
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  const soundUrl = `/overlay/sounds/${event.type}.mp3`;
-  const audio = new Audio(soundUrl);
-  audio.volume = overlayConfig.volume || 0.8;
-  currentAudio = audio;
-  audio.play().then(() => {
-    // Custom sound played successfully
-  }).catch(() => {
-    // No custom sound file, use synthesized
+  const playDefaultSound = () => {
     const playSound = soundEffects[event.type];
     if (playSound) playSound();
-  });
+  };
+  const sounds = overlayConfig.sounds || {};
+  const soundUrl = Object.prototype.hasOwnProperty.call(sounds, event.type) ? sounds[event.type] : null;
+  if (soundUrl) {
+    const audio = new Audio(soundUrl);
+    audio.volume = overlayConfig.volume || 0.8;
+    currentAudio = audio;
+    audio.play().catch(playDefaultSound);
+  } else {
+    playDefaultSound();
+  }
 
   // Build card
   const objectDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[event.type];

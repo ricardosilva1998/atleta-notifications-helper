@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const path = require('path');
 const db = require('../db');
 const bus = require('../services/overlayBus');
+const customSounds = require('../services/customSounds');
 
 // Unique ID per server process — changes on every restart/deploy
 const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
@@ -26,6 +28,8 @@ router.get('/events/:token', (req, res) => {
     donation: { enabled: streamer.overlay_donation_enabled, duration: streamer.overlay_donation_duration },
     giveaway_winner: { enabled: streamer.overlay_giveaway_enabled, duration: streamer.overlay_giveaway_duration },
     volume: streamer.overlay_volume,
+    // { type: '/overlay/sounds/<token>/<type>?v=<mtimeMs>' } for each custom sound
+    sounds: customSounds.soundUrls(streamer),
   };
 
   // Include overlay designs keyed by event type
@@ -59,6 +63,23 @@ router.get('/events/:token', (req, res) => {
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.off(`overlay:${streamer.id}`, listener);
+  });
+});
+
+// A streamer's custom alert sound, from their own folder. 404 when they have
+// none for this type; the overlay then plays its synthesized default.
+router.get('/sounds/:token/:type', async (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  const file = streamer ? customSounds.soundFilePath(streamer.id, req.params.type) : null;
+  const mimeType = file ? await customSounds.storedSoundMimeType(file) : null;
+  if (!mimeType) return res.status(404).end();
+
+  // The overlay asks for ?v=<mtimeMs>, so a replaced sound has a new URL;
+  // no-cache also makes OBS revalidate a URL it has played before.
+  res.set('Cache-Control', 'no-cache');
+  res.type(mimeType);
+  res.sendFile(path.basename(file), { root: path.dirname(file) }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
   });
 });
 

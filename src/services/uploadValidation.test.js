@@ -3,7 +3,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { isAllowedScreenshot, redemptionMediaError } = require('./uploadValidation');
+const { isAllowedScreenshot, redemptionMediaError, isAllowedSound, soundMimeType } = require('./uploadValidation');
 
 // Synthetic file starts: a real signature followed by filler bytes.
 const filler = Buffer.alloc(32, 0x41);
@@ -74,5 +74,56 @@ describe('redemptionMediaError', () => {
   test('rejects extensions outside the allowlist for the media type', () => {
     for (const ext of ['html', 'svg', 'js', 'mp4', '']) assert.equal(redemptionMediaError('audio', ext), AUDIO_ERROR);
     for (const ext of ['html', 'svg', 'js', 'mp3', '']) assert.equal(redemptionMediaError('video', ext), VIDEO_ERROR);
+  });
+});
+
+describe('isAllowedSound', () => {
+  const ID3_MP3 = Buffer.concat([Buffer.from('ID3', 'latin1'), Buffer.from([0x04, 0x00, 0x00]), filler]);
+  // Frame sync = 0xFF then 0xE?/0xF?: MPEG-1 Layer III (FB, FA), MPEG-2 (F3)
+  // and MPEG-2.5 (E3) frame headers.
+  const FRAME_MP3 = [0xfb, 0xfa, 0xf3, 0xe3].map((b) => Buffer.concat([Buffer.from([0xff, b, 0x90, 0x00]), filler]));
+  const OGG = Buffer.concat([Buffer.from('OggS', 'latin1'), Buffer.from([0x00, 0x02]), filler]);
+  const M4A = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x20]), Buffer.from('ftypM4A ', 'latin1'), filler]);
+  const HTML = Buffer.from('<!DOCTYPE html><html><body>not a sound</body></html>');
+
+  test('accepts MP3 that starts with an ID3 tag', () => {
+    assert.equal(isAllowedSound(ID3_MP3), true);
+  });
+
+  test('accepts MP3 that starts with an MPEG frame sync', () => {
+    for (const buf of FRAME_MP3) assert.equal(isAllowedSound(buf), true, `0xFF 0x${buf[1].toString(16)}`);
+  });
+
+  test('accepts the other formats the uploader sends today: WAV (the trim tool output), OGG and M4A', () => {
+    assert.equal(isAllowedSound(WAVE), true);
+    assert.equal(isAllowedSound(OGG), true);
+    assert.equal(isAllowedSound(M4A), true);
+  });
+
+  test('rejects anything else', () => {
+    const others = {
+      text: TEXT, html: HTML, svg: SVG, png: PNG, jpeg: JPEG, gif: GIF89, webp: WEBP,
+      'ff then a non-sync byte': Buffer.concat([Buffer.from([0xff, 0xd0]), filler]),
+      'ID3 not at the start': Buffer.concat([Buffer.from(' ID3', 'latin1'), filler]),
+    };
+    for (const [name, buf] of Object.entries(others)) assert.equal(isAllowedSound(buf), false, `${name} must be rejected`);
+  });
+
+  test('rejects empty, truncated or missing data', () => {
+    assert.equal(isAllowedSound(Buffer.alloc(0)), false);
+    assert.equal(isAllowedSound(ID3_MP3.subarray(0, 4)), false);
+    assert.equal(isAllowedSound(null), false);
+    assert.equal(isAllowedSound(undefined), false);
+    assert.equal(isAllowedSound('ID3 as a string'), false);
+  });
+
+  test('soundMimeType names the stored format, or null when it is not a sound', () => {
+    assert.equal(soundMimeType(ID3_MP3), 'audio/mpeg');
+    assert.equal(soundMimeType(FRAME_MP3[0]), 'audio/mpeg');
+    assert.equal(soundMimeType(WAVE), 'audio/wav');
+    assert.equal(soundMimeType(OGG), 'audio/ogg');
+    assert.equal(soundMimeType(M4A), 'audio/mp4');
+    assert.equal(soundMimeType(HTML), null);
+    assert.equal(soundMimeType(Buffer.alloc(0)), null);
   });
 });
