@@ -237,8 +237,9 @@ router.get('/iracing/:type/:token', (req, res) => {
     const setting = db.getIracingOverlaySetting(streamer.id, type);
     if (setting) settings = JSON.parse(setting.settings || '{}');
   } catch (e) {}
-  // < escaping: settings hold streamer-entered text and are embedded raw
-  // in the inline <script> below, where a literal "</script>" would end it.
+  // Escape every "<" (as a JSON unicode escape) because the settings hold
+  // streamer-entered text and are embedded raw in the inline <script> below;
+  // same pattern as the builder and redemption pages.
   const settingsJson = JSON.stringify(settings).replace(/</g, '\\u003c');
 
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
