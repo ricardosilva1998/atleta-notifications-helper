@@ -54,6 +54,7 @@ Module._load = function (request, parent, isMain) {
   return origLoad.call(this, request, parent, isMain);
 };
 const { chatManager } = require('./twitchChat');
+const bus = require('./overlayBus');
 Module._load = origLoad;
 
 const realFetch = global.fetch;
@@ -151,5 +152,49 @@ describe('raid protection triggers', () => {
     await flush();
     assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: 'Welcome raiders from RaidLeader!' }]);
     assert.equal(helixCalls.length, 0);
+  });
+});
+
+// ── Chat overlay only after moderation (H12) ─────────────────────────
+
+describe('chat overlay events', () => {
+  let emitted;
+  const listener = (event) => emitted.push(event);
+  beforeEach(() => {
+    emitted = [];
+    bus.on('overlay:1', listener);
+  });
+  afterEach(() => bus.off('overlay:1', listener));
+
+  test('a message that passes moderation is sent with the same payload as before', async () => {
+    await chat('hello there', tags());
+    await chat('no display name or colour', tags({ 'display-name': undefined, color: null }));
+    assert.deepEqual(emitted, [
+      { type: 'chat', data: { platform: 'twitch', username: 'Viewer', message: 'hello there', color: '#123456' } },
+      { type: 'chat', data: { platform: 'twitch', username: 'viewer', message: 'no display name or colour', color: '#9146ff' } },
+    ]);
+  });
+
+  test('a message the bot removes never reaches the overlay', async () => {
+    streamer = streamerRow({ mod_banned_words_enabled: 1 });
+    bannedWords = [{ id: 1, streamer_id: 1, word: 'scamlink', is_regex: 0, created_at: '2026-01-01 12:00:00' }];
+    await chat('free stuff at scamlink', tags({ id: 'msg-a' }));
+    await chat('look https://example.com', tags({ id: 'msg-b' }));
+    assert.deepEqual(emitted, []);
+    assert.deepEqual(helixCalls.map((c) => c.url.match(/message_id=([\w-]+)/)[1]), ['msg-a', 'msg-b']);
+  });
+
+  test('a flagged but kept message, and messages from mods, still reach the overlay', async () => {
+    streamer = streamerRow({ mod_first_chatter_enabled: 1 });
+    await chat('first time here!', tags({ 'first-msg': true }));
+    await chat('mods can post https://example.com', tags({ username: 'somemod', 'display-name': 'SomeMod', mod: true }));
+    assert.deepEqual(emitted.map((e) => e.data.message), ['first time here!', 'mods can post https://example.com']);
+    assert.equal(helixCalls.length, 0);
+  });
+
+  test('nothing is sent when the overlay is off', async () => {
+    streamer = streamerRow({ overlay_enabled: 0 });
+    await chat('hello there', tags());
+    assert.deepEqual(emitted, []);
   });
 });
