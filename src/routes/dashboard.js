@@ -22,6 +22,7 @@ const {
 const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
+const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('../services/inputLimits');
 
 const router = Router();
 
@@ -1517,7 +1518,7 @@ router.post('/sponsors/upload', async (req, res) => {
   catch (e) { return res.status(500).json({ error: 'Write failed' }); }
 
   const displayName = req.query.name || 'Sponsor';
-  const displayDuration = parseInt(req.query.dur) || 30;
+  const displayDuration = sponsorDurationSeconds(req.query.dur);
   db.addSponsorImage(streamerId, filename, displayName, null, displayDuration);
   const newImage = db.getSponsorImages(streamerId).find(i => i.filename === filename);
   res.json({ ok: true, filename, image: newImage });
@@ -1541,8 +1542,8 @@ router.post('/sponsors/:id/update', (req, res) => {
   db.updateSponsorImage(
     parseInt(req.params.id), req.streamer.id,
     req.body.display_name, req.body.chat_message,
-    req.body.enabled, parseInt(req.body.display_duration) || 30,
-    req.body.image_scale != null ? parseFloat(req.body.image_scale) : 1.0
+    req.body.enabled, sponsorDurationSeconds(req.body.display_duration),
+    sponsorImageScale(req.body.image_scale)
   );
   try {
     const { timedNotificationManager } = require('../services/timedNotifications');
@@ -1564,7 +1565,7 @@ router.post('/sponsors/settings', (req, res) => {
   db.updateSponsorSettings(
     req.streamer.id,
     req.body.sponsor_rotation_enabled,
-    parseInt(req.body.sponsor_interval_seconds) || 30,
+    sponsorDurationSeconds(req.body.sponsor_interval_seconds),
     req.body.sponsor_send_chat
   );
   try {
@@ -1616,7 +1617,7 @@ router.post('/sponsor-messages/:id/delete', (req, res) => {
 router.post('/sponsor-messages/settings', (req, res) => {
   db.updateSponsorChatSettings(
     req.streamer.id,
-    parseInt(req.body.interval_minutes) || 10,
+    sponsorChatIntervalMinutes(req.body.interval_minutes),
     req.body.enabled
   );
   try {

@@ -3212,6 +3212,11 @@ try {
     console.log('[DB] Added sponsor rotation columns to streamers');
   }
 } catch {}
+// The block above is skipped on a fresh database (its CREATE TABLE already has
+// sponsor_rotation_enabled), which left sponsor_interval_seconds missing there
+// and made /dashboard/sponsors/settings fail. Idempotent: existing databases
+// already have it.
+try { db.exec('ALTER TABLE streamers ADD COLUMN sponsor_interval_seconds INTEGER DEFAULT 30'); } catch (e) { _migrationLog('sponsor_interval_seconds', e); }
 
 // Migration: Add display_duration to sponsor_images
 try {

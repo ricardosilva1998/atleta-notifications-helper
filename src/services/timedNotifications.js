@@ -1,5 +1,6 @@
 const db = require('../db');
 const bus = require('./overlayBus');
+const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('./inputLimits');
 
 const activeRotations = new Map(); // streamerId -> { handle, currentIndex }
 const activeChatRotations = new Map(); // streamerId -> { handle, currentIndex }
@@ -28,25 +29,27 @@ function scheduleNextImage(streamerId) {
   const idx = state.currentIndex % imgs.length;
   const img = imgs[idx];
 
+  // Clamped here too: a stored negative or zero would otherwise be a 1 ms timer
+  // that swaps the image in a tight loop.
+  const durationSeconds = sponsorDurationSeconds(img.display_duration);
   const sponsorEvent = {
     type: 'sponsor',
     data: {
       imageUrl: `/sponsors/${streamerId}/${img.filename}`,
       name: img.display_name,
-      displayDuration: img.display_duration || 30,
-      imageScale: img.image_scale != null ? img.image_scale : 1.0,
+      displayDuration: durationSeconds,
+      imageScale: sponsorImageScale(img.image_scale),
     },
   };
   currentSponsorEvent.set(streamerId, sponsorEvent);
   bus.emit(`overlay:${streamerId}`, sponsorEvent);
 
-  const durationMs = (img.display_duration || 30) * 1000;
   state.handle = setTimeout(() => {
     state.currentIndex = idx + 1;
     scheduleNextImage(streamerId);
-  }, durationMs);
+  }, durationSeconds * 1000);
 
-  console.log(`[Sponsor] Showing "${img.display_name}" for ${img.display_duration || 30}s (streamer ${streamerId})`);
+  console.log(`[Sponsor] Showing "${img.display_name}" for ${durationSeconds}s (streamer ${streamerId})`);
 }
 
 function startRotation(streamerId) {
@@ -86,7 +89,9 @@ function startChatRotation(streamerId) {
   const messages = db.getEnabledSponsorMessages(streamerId);
   if (messages.length === 0) return;
 
-  const intervalMs = (streamer.sponsor_chat_interval_minutes || 10) * 60 * 1000;
+  // Clamped here too, so a bad stored interval cannot make the bot talk every millisecond.
+  const intervalMinutes = sponsorChatIntervalMinutes(streamer.sponsor_chat_interval_minutes);
+  const intervalMs = intervalMinutes * 60 * 1000;
   let currentIndex = 0;
 
   const handle = setInterval(() => {
@@ -111,7 +116,7 @@ function startChatRotation(streamerId) {
   }, intervalMs);
 
   activeChatRotations.set(streamerId, { handle, currentIndex: 0 });
-  console.log(`[Sponsor Chat] Started chat rotation for streamer ${streamerId} (${messages.length} messages, every ${streamer.sponsor_chat_interval_minutes || 10}min)`);
+  console.log(`[Sponsor Chat] Started chat rotation for streamer ${streamerId} (${messages.length} messages, every ${intervalMinutes}min)`);
 }
 
 // ── Manager ──

@@ -55,6 +55,22 @@ const record = (name) => (...args) => managerCalls.push([name, ...args]);
 const eventSubStub = { eventSubManager: { startForStreamer: record('eventsub.start'), stopForStreamer: record('eventsub.stop') } };
 const streamElementsStub = { streamElementsManager: { startForStreamer: record('se.start'), stopForStreamer: record('se.stop') } };
 
+// The uploads and deletes the routes make go here, not onto the disk: tests
+// must never write into the repo's data/ folder.
+const fileWrites = [];
+const fileRemovals = [];
+const fakeFs = {
+  ...realFs,
+  promises: {
+    ...realFs.promises,
+    mkdir: async () => {},
+    writeFile: async (file, data) => { fileWrites.push({ file, bytes: data.length }); },
+    unlink: async (file) => { fileRemovals.push(file); },
+  },
+  unlinkSync: (file) => { fileRemovals.push(file); },
+  rmSync: (file) => { fileRemovals.push(file); },
+};
+
 function fakeGuild(id, { manage = [], never = false } = {}) {
   const fetches = [];
   const gates = [];
@@ -101,10 +117,15 @@ let t;
 const logs = [];
 const saved = {};
 
-function request(method, urlPath, { streamer, form, rawBody, json = false } = {}) {
+// `body` is sent as JSON; `contentType` overrides the type of a raw or form body
+// (the upload routes read the raw bytes, so those use application/octet-stream).
+function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false } = {}) {
   return new Promise((resolve, reject) => {
-    const body = rawBody || (form ? new URLSearchParams(form).toString() : null);
-    const headers = body ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } : {};
+    const body = rawBody
+      || (jsonBody !== undefined ? JSON.stringify(jsonBody) : null)
+      || (form ? new URLSearchParams(form).toString() : null);
+    const type = contentType || (jsonBody !== undefined ? 'application/json' : 'application/x-www-form-urlencoded');
+    const headers = body ? { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body) } : {};
     if (streamer) headers['x-test-streamer'] = String(streamer);
     if (json) headers['x-test-render'] = 'json';
     const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, agent: false, headers }, (res) => {
@@ -128,6 +149,7 @@ before(async () => {
       if (request === 'fs') return { ...realFs, existsSync: () => true, mkdirSync: () => {} };
     }
     if (from === DASHBOARD_FILE) {
+      if (request === 'fs') return fakeFs;
       if (request === '../discord') return discordStub;
       if (request === '../services/twitch') return twitchStub;
       if (request === '../services/youtube') return youtubeStub;
@@ -153,6 +175,7 @@ before(async () => {
   app.set('view engine', 'ejs');
   app.set('views', path.join(SRC, 'views'));
   app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '10mb' }));
   app.use((req, res, next) => {
     // What server.js's session middleware does for these tests: log the header's streamer in.
     const id = Number(req.get('x-test-streamer'));
@@ -192,6 +215,8 @@ const messageOf = (res) => new URL(res.headers.location, 'http://x').searchParam
 beforeEach(() => {
   logs.length = 0;
   managerCalls.length = 0;
+  fileWrites.length = 0;
+  fileRemovals.length = 0;
   guilds.clear();
   twitch.users = {};
   twitch.lookups = [];
@@ -634,5 +659,70 @@ describe('the dashboard home and Discord answering slowly', () => {
     assert.deepEqual(res.json().locals.unclaimedGuilds.map((g) => g.id), ['700000000000000010']);
     assert.ok(took >= 2000, `it waited for the slow server up to the limit (${took} ms)`);
     assert.ok(took < 5000, `and no longer than that (${took} ms)`);
+  });
+});
+
+// ── Sponsor timing is clamped when it is saved (H11) ─────────────────────
+
+describe('sponsor timing on save', () => {
+  let id;
+  beforeEach(() => { id = addStreamer(); });
+  const firstImage = () => db.getSponsorImages(id)[0];
+
+  test('an image update keeps the duration at 5-300 s and the scale on the builder slider', async () => {
+    db.addSponsorImage(id, 'a.png', 'A', null, 30);
+    const imageId = firstImage().id;
+    const update = (over) => request('POST', `/dashboard/sponsors/${imageId}/update`, {
+      streamer: id, body: { display_name: 'A', chat_message: '', enabled: '1', display_duration: 30, image_scale: 1, ...over },
+    });
+
+    await update({ display_duration: -5, image_scale: -1 });
+    assert.deepEqual([firstImage().display_duration, firstImage().image_scale], [5, 0.3]);
+
+    await update({ display_duration: 99999, image_scale: 9 });
+    assert.deepEqual([firstImage().display_duration, firstImage().image_scale], [300, 1]);
+
+    await update({ display_duration: 'soon', image_scale: 'big' });
+    assert.deepEqual([firstImage().display_duration, firstImage().image_scale], [30, 1]);
+
+    const res = await update({ display_duration: 45, image_scale: 0.55 });
+    assert.equal(res.status, 200);
+    assert.deepEqual([firstImage().display_duration, firstImage().image_scale], [45, 0.55]);
+  });
+
+  test('an upload takes ?dur= through the same clamp', async () => {
+    const upload = (dur) => request('POST', `/dashboard/sponsors/upload?name=Acme&ext=png&dur=${dur}`, {
+      streamer: id, rawBody: 'not-really-a-png', contentType: 'application/octet-stream',
+    });
+    for (const dur of [-9, 0, 100000, '', 60]) assert.equal((await upload(dur)).status, 200);
+    // (Read from the table: uploads in the same millisecond share a file name.)
+    assert.deepEqual(db.getSponsorImages(id).map((i) => i.display_duration), [5, 5, 300, 30, 60]);
+    assert.equal(fileWrites.length, 5, 'the files went to the fake disk, not the real one');
+  });
+
+  test('the sponsor chat interval is saved as 1 to 1440 minutes', async () => {
+    const save = (interval) => request('POST', '/dashboard/sponsor-messages/settings', { streamer: id, body: { enabled: '1', interval_minutes: interval } });
+    const interval = () => db.getStreamerById(id).sponsor_chat_interval_minutes;
+    await save(-15);
+    assert.equal(interval(), 1);
+    await save(0);
+    assert.equal(interval(), 1);
+    await save(1_000_000);
+    assert.equal(interval(), 1440);
+    await save('');
+    assert.equal(interval(), 10);
+    await save(20);
+    assert.equal(interval(), 20);
+  });
+
+  test('the rotation settings seconds field is clamped like an image duration', async () => {
+    const save = (seconds) => request('POST', '/dashboard/sponsors/settings', { streamer: id, body: { sponsor_rotation_enabled: '1', sponsor_interval_seconds: seconds, sponsor_send_chat: '' } });
+    const seconds = () => db.getStreamerById(id).sponsor_interval_seconds;
+    await save(-30);
+    assert.equal(seconds(), 5);
+    await save(5000);
+    assert.equal(seconds(), 300);
+    await save(40);
+    assert.equal(seconds(), 40);
   });
 });
