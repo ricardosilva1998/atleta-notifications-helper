@@ -385,6 +385,10 @@ class EventSubClient {
         return { type: 'follow', data: { username: event.user_name } };
 
       case 'channel.subscribe':
+        // A gifted sub. Twitch sends one of these per recipient, besides the single
+        // channel.subscription.gift for the whole gift: that one is the alert and
+        // the thank-you (a 50-sub gift is one alert and one chat message, not 51).
+        if (event.is_gift) return null;
         return {
           type: 'subscription',
           data: {

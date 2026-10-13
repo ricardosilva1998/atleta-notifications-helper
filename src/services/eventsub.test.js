@@ -368,6 +368,51 @@ describe('a notification Twitch delivers twice', () => {
   });
 });
 
+describe('gift subs', () => {
+  // Twitch sends one channel.subscription.gift for the gift and, besides it, one
+  // channel.subscribe (is_gift: true) for every viewer who received a sub.
+  const gift = (total) => notification('channel.subscription.gift', {
+    user_name: 'Gifter', total, tier: '1000', is_anonymous: false, cumulative_total: 12,
+  });
+  const giftedSub = (username) => notification('channel.subscribe', { user_name: username, tier: '1000', is_gift: true });
+
+  test('a gift of 3 subs is one alert, one stats row and one thank-you, not one per recipient', async () => {
+    const socket = await connected();
+    socket.receive(gift(3));
+    for (const name of ['RecipientA', 'RecipientB', 'RecipientC']) socket.receive(giftedSub(name));
+
+    assert.equal(effects.overlay.length, 1);
+    const [alert] = effects.overlay;
+    assert.equal(alert.event.type, 'subscription', 'a gift shows as the subscription card');
+    assert.equal(alert.event.isGift, true);
+    assert.equal(alert.event.data.username, 'Gifter');
+    assert.equal(alert.event.data.amount, 3);
+    assert.deepEqual(effects.overlayLog.map((e) => e.type), ['giftsub']);
+    assert.deepEqual(effects.chat.map((c) => c.type), ['giftsub']);
+  });
+
+  test('a sub that is not a gift is still an alert and a thank-you', async () => {
+    const socket = await connected();
+    socket.receive(notification('channel.subscribe', { user_name: 'NewSub', tier: '2000', is_gift: false }));
+    assert.equal(effects.overlay.length, 1);
+    assert.equal(effects.overlay[0].event.type, 'subscription');
+    assert.equal(effects.overlay[0].event.isGift, false);
+    assert.equal(effects.overlay[0].event.data.username, 'NewSub');
+    assert.equal(effects.overlay[0].event.data.tier, '2');
+    assert.deepEqual(effects.chat.map((c) => c.type), ['subscription']);
+  });
+
+  test('a resub with a message is still an alert, even right after a gift', async () => {
+    const socket = await connected();
+    socket.receive(gift(5));
+    socket.receive(notification('channel.subscription.message', {
+      user_name: 'Loyal', tier: '1000', cumulative_months: 14, message: { text: 'synthetic resub message' },
+    }));
+    assert.deepEqual(effects.overlay.map((e) => e.event.data.username), ['Gifter', 'Loyal']);
+    assert.deepEqual(effects.chat.map((c) => c.type), ['giftsub', 'subscription']);
+  });
+});
+
 describe('a raid', () => {
   test('thanks the raider and starts raid protection, once', async () => {
     const socket = await connected();

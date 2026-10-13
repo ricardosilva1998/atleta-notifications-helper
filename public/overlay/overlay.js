@@ -284,17 +284,6 @@ function connectSSE() {
     const typeConfig = overlayConfig[eventType];
     if (typeConfig && !typeConfig.enabled) return;
 
-    // Gift sub dedup: when a gift sub event arrives (isGift flag),
-    // suppress individual subscribe events that follow within 10 seconds
-    // (Twitch sends both a giftsub event AND individual sub events for each recipient)
-    if (data.isGift) {
-      window._giftSubUntil = Date.now() + 10000;
-    }
-    if (data.type === 'subscription' && !data.isGift && window._giftSubUntil && Date.now() < window._giftSubUntil) {
-      console.log('[Overlay] Suppressing individual sub (part of gift sub batch)');
-      return;
-    }
-
     // Cap the queue. A burst (gift-sub batch, reconnect replay, test storm)
     // would otherwise grow unbounded since cards play one at a time.
     const MAX_QUEUE = 50;
