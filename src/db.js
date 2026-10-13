@@ -2749,6 +2749,14 @@ function deleteBannedWord(streamerId, id) {
   return db.prepare('DELETE FROM banned_words WHERE id = ? AND streamer_id = ?').run(id, streamerId);
 }
 
+// { total, regex } for the per-streamer limits checked before adding a word.
+function countBannedWords(streamerId) {
+  return db.prepare(`
+    SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN is_regex THEN 1 ELSE 0 END), 0) AS regex
+    FROM banned_words WHERE streamer_id = ?
+  `).get(streamerId);
+}
+
 function updateStreamerYoutubeTokens(streamerId, accessToken, refreshToken, expiresAt, channelName) {
   db.prepare(`
     UPDATE streamers SET yt_access_token = ?, yt_refresh_token = ?, yt_token_expires_at = ?, yt_channel_name = ?
@@ -4916,6 +4924,7 @@ module.exports = {
   getBannedWords,
   addBannedWord,
   deleteBannedWord,
+  countBannedWords,
   updateYoutubeChatbotConfig,
   getYoutubeChatbotEnabledStreamers,
   updateStreamerYoutubeTokens,

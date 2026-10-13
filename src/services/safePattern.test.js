@@ -5,9 +5,12 @@ const assert = require('node:assert/strict');
 const {
   validateBannedPattern,
   compileBannedWord,
+  bannedWordLimitReason,
   limitMessage,
   MAX_PATTERN_LENGTH,
   MAX_MESSAGE_CHARS,
+  MAX_BANNED_WORDS,
+  MAX_BANNED_PATTERNS,
 } = require('./safePattern');
 
 function rejects(pattern, reason) {
@@ -19,8 +22,7 @@ describe('validateBannedPattern', () => {
     for (const p of [
       'bad\\s*word',
       'f[o0]o',
-      's+p+a+m+',
-      's+p+a+m+e+r+', // 6 open-ended repeats: the most allowed
+      's+p+a+m+', // 4 open-ended repeats: the most allowed
       'b[a@4]+d\\s*w[o0]+rd',
       'colou?r',
       '\\bspam\\b',
@@ -102,8 +104,25 @@ describe('validateBannedPattern', () => {
     rejects('(?:a|a|a|a)(?:a|a|a|a)(?:a|a|a|a)(?:a|a|a|a)(?:a|a)', 'too_complex');
     rejects('a?b?c?d?e?f?g?h?i?', 'too_complex');
     rejects('a{2}b{2}c{2}d{2}e{2}f{2}g{2}h{2}i{2}j{2}k{2}', 'too_complex');
-    rejects('s+p+a+m+e+r+z+', 'too_complex');
+    rejects('s+p+a+m+e+', 'too_complex');
+    // A repeat followed by two-way choices: 3 choices is the most allowed.
+    assert.deepEqual(validateBannedPattern('.*(?:a|a)(?:a|a)(?:a|a)x'), { ok: true });
+    rejects('.*(?:a|a)(?:a|a)(?:a|a)(?:a|a)x', 'too_complex');
+    rejects('.*(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)x', 'too_complex');
     assert.deepEqual(validateBannedPattern('(?:a|b)(?:c|d)(?:e|f)'), { ok: true });
+  });
+});
+
+describe('bannedWordLimitReason', () => {
+  test(`allows ${MAX_BANNED_WORDS} words per streamer, at most ${MAX_BANNED_PATTERNS} of them regex`, () => {
+    assert.equal(MAX_BANNED_WORDS, 100);
+    assert.equal(MAX_BANNED_PATTERNS, 20);
+    assert.equal(bannedWordLimitReason({ total: 0, regex: 0 }, true), null);
+    assert.equal(bannedWordLimitReason({ total: 99, regex: 19 }, true), null, 'the 100th word and 20th pattern fit');
+    assert.equal(bannedWordLimitReason({ total: 100, regex: 0 }, false), 'too_many_words');
+    assert.equal(bannedWordLimitReason({ total: 100, regex: 20 }, true), 'too_many_words');
+    assert.equal(bannedWordLimitReason({ total: 50, regex: 20 }, true), 'too_many_patterns');
+    assert.equal(bannedWordLimitReason({ total: 50, regex: 20 }, false), null, 'plain words still fit');
   });
 });
 

@@ -12,7 +12,9 @@ const { resolveProfile: resolveTwitter, getLatestTweets } = require('../services
 const iracing = require('../services/iracing');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
-const { validateBannedPattern, MAX_PATTERN_LENGTH } = require('../services/safePattern');
+const {
+  validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
+} = require('../services/safePattern');
 
 const router = Router();
 
@@ -1239,6 +1241,15 @@ router.post('/chatbot/banned-words', (req, res) => {
   const word = typeof body.word === 'string' ? body.word.trim() : '';
   const isRegex = !!body.is_regex;
   if (!word) return res.json({ ok: false, error: t('chatbot.error.wordRequired') });
+  // Every word is tested against every chat message on the shared event loop,
+  // so the list itself is capped as well as each pattern.
+  const limit = bannedWordLimitReason(db.countBannedWords(req.streamer.id), isRegex);
+  if (limit === 'too_many_words') {
+    return res.json({ ok: false, error: t('chatbot.error.tooManyWords', { max: MAX_BANNED_WORDS }) });
+  }
+  if (limit === 'too_many_patterns') {
+    return res.json({ ok: false, error: t('chatbot.error.tooManyPatterns', { max: MAX_BANNED_PATTERNS }) });
+  }
   if (isRegex) {
     // Regex words run against every chat message, so only patterns that cannot
     // stall the shared event loop are accepted (see services/safePattern.js).

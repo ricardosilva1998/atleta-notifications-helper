@@ -248,6 +248,8 @@
   "chatbot.error.patternNestedRepeat": "A repeated group cannot contain another repeat or a | choice, such as (a+)+ or (a|b)*",
   "chatbot.error.patternOverlappingRepeats": "Two repeated parts can match the same character, such as a*a* or \\s*.*; combine them into one",
   "chatbot.error.patternTooComplex": "This pattern is too complex; use fewer repeats or | choices",
+  "chatbot.error.tooManyWords": "You can have at most {{max}} banned words; remove one to add another",
+  "chatbot.error.tooManyPatterns": "You can have at most {{max}} regex banned words; remove one to add another",
 
   "overlay.sounds.error.invalidType": "This alert type cannot have a custom sound",
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",

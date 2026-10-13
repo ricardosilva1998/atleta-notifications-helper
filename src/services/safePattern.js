@@ -14,12 +14,16 @@
 //    of such parts;
 //  - a bounded number of repeats and | choices, since each one multiplies the
 //    paths the engine may try.
-// Matching also only looks at the first 500 characters of a message.
+// Matching also only looks at the first 500 characters of a message, and a
+// streamer can keep at most 100 banned words, at most 20 of them regex: the
+// cost of one message is the sum over every word in the list.
 
 const MAX_PATTERN_LENGTH = 100;
 const MAX_MESSAGE_CHARS = 500; // Twitch's chat message limit
 const MAX_REPEATED_PARTS = 10;
-const MAX_BRANCHES = 64;
+const MAX_BRANCHES = 16;
+const MAX_BANNED_WORDS = 100; // per streamer, plain and regex together
+const MAX_BANNED_PATTERNS = 20; // regex words per streamer
 
 class Rejection extends Error {
   constructor(reason) {
@@ -241,6 +245,14 @@ function compileBannedWord(word, isRegex) {
   return (message) => message.toLowerCase().includes(needle);
 }
 
+// Why one more banned word cannot be saved, or null when it can. `counts` holds
+// the streamer's current { total, regex } word counts.
+function bannedWordLimitReason(counts, isRegex) {
+  if (counts.total >= MAX_BANNED_WORDS) return 'too_many_words';
+  if (isRegex && counts.regex >= MAX_BANNED_PATTERNS) return 'too_many_patterns';
+  return null;
+}
+
 // The first MAX_MESSAGE_CHARS characters (code points) of a message.
 function limitMessage(message) {
   const text = String(message ?? '');
@@ -255,7 +267,10 @@ function limitMessage(message) {
 module.exports = {
   validateBannedPattern,
   compileBannedWord,
+  bannedWordLimitReason,
   limitMessage,
   MAX_PATTERN_LENGTH,
   MAX_MESSAGE_CHARS,
+  MAX_BANNED_WORDS,
+  MAX_BANNED_PATTERNS,
 };
