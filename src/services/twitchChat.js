@@ -76,6 +76,9 @@ async function handleMessage(channel, tags, message, self) {
   if (!message.startsWith('!')) return;
 
   const commandName = message.split(' ')[0].substring(1).toLowerCase();
+  // A lone "!" (or "! hello") names no command; a blank-named command saved
+  // earlier would otherwise answer it.
+  if (!commandName) return;
   const args = message.split(' ').slice(1);
 
   // Built-in commands (followage, 8ball, rps, etc.)

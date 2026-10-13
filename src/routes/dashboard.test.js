@@ -726,3 +726,129 @@ describe('sponsor timing on save', () => {
     assert.equal(seconds(), 40);
   });
 });
+
+// ── Custom commands: add and update follow the same rules (N16) ──────────
+
+describe('custom chat commands', () => {
+  let id;
+  beforeEach(() => { id = addStreamer(); });
+  const add = (form, streamer = id) => request('POST', '/dashboard/chatbot/commands', { streamer, form });
+  const update = (commandId, form, streamer = id) => request('POST', `/dashboard/chatbot/commands/${commandId}/update`, { streamer, form });
+  const stored = (streamer = id) => db.getChatCommands(streamer).map((c) => [c.command, c.response, c.cooldown, c.enabled]);
+  const errorOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('cmd_error');
+  const tabOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('tab');
+
+  test('adds a command with a cleaned name and response, and a cooldown held to 5-3600 s', async () => {
+    const res = await add({ command: '!Socials ', response: '  Follow us!  ', cooldown: '-30' });
+    assert.equal(res.status, 302);
+    assert.equal(tabOf(res), 'commands');
+    assert.equal(errorOf(res), null);
+    await add({ command: 'slow', response: 'x', cooldown: '99999' });
+    await add({ command: 'blank', response: 'x', cooldown: '' });
+    assert.deepEqual(stored(), [['blank', 'x', 5, 1], ['slow', 'x', 3600, 1], ['socials', 'Follow us!', 5, 1]]);
+  });
+
+  test('a blank or invalid name, a missing response or one over 500 characters is refused with a code, and nothing is stored', async () => {
+    assert.equal(errorOf(await add({ command: '', response: 'hi' })), 'name_invalid');
+    assert.equal(errorOf(await add({ command: '!', response: 'hi' })), 'name_invalid');
+    assert.equal(errorOf(await add({ command: 'two words', response: 'hi' })), 'name_invalid');
+    assert.equal(errorOf(await add({ command: 'hi', response: '' })), 'response_required');
+    assert.equal(errorOf(await add({ command: 'hi' })), 'response_required');
+    assert.equal(errorOf(await add({ command: 'hi', response: 'x'.repeat(501) })), 'response_too_long');
+    assert.deepEqual(stored(), []);
+  });
+
+  test('a repeated field (an array) is an invalid command, not a crash', async () => {
+    const res = await request('POST', '/dashboard/chatbot/commands', { streamer: id, rawBody: 'command=a&command=b&response=hi' });
+    assert.equal(res.status, 302);
+    assert.equal(errorOf(res), 'name_invalid');
+    assert.deepEqual(stored(), []);
+  });
+
+  test('adding a name already in use says duplicate, and the first command is kept', async () => {
+    await add({ command: 'socials', response: 'first' });
+    const res = await add({ command: '!SOCIALS', response: 'second' });
+    assert.equal(res.status, 302);
+    assert.equal(errorOf(res), 'duplicate');
+    assert.deepEqual(stored(), [['socials', 'first', 5, 1]]);
+  });
+
+  test('the same name for another streamer is fine', async () => {
+    const other = addStreamer();
+    await add({ command: 'socials', response: 'mine' });
+    assert.equal(errorOf(await add({ command: 'socials', response: 'theirs' }, other)), null);
+    assert.deepEqual(stored(other), [['socials', 'theirs', 5, 1]]);
+  });
+
+  test('an update with a blank name is refused: the command keeps its name (it used to answer every lone "!")', async () => {
+    await add({ command: 'socials', response: 'Follow us!' });
+    const commandId = db.getChatCommands(id)[0].id;
+    for (const name of ['', '   ', '!']) {
+      const res = await update(commandId, { command: name, response: 'Follow us!', enabled: '1' });
+      assert.equal(errorOf(res), 'name_invalid', JSON.stringify(name));
+    }
+    assert.deepEqual(stored(), [['socials', 'Follow us!', 5, 1]]);
+  });
+
+  test('renaming onto a name already in use is duplicate, not a 500, and changes nothing', async () => {
+    await add({ command: 'a', response: 'one' });
+    await add({ command: 'b', response: 'two' });
+    const [first] = db.getChatCommands(id);
+    const res = await update(first.id, { command: 'b', response: 'changed', enabled: '1' });
+    assert.equal(res.status, 302);
+    assert.equal(errorOf(res), 'duplicate');
+    assert.deepEqual(stored(), [['a', 'one', 5, 1], ['b', 'two', 5, 1]]);
+  });
+
+  test('an update without a response is response_required, not a 500', async () => {
+    await add({ command: 'a', response: 'one' });
+    const commandId = db.getChatCommands(id)[0].id;
+    const res = await update(commandId, { command: 'a', enabled: '1' });
+    assert.equal(res.status, 302);
+    assert.equal(errorOf(res), 'response_required');
+    assert.deepEqual(stored(), [['a', 'one', 5, 1]]);
+  });
+
+  test('a good update renames, changes the response, switches off, and holds the cooldown to 5-3600 s', async () => {
+    await add({ command: 'a', response: 'one' });
+    const commandId = db.getChatCommands(id)[0].id;
+    let res = await update(commandId, { command: '!Renamed', response: ' new text ', cooldown: '-5' });
+    assert.equal(errorOf(res), null);
+    assert.deepEqual(stored(), [['renamed', 'new text', 5, 0]], 'no "enabled" field means switched off');
+    res = await update(commandId, { command: 'renamed', response: 'new text', enabled: '1', cooldown: '120' });
+    assert.deepEqual(stored(), [['renamed', 'new text', 120, 1]]);
+    await update(commandId, { command: 'renamed', response: 'new text', enabled: '1', cooldown: '123456' });
+    assert.equal(stored()[0][2], 3600);
+  });
+
+  test('renaming a command to its own name is not a duplicate', async () => {
+    await add({ command: 'a', response: 'one' });
+    const commandId = db.getChatCommands(id)[0].id;
+    const res = await update(commandId, { command: 'a', response: 'edited', enabled: '1' });
+    assert.equal(errorOf(res), null);
+    assert.deepEqual(stored(), [['a', 'edited', 5, 1]]);
+  });
+
+  test('a streamer cannot update another streamer\'s command', async () => {
+    const other = addStreamer();
+    await add({ command: 'theirs', response: 'keep' }, other);
+    const theirId = db.getChatCommands(other)[0].id;
+    await update(theirId, { command: 'stolen', response: 'changed', enabled: '1' });
+    assert.deepEqual(stored(other), [['theirs', 'keep', 5, 1]]);
+  });
+
+  test('the chatbot page shows the message for a known code, and nothing for text made up in the URL', async () => {
+    const shown = (query) => request('GET', `/dashboard/chatbot?tab=commands${query}`, { streamer: id });
+    const duplicate = await shown('&cmd_error=duplicate');
+    assert.equal(duplicate.status, 200);
+    assert.ok(duplicate.text.includes('id="command-error"'));
+    assert.ok(duplicate.text.includes(t('en', 'chatbot.commands.error.duplicate')));
+    const tooLong = await shown('&cmd_error=response_too_long');
+    assert.ok(tooLong.text.includes('A command response can be at most 500 characters.'));
+    const forged = await shown('&cmd_error=Your%20account%20is%20suspended');
+    assert.ok(!forged.text.includes('Your account is suspended'));
+    assert.ok(!forged.text.includes('id="command-error"'), 'no banner at all');
+    const none = await shown('');
+    assert.ok(!none.text.includes('chatbot.commands.error'));
+  });
+});

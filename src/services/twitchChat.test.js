@@ -12,13 +12,14 @@ const path = require('path');
 let streamer;
 let bannedWords = [];
 let bannedWordReads = 0;
+let chatCommands = {}; // command name -> row, as db.getChatCommand returns it
 
 const dbStub = {
   getStreamerById: (id) => (streamer && streamer.id === id ? { ...streamer } : null),
   getBannedWords: () => { bannedWordReads++; return bannedWords; },
   addModLogEntry: () => {},
   getChatbotEnabledStreamers: () => [],
-  getChatCommand: () => null,
+  getChatCommand: (_streamerId, name) => chatCommands[name] || null,
 };
 
 // Synthetic credentials; src/config.js would exit without real env vars.
@@ -42,6 +43,15 @@ class FakeTmiClient {
   readyState() { return 'OPEN'; }
   disconnect() { return Promise.resolve(); }
 }
+
+// A message that starts with "!" lazily loads these, which would load the real
+// db and config (config.js exits the process without real env vars).
+function stubModule(file, exports) {
+  const resolved = require.resolve(file);
+  require.cache[resolved] = { id: resolved, filename: resolved, loaded: true, exports };
+}
+stubModule('./builtinCommands', { handleBuiltinCommand: async () => false });
+stubModule('./giveawayManager', { tryAddEntry: () => false });
 
 const Module = require('module');
 const origLoad = Module._load;
@@ -111,6 +121,7 @@ beforeEach(() => {
   streamer = streamerRow();
   bannedWords = [];
   bannedWordReads = 0;
+  chatCommands = {};
   stubTwitch(200);
   chatManager.connect();
   chatManager.joinChannel(1, 'somestreamer');
@@ -245,5 +256,31 @@ describe('an account an admin disabled', () => {
     chatManager.sendEventMessage(1, 'raid', { username: 'RaidLeader', viewers: 42 });
     assert.equal(tmiClient.said.length, 1);
     assert.equal(tmiClient.said[0].text, 'Welcome raiders from RaidLeader!');
+  });
+});
+
+// ── Custom commands: a lone "!" names no command (N16) ───────────────
+
+describe('custom commands in chat', () => {
+  const command = (name, response) => ({ id: 1, command: name, response, cooldown: 5, enabled: 1 });
+
+  test('a command is answered', async () => {
+    chatCommands = { socials: command('socials', 'Follow us!') };
+    await chat('!socials', tags());
+    assert.deepEqual(tmiClient.said, [{ channel: '#somestreamer', text: 'Follow us!' }]);
+  });
+
+  test('a lone "!" is ignored, even if a command with a blank name was saved earlier', async () => {
+    chatCommands = { '': command('', 'I answer everything') };
+    await chat('!', tags());
+    await chat('! hello there', tags({ id: 'msg-2' }));
+    await chat('!   ', tags({ id: 'msg-3' }));
+    assert.deepEqual(tmiClient.said, []);
+  });
+
+  test('other messages that merely start with ! still reach their commands', async () => {
+    chatCommands = { hi: command('hi', 'hello!') };
+    await chat('!HI there', tags());
+    assert.deepEqual(tmiClient.said.map((m) => m.text), ['hello!']);
   });
 });

@@ -250,6 +250,10 @@
   "chatbot.error.patternTooComplex": "This pattern is too complex; use fewer repeats or | choices",
   "chatbot.error.tooManyWords": "You can have at most {{max}} banned words; remove one to add another",
   "chatbot.error.tooManyPatterns": "You can have at most {{max}} regex banned words; remove one to add another",
+  "chatbot.commands.error.nameInvalid": "A command name can only use letters, numbers and underscores, for example !socials.",
+  "chatbot.commands.error.responseRequired": "Enter the message the bot should send for this command.",
+  "chatbot.commands.error.responseTooLong": "A command response can be at most {{max}} characters.",
+  "chatbot.commands.error.duplicate": "You already have a command with that name.",
 
   "overlay.sounds.error.invalidType": "This alert type cannot have a custom sound",
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",

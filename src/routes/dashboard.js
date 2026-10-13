@@ -23,6 +23,7 @@ const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('../services/inputLimits');
+const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, isUniqueViolation } = require('../services/chatCommands');
 
 const router = Router();
 
@@ -982,7 +983,10 @@ router.get('/chatbot', (req, res) => {
     }
   } catch (e) {}
 
-  res.render('chatbot-config', { streamer, commands, botConnected, botUsername, bannedWords, discordChannels });
+  // Only a known error code from the URL becomes a message; anything else shows nothing.
+  const commandError = errorMessage(COMMAND_ERRORS, req.query.cmd_error, res.locals.t, { max: COMMAND_RESPONSE_MAX });
+
+  res.render('chatbot-config', { streamer, commands, botConnected, botUsername, bannedWords, discordChannels, commandError });
 });
 
 // Save chatbot settings
@@ -1154,34 +1158,44 @@ router.post('/chatbot/test/:eventType', (req, res) => {
   }
 });
 
-// Add command
+// Back to the commands tab; `error` is a COMMAND_ERRORS code the page shows as text.
+function commandsBack(res, error) {
+  res.redirect('/dashboard/chatbot?tab=commands' + (error ? `&cmd_error=${encodeURIComponent(error)}` : ''));
+}
+
+// Add command. Adding and updating follow the same rules (services/chatCommands.js).
 router.post('/chatbot/commands', (req, res) => {
-  const { command, response, cooldown } = req.body;
-  if (!command || !response) return res.redirect('/dashboard/chatbot');
-  const cleanCmd = command.replace(/^!/, '').toLowerCase().trim();
-  if (!cleanCmd || !/^[a-z0-9_]+$/.test(cleanCmd)) return res.redirect('/dashboard/chatbot');
+  const parsed = parseCommand(req.body);
+  if (parsed.error) return commandsBack(res, parsed.error);
 
   try {
-    db.addChatCommand(req.streamer.id, cleanCmd, response, parseInt(cooldown) || 5);
+    db.addChatCommand(req.streamer.id, parsed.command, parsed.response, parsed.cooldown);
   } catch (err) {
-    console.log(`[Dashboard] Command !${cleanCmd} already exists`);
+    if (!isUniqueViolation(err)) throw err;
+    return commandsBack(res, 'duplicate');
   }
-  res.redirect('/dashboard/chatbot');
+  commandsBack(res);
 });
 
 // Update command
 router.post('/chatbot/commands/:id/update', (req, res) => {
-  const { command, response, enabled, cooldown } = req.body;
-  const cleanCmd = (command || '').replace(/^!/, '').toLowerCase().trim();
-  db.updateChatCommand(
-    parseInt(req.params.id),
-    req.streamer.id,
-    cleanCmd,
-    response,
-    enabled ? 1 : 0,
-    parseInt(cooldown) || 5
-  );
-  res.redirect('/dashboard/chatbot');
+  const parsed = parseCommand(req.body);
+  if (parsed.error) return commandsBack(res, parsed.error);
+
+  try {
+    db.updateChatCommand(
+      parseInt(req.params.id, 10),
+      req.streamer.id,
+      parsed.command,
+      parsed.response,
+      req.body.enabled ? 1 : 0,
+      parsed.cooldown
+    );
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err; // renamed onto a name this streamer already uses
+    return commandsBack(res, 'duplicate');
+  }
+  commandsBack(res);
 });
 
 // Delete command
