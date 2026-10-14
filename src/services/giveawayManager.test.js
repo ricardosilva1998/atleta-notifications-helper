@@ -338,32 +338,148 @@ describe('pickWinners — winners are drawn once, unless the streamer re-draws',
     assert.equal(pickAgain.alreadyDrawn, true);
     assert.equal(winnerCards().length, 2, 'the first winner and the re-drawn one');
   });
+});
 
-  test('a timed giveaway that ended while the server was down is closed and drawn once at start-up', async () => {
-    // init() ends it twice over: from its end timer (due at once) and from a
-    // start-up check. Here the timer runs first, then the check (a real setImmediate).
+// A giveaway that is open when the server starts: its end timer is picked up again. Nothing is
+// closed and drawn in the first 30 seconds, so that the chat bot has joined its channels and OBS
+// has reconnected to hear and see the result.
+describe('a giveaway that is due when the server starts', () => {
+  const GRACE_MS = 30_000;
+  const winnersOf = (giveawayId) => _entries.filter(e => e.giveaway_id === giveawayId && e.is_winner && !e.is_redrawn_out);
+  const closedLines = () => announced.chat.filter(line => line.includes('Giveaway closed'));
+  let streamerId = 20;
+
+  // Mocked time includes Date, so "the end time passed" moves with the ticks.
+  beforeEach(() => {
     mock.timers.reset();
-    mock.timers.enable({ apis: ['setTimeout'] });
-    const g = dbStub.insertGiveaway({
-      streamer_id: 10, keyword: 'gw', prize: 'Test Prize', status: 'open', winners_count: 1,
-      duration_seconds: 60, ends_at: new Date(Date.now() - 60_000).toISOString(),
-    });
-    for (let i = 0; i < 3; i++) dbStub.insertEntry({ giveaway_id: g.id, twitch_user_id: `uid${i}`, username: `User${i}` });
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
+    _resetDb();
+    _resetAnnounced();
+    streamerId += 1;
+  });
 
+  // An open timed giveaway that ends `endsInMs` from now (negative: it ended while the server was down), with 3 entries.
+  function openGiveaway(endsInMs) {
+    const giveaway = dbStub.insertGiveaway({
+      streamer_id: streamerId, keyword: 'gw', prize: 'Test Prize', status: 'open', winners_count: 1,
+      duration_seconds: 60, ends_at: new Date(Date.now() + endsInMs).toISOString(),
+    });
+    for (let i = 0; i < 3; i++) dbStub.insertEntry({ giveaway_id: giveaway.id, twitch_user_id: `uid${i}`, username: `User${i}` });
+    return giveaway;
+  }
+  function boot() {
     const { log } = console;
     console.log = () => {}; // init() reports how many giveaways it picked up
-    try {
-      mgr.init();
-    } finally {
-      console.log = log;
-    }
-    mock.timers.tick(0);
-    await new Promise((resolve) => setImmediate(resolve));
-    mock.timers.tick(5000);
+    try { mgr.init(); } finally { console.log = log; }
+  }
+  const isOpen = () => dbStub.getActiveGiveaway(streamerId) !== null;
 
-    assert.equal(winnersInDb(g.id).length, 1);
+  test('one that ended while the server was down is not drawn at once: it is closed and drawn once, 30 seconds after the start', async () => {
+    const giveaway = openGiveaway(-60_000);
+    boot();
+
+    mock.timers.tick(0);
+    await new Promise((resolve) => setImmediate(resolve)); // what the old start-up check waited for
+    mock.timers.tick(5000);
+    assert.equal(isOpen(), true, 'still open');
+    assert.equal(announced.chat.length, 0, 'nothing said in chat');
+    assert.equal(winnerCards().length, 0, 'no winner card');
+    assert.equal(winnersOf(giveaway.id).length, 0);
+
+    mock.timers.tick(GRACE_MS - 5000 - 1);
+    assert.equal(isOpen(), true, 'still open a moment before the 30 seconds are up');
+
+    mock.timers.tick(1);
+    assert.equal(isOpen(), false, 'closed');
+    mock.timers.tick(5000);
+    assert.equal(winnersOf(giveaway.id).length, 1);
     assert.equal(winnerCards().length, 1);
     assert.equal(congratulations().length, 1);
-    assert.equal(announced.chat.filter(line => line.includes('Giveaway closed')).length, 1);
+    assert.equal(closedLines().length, 1);
+
+    mock.timers.tick(10 * 60_000); // nothing else was scheduled
+    assert.equal(winnerCards().length, 1);
+    assert.equal(congratulations().length, 1);
+    assert.equal(closedLines().length, 1);
+    assert.equal(winnersOf(giveaway.id).length, 1);
+  });
+
+  test('one that ends in the first 30 seconds waits for the 30 seconds as well', () => {
+    const giveaway = openGiveaway(5000);
+    boot();
+    mock.timers.tick(5000);
+    assert.equal(isOpen(), true, 'its own end time is not enough at boot');
+    mock.timers.tick(GRACE_MS - 5000 - 1);
+    assert.equal(isOpen(), true);
+    mock.timers.tick(1);
+    assert.equal(isOpen(), false);
+    mock.timers.tick(5000);
+    assert.equal(winnersOf(giveaway.id).length, 1);
+  });
+
+  test('one with more than 30 seconds left keeps its own end time', () => {
+    const giveaway = openGiveaway(120_000);
+    boot();
+    mock.timers.tick(GRACE_MS);
+    assert.equal(isOpen(), true);
+    mock.timers.tick(120_000 - GRACE_MS - 1);
+    assert.equal(isOpen(), true);
+    mock.timers.tick(1);
+    assert.equal(isOpen(), false);
+    mock.timers.tick(5000);
+    assert.equal(winnersOf(giveaway.id).length, 1);
+  });
+
+  test('one without an end time is left open', () => {
+    dbStub.insertGiveaway({ streamer_id: streamerId, keyword: 'gw', status: 'open', winners_count: 1 });
+    boot();
+    mock.timers.tick(24 * 60 * 60_000);
+    assert.equal(isOpen(), true);
+    assert.equal(mgr.getActive(streamerId).keyword, 'gw');
+  });
+
+  test('a giveaway started now still ends on its own end time, with no 30 seconds added', () => {
+    const giveaway = mgr.startGiveaway(streamerId, { keyword: 'gw', durationSeconds: 30, winnersCount: 1 });
+    mgr.tryAddEntry(streamerId, makeTags({ 'user-id': 'a', 'display-name': 'A' }), '!gw');
+    mock.timers.tick(29_999);
+    assert.equal(isOpen(), true);
+    mock.timers.tick(1);
+    assert.equal(isOpen(), false);
+    mock.timers.tick(5000);
+    assert.equal(winnersOf(giveaway.id).length, 1);
+  });
+
+  test('entries stop at the end time even while the draw waits for the 30 seconds', () => {
+    const giveaway = openGiveaway(-1000);
+    boot();
+    const before = dbStub.getEntryCount(giveaway.id);
+    assert.equal(mgr.tryAddEntry(streamerId, makeTags({ 'user-id': 'late', 'display-name': 'Late' }), '!gw'), true, 'the keyword still belongs to the giveaway');
+    assert.equal(dbStub.getEntryCount(giveaway.id), before, 'but a late entry is not counted');
+    assert.equal(mgr.tryAddEntry(streamerId, makeTags({ 'user-id': 'chat', 'display-name': 'Chat' }), 'hello'), false, 'other chat is not the giveaway\'s');
+
+    mock.timers.tick(GRACE_MS);
+    assert.equal(isOpen(), false);
+    assert.equal(mgr.tryAddEntry(streamerId, makeTags({ 'user-id': 'later', 'display-name': 'Later' }), '!gw'), false, 'once closed, the keyword is free again');
+    assert.equal(dbStub.getEntryCount(giveaway.id), before);
+  });
+
+  test('an entry before the end time is still counted after a restart', () => {
+    const giveaway = openGiveaway(120_000);
+    boot();
+    assert.equal(mgr.tryAddEntry(streamerId, makeTags({ 'user-id': 'early', 'display-name': 'Early' }), '!gw'), true);
+    assert.equal(dbStub.getEntryCount(giveaway.id), 4);
+  });
+
+  test('closing it by hand during the 30 seconds cancels the pending end: nothing is drawn or said twice', () => {
+    const giveaway = openGiveaway(-60_000);
+    boot();
+    mock.timers.tick(10_000);
+    mgr.closeGiveaway(streamerId, { silent: true });
+    const first = mgr.pickWinners(giveaway.id, streamerId, {});
+    mock.timers.tick(GRACE_MS * 2);
+    assert.equal(first.winners.length, 1);
+    assert.equal(winnersOf(giveaway.id).length, 1);
+    assert.equal(winnerCards().length, 1);
+    assert.equal(closedLines().length, 0, 'the manual close was silent, and the timer was cancelled');
   });
 });
