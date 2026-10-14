@@ -9,7 +9,7 @@
   const _tabs = ['twitch', 'discord'];
   if (features.youtube) _tabs.push('youtube');
   if (features.kick) _tabs.push('kick');
-  if (features.overlays) _tabs.push('experimental');
+  if (features.overlays && features.vtuber) _tabs.push('experimental');
   if (_isAdmin) _tabs.push('admin');
 %>
 <%# The tab picked last time (localStorage 'dashboard_tab'), or Twitch, is named on <html data-dashboard-tab> before
@@ -96,8 +96,8 @@
     <svg width="30" height="10" viewBox="0 0 78 26" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0307312H8.34073V5.79423H11.1163V2.91248H13.8919V0.0307312H22.2326V8.69274H19.457V11.5745H16.6815V14.4562H19.457V17.338H22.2326V26H13.8919V23.1182H11.1163V20.2365H8.34073V26H0V0.0307312ZM55.6444 0.0307312H63.9852V5.79423H66.7608V2.91248H69.5363V0.0307312H77.8771V8.69274H75.1015V11.5745H72.3259V14.4562H75.1015V17.338H77.8771V26H69.5363V23.1182H66.7608V20.2365H63.9852V26H55.6444V0.0307312ZM25.039 0.0307312H33.3797V26H25.039V0.0307312ZM38.9462 0.0307312V2.91248H36.1706V23.1029H38.9462V25.9846H52.8535V17.3226H44.5128V8.66061H52.8535V0H38.9462V0.0307312Z"/></svg>
   </button>
   <% } %>
-  <%# The Experimental tab holds only the VTuber face tracker, an OBS source: hidden with the overlay features. %>
-  <% if (features.overlays) { %>
+  <%# The Experimental tab holds only the VTuber face tracker: it has its own switch (features.vtuber). %>
+  <% if (features.overlays && features.vtuber) { %>
   <button class="tab-btn tab-experimental" data-tab="experimental">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v8l4 9H5l4-9V3z"/><path d="M9 3h6"/></svg>
     <%= t('dashboard.tab.experimental') %>
@@ -838,7 +838,7 @@
 </div>
 <% } %>
 
-<% if (features.overlays) { %>
+<% if (features.overlays && features.vtuber) { %>
 <div class="tab-content" id="tab-experimental">
   <div class="animate-in animate-in-delay-2">
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">

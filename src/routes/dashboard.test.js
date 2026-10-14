@@ -21,13 +21,15 @@ for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET'
   process.env[key] = process.env[key] || 'test';
 }
 
-// The overlay pages, cards and links are hidden while config.features.overlays is off, which is its
-// default. These tests cover those pages, so the switch is on for the file; the last section turns it off.
+// The overlay pages, cards and links are hidden while config.features.overlays is off. These tests cover
+// those pages, so the switch is on for the file whatever config.js ships; its sections turn it off.
 require('../config').features.overlays = true;
 // The same for YouTube and Kick (config.features.youtube and .kick, off by default): on for the file, so the
 // tests of the YouTube pages and tabs keep covering them; the sections at the end turn them off.
 require('../config').features.youtube = true;
 require('../config').features.kick = true;
+// The VTuber tab (config.features.vtuber, off by default) is on for the file too; its section turns it off.
+require('../config').features.vtuber = true;
 
 const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
@@ -4134,5 +4136,33 @@ describe('the channel point rewards switch reads its value strictly', () => {
     assert.equal(bad.status, 400);
     assert.deepEqual(bad.json(), { ok: false, code: 'invalid', error: t('en', 'dashboard.settings.error.invalid') });
     assert.equal(db.getStreamerById(id).cp_rewards_enabled, 1);
+  });
+});
+
+// ── The VTuber tab has its own switch (config.features.vtuber) ───────────
+
+describe('with the VTuber tab switched off', () => {
+  const { features } = require('../config');
+  beforeEach(() => { features.vtuber = false; });
+  afterEach(() => { features.vtuber = true; });
+
+  test('the dashboard has no Experimental tab and the preview page sends the streamer back', async () => {
+    const id = addStreamer({ overlay_token: 'synthetic-vtuber-token' });
+    const page = (await request('GET', '/dashboard', { streamer: id })).text;
+    assert.ok(!page.includes('data-tab="experimental"') && !page.includes('id="tab-experimental"'));
+    const preview = await request('GET', '/dashboard/vtuber-preview', { streamer: id });
+    assert.equal(preview.status, 302);
+    assert.equal(preview.headers.location, '/dashboard');
+  });
+
+  test('a tab remembered from before (Experimental) opens Twitch, not an empty dashboard', async () => {
+    const res = await request('GET', '/dashboard', { streamer: addStreamer() });
+    assert.deepEqual(openDashboardTab(res.text, 'experimental'), { html: 'twitch', open: ['button:twitch', 'pane:twitch'] });
+  });
+
+  test('switched on (with the overlays), the tab is back', async () => {
+    features.vtuber = true;
+    const page = (await request('GET', '/dashboard', { streamer: addStreamer() })).text;
+    assert.ok(page.includes('data-tab="experimental"') && page.includes('id="tab-experimental"'));
   });
 });

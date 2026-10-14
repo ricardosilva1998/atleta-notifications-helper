@@ -99,12 +99,18 @@ function refuseUpload(req, res, bytes, { replacing = 0, media = true } = {}) {
 router.use(requireActiveStreamer);
 
 // A page that exists only for the OBS overlay features (the overlay settings, the Overlay
-// Builder, Channel Point Rewards, the VTuber preview). While config.features.overlays is off
+// Builder, Channel Point Rewards). While config.features.overlays is off
 // it sends the streamer back to the dashboard, which no longer links to it. The POST routes
 // behind these pages stay as they are: nothing links to them either, and the OBS links
 // (/overlay/*, /vtuber/*) are not served from here.
 function overlayPage(req, res, next) {
   if (config.features.overlays) return next();
+  res.redirect('/dashboard');
+}
+
+// The VTuber preview page: only while the VTuber tab is shown (config.features.vtuber, with the overlays).
+function vtuberPage(req, res, next) {
+  if (config.features.overlays && config.features.vtuber) return next();
   res.redirect('/dashboard');
 }
 
@@ -2485,7 +2491,7 @@ router.post('/overlay-builder/reset', (req, res) => {
 
 // --- VTuber Preview (authenticated, no overlay token needed) ---
 
-router.get('/vtuber-preview', overlayPage, (req, res) => {
+router.get('/vtuber-preview', vtuberPage, (req, res) => {
   const model = req.streamer.vtuber_model_id ? db.getVtuberModel(req.streamer.vtuber_model_id) : null;
   let modelUrl = null;
   if (model) {

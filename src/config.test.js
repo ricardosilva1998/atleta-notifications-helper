@@ -175,9 +175,10 @@ test('multistream stays off when MEDIAMTX_API_URL is not an http(s) address (eve
   }
 });
 
-test('the OBS overlay features are switched off until features.overlays is set to true in config.js', () => {
+test('the OBS overlay features are on; the VTuber tab stays hidden until features.vtuber is set to true in config.js', () => {
   const { features } = loadWith({}).config;
-  assert.equal(features.overlays, false);
+  assert.equal(features.overlays, true);
+  assert.equal(features.vtuber, false);
 });
 
 test('YouTube and Kick are hidden from streamers until features.youtube and features.kick are set to true in config.js', () => {

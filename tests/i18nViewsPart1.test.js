@@ -217,12 +217,13 @@ const SAMPLES = {
   ],
 };
 
-// These pages show less while the overlay features are off (features.overlays, off by default): each of their
-// samples is rendered both ways.
+// These pages show less while the overlay features are off (features.overlays): each of their samples is rendered
+// both ways. The dashboard's VTuber tab has its own switch (features.vtuber) and shows only with the overlays, so
+// the samples get that switch together with them.
 const OVERLAY_SWITCH_PAGES = ['dashboard', 'donation-settings', 'timed-notifications'];
 for (const page of OVERLAY_SWITCH_PAGES) {
   SAMPLES[page] = SAMPLES[page].flatMap(([name, data]) => [true, false].map((overlays) => [
-    `${name}, overlay features ${overlays ? 'on' : 'off'}`, { ...data, features: { ...(data.features || { youtube: true }), overlays } },
+    `${name}, overlay features ${overlays ? 'on' : 'off'}`, { ...data, features: { ...(data.features || { youtube: true }), overlays, vtuber: overlays } },
   ]));
 }
 
