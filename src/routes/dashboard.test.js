@@ -1381,6 +1381,40 @@ describe('the test buttons', () => {
   });
 });
 
+// The pages are rendered with stub locals in tests/streamerViewsI18n.test.js; this renders them with what their routes really pass
+// (the account page is left out: it reads the language list server.js puts on every page, which this test app does not).
+describe('the translated streamer pages render through their routes', () => {
+  const html = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+
+  test('each answers with its translated heading', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const pages = [
+      ['/dashboard/report', 'report.desc'],
+      ['/dashboard/chatbot', 'chatbot.heading'],
+      ['/dashboard/chatbot/mod-log', 'modLog.subtitle'],
+      ['/dashboard/overlay', 'overlay.heading'],
+      ['/dashboard/overlay-builder', 'overlayBuilder.heading'],
+      ['/dashboard/youtube-chatbot', 'ytChatbot.heading'],
+    ];
+    for (const [route, key] of pages) {
+      const res = await request('GET', route, { streamer: id });
+      assert.equal(res.status, 200, route);
+      assert.ok(res.text.includes(html(t('en', key))), `${route} shows ${key}`);
+    }
+  });
+
+  test('the server pages (settings and statistics) too', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    db.upsertGuild('800000000000000001', id, 'Test Server');
+    const settings = await request('GET', '/dashboard/guild/800000000000000001', { streamer: id });
+    assert.equal(settings.status, 200);
+    assert.ok(settings.text.includes(html(t('en', 'guild.addTwitchChannel'))));
+    const stats = await request('GET', '/dashboard/guild/800000000000000001/stats', { streamer: id });
+    assert.equal(stats.status, 200);
+    assert.ok(stats.text.includes(html(t('en', 'guildStats.chartTitle'))));
+  });
+});
+
 describe('the profile picture upload', () => {
   const upload = (streamer, query, rawBody) => request('POST', `/dashboard/account/avatar${query}`, { streamer, rawBody, contentType: 'application/octet-stream' });
 
