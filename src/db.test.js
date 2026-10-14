@@ -503,3 +503,88 @@ describe('a disabled account is left out of the lookups the bot uses', () => {
     assert.equal(db.getYoutubeChatbotEnabledStreamers().length, 2);
   });
 });
+
+describe('linkTwitch: the broadcaster authorization belongs to the Twitch account that gave it', () => {
+  const authorize = (id, over = {}) => {
+    db.updateStreamerBroadcasterTokens(id, `access-of-${id}`, `refresh-of-${id}`, Date.now() + 3_600_000);
+    db.updateBroadcasterScopes(id, over.scopes || 'moderator:read:followers bits:read channel:manage:redemptions');
+  };
+  const tokensOf = (id) => {
+    const s = db.getStreamerById(id);
+    return { access: s.broadcaster_access_token, refresh: s.broadcaster_refresh_token, expires: s.broadcaster_token_expires_at, scopes: s.broadcaster_scopes };
+  };
+  const NOTHING = { access: null, refresh: null, expires: 0, scopes: null };
+
+  test('linking another Twitch account clears the old account\'s tokens and scopes, and says which channel the bot was in', () => {
+    db.linkTwitch(streamerA, '9001', 'old_channel', 'Old_Channel');
+    authorize(streamerA);
+
+    const result = db.linkTwitch(streamerA, '9002', 'new_channel', 'New_Channel');
+
+    assert.deepEqual(result, { accountChanged: true, previousUsername: 'old_channel', displaced: [] });
+    const row = db.getStreamerById(streamerA);
+    assert.equal(row.twitch_user_id, '9002');
+    assert.equal(row.twitch_username, 'new_channel');
+    assert.equal(row.twitch_display_name, 'New_Channel');
+    assert.deepEqual(tokensOf(streamerA), NOTHING);
+  });
+
+  test('linking the same account again changes only its names: the authorization, scopes and everything else stay', () => {
+    db.linkTwitch(streamerA, '9001', 'old_name', 'Old_Name');
+    authorize(streamerA);
+    const before = tokensOf(streamerA);
+
+    const result = db.linkTwitch(streamerA, '9001', 'renamed', 'Renamed');
+
+    assert.deepEqual(result, { accountChanged: false, previousUsername: 'old_name', displaced: [] });
+    assert.deepEqual(tokensOf(streamerA), before);
+    assert.equal(db.getStreamerById(streamerA).twitch_username, 'renamed');
+    assert.equal(db.getStreamerById(streamerA).twitch_display_name, 'Renamed');
+  });
+
+  test('the account is compared as an id, not as a string of the right type', () => {
+    db.linkTwitch(streamerA, '9001', 'channel', 'Channel');
+    authorize(streamerA);
+    assert.equal(db.linkTwitch(streamerA, 9001, 'channel', 'Channel').accountChanged, false);
+    assert.notDeepEqual(tokensOf(streamerA), NOTHING);
+  });
+
+  test('a first link has no previous channel, and clears any authorization left behind from before', () => {
+    authorize(streamerA, { scopes: 'bits:read' }); // a token with no account linked: whose it is, nobody knows
+    const result = db.linkTwitch(streamerA, '9003', 'first_channel', 'First_Channel');
+    assert.deepEqual(result, { accountChanged: true, previousUsername: null, displaced: [] });
+    assert.deepEqual(tokensOf(streamerA), NOTHING);
+    assert.equal(db.getStreamerById(streamerA).twitch_user_id, '9003');
+  });
+
+  test('another streamer who had the account linked loses the link and its authorization, and is named', () => {
+    db.linkTwitch(streamerA, '9001', 'shared_channel', 'Shared_Channel');
+    authorize(streamerA);
+
+    const result = db.linkTwitch(streamerB, '9001', 'shared_channel', 'Shared_Channel');
+
+    assert.deepEqual(result, { accountChanged: true, previousUsername: null, displaced: [{ id: streamerA, username: 'shared_channel' }] });
+    const a = db.getStreamerById(streamerA);
+    assert.equal(a.twitch_user_id, null);
+    assert.equal(a.twitch_username, null);
+    assert.deepEqual(tokensOf(streamerA), NOTHING, 'A can no longer act as that Twitch account');
+    assert.equal(db.getStreamerById(streamerB).twitch_user_id, '9001');
+  });
+
+  test('other streamers are not touched', () => {
+    db.linkTwitch(streamerA, '9001', 'a_channel', 'A_Channel');
+    db.linkTwitch(streamerB, '9002', 'b_channel', 'B_Channel');
+    authorize(streamerB);
+    const before = tokensOf(streamerB);
+    db.linkTwitch(streamerA, '9003', 'a_new_channel', 'A_New_Channel');
+    assert.deepEqual(tokensOf(streamerB), before);
+    assert.equal(db.getStreamerById(streamerB).twitch_user_id, '9002');
+  });
+
+  test('the account a streamer drops can be linked by another streamer afterwards', () => {
+    db.linkTwitch(streamerA, '9001', 'first_channel', 'First_Channel');
+    db.linkTwitch(streamerA, '9002', 'second_channel', 'Second_Channel');
+    assert.deepEqual(db.linkTwitch(streamerB, '9001', 'first_channel', 'First_Channel').displaced, [], 'nobody has it linked any more');
+    assert.equal(db.getStreamerByTwitchId('9001').id, streamerB);
+  });
+});

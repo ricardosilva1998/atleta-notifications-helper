@@ -2,13 +2,15 @@
 
 // What disabling, enabling or removing a streamer account does besides the
 // database row: closing its web sessions (done by the db functions) and
-// stopping or restarting the live connections that serve it. The managers'
-// own stop and start functions do the work; nothing here opens a connection.
+// stopping or restarting the live connections that serve it. The same goes for
+// a change of the streamer's linked Twitch account (twitchAccountChanged). The
+// managers' own stop and start functions do the work; nothing here opens a
+// connection.
 //
 // `services` is injectable so the order of calls can be tested; by default the
 // real modules are loaded on first use (they need the app's config).
 
-const { accountDisabledChannel } = require('./streamerAccess');
+const { accountDisabledChannel, isStreamerDisabled } = require('./streamerAccess');
 
 // The YouTube live chat a disabled account was polling is remembered for this
 // long. Enabling the account within it polls that chat again (the stream is
@@ -32,6 +34,15 @@ function liveServices() {
 
 // `services.now` is for tests.
 const nowOf = (services) => (typeof services.now === 'function' ? services.now() : Date.now());
+
+// The two managers a change of Twitch account touches.
+function twitchServices() {
+  return {
+    db: require('../db'),
+    eventSubManager: require('./eventsub').eventSubManager,
+    chatManager: require('./twitchChat').chatManager,
+  };
+}
 
 // One manager failing must not leave the others running.
 function attempt(label, streamerId, fn) {
@@ -113,4 +124,23 @@ function removeAccount(streamerId, services = liveServices()) {
   services.db.deleteStreamer(streamerId);
 }
 
-module.exports = { disableAccount, enableAccount, removeAccount };
+// A streamer's linked Twitch account changed, or the link was taken over by
+// another streamer who linked the same account (db.linkTwitch has cleared the
+// broadcaster authorization that belonged to the previous account). What ran for
+// that account stops: EventSub, and the chat bot leaves the previous channel
+// (previousUsername, which the database no longer holds) and joins the new one
+// if the chat bot is on. EventSub is not started again: there is no
+// authorization to connect with until the streamer gives one for the new
+// account, and giving it starts EventSub.
+function twitchAccountChanged(streamerId, previousUsername, services = twitchServices()) {
+  attempt('EventSub stop', streamerId, () => services.eventSubManager.stopForStreamer(streamerId));
+  if (previousUsername) {
+    attempt('Twitch chat leave', streamerId, () => services.chatManager.partChannel(previousUsername));
+  }
+  const streamer = services.db.getStreamerById(streamerId);
+  if (streamer && streamer.chatbot_enabled && streamer.twitch_username && !isStreamerDisabled(streamer)) {
+    attempt('Twitch chat join', streamerId, () => services.chatManager.startForStreamer(streamerId));
+  }
+}
+
+module.exports = { disableAccount, enableAccount, removeAccount, twitchAccountChanged };

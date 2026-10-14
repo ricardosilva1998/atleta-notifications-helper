@@ -1400,9 +1400,42 @@ function clearProfilePicture(streamerId) {
   _clearProfilePicture.run(streamerId);
 }
 
+// The broadcaster authorization (tokens and scopes) was given by one Twitch
+// account and is only good for that account's channel, so it goes when the
+// streamer's link to that account does. The streamer then sees "Enable Sub Sync"
+// and authorizes again, as one who never did.
+function clearBroadcasterAuth(streamerId) {
+  _updateStreamerBroadcasterTokens.run(null, null, 0, streamerId);
+  clearStreamerBroadcasterScopes(streamerId);
+}
+
+// Links a Twitch account to a streamer. Another streamer who had that account
+// linked loses it. A streamer whose linked account is not the one it was (another
+// account, or the first one) loses the broadcaster authorization they had: it was
+// the previous account's, and left in place it would have EventSub, the follow
+// checks and sub sync act on the new channel with the old account's token.
+// Linking the same account again only updates its names.
+// Returns what the caller must stop or move: { accountChanged, previousUsername
+// (the Twitch login that was linked before, or null), displaced: [{ id, username }]
+// (streamers who lost the account to this link) }.
 function linkTwitch(streamerId, twitchUserId, twitchUsername, twitchDisplayName) {
-  _clearOldTwitchLink.run(twitchUserId); // clear if another streamer had this Twitch linked
-  _linkTwitch.run(twitchUserId, twitchUsername, twitchDisplayName, streamerId);
+  return db.transaction(() => {
+    const before = _getStreamerById.get(streamerId);
+    const holder = _getStreamerByTwitchId.get(twitchUserId);
+    const displaced = holder && Number(holder.id) !== Number(streamerId) ? [{ id: holder.id, username: holder.twitch_username }] : [];
+
+    _clearOldTwitchLink.run(twitchUserId); // clear if another streamer had this Twitch linked
+    for (const other of displaced) clearBroadcasterAuth(other.id);
+    _linkTwitch.run(twitchUserId, twitchUsername, twitchDisplayName, streamerId);
+
+    const sameAccount = !!before && before.twitch_user_id != null && String(before.twitch_user_id) === String(twitchUserId);
+    if (!sameAccount) clearBroadcasterAuth(streamerId);
+    return {
+      accountChanged: !sameAccount,
+      previousUsername: before && before.twitch_user_id != null ? before.twitch_username : null,
+      displaced,
+    };
+  })();
 }
 
 function updateStreamerBroadcasterTokens(streamerId, accessToken, refreshToken, expiresAt) {
