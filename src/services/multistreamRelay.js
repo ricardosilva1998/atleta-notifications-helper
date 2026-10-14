@@ -12,6 +12,13 @@
 // password; without a token nothing is sent. Each request has a timeout.
 
 const REQUEST_TIMEOUT_MS = 10_000;
+const DESTINATIONS = ['twitch', 'youtube'];
+const LIST_PAGE_SIZE = 500;
+const LIST_MAX_PAGES = 20;
+
+// A stream key (db.ensureMultistreamToken), in the relay's path names.
+const LIVE_PATH = /^live\/([A-Za-z0-9_-]{16,128})$/;
+const FORWARDER_PATH = new RegExp(`^fwd_([A-Za-z0-9_-]{16,128})_(${DESTINATIONS.join('|')})$`);
 
 // A forwarding address goes into ffmpeg's command line, which MediaMTX splits
 // at spaces and quotes (expanding $variables), so only plain address
@@ -61,12 +68,12 @@ function relayRequest(settings, method, apiPath, { body, signal } = {}) {
   });
 }
 
-// What the relay answered, for an error message: never the stream key (it is
+// What the relay answered, for an error message: never a stream key (they are
 // in the path names), which would let anyone who reads the log publish as the
-// streamer.
+// streamer. Without the key to cut out, only the status is kept.
 async function failure(what, res, sourceToken) {
-  const text = await res.text().catch(() => '');
-  const detail = sourceToken ? text.split(sourceToken).join('<key>') : text;
+  const text = sourceToken ? await res.text().catch(() => '') : '';
+  const detail = sourceToken ? text.split(sourceToken).join('<key>') : '';
   return new Error(`Relay ${what} failed: ${res.status} ${detail.slice(0, 200)}`.trim());
 }
 
@@ -114,12 +121,51 @@ function isLive(stats) {
   return !!stats && (stats.available === true || stats.ready === true);
 }
 
+// Every item of a paginated list.
+async function listAll(settings, apiPath, signal) {
+  const items = [];
+  for (let page = 0; page < LIST_MAX_PAGES; page++) {
+    const res = await relayRequest(settings, 'GET', `${apiPath}?itemsPerPage=${LIST_PAGE_SIZE}&page=${page}`, { signal });
+    if (!res.ok) throw await failure(`list ${apiPath}`, res);
+    const data = await res.json();
+    if (Array.isArray(data.items)) items.push(...data.items);
+    if (!(page + 1 < Number(data.pageCount))) break;
+  }
+  return items;
+}
+
+// The stream keys with a stream coming in to the relay right now (a Set).
+async function listLiveStreams({ signal, ...settings }) {
+  const keys = new Set();
+  for (const item of await listAll(settings, '/v3/paths/list', signal)) {
+    const match = LIVE_PATH.exec(item && item.name);
+    if (match && isLive(item)) keys.add(match[1]);
+  }
+  return keys;
+}
+
+// The forwarders the relay has: a Map of stream key to the Set of its
+// destinations ('twitch', 'youtube').
+async function listForwarders({ signal, ...settings }) {
+  const byKey = new Map();
+  for (const item of await listAll(settings, '/v3/config/paths/list', signal)) {
+    const match = FORWARDER_PATH.exec(item && item.name);
+    if (!match) continue;
+    if (!byKey.has(match[1])) byKey.set(match[1], new Set());
+    byKey.get(match[1]).add(match[2]);
+  }
+  return byKey;
+}
+
 module.exports = {
   REQUEST_TIMEOUT_MS,
+  DESTINATIONS,
   forwarderName,
   buildFfmpegCmd,
   addForwardPaths,
   removeForwardPaths,
   getPathStats,
   isLive,
+  listLiveStreams,
+  listForwarders,
 };

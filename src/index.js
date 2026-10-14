@@ -68,11 +68,13 @@ function startWithoutDiscord() {
   require('./services/giveawayManager').init();
 
   // Multistream runs only once the relay is configured: then, finish any
-  // go-live a previous restart interrupted.
+  // go-live a previous restart interrupted, and from then on check the relay
+  // every minute (services/multistreamSessions.js).
   if (config.multistream.enabled) {
     require('./services/youtubeBroadcast')
       .reconcileActiveBroadcasts()
-      .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message));
+      .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message))
+      .finally(() => require('./services/multistreamSessions').sessions().startChecks());
   }
 
   console.log('[YT Chat] YouTube Live Chat manager ready (starts when streams go live)');
@@ -203,6 +205,7 @@ async function shutdown(signal) {
   stop('StreamElements', () => require('./services/streamelements').streamElementsManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
+  if (config.multistream.enabled) stop('Multistream checks', () => require('./services/multistreamSessions').sessions().stopAll());
   stop('Discord login retry', () => { if (discordLogin) discordLogin.stop(); });
   try {
     // At most 2 s for Discord to be told the bot is going offline.

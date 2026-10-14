@@ -3141,6 +3141,16 @@ function updateStreamerYoutubeTokens(streamerId, accessToken, refreshToken, expi
   `).run(sealToken(accessToken), sealToken(refreshToken), expiresAt, channelName, streamerId);
 }
 
+// A renewed YouTube token: the token columns only. The channel name is set
+// when the streamer connects YouTube; a renewal wrote back whatever the
+// caller's row held, which wiped it for rows read without that column.
+function updateStreamerYoutubeAccessToken(streamerId, accessToken, refreshToken, expiresAt) {
+  db.prepare(`
+    UPDATE streamers SET yt_access_token = ?, yt_refresh_token = ?, yt_token_expires_at = ?
+    WHERE id = ?
+  `).run(sealToken(accessToken), sealToken(refreshToken), expiresAt, streamerId);
+}
+
 function getYoutubeChatbotEnabledStreamers() {
   return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
@@ -4973,13 +4983,11 @@ function getStreamerByMultistreamToken(token) {
   `).get(token));
 }
 
-function setMultistreamYoutubeStream(streamerId, streamId, encryptedKey) {
-  db.prepare(`
-    UPDATE streamers
-    SET multistream_youtube_stream_id = ?,
-        multistream_youtube_stream_key_enc = ?
-    WHERE id = ?
-  `).run(streamId, encryptedKey, streamerId);
+// The streamer's reusable YouTube liveStream. Its RTMP key is read from
+// YouTube at every go-live and never stored (multistream_youtube_stream_key_enc
+// stays empty).
+function setMultistreamYoutubeStream(streamerId, streamId) {
+  db.prepare('UPDATE streamers SET multistream_youtube_stream_id = ? WHERE id = ?').run(streamId, streamerId);
 }
 
 function clearMultistreamYoutubeStream(streamerId) {
@@ -5532,6 +5540,7 @@ module.exports = {
   updateYoutubeChatbotConfig,
   getYoutubeChatbotEnabledStreamers,
   updateStreamerYoutubeTokens,
+  updateStreamerYoutubeAccessToken,
   updateSpotifyTokens,
   getOverlayDesign,
   getAllOverlayDesigns,

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const Module = require('module');
 
 const savedTokens = [];
-const dbStub = { updateStreamerYoutubeTokens: (...args) => savedTokens.push(args) };
+const dbStub = { updateStreamerYoutubeAccessToken: (...args) => savedTokens.push(args) };
 const configStub = { youtube: { botClientId: 'client-id', botClientSecret: 'client-secret' } };
 
 const origLoad = Module._load.bind(Module);
@@ -83,11 +83,31 @@ describe('refreshStreamerYoutubeToken', () => {
   test('sends the caller\'s signal, and saves the new token', async () => {
     stubFetch({ json: { access_token: 'new-access', expires_in: 3600 } });
     const signal = AbortSignal.timeout(5000);
-    assert.equal(await youtube.refreshStreamerYoutubeToken(streamer, { signal }), 'new-access');
+    assert.equal(await youtube.refreshStreamerYoutubeToken({ ...streamer }, { signal }), 'new-access');
     assert.equal(calls[0].signal, signal);
     assert.equal(savedTokens.length, 1);
     assert.equal(savedTokens[0][0], 1);
     assert.equal(savedTokens[0][1], 'new-access');
+  });
+
+  test('saves the tokens only, never the channel name (a row read without it used to wipe it)', async () => {
+    stubFetch({ json: { access_token: 'new-access', expires_in: 3600 } });
+    const before = Date.now();
+    await youtube.refreshStreamerYoutubeToken({ id: 4, yt_refresh_token: 'refresh-token' });
+    assert.equal(savedTokens.length, 1);
+    const [id, access, refresh, expiresAt, ...rest] = savedTokens[0];
+    assert.deepEqual([id, access, refresh, rest], [4, 'new-access', 'refresh-token', []]);
+    assert.ok(expiresAt > before + 3_000_000 && expiresAt <= Date.now() + 3_600_000);
+  });
+
+  test('puts the new token in the caller\'s row, so its next call does not renew again', async () => {
+    stubFetch({ json: { access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 } });
+    const row = { id: 5, yt_access_token: 'old-access', yt_refresh_token: 'old-refresh', yt_token_expires_at: Date.now() - 1000 };
+    await youtube.refreshStreamerYoutubeToken(row);
+    assert.equal(row.yt_access_token, 'new-access');
+    assert.equal(row.yt_refresh_token, 'new-refresh');
+    assert.ok(row.yt_token_expires_at > Date.now());
+    assert.equal(savedTokens[0][2], 'new-refresh');
   });
 
   test('has its own timeout when the caller gives none', async () => {

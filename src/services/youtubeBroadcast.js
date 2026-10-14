@@ -2,22 +2,29 @@
 //
 // Each streamer needs:
 //   1. ONE reusable liveStream resource (created once, gives us a permanent RTMP key)
-//   2. ONE liveBroadcast per session (created on go-live, transitioned to complete on stop)
+//   2. ONE liveBroadcast per session (created on go-live, reused while it is
+//      still ready or live, transitioned to complete when the stream has ended)
 //
-// We persist the streamId + key on the streamer row so we don't burn quota
+// We persist the streamId on the streamer row so we don't burn quota
 // recreating the stream every session.
 //
+// The broadcast starts by itself (enableAutoStart) once YouTube receives the
+// stream, and ends by itself (enableAutoStop) some time after it stops.
 // Quota cost per session (when streamer already has a stream):
+//   liveStreams.list          1 unit
 //   liveBroadcasts.insert     50 units
 //   liveBroadcasts.bind       50 units
-//   liveBroadcasts.transition 50 units (live)
 //   liveBroadcasts.transition 50 units (complete)
-//   = 200 units per session. Default daily quota is 10,000.
+//   = about 150 units per session. Default daily quota is 10,000.
 
 const db = require('../db');
 const { refreshStreamerYoutubeToken } = require('./youtube');
 
 const API = 'https://www.googleapis.com/youtube/v3';
+// A YouTube call that hangs must not hold a go-live (it runs under a lock).
+const REQUEST_TIMEOUT_MS = 10_000;
+// YouTube's longest broadcast title, in characters.
+const TITLE_MAX = 100;
 
 async function getFreshAccessToken(streamer) {
   if (!streamer.yt_access_token) return null;
@@ -35,6 +42,7 @@ async function ytFetch(token, method, path, body) {
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -44,6 +52,22 @@ async function ytFetch(token, method, path, body) {
   return res.json();
 }
 
+// A title YouTube takes: without '<' and '>' (YouTube refuses a title with
+// them, and "<3" is common), on one line, at most 100 characters (code points,
+// so an emoji is never cut in half).
+function sanitizeBroadcastTitle(title, fallback = 'Live Stream') {
+  const text = String(title ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+  return Array.from(text).slice(0, TITLE_MAX).join('').trim() || fallback;
+}
+
+// The RTMP key of a liveStream resource. Without one there is nothing to
+// forward to (it would make an address ending in "undefined").
+function streamKeyOf(liveStream) {
+  const key = liveStream && liveStream.cdn && liveStream.cdn.ingestionInfo && liveStream.cdn.ingestionInfo.streamName;
+  if (!key) throw new Error('YouTube returned no stream key');
+  return key;
+}
+
 // Returns { streamId, streamKey } — creates the reusable stream on first call,
 // reuses the persisted one thereafter.
 async function getOrCreateLiveStream(streamer) {
@@ -51,19 +75,14 @@ async function getOrCreateLiveStream(streamer) {
   if (!token) throw new Error('YouTube not connected');
 
   if (streamer.multistream_youtube_stream_id) {
-    try {
-      const data = await ytFetch(token, 'GET', `/liveStreams?part=snippet,cdn&id=${streamer.multistream_youtube_stream_id}`);
-      if (data.items && data.items.length > 0) {
-        const item = data.items[0];
-        return {
-          streamId: item.id,
-          streamKey: item.cdn?.ingestionInfo?.streamName,
-        };
-      }
-    } catch (e) {
-      console.warn('[ytBroadcast] persisted stream lookup failed, recreating:', e.message);
-      db.clearMultistreamYoutubeStream(streamer.id);
-    }
+    // A failed lookup (a timeout, a spent quota) says nothing about the stream,
+    // so it is an error, never a reason to make a new stream. Only YouTube
+    // answering that it has no such stream is.
+    const data = await ytFetch(token, 'GET', `/liveStreams?part=cdn&id=${encodeURIComponent(streamer.multistream_youtube_stream_id)}`);
+    const item = data && Array.isArray(data.items) ? data.items[0] : null;
+    if (item) return { streamId: item.id, streamKey: streamKeyOf(item) };
+    console.warn(`[ytBroadcast] YouTube no longer has the stored stream of streamer ${streamer.id}; making a new one`);
+    db.clearMultistreamYoutubeStream(streamer.id);
   }
 
   const created = await ytFetch(token, 'POST', '/liveStreams?part=snippet,cdn,contentDetails', {
@@ -77,10 +96,7 @@ async function getOrCreateLiveStream(streamer) {
     contentDetails: { isReusable: true },
   });
 
-  return {
-    streamId: created.id,
-    streamKey: created.cdn?.ingestionInfo?.streamName,
-  };
+  return { streamId: created.id, streamKey: streamKeyOf(created) };
 }
 
 async function createBroadcast(streamer, { title, description, privacyStatus, categoryId, scheduledStartTime }) {
@@ -89,7 +105,7 @@ async function createBroadcast(streamer, { title, description, privacyStatus, ca
   const startISO = scheduledStartTime || new Date(Date.now() + 5_000).toISOString();
   const body = {
     snippet: {
-      title: (title || 'Live Stream').slice(0, 100),
+      title: sanitizeBroadcastTitle(title),
       description: (description || '').slice(0, 5000),
       scheduledStartTime: startISO,
       categoryId: categoryId || '20',
@@ -99,7 +115,9 @@ async function createBroadcast(streamer, { title, description, privacyStatus, ca
       selfDeclaredMadeForKids: false,
     },
     contentDetails: {
-      enableAutoStart: false,
+      // YouTube starts it once the stream arrives: no transition call, and no
+      // wait that gives up if YouTube is slow to see the stream.
+      enableAutoStart: true,
       enableAutoStop: true,
       enableDvr: true,
       recordFromStart: true,
@@ -115,6 +133,15 @@ async function bindBroadcastToStream(streamer, broadcastId, streamId) {
   return ytFetch(token, 'POST', `/liveBroadcasts/bind?id=${encodeURIComponent(broadcastId)}&streamId=${encodeURIComponent(streamId)}&part=id`);
 }
 
+// A broadcast's life cycle status ('created', 'ready', 'testing', 'live',
+// 'complete', ...), or null when YouTube has no broadcast with that id.
+async function getBroadcastStatus(streamer, broadcastId) {
+  const token = await getFreshAccessToken(streamer);
+  if (!token) throw new Error('YouTube not connected');
+  const data = await ytFetch(token, 'GET', `/liveBroadcasts?part=status&id=${encodeURIComponent(broadcastId)}`);
+  return data?.items?.[0]?.status?.lifeCycleStatus || null;
+}
+
 async function transitionBroadcast(streamer, broadcastId, status) {
   // status = 'testing' | 'live' | 'complete'
   const token = await getFreshAccessToken(streamer);
@@ -122,28 +149,9 @@ async function transitionBroadcast(streamer, broadcastId, status) {
   return ytFetch(token, 'POST', `/liveBroadcasts/transition?broadcastStatus=${encodeURIComponent(status)}&id=${encodeURIComponent(broadcastId)}&part=id,status`);
 }
 
-// Wait for YouTube to detect the incoming RTMP feed before transitioning to live.
-// Without this wait, transition→live often fails with "redundantTransition" or
-// "errorStreamInactive" because YouTube hasn't seen bytes yet.
-async function waitForStreamActive(streamer, streamId, timeoutMs = 30_000) {
-  const token = await getFreshAccessToken(streamer);
-  if (!token) throw new Error('YouTube not connected');
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const data = await ytFetch(token, 'GET', `/liveStreams?part=status&id=${encodeURIComponent(streamId)}`);
-      const status = data.items?.[0]?.status?.streamStatus;
-      if (status === 'active') return true;
-    } catch (e) {
-      console.warn('[ytBroadcast] waitForStreamActive poll error:', e.message);
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  return false;
-}
-
-// Single-shot version of the poll above — used by the boot reconciler, which
-// must not block startup waiting on an encoder that may never appear.
+// Whether YouTube is receiving the stream right now (one check). Used by the
+// boot reconciler, which must not block startup waiting on an encoder that may
+// never appear.
 async function isStreamActive(streamer, streamId) {
   const token = await getFreshAccessToken(streamer);
   if (!token) return false;
@@ -156,10 +164,10 @@ async function isStreamActive(streamer, streamId) {
   }
 }
 
-// The go-live flow transitions a broadcast to live *after* answering MediaMTX's
-// webhook, so a deploy or crash in that window strands the broadcast in 'ready'
-// with multistream_active_broadcast_id still set. Run this on boot to finish the
-// transition if the encoder is still pushing, or close it out if it isn't.
+// A restart can leave multistream_active_broadcast_id set: a stream that ended
+// during the minute before its broadcast is completed (multistreamSessions.js),
+// or a broadcast made before it started by itself (enableAutoStart). Run this on
+// boot to start it if the encoder is still pushing, or close it out if it isn't.
 async function reconcileActiveBroadcasts() {
   let rows = [];
   try {
@@ -215,11 +223,12 @@ async function reconcileActiveBroadcasts() {
 }
 
 module.exports = {
+  sanitizeBroadcastTitle,
   getOrCreateLiveStream,
   createBroadcast,
   bindBroadcastToStream,
+  getBroadcastStatus,
   transitionBroadcast,
-  waitForStreamActive,
   isStreamActive,
   reconcileActiveBroadcasts,
 };

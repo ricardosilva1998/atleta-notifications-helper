@@ -13,13 +13,9 @@ const express = require('express');
 const config = require('../config');
 const db = require('../db');
 const twitch = require('../services/twitch');
-const ytBroadcast = require('../services/youtubeBroadcast');
-const relay = require('../services/multistreamRelay');
 const { decideRelayAuth, streamTokenFromPath, sameSecret } = require('../services/multistreamAuth');
+const { sessions, STOP_GRACE_MS } = require('../services/multistreamSessions');
 const { requireActiveStreamer } = require('../services/streamerAccess');
-
-const TWITCH_INGEST = 'rtmp://live.twitch.tv/app';
-const YOUTUBE_INGEST = 'rtmp://a.rtmp.youtube.com/live2';
 
 const dashboardRouter = express.Router();
 const apiRouter = express.Router();
@@ -69,12 +65,6 @@ dashboardRouter.post('/reset-youtube-stream', (req, res) => {
 
 // --- Routes the relay calls (MediaMTX, not the streamer) ---
 
-// The relay API settings (config.multistream) for services/multistreamRelay.js.
-function relaySettings() {
-  const { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret } = config.multistream;
-  return { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret };
-}
-
 // The secret a caller presents: "Authorization: Bearer <secret>" (the
 // webhooks' curl), or the password of HTTP Basic (MediaMTX's auth requests,
 // which carry it in the address they are sent to).
@@ -111,141 +101,35 @@ apiRouter.post('/auth', (req, res) => {
   res.status(decision.allow ? 200 : 401).json({ ok: decision.allow });
 });
 
+// The stream reached the relay (MediaMTX runOnAvailable). Answers once the
+// forwarders are set up. A relay error answers 502, so the relay's curl tries
+// again (only what is still missing is added).
 apiRouter.post('/webhook/on-ready', async (req, res) => {
   if (!authenticateRelay(req, res)) return;
-
   const token = streamTokenFromPath(req.body?.path);
   if (!token) return res.status(400).json({ error: 'not a stream path' });
 
-  const streamer = db.getStreamerByMultistreamToken(token);
-  if (!streamer) return res.status(404).json({ error: 'unknown stream key' });
-  if (!streamer.multistream_enabled) {
-    return res.json({ ok: true, forwarded: false, reason: 'disabled' });
-  }
-
-  const destinations = [];
-  const failures = [];
-  let youtubeBroadcastId = null;
-  let youtubeStreamId = null;
-
-  // --- Twitch destination ---
+  let result;
   try {
-    const twitchKey = await twitch.getStreamKey(streamer);
-    destinations.push({ name: 'twitch', url: `${TWITCH_INGEST}/${twitchKey}` });
+    result = await sessions().goLive(token);
   } catch (err) {
-    console.error('[multistream on-ready] Twitch key fetch failed:', err.message);
-    failures.push(`twitch: ${err.message}`);
+    console.error(`[multistream on-ready] ${err.message}`);
+    return res.status(502).json({ error: 'relay unavailable' });
   }
-
-  // --- YouTube destination + broadcast lifecycle ---
-  if (streamer.yt_access_token) {
-    try {
-      const { streamId, streamKey } = await ytBroadcast.getOrCreateLiveStream(streamer);
-      youtubeStreamId = streamId;
-      if (streamId !== streamer.multistream_youtube_stream_id) {
-        db.setMultistreamYoutubeStream(streamer.id, streamId, null);
-      }
-
-      let title = streamer.multistream_youtube_default_title;
-      if (!title && streamer.twitch_username) {
-        try {
-          const stream = await twitch.getStream(streamer.twitch_username);
-          if (stream && stream.title) title = stream.title;
-        } catch (e) { /* non-fatal */ }
-      }
-      if (!title) title = `Live — ${new Date().toLocaleDateString()}`;
-
-      youtubeBroadcastId = await ytBroadcast.createBroadcast(streamer, {
-        title,
-        description: '',
-        privacyStatus: streamer.multistream_youtube_privacy || 'public',
-        categoryId: streamer.multistream_youtube_category_id || '20',
-      });
-      await ytBroadcast.bindBroadcastToStream(streamer, youtubeBroadcastId, streamId);
-      db.setMultistreamActiveBroadcast(streamer.id, youtubeBroadcastId);
-      destinations.push({ name: 'youtube', url: `${YOUTUBE_INGEST}/${streamKey}` });
-    } catch (err) {
-      console.error('[multistream on-ready] YouTube broadcast setup failed:', err.message);
-      failures.push(`youtube: ${err.message}`);
-      youtubeBroadcastId = null;
-      youtubeStreamId = null;
-    }
-  }
-
-  if (destinations.length === 0) {
-    db.setMultistreamLastError(streamer.id, failures.join('; ') || 'No destinations available');
-    return res.json({ ok: true, forwarded: false, reason: 'no destinations', failed: failures });
-  }
-
-  try {
-    await relay.addForwardPaths({ ...relaySettings(), sourceToken: token, destinations });
-    db.markMultistreamStarted(streamer.id);
-  } catch (err) {
-    console.error('[multistream on-ready] addForwardPaths failed:', err.message);
-    db.setMultistreamLastError(streamer.id, `relay: ${err.message}`);
-    return res.status(500).json({ error: 'relay add failed' });
-  }
-
-  // Going live on only some destinations is the dangerous case: the streamer
-  // sees "live" and assumes both platforms. Persist it so the dashboard can say
-  // which one dropped, and clear the warning after a clean start.
-  db.setMultistreamLastError(streamer.id, failures.length ? failures.join('; ') : null);
-  if (failures.length) {
-    console.warn(
-      `[multistream on-ready] PARTIAL forward for streamer ${streamer.id} — live on ${destinations.map((d) => d.name).join(', ')} only: ${failures.join('; ')}`
-    );
-  }
-
-  // Async: wait for YouTube to detect the stream then transition to live.
-  // Don't block the webhook response — MediaMTX has a short timeout.
-  if (youtubeBroadcastId && youtubeStreamId) {
-    setImmediate(async () => {
-      try {
-        const active = await ytBroadcast.waitForStreamActive(streamer, youtubeStreamId, 60_000);
-        if (!active) {
-          console.warn(`[multistream on-ready] YouTube stream did not go active within 60s for streamer ${streamer.id}`);
-          return;
-        }
-        await ytBroadcast.transitionBroadcast(streamer, youtubeBroadcastId, 'live');
-        console.log(`[multistream on-ready] YouTube broadcast ${youtubeBroadcastId} live for streamer ${streamer.id}`);
-      } catch (err) {
-        console.error('[multistream on-ready] YouTube transition→live failed:', err.message);
-      }
-    });
-  }
-
-  res.json({ ok: true, forwarded: true, destinations: destinations.map((d) => d.name), failed: failures });
+  if (result.status === 'unknown') return res.status(404).json({ error: 'unknown stream key' });
+  if (result.status === 'off') return res.json({ ok: true, forwarded: false, reason: 'multistream is switched off' });
+  if (result.relayFailed) return res.status(502).json({ error: 'relay add failed', destinations: result.forwarding, failed: result.failed });
+  res.json({ ok: true, forwarded: result.forwarding.length > 0, destinations: result.forwarding, failed: result.failed });
 });
 
-apiRouter.post('/webhook/on-not-ready', async (req, res) => {
+// The stream left the relay (MediaMTX runOnUnavailable): its forwarders and
+// YouTube broadcast are stopped a minute later, unless it comes back first.
+apiRouter.post('/webhook/on-not-ready', (req, res) => {
   if (!authenticateRelay(req, res)) return;
-
   const token = streamTokenFromPath(req.body?.path);
   if (!token) return res.status(400).json({ error: 'not a stream path' });
-
-  const streamer = db.getStreamerByMultistreamToken(token);
-  if (!streamer) return res.status(404).json({ error: 'unknown stream key' });
-
-  try {
-    await relay.removeForwardPaths({ ...relaySettings(), sourceToken: token, destinationNames: ['twitch', 'youtube'] });
-  } catch (err) {
-    console.error('[multistream on-not-ready] removeForwardPaths failed:', err.message);
-  }
-
-  if (streamer.multistream_active_broadcast_id) {
-    const broadcastId = streamer.multistream_active_broadcast_id;
-    try {
-      const fresh = db.getStreamerByMultistreamToken(token);
-      await ytBroadcast.transitionBroadcast(fresh, broadcastId, 'complete');
-      console.log(`[multistream on-not-ready] YouTube broadcast ${broadcastId} completed for streamer ${streamer.id}`);
-    } catch (err) {
-      console.error('[multistream on-not-ready] YouTube transition→complete failed:', err.message);
-    } finally {
-      db.setMultistreamActiveBroadcast(streamer.id, null);
-    }
-  }
-
-  res.json({ ok: true });
+  sessions().streamEnded(token);
+  res.json({ ok: true, stopsInSeconds: STOP_GRACE_MS / 1000 });
 });
 
 module.exports = { dashboardRouter, apiRouter };

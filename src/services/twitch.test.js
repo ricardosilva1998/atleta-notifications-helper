@@ -607,3 +607,55 @@ describe('the pollers\' Twitch calls have a timeout', () => {
     await assert.rejects(() => tw.getSubscriberCount('42', 'stale-token'), /Subscriptions API error: 401/);
   });
 });
+
+describe('what multistream asks Twitch', () => {
+  const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+  let seen; // [{ url, opts }]
+
+  function freshTwitch() {
+    delete require.cache[require.resolve('./twitch')];
+    return require('./twitch');
+  }
+
+  function stub(body) {
+    seen = [];
+    global.fetch = async (url, opts = {}) => {
+      seen.push({ url: String(url), opts });
+      if (String(url) === TOKEN_URL) {
+        return { ok: true, status: 200, json: async () => ({ access_token: 'app-token', expires_in: 3600 }), text: async () => '' };
+      }
+      return { ok: true, status: 200, json: async () => body, text: async () => '' };
+    };
+  }
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  test('getChannelTitle reads the channel\'s title from /channels, which has it whether or not the channel is live', async () => {
+    const tw = freshTwitch();
+    stub({ data: [{ broadcaster_id: '42', title: 'Endurance night <3', game_name: 'iRacing' }] });
+    assert.equal(await tw.getChannelTitle('42'), 'Endurance night <3');
+    const helix = seen.filter((call) => call.url !== TOKEN_URL);
+    assert.equal(helix.length, 1);
+    assert.equal(helix[0].url, 'https://api.twitch.tv/helix/channels?broadcaster_id=42');
+    assert.ok(helix[0].opts.signal instanceof AbortSignal);
+  });
+
+  test('getChannelTitle: no channel or an empty title is null', async () => {
+    const tw = freshTwitch();
+    stub({ data: [] });
+    assert.equal(await tw.getChannelTitle('42'), null);
+    stub({ data: [{ title: '   ' }] });
+    assert.equal(await tw.getChannelTitle('42'), null);
+  });
+
+  test('getStreamKey has a timeout, so a slow Twitch cannot hold a go-live', async () => {
+    const tw = freshTwitch();
+    stub({ data: [{ stream_key: 'live_42_synthetic' }] });
+    const streamer = { id: 1, twitch_user_id: '42', broadcaster_access_token: 'fake-access-token', broadcaster_scopes: 'channel:read:stream_key' };
+    assert.equal(await tw.getStreamKey(streamer), 'live_42_synthetic');
+    assert.equal(seen[0].url, 'https://api.twitch.tv/helix/streams/key?broadcaster_id=42');
+    assert.ok(seen[0].opts.signal instanceof AbortSignal);
+  });
+});

@@ -194,13 +194,21 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
     const source = fs.readFileSync(DB_FILE, 'utf8');
     const readers = new Set();
     const writers = new Set();
-    for (const m of source.matchAll(/`[^`]*`|'[^'\n]*'/g)) {
+    // SQL in template literals, single or double quotes.
+    for (const m of source.matchAll(/`[^`]*`|'[^'\n]*'|"[^"\n]*"/g)) {
       const sql = m[0];
       if (!/\bstreamers\b/.test(sql)) continue;
       const owner = [...source.slice(0, m.index).matchAll(/\n(?:const (\w+) = db\.prepare\(|function (\w+)\()/g)].pop();
       const name = owner && (owner[1] || owner[2]);
       const mentionsTokens = TOKEN_COLUMNS.some((c) => sql.includes(c));
-      if (/^\W*SELECT\b/i.test(sql) && /FROM\s+streamers\b/i.test(sql) && (mentionsTokens || /SELECT\s+(\w+\.)?\*/i.test(sql))) readers.add(name);
+      // The streamers table read directly (FROM) or joined (JOIN), with or
+      // without an alias: all its columns come back with *, streamers.* or <alias>.*.
+      const table = /\b(?:FROM|JOIN)\s+streamers\b(?:\s+(?:AS\s+)?(?!(?:WHERE|ON|JOIN|LEFT|INNER|CROSS|ORDER|GROUP|LIMIT|USING)\b)(\w+))?/i.exec(sql);
+      if (/^\W*SELECT\b/i.test(sql) && table) {
+        const alias = table[1];
+        const allColumns = /\bSELECT\s+(?:DISTINCT\s+)?\*/i.test(sql) || /\bstreamers\.\*/i.test(sql) || (alias && new RegExp(`\\b${alias}\\.\\*`).test(sql));
+        if (mentionsTokens || allColumns) readers.add(name);
+      }
       if (/RETURNING\s+\*/i.test(sql)) readers.add(name);
       if (/^\W*(UPDATE|INSERT)\b/i.test(sql) && mentionsTokens) writers.add(name);
     }
@@ -209,7 +217,51 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
       '_upsertStreamerDiscord', 'getChatbotEnabledStreamers', 'getOverlayEnabledStreamers', 'getStreamerByMultistreamToken',
       'getStreamerByOverlayToken', 'getStreamerByUsername', 'getStreamersWithActiveMultistreamBroadcast', 'getYoutubeChatbotEnabledStreamers',
     ].sort());
-    assert.deepEqual([...writers].sort(), ['_updateStreamerBroadcasterTokens', 'updateBotTokens', 'updateSpotifyTokens', 'updateStreamerYoutubeTokens'].sort());
+    assert.deepEqual([...writers].sort(), ['_updateStreamerBroadcasterTokens', 'updateBotTokens', 'updateSpotifyTokens', 'updateStreamerYoutubeAccessToken', 'updateStreamerYoutubeTokens'].sort());
+  });
+
+  test('the check above sees joined and double-quoted queries too', () => {
+    // What it would catch: a JOIN that returns the streamer's columns, and SQL in double quotes.
+    const flagged = (sql) => /\b(?:FROM|JOIN)\s+streamers\b(?:\s+(?:AS\s+)?(?!(?:WHERE|ON|JOIN|LEFT|INNER|CROSS|ORDER|GROUP|LIMIT|USING)\b)(\w+))?/i.exec(sql);
+    const joined = 'SELECT g.guild_id, s.* FROM guilds g JOIN streamers s ON g.streamer_id = s.id';
+    assert.equal(flagged(joined)[1], 's');
+    assert.equal(flagged('SELECT guilds.*, streamers.twitch_username FROM guilds JOIN streamers ON guilds.streamer_id = streamers.id')[1], undefined);
+    assert.ok('x = db.prepare("SELECT yt_access_token FROM streamers WHERE id = ?")'.match(/"[^"\n]*"/)[0].includes('yt_access_token'));
+  });
+
+  test('no column whitelist of a dynamic UPDATE names a token column, except OVERLAY_COLUMNS (whose writer seals it)', () => {
+    // A dynamic UPDATE takes its column names from a Set or an object of
+    // allowed names; a token column there would be written without sealToken.
+    const source = fs.readFileSync(DB_FILE, 'utf8');
+    const lists = [
+      ...source.matchAll(/(?:const|let)\s+(\w+)\s*=\s*new Set\(\[([\s\S]*?)\]\)/g),
+      ...source.matchAll(/(?:const|let)\s+(\w+)\s*=\s*\{([^{}]*)\}/g),
+    ].map((m) => ({ name: m[1], body: m[2] }));
+    for (const known of ['OVERLAY_COLUMNS', 'CHATBOT_COLUMNS', 'YT_CHATBOT_COLUMNS', 'BUILTIN_CMD_COLUMNS', 'MODERATION_COLUMNS', 'allowed']) {
+      assert.ok(lists.some(({ name }) => name === known), `the scan finds ${known}`);
+    }
+    const naming = lists.filter(({ body }) => TOKEN_COLUMNS.some((c) => new RegExp(`['"\`]${c}['"\`]`).test(body)));
+    assert.deepEqual(naming.map(({ name }) => name), ['OVERLAY_COLUMNS']);
+  });
+
+  test('a renewed YouTube token is stored encrypted, and the channel name is left as it was', () => {
+    const file = preparedFile();
+    let id;
+    boot(file, {
+      key: KEY,
+      inspect: (db) => {
+        id = insertStreamer(db.db);
+        db.updateStreamerYoutubeTokens(id, 'yt-first-access', 'yt-first-refresh', Date.now() + 1000, 'Synthetic Channel');
+        db.updateStreamerYoutubeAccessToken(id, 'yt-renewed-access', 'yt-renewed-refresh', Date.now() + 3_600_000);
+        const streamer = db.getStreamerById(id);
+        assert.equal(streamer.yt_access_token, 'yt-renewed-access');
+        assert.equal(streamer.yt_refresh_token, 'yt-renewed-refresh');
+        assert.equal(streamer.yt_channel_name, 'Synthetic Channel');
+      },
+    });
+    const stored = rawTokens(file, id);
+    assert.equal(secretBox.open(stored.yt_access_token, KEY), 'yt-renewed-access');
+    assert.equal(secretBox.open(stored.yt_refresh_token, KEY), 'yt-renewed-refresh');
   });
 
   test('null and an empty value are stored as they are', () => {

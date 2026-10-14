@@ -389,13 +389,16 @@ async function refreshStreamerYoutubeToken(streamer, options) {
   if (!res.ok) return null;
   const data = await res.json();
 
-  db.updateStreamerYoutubeTokens(
-    streamer.id,
-    data.access_token,
-    data.refresh_token || streamer.yt_refresh_token,
-    Date.now() + data.expires_in * 1000 - 60_000,
-    streamer.yt_channel_name
-  );
+  const refreshToken = data.refresh_token || streamer.yt_refresh_token;
+  const expiresAt = Date.now() + data.expires_in * 1000 - 60_000;
+  // The tokens only: the channel name is not this call's to write (rows read
+  // without it used to wipe it).
+  db.updateStreamerYoutubeAccessToken(streamer.id, data.access_token, refreshToken, expiresAt);
+  // The caller goes on using this row: with the new token in it, its next
+  // YouTube call does not renew the token again.
+  streamer.yt_access_token = data.access_token;
+  streamer.yt_refresh_token = refreshToken;
+  streamer.yt_token_expires_at = expiresAt;
 
   return data.access_token;
 }

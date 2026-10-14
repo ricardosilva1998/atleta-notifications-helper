@@ -142,3 +142,43 @@ describe('logging in to the relay API (HTTP Basic)', () => {
     assert.equal(calls[1].opts.signal, signal);
   });
 });
+
+describe('the minute check\'s lists', () => {
+  const KEY_A = 'KeyAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const KEY_B = 'Key_B-with_underscores_and-dashes';
+
+  test('the live streams: live/<key> paths with a stream coming in, from every page', async () => {
+    const pages = {
+      0: { pageCount: 2, items: [{ name: `live/${KEY_A}`, available: true }, { name: `live/${KEY_B}`, available: false }, { name: `fwd_${KEY_A}_twitch`, available: true }] },
+      1: { pageCount: 2, items: [{ name: `live/${KEY_B}`, ready: true }, { name: 'live/short', available: true }, { name: 'other/path', available: true }] },
+    };
+    answer = (url) => ({ ok: true, status: 200, json: async () => pages[new URL(url).searchParams.get('page')] });
+    assert.deepEqual(await relay.listLiveStreams(SETTINGS), new Set([KEY_A, KEY_B]));
+    assert.deepEqual(calls.map((c) => c.url), [
+      'http://relay.example.test:9997/v3/paths/list?itemsPerPage=500&page=0',
+      'http://relay.example.test:9997/v3/paths/list?itemsPerPage=500&page=1',
+    ]);
+    for (const c of calls) assert.equal(c.opts.headers.Authorization, basic('admin', 'tok'));
+  });
+
+  test('the forwarders: each key with its destinations, read from the configured paths', async () => {
+    answer = () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ pageCount: 1, items: [
+        { name: `fwd_${KEY_A}_twitch` }, { name: `fwd_${KEY_A}_youtube` }, { name: `fwd_${KEY_B}_youtube` },
+        { name: '~^live/[A-Za-z0-9_-]{16,128}$' }, { name: `fwd_${KEY_A}_kick` }, { name: 'fwd_short_twitch' },
+      ] }),
+    });
+    const forwarders = await relay.listForwarders(SETTINGS);
+    assert.deepEqual([...forwarders.keys()].sort(), [KEY_A, KEY_B].sort());
+    assert.deepEqual(forwarders.get(KEY_A), new Set(['twitch', 'youtube']));
+    assert.deepEqual(forwarders.get(KEY_B), new Set(['youtube']));
+    assert.equal(calls[0].url, 'http://relay.example.test:9997/v3/config/paths/list?itemsPerPage=500&page=0');
+  });
+
+  test('a failed list throws with the status only (its body could name stream keys)', async () => {
+    answer = () => ({ ok: false, status: 500, text: async () => `path fwd_${KEY_A}_twitch is broken` });
+    await assert.rejects(relay.listForwarders(SETTINGS), (err) => /failed: 500$/.test(err.message) && !err.message.includes(KEY_A));
+  });
+});

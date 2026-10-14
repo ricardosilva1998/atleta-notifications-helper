@@ -37,20 +37,27 @@ const calls = []; // [name, ...args] of every stubbed outbound call
 const record = (name, answer) => async (...args) => { calls.push([name, ...args]); return typeof answer === 'function' ? answer(...args) : answer; };
 const twitchStub = {
   getStreamKey: record('twitch.getStreamKey', 'live_000000_synthetic'),
-  getStream: record('twitch.getStream', null),
   hasStreamKeyScope: () => true,
-};
-const youtubeBroadcastStub = {
-  getOrCreateLiveStream: record('yt.getOrCreateLiveStream', { streamId: 'yt-stream-1', streamKey: 'abcd-efgh-ijkl-mnop' }),
-  createBroadcast: record('yt.createBroadcast', 'yt-broadcast-1'),
-  bindBroadcastToStream: record('yt.bind', null),
-  transitionBroadcast: record('yt.transition', null),
-  waitForStreamActive: record('yt.waitForStreamActive', false),
 };
 const relayStub = {
   addForwardPaths: record('relay.add', ['twitch']),
   removeForwardPaths: record('relay.remove', undefined),
   getPathStats: record('relay.stats', null),
+  isLive: (stats) => !!stats && stats.available === true,
+};
+// The session lifecycle (services/multistreamSessions.js) has its own tests;
+// here it answers what each test sets.
+const session = { goLive: { status: 'ok', forwarding: ['twitch', 'youtube'], added: ['twitch', 'youtube'], failed: [], relayFailed: false } };
+const sessionsStub = {
+  STOP_GRACE_MS: 60_000,
+  sessions: () => ({
+    goLive: async (key) => {
+      calls.push(['sessions.goLive', key]);
+      if (session.goLive instanceof Error) throw session.goLive;
+      return session.goLive;
+    },
+    streamEnded: (key) => { calls.push(['sessions.streamEnded', key]); },
+  }),
 };
 
 // ── App ──────────────────────────────────────────────────────────────────
@@ -94,8 +101,8 @@ before(async () => {
     }
     if (from === ROUTES_FILE) {
       if (request === '../services/twitch') return twitchStub;
-      if (request === '../services/youtubeBroadcast') return youtubeBroadcastStub;
       if (request === '../services/multistreamRelay') return relayStub;
+      if (request === '../services/multistreamSessions') return sessionsStub;
     }
     return saved.load.call(this, request, parent, isMain);
   };
@@ -305,5 +312,56 @@ describe('POST /api/multistream/auth (MediaMTX authMethod: http)', () => {
     const notAKey = await hook('on-ready', `fwd_${KEY}_twitch`);
     assert.equal(notAKey.status, 400);
     assert.deepEqual(calls, []);
+  });
+});
+
+// ── The relay's webhooks (MS4, MS5) ─────────────────────────────────────
+
+describe('the webhooks', () => {
+  beforeEach(() => relayConfigured(true));
+  afterEach(() => {
+    session.goLive = { status: 'ok', forwarding: ['twitch', 'youtube'], added: ['twitch', 'youtube'], failed: [], relayFailed: false };
+  });
+  const KEY = 'tok-webhook-key-0000000000';
+
+  test('on-ready sets the stream up and says where it goes', async () => {
+    const res = await hook('on-ready', `live/${KEY}`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true, forwarded: true, destinations: ['twitch', 'youtube'], failed: [] });
+    assert.deepEqual(calls, [['sessions.goLive', KEY]]);
+  });
+
+  test('on-ready: an unknown key (or a disabled account) is 404, multistream switched off is not forwarded', async () => {
+    session.goLive = { status: 'unknown' };
+    assert.equal((await hook('on-ready', `live/${KEY}`)).status, 404);
+    session.goLive = { status: 'off' };
+    const off = await hook('on-ready', `live/${KEY}`);
+    assert.equal(off.status, 200);
+    assert.equal(off.json().forwarded, false);
+  });
+
+  test('on-ready answers 502 when the relay failed, so the relay\'s curl tries again', async () => {
+    session.goLive = { status: 'ok', forwarding: ['twitch'], added: ['twitch'], failed: ['relay: Relay add (youtube) failed: 500'], relayFailed: true };
+    const partial = await hook('on-ready', `live/${KEY}`);
+    assert.equal(partial.status, 502);
+    assert.deepEqual(partial.json().destinations, ['twitch']);
+    session.goLive = new Error('fetch failed');
+    const down = await hook('on-ready', `live/${KEY}`);
+    assert.equal(down.status, 502);
+    assert.ok(logs.some(([level, line]) => level === 'error' && /\[multistream on-ready\] fetch failed/.test(line)));
+  });
+
+  test('a platform that failed (not the relay) is reported, and not retried by the relay', async () => {
+    session.goLive = { status: 'ok', forwarding: ['twitch'], added: ['twitch'], failed: ['youtube: YouTube not connected'], relayFailed: false };
+    const res = await hook('on-ready', `live/${KEY}`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json().failed, ['youtube: YouTube not connected']);
+  });
+
+  test('on-not-ready starts the minute\'s wait before the stop', async () => {
+    const res = await hook('on-not-ready', `live/${KEY}`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true, stopsInSeconds: 60 });
+    assert.deepEqual(calls, [['sessions.streamEnded', KEY]]);
   });
 });

@@ -123,6 +123,14 @@ async function getStreams(logins, options) {
   return streams;
 }
 
+// The title the channel is set to (Helix GET /channels), or null. Unlike a
+// stream's title it is there whether or not the channel is live.
+async function getChannelTitle(broadcasterId, options) {
+  const data = await apiCall(`/channels?broadcaster_id=${encodeURIComponent(broadcasterId)}`, options);
+  const title = data.data?.[0]?.title;
+  return typeof title === 'string' && title.trim() ? title : null;
+}
+
 async function getUserId(username, options) {
   const data = await apiCall(`/users?login=${encodeURIComponent(username)}`, options);
   return data.data?.[0]?.id || null;
@@ -427,7 +435,7 @@ async function getStreamKey(streamer) {
 
   const doFetch = async (bearer) => fetch(
     `https://api.twitch.tv/helix/streams/key?broadcaster_id=${encodeURIComponent(streamer.twitch_user_id)}`,
-    { headers: { Authorization: `Bearer ${bearer}`, 'Client-Id': config.twitch.clientId } }
+    { headers: { Authorization: `Bearer ${bearer}`, 'Client-Id': config.twitch.clientId }, signal: AbortSignal.timeout(HELIX_TIMEOUT_MS) }
   );
 
   let res = await doFetch(token);
@@ -445,4 +453,4 @@ async function getStreamKey(streamer) {
   return key;
 }
 
-module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, getStreamKey, needsBroadcasterReauth };
+module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, getStreamKey, needsBroadcasterReauth };
