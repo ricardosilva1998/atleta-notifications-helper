@@ -246,8 +246,20 @@ app.use((req, res, next) => {
 app.use(csrfProtection({ appUrl: config.app.url }));
 
 // Routes
+// The home page: the streamer tools' features (views/home.ejs). Racing has its
+// own front door at /racing and is not named here: the header leaves out its
+// menu (hideRacingNav) and the Racing account's parts (racingUser: null), so a
+// visitor logged in only to Racing sees the page as any visitor does.
+// views/login.ejs, the old Streamer/Racing chooser, is kept but not used.
 app.get('/', (req, res) => {
-  res.render('login', { streamer: req.streamer || null, racingUser: req.racingUser || null });
+  res.render('home', {
+    streamer: req.streamer || null,
+    racingUser: null,
+    hideRacingNav: true,
+    // YouTube go-live posts need the YouTube Data API key (pollers/manager.js
+    // does nothing without it), so the page offers them only when it is set.
+    youtubeLive: !!(config.features.youtube && config.youtube && config.youtube.apiKey),
+  });
 });
 
 app.get('/tutorial', (req, res) => {
@@ -288,9 +300,10 @@ app.use('/racing/teams', (req, res, next) => {
 app.get('/racing/team', (req, res) => res.redirect('/racing/teams'));
 app.use('/racing', racingRoutes);
 
+// The old Streamer landing page: its place is the home page now
+// (views/streamer-landing.ejs is kept but not used).
 app.get('/streamer', (req, res) => {
-  if (req.streamer) return res.redirect('/dashboard');
-  res.render('streamer-landing', { streamer: null, racingUser: null });
+  res.redirect(req.streamer ? '/dashboard' : '/');
 });
 // Bridge feature-detect endpoint. The Bridge calls this without a session
 // cookie (raw https.get), so it needs no login. It answers only whether the

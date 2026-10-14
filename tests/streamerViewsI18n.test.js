@@ -31,6 +31,8 @@ const PAGES = [
   'account-disabled', // what a streamer is shown once an admin has disabled the account
   // linked from the site's menus, or the pages a streamer meets before logging in
   'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
+  // the home page: the streamer tools' features
+  'home',
 ];
 
 // Words that are not the page's own wording and may stay in every page: product names and units.
@@ -161,6 +163,12 @@ const PAGE_LOCALS = {
   donate: [{ streamer }],
   'streamer-landing': [{ streamer: null }],
   login: [{ streamer: null }],
+  // a visitor, a streamer (YouTube go-live posts on), and YouTube switched off
+  home: [
+    { streamer: null, racingUser: null, hideRacingNav: true, youtubeLive: false, features: { youtube: true } },
+    { streamer, racingUser: null, hideRacingNav: true, youtubeLive: true, features: { youtube: true } },
+    { streamer: null, racingUser: null, hideRacingNav: true, youtubeLive: false, features: { youtube: false } },
+  ],
   'guild-stats': [
     { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: '7d', stats: statsPage, chartData: series, twitchCount: 1, youtubeCount: 2 },
     { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: 'lifetime', stats: statsPage, chartData: [], twitchCount: 0, youtubeCount: 1 },
