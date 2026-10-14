@@ -206,3 +206,54 @@ describe('the builder shows an object where it will really sit', () => {
     assert.ok(!builder.includes("d.border_radius || 12"), 'no falsy fallback for the sponsor preview radius');
   });
 });
+
+describe('the legacy card stylesheet carries no position (M7)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.css'), 'utf8');
+  const rule = (selector) => {
+    const m = new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
+    assert.ok(m, `rule ${selector} exists`);
+    return m[1];
+  };
+  const keyframes = (name) => {
+    const m = new RegExp(`@keyframes ${name}\\s*\\{([\\s\\S]*?\\n\\})`).exec(css);
+    assert.ok(m, `@keyframes ${name} exists`);
+    return m[1];
+  };
+
+  test('a card fills its slot and has no top, left or transform of its own', () => {
+    const card = rule('.alert-card');
+    assert.match(card, /position:\s*relative/);
+    assert.match(card, /width:\s*100%/);
+    for (const property of ['top', 'left', 'right', 'bottom', 'transform']) {
+      assert.ok(!new RegExp(`(?:^|[\\s;])${property}\\s*:`).test(card), `no ${property} on the card`);
+    }
+  });
+
+  test('no entrance keyframe carries the old baked-in -50% shift that moved a card off any position but top-centre', () => {
+    for (const name of ['slideDown', 'slideUp', 'slideLeft', 'slideRight', 'zoomIn', 'fadeIn', 'slideOutUp']) {
+      assert.ok(!keyframes(name).includes('-50%'), name);
+    }
+  });
+
+  test('every entrance the builder offers ends where it started from (no offset left at the end)', () => {
+    for (const name of ['slideDown', 'slideUp', 'slideLeft', 'slideRight', 'zoomIn']) {
+      const to = /to\s*\{([^}]*)\}/.exec(keyframes(name))[1];
+      assert.match(to, /transform:\s*(?:translate[XY]\(0\)|scale\(1\))/, name);
+      assert.match(to, /opacity:\s*1/, name);
+    }
+  });
+
+  test('Slide Up moves in from below (it used to be an exit, and left the card invisible)', () => {
+    const body = keyframes('slideUp');
+    assert.match(/from\s*\{([^}]*)\}/.exec(body)[1], /translateY\(120%\)/);
+    assert.match(/to\s*\{([^}]*)\}/.exec(body)[1], /translateY\(0\)/);
+    assert.match(rule('.alert-card.dismissing'), /animation:\s*slideOutUp/, 'the exit has its own name');
+  });
+
+  test('the entrances the builder offers are the ones the stylesheet defines', () => {
+    const { FIELD_SPECS } = require('../src/services/overlayDesign');
+    for (const name of FIELD_SPECS.entrance_animation.values) assert.ok(keyframes(name), name);
+  });
+});
