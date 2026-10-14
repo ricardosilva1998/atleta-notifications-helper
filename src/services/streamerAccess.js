@@ -27,8 +27,11 @@ function requireActiveStreamer(req, res, next) {
   return res.redirect('/auth/login');
 }
 
-// Event-bus channel that ends a streamer's open OBS streams when the account
-// is disabled (see accountLifecycle.js and the SSE routes in routes/overlay.js).
+// Event-bus channel that ends a streamer's open OBS streams: the SSE routes in
+// routes/overlay.js listen on it and end their response. It is emitted when the
+// account is disabled or removed (accountLifecycle.js) and when the streamer
+// regenerates the overlay link (POST /overlay/generate-token in routes/dashboard.js),
+// because a source that is open on the old link must not carry on.
 function accountDisabledChannel(streamerId) {
   return `overlay-disabled:${streamerId}`;
 }

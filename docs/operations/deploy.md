@@ -51,15 +51,20 @@ are not detected and the YouTube chat bot never starts (uploads are still announ
 `WEEKLY_DIGEST_INTERVAL` unset: an hourly value gives the weekly digest one try per week instead of
 four. `DISCORD_DISABLED` must never be set.
 
-No longer read by the code, remove them when convenient: `GITHUB_TOKEN`, `GITHUB_REPO`,
-`MULTISTREAM_KEY_SECRET`, `SESSION_SECRET`, `ADMIN_PASSWORD`.
+Not read by any code any more, remove them when convenient: `GITHUB_TOKEN`, `GITHUB_REPO`,
+`MULTISTREAM_KEY_SECRET`. `src/config.js` still reads `SESSION_SECRET` and `ADMIN_PASSWORD`, but nothing
+uses them (sessions are random ids kept as hashes, and admin is decided by Discord id), so they can stay
+or go.
 
 ## Rolling out `TOKEN_ENCRYPTION_KEY` (two steps)
 
 1. **Deploy the release without the key.** Session ids are stored as hashes on the first boot
    (cookies stay valid, nobody is logged out); tokens stay as they are; one warning says the key is
    not set. Check the boot log (below) and that logging in, the dashboard and an overlay work. Going
-   back at this point costs one re-login for everybody (older code cannot match hashed ids) and nothing else.
+   back at this point costs one re-login for everybody (older code cannot match hashed ids), and the
+   first boot's other moves stay: the four shared sounds are in `data/sounds/13/` (older code looks in
+   the folder root, so streamer 13's custom sounds fall back to the built-in ones), and the clean-up of
+   orphaned watchers deleted rows for good (only a database copy brings them back).
 2. **Take a fresh backup** (`backup-restore.md`). Then generate the key with `openssl rand -hex 32`,
    keep a copy in a password manager, and set `TOKEN_ENCRYPTION_KEY`. The variable change redeploys
    the same code; its boot encrypts every stored token. Expect `[DB] Encrypted N stored token(s) with
@@ -114,8 +119,8 @@ Before:
 2. The admin's `streamers.discord_user_id` is one of the admin ids (`src/adminAccess.js`); if not, set
    `ADMIN_DISCORD_IDS`.
 3. A fresh database copy exists (the orphan clean-up and the new "Remove" delete rows for good).
-4. Admin → Users: an account that is switched off now really loses the dashboard, its overlay links and
-   its sessions. Switch on the ones that should work.
+4. Admin → Users: a switched-off account loses the dashboard, its overlay links and its sessions; switch
+   on the ones that should work.
 5. The five main alerts take their saved position and width again (they were ignored). To see who has
    one: `SELECT streamer_id, event_type, card_position, card_custom_x, card_custom_y, card_width FROM
    overlay_designs WHERE event_type IN ('follow','subscription','bits','donation','raid') AND

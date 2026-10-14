@@ -14,7 +14,7 @@ Streamer sets OBS to server `rtmp://ingest.atletanotifications.com/live` with th
 
 ## Who may publish (`POST /api/multistream/auth`)
 
-MediaMTX runs with `authMethod: http` and asks the website before every publish, read and control-API login (`services/multistreamAuth.js`): publish only to `live/<token>` of an enabled account with multistream on; read only from the relay itself (its forwarders); the control API only with `MEDIAMTX_API_USER` / `MEDIAMTX_API_TOKEN`; everything else refused. Every `/api/multistream` request must carry `MEDIAMTX_WEBHOOK_SECRET` (Bearer, or the Basic password of the address MediaMTX posts to). Those requests are not counted by the rate limits: the relay asks from one address, and anyone can make it ask.
+MediaMTX runs with `authMethod: http` and asks the website before every publish, read and control-API login (`services/multistreamAuth.js`): publish only to `live/<token>` of an enabled account with multistream on; read only from the relay itself (its forwarders); the control API only with `MEDIAMTX_API_USER` / `MEDIAMTX_API_TOKEN`; everything else refused. Every `/api/multistream` request must carry `MEDIAMTX_WEBHOOK_SECRET` (Bearer, or the Basic password of the address MediaMTX posts to). A request that carries the secret is not counted by the rate limits (the relay asks from one address, once per publish, read and control-API login, so a per-address limit could end up refusing its own calls); one without it is answered 401 and counted like any other.
 
 ## Relay Flow (`services/multistreamSessions.js`, one operation at a time per stream key)
 
