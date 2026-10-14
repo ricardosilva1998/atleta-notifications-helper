@@ -4133,6 +4133,12 @@ function logOverlayEvent(streamerId, eventType, username, data) {
   _stmtLogOverlayEvent.run(streamerId, eventType, username, data ? JSON.stringify(data) : null);
 }
 
+// The 7-day tiles of the Twitch tab. One gift event is stored per gift (its
+// recipients are not logged one by one), with the size of the gift as `amount`
+// in its JSON data, so Gift Subs adds those up. A row whose data is missing,
+// is not JSON or has no usable amount counts as one gift, which is what each
+// gift counted as before. Gift amounts are not added to Subs: rows logged before
+// recipients were left out hold a subscription row for each of them.
 function getOverlayStats7d(streamerId) {
   return db.prepare(`
     SELECT
@@ -4141,7 +4147,9 @@ function getOverlayStats7d(streamerId) {
       COALESCE(SUM(CASE WHEN event_type = 'bits' THEN 1 ELSE 0 END), 0) AS bits_events,
       COALESCE(SUM(CASE WHEN event_type = 'donation' THEN 1 ELSE 0 END), 0) AS donations,
       COALESCE(SUM(CASE WHEN event_type = 'raid' THEN 1 ELSE 0 END), 0) AS raids,
-      COALESCE(SUM(CASE WHEN event_type = 'giftsub' THEN 1 ELSE 0 END), 0) AS giftsubs,
+      COALESCE(SUM(CASE WHEN event_type = 'giftsub' THEN
+        CASE WHEN json_valid(data) THEN MAX(1, COALESCE(CAST(json_extract(data, '$.amount') AS INTEGER), 1)) ELSE 1 END
+      ELSE 0 END), 0) AS giftsubs,
       COUNT(*) AS total
     FROM overlay_events
     WHERE streamer_id = ? AND created_at >= datetime('now', '-7 days')

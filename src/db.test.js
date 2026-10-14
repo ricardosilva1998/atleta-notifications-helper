@@ -408,3 +408,60 @@ describe('channel_state: what the live poller remembers about a broadcast', () =
     assert.equal(state.last_stream_id, '40000000002', 'kept: it is how the same broadcast is recognised if it comes back');
   });
 });
+
+describe('getOverlayStats7d: the dashboard\'s 7-day tiles', () => {
+  // What eventsub.js stores for a gift: the whole normalized event.
+  const giftData = (amount) => ({ username: 'Gifter', tier: '1', amount, message: `Gifted ${amount} sub${amount > 1 ? 's' : ''}!` });
+
+  // A row as stored: data is the JSON text (or anything a column can hold).
+  function addEvent(streamerId, type, data, createdAt = null) {
+    db.db.prepare("INSERT INTO overlay_events (streamer_id, event_type, username, data, created_at) VALUES (?, ?, 'Someone', ?, COALESCE(?, datetime('now')))")
+      .run(streamerId, type, data === null || typeof data === 'string' ? data : JSON.stringify(data), createdAt);
+  }
+
+  test('a gift counts every sub in it, not one per gift event', () => {
+    addEvent(streamerA, 'giftsub', giftData(50));
+    addEvent(streamerA, 'giftsub', giftData(1));
+    addEvent(streamerA, 'giftsub', null); // a row with nothing stored about its size
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 52);
+  });
+
+  test('a row whose data cannot be read counts as one gift, and never breaks the query', () => {
+    for (const data of [null, '', 'not json at all', '{"truncated":', '5', '"text"', '[1,2]', '{"username":"NoAmount"}', '{"amount":null}']) {
+      addEvent(streamerA, 'giftsub', data);
+    }
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 9);
+  });
+
+  test('an amount that is zero, negative or not a number still counts as one gift', () => {
+    for (const amount of [0, -4, 'abc', '']) addEvent(streamerA, 'giftsub', { amount });
+    addEvent(streamerA, 'giftsub', { amount: '7' }); // a number stored as text is read as a number
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 4 + 7);
+  });
+
+  test('the other tiles still count events, and the gift amounts are not added to Subs', () => {
+    addEvent(streamerA, 'subscription', { username: 'NewSub', tier: '1', months: 1 });
+    addEvent(streamerA, 'subscription', { username: 'Resub', tier: '1', months: 6 });
+    addEvent(streamerA, 'giftsub', giftData(50));
+    addEvent(streamerA, 'follow', { username: 'Follower' });
+    addEvent(streamerA, 'bits', { username: 'Cheerer', amount: 500 });
+    addEvent(streamerA, 'donation', { amount: 25, currency: 'USD' });
+    addEvent(streamerA, 'raid', { username: 'Raider', viewers: 42 });
+    assert.deepEqual(db.getOverlayStats7d(streamerA), {
+      follows: 1, subs: 2, bits_events: 1, donations: 1, raids: 1, giftsubs: 50, total: 7,
+    });
+  });
+
+  test('only this streamer\'s last seven days are counted', () => {
+    const daysAgo = (days) => new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    addEvent(streamerA, 'giftsub', giftData(10), daysAgo(6));
+    addEvent(streamerA, 'giftsub', giftData(20), daysAgo(8));
+    addEvent(streamerB, 'giftsub', giftData(30));
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 10);
+    assert.equal(db.getOverlayStats7d(streamerB).giftsubs, 30);
+  });
+
+  test('a streamer with no events has all zeros', () => {
+    assert.deepEqual(db.getOverlayStats7d(streamerA), { follows: 0, subs: 0, bits_events: 0, donations: 0, raids: 0, giftsubs: 0, total: 0 });
+  });
+});
