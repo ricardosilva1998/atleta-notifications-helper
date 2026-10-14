@@ -1,0 +1,75 @@
+name: Server CI
+
+# Checks the web server (everything except the Atleta Racing desktop app in
+# bridge/, which has its own workflow): syntax, the unit tests, and two boots in
+# a row on a fresh database. No secrets: Discord is switched off with
+# DISCORD_DISABLED=1 and the Twitch credentials are dummies.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'bridge/**'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'bridge/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Unit tests
+        run: node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"
+
+      - name: Boot twice on a fresh database
+        env:
+          DISCORD_DISABLED: '1'
+          TWITCH_CLIENT_ID: ci-dummy
+          TWITCH_CLIENT_SECRET: ci-dummy
+          PORT: '3000'
+        run: |
+          test ! -e data/bot.db # a fresh checkout has no database
+          for run in 1 2; do
+            node src/index.js > "boot-$run.log" 2>&1 &
+            pid=$!
+            healthy=
+            for attempt in $(seq 1 60); do
+              if curl -fsS http://127.0.0.1:3000/health | grep -q '"ok":true'; then healthy=1; break; fi
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if [ -z "$healthy" ]; then
+              echo "Boot $run: /health never answered 200"
+              cat "boot-$run.log"
+              kill "$pid" 2>/dev/null || true
+              exit 1
+            fi
+            kill -TERM "$pid"
+            status=0
+            wait "$pid" || status=$?
+            cat "boot-$run.log"
+            if [ "$status" -ne 0 ]; then
+              echo "Boot $run: exited with $status after SIGTERM (a clean shutdown exits 0)"
+              exit 1
+            fi
+            echo "Boot $run: healthy, then stopped cleanly"
+          done
