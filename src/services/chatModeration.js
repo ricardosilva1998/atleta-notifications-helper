@@ -292,6 +292,10 @@ function getAction(channel, username, streamer) {
 }
 
 // ─── Helix API helpers for moderation ─────────────────────────────────────────
+// Every request to Twitch below gives up after this long, so a Twitch that does
+// not answer cannot hold a chat message's moderation (or a !slow) for good.
+const HELIX_TIMEOUT_MS = 10_000;
+
 let botUserId = null;
 let botClientId = null;
 
@@ -301,7 +305,8 @@ async function getBotUserId() {
   try {
     // Use validate endpoint — works regardless of Client-ID
     const res = await fetch('https://id.twitch.tv/oauth2/validate', {
-      headers: { 'Authorization': `OAuth ${token}` }
+      headers: { 'Authorization': `OAuth ${token}` },
+      signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
     });
     const data = await res.json();
     if (data.user_id) {
@@ -326,7 +331,8 @@ async function helixDeleteMessage(broadcasterId, messageId) {
   console.log(`[Mod] Helix DELETE message_id=${messageId} broadcaster_id=${broadcasterId} moderator_id=${modId} client_id=${clientId}`);
   const res = await fetch(url, {
     method: 'DELETE',
-    headers: { 'Client-ID': clientId, 'Authorization': `Bearer ${token}` }
+    headers: { 'Client-ID': clientId, 'Authorization': `Bearer ${token}` },
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -346,7 +352,8 @@ async function helixBanUser(broadcasterId, userId, duration, reason) {
   const res = await fetch(`https://api.twitch.tv/helix/moderation/bans?broadcaster_id=${broadcasterId}&moderator_id=${modId}`, {
     method: 'POST',
     headers: { 'Client-ID': clientId, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -357,8 +364,6 @@ async function helixBanUser(broadcasterId, userId, duration, reason) {
 // Twitch removed the IRC /slow and /followers commands in 2023, so chat settings
 // go through Helix. That needs the moderator:manage:chat_settings scope on
 // BOT_TWITCH_TOKEN and the bot to be a moderator in the channel.
-const HELIX_TIMEOUT_MS = 10_000;
-
 // Returns true only when Twitch accepted the change (2xx).
 async function updateChatSettings(channel, streamer, settings) {
   const broadcasterId = await resolveBroadcasterId(channel, streamer);
