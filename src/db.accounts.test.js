@@ -147,13 +147,13 @@ describe('disabling an account', () => {
   });
 });
 
-describe('what the managers start at boot, and what the overlay links serve', () => {
+describe('what the managers start at boot, and what the overlay links and stream keys serve', () => {
   let a;
   let b;
   beforeEach(() => {
     sql.exec('DELETE FROM streamers');
-    a = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok-a', chatbot_enabled: 1, twitch_username: 'streamer_a', overlay_token: 'tok-overlay-a' });
-    b = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok-b', chatbot_enabled: 1, twitch_username: 'streamer_b', overlay_token: 'tok-overlay-b' });
+    a = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok-a', chatbot_enabled: 1, twitch_username: 'streamer_a', overlay_token: 'tok-overlay-a', multistream_token: 'tok-multistream-a' });
+    b = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok-b', chatbot_enabled: 1, twitch_username: 'streamer_b', overlay_token: 'tok-overlay-b', multistream_token: 'tok-multistream-b' });
   });
 
   const ids = (rows) => rows.map((r) => r.id).sort((x, y) => x - y);
@@ -162,6 +162,7 @@ describe('what the managers start at boot, and what the overlay links serve', ()
     assert.deepEqual(ids(db.getOverlayEnabledStreamers()), [a, b]);
     assert.deepEqual(ids(db.getChatbotEnabledStreamers()), [a, b]);
     assert.equal(db.getStreamerByOverlayToken('tok-overlay-a').id, a);
+    assert.equal(db.getStreamerByMultistreamToken('tok-multistream-a').id, a);
   });
 
   test('a disabled account is skipped by the overlay and chatbot start-up lists', () => {
@@ -177,18 +178,27 @@ describe('what the managers start at boot, and what the overlay links serve', ()
     assert.equal(db.getStreamerByOverlayToken('nope'), undefined);
   });
 
+  test('a disabled account\'s multistream stream key finds nobody, so the relay neither lets it publish nor forwards it', () => {
+    db.disableStreamer(a, null);
+    assert.equal(db.getStreamerByMultistreamToken('tok-multistream-a'), undefined);
+    assert.equal(db.getStreamerByMultistreamToken('tok-multistream-b').id, b);
+    assert.equal(db.getStreamerByMultistreamToken('nope'), undefined);
+  });
+
   test('enabling brings the account back into the lists and its link back to life', () => {
     db.disableStreamer(a, null);
     db.enableStreamer(a);
     assert.deepEqual(ids(db.getOverlayEnabledStreamers()), [a, b]);
     assert.deepEqual(ids(db.getChatbotEnabledStreamers()), [a, b]);
     assert.equal(db.getStreamerByOverlayToken('tok-overlay-a').id, a);
+    assert.equal(db.getStreamerByMultistreamToken('tok-multistream-a').id, a);
   });
 
   test('a missing enabled flag counts as enabled', () => {
     sql.prepare('UPDATE streamers SET enabled = NULL WHERE id = ?').run(a);
     assert.deepEqual(ids(db.getOverlayEnabledStreamers()), [a, b]);
     assert.equal(db.getStreamerByOverlayToken('tok-overlay-a').id, a);
+    assert.equal(db.getStreamerByMultistreamToken('tok-multistream-a').id, a);
   });
 });
 

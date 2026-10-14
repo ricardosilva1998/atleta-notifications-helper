@@ -4955,6 +4955,9 @@ function ensureMultistreamToken(streamerId) {
   return token;
 }
 
+// The streamer a multistream stream key belongs to. A disabled account is left
+// out (as for an overlay link), so its key can neither publish to the relay
+// nor be forwarded.
 function getStreamerByMultistreamToken(token) {
   return openTokens(db.prepare(`
     SELECT
@@ -4966,7 +4969,7 @@ function getStreamerByMultistreamToken(token) {
       multistream_youtube_stream_key_enc, multistream_youtube_stream_id,
       multistream_youtube_privacy, multistream_youtube_category_id, multistream_youtube_default_title,
       multistream_active_broadcast_id
-    FROM streamers WHERE multistream_token = ?
+    FROM streamers WHERE multistream_token = ? AND COALESCE(enabled, 1) = 1
   `).get(token));
 }
 
