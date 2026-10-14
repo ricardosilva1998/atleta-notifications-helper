@@ -1,40 +1,19 @@
-const crypto = require('crypto');
+'use strict';
 
-const ALGO = 'aes-256-gcm';
-const VERSION = 'v1';
+// Multistream stream keys at rest. Kept under this name for the code that
+// uses it; the encryption itself is secretBox.js (AES-256-GCM, enc:v1: values).
+// The secret is MULTISTREAM_KEY_SECRET (64 hex characters).
 
-function getKey(secretHex) {
-  if (!secretHex || secretHex.length !== 64) {
-    throw new Error('MULTISTREAM_KEY_SECRET must be a 64-char hex string (32 bytes)');
-  }
-  return Buffer.from(secretHex, 'hex');
-}
+const { seal, open } = require('./secretBox');
 
 function encryptKey(plaintext, secretHex) {
   if (plaintext == null || plaintext === '') return null;
-  const key = getKey(secretHex);
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGO, key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${VERSION}:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+  return seal(String(plaintext), secretHex);
 }
 
 function decryptKey(ciphertext, secretHex) {
   if (ciphertext == null || ciphertext === '') return null;
-  const parts = ciphertext.split(':');
-  if (parts.length !== 4 || parts[0] !== VERSION) {
-    throw new Error('invalid ciphertext format');
-  }
-  const [, ivHex, tagHex, encHex] = parts;
-  const key = getKey(secretHex);
-  const iv = Buffer.from(ivHex, 'hex');
-  const tag = Buffer.from(tagHex, 'hex');
-  const enc = Buffer.from(encHex, 'hex');
-  const decipher = crypto.createDecipheriv(ALGO, key, iv);
-  decipher.setAuthTag(tag);
-  const plaintext = Buffer.concat([decipher.update(enc), decipher.final()]);
-  return plaintext.toString('utf8');
+  return open(ciphertext, secretHex);
 }
 
 module.exports = { encryptKey, decryptKey };

@@ -8,7 +8,7 @@ test('encrypt/decrypt round-trips a YouTube-style key', () => {
   const plaintext = 'aaaa-bbbb-cccc-dddd-eeee';
   const ciphertext = encryptKey(plaintext, SECRET);
   assert.notStrictEqual(ciphertext, plaintext);
-  assert.match(ciphertext, /^v1:[a-f0-9]+:[a-f0-9]+:[a-f0-9]+$/);
+  assert.match(ciphertext, /^enc:v1:[A-Za-z0-9+/]+={0,2}$/);
   const recovered = decryptKey(ciphertext, SECRET);
   assert.strictEqual(recovered, plaintext);
 });
