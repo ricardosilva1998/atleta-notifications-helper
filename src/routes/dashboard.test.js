@@ -1397,6 +1397,26 @@ describe('custom chat commands', () => {
   const errorOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('cmd_error');
   const tabOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('tab');
 
+  // What a browser makes of an attribute value: each entity once.
+  const attributeValue = (html) => html.replace(/&(#\d+|amp|lt|gt|quot|apos);/g, (m, name) => (
+    { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[name] || String.fromCharCode(Number(name.slice(1)))));
+
+  test('the Test button hands the script the response exactly as it was typed, quotes and all', async () => {
+    const responses = ['Say "hello" to chat', "it's a 'quoted' <b>bold</b> & more", 'plain', '5 &quot; is not an entity here'];
+    responses.forEach((response, i) => db.addChatCommand(id, `cmd${i}`, response, 5));
+    const page = (await request('GET', '/dashboard/chatbot', { streamer: id })).text;
+    const sent = [...page.matchAll(/data-response="([^"]*)" onclick="testCustomCommand\(this\.dataset\.response, this\)"/g)].map((m) => attributeValue(m[1]));
+    assert.deepEqual(sent.sort(), [...responses].sort());
+  });
+
+  test('the response reaches chat as it was typed: the route takes it as plain text', async () => {
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run('somechannel', id);
+    const typed = 'Say "hello" & <b>wave</b>';
+    const res = await request('POST', `/dashboard/chatbot/test/custom?response=${encodeURIComponent(typed)}`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.deepEqual(chatCalls, [['say', id, typed, { priority: 'high' }]]);
+  });
+
   test('adds a command with a cleaned name and response, and a cooldown held to 5-3600 s', async () => {
     const res = await add({ command: '!Socials ', response: '  Follow us!  ', cooldown: '-30' });
     assert.equal(res.status, 302);
