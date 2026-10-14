@@ -1363,6 +1363,36 @@ describe('the test buttons', () => {
     assert.deepEqual((await post(`/dashboard/sponsor-messages/${messageId}/test`, other)).json(), { ok: true });
     assert.deepEqual(chatCalls[1], ['say', other, 'Thanks to our sponsors https://example.com', { priority: 'low' }]);
   });
+
+  // The answers a test button's script shows are words from the language files, not text of the route's own.
+  test('an event type that cannot be tested is answered with the translated message', async () => {
+    const routes = [
+      ['/dashboard/overlay/test/nope', 'overlay.test.invalidType'],
+      ['/dashboard/chatbot/test/nope', 'chatbot.test.invalidType'],
+      ['/dashboard/youtube-chatbot/test/nope', 'ytChatbot.error.invalidType'],
+      ['/dashboard/youtube-chatbot/test-chat/nope', 'ytChatbot.error.invalidType'],
+    ];
+    for (const [route, key] of routes) {
+      // one streamer per route: a second test within the cooldown would be held instead
+      const res = await post(route, addStreamer({ twitch_username: 'somechannel' }));
+      assert.equal(res.status, 400, route);
+      assert.equal(res.json().error, t('en', key), route);
+    }
+  });
+});
+
+describe('the profile picture upload', () => {
+  const upload = (streamer, query, rawBody) => request('POST', `/dashboard/account/avatar${query}`, { streamer, rawBody, contentType: 'application/octet-stream' });
+
+  test('a refused upload says why, with the translated message', async () => {
+    const id = addStreamer();
+    const wrongType = await upload(id, '?ext=exe', 'not a picture');
+    assert.equal(wrongType.status, 400);
+    assert.equal(wrongType.json().error, t('en', 'account.error.invalidType'));
+    const empty = await upload(id, '?ext=png', '');
+    assert.equal(empty.status, 400);
+    assert.equal(empty.json().error, t('en', 'account.error.empty'));
+  });
 });
 
 // ── Overlay builder: what may be saved (N17) ─────────────────────────────

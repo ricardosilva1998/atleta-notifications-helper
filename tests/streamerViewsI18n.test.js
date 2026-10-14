@@ -187,7 +187,13 @@ const PAGE_LOCALS = {
 };
 
 // t() that marks everything it returns, so whatever is not marked in the rendered page is the page's own.
-const marked = (key, params) => '«' + t('en', key, params) + '»';
+// It also refuses a key that does not exist and a call that leaves a {{field}} of the text unfilled (t() would print nothing for it).
+const marked = (key, params) => {
+  assert.ok(key in en, `t('${key}') asks for a key that en.json does not have`);
+  const missing = [...en[key].matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).filter((name) => !params || !(name in params));
+  assert.deepEqual(missing, [], `t('${key}') is called without ${missing.join(', ')}`);
+  return '«' + t('en', key, params) + '»';
+};
 function render(page, locals) {
   return ejs.render(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'), {
     racingUser: null, isAdmin: false, features: { youtube: false }, lang: 'en', csrfToken: 'token', currentPath: '/x', notifications: [], unreadNotifCount: 0, streamerTier: 'free',
