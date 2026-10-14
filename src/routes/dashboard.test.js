@@ -799,6 +799,38 @@ describe('the server page while the bot cannot see the server', () => {
   });
 });
 
+describe('the tab named in the server page URL', () => {
+  const G = '600000000000000040';
+  let id;
+  beforeEach(() => {
+    id = addStreamer();
+    db.upsertGuild(G, id, 'Server');
+    guilds.set(G, fakeGuild(G));
+  });
+  const activeTab = async (query) => (await request('GET', `/dashboard/guild/${G}${query}`, { streamer: id, json: true })).json().locals.activeTab;
+
+  test('a tab of the page is used, and without one the page opens on Twitch', async () => {
+    for (const tab of ['twitch', 'youtube', 'discord', 'iracing', 'settings']) assert.equal(await activeTab(`?tab=${tab}`), tab, tab);
+    assert.equal(await activeTab(''), 'twitch');
+    assert.equal(await activeTab('?tab='), 'twitch');
+  });
+
+  test('anything else is the default, so it cannot reach the page\'s script', async () => {
+    const odd = ["x'); alert(1); ('", '\n', '\\', "'", '"', 'Twitch', 'twitch ', 'constructor', '__proto__', 'a'.repeat(5000)];
+    for (const tab of odd) assert.equal(await activeTab(`?tab=${encodeURIComponent(tab)}`), 'twitch', JSON.stringify(tab.slice(0, 30)));
+    assert.equal(await activeTab('?tab=discord&tab=settings'), 'twitch', 'a repeated parameter');
+    assert.equal(await activeTab('?tab[x]=discord'), 'twitch', 'a parameter with a key');
+  });
+
+  test('the page script holds a tab name from the list and nothing from the URL', async () => {
+    const res = await request('GET', `/dashboard/guild/${G}?tab=%0A%5C%27%22%3C`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes("switchTab(savedTab || 'twitch');"));
+    const ok = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
+    assert.ok(ok.text.includes("switchTab(savedTab || 'discord');"));
+  });
+});
+
 // ── Removed routes (N25) ─────────────────────────────────────────────────
 
 describe('routes that were removed', () => {

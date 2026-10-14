@@ -371,6 +371,10 @@ router.get('/guild/:guildId/stats', (req, res) => {
   });
 });
 
+// The tabs of the server page. ?tab= may name one; the page prints it into its
+// script, so anything else (a repeated parameter, any other text) is the default.
+const GUILD_PAGE_TABS = ['twitch', 'youtube', 'discord', 'iracing', 'settings'];
+
 // Guild config page
 router.get('/guild/:guildId', async (req, res) => {
   const { guildId } = req.params;
@@ -450,7 +454,7 @@ router.get('/guild/:guildId', async (req, res) => {
     limits,
     msg: req.query.msg,
     saved: req.query.saved,
-    activeTab: req.query.tab || 'twitch',
+    activeTab: GUILD_PAGE_TABS.includes(req.query.tab) ? req.query.tab : 'twitch',
   });
 });
 
