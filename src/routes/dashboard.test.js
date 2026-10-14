@@ -867,6 +867,31 @@ describe('the dashboard home and Discord answering slowly', () => {
   });
 });
 
+// ── The dashboard home before the Discord bot is ready ──────────────────
+
+describe('the dashboard home before the Discord bot is ready', () => {
+  const inviteFor = (clientId) => `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&amp;permissions=`;
+
+  test('renders while discord.js has no application yet, with the invite built from the OAuth client id', async () => {
+    // discord.js holds application = null until its gateway READY (always, with DISCORD_DISABLED=1).
+    const ready = discordStub.client.application;
+    discordStub.client.application = null;
+    try {
+      const res = await request('GET', '/dashboard', { streamer: addStreamer() });
+      assert.equal(res.status, 200);
+      assert.ok(res.text.includes(inviteFor(require('../config').discord.clientId)), 'the invite uses DISCORD_CLIENT_ID');
+    } finally {
+      discordStub.client.application = ready;
+    }
+  });
+
+  test('once Discord is ready, the invite uses the application id discord.js reports', async () => {
+    const res = await request('GET', '/dashboard', { streamer: addStreamer() });
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes(inviteFor(discordStub.client.application.id)));
+  });
+});
+
 // ── A broadcaster authorization refused for another Twitch account (N10) ─
 
 describe('the dashboard after a broadcaster authorization from another Twitch account', () => {

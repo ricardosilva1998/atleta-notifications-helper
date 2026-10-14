@@ -8,14 +8,22 @@ download one, and how to put one back.
 
 - **When:** every night at 03:30 UTC (`src/services/backups.js`, started at boot by `src/index.js`).
 - **Where:** `/app/data/backups/bot-YYYY-MM-DD.db` (the UTC date), on the same volume.
-- **How:** SQLite `VACUUM INTO`. Each copy is a consistent, compacted copy of the whole
-  database, taken while the app keeps running. It is written as `bot-YYYY-MM-DD.db.tmp`
-  and renamed once complete, so a `bot-YYYY-MM-DD.db` file is always a whole database.
-- **Kept:** 7 days (today and the six days before). Older copies are deleted only after a
-  new copy has succeeded, so a failed night never costs an old backup.
-- **Skipped** when the copy would leave the volume with less than 200 MB free.
-- **Logs:** `[Backup] Database copied to backups/bot-2026-10-14.db`, `[Backup] Failed: ...`,
-  `[Backup] Skipped: not enough free space ...`.
+- **How:** SQLite's online backup API (`db.backupInto()` in `src/db.js`). Each copy is a
+  consistent copy of the whole database, made a few pages at a time while the app keeps
+  answering (writes made during the copy are carried into it), then switched to the
+  rollback journal so it is one self-contained file. It is written as
+  `bot-YYYY-MM-DD.db.tmp` and renamed once complete, so a `bot-YYYY-MM-DD.db` file is
+  always a whole database.
+- **Kept:** 7 days (today and the six days before), and always the newest copy, however
+  old. Older copies are deleted only after a new copy has succeeded, or on a night with no
+  room for one, so a failed night never costs an old backup.
+- **Skipped** when the copy would leave the volume with less than 200 MB free. That night
+  the copies past the 7 days are still removed, keeping the newest, so old backups cannot
+  keep a full volume full.
+- **Logs:** every run states the database size and the free space:
+  `[Backup] Database copied to backups/bot-2026-10-14.db in 0.4 s (database 14.8 MB, 4610.2 MB free)`,
+  `[Backup] Failed after 0.2 s: ... (database ..., ... free)`,
+  `[Backup] Skipped: a copy would leave less than 200.0 MB free on the data volume (...); removed 2 file(s) past 7 days, kept the newest copy`.
 - **Not in it:** uploaded files (alert sounds, sponsor images, reward clips, avatars, VTuber
   models, issue screenshots). They are files under `/app/data/`, and only a Railway volume
   backup covers them.
@@ -104,7 +112,9 @@ The current volume is kept in the project, unmounted, until you delete it.
 
 ## Rehearsal
 
-Restore path A was rehearsed on 2026-10-14 against the production image (Node 24) on a
-fresh local volume. A nightly backup was taken, a row was added, the backup was copied back
-with step 3 while the app was running, and the container was restarted. The row was gone,
-`PRAGMA integrity_check` said `ok`, and `/health` answered `{"ok":true}`.
+Restore path A was rehearsed on 2026-10-14, first against the production image (Node 24) on
+a fresh local volume, then again with a copy made by the app's own backup code
+(`runBackup` with `db.backupInto`) while the app was running. Each time a row was added
+after the backup, the backup was copied back with step 3 while the app was running, and
+the app was restarted. The row was gone, `PRAGMA integrity_check` said `ok`, `/health`
+answered `{"ok":true}`, and step 1 left no files beside the copy.

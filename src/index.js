@@ -5,7 +5,7 @@ const server = require('./server');
 const commands = require('./commands');
 const welcome = require('./welcome');
 const pollers = require('./pollers/manager');
-const storageQuota = require('./services/storageQuota');
+const { startDiscordLogin } = require('./services/discordLogin');
 
 // Long-running server: a single unhandled rejection / uncaught exception must
 // not take the process down. Log loudly and keep going — Railway will still
@@ -106,15 +106,12 @@ function startHousekeeping() {
   setInterval(() => { try { db.cleanupOldNotifications(); } catch (e) {} }, 24 * 60 * 60 * 1000);
   db.cleanupOldNotifications();
 
-  // Nightly copy of the database, kept 7 days (services/backups.js). Skipped
-  // when the copy would leave the data volume with less than 200 MB free.
+  // Nightly copy of the database, kept 7 days (services/backups.js), made without
+  // pausing the app. Skipped when the copy would leave the data volume with less
+  // than 200 MB free.
   require('./services/backups').scheduleNightlyBackups({
-    vacuumInto: db.vacuumInto,
+    backup: (file) => db.backupInto(file),
     databaseFile: db.db.name,
-    canWrite: (bytes) => {
-      const free = storageQuota.freeBytes();
-      return free === null || free - bytes >= storageQuota.MIN_FREE_BYTES;
-    },
   });
 }
 
@@ -144,6 +141,8 @@ try {
   process.exit(1);
 }
 
+let discordLogin = null; // the login and its retries (services/discordLogin.js)
+
 if (config.discord.disabled) {
   console.warn('[Discord] DISCORD_DISABLED=1: the Discord bot stays offline (no slash commands, welcome messages or pollers). For development and CI only.');
 } else {
@@ -156,12 +155,10 @@ if (config.discord.disabled) {
     });
   });
 
-  // A bot that cannot log in must not leave a process running without it:
-  // exit, so the platform restarts it (and shows the failure).
-  client.login(config.discord.token).catch((error) => {
-    console.error(`[Discord] Login failed: ${error.message}`);
-    process.exit(1);
-  });
+  // Only the bot needs Discord: a failed login is tried again (30 s, doubling up
+  // to every 10 minutes) while the site and everything else keep running; a
+  // token Discord refuses is logged loudly and not retried.
+  discordLogin = startDiscordLogin({ client, token: config.discord.token });
 }
 
 // Handle bot joining a new guild
@@ -203,6 +200,7 @@ async function shutdown(signal) {
   stop('StreamElements', () => require('./services/streamelements').streamElementsManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
+  stop('Discord login retry', () => { if (discordLogin) discordLogin.stop(); });
   try {
     // At most 2 s for Discord to be told the bot is going offline.
     await Promise.race([client.destroy(), new Promise((resolve) => setTimeout(resolve, 2000).unref())]);

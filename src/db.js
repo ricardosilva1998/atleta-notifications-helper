@@ -5704,7 +5704,14 @@ module.exports = {
   backup(dest) { return db.backup(dest); },
   // GET /health: throws when the database cannot answer (or has been closed).
   ping() { return db.prepare('SELECT 1 AS ok').get(); },
-  // A consistent, compacted copy of the whole database in a new file (which must
-  // not exist yet); safe while the app keeps reading and writing.
-  vacuumInto(file) { db.prepare('VACUUM INTO ?').run(file); },
+  // A consistent copy of the whole database in `file`, made with SQLite's online
+  // backup API a few pages at a time, so the app keeps answering meanwhile
+  // (writes made during the copy are carried into it). The copy is then set to
+  // the plain rollback journal, so it is one self-contained file that leaves no
+  // -wal/-shm files behind when it is opened.
+  async backupInto(file) {
+    await db.backup(file);
+    const copy = new Database(file);
+    try { copy.pragma('journal_mode = DELETE'); } finally { copy.close(); }
+  },
 };

@@ -13,7 +13,6 @@ const { mountBodyParsers } = require('./bodyParsers');
 const { healthHandler } = require('./health');
 const httpDrain = require('./httpDrain');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
-const { isSnowflake, findPublicVoiceChannel } = require('./services/voicePresence');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -71,6 +70,12 @@ const apiLimiter = rateLimit({
 // The Discord voice overlay asks every 2 s (30 a minute); twice that per address.
 const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
 app.use(generalLimiter);
+// Every /api route (the multistream webhooks, the Atleta Racing app's endpoints,
+// the api router) is behind this one limiter. It is mounted ahead of the body
+// parsers, so a refused request is answered before its body (up to 10 MB on
+// some routes) is read, and it counts each request once: no /api route may be
+// given apiLimiter again.
+app.use('/api', apiLimiter);
 function secureCookie(res, name, value, opts = {}) {
   res.cookie(name, value, { httpOnly: true, secure: isProduction, sameSite: 'lax', ...opts });
 }
@@ -208,11 +213,7 @@ app.get('/pricing', (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/dashboard/multistream', require('./routes/multistream'));
-// Every /api route below (the multistream webhooks, the Atleta Racing app's
-// endpoints, the api router) is behind this one limiter; it counts each request
-// once, so no /api route may be given apiLimiter again.
-app.use('/api', apiLimiter);
-app.use('/api/multistream', require('./routes/multistream'));
+app.use('/api/multistream', require('./routes/multistream')); // behind apiLimiter, mounted above
 app.use('/dashboard', dashboardRoutes);
 // app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);
@@ -437,52 +438,9 @@ app.post('/api/bridge/spotify/control', async (req, res) => {
 });
 
 // Discord voice state API (public, used by the Atleta Racing app's Discord
-// voice overlay, which asks every 2 s with only a Discord user id). Only a
-// voice channel everyone in its server can see is reported; a private one
-// answers like no channel (services/voicePresence.js).
-app.get('/api/voice/:discordUserId', voiceLimiter, async (req, res) => {
-  try {
-    const { discordUserId } = req.params;
-    if (!isSnowflake(discordUserId)) return res.status(400).json({ error: 'Invalid Discord user id' });
-    const { client } = require('./discord');
-    const { ensureConnected, isSpeaking, scheduleDisconnect } = require('./services/voiceTracker');
-
-    const channel = findPublicVoiceChannel(client.guilds.cache.values(), discordUserId);
-    if (!channel) {
-      return res.json({ channelName: null, members: [] });
-    }
-
-    // Join voice channel for speaking detection (non-blocking)
-    ensureConnected(channel).catch(e => console.log('[VoiceTracker] ensureConnected error:', e.message));
-    scheduleDisconnect(); // Auto-leave after 5 min of no polls
-
-    // Filter out bots (like the Atleta bot itself)
-    const humanMembers = channel.members.filter(m => !m.user.bot);
-
-    const members = humanMembers.map(member => {
-      // Re-fetch voice state from cache for latest mute/deaf status
-      const freshVs = member.guild.voiceStates.cache.get(member.id);
-      const vs = freshVs || member.voice;
-      const user = member.user;
-      const avatar = user.avatar
-        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.webp?size=64`
-        : `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
-      return {
-        id: user.id, username: user.username,
-        displayName: member.displayName || user.displayName || user.username,
-        avatar, selfMute: vs.selfMute || false, selfDeaf: vs.selfDeaf || false,
-        serverMute: vs.serverMute || false, serverDeaf: vs.serverDeaf || false,
-        streaming: vs.streaming || false, camera: vs.selfVideo || false,
-        speaking: isSpeaking(user.id),
-        isStreamer: user.id === discordUserId,
-      };
-    });
-    res.json({ channelName: channel.name, members });
-  } catch(e) {
-    console.error('[Voice API]', e.message);
-    res.status(500).json({ error: 'Internal error' });
-  }
-});
+// voice overlay, which asks every 2 s with only a Discord user id), behind its
+// own limit: routes/voice.js.
+app.use('/api/voice', voiceLimiter, require('./routes/voice'));
 
 // Track map API (public — must be before /api auth middleware)
 app.get('/api/track-maps', (req, res) => {

@@ -288,7 +288,9 @@ router.get('/', async (req, res) => {
     .filter((g, i) => manageable[i])
     .map((g) => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 64 }) }));
 
-  const botInviteUrl = inviteUrlFor(client.application.id);
+  // discord.js has no application until the bot's gateway is ready (never, with
+  // DISCORD_DISABLED=1); a bot's application id is its OAuth client id.
+  const botInviteUrl = inviteUrlFor(client.application?.id ?? config.discord.clientId);
   const { tier, limits } = getTierLimits(req.streamer.id);
 
   // Twitch tab data

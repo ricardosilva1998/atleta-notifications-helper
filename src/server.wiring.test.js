@@ -81,12 +81,10 @@ test('every route that serves uploaded files from data/ sends the user-content h
   assert.deepEqual(staticFolders, ["'public'", "'bridge', 'overlays'", "'data', folder"]);
 });
 
-test('the public Discord voice route is rate-limited and only reports public channels (services/voicePresence.js)', () => {
-  const route = at("app.get('/api/voice/:discordUserId', voiceLimiter, async (req, res) => {");
-  const body = source.slice(route, source.indexOf('\n});', route));
-  assert.match(body, /if \(!isSnowflake\(discordUserId\)\) return res\.status\(400\)/);
-  assert.match(body, /findPublicVoiceChannel\(client\.guilds\.cache\.values\(\), discordUserId\)/);
-  assert.doesNotMatch(body, /voiceStates\.cache\.get\(discordUserId\)/, 'no lookup that skips the public-channel check');
+test('the public Discord voice route is served by routes/voice.js, behind its own rate limit', () => {
+  // What it answers is tested on the route itself (routes/voice.test.js).
+  at("app.use('/api/voice', voiceLimiter, require('./routes/voice'));");
+  assert.equal(code.match(/\/api\/voice/g).length, 1, 'no other /api/voice route');
 });
 
 test('every /api route is behind apiLimiter, which counts each request once', () => {
@@ -96,4 +94,10 @@ test('every /api route is behind apiLimiter, which counts each request once', ()
     .filter((index) => index !== limiter));
   assert.ok(limiter < firstApiRoute, 'the limiter comes before the first /api route');
   assert.equal(code.match(/\bapiLimiter\b/g).length, 2, 'declared once and mounted once, never again on a route');
+});
+
+test('a refused /api request is answered before its body is read', () => {
+  const limiter = at("app.use('/api', apiLimiter);");
+  assert.ok(limiter < at('mountBodyParsers(app);'), 'the limiter comes before the body parsers');
+  assert.ok(limiter < at('app.use(cookieParser());'), 'and needs nothing but the address');
 });

@@ -1,38 +1,45 @@
 'use strict';
 
 // Nightly copies of the database: data/backups/bot-YYYY-MM-DD.db (UTC date),
-// written with SQLite's VACUUM INTO (a consistent copy, taken while the app keeps
-// running) and kept for 7 days. Nothing serves this folder: the static routes
-// in server.js serve only their own data/ subfolders. How to download one and
-// restore from it: docs/operations/backup-restore.md.
+// written with SQLite's online backup API (db.backupInto: a consistent copy,
+// made a few pages at a time while the app keeps running) and kept for 7 days.
+// Nothing serves this folder: the static routes in server.js serve only their
+// own data/ subfolders. How to download one and restore from it:
+// docs/operations/backup-restore.md.
 
 const fs = require('fs');
 const path = require('path');
+const storageQuota = require('./storageQuota');
 
 const BACKUP_DIR = path.join(__dirname, '..', '..', 'data', 'backups');
 const KEEP_DAYS = 7; // today's copy and the six before it
 const RUN_AT_UTC = { hour: 3, minute: 30 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BACKUP_NAME = /^bot-(\d{4}-\d{2}-\d{2})\.db$/;
-const PARTIAL_NAME = /^bot-\d{4}-\d{2}-\d{2}\.db\.tmp$/;
+// What a copy that never finished can leave: the copy and its journal files.
+const PARTIAL_NAME = /^bot-\d{4}-\d{2}-\d{2}\.db\.tmp(-journal|-wal|-shm)?$/;
+const PARTIAL_SUFFIXES = ['', '-journal', '-wal', '-shm'];
 
 const utcDate = (date) => date.toISOString().slice(0, 10);
+const megabytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 function backupFileName(date) {
   return `bot-${utcDate(date)}.db`;
 }
 
-// Deletes the backups dated more than KEEP_DAYS - 1 days before `now`, and any
-// copy a crash left half-written. Other files in the folder are left alone.
-// Returns the names deleted.
+// Deletes the backups dated more than KEEP_DAYS - 1 days before `now`, except
+// the newest one, which is always kept (after nights with no room for a new
+// copy it may be older than that), and anything a copy that never finished left
+// behind. Other files in the folder are left alone. Returns the names deleted.
 function pruneBackups({ dir = BACKUP_DIR, now = new Date(), keepDays = KEEP_DAYS } = {}) {
   const oldestKept = utcDate(new Date(now.getTime() - (keepDays - 1) * DAY_MS));
   let names;
   try { names = fs.readdirSync(dir); } catch (e) { return []; }
+  const newest = names.filter((name) => BACKUP_NAME.test(name)).sort().pop();
   const deleted = [];
   for (const name of names) {
     const dated = BACKUP_NAME.exec(name);
-    if ((dated && dated[1] < oldestKept) || PARTIAL_NAME.test(name)) {
+    if ((dated && dated[1] < oldestKept && name !== newest) || PARTIAL_NAME.test(name)) {
       fs.rmSync(path.join(dir, name), { force: true });
       deleted.push(name);
     }
@@ -40,20 +47,24 @@ function pruneBackups({ dir = BACKUP_DIR, now = new Date(), keepDays = KEEP_DAYS
   return deleted;
 }
 
-// Writes today's backup (replacing one written earlier today), then prunes.
-// The copy is written under a temporary name and renamed when complete, so a
-// file named bot-YYYY-MM-DD.db is always a whole database. Old backups are only
-// pruned after a new one succeeded. Returns the backup's path.
-function runBackup({ vacuumInto, dir = BACKUP_DIR, now = new Date(), keepDays = KEEP_DAYS }) {
+function removePartial(partial) {
+  for (const suffix of PARTIAL_SUFFIXES) fs.rmSync(`${partial}${suffix}`, { force: true });
+}
+
+// Writes today's backup with `backup(path)` (async; replaces one written earlier
+// today), then prunes. The copy is written under a temporary name and renamed
+// when complete, so a file named bot-YYYY-MM-DD.db is always a whole database.
+// Old backups are only pruned after a new one succeeded. Returns the backup's path.
+async function runBackup({ backup, dir = BACKUP_DIR, now = new Date(), keepDays = KEEP_DAYS }) {
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, backupFileName(now));
   const partial = `${file}.tmp`;
-  fs.rmSync(partial, { force: true });
+  removePartial(partial);
   try {
-    vacuumInto(partial);
+    await backup(partial);
     fs.renameSync(partial, file);
   } catch (e) {
-    fs.rmSync(partial, { force: true });
+    removePartial(partial);
     throw e;
   }
   pruneBackups({ dir, now, keepDays });
@@ -68,23 +79,38 @@ function msUntilNextRun(now = new Date(), at = RUN_AT_UTC) {
   return next - now;
 }
 
-// Runs a backup every night at RUN_AT_UTC. `canWrite(bytes)` says whether the
-// volume has room for a copy of that size (it is skipped, and the old backups
-// kept, when it has not). The timers never keep the process alive.
-function scheduleNightlyBackups({ vacuumInto, databaseFile, canWrite = () => true, dir = BACKUP_DIR, log = console }) {
-  const run = () => {
-    try {
-      const size = fs.statSync(databaseFile).size;
-      if (!canWrite(size)) {
-        log.error('[Backup] Skipped: not enough free space on the data volume for a copy of the database');
-        return;
-      }
-      const file = runBackup({ vacuumInto, dir });
-      log.log(`[Backup] Database copied to ${path.relative(path.dirname(dir), file)}`);
-    } catch (e) {
-      log.error(`[Backup] Failed: ${e.message}`);
-    }
-  };
+const fileSize = (file) => {
+  try { return fs.statSync(file).size; } catch (e) { return 0; }
+};
+
+// One night's run: a new copy when the data volume has room for it, otherwise
+// none (and only the copies past the 7 days are removed, the newest kept, so a
+// full volume is not kept full by old backups). Every run logs the database
+// size and the free space; a copy also logs how long it took.
+async function nightlyRun({ backup, databaseFile, dir = BACKUP_DIR, freeBytes = () => storageQuota.freeBytes(), minFreeBytes = storageQuota.MIN_FREE_BYTES, log = console }) {
+  const size = fileSize(databaseFile) + fileSize(`${databaseFile}-wal`);
+  const free = freeBytes();
+  const facts = `database ${megabytes(size)}, ${free === null ? 'free space unknown' : `${megabytes(free)} free`}`;
+  if (free !== null && free - size < minFreeBytes) {
+    const removed = pruneBackups({ dir });
+    log.error(`[Backup] Skipped: a copy would leave less than ${megabytes(minFreeBytes)} free on the data volume (${facts}); removed ${removed.length} file(s) past ${KEEP_DAYS} days, kept the newest copy`);
+    return null;
+  }
+  const started = Date.now();
+  try {
+    const file = await runBackup({ backup, dir });
+    log.log(`[Backup] Database copied to ${path.relative(path.dirname(dir), file)} in ${((Date.now() - started) / 1000).toFixed(1)} s (${facts})`);
+    return file;
+  } catch (e) {
+    log.error(`[Backup] Failed after ${((Date.now() - started) / 1000).toFixed(1)} s: ${e.message} (${facts})`);
+    return null;
+  }
+}
+
+// Runs nightlyRun every night at RUN_AT_UTC. The timers never keep the process alive.
+function scheduleNightlyBackups(options) {
+  const log = options.log || console;
+  const run = () => { nightlyRun(options).catch((e) => log.error(`[Backup] Failed: ${e.message}`)); };
   const first = setTimeout(() => {
     run();
     setInterval(run, DAY_MS).unref();
@@ -101,5 +127,6 @@ module.exports = {
   pruneBackups,
   runBackup,
   msUntilNextRun,
+  nightlyRun,
   scheduleNightlyBackups,
 };
