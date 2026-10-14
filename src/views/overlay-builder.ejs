@@ -2140,7 +2140,8 @@ function renderSponsorList() {
         <span>Scale</span>
         <input type="range" min="0.3" max="1" step="0.05" value="${scale}"
                draggable="false"
-               oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'; updateSponsorScale(${s.id}, this.value)">
+               oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'; previewSponsorScale(${s.id}, this.value)"
+               onchange="saveSponsorScale(${s.id}, this.value)">
         <span>${Math.round(scale * 100)}%</span>
       </div>
     </div>
@@ -2221,11 +2222,19 @@ async function updateSponsorEnabled(id, enabled) {
   updateSponsorPreview();
 }
 
-async function updateSponsorScale(id, scale) {
+// The scale slider fires `input` for every step while it is dragged and `change` once when
+// it is let go: the preview follows the first, and the server is told only on the second.
+function previewSponsorScale(id, scale) {
   scale = Math.max(0.3, Math.min(1, parseFloat(scale) || 1.0));
   const img = sponsorImages.find(s => s.id === id);
   if (img) img.image_scale = scale;
   updateSponsorPreview();
+}
+
+async function saveSponsorScale(id, scale) {
+  scale = Math.max(0.3, Math.min(1, parseFloat(scale) || 1.0));
+  const img = sponsorImages.find(s => s.id === id);
+  if (img) img.image_scale = scale;
   await fetch(`/dashboard/sponsors/${id}/update`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: scale }),
