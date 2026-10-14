@@ -34,12 +34,25 @@ class FakeTmiClient {
     this.handlers = {};
     this.said = [];
     this.state = 'OPEN'; // what tmi.js reports; a test sets another while the bot is (re)connecting
+    // What Twitch tells the bot about itself in each channel it joins (tmi.js keeps it per '#channel').
+    this.userstate = {};
+    this.modIn = new Set(); // channels where the bot is a moderator
+    this.joins = [];
+    this.parts = [];
     tmiClient = this;
   }
   on(event, handler) { this.handlers[event] = handler; }
   connect() { return Promise.resolve(); }
-  join() { return Promise.resolve(); }
-  part() { return Promise.resolve(); }
+  join(channel) {
+    this.joins.push(channel);
+    this.userstate[`#${channel}`] = { mod: this.modIn.has(channel), 'user-type': this.modIn.has(channel) ? 'mod' : '' };
+    return Promise.resolve([`#${channel}`]);
+  }
+  part(channel) {
+    this.parts.push(channel);
+    delete this.userstate[`#${channel}`];
+    return Promise.resolve([`#${channel}`]);
+  }
   say(channel, text) { this.said.push({ channel, text }); return Promise.resolve(); }
   readyState() { return this.state; }
   disconnect() { return Promise.resolve(); }
@@ -569,4 +582,32 @@ describe('merged follow thank-yous, filled from the real template', () => {
       assertEveryoneThanked(template, names);
     });
   }
+});
+
+// ── Whether the bot is a moderator (the Chat protection card) ────────────
+
+describe('whether the bot is a moderator in a streamer\'s channel', () => {
+  test('is what Twitch said when the bot joined; checking again makes the bot leave and rejoin and reads it fresh', async () => {
+    assert.equal(chatManager.moderatorStatus(1), false);
+    tmiClient.modIn.add('somestreamer');
+    assert.equal(chatManager.moderatorStatus(1), false, 'Twitch tells the bot again only when it joins or speaks');
+    assert.equal(await chatManager.recheckModerator(1), true);
+    assert.deepEqual(tmiClient.parts, ['somestreamer']);
+    assert.equal(chatManager.moderatorStatus(1), true);
+    assert.deepEqual(chatManager.getJoinedChannels(), ['somestreamer'], 'the bot is back in the channel');
+  });
+
+  test('the streamer\'s own channel badge counts', () => {
+    tmiClient.userstate['#somestreamer'] = { mod: false, badges: { broadcaster: '1' } };
+    assert.equal(chatManager.moderatorStatus(1), true);
+  });
+
+  test('is unknown while the bot is not in the channel; checking again does nothing while the chatbot is off', async () => {
+    chatManager.stopForStreamer(1);
+    assert.equal(chatManager.moderatorStatus(1), null);
+    streamer = streamerRow({ chatbot_enabled: 0 });
+    const joins = tmiClient.joins.length;
+    assert.equal(await chatManager.recheckModerator(1), null);
+    assert.equal(tmiClient.joins.length, joins, 'the bot does not join a chat whose chatbot is off');
+  });
 });

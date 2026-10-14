@@ -93,6 +93,8 @@ const chatStub = {
     sendMessage: (...args) => chatCalls.push(['say', ...args]),
     startForStreamer: (...args) => managerCalls.push(['chat.start', ...args]),
     stopForStreamer: (...args) => managerCalls.push(['chat.stop', ...args]),
+    moderatorStatus: () => null,
+    recheckModerator: async (id) => { chatCalls.push(['recheck', id]); return true; },
   },
 };
 // The real one starts a polling interval when it loads.
@@ -1794,11 +1796,12 @@ describe('the test buttons', () => {
   const post = (urlPath, streamer, extra = {}) => request('POST', urlPath, { streamer, ...extra });
   const customTest = (streamer, text) => post(`/dashboard/chatbot/test/custom?response=${encodeURIComponent(text)}`, streamer);
 
-  // Every route that makes the shared bots speak or spends shared API quota.
+  // Every route that makes the shared bots speak or act, or spends shared API quota.
   const testRoutes = [
     '/dashboard/overlay/test/follow',
     '/dashboard/chatbot/test/custom?response=hello',
     '/dashboard/chatbot/test/follow',
+    '/dashboard/chatbot/check-moderator',
     '/dashboard/youtube-chatbot/test/yt_member',
     '/dashboard/youtube-chatbot/test-chat/member',
     '/dashboard/sponsor-messages/1/test',
@@ -4188,5 +4191,18 @@ describe('a test alert while the overlay switch is off', () => {
     } finally {
       bus.off(`overlay:${id}`, listener);
     }
+  });
+});
+
+// ── Checking again whether the bot is a moderator ────────────────────────
+
+describe('checking again whether the bot is a moderator', () => {
+  test('asks the chat manager and answers what it found', async () => {
+    const id = addStreamer({ chatbot_enabled: 1 });
+    chatCalls.length = 0;
+    const res = await request('POST', '/dashboard/chatbot/check-moderator', { streamer: id, body: {} });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true, moderator: true });
+    assert.deepEqual(chatCalls, [['recheck', id]]);
   });
 });

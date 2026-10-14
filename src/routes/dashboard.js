@@ -1435,6 +1435,14 @@ router.post('/chatbot/test/:eventType', limitTests, (req, res) => {
   }
 });
 
+// The Chat protection card's Check again: the bot asks Twitch again whether it is a moderator in the
+// streamer's channel (it leaves and rejoins it). Shares the test buttons' cooldown: it makes the bot act.
+router.post('/chatbot/check-moderator', limitTests, async (req, res) => {
+  const { chatManager } = require('../services/twitchChat');
+  const moderator = await chatManager.recheckModerator(req.streamer.id);
+  res.json({ ok: true, moderator });
+});
+
 // Back to the commands tab; `error` is a COMMAND_ERRORS code the page shows as text.
 function commandsBack(res, error) {
   res.redirect('/dashboard/chatbot?tab=commands' + (error ? `&cmd_error=${encodeURIComponent(error)}` : ''));

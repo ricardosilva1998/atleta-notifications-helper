@@ -157,6 +157,13 @@ async function handleMessage(channel, tags, message, self) {
   post(channel, cmd.response, 'high');
 }
 
+// `promise`, or a rejection after `ms` (the timer is cleared either way).
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const chatManager = {
   connect() {
     const { twitchUsername, twitchToken } = config.bot;
@@ -261,14 +268,45 @@ const chatManager = {
   },
 
   isConnected() {
-    if (!client) return false;
-    const state = client.readyState();
-    console.log(`[Chat] readyState check: ${state}`);
-    return state === 'OPEN';
+    return Boolean(client) && client.readyState() === 'OPEN';
   },
 
   getJoinedChannels() {
     return Array.from(channelMap.keys());
+  },
+
+  // Whether the bot is a moderator in the streamer's channel, as Twitch last told it (when the bot joined the
+  // channel or spoke there): true, false, or null while the bot is not in that channel.
+  moderatorStatus(streamerId) {
+    if (!client) return null;
+    const streamer = db.getStreamerById(streamerId);
+    const login = streamer && streamer.twitch_username ? streamer.twitch_username.toLowerCase() : null;
+    if (!login || channelMap.get(login) !== streamerId) return null;
+    const state = client.userstate && client.userstate[`#${login}`];
+    if (!state) return null;
+    const badges = state.badges || {};
+    return state.mod === true || state.mod === '1' || state['user-type'] === 'mod'
+      || Object.prototype.hasOwnProperty.call(badges, 'moderator')
+      || Object.prototype.hasOwnProperty.call(badges, 'broadcaster');
+  },
+
+  // Asks Twitch again (the Chat protection card's Check again): the bot leaves the streamer's channel and
+  // joins it again, which makes Twitch tell it its state there. Nothing is posted in chat. Resolves with
+  // moderatorStatus(), or null when the chatbot is off or the join does not complete in time.
+  async recheckModerator(streamerId, { timeoutMs = 5000 } = {}) {
+    if (!client) return null;
+    const streamer = db.getStreamerById(streamerId);
+    if (!streamer || isStreamerDisabled(streamer) || !streamer.chatbot_enabled || !streamer.twitch_username) return null;
+    const login = streamer.twitch_username.toLowerCase();
+    try { await client.part(login); } catch (e) { /* the bot was not in it: it joins below */ }
+    channelMap.set(login, streamerId);
+    try {
+      await withTimeout(client.join(login), timeoutMs);
+    } catch (e) {
+      console.error(`[Chat] Rejoining #${login} failed:`, e.message);
+      return null;
+    }
+    return this.moderatorStatus(streamerId);
   },
 
   // An event thank-you from the streamer's template. Follows and subs that
