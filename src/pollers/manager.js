@@ -619,6 +619,9 @@ async function pollAllIracingResults() {
   }
 }
 
+// The pollers' timers, so stopAll() can stop them (the shutdown in index.js).
+const timers = [];
+
 function startAll() {
   // A tick that fires while the previous run of the same poller is still going
   // is skipped: overlapping runs read the same stored state and both post.
@@ -631,12 +634,14 @@ function startAll() {
     weeklyDigest: exclusiveRun('WeeklyDigest', pollWeeklyDigest),
   };
 
-  setInterval(run.twitchLive, config.intervals.twitchLive);
-  setInterval(run.twitchClips, config.intervals.twitchClips);
-  setInterval(run.youtubeFeed, config.intervals.youtubeFeed);
-  setInterval(run.youtubeLive, config.intervals.youtubeLive);
-  setInterval(run.subSync, config.intervals.subSync);
-  setInterval(run.weeklyDigest, config.intervals.weeklyDigest);
+  timers.push(
+    setInterval(run.twitchLive, config.intervals.twitchLive),
+    setInterval(run.twitchClips, config.intervals.twitchClips),
+    setInterval(run.youtubeFeed, config.intervals.youtubeFeed),
+    setInterval(run.youtubeLive, config.intervals.youtubeLive),
+    setInterval(run.subSync, config.intervals.subSync),
+    setInterval(run.weeklyDigest, config.intervals.weeklyDigest),
+  );
   // Instagram and TikTok disabled — no reliable free API/scraping available
   // setInterval(pollAllInstagram, config.intervals.instagramFeed);
   // setInterval(pollAllTikTok, config.intervals.tiktokFeed);
@@ -658,4 +663,9 @@ function startAll() {
   // pollAllTikTok();
 }
 
-module.exports = { startAll, pollAllTwitchLive, pollAllTwitchClips, pollAllYouTubeFeed, pollAllYouTubeLive, pollAllSubSync };
+// No poller starts a new run after this; a run already going is not waited for.
+function stopAll() {
+  while (timers.length > 0) clearInterval(timers.pop());
+}
+
+module.exports = { startAll, stopAll, pollAllTwitchLive, pollAllTwitchClips, pollAllYouTubeFeed, pollAllYouTubeLive, pollAllSubSync };

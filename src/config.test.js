@@ -50,3 +50,60 @@ test('the weekly digest poller ticks every 15 minutes unless WEEKLY_DIGEST_INTER
   assert.equal(weeklyDigestIntervalWith('abc'), 15 * 60 * 1000);
   assert.equal(weeklyDigestIntervalWith('3600000'), 3_600_000);
 });
+
+// Loads config.js with these variables set (undefined: unset), then restores
+// them. process.exit is caught: config.js calls it when a required one is missing.
+function loadWith(env) {
+  const saved = {};
+  for (const key of Object.keys(env)) {
+    saved[key] = process.env[key];
+    if (env[key] === undefined) delete process.env[key];
+    else process.env[key] = env[key];
+  }
+  const realExit = process.exit;
+  const realError = console.error;
+  const errors = [];
+  process.exit = (code) => { throw Object.assign(new Error('exit'), { exitCode: code }); };
+  console.error = (...args) => errors.push(args.join(' '));
+  delete require.cache[require.resolve('./config')];
+  try {
+    return { config: require('./config'), errors };
+  } catch (e) {
+    if (e.exitCode === undefined) throw e;
+    return { exitCode: e.exitCode, errors };
+  } finally {
+    process.exit = realExit;
+    console.error = realError;
+    for (const key of Object.keys(env)) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+}
+
+const NO_DISCORD = { DISCORD_TOKEN: undefined, DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined };
+
+test('without DISCORD_DISABLED, a missing Discord variable stops the app at boot', () => {
+  const { exitCode, errors } = loadWith({ ...NO_DISCORD, DISCORD_DISABLED: undefined });
+  assert.equal(exitCode, 1);
+  assert.match(errors.join('\n'), /DISCORD_TOKEN/);
+});
+
+test('DISCORD_DISABLED=1 (development and CI) boots without the Discord variables', () => {
+  const { config, exitCode } = loadWith({ ...NO_DISCORD, DISCORD_DISABLED: '1' });
+  assert.equal(exitCode, undefined);
+  assert.equal(config.discord.disabled, true);
+});
+
+test('Twitch is still required with DISCORD_DISABLED=1', () => {
+  const { exitCode, errors } = loadWith({ ...NO_DISCORD, DISCORD_DISABLED: '1', TWITCH_CLIENT_SECRET: undefined });
+  assert.equal(exitCode, 1);
+  assert.match(errors.join('\n'), /TWITCH_CLIENT_SECRET/);
+  assert.doesNotMatch(errors.join('\n'), /DISCORD/);
+});
+
+test('Discord is on unless DISCORD_DISABLED is exactly 1', () => {
+  for (const value of [undefined, '', '0', 'true', 'yes']) {
+    assert.equal(loadWith({ DISCORD_DISABLED: value }).config.discord.disabled, false, String(value));
+  }
+});

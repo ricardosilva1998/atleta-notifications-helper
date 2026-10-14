@@ -7,8 +7,8 @@
 //   2. the error handler is registered after every route and parser, so
 //      anything they throw ends there (later tasks add parsers and routes:
 //      they must go above it);
-//   3. the body parsers come from bodyParsers.js only, and every /api route
-//      sits behind one apiLimiter.
+//   3. request tracking and /health come first, the body parsers come from
+//      bodyParsers.js only, and every /api route sits behind one apiLimiter.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -51,6 +51,16 @@ function at(needle) {
   assert.ok(index > 0, `server.js has ${needle}`);
   return index;
 }
+
+test('requests are tracked for the shutdown, and /health is answered, before anything else runs', () => {
+  const track = at('app.use(httpDrain.track);');
+  const health = at("app.get('/health', healthHandler(db));");
+  assert.ok(track < health, 'the tracker counts the health check too');
+  for (const later of ["req.get('x-forwarded-proto') === 'http'", 'app.use(helmet(', 'app.use(generalLimiter);', 'app.use(cookieParser());', 'const sid = req.cookies?.session;']) {
+    assert.ok(health < at(later), `/health comes before ${later}`);
+  }
+  assert.equal(source.indexOf("app.get('/health'", health + 1), -1, 'one /health route');
+});
 
 test('the body parsers are mounted once, from bodyParsers.js, before any route', () => {
   const mount = at('mountBodyParsers(app);');

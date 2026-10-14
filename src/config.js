@@ -1,9 +1,13 @@
 const { parseAdminDiscordIds } = require('./adminAccess');
 
+// DISCORD_DISABLED=1 is for development and CI only: the site runs without the
+// Discord bot (nothing logs in to Discord, no slash commands, welcome messages
+// or pollers), so the three Discord variables are not needed. Never set it in
+// production.
+const discordDisabled = process.env.DISCORD_DISABLED === '1';
+
 const required = [
-  'DISCORD_TOKEN',
-  'DISCORD_CLIENT_ID',
-  'DISCORD_CLIENT_SECRET',
+  ...(discordDisabled ? [] : ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET']),
   'TWITCH_CLIENT_ID',
   'TWITCH_CLIENT_SECRET',
 ];
@@ -25,6 +29,7 @@ module.exports = {
     token: process.env.DISCORD_TOKEN,
     clientId: process.env.DISCORD_CLIENT_ID,
     clientSecret: process.env.DISCORD_CLIENT_SECRET,
+    disabled: discordDisabled, // DISCORD_DISABLED=1, see above
   },
   twitch: {
     clientId: process.env.TWITCH_CLIENT_ID,

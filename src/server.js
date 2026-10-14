@@ -10,6 +10,8 @@ const { t, SUPPORTED_LANGS } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
+const { healthHandler } = require('./health');
+const httpDrain = require('./httpDrain');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
 const { isSnowflake, findPublicVoiceChannel } = require('./services/voicePresence');
 
@@ -27,6 +29,15 @@ const syncRoutes = require('./routes/sync');
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 app.set('trust proxy', 1); // Trust first proxy (Railway/Cloudflare)
+
+// Every request is counted until it is answered, so a shutdown can wait for it
+// (httpDrain.js, stop() below).
+app.use(httpDrain.track);
+
+// Railway's deploy check and CI (health.js). Ahead of the HTTPS redirect, the
+// rate limits and the session lookup: the check comes over plain HTTP from
+// inside Railway, carries no cookie, and must always be answered.
+app.get('/health', healthHandler(db));
 
 // HTTPS redirect in production
 app.use((req, res, next) => {
@@ -1225,17 +1236,24 @@ app.post('/set-language', (req, res) => {
   res.redirect(referer);
 });
 
-// Health check
-app.get('/health', (req, res) => res.send('OK'));
-
 // Error handler: keep it the LAST middleware, after every route and parser, so
 // anything they throw ends in a generic page or JSON body instead of a stack.
 app.use(errorHandler);
+
+let httpServer = null;
 
 function start() {
   const port = config.app.port;
   const server = app.listen(port, () => {
     console.log(`[Server] Dashboard at ${config.app.url}`);
+  });
+  httpServer = server;
+  // A server that cannot listen (the port is taken) must not leave the process
+  // running with no site: exit, so the platform restarts it.
+  server.on('error', (err) => {
+    if (server.listening) return console.error(`[Server] ${err.message}`);
+    console.error(`[Server] Could not listen on port ${port}: ${err.message}`);
+    process.exit(1);
   });
 
   // Pitwall WebSocket relay
@@ -1271,6 +1289,16 @@ function start() {
 
     console.log(`[Sync] Daily sync scheduled at 04:00 UTC (next: ${next.toISOString()})`);
   }
+
+  return server;
 }
 
-module.exports = { start };
+// On SIGTERM/SIGINT (index.js): stop taking connections, end the overlay event
+// streams and give the requests in progress up to timeoutMs to finish
+// (httpDrain.js). Resolves with how many had not finished by then.
+function stop({ timeoutMs = 10_000 } = {}) {
+  if (!httpServer) return Promise.resolve(0);
+  return httpDrain.drain(httpServer, { timeoutMs });
+}
+
+module.exports = { start, stop };

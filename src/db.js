@@ -5549,4 +5549,6 @@ module.exports = {
   endTipGoal,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
+  // GET /health: throws when the database cannot answer (or has been closed).
+  ping() { return db.prepare('SELECT 1 AS ok').get(); },
 };

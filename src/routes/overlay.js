@@ -8,6 +8,8 @@ const customSounds = require('../services/customSounds');
 const { buildOverlayConfig } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
+// Event streams are ended when the server shuts down; OBS reconnects to the new one.
+const { holdStream } = require('../httpDrain');
 
 // Unique ID per server process — changes on every restart/deploy
 const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
@@ -65,6 +67,7 @@ router.get('/events/:token', (req, res) => {
 
   bus.on(`overlay:${streamer.id}`, listener);
   endStreamWhenAccountDisabled(streamer.id, req, res);
+  holdStream(res);
 
   req.on('close', () => {
     clearInterval(heartbeat);
@@ -136,6 +139,7 @@ router.get('/sponsors/events/:token', (req, res) => {
 
   bus.on(`overlay:${streamer.id}`, listener);
   endStreamWhenAccountDisabled(streamer.id, req, res);
+  holdStream(res);
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.off(`overlay:${streamer.id}`, listener);
@@ -189,6 +193,7 @@ router.get('/goal/events/:token', (req, res) => {
 
   bus.on(tipGoals.channel(streamer.id), listener);
   endStreamWhenAccountDisabled(streamer.id, req, res);
+  holdStream(res);
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.off(tipGoals.channel(streamer.id), listener);

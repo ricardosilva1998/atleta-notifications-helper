@@ -4,7 +4,7 @@ const { client } = require('./discord');
 const server = require('./server');
 const commands = require('./commands');
 const welcome = require('./welcome');
-const { startAll } = require('./pollers/manager');
+const pollers = require('./pollers/manager');
 
 // Long-running server: a single unhandled rejection / uncaught exception must
 // not take the process down. Log loudly and keep going — Railway will still
@@ -40,88 +40,112 @@ try {
   console.error('[DB] Orphaned watcher cleanup failed:', e.message);
 }
 
-// 'ready' still fires in discord.js v14 but is deprecated and will be dropped
-// in v15; 'clientReady' is emitted alongside it today.
-client.once('clientReady', async () => {
+// At boot: the website and everything that does not need Discord (overlay
+// alerts, the Twitch chat bot, sponsors, giveaways, housekeeping), so Discord
+// being slow or down never keeps the site down.
+function startWithoutDiscord() {
+  server.start();
+
+  const { eventSubManager } = require('./services/eventsub');
+  const { streamElementsManager } = require('./services/streamelements');
+
+  // Start overlay event sources
+  eventSubManager.startAll();
+  streamElementsManager.startAll();
+
+  const { chatManager } = require('./services/twitchChat');
+  chatManager.startAll();
+
+  const { timedNotificationManager } = require('./services/timedNotifications');
+  timedNotificationManager.startAll();
+
+  require('./services/giveawayManager').init();
+
+  // Finish any multistream go-live a previous restart interrupted.
+  require('./services/youtubeBroadcast')
+    .reconcileActiveBroadcasts()
+    .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message));
+
+  console.log('[YT Chat] YouTube Live Chat manager ready (starts when streams go live)');
+
+  startHousekeeping();
+}
+
+function startHousekeeping() {
+  // Clean up old moderation logs (every 6 hours)
+  setInterval(() => { try { db.cleanupOldModLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
+  try { db.cleanupOldModLogs(); } catch (e) {}
+
+  // Clean up old overlay events (every 6 hours)
+  setInterval(() => { try { db.cleanupOldOverlayEvents(); } catch (e) {} }, 6 * 60 * 60 * 1000);
+  db.cleanupOldOverlayEvents();
+
+  // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours).
+  // Before old pending tips are deleted, tips PayPal captured that were never recorded are recovered.
+  const cleanupDonations = async () => {
+    try { db.cleanupOldDonations(); } catch (e) {}
+    try { await require('./routes/tip').reconcilePendingTips(); } catch (e) { console.error('[Tip] Reconcile error:', e.message); }
+    try { db.cleanupOldPendingTips(); } catch (e) {}
+  };
+  setInterval(cleanupDonations, 24 * 60 * 60 * 1000);
+  cleanupDonations();
+
+  // Clean up old bridge logs (every 6 hours)
+  setInterval(() => { try { db.cleanupOldBridgeLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
+  db.cleanupOldBridgeLogs();
+  setInterval(() => { try { db.cleanupOldBridgeBugReports(); } catch (e) {} }, 6 * 60 * 60 * 1000);
+  db.cleanupOldBridgeBugReports();
+
+  // Clean up old notifications (every 24 hours)
+  setInterval(() => { try { db.cleanupOldNotifications(); } catch (e) {} }, 24 * 60 * 60 * 1000);
+  db.cleanupOldNotifications();
+}
+
+// Once Discord is ready: what posts to or reads from Discord.
+async function startWithDiscord() {
   console.log(`Bot online as ${client.user.tag}`);
   console.log(`Serving ${client.guilds.cache.size} guilds`);
   console.log(`${db.getAllStreamers().length} registered streamers`);
 
-  try {
-    // Register slash commands
-    await commands.registerCommands();
-    commands.start();
+  // Register slash commands (a failure is logged; the commands Discord already has keep working)
+  await commands.registerCommands();
+  commands.start();
 
-    // Start welcome listener
-    welcome.start();
+  // Start welcome listener
+  welcome.start();
 
-    // Start all pollers
-    startAll();
+  // Start all pollers (they post to Discord)
+  pollers.startAll();
 
-    const { eventSubManager } = require('./services/eventsub');
-    const { streamElementsManager } = require('./services/streamelements');
+  console.log('All systems running');
+}
 
-    // Start overlay event sources
-    eventSubManager.startAll();
-    streamElementsManager.startAll();
+try {
+  startWithoutDiscord();
+} catch (error) {
+  console.error(`Startup error: ${error.message}`);
+  process.exit(1);
+}
 
-    const { chatManager } = require('./services/twitchChat');
-    chatManager.startAll();
+if (config.discord.disabled) {
+  console.warn('[Discord] DISCORD_DISABLED=1: the Discord bot stays offline (no slash commands, welcome messages or pollers). For development and CI only.');
+} else {
+  // 'ready' still fires in discord.js v14 but is deprecated and will be dropped
+  // in v15; 'clientReady' is emitted alongside it today.
+  client.once('clientReady', () => {
+    startWithDiscord().catch((error) => {
+      console.error(`Startup error: ${error.message}`);
+      process.exit(1);
+    });
+  });
 
-    const { timedNotificationManager } = require('./services/timedNotifications');
-    timedNotificationManager.startAll();
-
-    require('./services/giveawayManager').init();
-
-    // Finish any multistream go-live a previous restart interrupted.
-    require('./services/youtubeBroadcast')
-      .reconcileActiveBroadcasts()
-      .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message));
-
-    console.log('[YT Chat] YouTube Live Chat manager ready (starts when streams go live)');
-
-    // Start web dashboard
-    server.start();
-
-    // Clean up old moderation logs (every 6 hours)
-    setInterval(() => {
-      try {
-        const db = require('./db');
-        db.cleanupOldModLogs();
-      } catch (e) {}
-    }, 6 * 60 * 60 * 1000);
-    try { const db = require('./db'); db.cleanupOldModLogs(); } catch (e) {}
-
-    // Clean up old overlay events (every 6 hours)
-    setInterval(() => { try { db.cleanupOldOverlayEvents(); } catch (e) {} }, 6 * 60 * 60 * 1000);
-    db.cleanupOldOverlayEvents();
-
-    // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours).
-    // Before old pending tips are deleted, tips PayPal captured that were never recorded are recovered.
-    const cleanupDonations = async () => {
-      try { db.cleanupOldDonations(); } catch (e) {}
-      try { await require('./routes/tip').reconcilePendingTips(); } catch (e) { console.error('[Tip] Reconcile error:', e.message); }
-      try { db.cleanupOldPendingTips(); } catch (e) {}
-    };
-    setInterval(cleanupDonations, 24 * 60 * 60 * 1000);
-    cleanupDonations();
-
-    // Clean up old bridge logs (every 6 hours)
-    setInterval(() => { try { db.cleanupOldBridgeLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
-    db.cleanupOldBridgeLogs();
-    setInterval(() => { try { db.cleanupOldBridgeBugReports(); } catch (e) {} }, 6 * 60 * 60 * 1000);
-    db.cleanupOldBridgeBugReports();
-
-    // Clean up old notifications (every 24 hours)
-    setInterval(() => { try { db.cleanupOldNotifications(); } catch (e) {} }, 24 * 60 * 60 * 1000);
-    db.cleanupOldNotifications();
-
-    console.log('All systems running');
-  } catch (error) {
-    console.error(`Startup error: ${error.message}`);
+  // A bot that cannot log in must not leave a process running without it:
+  // exit, so the platform restarts it (and shows the failure).
+  client.login(config.discord.token).catch((error) => {
+    console.error(`[Discord] Login failed: ${error.message}`);
     process.exit(1);
-  }
-});
+  });
+}
 
 // Handle bot joining a new guild
 client.on('guildCreate', (guild) => {
@@ -135,15 +159,44 @@ client.on('guildDelete', (guild) => {
   console.log(`[Guild] Removed from: ${guild.name} (${guild.id})`);
 });
 
-// Graceful shutdown
-function shutdown() {
-  console.log('Shutting down...');
-  db.closeDb();
-  client.destroy();
+// Graceful shutdown (SIGTERM on a deploy or restart, SIGINT on Ctrl-C): stop
+// taking requests, end the overlay event streams, let the requests in progress
+// finish (up to 10 s), stop what talks to Twitch, YouTube and Discord, close
+// the database, exit 0.
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[Shutdown] ${signal}: finishing the requests in progress (up to 10 s)`);
+
+  try {
+    const unfinished = await server.stop({ timeoutMs: 10_000 });
+    if (unfinished > 0) console.warn(`[Shutdown] ${unfinished} request(s) had not finished after 10 s and were cut off`);
+  } catch (e) {
+    console.error(`[Shutdown] Web server: ${e.message}`);
+  }
+
+  const stop = (name, fn) => {
+    try { fn(); } catch (e) { console.error(`[Shutdown] ${name}: ${e.message}`); }
+  };
+  stop('Pollers', () => pollers.stopAll());
+  stop('Twitch chat', () => require('./services/twitchChat').chatManager.stopAll());
+  stop('EventSub', () => require('./services/eventsub').eventSubManager.stopAll());
+  stop('StreamElements', () => require('./services/streamelements').streamElementsManager.stopAll());
+  stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
+  stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
+  try {
+    // At most 2 s for Discord to be told the bot is going offline.
+    await Promise.race([client.destroy(), new Promise((resolve) => setTimeout(resolve, 2000).unref())]);
+  } catch (e) {
+    console.error(`[Shutdown] Discord: ${e.message}`);
+  }
+  stop('Database', () => db.closeDb());
+
+  console.log('[Shutdown] Done');
   process.exit(0);
 }
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-client.login(config.discord.token);
+process.on('SIGTERM', () => { shutdown('SIGTERM'); });
+process.on('SIGINT', () => { shutdown('SIGINT'); });
