@@ -71,6 +71,14 @@ test('every route that serves uploaded files from data/ sends the user-content h
   assert.deepEqual(staticFolders, ["'public'", "'bridge', 'overlays'", "'data', folder"]);
 });
 
+test('the public Discord voice route is rate-limited and only reports public channels (services/voicePresence.js)', () => {
+  const route = at("app.get('/api/voice/:discordUserId', voiceLimiter, async (req, res) => {");
+  const body = source.slice(route, source.indexOf('\n});', route));
+  assert.match(body, /if \(!isSnowflake\(discordUserId\)\) return res\.status\(400\)/);
+  assert.match(body, /findPublicVoiceChannel\(client\.guilds\.cache\.values\(\), discordUserId\)/);
+  assert.doesNotMatch(body, /voiceStates\.cache\.get\(discordUserId\)/, 'no lookup that skips the public-channel check');
+});
+
 test('every /api route is behind apiLimiter, which counts each request once', () => {
   const limiter = at("app.use('/api', apiLimiter);");
   const firstApiRoute = Math.min(...[...source.matchAll(/app\.(use|get|post|put|patch|delete|all)\('\/api/g)]

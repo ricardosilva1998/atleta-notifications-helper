@@ -11,6 +11,7 @@ const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
+const { isSnowflake, findPublicVoiceChannel } = require('./services/voicePresence');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -56,6 +57,8 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => req.method === 'GET' && req.path.startsWith('/track-map/'),
 });
+// The Discord voice overlay asks every 2 s (30 a minute); twice that per address.
+const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
 app.use(generalLimiter);
 function secureCookie(res, name, value, opts = {}) {
   res.cookie(name, value, { httpOnly: true, secure: isProduction, sameSite: 'lax', ...opts });
@@ -422,23 +425,21 @@ app.post('/api/bridge/spotify/control', async (req, res) => {
   }
 });
 
-// Discord voice state API (public, used by Bridge app)
-app.get('/api/voice/:discordUserId', async (req, res) => {
+// Discord voice state API (public, used by the Atleta Racing app's Discord
+// voice overlay, which asks every 2 s with only a Discord user id). Only a
+// voice channel everyone in its server can see is reported; a private one
+// answers like no channel (services/voicePresence.js).
+app.get('/api/voice/:discordUserId', voiceLimiter, async (req, res) => {
   try {
     const { discordUserId } = req.params;
+    if (!isSnowflake(discordUserId)) return res.status(400).json({ error: 'Invalid Discord user id' });
     const { client } = require('./discord');
     const { ensureConnected, isSpeaking, scheduleDisconnect } = require('./services/voiceTracker');
 
-    let voiceState = null;
-    for (const guild of client.guilds.cache.values()) {
-      const vs = guild.voiceStates.cache.get(discordUserId);
-      if (vs && vs.channelId) { voiceState = vs; break; }
-    }
-    if (!voiceState || !voiceState.channel) {
+    const channel = findPublicVoiceChannel(client.guilds.cache.values(), discordUserId);
+    if (!channel) {
       return res.json({ channelName: null, members: [] });
     }
-
-    const channel = voiceState.channel;
 
     // Join voice channel for speaking detection (non-blocking)
     ensureConnected(channel).catch(e => console.log('[VoiceTracker] ensureConnected error:', e.message));
@@ -466,7 +467,10 @@ app.get('/api/voice/:discordUserId', async (req, res) => {
       };
     });
     res.json({ channelName: channel.name, members });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[Voice API]', e.message);
+    res.status(500).json({ error: 'Internal error' });
+  }
 });
 
 // Track map API (public — must be before /api auth middleware)
