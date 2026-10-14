@@ -170,6 +170,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
           getAllStreamers: () => mine(db.getAllStreamers()),
           getAllStreamersAdmin: () => mine(db.getAllStreamersAdmin()),
           getOverlayEnabledStreamers: () => mine(db.getOverlayEnabledStreamers()),
+          getOverlayOrChatbotStreamers: () => mine(db.getOverlayOrChatbotStreamers()),
           getChatbotEnabledStreamers: () => mine(db.getChatbotEnabledStreamers()),
           getYoutubeChatbotEnabledStreamers: () => mine(db.getYoutubeChatbotEnabledStreamers()),
           getStreamersWithActiveMultistreamBroadcast: () => mine(db.getStreamersWithActiveMultistreamBroadcast()),
@@ -185,7 +186,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
         }
       },
     });
-    assert.equal(checked, 13);
+    assert.equal(checked, 14);
   });
 
   test('every query of db.js that reads or writes token columns is one of those covered here', () => {
@@ -214,7 +215,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
     }
     assert.deepEqual([...readers].sort(), [
       '_getAllStreamers', '_getAllStreamersAdmin', '_getStreamerByDiscordId', '_getStreamerById', '_getStreamerByTwitchId',
-      '_upsertStreamerDiscord', 'getChatbotEnabledStreamers', 'getOverlayEnabledStreamers', 'getStreamerByMultistreamToken',
+      '_upsertStreamerDiscord', 'getChatbotEnabledStreamers', 'getOverlayEnabledStreamers', 'getOverlayOrChatbotStreamers', 'getStreamerByMultistreamToken',
       'getStreamerByOverlayToken', 'getStreamerByUsername', 'getStreamersWithActiveMultistreamBroadcast', 'getYoutubeChatbotEnabledStreamers',
     ].sort());
     assert.deepEqual([...writers].sort(), ['_updateStreamerBroadcasterTokens', 'updateBotTokens', 'updateSpotifyTokens', 'updateStreamerYoutubeAccessToken', 'updateStreamerYoutubeTokens'].sort());

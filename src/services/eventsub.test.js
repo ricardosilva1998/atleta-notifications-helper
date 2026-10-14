@@ -45,7 +45,9 @@ let subscribeCalls;
 
 const dbStub = {
   getStreamerById: (id) => streamers[id] || null,
-  getOverlayEnabledStreamers: () => Object.values(streamers),
+  // The list EventSub starts from at boot: every streamer whose overlay or chatbot is on (the stub lists them all).
+  getOverlayOrChatbotStreamers: () => Object.values(streamers),
+  getOverlayEnabledStreamers: () => { throw new Error('EventSub must start from the streamers whose overlay or chatbot is on'); },
   logOverlayEvent: (streamerId, type, username) => effects.overlayLog.push({ streamerId, type, username }),
   clearStreamerBroadcasterScopes: () => {},
 };
@@ -634,6 +636,16 @@ describe('starting every streamer at boot', () => {
     eventSubManager.startAll();
     assert.equal(sockets.length, 2);
     assert.ok(logged.includes('[EventSub] Started 2 connections'), logged.join('\n'));
+  });
+
+  test('connects for a streamer who only has the chatbot on (the overlay is hidden), and still skips one with no broadcaster token', () => {
+    streamers = {
+      1: { ...streamers[1], overlay_enabled: 0, chatbot_enabled: 1 },
+      2: { ...streamers[1], id: 2, overlay_enabled: 0, chatbot_enabled: 1, broadcaster_access_token: null },
+    };
+    eventSubManager.startAll();
+    assert.equal(sockets.length, 1);
+    assert.ok(logged.includes('[EventSub] Started 1 connections (1 skipped: not set up for EventSub)'), logged.join('\n'));
   });
 
   test('startForStreamer says whether the streamer got a connection', () => {

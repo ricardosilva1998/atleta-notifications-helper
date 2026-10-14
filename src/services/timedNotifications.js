@@ -126,9 +126,11 @@ function startChatRotation(streamerId) {
 // ── Manager ──
 
 const timedNotificationManager = {
+  // Every streamer whose overlay or chatbot is on: the images go to the overlay,
+  // the messages to the chat. Each rotation starts only when it is switched on.
   startAll() {
-    const streamers = db.getOverlayEnabledStreamers();
-    console.log(`[Sponsor] startAll: found ${streamers.length} overlay-enabled streamers`);
+    const streamers = db.getOverlayOrChatbotStreamers();
+    console.log(`[Sponsor] startAll: found ${streamers.length} streamers with the overlay or the chatbot on`);
     let imgCount = 0;
     let chatCount = 0;
     for (const s of streamers) {

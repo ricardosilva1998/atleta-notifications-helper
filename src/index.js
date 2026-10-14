@@ -55,7 +55,7 @@ function startWithoutDiscord() {
   const { eventSubManager } = require('./services/eventsub');
   const { streamElementsManager } = require('./services/streamelements');
 
-  // Start overlay event sources
+  // Start the event connections of every streamer whose overlay or chatbot is on
   eventSubManager.startAll();
   streamElementsManager.startAll();
 

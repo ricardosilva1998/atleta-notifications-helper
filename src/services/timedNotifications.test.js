@@ -17,7 +17,10 @@ const dbStub = {
   getEnabledSponsorImages: () => dbStub.images,
   getEnabledSponsorMessages: () => dbStub.messages,
   getStreamerById: () => dbStub.streamer,
-  getOverlayEnabledStreamers: () => [],
+  // What startAll starts from: the streamers whose overlay or chatbot is on.
+  listed: [],
+  getOverlayOrChatbotStreamers: () => dbStub.listed,
+  getOverlayEnabledStreamers: () => { throw new Error('the rotations must start from the streamers whose overlay or chatbot is on'); },
 };
 const chatSends = [];
 const chatStub = { chatManager: { sendMessage: (streamerId, text, options) => chatSends.push({ streamerId, text, ...options }) } };
@@ -235,5 +238,54 @@ describe('sponsor chat messages', () => {
     assert.equal(chatSends.length, 0);
     t.mock.timers.tick(1);
     assert.equal(chatSends.length, 1);
+  });
+});
+
+// The rotations start at boot for every streamer whose overlay or chatbot is on: with the overlay hidden,
+// a streamer who only uses the chatbot still gets the sponsor messages in chat.
+describe('at boot', () => {
+  const listed = (over = {}) => ({
+    id: STREAMER_ID, overlay_enabled: 0, chatbot_enabled: 1, twitch_username: 'somechannel',
+    sponsor_rotation_enabled: 0, sponsor_send_chat: 0, sponsor_chat_interval_minutes: 10, ...over,
+  });
+  const boot = (row) => {
+    dbStub.listed = [row];
+    dbStub.streamer = row;
+    manager.startAll();
+  };
+  afterEach(() => { dbStub.listed = []; });
+
+  test('a streamer who only has the chatbot on gets the sponsor messages in chat, every interval', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    dbStub.messages = [{ message_text: 'Thanks to our sponsors', url: null }];
+    boot(listed({ sponsor_send_chat: 1 }));
+    t.mock.timers.tick(10 * 60_000 - 1);
+    assert.equal(chatSends.length, 0);
+    t.mock.timers.tick(1);
+    assert.deepEqual(chatSends, [{ streamerId: STREAMER_ID, text: 'Thanks to our sponsors', priority: 'low' }]);
+  });
+
+  test('and the image rotation, when it is switched on', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    boot(listed({ sponsor_rotation_enabled: 1 }));
+    assert.equal(shown.length, 1);
+  });
+
+  test('a streamer listed with neither rotation switched on starts nothing', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+    dbStub.images = [image(1)];
+    dbStub.messages = [{ message_text: 'Thanks to our sponsors', url: null }];
+    boot(listed());
+    t.mock.timers.tick(24 * 60 * 60_000);
+    assert.equal(shown.length, 0);
+    assert.equal(chatSends.length, 0);
+  });
+
+  test('a streamer who only has the overlay on is still started', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    boot(listed({ overlay_enabled: 1, chatbot_enabled: 0, sponsor_rotation_enabled: 1 }));
+    assert.equal(shown.length, 1);
   });
 });

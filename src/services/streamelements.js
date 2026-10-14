@@ -105,8 +105,10 @@ class StreamElementsClient {
 const clients = new Map();
 
 const streamElementsManager = {
+  // Every streamer whose overlay or chatbot is on and who saved a StreamElements
+  // token: a tip is thanked in chat as well as shown.
   startAll() {
-    const streamers = db.getOverlayEnabledStreamers();
+    const streamers = db.getOverlayOrChatbotStreamers();
     let count = 0;
     for (const s of streamers) {
       if (s.streamelements_jwt) {

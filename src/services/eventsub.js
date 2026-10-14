@@ -573,8 +573,11 @@ class EventSubClient {
 const clients = new Map();
 
 const eventSubManager = {
+  // Every streamer whose overlay or chatbot is on: the alerts and the chatbot's
+  // thank-yous both come from these events. One with no broadcaster token or no
+  // linked Twitch account is skipped (startForStreamer says so).
   startAll() {
-    const streamers = db.getOverlayEnabledStreamers();
+    const streamers = db.getOverlayOrChatbotStreamers();
     let started = 0;
     for (const s of streamers) {
       if (this.startForStreamer(s.id)) started++;

@@ -2965,8 +2965,10 @@ function getStreamerByOverlayToken(token) {
   return openTokens(db.prepare('SELECT * FROM streamers WHERE overlay_token = ? AND COALESCE(enabled, 1) = 1').get(token));
 }
 
-// Disabled accounts are left out, so the managers that start from this list
-// at boot (EventSub, StreamElements, sponsor rotation) skip them.
+// Streamers whose overlay is on (with a broadcaster token), disabled accounts
+// left out. The connection managers no longer start from this list: they use
+// getOverlayOrChatbotStreamers below, because the chatbot needs the same
+// connections.
 function getOverlayEnabledStreamers() {
   return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
@@ -2974,6 +2976,22 @@ function getOverlayEnabledStreamers() {
     AND COALESCE(enabled, 1) = 1
     AND broadcaster_access_token IS NOT NULL
     AND broadcaster_access_token != ''
+  `).all());
+}
+
+// The streamers the connection managers start for at boot (EventSub,
+// StreamElements, the sponsor rotation): the ones whose overlay or chatbot is
+// on. The overlay's alerts and the chatbot's thank-yous, raid protection and
+// sponsor messages come through the same connections, so a streamer who only
+// uses the chatbot needs them as much as one who only uses the overlay. Disabled
+// accounts are left out. Each manager adds its own conditions to this list:
+// EventSub a broadcaster token, StreamElements a token of its own, the sponsor
+// rotation a rotation that is switched on.
+function getOverlayOrChatbotStreamers() {
+  return openTokensOfAll(db.prepare(`
+    SELECT * FROM streamers
+    WHERE (overlay_enabled = 1 OR chatbot_enabled = 1)
+    AND COALESCE(enabled, 1) = 1
   `).all());
 }
 
@@ -5598,6 +5616,7 @@ module.exports = {
   updateWatchedIracingDriverChannel,
   getStreamerByOverlayToken,
   getOverlayEnabledStreamers,
+  getOverlayOrChatbotStreamers,
   updateOverlayConfig,
   generateOverlayToken,
   updateBroadcasterScopes,

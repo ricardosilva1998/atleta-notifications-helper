@@ -200,6 +200,53 @@ describe('what the managers start at boot, and what the overlay links and stream
     assert.equal(db.getStreamerByOverlayToken('tok-overlay-a').id, a);
     assert.equal(db.getStreamerByMultistreamToken('tok-multistream-a').id, a);
   });
+
+  // The event connections (EventSub, StreamElements, the sponsor rotation) serve the overlay and the chatbot:
+  // the managers start them at boot for every streamer whose overlay or chatbot is on.
+  describe('the streamers the connection managers start at boot (overlay or chatbot on)', () => {
+    let overlayOnly;
+    let chatbotOnly;
+    let neither;
+    beforeEach(() => {
+      overlayOnly = addStreamer({ overlay_enabled: 1, chatbot_enabled: 0, broadcaster_access_token: 'tok-overlay-only', twitch_username: 'overlay_only' });
+      chatbotOnly = addStreamer({ overlay_enabled: 0, chatbot_enabled: 1, broadcaster_access_token: 'tok-chatbot-only', twitch_username: 'chatbot_only' });
+      neither = addStreamer({ overlay_enabled: 0, chatbot_enabled: 0, broadcaster_access_token: 'tok-neither', twitch_username: 'neither' });
+    });
+
+    test('lists a streamer whose chatbot is on though the overlay is off, and one whose overlay is on though the chatbot is off, once each', () => {
+      assert.deepEqual(ids(db.getOverlayOrChatbotStreamers()), [a, b, overlayOnly, chatbotOnly].sort((x, y) => x - y));
+    });
+
+    test('leaves out a streamer with both off, and keeps the overlay list as it was', () => {
+      assert.ok(!ids(db.getOverlayOrChatbotStreamers()).includes(neither));
+      assert.deepEqual(ids(db.getOverlayEnabledStreamers()), [a, b, overlayOnly].sort((x, y) => x - y), 'a chatbot-only streamer is not an overlay streamer');
+    });
+
+    test('a streamer with the chatbot on and no broadcaster token is listed too: each manager applies its own conditions', () => {
+      sql.prepare('UPDATE streamers SET broadcaster_access_token = NULL WHERE id = ?').run(chatbotOnly);
+      assert.ok(ids(db.getOverlayOrChatbotStreamers()).includes(chatbotOnly));
+    });
+
+    test('a disabled account is skipped, and enabling it brings it back', () => {
+      db.disableStreamer(chatbotOnly, null);
+      db.disableStreamer(a, null);
+      assert.deepEqual(ids(db.getOverlayOrChatbotStreamers()), [b, overlayOnly].sort((x, y) => x - y));
+      db.enableStreamer(chatbotOnly);
+      assert.ok(ids(db.getOverlayOrChatbotStreamers()).includes(chatbotOnly));
+    });
+
+    test('a missing enabled flag counts as enabled', () => {
+      sql.prepare('UPDATE streamers SET enabled = NULL WHERE id = ?').run(chatbotOnly);
+      assert.ok(ids(db.getOverlayOrChatbotStreamers()).includes(chatbotOnly));
+    });
+
+    test('switching the chatbot off takes a chatbot-only streamer out of the list, the overlay keeps an overlay streamer in it', () => {
+      sql.prepare('UPDATE streamers SET chatbot_enabled = 0 WHERE id IN (?, ?)').run(chatbotOnly, a);
+      const listed = ids(db.getOverlayOrChatbotStreamers());
+      assert.ok(!listed.includes(chatbotOnly));
+      assert.ok(listed.includes(a), 'its overlay is still on');
+    });
+  });
 });
 
 // ── removing a streamer ──────────────────────────────────────────────────

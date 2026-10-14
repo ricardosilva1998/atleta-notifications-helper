@@ -10,7 +10,12 @@ const path = require('path');
 const Module = require('module');
 
 let streamers;
-const dbStub = { getStreamerById: (id) => streamers[id] || null };
+const dbStub = {
+  getStreamerById: (id) => streamers[id] || null,
+  // What startAll starts from: the streamers whose overlay or chatbot is on (the stub lists them all).
+  getOverlayOrChatbotStreamers: () => Object.values(streamers),
+  getOverlayEnabledStreamers: () => { throw new Error('the managers must start from the streamers whose overlay or chatbot is on'); },
+};
 
 const sockets = { webSocket: [], socketIo: [] };
 class FakeWebSocket {
@@ -100,5 +105,19 @@ describe('StreamElements', () => {
     console.log = realLog;
     assert.equal(sockets.socketIo.length, 0);
     streamElementsManager.stopForStreamer(2);
+  });
+
+  // At boot it starts for the streamers whose overlay or chatbot is on and who saved a token: a tip is thanked
+  // in chat as well as shown, so a streamer who only has the chatbot on needs it too.
+  test('at boot connects for a streamer who only has the chatbot on, and only when there is a token', () => {
+    streamers = {
+      1: { ...streamers[1], overlay_enabled: 0, chatbot_enabled: 1 },
+      3: { ...streamers[1], id: 3, overlay_enabled: 0, chatbot_enabled: 1, streamelements_jwt: null },
+      4: { ...streamers[1], id: 4, overlay_enabled: 1, chatbot_enabled: 0 },
+    };
+    streamElementsManager.startAll();
+    console.log = realLog;
+    assert.equal(sockets.socketIo.length, 2, 'the two with a token');
+    streamElementsManager.stopAll();
   });
 });
