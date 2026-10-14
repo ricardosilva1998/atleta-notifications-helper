@@ -91,7 +91,6 @@
   "guild.milestonesDesc": "Anuncie quando um canal atingir marcos de seguidores ou inscritos.",
   "guild.weeklyHighlights": "Destaques Semanais",
   "guild.weeklyHighlightsDesc": "Publique um resumo semanal toda segunda-feira com estatísticas de live e melhores clipes.",
-  "guild.upgradeToEnable": "Faça upgrade para ativar este recurso.",
   "guild.saveDiscordSettings": "Salvar Configurações do Discord",
 
   "guild.serverSummary": "Resumo do Servidor",
@@ -1262,7 +1261,6 @@
   "account.resources": "Recursos",
   "account.servers": "Servidores",
   "account.quickActions": "Ações Rápidas",
-  "account.subscription": "Assinatura",
   "account.feedback.title": "Dê o seu Feedback",
   "account.feedback.subtitle": "Ajude-nos a melhorar! Avalie a sua experiência e compartilhe suas ideias.",
   "account.feedback.thanks": "Obrigado pelo seu feedback!",
@@ -1272,7 +1270,6 @@
   "account.feedback.placeholder": "Do que você gosta? O que poderia ser melhor?",
   "account.memberSince": "Membro desde {{date}}",
   "account.notAvailable": "N/D",
-  "account.plan": "Plano {{tier}}",
   "account.chart.tooltipOne": "{{period}}: {{count}} notificação",
   "account.chart.tooltipMany": "{{period}}: {{count}} notificações",
   "account.type.twitchLive": "Lives da Twitch",
@@ -1420,6 +1417,14 @@
 
   "upload.error.imageType": "Tipo de arquivo inválido. Permitidos: png, jpg, gif, webp",
   "upload.error.writeFailed": "Falha ao gravar",
+
+  "auth.error.invalidCallback": "Não foi possível verificar o login. Volte e tente novamente.",
+  "auth.error.loginFailed": "Falha no login. Tente novamente.",
+  "auth.error.missingParams": "A conexão não foi concluída: faltam as informações que a Twitch envia de volta. Volte ao painel e tente novamente.",
+  "auth.error.invalidState": "Não foi possível verificar a conexão. Ela pode ter demorado demais ou ter sido iniciada em outro navegador. Volte ao painel e tente novamente.",
+  "auth.error.twitchLinkFailed": "Falha ao vincular a Twitch. Tente novamente.",
+  "auth.error.authorizationFailed": "Falha na autorização. Tente novamente.",
+  "auth.error.spotifyNotConfigured": "O Spotify não está configurado neste servidor.",
 
   "admin.msg.disabled": "Conta desativada: as sessões web dela foram encerradas e as conexões ao vivo foram interrompidas.",
   "admin.msg.enabled": "Conta ativada: as conexões ao vivo dela foram reiniciadas.",

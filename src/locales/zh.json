@@ -91,7 +91,6 @@
   "guild.milestonesDesc": "当频道达到关注者或订阅者里程碑时自动公告。",
   "guild.weeklyHighlights": "每周精选",
   "guild.weeklyHighlightsDesc": "每周一发布一份周报，包含直播数据和热门片段。",
-  "guild.upgradeToEnable": "升级以启用此功能。",
   "guild.saveDiscordSettings": "保存 Discord 设置",
 
   "guild.serverSummary": "服务器概览",
@@ -1262,7 +1261,6 @@
   "account.resources": "资源",
   "account.servers": "服务器",
   "account.quickActions": "快捷操作",
-  "account.subscription": "订阅",
   "account.feedback.title": "提交反馈",
   "account.feedback.subtitle": "帮助我们改进！请为你的体验评分并分享你的想法。",
   "account.feedback.thanks": "感谢你的反馈！",
@@ -1272,7 +1270,6 @@
   "account.feedback.placeholder": "你喜欢什么？哪些方面可以更好？",
   "account.memberSince": "注册于 {{date}}",
   "account.notAvailable": "不适用",
-  "account.plan": "{{tier}} 方案",
   "account.chart.tooltipOne": "{{period}}：{{count}} 条通知",
   "account.chart.tooltipMany": "{{period}}：{{count}} 条通知",
   "account.type.twitchLive": "Twitch 直播",
@@ -1420,6 +1417,14 @@
 
   "upload.error.imageType": "文件类型无效。允许：png、jpg、gif、webp",
   "upload.error.writeFailed": "写入失败",
+
+  "auth.error.invalidCallback": "无法验证登录。请返回并重试。",
+  "auth.error.loginFailed": "登录失败，请重试。",
+  "auth.error.missingParams": "连接未完成：缺少 Twitch 返回的信息。请返回控制面板并重试。",
+  "auth.error.invalidState": "无法验证此连接。可能是耗时过长，或是在其他浏览器中发起的。请返回控制面板并重试。",
+  "auth.error.twitchLinkFailed": "关联 Twitch 失败，请重试。",
+  "auth.error.authorizationFailed": "授权失败，请重试。",
+  "auth.error.spotifyNotConfigured": "此服务器未设置 Spotify。",
 
   "admin.msg.disabled": "账户已禁用：其网页会话已关闭，实时连接已停止。",
   "admin.msg.enabled": "账户已启用：其实时连接已重新启动。",

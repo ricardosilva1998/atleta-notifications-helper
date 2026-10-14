@@ -91,7 +91,6 @@
   "guild.milestonesDesc": "Ankündigung, wenn ein Kanal Follower- oder Abonnenten-Meilensteine erreicht.",
   "guild.weeklyHighlights": "Wöchentliche Highlights",
   "guild.weeklyHighlightsDesc": "Jeden Montag eine wöchentliche Übersicht mit Stream-Statistiken und Top-Clips posten.",
-  "guild.upgradeToEnable": "Upgrade durchführen, um diese Funktion zu aktivieren.",
   "guild.saveDiscordSettings": "Discord-Einstellungen speichern",
 
   "guild.serverSummary": "Server-Übersicht",
@@ -1262,7 +1261,6 @@
   "account.resources": "Ressourcen",
   "account.servers": "Server",
   "account.quickActions": "Schnellaktionen",
-  "account.subscription": "Abonnement",
   "account.feedback.title": "Feedback geben",
   "account.feedback.subtitle": "Hilf uns, besser zu werden! Bewerte deine Erfahrung und teile deine Gedanken mit uns.",
   "account.feedback.thanks": "Danke für dein Feedback!",
@@ -1272,7 +1270,6 @@
   "account.feedback.placeholder": "Was gefällt dir? Was könnte besser sein?",
   "account.memberSince": "Mitglied seit {{date}}",
   "account.notAvailable": "k. A.",
-  "account.plan": "{{tier}}-Tarif",
   "account.chart.tooltipOne": "{{period}}: {{count}} Benachrichtigung",
   "account.chart.tooltipMany": "{{period}}: {{count}} Benachrichtigungen",
   "account.type.twitchLive": "Twitch Live",
@@ -1420,6 +1417,14 @@
 
   "upload.error.imageType": "Ungültiger Dateityp. Erlaubt: png, jpg, gif, webp",
   "upload.error.writeFailed": "Schreiben fehlgeschlagen",
+
+  "auth.error.invalidCallback": "Die Anmeldung konnte nicht überprüft werden. Gehe zurück und versuche es erneut.",
+  "auth.error.loginFailed": "Anmeldung fehlgeschlagen. Bitte versuche es erneut.",
+  "auth.error.missingParams": "Die Verbindung wurde nicht abgeschlossen: Die Informationen, die Twitch zurücksendet, fehlen. Kehre zum Dashboard zurück und versuche es erneut.",
+  "auth.error.invalidState": "Die Verbindung konnte nicht überprüft werden. Möglicherweise hat es zu lange gedauert, oder sie wurde in einem anderen Browser gestartet. Kehre zum Dashboard zurück und versuche es erneut.",
+  "auth.error.twitchLinkFailed": "Die Verknüpfung mit Twitch ist fehlgeschlagen. Bitte versuche es erneut.",
+  "auth.error.authorizationFailed": "Autorisierung fehlgeschlagen. Bitte versuche es erneut.",
+  "auth.error.spotifyNotConfigured": "Spotify ist auf diesem Server nicht eingerichtet.",
 
   "admin.msg.disabled": "Konto deaktiviert: Seine Websitzungen wurden geschlossen und seine Live-Verbindungen beendet.",
   "admin.msg.enabled": "Konto aktiviert: Seine Live-Verbindungen wurden neu gestartet.",

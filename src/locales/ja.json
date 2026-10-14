@@ -91,7 +91,6 @@
   "guild.milestonesDesc": "チャンネルがフォロワーやサブスクライバーのマイルストーンに到達した際にお知らせ。",
   "guild.weeklyHighlights": "週間ハイライト",
   "guild.weeklyHighlightsDesc": "毎週月曜日に配信統計とトップクリップをまとめた週間レポートを投稿。",
-  "guild.upgradeToEnable": "この機能を利用するにはアップグレードが必要です。",
   "guild.saveDiscordSettings": "Discord 設定を保存",
 
   "guild.serverSummary": "サーバー概要",
@@ -1262,7 +1261,6 @@
   "account.resources": "リソース",
   "account.servers": "サーバー",
   "account.quickActions": "クイックアクション",
-  "account.subscription": "サブスクリプション",
   "account.feedback.title": "フィードバックを送る",
   "account.feedback.subtitle": "改善にご協力ください！ご利用の感想やご意見をお聞かせください。",
   "account.feedback.thanks": "フィードバックありがとうございます！",
@@ -1272,7 +1270,6 @@
   "account.feedback.placeholder": "気に入っている点は？もっとこうなると良い点は？",
   "account.memberSince": "登録日：{{date}}",
   "account.notAvailable": "該当なし",
-  "account.plan": "{{tier}} プラン",
   "account.chart.tooltipOne": "{{period}}：通知{{count}}件",
   "account.chart.tooltipMany": "{{period}}：通知{{count}}件",
   "account.type.twitchLive": "Twitch ライブ",
@@ -1420,6 +1417,14 @@
 
   "upload.error.imageType": "無効なファイル形式です。使用できる形式：png、jpg、gif、webp",
   "upload.error.writeFailed": "書き込みに失敗しました",
+
+  "auth.error.invalidCallback": "ログインを確認できませんでした。前のページに戻って、もう一度お試しください。",
+  "auth.error.loginFailed": "ログインに失敗しました。もう一度お試しください。",
+  "auth.error.missingParams": "接続が完了しませんでした：Twitch から返される情報が不足しています。ダッシュボードに戻って、もう一度お試しください。",
+  "auth.error.invalidState": "接続を確認できませんでした。時間がかかりすぎたか、別のブラウザで開始された可能性があります。ダッシュボードに戻って、もう一度お試しください。",
+  "auth.error.twitchLinkFailed": "Twitch の連携に失敗しました。もう一度お試しください。",
+  "auth.error.authorizationFailed": "認証に失敗しました。もう一度お試しください。",
+  "auth.error.spotifyNotConfigured": "このサーバーでは Spotify が設定されていません。",
 
   "admin.msg.disabled": "アカウントを無効にしました：Web セッションを終了し、ライブ接続を停止しました。",
   "admin.msg.enabled": "アカウントを有効にしました：ライブ接続を再開しました。",

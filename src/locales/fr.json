@@ -91,7 +91,6 @@
   "guild.milestonesDesc": "Annoncez quand une chaîne atteint des paliers d'abonnés ou de followers.",
   "guild.weeklyHighlights": "Temps Forts de la Semaine",
   "guild.weeklyHighlightsDesc": "Publiez un récapitulatif hebdomadaire chaque lundi avec les statistiques de stream et les meilleurs clips.",
-  "guild.upgradeToEnable": "Passez à un forfait supérieur pour activer cette fonctionnalité.",
   "guild.saveDiscordSettings": "Enregistrer les Paramètres Discord",
 
   "guild.serverSummary": "Résumé du Serveur",
@@ -1262,7 +1261,6 @@
   "account.resources": "Ressources",
   "account.servers": "Serveurs",
   "account.quickActions": "Actions Rapides",
-  "account.subscription": "Abonnement",
   "account.feedback.title": "Donner votre Avis",
   "account.feedback.subtitle": "Aidez-nous à nous améliorer ! Évaluez votre expérience et partagez vos impressions.",
   "account.feedback.thanks": "Merci pour votre avis !",
@@ -1272,7 +1270,6 @@
   "account.feedback.placeholder": "Qu'aimez-vous ? Qu'est-ce qui pourrait être amélioré ?",
   "account.memberSince": "Membre depuis le {{date}}",
   "account.notAvailable": "N/D",
-  "account.plan": "Forfait {{tier}}",
   "account.chart.tooltipOne": "{{period}} : {{count}} notification",
   "account.chart.tooltipMany": "{{period}} : {{count}} notifications",
   "account.type.twitchLive": "Twitch en Direct",
@@ -1420,6 +1417,14 @@
 
   "upload.error.imageType": "Type de fichier invalide. Formats autorisés : png, jpg, gif, webp",
   "upload.error.writeFailed": "Échec de l'écriture",
+
+  "auth.error.invalidCallback": "La tentative de connexion n'a pas pu être vérifiée. Revenez en arrière et réessayez.",
+  "auth.error.loginFailed": "Échec de la connexion. Veuillez réessayer.",
+  "auth.error.missingParams": "La connexion n'a pas été terminée : les informations renvoyées par Twitch sont manquantes. Retournez sur le tableau de bord et réessayez.",
+  "auth.error.invalidState": "La connexion n'a pas pu être vérifiée. Elle a peut-être pris trop de temps, ou a été lancée dans un autre navigateur. Retournez sur le tableau de bord et réessayez.",
+  "auth.error.twitchLinkFailed": "Échec de la liaison avec Twitch. Veuillez réessayer.",
+  "auth.error.authorizationFailed": "Échec de l'autorisation. Veuillez réessayer.",
+  "auth.error.spotifyNotConfigured": "Spotify n'est pas configuré sur ce serveur.",
 
   "admin.msg.disabled": "Compte désactivé : ses sessions web ont été fermées et ses connexions en direct ont été arrêtées.",
   "admin.msg.enabled": "Compte activé : ses connexions en direct ont été relancées.",
