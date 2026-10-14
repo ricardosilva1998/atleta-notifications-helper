@@ -202,7 +202,7 @@ describe('the refusal', () => {
   });
 });
 
-describe('the routes it leaves alone', () => {
+describe('the routes programs call (CSRF_EXEMPT): no Origin asked for', () => {
   // Every request with an unsafe method that the Atleta Racing app (bridge/)
   // sends to the site, as it sends them: no Origin, no cookie.
   const BRIDGE_CALLS = [
@@ -238,8 +238,27 @@ describe('the routes it leaves alone', () => {
     assert.ok(reached(await send('DELETE', '/api/session/7?bridge_id=x')));
   });
 
-  test('they are left alone with a session cookie too (the app sends none; a page may)', async () => {
-    assert.ok(reached(await send('POST', '/api/track-stats', { headers: { 'x-test-session': SESSION, Origin: SITE }, json: {} })));
+  // Whisper and Spotify control also log in through the session; the Track
+  // Database, iRacing and tip pages call some of these routes while logged in.
+  test('a request to one of them that carries a logged-in session still needs its token', async () => {
+    for (const urlPath of ['/api/bridge/whisper', '/api/bridge/spotify/control', '/api/track-stats', '/api/track-map', '/tip/somestreamer/create']) {
+      const refused = await send('POST', urlPath, { headers: { 'x-test-session': SESSION, Origin: SITE }, json: { action: 'next' } });
+      assert.equal(refused.status, 403, `${urlPath} without the token`);
+      assert.ok(reached(await send('POST', urlPath, { headers: { 'x-test-session': SESSION, Origin: SITE, 'X-CSRF-Token': TOKEN }, json: { action: 'next' } })), `${urlPath} with it`);
+    }
+    // Another session's token does not do, with or without an Origin.
+    const other = csrfToken('b'.repeat(64), SECRET);
+    assert.equal((await send('POST', '/api/bridge/spotify/control', { headers: { 'x-test-session': SESSION, 'X-CSRF-Token': other }, json: { action: 'next' } })).status, 403);
+    // The Origin is still not asked for: the token is enough.
+    assert.ok(reached(await send('PATCH', '/api/bridge-bug-reports/3', { headers: { 'x-test-session': SESSION, 'X-CSRF-Token': TOKEN }, json: { status: 'approved' } })));
+    assert.match(logs[0], /^\[CSRF\] Refused POST \/api\/bridge\/whisper: no token$/);
+  });
+
+  test('they never see the _csrf field either', async () => {
+    const anonymous = await send('POST', '/tip/somestreamer/create', { form: { amount: '5', _csrf: 'whatever-the-page-had' } });
+    assert.deepEqual(anonymous.json().body, { amount: '5' });
+    const loggedIn = await send('POST', '/tip/somestreamer/create', { headers: { 'x-test-session': SESSION, Origin: SITE }, form: { amount: '5', _csrf: TOKEN } });
+    assert.deepEqual(loggedIn.json().body, { amount: '5' });
   });
 
   test('the website\'s own sign-up form (not JSON) is checked', async () => {
@@ -265,7 +284,7 @@ describe('the routes it leaves alone', () => {
     assert.equal(isExempt(req('POST', '/racing/auth/signup', true)), true);
   });
 
-  test('each entry says why it is left alone', () => {
+  test('each entry says why it skips the Origin check', () => {
     for (const entry of CSRF_EXEMPT) {
       assert.ok(['POST', 'PUT', 'PATCH', 'DELETE'].includes(entry.method), entry.path);
       assert.ok(entry.why && entry.why.length > 10, entry.path);

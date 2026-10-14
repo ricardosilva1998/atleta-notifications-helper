@@ -17,8 +17,9 @@ const PAGE = 'https://atleta.example/dashboard/overlay';
 const TOKEN = 'synthetic-page-token';
 
 // A page with the script loaded, the way src/views/csrf.ejs loads it. With
-// viaLoader, document.currentScript is null, as when a script loader runs it.
-function loadPage({ token = TOKEN, viaLoader = false } = {}) {
+// viaLoader, document.currentScript is null, as when a script loader runs it;
+// loads is how many times the page loads the file.
+function loadPage({ token = TOKEN, viaLoader = false, loads = 1 } = {}) {
   const fetched = [];
   const sentForms = [];
   const xhrs = [];
@@ -44,10 +45,15 @@ function loadPage({ token = TOKEN, viaLoader = false } = {}) {
     }
   }
 
+  // Like a browser's: header names in any case, a header set twice is sent
+  // once with both values joined ("a, b"), and open() starts a new request.
   class XMLHttpRequest {
     constructor() { this.headers = {}; xhrs.push(this); }
-    open(method, url) { this.method = method; this.url = url; }
-    setRequestHeader(name, value) { this.headers[name] = value; }
+    open(method, url) { this.method = method; this.url = url; this.headers = {}; }
+    setRequestHeader(name, value) {
+      const key = String(name).toLowerCase();
+      this.headers[key] = key in this.headers ? `${this.headers[key]}, ${value}` : value;
+    }
     send(body) { this.body = body; }
   }
 
@@ -68,9 +74,14 @@ function loadPage({ token = TOKEN, viaLoader = false } = {}) {
   };
   window.window = window;
   const nativeFetch = window.fetch;
-  vm.runInNewContext(CSRF_JS, window);
+  vm.createContext(window);
+  const fetchAfterEachLoad = [];
+  for (let i = 0; i < loads; i++) {
+    vm.runInContext(CSRF_JS, window);
+    fetchAfterEachLoad.push(window.fetch);
+  }
   const headersOf = (call) => new Headers(call.init && call.init.headers);
-  return { window, fetched, sentForms, xhrs, nativeFetch, headersOf, HTMLFormElement };
+  return { window, fetched, sentForms, xhrs, listeners, nativeFetch, fetchAfterEachLoad, headersOf, HTMLFormElement };
 }
 
 describe('fetch()', () => {
@@ -135,13 +146,54 @@ describe('fetch()', () => {
 });
 
 describe('XMLHttpRequest', () => {
+  const send = (page, method, url, pageHeaders = {}) => {
+    const xhr = new page.window.XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [name, value] of Object.entries(pageHeaders)) xhr.setRequestHeader(name, value);
+    xhr.send('x');
+    return xhr;
+  };
+
   test('a POST to this site gets the header; a GET or another site does not', () => {
     const page = loadPage();
-    const send = (method, url) => { const xhr = new page.window.XMLHttpRequest(); xhr.open(method, url); xhr.send('x'); return xhr; };
-    assert.equal(send('POST', '/dashboard/report').headers['X-CSRF-Token'], TOKEN);
-    assert.equal(send('delete', '/dashboard/x').headers['X-CSRF-Token'], TOKEN);
-    assert.equal(send('GET', '/dashboard/x').headers['X-CSRF-Token'], undefined);
-    assert.equal(send('POST', 'https://elsewhere.example/x').headers['X-CSRF-Token'], undefined);
+    assert.equal(send(page, 'POST', '/dashboard/report').headers['x-csrf-token'], TOKEN);
+    assert.equal(send(page, 'delete', '/dashboard/x').headers['x-csrf-token'], TOKEN);
+    assert.equal(send(page, 'GET', '/dashboard/x').headers['x-csrf-token'], undefined);
+    assert.equal(send(page, 'POST', 'https://elsewhere.example/x').headers['x-csrf-token'], undefined);
+  });
+
+  test('a token the page set itself is kept, not joined to a second one', () => {
+    const page = loadPage();
+    assert.equal(send(page, 'POST', '/a', { 'X-CSRF-Token': 'chosen' }).headers['x-csrf-token'], 'chosen');
+    assert.equal(send(page, 'POST', '/b', { 'x-csrf-token': 'chosen' }).headers['x-csrf-token'], 'chosen');
+    assert.equal(send(page, 'POST', '/c', { 'Content-Type': 'application/json' }).headers['x-csrf-token'], TOKEN, 'another header does not count');
+  });
+
+  test('an XMLHttpRequest used again gets the token for its new request', () => {
+    const page = loadPage();
+    const xhr = new page.window.XMLHttpRequest();
+    xhr.open('POST', '/a');
+    xhr.setRequestHeader('X-CSRF-Token', 'chosen');
+    xhr.send('x');
+    xhr.open('POST', '/b'); // a new request: the page's headers are gone
+    xhr.send('y');
+    assert.equal(xhr.headers['x-csrf-token'], TOKEN);
+  });
+});
+
+describe('a page that loads the file twice (the header and its own include)', () => {
+  test('is set up once: one token on each request, one submit listener, fetch wrapped once', async () => {
+    const page = loadPage({ loads: 2 });
+    const xhr = new page.window.XMLHttpRequest();
+    xhr.open('POST', '/dashboard/report');
+    xhr.send('x');
+    assert.equal(xhr.headers['x-csrf-token'], TOKEN, 'not "token, token"');
+    assert.equal(page.listeners.length, 1);
+    assert.equal(page.fetchAfterEachLoad[1], page.fetchAfterEachLoad[0]);
+    await page.window.fetch('/dashboard/chatbot', { method: 'POST' });
+    assert.equal(page.headersOf(page.fetched[0]).get('X-CSRF-Token'), TOKEN);
+    new page.HTMLFormElement({ method: 'POST', action: '/x' }).submit();
+    assert.deepEqual(page.sentForms[0].fields, [['_csrf', TOKEN]]);
   });
 });
 

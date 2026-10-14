@@ -15,6 +15,11 @@
   var script = document.currentScript || document.querySelector('script[data-csrf-token]');
   var token = (script && script.getAttribute('data-csrf-token')) || '';
   if (!token) return;
+  // Installed once per page, even if the page loads the file twice (header.ejs
+  // and a page that includes csrf.ejs itself): wrapping XMLHttpRequest twice
+  // would send the header twice.
+  if (window.__atletaCsrfInstalled) return;
+  window.__atletaCsrfInstalled = true;
 
   var UNSAFE = /^(post|put|patch|delete)$/i;
 
@@ -75,13 +80,21 @@
   if (typeof XMLHttpRequest === 'function') {
     var nativeOpen = XMLHttpRequest.prototype.open;
     var nativeSend = XMLHttpRequest.prototype.send;
+    var nativeSetHeader = XMLHttpRequest.prototype.setRequestHeader;
     XMLHttpRequest.prototype.open = function (method, url) {
       this._csrfNeeded = UNSAFE.test(String(method)) && sameOrigin(String(url));
+      this._csrfHeaderSet = false; // open() clears the headers a page set
       return nativeOpen.apply(this, arguments);
     };
+    // A token the page sets itself is kept, as with fetch(): a second value
+    // would be joined to it ("a, b") and refused.
+    XMLHttpRequest.prototype.setRequestHeader = function (name) {
+      if (String(name).toLowerCase() === 'x-csrf-token') this._csrfHeaderSet = true;
+      return nativeSetHeader.apply(this, arguments);
+    };
     XMLHttpRequest.prototype.send = function () {
-      if (this._csrfNeeded) {
-        try { this.setRequestHeader('X-CSRF-Token', token); } catch (e) { /* not opened */ }
+      if (this._csrfNeeded && !this._csrfHeaderSet) {
+        try { nativeSetHeader.call(this, 'X-CSRF-Token', token); } catch (e) { /* not opened */ }
       }
       return nativeSend.apply(this, arguments);
     };

@@ -211,9 +211,10 @@ app.use((req, res, next) => {
 // CSRF (csrf.js): a request that changes something must come from one of this
 // site's pages and, from a logged-in visitor, carry the session's token. After
 // the session middleware (the token comes from the session) and the body
-// parsers (it reads the _csrf form field), ahead of every route. The routes it
-// leaves alone (the Atleta Racing app's, the multistream relay's, the
-// development sync, the public tip form) are listed in csrf.js.
+// parsers (it reads the _csrf form field), ahead of every route. The routes
+// that programs call and that skip the "from this site" part (the Atleta
+// Racing app's, the multistream relay's, the development sync, the public tip
+// form) are listed in csrf.js; a logged-in request to them still needs the token.
 app.use(csrfProtection({ appUrl: config.app.url }));
 
 // Routes

@@ -23,7 +23,7 @@ Last audited: 2026-04-11
 - **Complexity:** Medium — needs certificate purchase + CI config
 
 ### 4. CSRF Protection Missing on POST Endpoints — fixed (2026-10-14)
-- **Fix:** `src/csrf.js`. Every POST, PUT, PATCH and DELETE must come from this site (Origin, or Referer without one) and, from a logged-in visitor, carry the session's token; logout is a POST. The routes it leaves alone, each with its reason, are in `CSRF_EXEMPT` there. See "CSRF" in `CLAUDE.md`.
+- **Fix:** `src/csrf.js`. Every POST, PUT, PATCH and DELETE must come from this site (Origin, or Referer without one) and, from a logged-in visitor, carry the session's token; logout is a POST. The routes programs call skip the Origin part (each with its reason in `CSRF_EXEMPT` there), but still need the token from a logged-in visitor. See "CSRF" in `CLAUDE.md`.
 
 ### 5. Pitwall Token in JSON Response
 - **File:** `src/routes/racing-auth.js` (line 143, `/racing/auth/login-api`)

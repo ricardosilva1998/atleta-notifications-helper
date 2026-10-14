@@ -7,16 +7,18 @@
 // server.js mounts csrfProtection() after the session middleware (the token is
 // derived from the session) and the body parsers (it reads the _csrf form
 // field), ahead of every route. A request with any method other than GET, HEAD
-// or OPTIONS, on a route not in CSRF_EXEMPT below, must pass two checks:
+// or OPTIONS must pass two checks:
 //
 //   1. It comes from this site's own pages: its Origin header, or its Referer
 //      when it has no Origin, names this site (APP_URL's origin, or the origin
 //      the request itself was sent to). Browsers name the page a request comes
 //      from, and a page on another site cannot claim to be this one. Origin
-//      "null" (a page with no origin of its own) does not count.
+//      "null" (a page with no origin of its own) does not count. The routes in
+//      CSRF_EXEMPT below skip this check: programs call them, with no Origin.
 //   2. When it carries a logged-in session, it also carries that session's
 //      token, HMAC-SHA256(CSRF_SECRET, the session id's stored hash), in a
-//      _csrf form field or an X-CSRF-Token header. Every page gets the token as
+//      _csrf form field or an X-CSRF-Token header. This applies on every
+//      route, CSRF_EXEMPT ones included. Every page gets the token as
 //      res.locals.csrfToken; views/csrf.ejs loads public/js/csrf.js, which adds
 //      it to the page's POST forms and to its fetch() and XMLHttpRequest calls.
 //
@@ -31,9 +33,15 @@ const crypto = require('crypto');
 const { t } = require('./i18n');
 const { wantsJson, loggedPath } = require('./errorHandler');
 
-// Requests that are not checked. Each comes from a program, not from a page of
-// this site, sends no session cookie, and is authenticated by something else
-// (a bridge id, a racing login, a shared secret) or is public by design.
+// Routes that skip the Origin check (check 1 above). Each is called by a
+// program, not from a page of this site: the program sends no Origin and no
+// session cookie, and is authenticated by something else (a bridge id, a
+// racing login, a shared secret) or the route is public by design. The token
+// check (check 2) still applies to them. A request that carries a logged-in
+// session needs its token here too, so a browser cannot be made to use these
+// routes with its visitor's login: Whisper and Spotify control accept the
+// session as well, and the site's own pages that call some of these routes
+// (Track Database, iRacing, the tip form) send the token.
 // Matched on the method and on the path as Express routes it (in any letter
 // case, with or without a trailing slash). A new route that one of these
 // programs calls with an unsafe method must be added here, or its requests are
@@ -183,19 +191,24 @@ function csrfProtection({ appUrl, secret = csrfSecret() } = {}) {
   return function csrfCheck(req, res, next) {
     const token = req.sessionHash ? csrfToken(req.sessionHash, secret) : '';
     res.locals.csrfToken = token;
-    if (SAFE_METHODS.has(req.method) || isExempt(req)) return next();
+    if (SAFE_METHODS.has(req.method)) return next();
 
-    const source = sourceOrigin(req);
-    const host = req.get('host');
-    const ownOrigin = host ? originOf(`${req.protocol}://${host}`) : null;
-    if (!source || (source !== siteOrigin && source !== ownOrigin)) return refuse(req, res, describeSource(req));
-    if (token) {
-      const presented = presentedToken(req);
-      if (!sameToken(presented, token)) return refuse(req, res, presented ? 'the token does not match the session' : 'no token');
-    }
-    // The routes never see the field: the iRacing overlay settings, for one,
+    const presented = presentedToken(req);
+    // No route ever sees the field: the iRacing overlay settings, for one,
     // save every field they are sent.
     if (req.body && typeof req.body === 'object') delete req.body._csrf;
+
+    // 1. From this site, except on the routes programs call (CSRF_EXEMPT).
+    if (!isExempt(req)) {
+      const source = sourceOrigin(req);
+      const host = req.get('host');
+      const ownOrigin = host ? originOf(`${req.protocol}://${host}`) : null;
+      if (!source || (source !== siteOrigin && source !== ownOrigin)) return refuse(req, res, describeSource(req));
+    }
+    // 2. With a logged-in session, its token, on every route.
+    if (token && !sameToken(presented, token)) {
+      return refuse(req, res, presented ? 'the token does not match the session' : 'no token');
+    }
     next();
   };
 }
