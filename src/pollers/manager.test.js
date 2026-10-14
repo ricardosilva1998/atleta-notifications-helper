@@ -1,9 +1,9 @@
 'use strict';
 
-// The Twitch side of the poller manager (N12, M21, L6): the real manager, the
-// real live poller and the real src/db.js on in-memory SQLite; Twitch and Discord
-// are stubs that record what they were asked, so nothing leaves the machine.
-// All ids, names and numbers are synthetic.
+// The poller manager (N12, M21, M22, L6, M18): the real manager, the real live
+// and feed pollers and the real src/db.js on in-memory SQLite; Twitch, YouTube
+// and Discord are stubs that record what they were asked, so nothing leaves the
+// machine. All ids, names and numbers are synthetic.
 
 const { test, describe, before, after, beforeEach, afterEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,6 +16,8 @@ const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
 const MANAGER_FILE = path.join(__dirname, 'manager.js');
 const LIVE_FILE = path.join(__dirname, 'twitchLive.js');
+const YOUTUBE_LIVE_FILE = path.join(__dirname, 'youtubeLive.js');
+const YOUTUBE_FEED_FILE = path.join(__dirname, 'youtubeFeed.js');
 
 const HOUR = 3600 * 1000;
 const G1 = '400000000000000041';
@@ -34,6 +36,31 @@ const configStub = {
   tiers: { free: { recaps: true, milestones: true } },
   intervals: { twitchLive: 60_000, twitchClips: 300_000, youtubeFeed: 300_000, youtubeLive: 120_000, subSync: 600_000, weeklyDigest: 1_200_000 },
   youtube: { apiKey: '' },
+};
+
+// YouTube: what the stubbed service answers and was asked, and the chat manager's calls.
+const yt = { feeds: {}, feedFails: new Set(), liveCalls: [], rssCalls: [], detailCalls: [], live: new Map(), failed: new Set(), quotaError: false, backoff: false, details: {}, chat: [], polling: new Map() };
+const youtubeStub = {
+  quotaBackoffActive: () => yt.backoff,
+  getLatestVideos: async (channelId) => {
+    yt.rssCalls.push(channelId);
+    if (yt.feedFails.has(channelId)) throw new Error('YouTube RSS fetch failed: 500');
+    return yt.feeds[channelId] || [];
+  },
+  getLiveVideos: async (ids) => {
+    yt.liveCalls.push(ids.slice());
+    if (yt.quotaError) throw Object.assign(new Error('YouTube API quota exceeded'), { code: 'QUOTA_EXCEEDED' });
+    return { live: yt.live, failed: yt.failed };
+  },
+  getVideoDetails: async (ids) => { yt.detailCalls.push(ids.slice()); return yt.details; },
+};
+const chatManagerStub = {
+  youtubeChatManager: {
+    isPolling: (streamerId) => yt.polling.has(streamerId),
+    getLiveChatId: (streamerId) => yt.polling.get(streamerId) || null,
+    startPolling: (streamerId, liveChatId) => { yt.chat.push(['start', streamerId, liveChatId]); yt.polling.set(streamerId, liveChatId); },
+    stopPolling: (streamerId) => { yt.chat.push(['stop', streamerId]); yt.polling.delete(streamerId); },
+  },
 };
 
 const twitchStub = {
@@ -76,7 +103,7 @@ const discordStub = {
   buildIracingResultEmbed: () => ({}),
 };
 
-const noopPollers = ['./twitchClips', './youtubeFeed', './youtubeLive', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed', './iracingResults'];
+const noopPollers = ['./twitchClips', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed', './iracingResults'];
 
 let db;
 let manager;
@@ -97,15 +124,21 @@ before(() => {
       if (request === '../discord') return discordStub;
       if (request === '../services/twitch') return twitchStub;
       if (request === '../services/iracing') return { isConfigured: () => false };
+      if (request === '../services/youtube') return youtubeStub;
+      if (request === '../services/youtubeLiveChat') return chatManagerStub;
       if (noopPollers.includes(request)) return {};
     }
     if (from === LIVE_FILE) {
       if (request === '../services/twitch') return twitchStub;
       if (request === '../discord') return discordStub;
     }
+    if (from === YOUTUBE_LIVE_FILE || from === YOUTUBE_FEED_FILE) {
+      if (request === '../services/youtube') return youtubeStub;
+      if (request === '../discord') return discordStub;
+    }
     return saved.load.call(this, request, parent, isMain);
   };
-  for (const file of [DB_FILE, MANAGER_FILE, LIVE_FILE]) delete require.cache[file];
+  for (const file of [DB_FILE, MANAGER_FILE, LIVE_FILE, YOUTUBE_LIVE_FILE, YOUTUBE_FEED_FILE]) delete require.cache[file];
   const { log, error } = console;
   console.log = () => {}; // a fresh database prints one line per migration
   console.error = () => {};
@@ -115,6 +148,11 @@ before(() => {
   } finally {
     console.log = log;
     console.error = error;
+  }
+  // A new database gets the YouTube chatbot columns only on its second boot (a
+  // known migration-order problem). Add what a second boot would.
+  if (!db.db.pragma('table_info(streamers)').some((c) => c.name === 'yt_chatbot_enabled')) {
+    db.db.exec('ALTER TABLE streamers ADD COLUMN yt_chatbot_enabled INTEGER DEFAULT 0');
   }
 });
 
@@ -156,7 +194,9 @@ const stream = (login, over = {}) => ({
 });
 
 beforeEach(() => {
-  db.db.exec('DELETE FROM channel_state; DELETE FROM channel_milestones; DELETE FROM watched_channels; DELETE FROM guilds; DELETE FROM streamers;');
+  for (const table of ['channel_state', 'channel_milestones', 'youtube_channel_state', 'watched_channels', 'watched_youtube_channels', 'guilds', 'streamers']) {
+    db.db.prepare(`DELETE FROM ${table}`).run();
+  }
   for (const list of Object.values(calls)) list.length = 0;
   sent.length = 0;
   logs.length = 0;
@@ -164,6 +204,8 @@ beforeEach(() => {
   failBatch = null;
   holdBatches = null;
   counts = { followers: 1500, subscribers: 60 };
+  Object.assign(yt, { feeds: {}, feedFails: new Set(), liveCalls: [], rssCalls: [], detailCalls: [], live: new Map(), failed: new Set(), quotaError: false, backoff: false, details: {}, chat: [], polling: new Map() });
+  configStub.youtube.apiKey = '';
   for (const level of ['log', 'warn', 'error']) { saved[level] = console[level]; console[level] = (...args) => logs.push(`${level}: ${args.join(' ')}`); }
 
   streamerA = addStreamer({ twitch_username: 'streamer_a', broadcaster_access_token: 'token-a' });
@@ -481,5 +523,239 @@ describe('startAll: a slow run is not started over', () => {
     mock.timers.tick(configStub.intervals.twitchLive);
     await settle();
     assert.equal(calls.getStreams.length, 2, 'the next tick after the run ended starts a new run');
+  });
+});
+
+// ── YouTube: live detection in batches, the chat after a restart, the quota (M22, M18) ──
+
+describe('pollAllYouTubeLive', () => {
+  const GUILD_LIVE_CHANNEL = 'LIVE-CHANNEL';
+  const feedOf = (...ids) => ids.map((id) => ({ id, title: `Video ${id}`, url: `https://www.youtube.com/watch?v=${id}`, author: 'Some Channel' }));
+  const onAir = (id, liveChatId = `chat-${id}`) => ({ id, title: `Stream ${id}`, description: 'Race night', thumbnail: `https://img.test/${id}.jpg`, liveChatId });
+
+  // streamer owns YouTube channel `channelId`; `watcher` watches it for live posts.
+  function watchYoutube(channelId, streamerId = streamerA, guildId = G1) {
+    db.addWatchedYoutubeChannel(guildId, streamerId, channelId, 'Some Channel', 'VIDEOS-CH', GUILD_LIVE_CHANNEL, null);
+  }
+  function ownerWithChat(channelId, chatbot = 1) {
+    db.db.prepare('UPDATE streamers SET youtube_channel_id = ?, yt_chatbot_enabled = ? WHERE id = ?').run(channelId, chatbot, streamerA);
+  }
+  const youtubePosts = () => sent.filter((s) => s.type === 'youtube_live');
+
+  beforeEach(() => {
+    configStub.youtube.apiKey = 'api-key';
+  });
+
+  test('without an API key, as in production today, nothing is asked and nothing is logged', async () => {
+    configStub.youtube.apiKey = '';
+    watchYoutube('UCa');
+    await manager.pollAllYouTubeLive();
+    assert.deepEqual(yt.rssCalls, []);
+    assert.deepEqual(yt.liveCalls, []);
+    assert.deepEqual(logs, []);
+  });
+
+  test('the videos of all the channels are checked together: one lookup, not one per channel', async () => {
+    for (let i = 0; i < 14; i++) {
+      watchYoutube(`UCchan${i}`);
+      yt.feeds[`UCchan${i}`] = feedOf(...Array.from({ length: 8 }, (_, n) => `v${i}-${n}`));
+    }
+    await manager.pollAllYouTubeLive();
+
+    assert.equal(yt.rssCalls.length, 14, 'each channel\'s feed is read once');
+    assert.equal(yt.liveCalls.length, 1, 'but all their videos go to YouTube together');
+    assert.equal(yt.liveCalls[0].length, 14 * 5, 'the latest five videos of each');
+    assert.equal(new Set(yt.liveCalls[0]).size, 70);
+  });
+
+  test('a channel that goes live is announced and its owner\'s chat is started', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    yt.feeds.UCa = feedOf('v1', 'v2');
+    yt.live = new Map([['v1', onAir('v1')]]);
+
+    await manager.pollAllYouTubeLive();
+
+    assert.deepEqual(youtubePosts().map((p) => p.channelId), [GUILD_LIVE_CHANNEL]);
+    assert.equal(db.getYoutubeChannelState('UCa').is_live, 1);
+    assert.equal(db.getYoutubeChannelState('UCa').live_video_id, 'v1');
+    assert.deepEqual(yt.chat, [['start', streamerA, 'chat-v1']]);
+  });
+
+  test('after a restart in the middle of a stream the chat starts again, with no new announcement', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    db.getYoutubeChannelState('UCa');
+    db.updateYoutubeChannelState('UCa', { is_live: 1, live_video_id: 'v1' }); // what the database says after the restart
+    yt.feeds.UCa = feedOf('v1');
+    yt.live = new Map([['v1', onAir('v1')]]);
+
+    await manager.pollAllYouTubeLive();
+
+    assert.deepEqual(youtubePosts(), [], 'the stream was announced before the restart');
+    assert.deepEqual(yt.chat, [['start', streamerA, 'chat-v1']], 'but its chat is polled again');
+
+    await manager.pollAllYouTubeLive(); // the next poll finds the chat already running
+    assert.deepEqual(yt.chat, [['start', streamerA, 'chat-v1']], 'and leaves it alone');
+  });
+
+  test('a new stream with another chat replaces the old chat polling', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    db.getYoutubeChannelState('UCa');
+    db.updateYoutubeChannelState('UCa', { is_live: 1, live_video_id: 'v1' });
+    yt.polling.set(streamerA, 'chat-v1');
+    yt.feeds.UCa = feedOf('v2', 'v1');
+    yt.live = new Map([['v2', onAir('v2')]]);
+
+    await manager.pollAllYouTubeLive();
+
+    assert.deepEqual(yt.chat, [['start', streamerA, 'chat-v2']]);
+  });
+
+  test('the chat is only started for the channel\'s owner, and only when the chatbot is on', async () => {
+    watchYoutube('UCa'); // streamerA watches UCa but does not own it
+    watchYoutube('UCa', streamerB);
+    yt.feeds.UCa = feedOf('v1');
+    yt.live = new Map([['v1', onAir('v1')]]);
+    await manager.pollAllYouTubeLive();
+    assert.deepEqual(yt.chat, [], 'nobody owns the channel');
+
+    db.db.prepare('UPDATE streamers SET youtube_channel_id = ?, yt_chatbot_enabled = 0 WHERE id = ?').run('UCa', streamerA);
+    await manager.pollAllYouTubeLive();
+    assert.deepEqual(yt.chat, [], 'the owner has the chatbot off');
+  });
+
+  test('a broadcast with no chat to read does not start one', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    yt.feeds.UCa = feedOf('v1');
+    yt.live = new Map([['v1', onAir('v1', null)]]);
+    await manager.pollAllYouTubeLive();
+    assert.deepEqual(yt.chat, []);
+  });
+
+  test('when the stream ends the channel is marked offline and the chat is stopped', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    db.getYoutubeChannelState('UCa');
+    db.updateYoutubeChannelState('UCa', { is_live: 1, live_video_id: 'v1' });
+    yt.polling.set(streamerA, 'chat-v1');
+    yt.feeds.UCa = feedOf('v1');
+
+    await manager.pollAllYouTubeLive();
+
+    assert.equal(db.getYoutubeChannelState('UCa').is_live, 0);
+    assert.deepEqual(yt.chat, [['stop', streamerA]]);
+    assert.deepEqual(youtubePosts(), []);
+  });
+
+  test('a lookup that failed for a channel\'s videos leaves the channel exactly as it was', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    db.getYoutubeChannelState('UCa');
+    db.updateYoutubeChannelState('UCa', { is_live: 1, live_video_id: 'v1' });
+    yt.polling.set(streamerA, 'chat-v1');
+    yt.feeds.UCa = feedOf('v1');
+    yt.failed = new Set(['v1']);
+
+    await manager.pollAllYouTubeLive();
+
+    assert.equal(db.getYoutubeChannelState('UCa').is_live, 1, 'unknown is not offline');
+    assert.deepEqual(yt.chat, [], 'and the chat keeps running');
+  });
+
+  test('a channel whose feed cannot be read is skipped; the others are still checked', async () => {
+    watchYoutube('UCbroken');
+    watchYoutube('UCfine');
+    yt.feedFails.add('UCbroken');
+    yt.feeds.UCfine = feedOf('v1');
+    yt.live = new Map([['v1', onAir('v1')]]);
+
+    await manager.pollAllYouTubeLive();
+
+    assert.ok(logs.some((l) => /Error for UCbroken: YouTube RSS fetch failed: 500/.test(l)));
+    assert.equal(db.getYoutubeChannelState('UCfine').is_live, 1);
+    assert.deepEqual(yt.liveCalls.map((ids) => ids), [['v1']]);
+  });
+
+  test('an exhausted quota ends the run quietly and changes nothing', async () => {
+    ownerWithChat('UCa');
+    watchYoutube('UCa');
+    db.getYoutubeChannelState('UCa');
+    db.updateYoutubeChannelState('UCa', { is_live: 1, live_video_id: 'v1' });
+    yt.feeds.UCa = feedOf('v1');
+    yt.quotaError = true;
+
+    await manager.pollAllYouTubeLive();
+
+    assert.equal(db.getYoutubeChannelState('UCa').is_live, 1);
+    assert.deepEqual(yt.chat, []);
+    assert.deepEqual(logs, [], 'the service logged the pause; the poller adds nothing');
+  });
+
+  test('while YouTube is paused for the quota nothing is asked, by the live poller or the feed poller', async () => {
+    watchYoutube('UCa');
+    yt.feeds.UCa = feedOf('v1');
+    yt.backoff = true;
+    await manager.pollAllYouTubeLive();
+    await manager.pollAllYouTubeFeed();
+    assert.deepEqual(yt.rssCalls, []);
+    assert.deepEqual(yt.liveCalls, []);
+    assert.deepEqual(yt.detailCalls, []);
+  });
+
+  test('a channel with no live notifications set up, or only disabled watchers, is not looked at', async () => {
+    db.addWatchedYoutubeChannel(G1, streamerA, 'UCnolive', 'No live', 'VIDEOS-CH', null, null);
+    db.addWatchedYoutubeChannel(G1, disabled, 'UCdisabled', 'Disabled', 'VIDEOS-CH', GUILD_LIVE_CHANNEL, null);
+    await manager.pollAllYouTubeLive();
+    assert.deepEqual(yt.rssCalls, []);
+    assert.deepEqual(yt.liveCalls, []);
+  });
+});
+
+describe('pollAllYouTubeFeed', () => {
+  const feedOf = (...ids) => ids.map((id) => ({ id, title: `Video ${id}`, url: `https://www.youtube.com/watch?v=${id}`, author: 'Some Channel' }));
+
+  test('announces a new upload, a Short under its own type, and not a live broadcast', async () => {
+    configStub.youtube.apiKey = 'api-key';
+    db.addWatchedYoutubeChannel(G1, streamerA, 'UCa', 'Some Channel', 'VIDEOS-CH', null, JSON.stringify(['old']));
+    yt.feeds.UCa = feedOf('old', 'up1', 'short1', 'onair1');
+    yt.details = {
+      up1: { duration: 600, isShort: false, isLiveOrUpcoming: false },
+      short1: { duration: 150, isShort: true, isLiveOrUpcoming: false },
+      onair1: { duration: 0, isShort: false, isLiveOrUpcoming: true },
+    };
+
+    await manager.pollAllYouTubeFeed();
+
+    assert.deepEqual(sent.map((s) => s.type).sort(), ['youtube_short', 'youtube_video']);
+    assert.deepEqual(yt.detailCalls, [['up1', 'short1', 'onair1']], 'the details of the new videos come in one lookup');
+    assert.deepEqual(JSON.parse(db.getYoutubeChannelState('UCa').known_video_ids), ['old', 'up1', 'short1', 'onair1']);
+  });
+
+  test('without an API key the feed still announces new videos, and asks YouTube for nothing', async () => {
+    db.addWatchedYoutubeChannel(G1, streamerA, 'UCa', 'Some Channel', 'VIDEOS-CH', null, JSON.stringify(['old']));
+    yt.feeds.UCa = feedOf('old', 'up1');
+
+    await manager.pollAllYouTubeFeed();
+
+    assert.deepEqual(sent.map((s) => s.type), ['youtube_video']);
+    assert.deepEqual(yt.detailCalls, []);
+    assert.deepEqual(logs.filter((l) => /warn|error/.test(l)), []);
+  });
+});
+
+describe('startAll: the first run', () => {
+  test('the YouTube live poller also runs at once, so a stream that is on when the server starts gets its chat back', async () => {
+    configStub.youtube.apiKey = 'api-key';
+    db.addWatchedYoutubeChannel(G1, streamerA, 'UCa', 'Some Channel', 'VIDEOS-CH', 'LIVE-CHANNEL', null);
+    yt.feeds.UCa = [{ id: 'v1', title: 'T', url: 'u', author: 'a' }];
+    mock.timers.enable({ apis: ['setInterval'] });
+
+    manager.startAll();
+    await settle();
+
+    assert.equal(yt.liveCalls.length, 1, 'without waiting for the first two-minute tick');
   });
 });

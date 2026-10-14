@@ -1,32 +1,37 @@
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { refreshYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages } = require('./youtube');
+const { requestYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages } = require('./youtube');
 const { getBuiltinResponse, getCommandsList } = require('./builtinCommands');
 const { moderateYoutubeMessage, grantYoutubePermit } = require('./youtubeModeration');
 const { commandCooldownSeconds } = require('./chatCommands');
 const { fillChatTemplate } = require('./chatTemplate');
 
-let botAccessToken = null;
+let botToken = null; // { accessToken, expiresAt } of the bot account
+let botTokenRefresh = null; // the refresh under way, shared by whoever asks meanwhile
 const activePollers = new Map(); // streamerId -> { liveChatId, pageToken, timer }
 const cooldowns = new Map(); // "streamerId:command" -> timestamp
 
 const ytChatTypeMap = { superchat: 'superchat', member: 'member', giftmember: 'giftmember' };
 
+// The bot's access token, refreshed here when it has expired. It lasts about an
+// hour, and the bot is idle between streams, so a token kept from the last stream
+// is usually dead by the next. null when none can be had: why is already logged
+// (services/youtube.js), and the callers skip or retry.
 async function ensureBotToken() {
-  if (!botAccessToken) {
-    botAccessToken = await refreshYoutubeBotToken();
+  if (botToken && Date.now() < botToken.expiresAt) return botToken.accessToken;
+  if (!botTokenRefresh) {
+    botTokenRefresh = requestYoutubeBotToken()
+      .then((fresh) => {
+        botToken = fresh;
+        if (fresh) console.log('[YT Chat] Bot token refreshed');
+        return fresh;
+      })
+      .finally(() => { botTokenRefresh = null; });
   }
-  return botAccessToken;
+  const fresh = await botTokenRefresh;
+  return fresh ? fresh.accessToken : null;
 }
-
-// Refresh token every 50 minutes (tokens expire in 60 min)
-setInterval(async () => {
-  if (activePollers.size > 0) {
-    botAccessToken = await refreshYoutubeBotToken();
-    if (botAccessToken) console.log('[YT Chat] Bot token refreshed');
-  }
-}, 50 * 60 * 1000);
 
 async function handleChatMessage(streamerId, item) {
   const type = item.snippet?.type;

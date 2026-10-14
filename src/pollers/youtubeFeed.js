@@ -1,5 +1,28 @@
 const { getLatestVideos, getVideoDetails } = require('../services/youtube');
 
+// Said once per outage, not on every poll: the feed is read every five minutes.
+let warnedAboutDetails = false;
+
+// What YouTube says about new videos (length, and whether one is a live or
+// upcoming broadcast): { [id]: details }. Without an API key there is nothing to
+// ask, and nothing to say. When the lookup fails, or YouTube does not list a
+// video, that video simply has no entry and is treated as a normal video: a
+// missing duration must not stop an upload from being announced.
+async function lookUpDetails(videoIds, apiKey) {
+  if (!apiKey || videoIds.length === 0) return {};
+  try {
+    const details = await getVideoDetails(videoIds, apiKey);
+    warnedAboutDetails = false;
+    return details;
+  } catch (error) {
+    if (!warnedAboutDetails) {
+      warnedAboutDetails = true;
+      console.warn(`[YouTubeFeed] Could not read the details of new videos (${error.message}) - announcing them as normal videos`);
+    }
+    return {};
+  }
+}
+
 async function check(youtubeChannelId, channelState, apiKey) {
   const videos = await getLatestVideos(youtubeChannelId);
   const knownIds = JSON.parse(channelState.known_video_ids || '[]');
@@ -18,14 +41,15 @@ async function check(youtubeChannelId, channelState, apiKey) {
     return null;
   }
 
-  // Enrich with Shorts detection if API key is available
-  let videoDetails = {};
-  if (apiKey) {
-    videoDetails = await getVideoDetails(newVideos.map(v => v.id), apiKey);
-  }
+  // Enrich with Shorts and live detection if API key is available
+  const videoDetails = await lookUpDetails(newVideos.map((v) => v.id), apiKey);
+
+  // A broadcast that is on air or announced is the live poller's to announce. It
+  // is still remembered as known, so it is not announced as an upload later.
+  const uploads = newVideos.filter((v) => !videoDetails[v.id]?.isLiveOrUpcoming);
 
   // Send as plain text messages so Discord auto-generates the video player
-  const videoData = newVideos.map((video) => {
+  const videoData = uploads.map((video) => {
     const isShort = videoDetails[video.id]?.isShort || false;
     const message = isShort
       ? `📱 **${video.author || 'New'} posted a Short!** — ${video.title}\n${video.url}`
@@ -34,7 +58,7 @@ async function check(youtubeChannelId, channelState, apiKey) {
   });
 
   return {
-    notify: true,
+    notify: videoData.length > 0,
     videoData,
     stateUpdate: { known_video_ids: JSON.stringify(allIds) },
   };

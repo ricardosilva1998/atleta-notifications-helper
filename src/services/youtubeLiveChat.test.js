@@ -2,9 +2,10 @@
 
 // YouTube live chat commands: a lone "!" names no command, and a stored cooldown is
 // held to 5-3600 seconds when it is checked (the same rules as the Twitch chat).
-// The module starts a 50-minute interval when it loads, so the timers are mocked
-// before it is required; db, YouTube and the built-in commands are stubs, and
-// nothing leaves the machine. All ids and names are synthetic.
+// The bot's access token is replaced when it has expired. The polling runs on
+// timers, so they are mocked before the module is required; db, YouTube and the
+// built-in commands are stubs, and nothing leaves the machine. All ids and names
+// are synthetic.
 
 const { test, describe, before, after, beforeEach, afterEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,20 +13,25 @@ const path = require('path');
 const Module = require('module');
 
 const STREAMER_ID = 7;
+const OTHER_STREAMER_ID = 8;
 const sent = []; // what the bot said: { liveChatId, text }
+const tokensUsed = []; // the access token each of those messages was sent with
+let tokenRequests; // how many times a new access token was asked for
+let tokenAnswer; // what the token endpoint answers: () => { accessToken, expiresAt } | null | a promise of either
+let fetchCalls; // how many times the chat was read
 let pages; // what YouTube answers, one page per poll
 let commands = {}; // command name -> row, as db.getChatCommand returns it
 let clock = 1_700_000_000_000; // what Date.now() says: the cooldowns are measured on it
 
 let streamerExtra = {}; // more columns of the streamer row, set by a test
 const dbStub = {
-  getStreamerById: (id) => (id === STREAMER_ID ? { id, yt_chatbot_enabled: 1, mod_link_permit_seconds: 60, ...streamerExtra } : null),
+  getStreamerById: (id) => ((id === STREAMER_ID || id === OTHER_STREAMER_ID) ? { id, yt_chatbot_enabled: 1, mod_link_permit_seconds: 60, ...streamerExtra } : null),
   getChatCommand: (_streamerId, name) => commands[name] || null,
 };
 const youtubeStub = {
-  refreshYoutubeBotToken: async () => 'bot-token',
-  sendYoutubeChatMessage: (liveChatId, text) => { sent.push({ liveChatId, text }); },
-  fetchLiveChatMessages: async () => pages.shift() || { items: [], nextPageToken: 'end', pollingIntervalMillis: 5000 },
+  requestYoutubeBotToken: async () => { tokenRequests += 1; return tokenAnswer(); },
+  sendYoutubeChatMessage: (liveChatId, text, token) => { sent.push({ liveChatId, text }); tokensUsed.push(token); },
+  fetchLiveChatMessages: async () => { fetchCalls += 1; return pages.shift() || { items: [], nextPageToken: 'end', pollingIntervalMillis: 5000 }; },
 };
 const stubs = {
   '../config': {},
@@ -58,6 +64,10 @@ after(() => {
 
 beforeEach(() => {
   sent.length = 0;
+  tokensUsed.length = 0;
+  tokenRequests = 0;
+  fetchCalls = 0;
+  tokenAnswer = () => ({ accessToken: 'bot-token', expiresAt: clock + 59 * 60_000 });
   pages = [];
   commands = {};
   streamerExtra = {};
@@ -155,5 +165,75 @@ describe('Super Chat thank-yous', () => {
     streamerExtra = { yt_chat_superchat_enabled: 1, yt_chat_superchat_template: '{username} sent {amount}! {message}' };
     await deliver([superChat('!commands $&$&', "$'$'$' and\nmore")]);
     assert.deepEqual(sent, [{ liveChatId: 'chat-1', text: "commands $&$& sent $5.00! $'$'$' and more" }]);
+  });
+});
+
+describe('the bot\'s access token', () => {
+  const HOUR = 3_600_000;
+  const quiet = (fn) => {
+    const { error } = console;
+    console.error = () => {};
+    return Promise.resolve().then(fn).finally(() => { console.error = error; });
+  };
+
+  // Whatever an earlier test left cached has run out; the next token is numbered by request.
+  beforeEach(() => {
+    clock += 2 * HOUR;
+    tokenAnswer = () => ({ accessToken: `token-${tokenRequests}`, expiresAt: clock + 59 * 60_000 });
+    commands = { hi: command('hi', 'hello', 5) };
+  });
+
+  test('is asked for once and kept while it is valid', async () => {
+    await say('!hi');
+    clock += 30 * 60_000;
+    await say('!hi');
+    assert.equal(sent.length, 2);
+    assert.equal(tokenRequests, 1);
+    assert.deepEqual(tokensUsed, ['token-1', 'token-1']);
+  });
+
+  test('a token kept from the last stream has expired by the next one, and is replaced before it is used', async () => {
+    await say('!hi');
+    assert.deepEqual(tokensUsed, ['token-1']);
+
+    youtubeChatManager.stopAll(); // the stream ends; the bot idles for two hours
+    clock += 2 * HOUR;
+
+    await say('!hi'); // the next stream
+    assert.equal(tokenRequests, 2, 'a new token was asked for, not the old one reused');
+    assert.deepEqual(tokensUsed, ['token-1', 'token-2']);
+    assert.ok(fetchCalls >= 3, 'and the chat was read with it');
+  });
+
+  test('the chat polled by two streamers at the same moment shares one refresh', async () => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    tokenAnswer = async () => { await gate; return { accessToken: 'shared-token', expiresAt: clock + 59 * 60_000 }; };
+
+    youtubeChatManager.startPolling(STREAMER_ID, 'chat-1');
+    youtubeChatManager.startPolling(OTHER_STREAMER_ID, 'chat-2');
+    await flush();
+    assert.equal(tokenRequests, 1, 'the second asker waits for the refresh already under way');
+
+    release();
+    await flush();
+    assert.equal(tokenRequests, 1);
+    assert.ok(fetchCalls >= 2, 'both chats are read once the token is there');
+  });
+
+  test('when no token can be had the chat is not read with a dead one, and the next poll asks again', async () => {
+    tokenAnswer = () => null;
+    await quiet(async () => {
+      youtubeChatManager.startPolling(STREAMER_ID, 'chat-1');
+      await flush();
+      assert.equal(fetchCalls, 0, 'nothing was read without a token');
+      assert.equal(tokenRequests, 1);
+
+      tokenAnswer = () => ({ accessToken: 'recovered', expiresAt: clock + 59 * 60_000 });
+      mock.timers.tick(30_000); // the retry the module schedules
+      await flush();
+    });
+    assert.equal(tokenRequests, 2);
+    assert.ok(fetchCalls >= 1, 'read as soon as a token came');
   });
 });

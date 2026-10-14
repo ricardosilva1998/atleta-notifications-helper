@@ -13,6 +13,7 @@ const twitterFeed = require('./twitterFeed');
 const iracingResults = require('./iracingResults');
 const iracing = require('../services/iracing');
 const { getFollowerCount, getSubscriberCount, getStreams, STREAMS_PER_REQUEST } = require('../services/twitch');
+const { getLatestVideos, getLiveVideos, quotaBackoffActive } = require('../services/youtube');
 const { chunk } = require('../services/chunk');
 const { exclusiveRun } = require('./exclusiveRun');
 const { planMilestoneCheck } = require('./milestones');
@@ -267,6 +268,9 @@ async function pollAllTwitchClips() {
 // --- YouTube polling (channel-centric) ---
 
 async function pollAllYouTubeFeed() {
+  // YouTube said its daily quota is used up: nothing to ask for an hour.
+  if (quotaBackoffActive()) return;
+
   const channels = db.getAllUniqueWatchedYoutubeChannels();
   if (channels.length > 0 && !pollAllYouTubeFeed._logged) {
     console.log(`[YouTubeFeed] Polling ${channels.length} channels: ${channels.map(c => c.youtube_channel_id).join(', ')}`);
@@ -306,73 +310,106 @@ async function pollAllYouTubeFeed() {
   }
 }
 
+// The streamer whose own YouTube channel this is, among the watchers of it.
+function ownerOfYoutubeChannel(youtubeChannelId, watchers) {
+  for (const w of watchers) {
+    const streamer = db.getStreamerById(w.streamer_id);
+    if (streamer && streamer.youtube_channel_id === youtubeChannelId) return streamer;
+  }
+  return null;
+}
+
+// While the owner's channel is live its chat is polled. This runs on every poll
+// that finds the channel live, not only when the stream goes live: after a
+// restart in the middle of a stream nothing marks a change, so nothing else
+// would start the chat again.
+function ensureYoutubeChatPolling(owner, liveChatId) {
+  if (!owner || !owner.yt_chatbot_enabled || !liveChatId) return;
+  const { youtubeChatManager } = require('../services/youtubeLiveChat');
+  if (youtubeChatManager.isPolling(owner.id) && youtubeChatManager.getLiveChatId(owner.id) === liveChatId) return;
+  try {
+    youtubeChatManager.startPolling(owner.id, liveChatId);
+  } catch (e) {
+    console.error('[YT Live] Failed to start chat polling:', e.message);
+  }
+}
+
+// `target` is a channel with someone to tell and its latest video ids;
+// `liveVideo` is the one of them that is on air, or null.
+async function handleYouTubeLive({ channelId, watchers }, liveVideo) {
+  const state = db.getYoutubeChannelState(channelId);
+  const result = youtubeLive.decide(state, liveVideo);
+  if (result?.stateUpdate) db.updateYoutubeChannelState(channelId, result.stateUpdate);
+
+  const owner = ownerOfYoutubeChannel(channelId, watchers);
+  if (liveVideo) {
+    ensureYoutubeChatPolling(owner, liveVideo.liveChatId);
+  } else if (result?.stateUpdate?.is_live === 0 && owner) {
+    try {
+      require('../services/youtubeLiveChat').youtubeChatManager.stopPolling(owner.id);
+    } catch (e) {}
+  }
+
+  if (result?.notify) {
+    for (const w of watchers) {
+      try {
+        await sendNotification(w.live_channel_id, result.embed, {
+          streamerId: w.streamer_id,
+          guildId: w.guild_id,
+          type: 'youtube_live',
+        });
+      } catch (e) {
+        console.error(`[YouTubeLive] Send failed for ${channelId} to ${w.guild_id}: ${e.message}`);
+      }
+    }
+  }
+}
+
+// Live detection needs the API key; without one (as in production today) there
+// is nothing to do, and nothing is logged. The latest videos of every channel
+// come from the RSS feeds, which cost no quota; whether any of them is on air is
+// then asked of YouTube for all channels together, 50 videos per request.
 async function pollAllYouTubeLive() {
-  const channels = db.getAllUniqueWatchedYoutubeChannels();
-  for (const { youtube_channel_id } of channels) {
+  const apiKey = config.youtube.apiKey;
+  if (!apiKey) return;
+  if (quotaBackoffActive()) return;
+
+  const targets = [];
+  for (const { youtube_channel_id } of db.getAllUniqueWatchedYoutubeChannels()) {
     try {
       const watchers = db.getYoutubeWatchersForChannel(youtube_channel_id)
         .filter((w) => w.notify_live && w.live_channel_id);
       if (watchers.length === 0) continue;
 
-      // Use global YouTube API key
-      const apiKey = config.youtube.apiKey;
-      if (!apiKey) continue;
-
-      const state = db.getYoutubeChannelState(youtube_channel_id);
-      const result = await youtubeLive.check(youtube_channel_id, state, apiKey);
-      if (!result) continue;
-
-      if (result.stateUpdate) db.updateYoutubeChannelState(youtube_channel_id, result.stateUpdate);
-
-      if (result.notify) {
-        // Start YouTube chat polling if chatbot is enabled
-        const videoId = result.stateUpdate?.live_video_id;
-        if (videoId) {
-          for (const w of watchers) {
-            const streamer = db.getStreamerById(w.streamer_id);
-            if (streamer && streamer.youtube_channel_id === youtube_channel_id) {
-              try {
-                const { youtubeChatManager } = require('../services/youtubeLiveChat');
-                const { getLiveChatId } = require('../services/youtube');
-                const liveChatId = await getLiveChatId(videoId, apiKey);
-                if (liveChatId) {
-                  youtubeChatManager.startPolling(streamer.id, liveChatId);
-                }
-              } catch (e) {
-                console.error('[YT Live] Failed to start chat polling:', e.message);
-              }
-              break;
-            }
-          }
-        }
-
-        for (const w of watchers) {
-          try {
-            await sendNotification(w.live_channel_id, result.embed, {
-              streamerId: w.streamer_id,
-              guildId: w.guild_id,
-              type: 'youtube_live',
-            });
-          } catch (e) {
-            console.error(`[YouTubeLive] Send failed for ${youtube_channel_id} to ${w.guild_id}: ${e.message}`);
-          }
-        }
-      }
-
-      if (!result.notify && result.stateUpdate?.is_live === 0) {
-        for (const w of watchers) {
-          const streamer = db.getStreamerById(w.streamer_id);
-          if (streamer && streamer.youtube_channel_id === youtube_channel_id) {
-            try {
-              const { youtubeChatManager } = require('../services/youtubeLiveChat');
-              youtubeChatManager.stopPolling(streamer.id);
-            } catch (e) {}
-            break;
-          }
-        }
-      }
+      const videos = await getLatestVideos(youtube_channel_id);
+      targets.push({
+        channelId: youtube_channel_id,
+        watchers,
+        videoIds: videos.slice(0, youtubeLive.LIVE_CHECK_VIDEOS).map((v) => v.id),
+      });
     } catch (error) {
       console.error(`[YouTubeLive] Error for ${youtube_channel_id}: ${error.message}`);
+    }
+  }
+  if (targets.length === 0) return;
+
+  let lookup;
+  try {
+    lookup = await getLiveVideos(targets.flatMap((t) => t.videoIds), apiKey);
+  } catch (error) {
+    // An exhausted quota is already logged, and YouTube is paused for an hour.
+    if (error.code !== 'QUOTA_EXCEEDED') console.error(`[YouTubeLive] ${error.message}`);
+    return;
+  }
+
+  for (const target of targets) {
+    try {
+      // A lookup that failed says nothing about whether the channel is live.
+      if (target.videoIds.some((id) => lookup.failed.has(id))) continue;
+      const liveVideo = target.videoIds.map((id) => lookup.live.get(id)).find(Boolean) || null;
+      await handleYouTubeLive(target, liveVideo);
+    } catch (error) {
+      console.error(`[YouTubeLive] Error for ${target.channelId}: ${error.message}`);
     }
   }
 }
@@ -614,6 +651,9 @@ function startAll() {
   run.twitchLive();
   run.twitchClips();
   run.subSync();
+  // Also at once, so that a stream that is on when the server starts gets its chat back
+  // within seconds (it does nothing without a YouTube API key).
+  run.youtubeLive();
   // pollAllInstagram();
   // pollAllTikTok();
 }
