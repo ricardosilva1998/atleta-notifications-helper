@@ -1502,6 +1502,110 @@ describe('the test buttons', () => {
     assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]], 'a test is never merged with real thank-yous');
   });
 
+  describe('Preview Alert on the overlay settings page', () => {
+    const bus = require('../services/overlayBus');
+    const TWITCH_TYPES = ['follow', 'subscription', 'bits', 'donation', 'raid'];
+    // The types the page's buttons ask for: openPreview('<type>') in the view.
+    const buttonTypes = [...new Set([...realFs.readFileSync(path.join(SRC, 'views', 'overlay-config.ejs'), 'utf8').matchAll(/openPreview\('([a-z_]+)'\)/g)].map((m) => m[1]))];
+
+    // Everything this streamer's overlay is sent while `action` runs.
+    async function overlayDuring(streamerId, action) {
+      const seen = [];
+      const listener = (event) => seen.push(event);
+      bus.on(`overlay:${streamerId}`, listener);
+      try { await action(); } finally { bus.off(`overlay:${streamerId}`, listener); }
+      return seen;
+    }
+    const preview = (streamerId, type) => post(`/dashboard/overlay/test/${type}`, streamerId);
+
+    test('the page offers a button for each of the nine alerts', () => {
+      assert.deepEqual([...buttonTypes].sort(), [...TWITCH_TYPES, 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember'].sort());
+    });
+
+    test('every button is answered with that alert on the overlay (the four that used to be refused included)', async () => {
+      for (const type of buttonTypes) {
+        const id = addStreamer({ twitch_username: 'somechannel' }); // one streamer per button: the cooldown is per streamer
+        let res;
+        const events = await overlayDuring(id, async () => { res = await preview(id, type); });
+        assert.equal(res.status, 200, type);
+        assert.deepEqual(res.json(), { ok: true }, type);
+        assert.equal(events.length, 1, `${type}: one alert is sent to the overlay`);
+        assert.equal(events[0].type, type);
+        assert.ok(events[0].data && typeof events[0].data.username === 'string' && events[0].data.username, `${type}: a name to show`);
+      }
+    });
+
+    test('the giveaway winner is the card giveawayManager sends: a name, the prize and the keyword', async () => {
+      const id = addStreamer();
+      const [event] = await overlayDuring(id, () => preview(id, 'giveaway_winner'));
+      assert.deepEqual(Object.keys(event.data).sort(), ['keyword', 'prize', 'username']);
+      assert.deepEqual(Object.keys(event).sort(), ['data', 'type']);
+    });
+
+    test('the YouTube alerts are the same samples the YouTube chatbot page plays', async () => {
+      for (const type of ['yt_superchat', 'yt_member', 'yt_giftmember']) {
+        const a = addStreamer();
+        const b = addStreamer();
+        const [fromSettings] = await overlayDuring(a, () => preview(a, type));
+        const [fromChatbot] = await overlayDuring(b, () => post(`/dashboard/youtube-chatbot/test/${type}`, b));
+        assert.deepEqual(fromSettings, fromChatbot, type);
+      }
+    });
+
+    test('only the five Twitch alerts post a thank-you in Twitch chat, and as a test', async () => {
+      for (const type of buttonTypes) {
+        chatCalls.length = 0;
+        const id = addStreamer({ twitch_username: 'somechannel' });
+        const res = await preview(id, type);
+        assert.equal(res.status, 200, type);
+        if (TWITCH_TYPES.includes(type)) {
+          assert.equal(chatCalls.length, 1, type);
+          assert.deepEqual([chatCalls[0][0], chatCalls[0][1], chatCalls[0][2]], ['event', id, type]);
+          assert.deepEqual(chatCalls[0][4], { test: true });
+        } else {
+          assert.deepEqual(chatCalls, [], `${type} is not a Twitch alert`);
+        }
+      }
+    });
+
+    test('a sample is not changed by being sent: the next test sends the same alert', async () => {
+      const a = addStreamer();
+      const b = addStreamer();
+      const [first] = await overlayDuring(a, () => preview(a, 'giveaway_winner'));
+      first.data.username = 'changed on the way';
+      const [second] = await overlayDuring(b, () => preview(b, 'giveaway_winner'));
+      assert.notEqual(second.data.username, 'changed on the way');
+    });
+
+    test('a type the overlay does not have is refused before the cooldown starts', async () => {
+      const id = addStreamer({ twitch_username: 'somechannel' });
+      const seen = await overlayDuring(id, async () => {
+        const refused = await preview(id, 'nope');
+        assert.equal(refused.status, 400);
+        assert.equal(refused.json().error, t('en', 'overlay.test.invalidType'));
+        const next = await preview(id, 'follow'); // straight after: not held for 5 seconds
+        assert.equal(next.status, 200);
+        assert.deepEqual(next.json(), { ok: true });
+        const held = await preview(id, 'raid'); // a real test does start it
+        assert.equal(held.status, 429);
+        const refusedAgain = await preview(id, 'nope'); // and a refusal inside it is still a refusal
+        assert.equal(refusedAgain.status, 400);
+      });
+      assert.deepEqual(seen.map((event) => event.type), ['follow']);
+    });
+
+    test('names that are on every object are not alert types', async () => {
+      const id = addStreamer({ twitch_username: 'somechannel' });
+      const seen = await overlayDuring(id, async () => {
+        for (const type of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+          assert.equal((await preview(id, type)).status, 400, type);
+        }
+      });
+      assert.deepEqual(seen, []);
+      assert.deepEqual(chatCalls, []);
+    });
+  });
+
   test('the chatbot test sends the thank-you as a test, and the sponsor test as a sponsor message', async () => {
     const id = addStreamer({ twitch_username: 'somechannel' });
     assert.deepEqual((await post('/dashboard/chatbot/test/follow', id)).json(), { ok: true });

@@ -886,6 +886,10 @@
       bits: parseInt(document.querySelector('[name="overlay_bits_duration"]')?.value) || 6,
       donation: parseInt(document.querySelector('[name="overlay_donation_duration"]')?.value) || 6,
       raid: 6,
+      giveaway_winner: parseInt(document.querySelector('[name="overlay_giveaway_duration"]')?.value) || 8,
+      yt_superchat: parseInt(document.querySelector('[name="yt_overlay_superchat_duration"]')?.value) || 6,
+      yt_member: parseInt(document.querySelector('[name="yt_overlay_member_duration"]')?.value) || 5,
+      yt_giftmember: parseInt(document.querySelector('[name="yt_overlay_giftmember_duration"]')?.value) || 6,
     };
     const alertDuration = durationMap[type] || 6;
 

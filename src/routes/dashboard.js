@@ -749,27 +749,50 @@ router.post('/overlay/generate-token', (req, res) => {
   res.redirect('/dashboard/overlay');
 });
 
+// The sample alert each "Preview Alert" button plays on the streamer's own overlay.
+// Every alert type the overlay settings page lists is here: the five Twitch ones
+// (which also post their thank-you in Twitch chat), the giveaway winner (the shape
+// giveawayManager.pickWinners() emits) and the three YouTube ones (YOUTUBE_TEST_EVENTS).
+const TWITCH_ALERT_TYPES = ['follow', 'subscription', 'bits', 'donation', 'raid'];
+const YOUTUBE_TEST_EVENTS = {
+  yt_superchat: { type: 'yt_superchat', data: { username: 'TestViewer', amount: '$10.00', message: 'Great stream!' } },
+  yt_member: { type: 'yt_member', data: { username: 'NewFan', level: 'Member' } },
+  yt_giftmember: { type: 'yt_giftmember', data: { username: 'GenerousViewer', amount: 5, level: 'Member' } },
+};
+const OVERLAY_TEST_EVENTS = {
+  follow: { type: 'follow', data: { username: 'TestRacer' } },
+  subscription: { type: 'subscription', data: { username: 'SpeedDemon', message: 'Love the stream!', tier: '1', months: 6 } },
+  bits: { type: 'bits', data: { username: 'NitroFan', amount: 500, message: 'Take my bits!' } },
+  donation: { type: 'donation', data: { username: 'BigSponsor', amount: 25, message: 'Keep racing!', currency: 'USD' } },
+  raid: { type: 'raid', data: { username: 'RaidLeader', viewers: 42 } },
+  giveaway_winner: { type: 'giveaway_winner', data: { username: 'LuckyViewer', prize: 'Signed poster', keyword: 'giveaway' } },
+  ...YOUTUBE_TEST_EVENTS,
+};
+
+// A type the overlay does not have is refused before the shared cooldown starts,
+// so a refused click does not hold up the next test.
+function knownOverlayTestType(req, res, next) {
+  if (!Object.hasOwn(OVERLAY_TEST_EVENTS, req.params.eventType)) {
+    return res.status(400).json({ error: res.locals.t('overlay.test.invalidType') });
+  }
+  next();
+}
+
 // Test notification
-router.post('/overlay/test/:eventType', limitTests, (req, res) => {
+router.post('/overlay/test/:eventType', knownOverlayTestType, limitTests, (req, res) => {
   const bus = require('../services/overlayBus');
-  const { chatManager } = require('../services/twitchChat');
   const type = req.params.eventType;
-  const testEvents = {
-    follow: { type: 'follow', data: { username: 'TestRacer' } },
-    subscription: { type: 'subscription', data: { username: 'SpeedDemon', message: 'Love the stream!', tier: '1', months: 6 } },
-    bits: { type: 'bits', data: { username: 'NitroFan', amount: 500, message: 'Take my bits!' } },
-    donation: { type: 'donation', data: { username: 'BigSponsor', amount: 25, message: 'Keep racing!', currency: 'USD' } },
-    raid: { type: 'raid', data: { username: 'RaidLeader', viewers: 42 } },
-  };
+  const event = OVERLAY_TEST_EVENTS[type];
 
-  const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: res.locals.t('overlay.test.invalidType') });
+  // Fire overlay alert (a copy: the samples above are shared by every request)
+  bus.emit(`overlay:${req.streamer.id}`, { ...event, data: { ...event.data } });
 
-  // Fire overlay alert
-  bus.emit(`overlay:${req.streamer.id}`, event);
-
-  // Fire chatbot message in sync (a test is never merged with real thank-yous)
-  chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
+  // Fire chatbot message in sync (a test is never merged with real thank-yous).
+  // Only the Twitch alerts have a thank-you in Twitch chat.
+  if (TWITCH_ALERT_TYPES.includes(type)) {
+    const { chatManager } = require('../services/twitchChat');
+    chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
+  }
 
   res.json({ ok: true });
 });
@@ -1356,12 +1379,7 @@ router.post('/youtube-chatbot', (req, res) => {
 router.post('/youtube-chatbot/test/:eventType', limitTests, async (req, res) => {
   const bus = require('../services/overlayBus');
   const type = req.params.eventType;
-  const testEvents = {
-    yt_superchat: { type: 'yt_superchat', data: { username: 'TestViewer', amount: '$10.00', message: 'Great stream!' } },
-    yt_member: { type: 'yt_member', data: { username: 'NewFan', level: 'Member' } },
-    yt_giftmember: { type: 'yt_giftmember', data: { username: 'GenerousViewer', amount: 5, level: 'Member' } },
-  };
-  const event = testEvents[type];
+  const event = Object.hasOwn(YOUTUBE_TEST_EVENTS, type) ? YOUTUBE_TEST_EVENTS[type] : null;
   if (!event) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
   // Send to overlay
