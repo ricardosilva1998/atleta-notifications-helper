@@ -729,36 +729,60 @@ router.get('/overlay', overlayPage, (req, res) => {
   });
 });
 
+// EventSub (the Twitch events behind the overlay's alerts and the chatbot's
+// thank-yous), StreamElements and the sponsor rotation run while the overlay or
+// the chatbot is on; the managers start them at boot on the same rule
+// (db.getOverlayOrChatbotStreamers). A save that changes one of the two
+// switches goes through here: `wasNeeded` and `needed` say whether either was
+// on before and is on after. They are started when the first of the two comes
+// on, stopped when the last one goes off, and left alone while the other switch
+// keeps them needed. Settings reach an open OBS source as they are saved, so
+// nothing else reconnects Twitch (a restart drops events for a second or two);
+// the StreamElements connection also follows its token, when that is added,
+// replaced or removed (streamElementsChanged).
+function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt, streamElementsChanged = false }) {
+  try {
+    const { eventSubManager } = require('../services/eventsub');
+    const { streamElementsManager } = require('../services/streamelements');
+    const { timedNotificationManager } = require('../services/timedNotifications');
+    if (needed) {
+      if (!wasNeeded) {
+        eventSubManager.startForStreamer(streamerId);
+        timedNotificationManager.restartForStreamer(streamerId);
+        timedNotificationManager.restartChatForStreamer(streamerId);
+      }
+      if (!wasNeeded || streamElementsChanged) {
+        if (streamElementsJwt) streamElementsManager.startForStreamer(streamerId);
+        else if (streamElementsChanged) streamElementsManager.stopForStreamer(streamerId); // token removed
+      }
+    } else {
+      eventSubManager.stopForStreamer(streamerId);
+      streamElementsManager.stopForStreamer(streamerId);
+      timedNotificationManager.stopForStreamer(streamerId);
+    }
+  } catch (e) {
+    console.error('[Dashboard] Starting or stopping the event connections failed:', e.message);
+  }
+}
+
 // Save overlay settings. Toggles, durations and volume are read and bounded by
 // parseOverlaySettings; a blank StreamElements field keeps the stored token.
 router.post('/overlay', (req, res) => {
   const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
-  // Whether the overlay was on before this save: the connections below were
-  // started then (at boot, or by the save that switched it on).
+  // Whether the overlay was on before this save: the connections were started
+  // then (at boot, or by the save that switched it on). The chatbot has its own
+  // page, so its switch is as stored.
   const wasEnabled = !!req.streamer.overlay_enabled;
+  const chatbotOn = !!req.streamer.chatbot_enabled;
   db.updateOverlayConfig(req.streamer.id, columns);
   pushOverlayConfig(req.streamer.id);
 
-  try {
-    const { eventSubManager } = require('../services/eventsub');
-    const { streamElementsManager } = require('../services/streamelements');
-    if (columns.overlay_enabled) {
-      // Settings reach an open OBS source as they are saved, so a save must not
-      // reconnect Twitch (a restart drops events for a second or two): the
-      // connections are started when the overlay is switched on, and the
-      // StreamElements one also when its token is added, replaced or removed.
-      if (!wasEnabled) eventSubManager.startForStreamer(req.streamer.id);
-      if (!wasEnabled || 'streamelements_jwt' in columns) {
-        if (streamElementsJwt) streamElementsManager.startForStreamer(req.streamer.id);
-        else streamElementsManager.stopForStreamer(req.streamer.id); // token removed (or never set)
-      }
-    } else {
-      eventSubManager.stopForStreamer(req.streamer.id);
-      streamElementsManager.stopForStreamer(req.streamer.id);
-    }
-  } catch (e) {
-    // EventSub/StreamElements services not yet available
-  }
+  syncLiveConnections(req.streamer.id, {
+    wasNeeded: wasEnabled || chatbotOn,
+    needed: !!columns.overlay_enabled || chatbotOn,
+    streamElementsJwt,
+    streamElementsChanged: 'streamelements_jwt' in columns,
+  });
 
   res.redirect('/dashboard/overlay');
 });
@@ -1134,6 +1158,22 @@ router.post('/chatbot', (req, res) => {
     }
   } catch (e) {
     console.error('[Dashboard] Chatbot start/stop error:', e.message);
+  }
+
+  // The chatbot's thank-yous and sponsor messages need the event connections as
+  // the overlay does (see syncLiveConnections): switching the chatbot on starts
+  // them unless the overlay already has, switching it off stops them unless the
+  // overlay still needs them. A save that leaves the switch where it was
+  // changes nothing.
+  const chatbotWasOn = !!req.streamer.chatbot_enabled;
+  const chatbotIsOn = !!b.chatbot_enabled;
+  if (chatbotWasOn !== chatbotIsOn) {
+    const overlayOn = !!req.streamer.overlay_enabled;
+    syncLiveConnections(req.streamer.id, {
+      wasNeeded: overlayOn || chatbotWasOn,
+      needed: overlayOn || chatbotIsOn,
+      streamElementsJwt: req.streamer.streamelements_jwt,
+    });
   }
 
   res.redirect('/dashboard/chatbot');
