@@ -123,6 +123,9 @@ Trouble:
   app in "Testing" mode expires it after 7 days); make a new `YOUTUBE_BOT_REFRESH_TOKEN`.
 - `[SubSync]` logs one count line per streamer per cycle and one line per role given or taken, not one
   per linked viewer. To see who is linked, query `user_links`.
+- Every icon missing on every page: the browser refused the icon library because the `integrity` hash in its
+  `<script>` tag (`header.ejs`, `racing-pitwall.ejs`; unpkg, `lucide@1.57.0`) does not match the file. The
+  version is pinned together with its hash, so only a change to the tag can cause it; nothing to do at deploy.
 
 ## First deploy of the 2026-10 stream fixes
 
@@ -151,7 +154,10 @@ After, and over the first days:
 - `429` answers on `/api` should be rare. Rate limits now count per visitor address instead of per
   Cloudflare data centre, so visitors no longer share one counter. A burst of `429`s means the limits
   need a look. Railway's HTTP logs show them: `railway logs --http --status 429 --lines 100` (flags as
-  in `railway logs --help`).
+  in `railway logs --help`). The visitor's address is trusted from Cloudflare only for the address ranges
+  listed in `CLOUDFLARE_RANGES` (`src/clientIp.js`, dated 2026-10-14): when Cloudflare publishes new ones
+  (https://www.cloudflare.com/ips/), add them there, or visitors coming through them are counted as one
+  shared Cloudflare address again.
 - Once the release has settled, delete the hand-made copy `data/backups/pre-release.db`
   (`backup-restore.md`): it holds account tokens, and the nightly clean-up leaves it alone.
 - `build-bridge.yml` (the "Build Atleta Bridge" workflow) runs when a push touches `bridge/**`,
@@ -183,6 +189,9 @@ Need to do something:
   follow and bits alerts and for `!followage`; the Channel Point Rewards page has its own reconnect notice
   for the rewards permission). Authorizing with another Twitch account than the linked one is refused with
   a banner naming the right one.
+- **A different Twitch account later:** a streamer who links another Twitch account sees "Enable Sub Sync" and
+  authorizes again; until then alerts, sub sync, `!followage`, the follow-age filter and rewards for the new
+  channel are off.
 - **Tip goals:** a goal in another currency than the tip page now shows a warning; use the same currency
   or PayPal tips never count toward it.
 
@@ -190,4 +199,12 @@ Will notice, nothing to do: the Multistream card is hidden until the relay exist
 thank-yous arrive about five seconds after the alert and merge when several come at once; one alert and
 one thank-you per gift sub; giveaways draw winners again; a test button works once every five seconds;
 uploads stop at 250 MB per streamer; logout is a button; pages follow the browser's language until a
-language is chosen; new Discord invites ask for six permissions instead of Administrator.
+language is chosen; new Discord invites ask for six permissions instead of Administrator; Preview Alert works
+for the giveaway winner and the three YouTube alerts; YouTube and giveaway cards fade out instead of vanishing,
+and the giveaway card shows its party popper on both sides; saving the overlay settings mid-stream no longer
+reconnects Twitch; saving the server page while the bot cannot see the server keeps the welcome channel and sub
+role (and says so); a timed giveaway that ended while the app was down is drawn about 30 s after it starts; an
+alert that was in flight when Twitch moved the connection is no longer lost, a connection that never gets its
+welcome is replaced within about 15 s, and chat lines wait (up to a minute) while the bot reconnects; Gift Subs on
+the dashboard counts every sub in a gift (the Subs tile can still include per-recipient rows logged before the
+earlier gift fix, for up to 7 days).
