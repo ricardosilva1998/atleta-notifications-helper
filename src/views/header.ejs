@@ -6,7 +6,7 @@
   <%- include('csrf') %>
   <title><%= typeof title !== 'undefined' ? title : 'Atleta' %></title>
   <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://unpkg.com/lucide@1.57.0/dist/umd/lucide.min.js" integrity="sha384-Qp5jsYqEgOGiWD8YMQ6yXIycASOePxr9mmbt+Ua0Wu1IScYxo0Pxf7o3Kx6NWJID" crossorigin="anonymous"></script>
   <meta property="og:title" content="Atleta — Personal Helper">
   <meta property="og:description" content="<%= t('common.siteDescription') %>">
   <meta property="og:image" content="/app-icon/honest_graphic-running-athlete-9715727.png">
@@ -741,10 +741,10 @@
                       <% if (n.link) { %></a><% } %>
                       <% if (n.action_type === 'team_invite') { %>
                         <div style="display:flex;gap:6px;margin-top:6px;">
-                          <form method="POST" action="/racing/team/invite/<%= n.action_id %>/accept" style="margin:0;">
+                          <form method="POST" action="/racing/teams/invite/<%= n.action_id %>/accept" style="margin:0;">
                             <button type="submit" style="background:#3ecf8e;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;"><%= t('nav.accept') %></button>
                           </form>
-                          <form method="POST" action="/racing/team/invite/<%= n.action_id %>/decline" style="margin:0;">
+                          <form method="POST" action="/racing/teams/invite/<%= n.action_id %>/decline" style="margin:0;">
                             <button type="submit" style="background:rgba(240,68,56,0.15);color:#f04438;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;"><%= t('nav.decline') %></button>
                           </form>
                         </div>
