@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<%= typeof lang !== 'undefined' && lang ? lang : 'en' %>">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <meta property="og:title" content="Atleta — Personal Helper">
-  <meta property="og:description" content="Free all-in-one streaming toolkit — Discord notifications, OBS overlays, Twitch & YouTube chatbots, and moderation for streamers.">
+  <meta property="og:description" content="<%= t('common.siteDescription') %>">
   <meta property="og:image" content="/app-icon/honest_graphic-running-athlete-9715727.png">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
@@ -621,29 +621,29 @@
 
       <a href="<%= (typeof streamer !== 'undefined' && streamer) ? '/dashboard' : '/streamer' %>" class="sidebar-link">
         <i data-lucide="tv"></i>
-        Streamer
+        <%= t('nav.streamer') %>
       </a>
       <a href="/racing" class="sidebar-link">
         <i data-lucide="car"></i>
-        Racing
+        <%= t('nav.racing') %>
       </a>
       <% if (typeof racingUser !== 'undefined' && racingUser) { %>
         <a href="/tracks" class="sidebar-link" style="padding-left:34px;font-size:12px;">
           <i data-lucide="globe" style="width:15px;height:15px;"></i>
-          Track Database
+          <%= t('nav.trackDatabase') %>
         </a>
         <a href="/racing/teams" class="sidebar-link" style="padding-left:34px;font-size:12px;">
           <i data-lucide="users" style="width:15px;height:15px;"></i>
-          Teams
+          <%= t('nav.teams') %>
         </a>
         <a href="/racing/account" class="sidebar-link" style="padding-left:34px;font-size:12px;">
           <i data-lucide="user" style="width:15px;height:15px;"></i>
-          Account
+          <%= t('nav.account') %>
         </a>
         <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
         <a href="/racing/admin" class="sidebar-link" style="padding-left:34px;font-size:12px;">
           <i data-lucide="shield" style="width:15px;height:15px;"></i>
-          Admin
+          <%= t('nav.racingAdmin') %>
         </a>
         <% } %>
       <% } %>
@@ -654,7 +654,7 @@
       </a>
       <a href="/donate" class="sidebar-link">
         <i data-lucide="heart"></i>
-        Buy me a coffee
+        <%= t('nav.buyCoffee') %>
       </a>
 
       <% if (typeof streamer !== 'undefined' && streamer) { %>
@@ -684,7 +684,7 @@
 
   <nav class="nav">
     <div class="nav-left">
-      <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+      <button class="hamburger" onclick="toggleSidebar()" aria-label="<%= t('nav.menu') %>">
         <span></span><span></span><span></span>
       </button>
       <a href="/" class="nav-brand"><img src="/app-icon/honest_graphic-running-athlete-9715727.png" alt="">Atleta</a>
@@ -694,21 +694,21 @@
       <% const _unreadCount = typeof unreadNotifCount !== 'undefined' ? unreadNotifCount : 0; %>
       <% if (typeof racingUser !== 'undefined' && racingUser) { %>
         <div style="position:relative;">
-          <button class="nav-notif-btn" onclick="toggleNotifDropdown(event)" aria-label="Notifications">
+          <button class="nav-notif-btn" onclick="toggleNotifDropdown(event)" aria-label="<%= t('nav.notifications') %>">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <% if (_unreadCount > 0) { %><span class="nav-notif-badge"><%= _unreadCount %></span><% } %>
           </button>
           <div class="nav-notif-dropdown" id="notif-dropdown">
             <div class="nav-notif-header" style="display:flex;align-items:center;justify-content:space-between;">
-              <span>Notifications</span>
+              <span><%= t('nav.notifications') %></span>
               <% if (_notifs.length > 0) { %>
                 <form method="POST" action="/racing/notifications/dismiss-all" style="margin:0;">
-                  <button type="submit" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0;">Dismiss all</button>
+                  <button type="submit" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0;"><%= t('nav.dismissAll') %></button>
                 </form>
               <% } %>
             </div>
             <% if (_notifs.length === 0) { %>
-              <div class="nav-notif-empty">No notifications</div>
+              <div class="nav-notif-empty"><%= t('nav.noNotifications') %></div>
             <% } else { %>
               <div style="max-height:360px;overflow-y:auto;">
               <% _notifs.forEach(function(n) { %>
@@ -736,22 +736,22 @@
                         <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;"><%= n.message %></div>
                         <div style="font-size:10px;color:var(--text-muted);">
                           <% var _ago = Math.floor((Date.now() - new Date(n.created_at + 'Z').getTime()) / 1000); %>
-                          <% if (_ago < 60) { %>just now<% } else if (_ago < 3600) { %><%= Math.floor(_ago/60) %>m ago<% } else if (_ago < 86400) { %><%= Math.floor(_ago/3600) %>h ago<% } else { %><%= Math.floor(_ago/86400) %>d ago<% } %>
+                          <% if (_ago < 60) { %><%= t('nav.timeNow') %><% } else if (_ago < 3600) { %><%= t('nav.timeMinutes', { n: Math.floor(_ago/60) }) %><% } else if (_ago < 86400) { %><%= t('nav.timeHours', { n: Math.floor(_ago/3600) }) %><% } else { %><%= t('nav.timeDays', { n: Math.floor(_ago/86400) }) %><% } %>
                         </div>
                       <% if (n.link) { %></a><% } %>
                       <% if (n.action_type === 'team_invite') { %>
                         <div style="display:flex;gap:6px;margin-top:6px;">
                           <form method="POST" action="/racing/team/invite/<%= n.action_id %>/accept" style="margin:0;">
-                            <button type="submit" style="background:#3ecf8e;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;">Accept</button>
+                            <button type="submit" style="background:#3ecf8e;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;"><%= t('nav.accept') %></button>
                           </form>
                           <form method="POST" action="/racing/team/invite/<%= n.action_id %>/decline" style="margin:0;">
-                            <button type="submit" style="background:rgba(240,68,56,0.15);color:#f04438;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;">Decline</button>
+                            <button type="submit" style="background:rgba(240,68,56,0.15);color:#f04438;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;"><%= t('nav.decline') %></button>
                           </form>
                         </div>
                       <% } %>
                     </div>
                     <form method="POST" action="/racing/notifications/<%= n.id %>/dismiss" style="margin:0;flex-shrink:0;">
-                      <button type="submit" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;opacity:0.5;" title="Dismiss" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">&times;</button>
+                      <button type="submit" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;opacity:0.5;" title="<%= t('nav.dismiss') %>" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">&times;</button>
                     </form>
                   </div>
                 </div>
