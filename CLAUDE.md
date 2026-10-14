@@ -8,14 +8,15 @@ Two-product platform: **Streamer** (Twitch/YouTube/Discord tools) and **Racing**
 
 ## Tech Stack
 
-- **Runtime:** Node.js >= 20 (no TypeScript, no build step)
+- **Runtime:** Node.js 24 (production image `node:24-slim`, pinned by digest in the `Dockerfile`, with `NODE_ENV=production`; no TypeScript, no build step)
 - **Backend:** Express v5, EJS templates (server-rendered)
 - **Database:** SQLite via better-sqlite3 (WAL mode, foreign keys)
 - **Bot:** discord.js v14
 - **External APIs:** Twitch Helix, Twitch EventSub (WebSocket), StreamElements (socket.io), YouTube Data API v3 + Live Chat API + RSS feeds, Spotify Web API, PayPal, OpenAI Whisper
 - **Chatbot:** tmi.js (Twitch IRC) — single shared connection for all channels; YouTube Live Chat API polling
 - **i18n:** Custom JSON-based translation system (7 languages)
-- **Deployment:** Docker on Railway with persistent volume at `/app/data`
+- **Deployment:** Docker on Railway with persistent volume at `/app/data`. `railway.json` builds from the `Dockerfile` (whose `CMD` is the start command) and sets the deploy healthcheck (`/health`, 120 s) and restart-on-failure (10 retries). Backups and restore: `docs/operations/backup-restore.md`.
+- **CI:** `.github/workflows/server-ci.yml` runs on pushes and pull requests to `main` (not for `bridge/**`-only changes): `npm ci`, `node --check` on `src/**/*.js`, the unit suite, and two boots in a row on a fresh database with `DISCORD_DISABLED=1` (each must answer `/health` 200 and exit 0 on SIGTERM). No secrets; actions pinned by commit SHA.
 - **Testing:** `node --test` unit suites (run explicitly; `npm test` is a no-op) + Playwright E2E in `tests/*.spec.js`. NOTE: there is currently **no** pre-push git hook — `.git/hooks` contains only samples. `tests/playwright.config.js` points `baseURL` at production, so specs must build absolute URLs from `E2E_BASE_URL` and guard with `test.skip` rather than relying on `baseURL`
 - **Auth:** Discord OAuth (Streamer), bcryptjs username/password (Racing), linkable accounts
 
@@ -24,6 +25,8 @@ For the Bridge desktop app stack (Electron 28, koffi FFI, etc.) see `bridge/CLAU
 ## Commands
 
 - `npm run dev` — run locally (loads `.env` via `--env-file`)
+- `DISCORD_DISABLED=1 TWITCH_CLIENT_ID=x TWITCH_CLIENT_SECRET=x node src/index.js` — run the site without the Discord bot (dev/CI only; no Discord credentials needed)
+- `node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"` — the unit suite (what CI runs)
 - `npm start` — production start
 - `npx playwright test` — E2E tests (public pages, authenticated flows, custom overlays)
 
@@ -33,10 +36,13 @@ No linting configured.
 
 ```
 src/
-├── index.js              # Entry — boots bot, pollers, EventSub, StreamElements, chat managers, web server
+├── index.js              # Entry — web server + non-Discord managers at boot, Discord parts on ready, graceful shutdown
 ├── config.js             # Env vars + tier definitions + intervals
 ├── db.js                 # SQLite schema, migrations, seeds, all queries
 ├── server.js             # Express app + middleware (session, i18n, language, static files)
+├── bodyParsers.js        # Body limits: 100 kb, except the routes listed in LARGE_BODY_ROUTES
+├── health.js             # GET /health (SELECT 1)
+├── httpDrain.js          # Graceful stop: tracks requests, ends SSE streams, waits up to 10 s
 ├── discord.js            # Discord client + embed helpers (recap, digest, milestone)
 ├── i18n.js               # Translation helper — loads JSON locale files
 ├── commands.js           # Slash commands
@@ -62,6 +68,10 @@ src/
 │   ├── twitchRewards.js      # Channel Points Helix client — see docs/features/channel-point-rewards.md
 │   ├── redemptionDispatcher.js # Channel point redemption flow
 │   ├── tipGoals.js       # Tip goal progress — recordDonation() from PayPal/StreamElements, broadcasts on `tipgoal:<id>`
+│   ├── backups.js        # Nightly VACUUM INTO data/backups/bot-YYYY-MM-DD.db (03:30 UTC), kept 7 days
+│   ├── storageQuota.js   # Upload guard: 200 MB must stay free on data/, 250 MB of media per streamer
+│   ├── userContentHeaders.js # Headers for uploaded files served from data/ (sandbox CSP, nosniff, attachment)
+│   ├── voicePresence.js  # Public-voice-channel lookup for GET /api/voice/:discordUserId
 │   └── redemptionTemplates.js  # Pure formatChatTemplate helper (unit-tested)
 ├── routes/
 │   ├── auth.js           # Discord + Twitch + YouTube + Spotify OAuth flows + Racing account linking
@@ -129,16 +139,24 @@ docs/
 - **Password reset:** `password_reset_tokens` table. Self-service via email (`nodemailer` + Gmail) at `/racing/auth/forgot` → `/racing/auth/reset`. Admin can generate 24h reset links via Racing admin panel "Reset PW" button (`POST /racing/admin/reset-password/:id`). Also at `POST /admin/racing-reset-password` (Discord admin auth).
 - **iRacing Web Integration (coming soon):** Built but disabled — waiting for iRacing OAuth credentials.
 - **DB migrations:** Auto-run on startup in `src/db.js`. SQLite pragmas applied at startup: `journal_mode=WAL`, `foreign_keys=ON`, `synchronous=NORMAL`, `cache_size=-64000`, `temp_store=MEMORY`, `mmap_size=256MB`. Hot-path indexes on `subscriptions(streamer_id, status)`, `watched_channels(twitch_username)`, `watched_youtube_channels(youtube_channel_id)`.
+- **Boot and shutdown (`src/index.js`):** the web server and everything that does not need Discord (EventSub, StreamElements, the Twitch chat bot, sponsor rotations, giveaways, housekeeping, nightly backups) start at boot; slash commands, welcome messages and the pollers start on Discord's `clientReady`. A failed Discord login exits 1 (Railway restarts it); `DISCORD_DISABLED=1` (dev/CI only) skips Discord entirely. On SIGTERM/SIGINT the server stops taking connections, ends the SSE streams (each SSE route registers with `httpDrain.holdStream(res)`; OBS reconnects to the new server), waits up to 10 s for requests in progress, stops the pollers, chat, EventSub, StreamElements, YouTube chat, sponsors and Discord, closes the DB and exits 0.
+- **Health:** `GET /health` (`src/health.js`) answers 200 `{"ok":true}` after `SELECT 1`, 503 `{"ok":false}` when the DB fails; no auth, registered first (ahead of the HTTPS redirect, rate limits and session lookup).
+- **Backups** → `docs/operations/backup-restore.md`. `src/services/backups.js` writes `data/backups/bot-YYYY-MM-DD.db` with `VACUUM INTO` every night at 03:30 UTC and keeps 7 days; nothing serves `data/backups/`. Railway volume backups are separate (set in the Railway dashboard).
+- **Request bodies:** 100 kb for JSON and forms everywhere, except the routes in `LARGE_BODY_ROUTES` (`src/bodyParsers.js`: session 10 MB, lap 5 MB, track map 5 MB, bridge logs 3 MB, imports 10 MB, issue/bug reports 1 MB, racing pictures 2 MB), whose parsers run before the global ones. A parser placed on a route itself never runs (the global one has already read the body), so a route that needs more must be added to that table.
+- **Rate limits:** `generalLimiter` 200/min per address on everything; `apiLimiter` 150/min mounted once as `app.use('/api', apiLimiter)` ahead of every `/api` route (reads of a single track map are not counted) — never add it to an individual `/api` route again (it would count twice); `/api/voice/:discordUserId` has its own 60/min (the Bridge overlay polls every 2 s).
+- **Uploads and uploaded files:** dashboard uploads go through `refuseUpload()` (`src/services/storageQuota.js`): refused with 507 and a translated message when the data volume would keep less than 200 MB free, or (sounds, sponsor images, reward clips, VTuber models) when the streamer's media in `data/{sounds,sponsors,redemptions,vtuber-models}/<id>/` would pass 250 MB. Every route that serves uploaded files (`/sponsors`, `/redemptions`, `/avatars`, `/issues-files`, `/vtuber-models`, `/overlay/sounds/:token/:type`) sends `src/services/userContentHeaders.js`'s headers: `Content-Security-Policy: sandbox; default-src 'none'`, `nosniff`, and `Content-Disposition: attachment` for anything that is not an image, sound, video or model.
+- **Discord voice API:** `GET /api/voice/:discordUserId` (public, used by the Bridge's Discord overlay) takes only a 17–20 digit snowflake and only reports a voice channel `@everyone` can view (`src/services/voicePresence.js`); a private channel answers like no channel.
 - **No ORM:** All SQL is raw in `db.js`.
 - **i18n:** `t(lang, key, params)` helper via `res.locals.t` — cookie-based language preference.
 
 ## Environment Variables
 
 Required:
-- `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`
+- `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` (not with `DISCORD_DISABLED=1`)
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`
 
 Optional:
+- `DISCORD_DISABLED=1` — development and CI only: the site runs without the Discord bot (no login, slash commands, welcome messages or pollers). Never set it in production.
 - `BOT_TWITCH_USERNAME`, `BOT_TWITCH_TOKEN` — Twitch chatbot credentials (shared single connection)
 - `YOUTUBE_API_KEY` — global key for YouTube live detection
 - `YOUTUBE_BOT_CLIENT_ID`, `YOUTUBE_BOT_CLIENT_SECRET`, `YOUTUBE_BOT_REFRESH_TOKEN` — YouTube chatbot credentials
@@ -174,7 +192,7 @@ Optional:
 - Domain: `atletanotifications.com` (Cloudflare DNS → Railway).
 - **Pitwall static route Cache-Control split** (`src/server.js:64-74`): `.html`/`.js` get `no-cache, no-store, must-revalidate` so deploys ship fresh overlay code immediately; all other assets (SVG flags, PNG helmets, CSS, images) get `public, max-age=3600`. Without the split, the standings/relative overlays' rebuild loop forced a fresh network round-trip per `<img class="flag-img">` and produced a visible flicker on every flag. Keep this split if you ever change static-file headers.
 - Public tip pages at `/tip/:username` are NOT behind auth middleware.
-- **Public API endpoints (placed BEFORE the `/api` auth middleware in `server.js`):**
+- **Public API endpoints (placed BEFORE the `/api` auth middleware in `server.js`, and after the one `apiLimiter`):**
   - Track maps: `GET /api/track-maps`, `GET /api/track-map/:name`, `POST /api/track-map`
   - Sessions: `POST /api/session`, `POST /api/session/:id/lap`, `PATCH /api/session/:id/finish`, `GET /api/sessions/:trackName`, `GET /api/session/:id`, `GET /api/session/share/:token`
 - Racing auth endpoints (`/racing/auth/*`) are public. Other `/racing/*` routes (except `/` and `/signup`) require `req.racingUser`.
