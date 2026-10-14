@@ -2057,6 +2057,71 @@ describe('the AI analysis of a reported issue', () => {
   });
 });
 
+// ── What the giveaway, sponsor-message, donation-history and server-list routes say is in the streamer's language ──
+
+describe('the messages and names those routes show', () => {
+  let id;
+  beforeEach(() => { id = addStreamer(); });
+
+  test('starting a giveaway with values that are not allowed says which, in words', async () => {
+    const start = (body) => request('POST', '/dashboard/giveaways/start', { streamer: id, body });
+    const answers = [
+      [{ keyword: 'no spaces!' }, 'giveaways.error.invalidKeyword'],
+      [{ keyword: 'ok', duration_seconds: 5 }, 'giveaways.error.invalidDuration'],
+      [{ keyword: 'ok', winners_count: 99 }, 'giveaways.error.invalidWinners'],
+      [{ keyword: 'ok', prize: 'p'.repeat(101) }, 'giveaways.error.invalidPrize'],
+    ];
+    for (const [body, key] of answers) {
+      const res = await start(body);
+      assert.equal(res.status, 400, key);
+      assert.equal(res.json().error, t('en', key), key);
+    }
+    assert.equal(count('giveaways', 'streamer_id = ?', id), 0, 'nothing was started');
+  });
+
+  test('a second giveaway, a missing one and deleting an open one each get their own message', async () => {
+    const open = db.insertGiveaway({ streamer_id: id, keyword: 'open', status: 'open' });
+    const again = await request('POST', '/dashboard/giveaways/start', { streamer: id, body: { keyword: 'again' } });
+    assert.equal(again.status, 409);
+    assert.equal(again.json().error, t('en', 'giveaways.error.alreadyActive'));
+
+    const missing = await request('POST', '/dashboard/giveaways/999999/pick', { streamer: id, body: {} });
+    assert.equal(missing.status, 404);
+    assert.equal(missing.json().error, t('en', 'giveaways.error.notFound'));
+
+    const deleting = await request('DELETE', `/dashboard/giveaways/${open.id}`, { streamer: id });
+    assert.equal(deleting.status, 409);
+    assert.equal(deleting.json().error, t('en', 'giveaways.error.closeFirst'));
+  });
+
+  test('a sponsor message with no text, and a test of one that is gone, are refused in words', async () => {
+    const add = await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: '' } });
+    assert.equal(add.status, 400);
+    assert.equal(add.json().error, t('en', 'sponsors.error.textRequired'));
+
+    const test = await request('POST', '/dashboard/sponsor-messages/999999/test', { streamer: id });
+    assert.deepEqual(test.json(), { ok: false, error: t('en', 'sponsors.error.notFound') });
+  });
+
+  test('the donation history shows a donor with no name as the translated word, and keeps real names', async () => {
+    db.logDonation(id, { source: 'paypal', donor_name: '', amount: 5, currency: 'EUR', external_id: 'route-anon-1' });
+    db.logDonation(id, { source: 'paypal', donor_name: 'Synthetic Donor', amount: 6, currency: 'EUR', external_id: 'route-anon-2' });
+    const rows = (await request('GET', '/dashboard/donations/history', { streamer: id, json: true })).json().locals.donations;
+    assert.deepEqual(rows.map((d) => d.donor_name).sort(), ['Synthetic Donor', null]);
+    const page = await request('GET', '/dashboard/donations/history', { streamer: id });
+    assert.ok(page.text.includes(`<td class="dh-donor">${t('en', 'donations.history.anonymous')}</td>`));
+    assert.ok(page.text.includes('<td class="dh-donor">Synthetic Donor</td>'));
+    // the stored name and the CSV keep what was recorded
+    assert.equal(db.getDonations(id, { sinceDays: 30, limit: 10, offset: 0 }).filter((d) => d.donor_name === 'Anonymous').length, 1);
+  });
+
+  test('a server the bot cannot see is listed under a translated name', async () => {
+    db.upsertGuild('800000000000000001', id, '');
+    const res = await request('GET', '/dashboard', { streamer: id, json: true });
+    assert.equal(res.json().locals.guilds[0].name, t('en', 'dashboard.unknownServer'));
+  });
+});
+
 // ── Channel point rewards: edits and deletes are only done when Twitch took them (N15) ──
 
 describe('channel point rewards', () => {
@@ -2267,5 +2332,114 @@ describe('channel point rewards', () => {
     assert.ok(res.text.includes(t('en', 'redemptions.outcome.refundedDisabled')));
     assert.ok(res.text.includes(t('en', 'redemptions.outcome.refundedDeleted')));
     assert.ok(res.text.includes('Off Reward'));
+  });
+
+  test('every outcome has a translated label and a colour of its own, not its raw code', async () => {
+    const rewardId = addReward(id, { title: 'Labelled Reward' });
+    const outcomes = {
+      played: 'redemptions.outcome.played',
+      refunded_no_file: 'redemptions.outcome.refundedNoFile',
+      refunded_disabled: 'redemptions.outcome.refundedDisabled',
+      refunded_deleted: 'redemptions.outcome.refundedDeleted',
+      refunded_switch_off: 'redemptions.outcome.refundedSwitchOff',
+      disabled: 'redemptions.outcome.disabled',
+      error: 'redemptions.outcome.error',
+      pending: 'redemptions.outcome.pending',
+    };
+    let n = 0;
+    for (const outcome of Object.keys(outcomes)) {
+      db.logRedemption({ streamer_id: id, reward_id: rewardId, twitch_redemption_id: `route-label-${id}-${++n}`, twitch_reward_id: 'x', user_login: 'viewer', cost: 100, status: 'unfulfilled', outcome, redeemed_at: '2026-10-13T12:00:00Z' });
+    }
+    const res = await request('GET', '/dashboard/redemptions', { streamer: id });
+    const chips = [...res.text.matchAll(/<span class="outcome-chip ([a-z_]+)">\s*([^<]*?)\s*<\/span>/g)].map((m) => [m[1], m[2]]);
+    for (const [outcome, key] of Object.entries(outcomes)) {
+      assert.ok(chips.some(([cls, label]) => cls === outcome && label === t('en', key)), `${outcome} is shown as "${t('en', key)}" in a chip of its own class`);
+    }
+    assert.ok(!chips.some(([, label]) => /_/.test(label)), 'no raw outcome code is shown');
+    // pending and the switch have a colour: a rule for their class in the page's style
+    assert.match(res.text, /\.outcome-chip\.pending\s*\{[^}]*color:/);
+    assert.match(res.text, /\.outcome-chip\.refunded_switch_off[^{]*\{[^}]*color:/);
+  });
+
+  test('the page says redemptions are refunded while the switch is off', async () => {
+    const hint = t('en', 'redemptions.master.hint');
+    const off = await request('GET', '/dashboard/redemptions', { streamer: id });
+    assert.ok(off.text.includes(hint));
+    assert.match(off.text, /class="cp-master-hint off" id="cp-master-hint"/, 'shown as a warning while the switch is off');
+
+    db.updateOverlayConfig(id, { cp_rewards_enabled: 1 });
+    const on = await request('GET', '/dashboard/redemptions', { streamer: id });
+    assert.ok(on.text.includes(hint));
+    assert.match(on.text, /class="cp-master-hint " id="cp-master-hint"/, 'not a warning once it is on');
+  });
+
+  describe('creating a reward', () => {
+    const upload = (streamer, query = {}) => {
+      const params = new URLSearchParams({ media_type: 'audio', ext: 'mp3', title: `Horn ${++rewardCounter}`, cost: '500', ...query });
+      return request('POST', `/dashboard/redemptions/upload?${params}`, { streamer, rawBody: 'synthetic-audio-bytes', contentType: 'application/octet-stream' });
+    };
+    const switchOf = (streamerId = id) => db.getStreamerById(streamerId).cp_rewards_enabled;
+
+    test('the first reward switches "Enable Channel Point Rewards" on, and the answer says so', async () => {
+      assert.equal(switchOf(), 0, 'a new streamer starts with the switch off');
+      const res = await upload(id);
+      assert.equal(res.status, 200);
+      assert.equal(res.json().ok, true);
+      assert.equal(res.json().rewardsSwitchedOn, true);
+      assert.equal(switchOf(), 1);
+      assert.equal(db.getRewards(id).length, 1);
+    });
+
+    test('a later reward leaves the switch as the streamer set it', async () => {
+      addReward(id);
+      assert.equal(switchOf(), 0, 'the streamer has a reward and the switch is off');
+      const res = await upload(id);
+      assert.equal(res.status, 200);
+      assert.equal(res.json().rewardsSwitchedOn, undefined);
+      assert.equal(switchOf(), 0);
+    });
+
+    test('with the switch already on, nothing changes and nothing is said', async () => {
+      db.updateOverlayConfig(id, { cp_rewards_enabled: 1 });
+      const res = await upload(id);
+      assert.equal(res.status, 200);
+      assert.equal(res.json().rewardsSwitchedOn, undefined);
+      assert.equal(switchOf(), 1);
+    });
+
+    test('a reward that is refused does not switch it on', async () => {
+      const res = await upload(id, { ext: 'exe' });
+      assert.equal(res.status, 400);
+      assert.equal(res.json().error, t('en', 'redemptions.error.audioExt'), 'the refusal is a translated message');
+      assert.equal(switchOf(), 0);
+      assert.equal(db.getRewards(id).length, 0);
+    });
+
+    test('a clip that cannot be saved leaves no reward behind and the switch off', async () => {
+      const write = fakeFs.promises.writeFile;
+      fakeFs.promises.writeFile = async () => { throw new Error('disk gone'); };
+      try {
+        const res = await upload(id);
+        assert.equal(res.status, 500);
+        assert.equal(res.json().error, t('en', 'redemptions.error.writeFailed'));
+      } finally {
+        fakeFs.promises.writeFile = write;
+      }
+      assert.equal(db.getRewards(id).length, 0);
+      assert.equal(switchOf(), 0);
+    });
+
+    test('the other messages a streamer can get are in their language too', async () => {
+      assert.equal((await upload(id, { title: 'x' })).json().error, t('en', 'redemptions.error.titleLength'));
+      assert.equal((await upload(id, { cost: '0' })).json().error, t('en', 'redemptions.error.costRange'));
+      assert.equal((await upload(id, { prompt: 'p'.repeat(201) })).json().error, t('en', 'redemptions.error.promptLength'));
+      assert.equal((await upload(id, { position_preset: 'diagonal' })).json().error, t('en', 'redemptions.error.position'));
+      assert.equal((await upload(id, { media_type: 'image' })).json().error, t('en', 'redemptions.error.mediaType'));
+      const reward = addReward(id);
+      assert.equal((await patch(reward, { title: 'x' })).json().error, t('en', 'redemptions.error.titleLength'));
+      assert.equal((await patch(reward, { cost: 0 })).json().error, t('en', 'redemptions.error.costRange'));
+      assert.equal((await patch(reward + 9999, { title: 'Fine title' })).json().error, t('en', 'redemptions.error.notFound'));
+      assert.equal((await del(reward + 9999)).json().error, t('en', 'redemptions.error.notFound'));
+    });
   });
 });

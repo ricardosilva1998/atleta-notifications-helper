@@ -55,9 +55,10 @@ describe('isAllowedScreenshot', () => {
 });
 
 describe('redemptionMediaError', () => {
-  const TYPE_ERROR = 'media_type must be audio or video';
-  const AUDIO_ERROR = 'Audio ext must be mp3, wav, or ogg';
-  const VIDEO_ERROR = 'Video ext must be mp4 or webm';
+  // The answer is a locale key: the route translates it for the streamer.
+  const TYPE_ERROR = 'redemptions.error.mediaType';
+  const AUDIO_ERROR = 'redemptions.error.audioExt';
+  const VIDEO_ERROR = 'redemptions.error.videoExt';
 
   test('allows the audio and video extensions the upload route accepts', () => {
     for (const ext of ['mp3', 'wav', 'ogg']) assert.equal(redemptionMediaError('audio', ext), null);
@@ -74,6 +75,11 @@ describe('redemptionMediaError', () => {
   test('rejects extensions outside the allowlist for the media type', () => {
     for (const ext of ['html', 'svg', 'js', 'mp4', '']) assert.equal(redemptionMediaError('audio', ext), AUDIO_ERROR);
     for (const ext of ['html', 'svg', 'js', 'mp3', '']) assert.equal(redemptionMediaError('video', ext), VIDEO_ERROR);
+  });
+
+  test('every error is a key that en.json has', () => {
+    const en = require('../locales/en.json');
+    for (const key of [TYPE_ERROR, AUDIO_ERROR, VIDEO_ERROR]) assert.equal(typeof en[key], 'string', key);
   });
 });
 

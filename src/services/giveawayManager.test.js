@@ -98,8 +98,8 @@ const dbStub = {
   },
   // A streamer with the chat bot on, so chat announcements are recorded below.
   getStreamerById() { return { chatbot_enabled: 1, twitch_username: 'synthetic_channel' }; },
-  // transaction wraps fn so it behaves inline (synchronous)
-  transaction(fn) { return fn; },
+  // The raw handle, as the real module exposes it as `db`: transaction wraps fn so it behaves inline (synchronous)
+  db: { transaction(fn) { return fn; } },
 };
 
 // What the giveaway announced: chat lines and overlay events.

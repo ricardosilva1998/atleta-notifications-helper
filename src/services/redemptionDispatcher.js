@@ -9,11 +9,16 @@ const { unavailableReason, refundRedemption } = require('./twitchRewards');
 // A redemption of a reward that must not play (switched off here, deleted here
 // while Twitch still has it, or Channel Point Rewards switched off): the viewer's
 // channel points go back to them (the redemption is canceled on Twitch) and the
-// outcome goes on the redemption's history row (logId).
-//   refunded_disabled / refunded_deleted - canceled
+// outcome goes on the redemption's history row (logId). `reason` says why:
+// 'disabled' (this reward is off), 'deleted' (deleted here, still live on Twitch)
+// or 'switch_off' (the "Enable Channel Point Rewards" switch is off).
+//   refunded_disabled / refunded_deleted / refunded_switch_off - canceled
 //   disabled - nothing to cancel: only a redemption still waiting in the queue
 //              (status unfulfilled) can be, and this one was not
 //   error - Twitch did not cancel it (the reason is in error_message)
+// The switch gets its own outcome so the history does not blame a reward that is on.
+const REFUND_OUTCOME = { deleted: 'refunded_deleted', switch_off: 'refunded_switch_off' };
+
 async function refundUnavailableReward(streamerId, logId, eventData, reason) {
   const { twitchRedemptionId, twitchRewardId, status } = eventData;
   let outcome = 'disabled';
@@ -22,7 +27,7 @@ async function refundUnavailableReward(streamerId, logId, eventData, reason) {
   if (String(status).toLowerCase() === 'unfulfilled') {
     try {
       await refundRedemption(db.getStreamerById(streamerId), twitchRewardId, twitchRedemptionId);
-      outcome = reason === 'deleted' ? 'refunded_deleted' : 'refunded_disabled';
+      outcome = REFUND_OUTCOME[reason] || 'refunded_disabled';
     } catch (e) {
       console.error(`[Redemption] could not refund ${twitchRedemptionId}: ${e.message}`);
       outcome = 'error';
@@ -72,7 +77,7 @@ async function handleRedemption(streamerId, eventData) {
   // Twitch (the delete was refused), or any reward while "Enable Channel Point
   // Rewards" is off, must not play: the viewer is refunded instead.
   const streamer = db.getStreamerById(streamerId);
-  const unavailable = unavailableReason(reward) || (streamer && streamer.cp_rewards_enabled ? null : 'disabled');
+  const unavailable = unavailableReason(reward) || (streamer && streamer.cp_rewards_enabled ? null : 'switch_off');
   if (unavailable) {
     await refundUnavailableReward(streamerId, logId, eventData, unavailable);
     return;

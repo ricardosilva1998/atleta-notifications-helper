@@ -1,4 +1,10 @@
-<%- include('header', { title: 'Giveaways', streamer: streamer }) %>
+<%- include('header', { title: t('giveaways.title'), streamer: streamer }) %>
+<%
+  // A sentence with markup in the middle holds a {{name}} marker; this returns the
+  // text before and after it, so the markup stays out of the translation and all of
+  // it is still escaped.
+  const _around = (key, name, params) => t(key, Object.assign({}, params, { [name]: '\u0001' })).split('\u0001');
+%>
 
 <style>
   /* ── Layout helpers ──────────────────────────────── */
@@ -227,11 +233,12 @@
 <!-- Back link + header -->
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
-<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in">Giveaways</h2>
+<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('giveaways.title') %></h2>
+<% const _subtitle = _around('giveaways.subtitle', 'keyword'); %>
 <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
-  Run keyword giveaways in Twitch chat — viewers type <code>!keyword</code> to enter, you pick a winner.
+  <%= _subtitle[0] %><code>!keyword</code><%= _subtitle[1] %>
 </p>
 
 <!-- ─────────────────────────────────────────────────── -->
@@ -240,31 +247,32 @@
 <% if (typeof active !== 'undefined' && active) { %>
 <div class="gw-active animate-in" id="gw-active-panel">
   <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
-    <span class="gw-badge live">Live</span>
+    <span class="gw-badge live"><%= t('giveaways.state.open') %></span>
     <span class="kw-chip" id="kw-display">!<%= active.keyword %></span>
-    <button class="gw-copy-btn" onclick="copyKeyword()" title="Copy to clipboard">
+    <button class="gw-copy-btn" onclick="copyKeyword()" title="<%= t('giveaways.copyTitle') %>">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      Copy
+      <%= t('giveaways.copy') %>
     </button>
     <% if (active.prize) { %>
-      <span style="font-size: 14px; color: var(--text-secondary);">Prize: <strong style="color: var(--text-primary);"><%= active.prize %></strong></span>
+      <% const _prize = _around('giveaways.prizeIs', 'prize'); %>
+      <span style="font-size: 14px; color: var(--text-secondary);"><%= _prize[0] %><strong style="color: var(--text-primary);"><%= active.prize %></strong><%= _prize[1] %></span>
     <% } %>
     <% if (active.subs_only) { %>
-      <span class="gw-badge subs">Subscribers only</span>
+      <span class="gw-badge subs"><%= t('giveaways.eligibility.subsOnly') %></span>
     <% } else { %>
-      <span class="gw-badge open">Open to all</span>
+      <span class="gw-badge open"><%= t('giveaways.eligibility.openToAll') %></span>
     <% } %>
   </div>
 
   <div class="gw-live-row">
     <div class="gw-count-box">
       <div class="gw-count-num" id="gw-entry-count">–</div>
-      <div class="gw-count-label">Entrants</div>
+      <div class="gw-count-label"><%= t('giveaways.entrants') %></div>
     </div>
     <% if (active.ends_at) { %>
     <div>
       <div class="gw-countdown" id="gw-countdown">–</div>
-      <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">remaining</div>
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('giveaways.remaining') %></div>
     </div>
     <% } %>
   </div>
@@ -272,13 +280,13 @@
   <!-- Entrants list — auto-refreshed every 2 s -->
   <div>
     <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
-      <span>Entrants (first 50 shown)</span>
+      <span><%= t('giveaways.entrantsFirst50') %></span>
     </div>
     <div class="gw-entrants-wrap">
       <table class="gw-entrants-table">
-        <thead><tr><th>#</th><th>Username</th></tr></thead>
+        <thead><tr><th>#</th><th><%= t('giveaways.col.username') %></th></tr></thead>
         <tbody id="gw-entrants-body">
-          <tr><td colspan="2" style="color: var(--text-muted); font-style: italic; text-align: center; padding: 16px;">Waiting for entries...</td></tr>
+          <tr><td colspan="2" style="color: var(--text-muted); font-style: italic; text-align: center; padding: 16px;"><%= t('giveaways.waiting') %></td></tr>
         </tbody>
       </table>
     </div>
@@ -288,13 +296,13 @@
   <div class="gw-actions">
     <button class="btn btn-primary" id="btn-pick-winner" onclick="pickWinner(false)" disabled>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 5px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      Pick Winner Now
+      <%= t('giveaways.button.pick') %>
     </button>
     <button class="btn btn-secondary" onclick="closeGiveaway()">
-      Close (No Winner)
+      <%= t('giveaways.button.close') %>
     </button>
     <button class="btn btn-danger" onclick="cancelGiveaway()" style="margin-left: auto;">
-      Cancel &amp; Delete
+      <%= t('giveaways.button.cancel') %>
     </button>
   </div>
 </div>
@@ -304,14 +312,14 @@
 <!-- START FORM (shown when no active giveaway)          -->
 <!-- ─────────────────────────────────────────────────── -->
 <div class="card animate-in" id="gw-start-form">
-  <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Start a Giveaway</h3>
-  <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">Viewers type the keyword in chat to enter.</p>
+  <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;"><%= t('giveaways.start.title') %></h3>
+  <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;"><%= t('giveaways.start.hint') %></p>
 
   <div class="gw-form-grid">
 
     <!-- Keyword -->
     <div>
-      <label class="gw-label" for="gw-keyword">Keyword</label>
+      <label class="gw-label" for="gw-keyword"><%= t('giveaways.field.keyword') %></label>
       <div class="gw-keyword-wrap">
         <span class="gw-keyword-prefix">!</span>
         <input
@@ -323,47 +331,47 @@
           autocomplete="off"
           oninput="this.value = this.value.replace(/[^a-zA-Z0-9]/g, '')">
       </div>
-      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Letters and numbers only, max 25 chars</div>
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;"><%= t('giveaways.keywordHint') %></div>
     </div>
 
     <!-- Prize -->
     <div>
-      <label class="gw-label" for="gw-prize">Prize <span style="font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted);">(optional)</span></label>
-      <input class="gw-input" id="gw-prize" type="text" placeholder="e.g. Steam key, $10 gift card" maxlength="100">
+      <label class="gw-label" for="gw-prize"><%= t('giveaways.field.prize') %> <span style="font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted);"><%= t('giveaways.optional') %></span></label>
+      <input class="gw-input" id="gw-prize" type="text" placeholder="<%= t('giveaways.prizePlaceholder') %>" maxlength="100">
     </div>
 
     <!-- Duration (full width) -->
     <div class="full">
-      <label class="gw-label">Duration</label>
+      <label class="gw-label"><%= t('giveaways.field.duration') %></label>
       <div class="gw-radio-group">
-        <label><input type="radio" name="gw-duration" value="0" checked onchange="onDurationChange(this)"><span>Manual end</span></label>
-        <label><input type="radio" name="gw-duration" value="60" onchange="onDurationChange(this)"><span>1 min</span></label>
-        <label><input type="radio" name="gw-duration" value="300" onchange="onDurationChange(this)"><span>5 min</span></label>
-        <label><input type="radio" name="gw-duration" value="600" onchange="onDurationChange(this)"><span>10 min</span></label>
-        <label><input type="radio" name="gw-duration" value="1800" onchange="onDurationChange(this)"><span>30 min</span></label>
-        <label><input type="radio" name="gw-duration" value="custom" onchange="onDurationChange(this)"><span>Custom</span></label>
+        <label><input type="radio" name="gw-duration" value="0" checked onchange="onDurationChange(this)"><span><%= t('giveaways.duration.manual') %></span></label>
+        <label><input type="radio" name="gw-duration" value="60" onchange="onDurationChange(this)"><span><%= t('giveaways.duration.1m') %></span></label>
+        <label><input type="radio" name="gw-duration" value="300" onchange="onDurationChange(this)"><span><%= t('giveaways.duration.5m') %></span></label>
+        <label><input type="radio" name="gw-duration" value="600" onchange="onDurationChange(this)"><span><%= t('giveaways.duration.10m') %></span></label>
+        <label><input type="radio" name="gw-duration" value="1800" onchange="onDurationChange(this)"><span><%= t('giveaways.duration.30m') %></span></label>
+        <label><input type="radio" name="gw-duration" value="custom" onchange="onDurationChange(this)"><span><%= t('giveaways.duration.custom') %></span></label>
       </div>
       <div id="custom-duration-wrap">
-        <input class="gw-input" id="gw-custom-seconds" type="number" min="30" max="86400" placeholder="seconds" style="width: 140px;">
-        <span style="font-size: 13px; color: var(--text-muted);">seconds (30–86400)</span>
+        <input class="gw-input" id="gw-custom-seconds" type="number" min="30" max="86400" placeholder="<%= t('giveaways.duration.secondsPlaceholder') %>" style="width: 140px;">
+        <span style="font-size: 13px; color: var(--text-muted);"><%= t('giveaways.duration.secondsHint') %></span>
       </div>
     </div>
 
     <!-- Subscribers only -->
     <div style="display: flex; align-items: center; gap: 10px;">
-      <label class="gw-toggle" title="Subscribers only">
+      <label class="gw-toggle" title="<%= t('giveaways.field.subsOnly') %>">
         <input type="checkbox" id="gw-subs-only">
         <span class="gw-toggle-slider"></span>
       </label>
       <div>
-        <div style="font-size: 14px; font-weight: 600;">Subscribers only</div>
-        <div style="font-size: 12px; color: var(--text-muted);">Only channel subscribers can enter</div>
+        <div style="font-size: 14px; font-weight: 600;"><%= t('giveaways.field.subsOnly') %></div>
+        <div style="font-size: 12px; color: var(--text-muted);"><%= t('giveaways.subsOnlyHint') %></div>
       </div>
     </div>
 
     <!-- Winners count -->
     <div>
-      <label class="gw-label" for="gw-winners-count">Number of winners</label>
+      <label class="gw-label" for="gw-winners-count"><%= t('giveaways.field.winners') %></label>
       <input class="gw-input" id="gw-winners-count" type="number" min="1" max="10" value="1" style="width: 100px;">
     </div>
 
@@ -371,7 +379,7 @@
 
   <button class="btn btn-primary" onclick="startGiveaway()" id="btn-start">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 5px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    Start Giveaway
+    <%= t('giveaways.button.start') %>
   </button>
 </div>
 <% } %>
@@ -381,18 +389,18 @@
 <!-- ─────────────────────────────────────────────────── -->
 <% if (typeof recentWinners !== 'undefined' && recentWinners && recentWinners.length > 0 && !(typeof active !== 'undefined' && active)) { %>
 <div class="card animate-in gw-winner" style="margin-top: 24px; margin-bottom: 0;">
-  <h3>Last Winner<%= recentWinners.length > 1 ? 's' : '' %></h3>
+  <h3><%= t(recentWinners.length > 1 ? 'giveaways.lastWinner_plural' : 'giveaways.lastWinner') %></h3>
   <% recentWinners.forEach(function(w) { %>
     <div class="gw-winner-name">@<%= w.username %></div>
     <% if (typeof history !== 'undefined' && history && history.length > 0 && history[0].prize) { %>
-      <div class="gw-winner-prize">won <%= history[0].prize %></div>
+      <div class="gw-winner-prize"><%= t('giveaways.wonPrize', { prize: history[0].prize }) %></div>
     <% } %>
   <% }); %>
   <% if (typeof history !== 'undefined' && history && history.length > 0) { %>
   <div style="margin-top: 16px;">
     <button class="btn btn-secondary" onclick="redrawWinner(<%= history[0].id %>)" style="font-size: 13px;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
-      Re-draw Winner
+      <%= t('giveaways.button.redraw') %>
     </button>
   </div>
   <% } %>
@@ -405,7 +413,7 @@
 <% if (typeof history !== 'undefined' && history && history.length > 0) { %>
 <div class="card animate-in" style="margin-top: 24px;">
   <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">
-    Recent Giveaways
+    <%= t('giveaways.history.title') %>
     <span style="font-size: 12px; font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; margin-left: 6px; color: var(--text-muted);">
       <%= history.length %>
     </span>
@@ -413,11 +421,11 @@
   <table class="gw-history-table">
     <thead>
       <tr>
-        <th>When</th>
-        <th>Keyword</th>
-        <th>Prize</th>
-        <th>Entries</th>
-        <th>Winners</th>
+        <th><%= t('giveaways.history.when') %></th>
+        <th><%= t('giveaways.field.keyword') %></th>
+        <th><%= t('giveaways.field.prize') %></th>
+        <th><%= t('giveaways.history.entries') %></th>
+        <th><%= t('giveaways.history.winners') %></th>
       </tr>
     </thead>
     <tbody>
@@ -425,11 +433,11 @@
       <tr>
         <td>
           <details>
-            <summary title="Click to expand entries">
+            <summary title="<%= t('giveaways.history.expandTitle') %>">
               <span data-ts="<%= g.started_at %>"><%= g.started_at %></span>
             </summary>
             <div class="gw-history-expand" id="expand-<%= g.id %>">
-              <span style="color: var(--text-muted);">Loading...</span>
+              <span style="color: var(--text-muted);"><%= t('giveaways.history.loading') %></span>
             </div>
           </details>
         </td>
@@ -445,12 +453,47 @@
 <% } else if (!(typeof active !== 'undefined' && active)) { %>
 <div class="card animate-in" style="margin-top: 24px; text-align: center; padding: 48px 24px; border: 1px dashed var(--border);">
   <div style="font-size: 32px; margin-bottom: 8px;">🎁</div>
-  <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px;">No giveaways yet</h4>
-  <p style="font-size: 13px; color: var(--text-muted);">Start your first giveaway above — it takes 30 seconds.</p>
+  <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px;"><%= t('giveaways.empty.title') %></h4>
+  <p style="font-size: 13px; color: var(--text-muted);"><%= t('giveaways.empty.body') %></p>
 </div>
 <% } %>
 
 <script>
+// Texts for this script, translated on the server ({{name}} marks a value filled in by fmt)
+var T = <%- JSON.stringify({
+  keywordCopied: t('giveaways.toast.keywordCopied'),
+  noEntriesYet: t('giveaways.noEntriesYet'),
+  sub: t('giveaways.subBadge'),
+  invalidKeyword: t('giveaways.error.invalidKeyword'),
+  invalidDuration: t('giveaways.error.invalidDuration'),
+  starting: t('giveaways.starting'),
+  startLabel: t('giveaways.button.start'),
+  startFailed: t('giveaways.error.startFailed'),
+  started: t('giveaways.toast.started'),
+  network: t('giveaways.error.network'),
+  picking: t('giveaways.picking'),
+  pickLabel: t('giveaways.button.pick'),
+  noEligible: t('giveaways.error.noEligible'),
+  won: t('giveaways.toast.won', { names: '{{names}}' }),
+  confirmClose: t('giveaways.confirm.close'),
+  closed: t('giveaways.toast.closed'),
+  closeFailed: t('giveaways.error.closeFailed'),
+  confirmCancel: t('giveaways.confirm.cancel'),
+  cancelled: t('giveaways.toast.cancelled'),
+  cancelFailed: t('giveaways.error.cancelFailed'),
+  noEntriesRecorded: t('giveaways.history.noEntries'),
+  loadFailed: t('giveaways.history.loadFailed'),
+  winnerLabel: t('giveaways.history.winnerLabel'),
+  winnersLabel: t('giveaways.history.winnersLabel'),
+  entrantsCount: t('giveaways.history.entrantsCount', { count: '{{count}}' }),
+  more: t('giveaways.history.more', { count: '{{count}}' }),
+  secondsAgo: t('giveaways.time.seconds', { n: '{{n}}' }),
+  minutesAgo: t('giveaways.time.minutes', { n: '{{n}}' }),
+  hoursAgo: t('giveaways.time.hours', { n: '{{n}}' }),
+  daysAgo: t('giveaways.time.days', { n: '{{n}}' }),
+}).replace(/</g, '\\u003c') %>;
+function fmt(text, values) { return String(text).replace(/\{\{(\w+)\}\}/g, function (_, k) { return values[k] != null ? values[k] : ''; }); }
+
 var ACTIVE_ID = <% if (typeof active !== 'undefined' && active) { %><%= active.id %><% } else { %>null<% } %>;
 var ACTIVE_ENDS_AT = <% if (typeof active !== 'undefined' && active && active.ends_at) { %>'<%= active.ends_at %>'<% } else { %>null<% } %>;
 var _pollTimer = null;
@@ -478,7 +521,7 @@ function copyKeyword() {
   var kw = document.getElementById('kw-display');
   if (!kw) return;
   navigator.clipboard.writeText(kw.textContent.trim()).then(function() {
-    showToast('Keyword copied!', 'success');
+    showToast(T.keywordCopied, 'success');
   });
 }
 
@@ -508,12 +551,12 @@ function pollEntries() {
       var tbody = document.getElementById('gw-entrants-body');
       if (tbody && Array.isArray(d.entries)) {
         if (d.entries.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="2" style="color: var(--text-muted); font-style: italic; text-align: center; padding: 16px;">No entries yet</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="2" style="color: var(--text-muted); font-style: italic; text-align: center; padding: 16px;">' + escHtml(T.noEntriesYet) + '</td></tr>';
         } else {
           tbody.innerHTML = d.entries.slice(0, 50).map(function(e, i) {
             return '<tr>'
               + '<td style="color: var(--text-muted);">' + (i + 1) + '</td>'
-              + '<td>' + escHtml(e.username) + (e.is_subscriber ? '<span class="sub-badge">Sub</span>' : '') + '</td>'
+              + '<td>' + escHtml(e.username) + (e.is_subscriber ? '<span class="sub-badge">' + escHtml(T.sub) + '</span>' : '') + '</td>'
               + '</tr>';
           }).join('');
         }
@@ -547,7 +590,7 @@ if (ACTIVE_ID) {
 function startGiveaway() {
   var keyword = (document.getElementById('gw-keyword').value || '').trim();
   if (!keyword || !/^[a-zA-Z0-9]{1,25}$/.test(keyword)) {
-    showToast('Keyword must be 1–25 letters and numbers', 'error');
+    showToast(T.invalidKeyword, 'error');
     return;
   }
   var prize = (document.getElementById('gw-prize').value || '').trim();
@@ -560,7 +603,7 @@ function startGiveaway() {
   if (durVal === 'custom') {
     durationSeconds = parseInt(document.getElementById('gw-custom-seconds').value, 10);
     if (!durationSeconds || durationSeconds < 30 || durationSeconds > 86400) {
-      showToast('Custom duration must be 30–86400 seconds', 'error');
+      showToast(T.invalidDuration, 'error');
       return;
     }
   } else if (durVal !== '0') {
@@ -569,7 +612,7 @@ function startGiveaway() {
 
   var btn = document.getElementById('btn-start');
   btn.disabled = true;
-  btn.textContent = 'Starting...';
+  btn.textContent = T.starting;
 
   fetch('/dashboard/giveaways/start', {
     method: 'POST',
@@ -585,18 +628,18 @@ function startGiveaway() {
   .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
   .then(function(res) {
     if (!res.ok) {
-      showToast(res.d.error || 'Failed to start giveaway', 'error');
+      showToast(res.d.error || T.startFailed, 'error');
       btn.disabled = false;
-      btn.textContent = 'Start Giveaway';
+      btn.textContent = T.startLabel;
       return;
     }
-    showToast('Giveaway started!', 'success');
+    showToast(T.started, 'success');
     setTimeout(function() { location.reload(); }, 800);
   })
   .catch(function() {
-    showToast('Network error — try again', 'error');
+    showToast(T.network, 'error');
     btn.disabled = false;
-    btn.textContent = 'Start Giveaway';
+    btn.textContent = T.startLabel;
   });
 }
 
@@ -604,7 +647,7 @@ function startGiveaway() {
 function pickWinner(redraw) {
   if (!ACTIVE_ID) return;
   var btn = document.getElementById('btn-pick-winner');
-  if (btn) { btn.disabled = true; btn.textContent = 'Picking...'; }
+  if (btn) { btn.disabled = true; btn.textContent = T.picking; }
 
   fetch('/dashboard/giveaways/' + ACTIVE_ID + '/pick', {
     method: 'POST',
@@ -614,17 +657,17 @@ function pickWinner(redraw) {
   .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
   .then(function(res) {
     if (!res.ok || !res.d.winners || res.d.winners.length === 0) {
-      showToast((res.d && (res.d.message || res.d.error)) || 'No eligible entries', 'error');
-      if (btn) { btn.disabled = false; btn.textContent = 'Pick Winner Now'; }
+      showToast((res.d && (res.d.message || res.d.error)) || T.noEligible, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = T.pickLabel; }
       return;
     }
     var names = res.d.winners.map(function(w) { return '@' + w.username; }).join(', ');
-    showToast(names + ' won!', 'success');
+    showToast(fmt(T.won, { names: names }), 'success');
     setTimeout(function() { location.reload(); }, 1200);
   })
   .catch(function() {
-    showToast('Network error — try again', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = 'Pick Winner Now'; }
+    showToast(T.network, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = T.pickLabel; }
   });
 }
 
@@ -638,49 +681,49 @@ function redrawWinner(giveawayId) {
   .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
   .then(function(res) {
     if (!res.ok || !res.d.winners || res.d.winners.length === 0) {
-      showToast((res.d && (res.d.message || res.d.error)) || 'No more eligible entries', 'error');
+      showToast((res.d && (res.d.message || res.d.error)) || T.noEligible, 'error');
       return;
     }
     var names = res.d.winners.map(function(w) { return '@' + w.username; }).join(', ');
-    showToast(names + ' won!', 'success');
+    showToast(fmt(T.won, { names: names }), 'success');
     setTimeout(function() { location.reload(); }, 1200);
   })
-  .catch(function() { showToast('Network error — try again', 'error'); });
+  .catch(function() { showToast(T.network, 'error'); });
 }
 
 // ── Close giveaway (no winner) ────────────────────────
 function closeGiveaway() {
   if (!ACTIVE_ID) return;
-  if (!confirm('Close this giveaway without picking a winner?')) return;
+  if (!confirm(T.confirmClose)) return;
   fetch('/dashboard/giveaways/' + ACTIVE_ID + '/close', { method: 'POST' })
     .then(function(r) {
       if (r.ok) {
-        showToast('Giveaway closed', 'success');
+        showToast(T.closed, 'success');
         setTimeout(function() { location.reload(); }, 800);
       } else {
-        showToast('Failed to close giveaway', 'error');
+        showToast(T.closeFailed, 'error');
       }
     })
-    .catch(function() { showToast('Network error', 'error'); });
+    .catch(function() { showToast(T.network, 'error'); });
 }
 
 // ── Cancel / delete giveaway ──────────────────────────
 function cancelGiveaway() {
   if (!ACTIVE_ID) return;
-  if (!confirm('Cancel and delete this giveaway? All entries will be permanently lost.')) return;
+  if (!confirm(T.confirmCancel)) return;
   fetch('/dashboard/giveaways/' + ACTIVE_ID + '/close', { method: 'POST' })
     .then(function() {
       return fetch('/dashboard/giveaways/' + ACTIVE_ID, { method: 'DELETE' });
     })
     .then(function(r) {
       if (r.ok) {
-        showToast('Giveaway cancelled', 'success');
+        showToast(T.cancelled, 'success');
         setTimeout(function() { location.reload(); }, 800);
       } else {
-        return r.json().then(function(d) { showToast(d.error || 'Failed to cancel', 'error'); });
+        return r.json().then(function(d) { showToast(d.error || T.cancelFailed, 'error'); });
       }
     })
-    .catch(function() { showToast('Network error', 'error'); });
+    .catch(function() { showToast(T.network, 'error'); });
 }
 
 // ── History row: expand on details toggle ─────────────
@@ -697,40 +740,40 @@ document.querySelectorAll('.gw-history-table details').forEach(function(det) {
         var countEl = document.getElementById('hist-count-' + rowId);
         if (countEl) countEl.textContent = d.count;
         if (!d.entries || d.entries.length === 0) {
-          expandEl.textContent = 'No entries recorded.';
+          expandEl.textContent = T.noEntriesRecorded;
           return;
         }
         var winners = d.entries.filter(function(e) { return e.is_winner; });
         var others = d.entries.filter(function(e) { return !e.is_winner; });
         var html = '';
         if (winners.length) {
-          html += '<div style="margin-bottom: 6px; font-weight: 700; color: #f59e0b;">Winner' + (winners.length > 1 ? 's' : '') + ':</div>';
+          html += '<div style="margin-bottom: 6px; font-weight: 700; color: #f59e0b;">' + escHtml(winners.length > 1 ? T.winnersLabel : T.winnerLabel) + '</div>';
           html += '<div>' + winners.map(function(e) {
-            return escHtml(e.username) + (e.is_subscriber ? '<span class="sub-badge">Sub</span>' : '');
+            return escHtml(e.username) + (e.is_subscriber ? '<span class="sub-badge">' + escHtml(T.sub) + '</span>' : '');
           }).join(' &bull; ') + '</div>';
         }
         if (others.length) {
-          html += '<div style="margin: 8px 0 4px; font-weight: 600; color: var(--text-muted);">Entrants (' + others.length + '):</div>';
+          html += '<div style="margin: 8px 0 4px; font-weight: 600; color: var(--text-muted);">' + escHtml(fmt(T.entrantsCount, { count: others.length })) + '</div>';
           html += '<div style="columns: 2; gap: 4px;">' + others.slice(0, 40).map(function(e) {
             return '<div>' + escHtml(e.username) + '</div>';
           }).join('') + '</div>';
           if (others.length > 40) {
-            html += '<div style="color: var(--text-muted); margin-top: 4px;">+' + (others.length - 40) + ' more</div>';
+            html += '<div style="color: var(--text-muted); margin-top: 4px;">' + escHtml(fmt(T.more, { count: others.length - 40 })) + '</div>';
           }
         }
         expandEl.innerHTML = html;
       })
-      .catch(function() { expandEl.textContent = 'Failed to load entries.'; });
+      .catch(function() { expandEl.textContent = T.loadFailed; });
   });
 });
 
 // ── Relative timestamps ───────────────────────────────
 function relTime(dateStr) {
   var diff = Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 1000);
-  if (diff < 60) return diff + 's ago';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
+  if (diff < 60) return fmt(T.secondsAgo, { n: diff });
+  if (diff < 3600) return fmt(T.minutesAgo, { n: Math.floor(diff / 60) });
+  if (diff < 86400) return fmt(T.hoursAgo, { n: Math.floor(diff / 3600) });
+  return fmt(T.daysAgo, { n: Math.floor(diff / 86400) });
 }
 document.querySelectorAll('[data-ts]').forEach(function(el) {
   el.textContent = relTime(el.dataset.ts);

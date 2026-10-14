@@ -64,7 +64,8 @@ function renderTipPage(res, streamer, { status = 200, success = false, error = n
 }
 
 // The translated error for a refused return, on the tip page (or as plain text
-// if the page has since been turned off).
+// if the page has since been turned off). Every message in this file is shown to
+// a viewer, so each one goes through res.locals.t (the visit's language).
 function tipError(res, streamer, reason) {
   const { status, key } = tipErrorResponse(reason);
   const message = res.locals.t(key);
@@ -116,7 +117,7 @@ function markTipCaptured(orderId) {
 router.get('/:username', (req, res) => {
   const streamer = db.getStreamerByUsername(req.params.username);
   if (!tipPageAvailable(streamer)) {
-    return res.status(404).send('Donation page not available.');
+    return res.status(404).send(res.locals.t('tip.error.pageUnavailable'));
   }
   renderTipPage(res, streamer, { success: req.query.success === '1' });
 });
@@ -124,9 +125,10 @@ router.get('/:username', (req, res) => {
 // ─── Create PayPal order for tip ─────────────────────────────────────────────
 
 router.post('/:username/create', async (req, res) => {
+  const t = res.locals.t;
   const streamer = db.getStreamerByUsername(req.params.username);
   if (!tipPageAvailable(streamer)) {
-    return res.status(404).send('Donation page not available.');
+    return res.status(404).send(t('tip.error.pageUnavailable'));
   }
 
   const body = req.body || {};
@@ -136,7 +138,7 @@ router.post('/:username/create', async (req, res) => {
   const { donorName, message } = tipInput(body);
 
   if (isNaN(amount) || amount < minAmount) {
-    return res.status(400).send('Invalid amount.');
+    return res.status(400).send(t('tip.error.invalidAmount'));
   }
 
   try {
@@ -149,7 +151,8 @@ router.post('/:username/create', async (req, res) => {
         intent: 'CAPTURE',
         purchase_units: [{
           amount: { currency_code: currency, value: amount.toFixed(2) },
-          description: `Donation to ${streamer.twitch_display_name || streamer.twitch_username}`,
+          // Shown to the donor at PayPal, so in the language they are reading this page in
+          description: t('tip.paypalDescription', { name: streamer.twitch_display_name || streamer.twitch_username }),
           payee: { email_address: streamer.paypal_email },
         }],
         application_context: {
@@ -177,10 +180,10 @@ router.post('/:username/create', async (req, res) => {
       return res.redirect(approveUrl);
     }
     console.error('[Tip] PayPal order creation failed:', order);
-    res.status(500).send('Payment error. Please try again.');
+    res.status(500).send(t('tip.error.paymentFailed'));
   } catch (e) {
     console.error('[Tip] PayPal error:', e.message);
-    res.status(500).send('Payment error. Please try again.');
+    res.status(500).send(t('tip.error.paymentFailed'));
   }
 });
 
@@ -188,7 +191,7 @@ router.post('/:username/create', async (req, res) => {
 
 router.get('/:username/success', async (req, res) => {
   const streamer = db.getStreamerByUsername(req.params.username);
-  if (!streamer) return res.status(404).send('Streamer not found.');
+  if (!streamer) return res.status(404).send(res.locals.t('tip.error.streamerNotFound'));
 
   const orderId = typeof req.query.token === 'string' ? req.query.token : ''; // PayPal passes the order id as 'token'
   const validOrderId = /^[A-Z0-9-]{10,}$/i.test(orderId);
@@ -198,7 +201,7 @@ router.get('/:username/success', async (req, res) => {
   const disabled = isStreamerDisabled(streamer);
   if (disabled) {
     const pending = validOrderId ? db.getPendingTip(orderId) : null;
-    if (!pending || Number(pending.streamer_id) !== Number(streamer.id)) return res.status(404).send('Streamer not found.');
+    if (!pending || Number(pending.streamer_id) !== Number(streamer.id)) return res.status(404).send(res.locals.t('tip.error.streamerNotFound'));
   }
   if (!validOrderId) return tipError(res, streamer, 'invalid_token');
 

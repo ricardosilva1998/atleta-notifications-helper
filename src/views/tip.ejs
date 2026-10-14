@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<%= typeof lang !== 'undefined' ? lang : 'en' %>">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <%- include('csrf') %>
-  <title>Donate to <%= streamer.twitch_display_name || streamer.twitch_username %> — Atleta</title>
+  <title><%= t('tip.pageTitle', { name: streamer.twitch_display_name || streamer.twitch_username }) %></title>
   <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -45,14 +45,14 @@
   <div class="tip-card">
     <img class="tip-avatar" src="<%= avatarUrl || '/app-icon/honest_graphic-running-athlete-9715727.png' %>" alt="" onerror="this.src='/app-icon/honest_graphic-running-athlete-9715727.png'">
     <div class="tip-name"><%= streamer.twitch_display_name || streamer.twitch_username %></div>
-    <div class="tip-sub">Support this streamer with a donation</div>
+    <div class="tip-sub"><%= t('tip.subtitle') %></div>
 
     <% if (error) { %>
       <div class="tip-alert" role="alert"><%= error %></div>
     <% } %>
 
     <% if (success) { %>
-      <div class="tip-success">Thank you for your donation! The streamer has been notified.</div>
+      <div class="tip-success"><%= t('tip.thanks') %></div>
     <% } else { %>
       <form method="POST" action="/tip/<%= streamer.twitch_username %>/create" id="tip-form">
         <div class="tip-amounts">
@@ -63,19 +63,19 @@
         </div>
         <div class="tip-row">
           <span class="tip-currency"><%= streamer.donation_currency || 'EUR' %></span>
-          <input type="number" name="amount" id="tip-amount-input" class="tip-input" value="<%= [2,5,10,25].find(a => a >= (streamer.donation_min_amount || 1)) || 5 %>" min="<%= streamer.donation_min_amount || 1 %>" step="0.01" placeholder="Amount">
+          <input type="number" name="amount" id="tip-amount-input" class="tip-input" value="<%= [2,5,10,25].find(a => a >= (streamer.donation_min_amount || 1)) || 5 %>" min="<%= streamer.donation_min_amount || 1 %>" step="0.01" placeholder="<%= t('tip.amountPlaceholder') %>">
         </div>
-        <input type="text" name="message" class="tip-input" placeholder="Add a message (optional)" maxlength="200">
-        <input type="text" name="donor_name" class="tip-input" placeholder="Your name (optional)" maxlength="50">
+        <input type="text" name="message" class="tip-input" placeholder="<%= t('tip.messagePlaceholder') %>" maxlength="200">
+        <input type="text" name="donor_name" class="tip-input" placeholder="<%= t('tip.namePlaceholder') %>" maxlength="50">
         <div class="tip-error" id="tip-error"></div>
         <button type="submit" class="tip-btn" id="tip-submit">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 0 0-.794.68l-.04.22-.63 3.993-.032.17a.804.804 0 0 1-.794.679H8.044a.483.483 0 0 1-.477-.558l.78-4.938v-.001l.025-.16.54-3.418.03-.187a.805.805 0 0 1 .794-.68h1.674c3.94 0 7.023-1.6 7.927-6.225.066-.34.118-.662.155-.964a3.57 3.57 0 0 1 .575 1.942z"/><path d="M17.067 6.878c-.246-.067-.499-.12-.757-.158a10.09 10.09 0 0 0-1.598-.127H9.534a.787.787 0 0 0-.777.657L7.832 13.5l-.025.16.78-4.939a.805.805 0 0 1 .794-.68h3.27c3.94 0 7.024-1.6 7.928-6.225.027-.137.05-.272.07-.404a4.693 4.693 0 0 0-1.582-.534z"/><path d="M8.757 7.25a.787.787 0 0 1 .777-.657h5.178c.614 0 1.187.04 1.713.127.15.025.297.055.441.09.219.054.427.12.625.198a4.693 4.693 0 0 1 1.582.534c.32-2.044-.003-3.435-1.108-4.694C16.752 1.466 14.706.875 12.103.875H5.766a.805.805 0 0 0-.795.68L2.608 17.92a.483.483 0 0 0 .477.558h3.474l.872-5.53L8.757 7.25z"/></svg>
-          Donate via PayPal
+          <%= t('tip.donateButton') %>
         </button>
       </form>
     <% } %>
 
-    <div class="tip-footer">Powered by <a href="/">Atleta Personal Helper</a></div>
+    <div class="tip-footer"><%= t('tip.poweredBy') %> <a href="/">Atleta Personal Helper</a></div>
   </div>
 
   <script>
@@ -94,12 +94,14 @@
 
     // Client-side min amount validation
     const minAmount = <%= streamer.donation_min_amount || 1 %>;
+    // Translated on the server, with the minimum and the currency filled in
+    const minMessage = <%- JSON.stringify(t('tip.minAmount', { min: streamer.donation_min_amount || 1, currency: streamer.donation_currency || 'EUR' })).replace(/</g, '\\u003c') %>;
     document.getElementById('tip-form')?.addEventListener('submit', function(e) {
       const amount = parseFloat(document.getElementById('tip-amount-input').value);
       const errorEl = document.getElementById('tip-error');
       if (isNaN(amount) || amount < minAmount) {
         e.preventDefault();
-        errorEl.textContent = 'Minimum donation is ' + minAmount + ' <%= streamer.donation_currency || "EUR" %>';
+        errorEl.textContent = minMessage;
         errorEl.style.display = 'block';
         return;
       }

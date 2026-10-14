@@ -33,17 +33,18 @@ function isAllowedScreenshot(ext, buf) {
 }
 
 // Channel-point reward media: the extensions allowed per media type. Shared by
-// the upload and replace-media routes so the two can't drift apart.
+// the upload and replace-media routes so the two can't drift apart. `error` is a
+// locale key: the routes translate it for the streamer's language.
 const REDEMPTION_MEDIA = new Map([
-  ['audio', { exts: new Set(['mp3', 'wav', 'ogg']), error: 'Audio ext must be mp3, wav, or ogg' }],
-  ['video', { exts: new Set(['mp4', 'webm']), error: 'Video ext must be mp4 or webm' }],
+  ['audio', { exts: new Set(['mp3', 'wav', 'ogg']), error: 'redemptions.error.audioExt' }],
+  ['video', { exts: new Set(['mp4', 'webm']), error: 'redemptions.error.videoExt' }],
 ]);
 
-// The error message for a reward media upload, or null when both the media
-// type and the extension are allowed.
+// The locale key of the error for a reward media upload, or null when both the
+// media type and the extension are allowed.
 function redemptionMediaError(mediaType, ext) {
   const rule = REDEMPTION_MEDIA.get(mediaType);
-  if (!rule) return 'media_type must be audio or video';
+  if (!rule) return 'redemptions.error.mediaType';
   return rule.exts.has(ext) ? null : rule.error;
 }
 

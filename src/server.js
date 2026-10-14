@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
-const { t, SUPPORTED_LANGS } = require('./i18n');
+const { t, SUPPORTED_LANGS, fromAcceptLanguage } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
@@ -198,7 +198,11 @@ app.use((req, res, next) => {
   }
 
   // i18n
-  const lang = SUPPORTED_LANGS.includes(req.cookies?.lang) ? req.cookies.lang : 'en';
+  // The cookie the language switcher sets; without one, the browser's own language
+  // (Accept-Language) when the site speaks it, else English.
+  const lang = SUPPORTED_LANGS.includes(req.cookies?.lang)
+    ? req.cookies.lang
+    : (fromAcceptLanguage(req.headers['accept-language']) || 'en');
   req.lang = lang;
   res.locals.lang = lang;
   res.locals.SUPPORTED_LANGS = SUPPORTED_LANGS;

@@ -1,4 +1,10 @@
-<%- include('header', { title: 'Dashboard', streamer: streamer }) %>
+<%- include('header', { title: t('dashboard.title'), streamer: streamer }) %>
+<%
+  // A sentence with markup in the middle holds a {{name}} marker; this returns the
+  // text before and after it, so the markup stays out of the translation and all of
+  // it is still escaped.
+  const _around = (key, name, params) => t(key, Object.assign({}, params, { [name]: '\u0001' })).split('\u0001');
+%>
 
 <style>
   .tab-discord.active { background: #5865F2; }
@@ -24,18 +30,17 @@
 <% if (msg === 'guild_limit') { %><div class="alert alert-warning"><%= t('dashboard.guildLimit') %></div><% } %>
 <% if (msg === 'already_claimed') { %><div class="alert alert-danger"><%= t('dashboard.alreadyClaimed') %></div><% } %>
 <% if (msg === 'claim_not_allowed') { %><div class="alert alert-danger"><%= t('dashboard.claimNotAllowed') %></div><% } %>
-<% if (msg === 'spotify_connected') { %><div class="alert alert-success">Spotify account connected! Viewers can now use !song.</div><% } %>
-<% if (msg === 'spotify_error') { %><div class="alert alert-danger">Failed to connect Spotify. Please try again.</div><% } %>
+<% if (msg === 'spotify_connected') { %><div class="alert alert-success"><%= t('dashboard.spotifyConnected') %></div><% } %>
+<% if (msg === 'spotify_error') { %><div class="alert alert-danger"><%= t('dashboard.spotifyError') %></div><% } %>
 
 <%# Shown when broadcaster auth was completed at some point but the grant no longer works —
     either scopes were never granted, or the refresh token died and EventSub/SubSync cleared
     them. Streamers who never authorized get the separate "enable" CTA further down instead. %>
 <% if (needsReauth && streamer.broadcaster_access_token) { %>
   <div class="alert alert-warning">
-    <strong>Reconnect Twitch.</strong>
-    Your broadcaster authorization has expired or was revoked, so follow, subscription, bits and
-    raid alerts &mdash; and Discord sub-role sync &mdash; are currently paused.
-    <a href="/auth/broadcaster" style="color: var(--warning); text-decoration: underline; margin-left: 6px;">Reconnect now &rarr;</a>
+    <strong><%= t('dashboard.reconnect.title') %></strong>
+    <%= t('dashboard.reconnect.body') %>
+    <a href="/auth/broadcaster" style="color: var(--warning); text-decoration: underline; margin-left: 6px;"><%= t('dashboard.reconnect.cta') %></a>
   </div>
 <% } %>
 
@@ -58,12 +63,12 @@
   </button>
   <button class="tab-btn tab-experimental" data-tab="experimental">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v8l4 9H5l4-9V3z"/><path d="M9 3h6"/></svg>
-    Experimental
+    <%= t('dashboard.tab.experimental') %>
   </button>
   <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
   <button class="tab-btn tab-admin" data-tab="admin">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-    Admin
+    <%= t('dashboard.tab.admin') %>
   </button>
   <% } %>
 </div>
@@ -111,7 +116,7 @@
         <div style="display: flex; gap: 6px; flex-shrink: 0;">
           <button onclick="toggleStats('<%= g.guild_id %>')" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;" id="stats-btn-<%= g.guild_id %>">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            Stats
+            <%= t('dashboard.stats') %>
           </button>
           <a href="/dashboard/guild/<%= g.guild_id %>" class="btn btn-primary" style="padding: 7px 12px; font-size: 12px;"><%= t('dashboard.configure') %></a>
         </div>
@@ -120,24 +125,24 @@
       <!-- Summary (always visible) -->
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
         <div class="stat-card">
-          <div class="stat-tooltip">Notifications sent when a Twitch channel goes live</div>
+          <div class="stat-tooltip"><%= t('dashboard.summary.liveTip') %></div>
           <div class="stat-value" style="color: var(--accent);"><%= g.stats.live_count %></div>
-          <div class="stat-label">Live Alerts</div>
+          <div class="stat-label"><%= t('dashboard.summary.liveLabel') %></div>
         </div>
         <div class="stat-card">
-          <div class="stat-tooltip">Clip notifications shared to Discord from Twitch</div>
+          <div class="stat-tooltip"><%= t('dashboard.summary.clipsTip') %></div>
           <div class="stat-value" style="color: #bf94ff;"><%= g.stats.clip_count %></div>
-          <div class="stat-label">Clips Shared</div>
+          <div class="stat-label"><%= t('dashboard.summary.clipsLabel') %></div>
         </div>
         <div class="stat-card">
-          <div class="stat-tooltip">YouTube video and livestream notifications combined</div>
+          <div class="stat-tooltip"><%= t('dashboard.summary.youtubeTip') %></div>
           <div class="stat-value" style="color: #f04438;"><%= g.stats.youtube_video_count + g.stats.youtube_live_count %></div>
-          <div class="stat-label">YouTube Alerts</div>
+          <div class="stat-label"><%= t('dashboard.summary.youtubeLabel') %></div>
         </div>
         <div class="stat-card">
-          <div class="stat-tooltip">Total notifications of all types sent to this server</div>
+          <div class="stat-tooltip"><%= t('dashboard.summary.allTip') %></div>
           <div class="stat-value" style="color: var(--text-primary);"><%= g.stats.total %></div>
-          <div class="stat-label">All Notifications</div>
+          <div class="stat-label"><%= t('dashboard.summary.allLabel') %></div>
         </div>
       </div>
 
@@ -148,17 +153,22 @@
         <%
           const typeKeys = ['twitch_live', 'twitch_clip', 'twitch_recap', 'twitch_milestone', 'youtube_video', 'youtube_short', 'youtube_live', 'weekly_digest', 'instagram_post', 'tiktok_video', 'twitter_tweet', 'iracing_result'];
           const typeColors = { twitch_live: '#9146ff', twitch_clip: '#bf94ff', twitch_recap: '#6d28d9', twitch_milestone: '#f1c40f', youtube_video: '#f04438', youtube_short: '#ff6b6b', youtube_live: '#ff4444', weekly_digest: '#3498db', instagram_post: '#E1306C', tiktok_video: '#010101', twitter_tweet: '#1DA1F2', iracing_result: '#1a1a2e' };
-          const typeNames = { twitch_live: 'Go-Live Alerts', twitch_clip: 'Clip Notifications', twitch_recap: 'Stream Recaps', twitch_milestone: 'Milestones', youtube_video: 'YouTube Video Alerts', youtube_short: 'YouTube Shorts', youtube_live: 'YouTube Live Alerts', weekly_digest: 'Weekly Digests', instagram_post: 'Instagram Posts', tiktok_video: 'TikTok Videos', twitter_tweet: 'Tweets', iracing_result: 'iRacing Results' };
+          const typeNames = {
+            twitch_live: t('dashboard.type.twitch_live'), twitch_clip: t('dashboard.type.twitch_clip'), twitch_recap: t('dashboard.type.twitch_recap'),
+            twitch_milestone: t('dashboard.type.twitch_milestone'), youtube_video: t('dashboard.type.youtube_video'), youtube_short: t('dashboard.type.youtube_short'),
+            youtube_live: t('dashboard.type.youtube_live'), weekly_digest: t('dashboard.type.weekly_digest'), instagram_post: t('dashboard.type.instagram_post'),
+            tiktok_video: t('dashboard.type.tiktok_video'), twitter_tweet: t('dashboard.type.twitter_tweet'), iracing_result: t('dashboard.type.iracing_result'),
+          };
           const activeTypes = typeKeys.filter(function(tk) { return g.chartData.some(function(d) { return (d[tk] || 0) > 0; }); });
         %>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-          <div style="font-size: 13px; color: var(--text-primary); font-family: var(--font-display); font-weight: 600;">Last 30 days by type</div>
-          <div style="font-size: 11px; color: var(--text-muted);"><%= g.stats.total %> total all time</div>
+          <div style="font-size: 13px; color: var(--text-primary); font-family: var(--font-display); font-weight: 600;"><%= t('dashboard.last30ByType') %></div>
+          <div style="font-size: 11px; color: var(--text-muted);"><%= t('dashboard.totalAllTime', { count: g.stats.total }) %></div>
         </div>
 
         <% if (g.chartData.length === 0 || activeTypes.length === 0) { %>
-          <div style="text-align: center; padding: 24px 0; color: var(--text-muted); font-size: 13px; background: var(--bg-base); border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 20px;">No notifications in the last 30 days</div>
+          <div style="text-align: center; padding: 24px 0; color: var(--text-muted); font-size: 13px; background: var(--bg-base); border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 20px;"><%= t('dashboard.noNotifications30') %></div>
         <% } else { %>
           <div style="display: grid; grid-template-columns: repeat(<%= activeTypes.length <= 3 ? activeTypes.length : Math.ceil(activeTypes.length / 2) %>, 1fr); gap: 10px; margin-bottom: 20px;">
             <% activeTypes.forEach(function(tk) {
@@ -193,28 +203,28 @@
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></svg>
             <div style="font-size: 13px; color: var(--text-primary); font-family: var(--font-display); font-weight: 600;">Twitch</div>
-            <span style="font-size: 11px; color: var(--text-muted); margin-left: auto;"><%= g.twitchCount %> channel<%= g.twitchCount !== 1 ? 's' : '' %> watched</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-left: auto;"><%= t(g.twitchCount === 1 ? 'dashboard.channelWatched' : 'dashboard.channelWatched_plural', { count: g.twitchCount }) %></span>
           </div>
           <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Posted when a monitored Twitch channel starts streaming</div>
+              <div class="stat-tooltip"><%= t('dashboard.twitchBox.liveTip') %></div>
               <div class="stat-value" style="color: var(--accent);"><%= g.stats.live_count %></div>
-              <div class="stat-label">Go-Live Alerts</div>
+              <div class="stat-label"><%= t('dashboard.type.twitch_live') %></div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Shared when a new clip is created on a watched channel</div>
+              <div class="stat-tooltip"><%= t('dashboard.twitchBox.clipTip') %></div>
               <div class="stat-value" style="color: #bf94ff;"><%= g.stats.clip_count %></div>
-              <div class="stat-label">Clip Notifications</div>
+              <div class="stat-label"><%= t('dashboard.type.twitch_clip') %></div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Summary posted after a stream ends with duration, category, and top clips</div>
+              <div class="stat-tooltip"><%= t('dashboard.twitchBox.recapTip') %></div>
               <div class="stat-value" style="color: #6d28d9;"><%= g.stats.recap_count %></div>
-              <div class="stat-label">Stream Recaps</div>
+              <div class="stat-label"><%= t('dashboard.type.twitch_recap') %></div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Celebration posted when a channel hits a follower or subscriber milestone</div>
+              <div class="stat-tooltip"><%= t('dashboard.twitchBox.milestoneTip') %></div>
               <div class="stat-value" style="color: #f1c40f;"><%= g.stats.milestone_count %></div>
-              <div class="stat-label">Milestones</div>
+              <div class="stat-label"><%= t('dashboard.type.twitch_milestone') %></div>
             </div>
           </div>
         </div>
@@ -224,18 +234,18 @@
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f04438" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="#f04438"/></svg>
             <div style="font-size: 13px; color: var(--text-primary); font-family: var(--font-display); font-weight: 600;">YouTube</div>
-            <span style="font-size: 11px; color: var(--text-muted); margin-left: auto;"><%= g.youtubeCount %> channel<%= g.youtubeCount !== 1 ? 's' : '' %> watched</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-left: auto;"><%= t(g.youtubeCount === 1 ? 'dashboard.channelWatched' : 'dashboard.channelWatched_plural', { count: g.youtubeCount }) %></span>
           </div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Sent when a watched YouTube channel uploads a new video or short</div>
+              <div class="stat-tooltip"><%= t('dashboard.youtubeBox.videoTip') %></div>
               <div class="stat-value" style="color: #f04438;"><%= g.stats.youtube_video_count %></div>
-              <div class="stat-label">New Video Alerts</div>
+              <div class="stat-label"><%= t('dashboard.youtubeBox.videoLabel') %></div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Sent when a watched YouTube channel starts a live stream</div>
+              <div class="stat-tooltip"><%= t('dashboard.youtubeBox.liveTip') %></div>
               <div class="stat-value" style="color: #ff6b6b;"><%= g.stats.youtube_live_count %></div>
-              <div class="stat-label">YouTube Live Alerts</div>
+              <div class="stat-label"><%= t('dashboard.type.youtube_live') %></div>
             </div>
           </div>
         </div>
@@ -244,23 +254,23 @@
         <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border);">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5865F2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <div style="font-size: 13px; color: var(--text-primary); font-family: var(--font-display); font-weight: 600;">Discord & Community</div>
+            <div style="font-size: 13px; color: var(--text-primary); font-family: var(--font-display); font-weight: 600;"><%= t('dashboard.communityBox.title') %></div>
           </div>
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Automatic weekly summary posted every Monday with stream stats and top clips</div>
+              <div class="stat-tooltip"><%= t('dashboard.communityBox.digestTip') %></div>
               <div class="stat-value" style="color: #3498db;"><%= g.stats.digest_count %></div>
-              <div class="stat-label">Weekly Digests</div>
+              <div class="stat-label"><%= t('dashboard.type.weekly_digest') %></div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">All notifications sent to this server in the past 7 days</div>
+              <div class="stat-tooltip"><%= t('dashboard.communityBox.weekTip') %></div>
               <div class="stat-value" style="color: var(--success);"><%= g.stats.week_total %></div>
-              <div class="stat-label">Sent This Week</div>
+              <div class="stat-label"><%= t('dashboard.communityBox.weekLabel') %></div>
             </div>
             <div class="stat-card" style="padding: 12px;">
-              <div class="stat-tooltip">Total notifications ever sent to this server across all features</div>
+              <div class="stat-tooltip"><%= t('dashboard.communityBox.totalTip') %></div>
               <div class="stat-value" style="color: var(--text-primary);"><%= g.stats.total %></div>
-              <div class="stat-label">All Time Total</div>
+              <div class="stat-label"><%= t('dashboard.communityBox.totalLabel') %></div>
             </div>
           </div>
         </div>
@@ -325,36 +335,36 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
         </div>
         <div>
-          <h3 style="font-size: 15px; font-weight: 700; margin: 0;">Last 7 Days</h3>
-          <span style="color: var(--text-muted); font-size: 11px;">Stream activity overview</span>
+          <h3 style="font-size: 15px; font-weight: 700; margin: 0;"><%= t('dashboard.week.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 11px;"><%= t('dashboard.week.subtitle') %></span>
         </div>
       </div>
-      <span style="font-size: 12px; color: var(--text-muted); font-family: var(--font-display);"><%= overlayStats.total %> events total</span>
+      <span style="font-size: 12px; color: var(--text-muted); font-family: var(--font-display);"><%= t('dashboard.week.total', { count: overlayStats.total }) %></span>
     </div>
     <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;">
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #8888cc; font-family: var(--font-display);"><%= overlayStats.follows %></div>
-        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Follows</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.follows') %></div>
       </div>
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #00ff88; font-family: var(--font-display);"><%= overlayStats.subs %></div>
-        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Subs</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.subs') %></div>
       </div>
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #f7c948; font-family: var(--font-display);"><%= overlayStats.bits_events %></div>
-        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Bits</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.bits') %></div>
       </div>
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #bf00ff; font-family: var(--font-display);"><%= overlayStats.donations %></div>
-        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Donations</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.donations') %></div>
       </div>
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #ff4444; font-family: var(--font-display);"><%= overlayStats.raids %></div>
-        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Raids</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.raids') %></div>
       </div>
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #00ff88; font-family: var(--font-display);"><%= overlayStats.giftsubs %></div>
-        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Gift Subs</div>
+        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.giftSubs') %></div>
       </div>
     </div>
   </div>
@@ -369,40 +379,40 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <div>
-          <h3 style="font-size: 16px; font-weight: 700;">OBS Overlay</h3>
+          <h3 style="font-size: 16px; font-weight: 700;"><%= t('dashboard.cards.overlay.title') %></h3>
           <% if (streamer.overlay_enabled) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Enabled</span>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= t('dashboard.status.enabled') %></span>
           <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● Not configured</span>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConfigured') %></span>
           <% } %>
         </div>
       </div>
       <% if (overlayUrl) { %>
         <div style="margin-bottom: 8px;">
-          <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">Alerts Overlay</label>
+          <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;"><%= t('dashboard.cards.overlay.alertsLabel') %></label>
           <div style="display: flex; gap: 6px;">
             <input type="text" value="<%= overlayUrl %>" readonly id="overlay-url-copy" style="flex: 1; background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: var(--radius-sm); font-size: 11px; font-family: monospace;">
-            <button onclick="navigator.clipboard.writeText(document.getElementById('overlay-url-copy').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1500);" class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px; white-space: nowrap;">Copy</button>
+            <button type="button" onclick="copyField('overlay-url-copy', this)" data-copy="<%= t('dashboard.copy') %>" data-copied="<%= t('dashboard.copied') %>" class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px; white-space: nowrap;"><%= t('dashboard.copy') %></button>
           </div>
         </div>
         <div style="margin-bottom: 12px;">
-          <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">Sponsors Overlay</label>
+          <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;"><%= t('dashboard.cards.overlay.sponsorsLabel') %></label>
           <div style="display: flex; gap: 6px;">
             <input type="text" value="<%= overlayUrl.replace('/overlay/', '/overlay/sponsors/') %>" readonly id="sponsor-url-copy" style="flex: 1; background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: var(--radius-sm); font-size: 11px; font-family: monospace;">
-            <button onclick="navigator.clipboard.writeText(document.getElementById('sponsor-url-copy').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1500);" class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px; white-space: nowrap;">Copy</button>
+            <button type="button" onclick="copyField('sponsor-url-copy', this)" data-copy="<%= t('dashboard.copy') %>" data-copied="<%= t('dashboard.copied') %>" class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px; white-space: nowrap;"><%= t('dashboard.copy') %></button>
           </div>
         </div>
       <% } else { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Configure animated notification banners for follows, subs, bits, donations, and raids in your OBS stream.
+          <%= t('dashboard.cards.overlay.desc') %>
         </p>
       <% } %>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: auto;">
-        <a href="/dashboard/overlay" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= overlayUrl ? 'Overlay Settings' : 'Configure Overlay' %></a>
+        <a href="/dashboard/overlay" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= overlayUrl ? t('dashboard.cards.overlay.settings') : t('dashboard.cards.overlay.configure') %></a>
         <% if (overlayUrl) { %>
         <a href="/dashboard/overlay-builder" style="font-size: 13px; padding: 8px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: rgba(145,71,255,0.1); border: 1px solid rgba(145,71,255,0.25); border-radius: var(--radius-sm); color: #9146ff; font-family: var(--font-display); font-weight: 600; transition: all 0.15s;" onmouseover="this.style.background='rgba(145,71,255,0.2)'" onmouseout="this.style.background='rgba(145,71,255,0.1)'">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-          Customize Design
+          <%= t('dashboard.cards.overlay.customize') %>
         </a>
         <% } %>
       </div>
@@ -415,24 +425,24 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Chatbot</h3>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.chatbot.title') %></h3>
           <% if (botConnected && streamer.chatbot_enabled) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Online<%= botUsername ? ' as ' + botUsername : '' %></span>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= botUsername ? t('dashboard.cards.chatbot.onlineAs', { name: botUsername }) : t('dashboard.cards.chatbot.online') %></span>
           <% } else if (botConnected && !streamer.chatbot_enabled) { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● Bot available — not enabled</span>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.cards.chatbot.availableNotEnabled') %></span>
           <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● Not configured</span>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConfigured') %></span>
           <% } %>
         </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
         <% if (streamer.chatbot_enabled) { %>
-          Chatbot is active on <strong>#<%= streamer.twitch_username %></strong> — manage thank-you messages and custom commands.
+          <% const _chat = _around('dashboard.cards.chatbot.activeOn', 'channel'); %><%= _chat[0] %><strong>#<%= streamer.twitch_username %></strong><%= _chat[1] %>
         <% } else { %>
-          Set up a chatbot for your Twitch channel with thank-you messages and custom commands.
+          <%= t('dashboard.cards.chatbot.setup') %>
         <% } %>
       </p>
-      <a href="/dashboard/chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= streamer.chatbot_enabled ? 'Chatbot Settings' : 'Configure Chatbot' %></a>
+      <a href="/dashboard/chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= streamer.chatbot_enabled ? t('dashboard.cards.chatbot.settings') : t('dashboard.cards.chatbot.configure') %></a>
     </div>
 
     <!-- Spotify Card -->
@@ -444,22 +454,22 @@
         <div style="line-height: 1.2;">
           <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Spotify</h3>
           <% if (streamer.spotify_access_token) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Connected</span>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= t('dashboard.status.connected') %></span>
           <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● Not connected</span>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConnected') %></span>
           <% } %>
         </div>
       </div>
       <% if (streamer.spotify_access_token) { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Spotify connected — viewers can type <code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code> to see what you're listening to.
+          <% const _spotify = _around('dashboard.cards.spotify.connectedDesc', 'command'); %><%= _spotify[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotify[1] %>
         </p>
-        <a href="/auth/spotify" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Reconnect</a>
+        <a href="/auth/spotify" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.reconnect') %></a>
       <% } else { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Connect Spotify so viewers can use <code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code> to see what you're playing.
+          <% const _spotifyConnect = _around('dashboard.cards.spotify.connectDesc', 'command'); %><%= _spotifyConnect[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotifyConnect[1] %>
         </p>
-        <a href="/auth/spotify" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Connect Spotify</a>
+        <a href="/auth/spotify" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.connect') %></a>
       <% } %>
     </div>
 
@@ -470,14 +480,14 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Sponsor Messages</h3>
-          <span style="color: var(--text-muted); font-size: 12px;">Auto-post sponsor messages to chat</span>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('sponsors.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.sponsors.sub') %></span>
         </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        Rotate sponsor messages in chat with customizable intervals. For sponsor image overlays, use the Overlay Builder.
+        <%= t('dashboard.cards.sponsors.desc') %>
       </p>
-      <a href="/dashboard/timed-notifications" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Manage Messages</a>
+      <a href="/dashboard/timed-notifications" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.sponsors.cta') %></a>
     </div>
 
     <!-- Donations Card -->
@@ -487,23 +497,23 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0070ba" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Donations</h3>
-          <span style="color: var(--text-muted); font-size: 12px;">PayPal donation page for viewers</span>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.donations.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.donations.sub') %></span>
         </div>
       </div>
       <% if (streamer.paypal_email && streamer.donation_page_enabled) { %>
         <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Active — <a href="/tip/<%= streamer.twitch_username %>" target="_blank" style="color: var(--accent); text-decoration: none;">/tip/<%= streamer.twitch_username %></a>
+          <% const _tip = _around('dashboard.cards.donations.active', 'link'); %><%= _tip[0] %><a href="/tip/<%= streamer.twitch_username %>" target="_blank" style="color: var(--accent); text-decoration: none;">/tip/<%= streamer.twitch_username %></a><%= _tip[1] %>
         </p>
       <% } else { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Set up your PayPal email to receive donations with overlay alerts.
+          <%= t('dashboard.cards.donations.setup') %>
         </p>
       <% } %>
       <div style="display: flex; gap: 8px; margin-top: auto;">
-        <a href="/dashboard/donations" class="btn btn-primary" style="flex: 1; font-size: 13px; padding: 8px 16px; text-decoration: none; text-align: center;">Donation Settings</a>
-        <a href="/dashboard/donations/history" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;">History</a>
+        <a href="/dashboard/donations" class="btn btn-primary" style="flex: 1; font-size: 13px; padding: 8px 16px; text-decoration: none; text-align: center;"><%= t('dashboard.cards.donations.cta') %></a>
+        <a href="/dashboard/donations/history" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= t('dashboard.cards.donations.history') %></a>
       </div>
     </div>
 
@@ -515,21 +525,21 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Multistream</h3>
-          <span style="color: var(--text-muted); font-size: 12px;">Stream to Twitch + YouTube at once</span>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.multistream.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.multistream.sub') %></span>
         </div>
       </div>
       <% if (streamer.multistream_enabled) { %>
         <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Active — point OBS at your ingest URL
+          <%= t('dashboard.cards.multistream.active') %>
         </p>
       <% } else { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Stream once from OBS, broadcast to Twitch and YouTube. Zero extra CPU on your PC.
+          <%= t('dashboard.cards.multistream.desc') %>
         </p>
       <% } %>
-      <a href="/dashboard/multistream" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Multistream Settings</a>
+      <a href="/dashboard/multistream" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.multistream.cta') %></a>
     </div>
     <% } %>
 
@@ -540,13 +550,13 @@
       const _enabled = !!streamer.cp_rewards_enabled;
       let _dotColor, _dotLabel;
       if (_affiliateOk && _hasScope && _enabled) {
-        _dotColor = 'var(--success)'; _dotLabel = 'Active';
+        _dotColor = 'var(--success)'; _dotLabel = t('dashboard.active');
       } else if (!_hasScope && streamer.broadcaster_access_token) {
-        _dotColor = 'var(--warning)'; _dotLabel = 'Reconnect Twitch';
+        _dotColor = 'var(--warning)'; _dotLabel = t('dashboard.cards.cpRewards.reconnect');
       } else if (streamer.cp_affiliate_status === 'not_affiliate') {
-        _dotColor = 'var(--danger)'; _dotLabel = 'Affiliate required';
+        _dotColor = 'var(--danger)'; _dotLabel = t('dashboard.cards.cpRewards.affiliate');
       } else {
-        _dotColor = 'var(--text-muted)'; _dotLabel = 'Not configured';
+        _dotColor = 'var(--text-muted)'; _dotLabel = t('dashboard.status.notConfigured');
       }
     %>
     <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
@@ -555,19 +565,20 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Channel Point Rewards</h3>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.cpRewards') %></h3>
           <span style="color: <%= _dotColor %>; font-size: 12px; font-weight: 600;">● <%= _dotLabel %></span>
         </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        Let viewers spend Twitch points to trigger audio or video clips on your stream.
+        <%= t('dashboard.cards.cpRewards.desc') %>
       </p>
       <% if (!_hasScope && streamer.broadcaster_access_token) { %>
+        <% const _reconnect = _around('dashboard.cards.cpRewards.reconnectHint', 'link'); %>
         <p style="font-size: 12px; color: var(--warning); margin-bottom: 10px;">
-          <a href="/auth/broadcaster" style="color: var(--warning);">Reconnect Twitch</a> to enable Channel Point Rewards.
+          <%= _reconnect[0] %><a href="/auth/broadcaster" style="color: var(--warning);"><%= t('dashboard.cards.cpRewards.reconnect') %></a><%= _reconnect[1] %>
         </p>
       <% } %>
-      <a href="/dashboard/redemptions" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Manage Rewards</a>
+      <a href="/dashboard/redemptions" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.cpRewards.cta') %></a>
     </div>
     <% } %>
 
@@ -578,21 +589,21 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Giveaways</h3>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.giveaways') %></h3>
           <% if (typeof activeGiveaway !== 'undefined' && activeGiveaway) { %>
             <span style="color: var(--danger); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
               <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--danger); display: inline-block; animation: pulse 1.2s ease-in-out infinite;"></span>
-              Live: !<%= activeGiveaway.keyword %>
+              <%= t('dashboard.cards.giveaways.live', { keyword: activeGiveaway.keyword }) %>
             </span>
           <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">No active giveaway</span>
+            <span style="color: var(--text-muted); font-size: 12px;"><%= t('giveaways.state.noActive') %></span>
           <% } %>
         </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        Run quick !keyword giveaways in chat — pick winners, show on overlay.
+        <%= t('dashboard.cards.giveaways.desc') %>
       </p>
-      <a href="/dashboard/giveaways" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Manage Giveaways</a>
+      <a href="/dashboard/giveaways" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.giveaways.cta') %></a>
     </div>
 
     <!-- Custom Overlays Card — DISABLED for now
@@ -618,18 +629,18 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff0000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <div>
-          <h3 style="font-size: 16px; font-weight: 700;">OBS Overlay</h3>
+          <h3 style="font-size: 16px; font-weight: 700;"><%= t('dashboard.cards.overlay.title') %></h3>
           <% if (streamer.overlay_enabled) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Shared with Twitch</span>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= t('dashboard.youtube.sharedWithTwitch') %></span>
           <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● Not configured</span>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConfigured') %></span>
           <% } %>
         </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        YouTube Super Chats, Members, and Gift events show on the same overlay URL as Twitch events.
+        <%= t('dashboard.youtube.overlayDesc') %>
       </p>
-      <a href="/dashboard/overlay" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= streamer.overlay_enabled ? 'Overlay Settings' : 'Configure Overlay' %></a>
+      <a href="/dashboard/overlay" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= streamer.overlay_enabled ? t('dashboard.cards.overlay.settings') : t('dashboard.cards.overlay.configure') %></a>
     </div>
 
     <!-- YouTube Chatbot Card -->
@@ -639,22 +650,22 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff0000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">YouTube Chatbot</h3>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.youtube.chatbotTitle') %></h3>
           <% if (streamer.yt_chatbot_enabled) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● Enabled</span>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= t('dashboard.status.enabled') %></span>
           <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● Not enabled</span>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notEnabled') %></span>
           <% } %>
         </div>
       </div>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
         <% if (streamer.yt_chatbot_enabled) { %>
-          YouTube chatbot is active — responding to Super Chats, Members, and Gift events in your live chat.
+          <%= t('dashboard.youtube.chatbotActive') %>
         <% } else { %>
-          Set up a chatbot for your YouTube live chat with automatic thank-you messages for Super Chats, Members, and Gifts.
+          <%= t('dashboard.youtube.chatbotSetup') %>
         <% } %>
       </p>
-      <a href="/dashboard/youtube-chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= streamer.yt_chatbot_enabled ? 'Chatbot Settings' : 'Configure Chatbot' %></a>
+      <a href="/dashboard/youtube-chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= streamer.yt_chatbot_enabled ? t('dashboard.cards.chatbot.settings') : t('dashboard.cards.chatbot.configure') %></a>
     </div>
 
   </div>
@@ -663,8 +674,8 @@
     <div style="margin-bottom: 16px;">
       <svg width="64" height="45" viewBox="0 0 24 24" fill="none" stroke="#ff0000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 7.7a2.8 2.8 0 0 0-2-2C18.9 5 12 5 12 5s-6.9 0-8.5.7a2.8 2.8 0 0 0-2 2A29 29 0 0 0 1 12a29 29 0 0 0 .5 4.3 2.8 2.8 0 0 0 2 2c1.6.7 8.5.7 8.5.7s6.9 0 8.5-.7a2.8 2.8 0 0 0 2-2A29 29 0 0 0 23 12a29 29 0 0 0-.5-4.3z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>
     </div>
-    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;">Coming Soon</p>
-    <p style="color: var(--text-muted); font-size: 13px;">YouTube integration with chatbot and overlay support is coming.</p>
+    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;"><%= t('dashboard.comingSoon') %></p>
+    <p style="color: var(--text-muted); font-size: 13px;"><%= t('dashboard.youtube.comingSoon') %></p>
   </div>
 <% } %>
 </div>
@@ -674,32 +685,32 @@
     <div style="margin-bottom: 16px;">
       <svg width="120" height="34" viewBox="0 0 78 26" fill="#53fc18"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0307312H8.34073V5.79423H11.1163V2.91248H13.8919V0.0307312H22.2326V8.69274H19.457V11.5745H16.6815V14.4562H19.457V17.338H22.2326V26H13.8919V23.1182H11.1163V20.2365H8.34073V26H0V0.0307312ZM55.6444 0.0307312H63.9852V5.79423H66.7608V2.91248H69.5363V0.0307312H77.8771V8.69274H75.1015V11.5745H72.3259V14.4562H75.1015V17.338H77.8771V26H69.5363V23.1182H66.7608V20.2365H63.9852V26H55.6444V0.0307312ZM25.039 0.0307312H33.3797V26H25.039V0.0307312ZM38.9462 0.0307312V2.91248H36.1706V23.1029H38.9462V25.9846H52.8535V17.3226H44.5128V8.66061H52.8535V0H38.9462V0.0307312Z"/></svg>
     </div>
-    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;">Coming Soon</p>
-    <p style="color: var(--text-muted); font-size: 13px;">Kick.com integration with chatbot and overlay support is coming.</p>
+    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;"><%= t('dashboard.comingSoon') %></p>
+    <p style="color: var(--text-muted); font-size: 13px;"><%= t('dashboard.kick.comingSoon') %></p>
   </div>
 </div>
 
 <div class="tab-content" id="tab-experimental">
   <div class="animate-in animate-in-delay-2">
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
-      <h3 class="section-title" style="margin: 0; line-height: 1;">VTuber Face Tracker</h3>
-      <span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;">BETA</span>
+      <h3 class="section-title" style="margin: 0; line-height: 1;"><%= t('dashboard.vtuber.title') %></h3>
+      <span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;"><%= t('dashboard.vtuber.beta') %></span>
     </div>
 
     <!-- Info Card -->
     <div class="card" style="padding: 16px; margin-bottom: 16px;">
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
-        Track your face with your webcam and display an animated 3D avatar on your stream via OBS Browser Source.
+        <%= t('dashboard.vtuber.intro') %>
       </p>
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; color: var(--text-secondary);">
-          <strong style="color: var(--text-primary);">1.</strong> Pick a model below
+          <strong style="color: var(--text-primary);">1.</strong> <%= t('dashboard.vtuber.step1') %>
         </div>
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; color: var(--text-secondary);">
-          <strong style="color: var(--text-primary);">2.</strong> Launch tracker &amp; allow camera
+          <strong style="color: var(--text-primary);">2.</strong> <%= t('dashboard.vtuber.step2') %>
         </div>
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; color: var(--text-secondary);">
-          <strong style="color: var(--text-primary);">3.</strong> Copy OBS URL &amp; add as Browser Source
+          <strong style="color: var(--text-primary);">3.</strong> <%= t('dashboard.vtuber.step3') %>
         </div>
       </div>
     </div>
@@ -707,25 +718,25 @@
     <!-- Model Selector Card -->
     <div class="card" style="padding: 0; margin-bottom: 16px; overflow: hidden;">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border);">
-        <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Choose Avatar</span>
+        <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);"><%= t('dashboard.vtuber.chooseAvatar') %></span>
         <label style="background: rgba(102,126,234,0.15); border: 1px solid rgba(102,126,234,0.3); color: #667eea; padding: 5px 12px; border-radius: var(--radius-sm); font-size: 11px; cursor: pointer; font-weight: 600; font-family: var(--font-display);">
-          + Upload VRM
+          <%= t('dashboard.vtuber.upload') %>
           <input type="file" accept=".vrm" id="vtuber-upload-input" style="display: none;" onchange="uploadVtuberModel(this)">
         </label>
       </div>
 
       <!-- Category Filter Pills -->
       <div id="vtuber-category-pills" style="display: flex; gap: 6px; padding: 12px 16px 8px; flex-wrap: wrap;">
-        <button class="vtuber-cat-pill active" data-category="all" onclick="filterVtuberCategory('all', this)" style="background: #667eea; color: white; border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: 600; font-family: var(--font-display);">All</button>
-        <button class="vtuber-cat-pill" data-category="anime" onclick="filterVtuberCategory('anime', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);">Anime</button>
-        <button class="vtuber-cat-pill" data-category="animal" onclick="filterVtuberCategory('animal', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);">Animals</button>
-        <button class="vtuber-cat-pill" data-category="robot" onclick="filterVtuberCategory('robot', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);">Robots</button>
-        <button class="vtuber-cat-pill" data-category="custom" onclick="filterVtuberCategory('custom', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);">Custom</button>
+        <button class="vtuber-cat-pill active" data-category="all" onclick="filterVtuberCategory('all', this)" style="background: #667eea; color: white; border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: 600; font-family: var(--font-display);"><%= t('dashboard.vtuber.cat.all') %></button>
+        <button class="vtuber-cat-pill" data-category="anime" onclick="filterVtuberCategory('anime', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);"><%= t('dashboard.vtuber.cat.anime') %></button>
+        <button class="vtuber-cat-pill" data-category="animal" onclick="filterVtuberCategory('animal', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);"><%= t('dashboard.vtuber.cat.animal') %></button>
+        <button class="vtuber-cat-pill" data-category="robot" onclick="filterVtuberCategory('robot', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);"><%= t('dashboard.vtuber.cat.robot') %></button>
+        <button class="vtuber-cat-pill" data-category="custom" onclick="filterVtuberCategory('custom', this)" style="background: var(--bg-hover); color: var(--text-muted); border: none; padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: var(--font-display);"><%= t('dashboard.vtuber.cat.custom') %></button>
       </div>
 
       <!-- Model Grid -->
       <div id="vtuber-model-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; padding: 10px 16px 16px;">
-        <div style="text-align: center; color: var(--text-muted); font-size: 12px; padding: 20px;">Loading models...</div>
+        <div style="text-align: center; color: var(--text-muted); font-size: 12px; padding: 20px;"><%= t('dashboard.vtuber.loading') %></div>
       </div>
     </div>
 
@@ -734,22 +745,22 @@
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-elevated);">
         <div style="display: flex; align-items: center; gap: 8px;">
           <div id="vtuber-status" style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted);"></div>
-          <span style="font-size: 12px; color: var(--text-secondary);" id="vtuber-status-text">Not started</span>
+          <span style="font-size: 12px; color: var(--text-secondary);" id="vtuber-status-text"><%= t('dashboard.vtuber.notStarted') %></span>
         </div>
         <div style="display: flex; gap: 8px;">
           <button onclick="copyVtuberOBSUrl()" id="vtuber-copy-btn" style="background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary); padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; font-family: var(--font-display); font-weight: 600; transition: all var(--transition);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-secondary)'">
-            Copy OBS URL
+            <%= t('dashboard.vtuber.copyUrl') %>
           </button>
           <button onclick="toggleVtuber()" id="vtuber-toggle-btn" style="background: linear-gradient(135deg, #667eea, #764ba2); border: none; color: white; padding: 5px 16px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; font-family: var(--font-display); font-weight: 600; transition: all var(--transition);">
-            Launch Tracker
+            <%= t('dashboard.vtuber.launch') %>
           </button>
         </div>
       </div>
       <div id="vtuber-container" style="position: relative; width: 100%; height: 500px; background: #1a1a2e; display: flex; align-items: center; justify-content: center;">
         <div id="vtuber-placeholder" style="text-align: center; color: var(--text-muted);">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.5;"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-          <p style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Pick a model and click "Launch Tracker"</p>
-          <p style="font-size: 12px;">Your webcam will be used to track facial movements</p>
+          <p style="font-size: 14px; font-weight: 600; margin-bottom: 4px;"><%= t('dashboard.vtuber.placeholderTitle', { button: t('dashboard.vtuber.launch') }) %></p>
+          <p style="font-size: 12px;"><%= t('dashboard.vtuber.placeholderBody') %></p>
         </div>
         <iframe id="vtuber-iframe" style="display: none; width: 100%; height: 100%; border: none;" allow="camera; autoplay"></iframe>
       </div>
@@ -759,6 +770,23 @@
 
 <script>
   // --- VTuber Face Tracker ---
+  // Texts for this script, translated on the server ({{name}} marks a value filled in by fmt)
+  const T = <%- JSON.stringify({
+    noModels: t('dashboard.vtuber.noModels'),
+    errNotVrm: t('dashboard.vtuber.errNotVrm'),
+    errTooLarge: t('dashboard.vtuber.errTooLarge'),
+    confirmDelete: t('dashboard.vtuber.confirmDelete', { name: '{{name}}' }),
+    errSelectModel: t('dashboard.vtuber.errSelectModel'),
+    stop: t('dashboard.vtuber.stop'),
+    launch: t('dashboard.vtuber.launch'),
+    running: t('dashboard.vtuber.running'),
+    runningModel: t('dashboard.vtuber.runningModel', { name: '{{name}}' }),
+    notStarted: t('dashboard.vtuber.notStarted'),
+    errNoToken: t('dashboard.vtuber.errNoToken'),
+    copied: t('dashboard.copied'),
+    copyUrl: t('dashboard.vtuber.copyUrl'),
+  }).replace(/</g, '\\u003c') %>;
+  function fmt(text, values) { return String(text).replace(/\{\{(\w+)\}\}/g, function (_, k) { return values[k] != null ? values[k] : ''; }); }
   let vtuberActive = false;
   let vtuberModels = [];
   let vtuberSelectedId = <%= typeof streamer !== 'undefined' && streamer.vtuber_model_id ? streamer.vtuber_model_id : 'null' %>;
@@ -790,7 +818,7 @@
       : vtuberModels.filter(m => m.category === vtuberCategoryFilter);
 
     if (filtered.length === 0) {
-      grid.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 12px; padding: 20px; grid-column: 1/-1;">No models in this category</div>';
+      grid.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 12px; padding: 20px; grid-column: 1/-1;">' + escHtml(T.noModels) + '</div>';
       return;
     }
 
@@ -859,12 +887,12 @@
     const file = input.files[0];
     if (!file) return;
     if (!file.name.endsWith('.vrm')) {
-      alert('Please select a .vrm file');
+      alert(T.errNotVrm);
       input.value = '';
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      alert('File too large (max 50MB)');
+      alert(T.errTooLarge);
       input.value = '';
       return;
     }
@@ -892,7 +920,7 @@
   }
 
   async function deleteVtuberModel(id, name) {
-    if (!confirm(`Delete "${name}"?`)) return;
+    if (!confirm(fmt(T.confirmDelete, { name: name }))) return;
     try {
       const resp = await fetch(`/dashboard/api/vtuber/models/${id}`, { method: 'DELETE' });
       const data = await resp.json();
@@ -913,39 +941,39 @@
 
     if (!vtuberActive) {
       if (!vtuberSelectedId) {
-        alert('Please select a model first.');
+        alert(T.errSelectModel);
         return;
       }
       iframe.src = '/dashboard/vtuber-preview?_t=' + Date.now();
       iframe.style.display = 'block';
       placeholder.style.display = 'none';
-      btn.textContent = 'Stop Tracker';
+      btn.textContent = T.stop;
       btn.style.background = '#e74c3c';
       status.style.background = '#2ecc71';
       const model = vtuberModels.find(m => m.id === vtuberSelectedId);
-      statusText.textContent = 'Running' + (model ? ' — ' + model.name : '');
+      statusText.textContent = model ? fmt(T.runningModel, { name: model.name }) : T.running;
       vtuberActive = true;
     } else {
       iframe.src = '';
       iframe.style.display = 'none';
       placeholder.style.display = 'block';
-      btn.textContent = 'Launch Tracker';
+      btn.textContent = T.launch;
       btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
       status.style.background = 'var(--text-muted)';
-      statusText.textContent = 'Not started';
+      statusText.textContent = T.notStarted;
       vtuberActive = false;
     }
   }
 
   function copyVtuberOBSUrl() {
     if (!vtuberUrl) {
-      alert('To use in OBS, first generate an overlay token in the Overlay Config page. The dashboard preview works without it.');
+      alert(T.errNoToken);
       return;
     }
     navigator.clipboard.writeText(vtuberUrl + '?mode=stream').then(() => {
       const btn = document.getElementById('vtuber-copy-btn');
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy OBS URL'; }, 2000);
+      btn.textContent = T.copied;
+      setTimeout(() => { btn.textContent = T.copyUrl; }, 2000);
     });
   }
 
@@ -961,14 +989,21 @@
     <div style="margin-bottom: 16px;">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="var(--text-muted)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
     </div>
-    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 12px;">Admin Panel</p>
-    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">Manage users, view stats, handle issues, and configure the platform.</p>
-    <a href="/admin" class="btn btn-primary" style="font-size: 14px; padding: 10px 24px; text-decoration: none;">Open Admin Panel</a>
+    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 12px;"><%= t('nav.admin') %></p>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;"><%= t('dashboard.admin.desc') %></p>
+    <a href="/admin" class="btn btn-primary" style="font-size: 14px; padding: 10px 24px; text-decoration: none;"><%= t('dashboard.admin.open') %></a>
   </div>
 </div>
 <% } %>
 
 <script>
+// The copy buttons of the overlay links: the button names its two labels
+function copyField(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).value);
+  btn.textContent = btn.dataset.copied;
+  setTimeout(function () { btn.textContent = btn.dataset.copy; }, 1500);
+}
+
 function toggleStats(guildId) {
   var panel = document.getElementById('stats-' + guildId);
   var btn = document.getElementById('stats-btn-' + guildId);

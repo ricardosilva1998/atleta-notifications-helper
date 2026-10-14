@@ -1,4 +1,39 @@
-<%- include('header', { title: 'Channel Point Rewards', streamer: streamer }) %>
+<%- include('header', { title: t('redemptions.title'), streamer: streamer }) %>
+<%
+  // What the history, the reward cards and their status chips call things, in the page language
+  const outcomeLabels = {
+    played: t('redemptions.outcome.played'),
+    refunded_no_file: t('redemptions.outcome.refundedNoFile'),
+    refunded_disabled: t('redemptions.outcome.refundedDisabled'),
+    refunded_deleted: t('redemptions.outcome.refundedDeleted'),
+    refunded_switch_off: t('redemptions.outcome.refundedSwitchOff'),
+    disabled: t('redemptions.outcome.disabled'),
+    error: t('redemptions.outcome.error'),
+    pending: t('redemptions.outcome.pending'),
+    test: t('redemptions.outcome.test'),
+  };
+  const syncLabels = {
+    orphaned: t('redemptions.status.orphaned'),
+    create_failed: t('redemptions.status.createFailed'),
+    no_affiliate: t('redemptions.status.noAffiliate'),
+    update_failed: t('redemptions.status.updateFailed'),
+    delete_failed: t('redemptions.status.deleteFailed'),
+  };
+  const positionLabels = {
+    'center-large': t('redemptions.position.centerLarge'),
+    fullscreen: t('redemptions.position.fullscreen'),
+    'top-right-small': t('redemptions.position.topRightSmall'),
+    'bottom-banner': t('redemptions.position.bottomBanner'),
+    custom: t('redemptions.position.custom'),
+  };
+  const has = (map, key) => Object.prototype.hasOwnProperty.call(map, key);
+  // A number the way the page language writes it (1,500 or 1.500)
+  const num = (n) => Number(n).toLocaleString(typeof lang !== 'undefined' ? lang : 'en');
+  // A sentence with markup in the middle holds a {{name}} marker; this returns the
+  // text before and after it, so the markup stays out of the translation and all of
+  // it is still escaped.
+  const _around = (key, name, params) => t(key, Object.assign({}, params, { [name]: '\u0001' })).split('\u0001');
+%>
 
 <style>
   /* ── Layout helpers ─────────────────────────────── */
@@ -26,6 +61,8 @@
   .cp-toggle-slider:before { position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
   .cp-toggle input:checked + .cp-toggle-slider { background: var(--success); }
   .cp-toggle input:checked + .cp-toggle-slider:before { transform: translateX(20px); }
+  .cp-master-hint { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
+  .cp-master-hint.off { color: var(--warning); }
 
   /* ── Banner ─────────────────────────────────────── */
   .cp-banner {
@@ -142,7 +179,8 @@
   .outcome-chip { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
   .outcome-chip.played { background: rgba(62,207,142,0.15); color: var(--success); }
   .outcome-chip.refunded_no_file { background: var(--warning-bg); color: var(--warning); }
-  .outcome-chip.refunded_disabled, .outcome-chip.refunded_deleted { background: var(--warning-bg); color: var(--warning); }
+  .outcome-chip.refunded_disabled, .outcome-chip.refunded_deleted, .outcome-chip.refunded_switch_off { background: var(--warning-bg); color: var(--warning); }
+  .outcome-chip.pending { background: var(--accent-glow); color: var(--accent); }
   .outcome-chip.disabled { background: var(--bg-elevated); color: var(--text-muted); }
   .outcome-chip.error { background: var(--danger-bg); color: var(--danger); }
   .outcome-chip.test { background: rgba(88,101,242,0.15); color: #5865f2; }
@@ -175,46 +213,49 @@
 <!-- Back link + header -->
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
-<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in">Channel Point Rewards</h2>
+<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('redemptions.title') %></h2>
 <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
-  Let viewers spend Twitch Channel Points to trigger audio or video clips on your stream.
+  <%= t('redemptions.subtitle') %>
 </p>
 
 <!-- Banners -->
 <% if (!hasScope) { %>
   <div class="cp-banner warn">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <span>Reconnect Twitch to enable Channel Point Rewards. <a href="/auth/broadcaster">Reconnect now &rarr;</a></span>
+    <span><%= t('redemptions.reconnectScope') %> <a href="/auth/broadcaster"><%= t('redemptions.reconnectNow') %></a></span>
   </div>
 <% } %>
 <% if (affiliateStatus === 'not_affiliate') { %>
   <div class="cp-banner danger">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-    <span>Channel Points require Twitch Affiliate or Partner status.</span>
+    <span><%= t('redemptions.affiliateRequired') %></span>
   </div>
 <% } %>
 
 <!-- Master toggle + sync -->
 <div class="card animate-in" style="margin-bottom: 20px;">
   <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
-    <label class="cp-toggle" title="Enable Channel Point Rewards">
+    <label class="cp-toggle" title="<%= t('redemptions.master.title') %>">
       <input type="checkbox" id="cp-master-toggle" <%= cpRewardsEnabled ? 'checked' : '' %>>
       <span class="cp-toggle-slider"></span>
     </label>
     <div style="flex: 1; min-width: 0;">
-      <div style="font-size: 14px; font-weight: 600;">Enable Channel Point Rewards</div>
-      <div style="font-size: 12px; color: var(--text-muted);">Allow redemptions to trigger overlay media</div>
+      <div style="font-size: 14px; font-weight: 600;"><%= t('redemptions.master.title') %></div>
+      <div style="font-size: 12px; color: var(--text-muted);"><%= t('redemptions.master.desc') %></div>
     </div>
     <button type="button" class="btn btn-secondary" onclick="syncRewards()" style="font-size: 13px;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-      Sync from Twitch
+      <%= t('redemptions.syncNow') %>
     </button>
     <% if (lastSyncAt) { %>
-      <span style="font-size: 12px; color: var(--text-muted);" id="last-sync-label">Last synced: <span data-ts="<%= lastSyncAt %>"></span></span>
+      <% const _synced = _around('redemptions.lastSync', 'time'); %>
+      <span style="font-size: 12px; color: var(--text-muted);" id="last-sync-label"><%= _synced[0] %><span data-ts="<%= lastSyncAt %>"></span><%= _synced[1] %></span>
     <% } %>
   </div>
+  <%# While the switch is off every redemption is refunded: said right under it %>
+  <div class="cp-master-hint <%= cpRewardsEnabled ? '' : 'off' %>" id="cp-master-hint"><%= t('redemptions.master.hint') %></div>
 </div>
 
 <!-- Rewards Twitch refused to delete: still live there, kept until they are gone -->
@@ -226,7 +267,7 @@
       <% pendingDeletes.forEach(function(r) { %>
         <div class="pending-delete-row" id="pending-delete-<%= r.id %>">
           <span class="reward-title"><%= r.title %></span>
-          <span style="color: var(--text-muted);"><%= r.cost.toLocaleString() %> pts</span>
+          <span style="color: var(--text-muted);"><%= t('redemptions.pts', { cost: num(r.cost) }) %></span>
           <button type="button" class="btn btn-secondary" onclick="retryReward(<%= r.id %>, this)" style="font-size: 12px; padding: 6px 12px;"><%= t('redemptions.retry') %></button>
         </div>
       <% }); %>
@@ -237,19 +278,19 @@
 <!-- Rewards list header -->
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
   <h3 style="font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em;">
-    Rewards
+    <%= t('redemptions.rewards') %>
     <span style="font-size: 12px; font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; margin-left: 6px; color: var(--text-muted); letter-spacing: 0;" id="reward-count"><%= rewards.length %></span>
   </h3>
   <button type="button" class="btn btn-primary" onclick="openAddModal()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    Add Reward
+    <%= t('redemptions.addReward') %>
   </button>
 </div>
 
 <% if (rewards.length === 0) { %>
   <div class="cp-empty animate-in" id="rewards-empty">
-    <h4>No rewards yet</h4>
-    <p>Click "Add Reward" above to create your first Channel Point reward.</p>
+    <h4><%= t('redemptions.empty.title') %></h4>
+    <p><%= t('redemptions.empty.body', { button: t('redemptions.addReward') }) %></p>
   </div>
 <% } %>
 
@@ -257,35 +298,35 @@
 <% rewards.forEach(function(r) { %>
   <div class="reward-card" id="reward-card-<%= r.id %>" data-id="<%= r.id %>">
     <div class="reward-card-header">
-      <span class="reward-drag-handle" title="Drag to reorder">
+      <span class="reward-drag-handle" title="<%= t('redemptions.dragTitle') %>">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
       </span>
-      <span class="reward-icon"><%= r.media_type === 'video' ? '&#127916;' : '&#128266;' %></span>
+      <span class="reward-icon"><%= r.media_type === 'video' ? '🎬' : '🔊' %></span>
       <div class="reward-info">
         <div class="reward-title"><%= r.title %></div>
         <div class="reward-meta">
-          <%= r.cost.toLocaleString() %> pts &middot; <%= r.position_preset %>
+          <%= t('redemptions.pts', { cost: num(r.cost) }) %> &middot; <%= has(positionLabels, r.position_preset) ? positionLabels[r.position_preset] : r.position_preset %>
           <% if (r.twitch_sync_status && r.twitch_sync_status !== 'ok') { %>
-            <span class="sync-chip <%= r.twitch_sync_status %>"><%= r.twitch_sync_status === 'update_failed' ? t('redemptions.status.updateFailed') : r.twitch_sync_status.replace(/_/g, ' ') %></span>
+            <span class="sync-chip <%= r.twitch_sync_status %>"><%= has(syncLabels, r.twitch_sync_status) ? syncLabels[r.twitch_sync_status] : r.twitch_sync_status.replace(/_/g, ' ') %></span>
           <% } %>
         </div>
       </div>
       <div class="reward-actions">
-        <label class="cp-toggle" title="<%= r.enabled ? 'Enabled' : 'Disabled' %>">
+        <label class="cp-toggle" title="<%= r.enabled ? t('redemptions.toggle.enabled') : t('redemptions.toggle.disabled') %>">
           <input type="checkbox" <%= r.enabled ? 'checked' : '' %> onchange="toggleReward(<%= r.id %>, this.checked)">
           <span class="cp-toggle-slider"></span>
         </label>
-        <button type="button" class="btn btn-secondary" onclick="testReward(<%= r.id %>, this)" style="font-size: 12px; padding: 6px 12px;" title="Test overlay">
+        <button type="button" class="btn btn-secondary" onclick="testReward(<%= r.id %>, this)" style="font-size: 12px; padding: 6px 12px;" title="<%= t('redemptions.testTitle') %>">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Test
+          <%= t('redemptions.testFire') %>
         </button>
         <button type="button" class="btn btn-secondary" onclick="openEditModal(<%= r.id %>)" style="font-size: 12px; padding: 6px 12px;">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Edit
+          <%= t('redemptions.edit') %>
         </button>
         <button type="button" class="btn btn-danger" onclick="deleteReward(<%= r.id %>)" style="font-size: 12px; padding: 6px 12px;">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          Delete
+          <%= t('redemptions.deleteReward') %>
         </button>
       </div>
     </div>
@@ -302,49 +343,49 @@
 <!-- Add/Edit Reward Modal -->
 <div class="cp-modal-backdrop" id="reward-modal">
   <div class="cp-modal">
-    <h3 id="modal-title">Add Reward</h3>
+    <h3 id="modal-title"><%= t('redemptions.addReward') %></h3>
 
     <div class="cp-form-grid">
       <!-- Title -->
       <div class="full">
-        <label class="cp-label">Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(2–45 chars)</span></label>
-        <input type="text" id="f-title" class="cp-input" minlength="2" maxlength="45" placeholder="e.g. Air Horn">
+        <label class="cp-label"><%= t('redemptions.field.title') %> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);"><%= t('redemptions.hint.titleLength') %></span></label>
+        <input type="text" id="f-title" class="cp-input" minlength="2" maxlength="45" placeholder="<%= t('redemptions.placeholder.title') %>">
       </div>
 
       <!-- Cost -->
       <div>
-        <label class="cp-label">Cost (Channel Points)</label>
+        <label class="cp-label"><%= t('redemptions.field.cost') %></label>
         <input type="number" id="f-cost" class="cp-input" min="1" max="1000000" value="500" placeholder="500">
       </div>
 
       <!-- Cooldown -->
       <div>
-        <label class="cp-label">Cooldown (seconds)</label>
+        <label class="cp-label"><%= t('redemptions.field.cooldown') %></label>
         <input type="number" id="f-cooldown" class="cp-input" min="0" max="86400" value="0" placeholder="0">
       </div>
 
       <!-- Prompt -->
       <div class="full">
-        <label class="cp-label">Prompt <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(optional, max 200 chars)</span></label>
-        <textarea id="f-prompt" class="cp-input" maxlength="200" placeholder="Viewer sees this before redeeming" oninput="updateCharCount('f-prompt','prompt-count',200)" rows="2"></textarea>
+        <label class="cp-label"><%= t('redemptions.field.prompt') %> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);"><%= t('redemptions.hint.promptOptional') %></span></label>
+        <textarea id="f-prompt" class="cp-input" maxlength="200" placeholder="<%= t('redemptions.placeholder.prompt') %>" oninput="updateCharCount('f-prompt','prompt-count',200)" rows="2"></textarea>
         <div class="cp-char-counter"><span id="prompt-count">0</span> / 200</div>
       </div>
 
       <!-- Media type -->
       <div class="full">
-        <label class="cp-label">Media Type</label>
+        <label class="cp-label"><%= t('redemptions.field.media') %></label>
         <div class="cp-radio-group">
-          <label><input type="radio" name="media_type" value="audio" checked onchange="onMediaTypeChange()"> Audio (mp3 / wav / ogg)</label>
-          <label><input type="radio" name="media_type" value="video" onchange="onMediaTypeChange()"> Video (mp4 / webm)</label>
+          <label><input type="radio" name="media_type" value="audio" checked onchange="onMediaTypeChange()"> <%= t('redemptions.field.mediaAudio') %></label>
+          <label><input type="radio" name="media_type" value="video" onchange="onMediaTypeChange()"> <%= t('redemptions.field.mediaVideo') %></label>
         </div>
       </div>
 
       <!-- File dropzone -->
       <div class="full" id="dropzone-wrap">
-        <label class="cp-label" id="file-label">Audio File <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(&le; 5 MB)</span></label>
+        <label class="cp-label" id="file-label"><%= t('redemptions.file.audio') %> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);"><%= t('redemptions.file.maxSize', { mb: 5 }) %></span></label>
         <div class="cp-dropzone" id="dropzone" onclick="document.getElementById('f-file').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
-          <div class="cp-dropzone-label">Drop file here or click to browse</div>
-          <div class="cp-dropzone-hint" id="dropzone-hint">Accepted: mp3, wav, ogg &mdash; max 5 MB</div>
+          <div class="cp-dropzone-label"><%= t('redemptions.dropzone') %></div>
+          <div class="cp-dropzone-hint" id="dropzone-hint"><%= t('redemptions.accepted.audio') %></div>
           <div class="cp-dropzone-filename" id="dropzone-filename" style="display:none;"></div>
         </div>
         <input type="file" id="f-file" style="display:none;" accept=".mp3,.wav,.ogg" onchange="onFileSelected(this)">
@@ -353,13 +394,13 @@
 
       <!-- Position preset -->
       <div class="full">
-        <label class="cp-label">Position</label>
+        <label class="cp-label"><%= t('redemptions.field.position') %></label>
         <div class="cp-radio-group">
-          <label><input type="radio" name="position_preset" value="center-large" checked onchange="updatePositionPreview()"> Center (large)</label>
-          <label><input type="radio" name="position_preset" value="fullscreen" onchange="updatePositionPreview()"> Full screen</label>
-          <label><input type="radio" name="position_preset" value="top-right-small" onchange="updatePositionPreview()"> Top right (small)</label>
-          <label><input type="radio" name="position_preset" value="bottom-banner" onchange="updatePositionPreview()"> Bottom banner</label>
-          <label><input type="radio" name="position_preset" value="custom" onchange="updatePositionPreview()"> Custom</label>
+          <label><input type="radio" name="position_preset" value="center-large" checked onchange="updatePositionPreview()"> <%= t('redemptions.position.centerLarge') %></label>
+          <label><input type="radio" name="position_preset" value="fullscreen" onchange="updatePositionPreview()"> <%= t('redemptions.position.fullscreen') %></label>
+          <label><input type="radio" name="position_preset" value="top-right-small" onchange="updatePositionPreview()"> <%= t('redemptions.position.topRightSmall') %></label>
+          <label><input type="radio" name="position_preset" value="bottom-banner" onchange="updatePositionPreview()"> <%= t('redemptions.position.bottomBanner') %></label>
+          <label><input type="radio" name="position_preset" value="custom" onchange="updatePositionPreview()"> <%= t('redemptions.position.custom') %></label>
         </div>
       </div>
 
@@ -367,19 +408,19 @@
       <div class="full" id="custom-xy-group" style="display:none;">
         <div class="cp-custom-fields">
           <div>
-            <label class="cp-label">X (left) <span id="cx-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">20%</span></label>
+            <label class="cp-label"><%= t('redemptions.pos.x') %> <span id="cx-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">20%</span></label>
             <input type="range" min="0" max="100" value="20" id="f-cx" oninput="document.getElementById('cx-val').textContent=this.value+'%'; updatePositionPreview()">
           </div>
           <div>
-            <label class="cp-label">Y (top) <span id="cy-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">20%</span></label>
+            <label class="cp-label"><%= t('redemptions.pos.y') %> <span id="cy-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">20%</span></label>
             <input type="range" min="0" max="100" value="20" id="f-cy" oninput="document.getElementById('cy-val').textContent=this.value+'%'; updatePositionPreview()">
           </div>
           <div>
-            <label class="cp-label">Width <span id="cw-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">60%</span></label>
+            <label class="cp-label"><%= t('redemptions.pos.w') %> <span id="cw-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">60%</span></label>
             <input type="range" min="5" max="100" value="60" id="f-cw" oninput="document.getElementById('cw-val').textContent=this.value+'%'; updatePositionPreview()">
           </div>
           <div>
-            <label class="cp-label">Height <span id="ch-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">60%</span></label>
+            <label class="cp-label"><%= t('redemptions.pos.h') %> <span id="ch-val" style="font-weight:400;text-transform:none;color:var(--text-muted);">60%</span></label>
             <input type="range" min="5" max="100" value="60" id="f-ch" oninput="document.getElementById('ch-val').textContent=this.value+'%'; updatePositionPreview()">
           </div>
         </div>
@@ -387,7 +428,7 @@
 
       <!-- Position preview -->
       <div class="full">
-        <label class="cp-label">Position Preview</label>
+        <label class="cp-label"><%= t('redemptions.pos.preview') %></label>
         <div class="pos-preview" id="pos-preview">
           <div class="pos-preview-rect" id="pos-rect" style="top:20%;left:20%;width:60%;height:60%;"></div>
         </div>
@@ -395,17 +436,17 @@
 
       <!-- Volume -->
       <div class="full">
-        <label class="cp-label">Volume</label>
+        <label class="cp-label"><%= t('redemptions.field.volume') %></label>
         <div class="cp-slider-row">
           <input type="range" min="0" max="100" value="100" id="f-volume" oninput="document.getElementById('vol-val').textContent=this.value+'%'">
           <span class="cp-slider-val" id="vol-val">100%</span>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Multiplied by the overlay master volume</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;"><%= t('redemptions.volumeHint') %></div>
       </div>
 
       <!-- Max play time -->
       <div>
-        <label class="cp-label">Max play time (seconds)</label>
+        <label class="cp-label"><%= t('redemptions.field.maxPlay') %></label>
         <div class="cp-slider-row">
           <input type="range" min="5" max="60" value="15" id="f-maxplay" oninput="document.getElementById('maxplay-val').textContent=this.value+'s'">
           <span class="cp-slider-val" id="maxplay-val">15s</span>
@@ -419,22 +460,22 @@
           <span class="cp-toggle-slider"></span>
         </label>
         <div>
-          <div style="font-size:13px;font-weight:600;">Auto-fulfill</div>
-          <div style="font-size:11px;color:var(--text-muted);">Mark FULFILLED on Twitch after playback</div>
+          <div style="font-size:13px;font-weight:600;"><%= t('redemptions.field.autoFulfill') %></div>
+          <div style="font-size:11px;color:var(--text-muted);"><%= t('redemptions.autoFulfillHint') %></div>
         </div>
       </div>
 
       <!-- Chat message template -->
       <div class="full">
-        <label class="cp-label">Chat message <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(optional)</span></label>
-        <input type="text" id="f-chat-template" class="cp-input" placeholder="{user} redeemed {title} for {cost} points!">
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Supports: <code>{user}</code> <code>{title}</code> <code>{cost}</code></div>
+        <label class="cp-label"><%= t('redemptions.field.chatTemplate') %> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);"><%= t('redemptions.hint.optional') %></span></label>
+        <input type="text" id="f-chat-template" class="cp-input" placeholder="<%= t('redemptions.placeholder.chat') %>">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;"><%= t('redemptions.chatSupports') %> <code>{user}</code> <code>{title}</code> <code>{cost}</code></div>
       </div>
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
-      <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button type="button" class="btn btn-primary" id="modal-submit-btn" onclick="submitReward()">Add Reward</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal()"><%= t('redemptions.cancel') %></button>
+      <button type="button" class="btn btn-primary" id="modal-submit-btn" onclick="submitReward()"><%= t('redemptions.addReward') %></button>
     </div>
   </div>
 </div>
@@ -443,37 +484,36 @@
 <div class="card animate-in" style="margin-top: 32px; margin-bottom: 32px;">
   <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px; display:flex;align-items:center;gap:8px;">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    Recent Redemptions
+    <%= t('redemptions.recent') %>
     <span style="font-size:12px;font-weight:600;background:var(--bg-elevated);border:1px solid var(--border);border-radius:20px;padding:1px 8px;color:var(--text-muted);letter-spacing:0;"><%= recentRedemptions.length %></span>
   </h3>
 
   <% if (recentRedemptions.length === 0) { %>
-    <div style="text-align:center;padding:32px 16px;color:var(--text-muted);font-size:13px;">No redemptions yet.</div>
+    <div style="text-align:center;padding:32px 16px;color:var(--text-muted);font-size:13px;"><%= t('redemptions.history.empty') %></div>
   <% } else { %>
     <div style="overflow-x:auto;">
       <table class="rh-table">
         <thead>
           <tr>
-            <th>When</th>
-            <th>User</th>
-            <th>Reward</th>
-            <th>Cost</th>
-            <th>Outcome</th>
+            <th><%= t('redemptions.col.when') %></th>
+            <th><%= t('redemptions.col.user') %></th>
+            <th><%= t('redemptions.col.reward') %></th>
+            <th><%= t('redemptions.col.cost') %></th>
+            <th><%= t('redemptions.col.outcome') %></th>
           </tr>
         </thead>
         <tbody>
           <% recentRedemptions.forEach(function(r) {
             const rewardRow = allRewards.find(function(rw) { return rw.id === r.reward_id; });
-            const outcomeLabels = { refunded_disabled: t('redemptions.outcome.refundedDisabled'), refunded_deleted: t('redemptions.outcome.refundedDeleted') };
           %>
             <tr>
               <td style="color:var(--text-muted);white-space:nowrap;" data-ts="<%= r.created_at %>"><%= r.created_at %></td>
-              <td style="font-weight:500;"><%= r.user_login || '&mdash;' %></td>
-              <td style="color:var(--text-secondary);"><%= rewardRow ? rewardRow.title : (r.twitch_reward_id || '&mdash;') %></td>
-              <td style="font-family:var(--font-display);"><%= r.cost ? Number(r.cost).toLocaleString() + ' pts' : '&mdash;' %></td>
+              <td style="font-weight:500;"><%= r.user_login || '—' %></td>
+              <td style="color:var(--text-secondary);"><%= rewardRow ? rewardRow.title : (r.twitch_reward_id || '—') %></td>
+              <td style="font-family:var(--font-display);"><%= r.cost ? t('redemptions.pts', { cost: num(r.cost) }) : '—' %></td>
               <td>
                 <span class="outcome-chip <%= r.is_test ? 'test' : (r.outcome || 'error') %>">
-                  <%= r.is_test ? 'TEST' : (outcomeLabels[r.outcome] || r.outcome || 'error') %>
+                  <%= r.is_test ? outcomeLabels.test : (has(outcomeLabels, r.outcome) ? outcomeLabels[r.outcome] : (r.outcome || outcomeLabels.error)) %>
                 </span>
               </td>
             </tr>
@@ -488,15 +528,61 @@
 <script>
 const REWARDS_DATA = <%- JSON.stringify(rewards).replace(/</g, '\\u003c') %>;
 
+// Texts for this script, translated on the server ({{name}} marks a value filled in by fmt)
+const T = <%- JSON.stringify({
+  justNow: t('redemptions.time.now'),
+  minutesAgo: t('redemptions.time.minutes', { n: '{{n}}' }),
+  hoursAgo: t('redemptions.time.hours', { n: '{{n}}' }),
+  daysAgo: t('redemptions.time.days', { n: '{{n}}' }),
+  enabled: t('redemptions.toast.enabled'),
+  disabled: t('redemptions.toast.disabled'),
+  switchSaveFailed: t('redemptions.error.saveSwitch'),
+  syncing: t('redemptions.toast.syncing'),
+  syncDone: t('redemptions.toast.syncDone'),
+  syncFailed: t('redemptions.error.syncFailed'),
+  network: t('redemptions.error.network'),
+  toggleFailed: t('redemptions.error.toggleFailed'),
+  retryDeleted: t('redemptions.retry.deleted'),
+  retrySent: t('redemptions.retry.sent'),
+  updateFailed: t('redemptions.error.updateFailed'),
+  testFired: t('redemptions.toast.testFired'),
+  testFailed: t('redemptions.error.testFailed'),
+  testDone: t('redemptions.testDone'),
+  confirmDelete: t('redemptions.confirmDelete'),
+  deleted: t('redemptions.toast.deleted'),
+  removeFailed: t('redemptions.error.removeFailed'),
+  emptyTitle: t('redemptions.empty.title'),
+  emptyBody: t('redemptions.empty.body', { button: t('redemptions.addReward') }),
+  addReward: t('redemptions.addReward'),
+  editReward: t('redemptions.editReward'),
+  saveChanges: t('redemptions.saveChanges'),
+  saving: t('redemptions.saving'),
+  fileAudio: t('redemptions.file.audio'),
+  fileVideo: t('redemptions.file.video'),
+  fileMax: t('redemptions.file.maxSize', { mb: '{{mb}}' }),
+  acceptedAudio: t('redemptions.accepted.audio'),
+  acceptedVideo: t('redemptions.accepted.video'),
+  currentFile: t('redemptions.currentFile', { file: '{{file}}' }),
+  titleLength: t('redemptions.error.titleLength'),
+  costRange: t('redemptions.error.costRange'),
+  saveFailed: t('redemptions.error.saveFailed'),
+  updated: t('redemptions.toast.updated'),
+  noFile: t('redemptions.error.noFile'),
+  uploadFailed: t('redemptions.error.uploadFailed'),
+  added: t('redemptions.toast.added'),
+  addedAndOn: t('redemptions.toast.addedAndOn'),
+}).replace(/</g, '\\u003c') %>;
+function fmt(text, values) { return String(text).replace(/\{\{(\w+)\}\}/g, function (_, k) { return values[k] != null ? values[k] : ''; }); }
+
 // ── Relative time helper ──────────────────────────────────────
 function relativeTime(isoStr) {
   if (!isoStr) return '';
   const date = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
   const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
+  if (diff < 60) return T.justNow;
+  if (diff < 3600) return fmt(T.minutesAgo, { n: Math.floor(diff / 60) });
+  if (diff < 86400) return fmt(T.hoursAgo, { n: Math.floor(diff / 3600) });
+  return fmt(T.daysAgo, { n: Math.floor(diff / 86400) });
 }
 
 document.querySelectorAll('[data-ts]').forEach(function(el) {
@@ -514,6 +600,11 @@ function showToast(msg, type) {
 }
 
 // ── Master toggle ─────────────────────────────────────────────
+// The hint under the switch turns to a warning while the switch is off.
+function showSwitchHint(on) {
+  document.getElementById('cp-master-hint').classList.toggle('off', !on);
+}
+
 document.getElementById('cp-master-toggle').addEventListener('change', async function() {
   var enabled = this.checked ? 1 : 0;
   var self = this;
@@ -523,27 +614,28 @@ document.getElementById('cp-master-toggle').addEventListener('change', async fun
     body: JSON.stringify({ cp_rewards_enabled: enabled }),
   });
   if (r.ok) {
-    showToast(enabled ? 'Channel Point Rewards enabled' : 'Disabled', 'success');
+    showToast(enabled ? T.enabled : T.disabled, 'success');
   } else {
-    showToast('Failed to save', 'error');
+    showToast(T.switchSaveFailed, 'error');
     self.checked = !self.checked;
   }
+  showSwitchHint(self.checked);
 });
 
 // ── Sync ────────────────────────────────────────────────────
 async function syncRewards() {
-  showToast('Syncing from Twitch...', '');
+  showToast(T.syncing, '');
   try {
     var r = await fetch('/dashboard/redemptions/sync', { method: 'POST' });
     var data = await r.json();
     if (r.ok) {
-      showToast('Sync complete', 'success');
+      showToast(T.syncDone, 'success');
       setTimeout(function() { location.reload(); }, 800);
     } else {
-      showToast(data.error || 'Sync failed', 'error');
+      showToast(data.error || T.syncFailed, 'error');
     }
   } catch (e) {
-    showToast('Network error', 'error');
+    showToast(T.network, 'error');
   }
 }
 
@@ -556,7 +648,7 @@ async function toggleReward(id, enabled) {
   });
   if (!r.ok) {
     var d = await r.json().catch(function() { return {}; });
-    showToast(d.error || 'Update failed', 'error');
+    showToast(d.error || T.toggleFailed, 'error');
     // Saved here but not on Twitch: reload to show the warning on the reward.
     if (d.reward) setTimeout(function() { location.reload(); }, 2500);
   }
@@ -569,13 +661,13 @@ async function retryReward(id, btn) {
     var r = await fetch('/dashboard/redemptions/' + id + '/retry', { method: 'POST' });
     var d = await r.json().catch(function() { return {}; });
     if (r.ok) {
-      showToast(d.removed ? <%- JSON.stringify(t('redemptions.retry.deleted')).replace(/</g, '\\u003c') %> : <%- JSON.stringify(t('redemptions.retry.sent')).replace(/</g, '\\u003c') %>, 'success');
+      showToast(d.removed ? T.retryDeleted : T.retrySent, 'success');
       setTimeout(function() { location.reload(); }, 800);
       return;
     }
-    showToast(d.error || <%- JSON.stringify(t('redemptions.error.updateFailed')).replace(/</g, '\\u003c') %>, 'error');
+    showToast(d.error || T.updateFailed, 'error');
   } catch (e) {
-    showToast('Network error', 'error');
+    showToast(T.network, 'error');
   }
   btn.disabled = false;
 }
@@ -588,15 +680,15 @@ async function testReward(id, btn) {
   try {
     var r = await fetch('/dashboard/redemptions/' + id + '/test', { method: 'POST' });
     if (r.ok) {
-      showToast('Test fired', 'success');
-      btn.textContent = 'Done';
+      showToast(T.testFired, 'success');
+      btn.textContent = T.testDone;
     } else {
       var d = await r.json().catch(function() { return {}; });
-      showToast(d.error || 'Test failed', 'error');
+      showToast(d.error || T.testFailed, 'error');
       btn.innerHTML = original;
     }
   } catch (e) {
-    showToast('Network error', 'error');
+    showToast(T.network, 'error');
     btn.innerHTML = original;
   }
   setTimeout(function() { btn.disabled = false; btn.innerHTML = original; }, 2000);
@@ -604,7 +696,7 @@ async function testReward(id, btn) {
 
 // ── Delete a reward ──────────────────────────────────────────
 async function deleteReward(id) {
-  if (!confirm('Delete this reward? This cannot be undone.')) return;
+  if (!confirm(T.confirmDelete)) return;
   var r = await fetch('/dashboard/redemptions/' + id, { method: 'DELETE' });
   if (r.ok) {
     var card = document.getElementById('reward-card-' + id);
@@ -615,15 +707,20 @@ async function deleteReward(id) {
       var empty = document.createElement('div');
       empty.className = 'cp-empty animate-in';
       empty.id = 'rewards-empty';
-      empty.innerHTML = '<h4>No rewards yet</h4><p>Click "Add Reward" above to create your first Channel Point reward.</p>';
+      var emptyTitle = document.createElement('h4');
+      emptyTitle.textContent = T.emptyTitle;
+      var emptyBody = document.createElement('p');
+      emptyBody.textContent = T.emptyBody;
+      empty.appendChild(emptyTitle);
+      empty.appendChild(emptyBody);
       var list = document.getElementById('rewards-list');
       list.innerHTML = '';
       list.before(empty);
     }
-    showToast('Reward deleted', 'success');
+    showToast(T.deleted, 'success');
   } else {
     var d = await r.json().catch(function() { return {}; });
-    showToast(d.error || 'Delete failed', 'error');
+    showToast(d.error || T.removeFailed, 'error');
     // Twitch kept the reward: reload so it appears under "Not deleted on Twitch".
     if (d.reward) setTimeout(function() { location.reload(); }, 2500);
   }
@@ -727,10 +824,13 @@ function onMediaTypeChange() {
   var type = (document.querySelector('input[name="media_type"]:checked') || {}).value || 'audio';
   var isVideo = type === 'video';
   document.getElementById('f-file').setAttribute('accept', isVideo ? '.mp4,.webm' : '.mp3,.wav,.ogg');
-  document.getElementById('file-label').innerHTML = (isVideo ? 'Video' : 'Audio') + ' File <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">(&le; ' + (isVideo ? 20 : 5) + ' MB)</span>';
-  document.getElementById('dropzone-hint').textContent = isVideo
-    ? 'Accepted: mp4, webm — max 20 MB'
-    : 'Accepted: mp3, wav, ogg — max 5 MB';
+  var fileLabel = document.getElementById('file-label');
+  fileLabel.textContent = (isVideo ? T.fileVideo : T.fileAudio) + ' ';
+  var sizeHint = document.createElement('span');
+  sizeHint.style.cssText = 'font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);';
+  sizeHint.textContent = fmt(T.fileMax, { mb: isVideo ? 20 : 5 });
+  fileLabel.appendChild(sizeHint);
+  document.getElementById('dropzone-hint').textContent = isVideo ? T.acceptedVideo : T.acceptedAudio;
   _selectedFile = null;
   document.getElementById('dropzone-filename').style.display = 'none';
   document.getElementById('f-file').value = '';
@@ -742,8 +842,8 @@ var _editId = null;
 function openAddModal() {
   _editId = null;
   _selectedFile = null;
-  document.getElementById('modal-title').textContent = 'Add Reward';
-  document.getElementById('modal-submit-btn').textContent = 'Add Reward';
+  document.getElementById('modal-title').textContent = T.addReward;
+  document.getElementById('modal-submit-btn').textContent = T.addReward;
   document.getElementById('f-title').value = '';
   document.getElementById('f-cost').value = 500;
   document.getElementById('f-cooldown').value = 0;
@@ -770,8 +870,8 @@ function openEditModal(id) {
   if (!r) return;
   _editId = id;
   _selectedFile = null;
-  document.getElementById('modal-title').textContent = 'Edit Reward';
-  document.getElementById('modal-submit-btn').textContent = 'Save Changes';
+  document.getElementById('modal-title').textContent = T.editReward;
+  document.getElementById('modal-submit-btn').textContent = T.saveChanges;
   document.getElementById('f-title').value = r.title || '';
   document.getElementById('f-cost').value = r.cost || 500;
   document.getElementById('f-cooldown').value = r.cooldown_seconds || 0;
@@ -805,7 +905,7 @@ function openEditModal(id) {
   var note = document.getElementById('existing-file-note');
   if (r.media_filename) {
     note.style.display = '';
-    note.textContent = 'Current file: ' + r.media_filename + ' — upload a new file below to replace it';
+    note.textContent = fmt(T.currentFile, { file: r.media_filename });
   } else {
     note.style.display = 'none';
   }
@@ -840,13 +940,13 @@ async function submitReward() {
   var cw = parseFloat((parseInt(document.getElementById('f-cw').value) / 100).toFixed(4));
   var ch = parseFloat((parseInt(document.getElementById('f-ch').value) / 100).toFixed(4));
 
-  if (title.length < 2 || title.length > 45) return showToast('Title must be 2–45 characters', 'error');
-  if (cost < 1 || cost > 1000000) return showToast('Cost must be 1-1,000,000', 'error');
+  if (title.length < 2 || title.length > 45) return showToast(T.titleLength, 'error');
+  if (cost < 1 || cost > 1000000) return showToast(T.costRange, 'error');
 
   var btn = document.getElementById('modal-submit-btn');
   btn.disabled = true;
   var origText = btn.textContent;
-  btn.textContent = 'Saving...';
+  btn.textContent = T.saving;
 
   try {
     if (_editId) {
@@ -859,7 +959,7 @@ async function submitReward() {
       if (!patchRes.ok) {
         var d = await patchRes.json().catch(function() { return {}; });
         if (!d.reward) {
-          showToast(d.error || 'Save failed', 'error');
+          showToast(d.error || T.saveFailed, 'error');
           btn.disabled = false; btn.textContent = origText; return;
         }
         twitchMessage = d.error;
@@ -880,10 +980,10 @@ async function submitReward() {
           }
         }
       }
-      showToast(twitchMessage || 'Reward updated', twitchMessage ? 'error' : 'success');
+      showToast(twitchMessage || T.updated, twitchMessage ? 'error' : 'success');
       setTimeout(function() { location.reload(); }, twitchMessage ? 2500 : 800);
     } else {
-      if (!_selectedFile) { showToast('Please select a media file', 'error'); btn.disabled = false; btn.textContent = origText; return; }
+      if (!_selectedFile) { showToast(T.noFile, 'error'); btn.disabled = false; btn.textContent = origText; return; }
       var ext = _selectedFile.name.split('.').pop().toLowerCase();
       var params = new URLSearchParams({ title: title, cost: cost, cooldown_seconds: cooldown, prompt: prompt || '', chat_message_template: chatTemplate || '', auto_fulfill: autoFulfill, volume: volume, max_play_seconds: maxPlay, media_type: mediaType, position_preset: posPreset, custom_x: cx, custom_y: cy, custom_w: cw, custom_h: ch, ext: ext });
       var uploadRes = await fetch('/dashboard/redemptions/upload?' + params.toString(), {
@@ -893,14 +993,17 @@ async function submitReward() {
       });
       if (!uploadRes.ok) {
         var d2 = await uploadRes.json().catch(function() { return {}; });
-        showToast(d2.error || 'Upload failed', 'error');
+        showToast(d2.error || T.uploadFailed, 'error');
         btn.disabled = false; btn.textContent = origText; return;
       }
-      showToast('Reward added', 'success');
+      // The first reward also switches "Enable Channel Point Rewards" on (the page reloads in a moment)
+      var uploaded = await uploadRes.json().catch(function() { return {}; });
+      if (uploaded.rewardsSwitchedOn) document.getElementById('cp-master-toggle').checked = true;
+      showToast(uploaded.rewardsSwitchedOn ? T.addedAndOn : T.added, 'success');
       setTimeout(function() { location.reload(); }, 800);
     }
   } catch (e) {
-    showToast('Network error', 'error');
+    showToast(T.network, 'error');
     btn.disabled = false; btn.textContent = origText;
   }
 }

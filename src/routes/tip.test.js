@@ -105,12 +105,12 @@ const orderReads = () => paypal.calls.filter((c) => c.method === 'GET' && /\/v2\
 
 // ── App ──────────────────────────────────────────────────────────────
 
-function request(method, urlPath, form) {
+function request(method, urlPath, form, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const body = form ? new URLSearchParams(form).toString() : null;
     const req = http.request({
       host: '127.0.0.1', port, path: urlPath, method, agent: false,
-      headers: body ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } : {},
+      headers: { ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } : {}), ...extraHeaders },
     }, (res) => {
       let text = '';
       res.setEncoding('utf8');
@@ -163,7 +163,13 @@ before(async () => {
   app.set('view engine', 'ejs');
   app.set('views', path.join(SRC, 'views'));
   app.use(express.urlencoded({ extended: true }));
-  app.use((req, res, next) => { res.locals.t = (key, params) => t('en', key, params); next(); });
+  app.use((req, res, next) => {
+    // x-show-keys: every message comes back as its key, to see that none is typed into the page or the route;
+    // x-test-lang: the language server.js would have set in res.locals.lang
+    res.locals.t = req.get('x-show-keys') ? (key) => `[${key}]` : (key, params) => t('en', key, params);
+    if (req.get('x-test-lang')) res.locals.lang = req.get('x-test-lang');
+    next();
+  });
   tipRoutes = require('./tip');
   app.use('/tip', tipRoutes);
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -490,5 +496,87 @@ describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
     db.cleanupOldPendingTips();
     const left = db.db.prepare('SELECT order_id FROM pending_tips ORDER BY order_id').all().map((r) => r.order_id);
     assert.deepEqual(left, ['RECONCILE00000002', 'RECONCILE00000003', 'RECONCILE00000004']);
+  });
+});
+
+// ── The public page and its messages are in the visit's language ─────────────
+
+describe('what a donor reads is translated', () => {
+  const KEYS = { 'x-show-keys': '1' };
+
+  test('every text on the page is a translated key, the language is the visit\'s, and the script gets the minimum in words', async () => {
+    const res = await request('GET', '/tip/tips_a', undefined, { ...KEYS, 'x-test-lang': 'pt' });
+    assert.equal(res.status, 200);
+    assert.match(res.text, /<html lang="pt">/);
+    for (const key of ['tip.pageTitle', 'tip.subtitle', 'tip.donateButton', 'tip.poweredBy']) {
+      assert.ok(res.text.includes(`[${key}]`), key);
+    }
+    for (const key of ['tip.amountPlaceholder', 'tip.messagePlaceholder', 'tip.namePlaceholder']) {
+      assert.ok(res.text.includes(`placeholder="[${key}]"`), key);
+    }
+    assert.ok(res.text.includes('const minMessage = "[tip.minAmount]";'), 'the minimum-donation message is rendered on the server');
+    // nothing of the English wording is left typed into the page
+    for (const english of ['Support this streamer', 'Donate via PayPal', 'Powered by', 'Minimum donation', 'optional']) {
+      assert.ok(!res.text.includes(english), `"${english}" is not typed into the page`);
+    }
+  });
+
+  test('the same page in English reads as before, with the minimum and the currency filled in', async () => {
+    const res = await request('GET', '/tip/tips_a');
+    assert.match(res.text, /<html lang="en">/);
+    assert.ok(res.text.includes('Support this streamer with a donation'));
+    assert.ok(res.text.includes('Donate via PayPal'));
+    assert.ok(res.text.includes('const minMessage = "Minimum donation is 1 EUR";'));
+    assert.ok(res.text.includes('<title>Donate to tips_a — Atleta</title>'));
+  });
+
+  test('the thank-you after a donation is translated', async () => {
+    const res = await request('GET', '/tip/tips_a?success=1', undefined, KEYS);
+    assert.ok(res.text.includes('[tip.thanks]'));
+  });
+
+  test('the plain-text answers of the routes are translated', async () => {
+    const answer = async (method, urlPath, form) => {
+      const res = await request(method, urlPath, form, KEYS);
+      return [res.status, res.text];
+    };
+    assert.deepEqual(await answer('GET', '/tip/nobody'), [404, '[tip.error.pageUnavailable]']);
+    assert.deepEqual(await answer('POST', '/tip/nobody/create', { amount: '5' }), [404, '[tip.error.pageUnavailable]']);
+    assert.deepEqual(await answer('POST', '/tip/tips_a/create', { amount: '0.5' }), [400, '[tip.error.invalidAmount]']);
+    assert.deepEqual(await answer('GET', '/tip/nobody/success?token=TESTORDER00000001'), [404, '[tip.error.streamerNotFound]']);
+  });
+
+  test('a payment that cannot be started says so in words', async () => {
+    paypal.calls.length = 0;
+    const original = global.fetch;
+    global.fetch = async (url, opts = {}) => {
+      if (String(url) === `${PAYPAL}/v2/checkout/orders`) return reply(500, { name: 'INTERNAL_SERVER_ERROR' });
+      return original(url, opts);
+    };
+    try {
+      const res = await request('POST', '/tip/tips_a/create', { amount: '5' }, KEYS);
+      assert.equal(res.status, 500);
+      assert.equal(res.text, '[tip.error.paymentFailed]');
+    } finally {
+      global.fetch = original;
+    }
+    assert.equal(count('pending_tips'), 0);
+  });
+
+  test('the order PayPal shows the donor is described in the visit\'s language', async () => {
+    await request('POST', '/tip/tips_a/create', { amount: '5' }, KEYS);
+    const create = paypal.calls.find((c) => c.url === `${PAYPAL}/v2/checkout/orders`);
+    assert.equal(JSON.parse(create.body).purchase_units[0].description, '[tip.paypalDescription]');
+
+    paypal.calls.length = 0;
+    await request('POST', '/tip/tips_a/create', { amount: '5' });
+    const english = paypal.calls.find((c) => c.url === `${PAYPAL}/v2/checkout/orders`);
+    assert.equal(JSON.parse(english.body).purchase_units[0].description, 'Donation to tips_a');
+  });
+
+  test('a refused return shows its translated message on the page', async () => {
+    const res = await request('GET', '/tip/tips_a/success?token=NOTANORDERID', undefined, KEYS);
+    assert.equal(res.status, 400);
+    assert.ok(res.text.includes('[tip.error.expired]'));
   });
 });

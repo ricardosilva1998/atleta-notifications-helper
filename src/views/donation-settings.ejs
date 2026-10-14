@@ -1,17 +1,26 @@
-<%- include('header', { title: 'Donation Settings', streamer: streamer }) %>
+<%- include('header', { title: t('donations.settings.title'), streamer: streamer }) %>
+<%
+  const _lang = typeof lang !== 'undefined' ? lang : 'en';
+  // A sentence with markup in the middle holds a {{name}} marker; this returns the
+  // text before and after it, so the markup stays out of the translation and all of
+  // it is still escaped.
+  const _around = (key, name, params) => t(key, Object.assign({}, params, { [name]: '\u0001' })).split('\u0001');
+  // The currency's name in the page language (the browser's own data, no keys needed)
+  const _currencyName = (code) => { try { return new Intl.DisplayNames(_lang, { type: 'currency' }).of(code); } catch (e) { return code; } };
+%>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
 <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 8px;" class="animate-in">
-  <h2 style="margin: 0; font-size: 24px; font-weight: 700;">Donation Settings</h2>
+  <h2 style="margin: 0; font-size: 24px; font-weight: 700;"><%= t('donations.settings.title') %></h2>
   <a href="/dashboard/donations/history" class="btn btn-secondary" style="text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
-    Donation History
+    <%= t('donations.history.title') %>
   </a>
 </div>
-<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">Set up PayPal donations so viewers can support you with overlay alerts on stream.</p>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;"><%= t('donations.settings.intro') %></p>
 
 <% if (settingsError) { %>
   <div class="alert alert-danger" role="alert"><%= settingsError %></div>
@@ -23,23 +32,24 @@
     <div style="display: flex; align-items: center; justify-content: space-between;">
       <h3>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        Enable Donation Page
+        <%= t('donations.settings.enablePage') %>
       </h3>
       <label class="pill-toggle">
         <input type="checkbox" name="donation_page_enabled" value="1" <%= streamer.donation_page_enabled ? 'checked' : '' %>>
         <span class="slider"></span>
       </label>
     </div>
-    <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">When enabled, viewers can donate at <strong>/tip/<%= streamer.twitch_username || 'your-username' %></strong></p>
+    <% const _enable = _around('donations.settings.enableHint', 'url'); %>
+    <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;"><%= _enable[0] %><strong>/tip/<%= streamer.twitch_username || t('donations.settings.yourUsername') %></strong><%= _enable[1] %></p>
   </div>
 
   <!-- PayPal Email -->
   <div class="card animate-in animate-in-delay-2" style="margin-bottom: 16px;">
     <h3>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-      PayPal Email
+      <%= t('donations.settings.paypalEmail') %>
     </h3>
-    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">Donations will be sent directly to this PayPal account.</p>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;"><%= t('donations.settings.paypalHint') %></p>
     <div class="form-group" style="margin-bottom: 0;">
       <input type="email" name="paypal_email" placeholder="your-email@paypal.com" value="<%= streamer.paypal_email || '' %>" style="width: 100%;">
     </div>
@@ -49,22 +59,22 @@
   <div class="card animate-in animate-in-delay-3" style="margin-bottom: 16px;">
     <h3>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Settings
+      <%= t('donations.settings.settingsHeading') %>
     </h3>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
       <div class="form-group" style="margin-bottom: 0;">
-        <label>Minimum Amount</label>
+        <label><%= t('donations.settings.minAmount') %></label>
         <input type="number" name="donation_min_amount" value="<%= streamer.donation_min_amount || 1 %>" min="0.50" step="0.50" style="width: 100%;">
       </div>
       <div class="form-group" style="margin-bottom: 0;">
-        <label>Currency</label>
+        <label><%= t('donations.settings.currency') %></label>
         <select name="donation_currency" style="width: 100%;">
-          <option value="EUR" <%= (streamer.donation_currency || 'EUR') === 'EUR' ? 'selected' : '' %>>EUR (Euro)</option>
-          <option value="USD" <%= streamer.donation_currency === 'USD' ? 'selected' : '' %>>USD (US Dollar)</option>
-          <option value="GBP" <%= streamer.donation_currency === 'GBP' ? 'selected' : '' %>>GBP (British Pound)</option>
-          <option value="BRL" <%= streamer.donation_currency === 'BRL' ? 'selected' : '' %>>BRL (Brazilian Real)</option>
-          <option value="CAD" <%= streamer.donation_currency === 'CAD' ? 'selected' : '' %>>CAD (Canadian Dollar)</option>
-          <option value="AUD" <%= streamer.donation_currency === 'AUD' ? 'selected' : '' %>>AUD (Australian Dollar)</option>
+          <option value="EUR" <%= (streamer.donation_currency || 'EUR') === 'EUR' ? 'selected' : '' %>>EUR (<%= _currencyName('EUR') %>)</option>
+          <option value="USD" <%= streamer.donation_currency === 'USD' ? 'selected' : '' %>>USD (<%= _currencyName('USD') %>)</option>
+          <option value="GBP" <%= streamer.donation_currency === 'GBP' ? 'selected' : '' %>>GBP (<%= _currencyName('GBP') %>)</option>
+          <option value="BRL" <%= streamer.donation_currency === 'BRL' ? 'selected' : '' %>>BRL (<%= _currencyName('BRL') %>)</option>
+          <option value="CAD" <%= streamer.donation_currency === 'CAD' ? 'selected' : '' %>>CAD (<%= _currencyName('CAD') %>)</option>
+          <option value="AUD" <%= streamer.donation_currency === 'AUD' ? 'selected' : '' %>>AUD (<%= _currencyName('AUD') %>)</option>
         </select>
       </div>
     </div>
@@ -75,14 +85,14 @@
     <div class="card animate-in animate-in-delay-3" style="margin-bottom: 16px;">
       <h3>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        Your Donation Link
+        <%= t('donations.settings.linkHeading') %>
       </h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 10px;">Share this link with your viewers:</p>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 10px;"><%= t('donations.settings.linkHint') %></p>
       <div style="display: flex; gap: 8px; align-items: center;">
         <input type="text" value="<%= appUrl %>/tip/<%= streamer.twitch_username %>" readonly id="tip-url"
           style="flex: 1; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
-        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('tip-url').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500);" class="btn btn-secondary" style="flex-shrink: 0;">Copy</button>
-        <a href="/tip/<%= streamer.twitch_username %>" target="_blank" class="btn btn-secondary" style="flex-shrink: 0; text-decoration: none;">Preview</a>
+        <button type="button" onclick="copyField('tip-url', this)" data-copy="<%= t('donations.settings.copy') %>" data-copied="<%= t('donations.settings.copied') %>" class="btn btn-secondary" style="flex-shrink: 0;"><%= t('donations.settings.copy') %></button>
+        <a href="/tip/<%= streamer.twitch_username %>" target="_blank" class="btn btn-secondary" style="flex-shrink: 0; text-decoration: none;"><%= t('donations.settings.preview') %></a>
       </div>
     </div>
   <% } %>
@@ -91,20 +101,20 @@
   <div style="display: flex; justify-content: flex-end; margin-bottom: 24px;">
     <button type="submit" class="btn btn-primary" style="padding: 12px 32px; font-size: 14px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Save Settings
+      <%= t('donations.settings.save') %>
     </button>
   </div>
 </form>
 
 <!-- Tip Goal -->
-<% const _fmt = (v, c) => { try { return new Intl.NumberFormat('en', { style: 'currency', currency: c }).format(v); } catch (e) { return c + ' ' + Number(v).toFixed(2); } }; %>
+<% const _fmt = (v, c) => { try { return new Intl.NumberFormat(_lang, { style: 'currency', currency: c }).format(v); } catch (e) { return c + ' ' + Number(v).toFixed(2); } }; %>
 <div id="tip-goal" class="card animate-in" style="margin-bottom: 16px;">
   <h3>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4"/><path d="M4 4h12l-2 4 2 4H4"/></svg>
-    Tip Goal
+    <%= t('donations.goal.title') %>
   </h3>
   <p style="color: var(--text-muted); font-size: 13px; margin: 8px 0 16px;">
-    Set a donation target and show a live progress bar on stream. PayPal tips and StreamElements tips in the goal's currency are added automatically. Test alerts don't count.
+    <%= t('donations.goal.intro') %>
   </p>
 
   <% if (goalError) { %>
@@ -116,74 +126,74 @@
 
   <!-- Live preview — same overlay page OBS loads, driven by the form below (nothing is saved or counted) -->
   <div style="background: repeating-conic-gradient(#1a1a22 0 25%, #22222c 0 50%) 0 0 / 20px 20px; border-radius: var(--radius-sm); overflow: hidden;">
-    <iframe id="goal-preview" src="/overlay/goal-demo" title="Goal overlay preview" style="display: block; width: 100%; height: 160px; border: 0;"></iframe>
+    <iframe id="goal-preview" src="/overlay/goal-demo" title="<%= t('donations.goal.previewTitle') %>" style="display: block; width: 100%; height: 160px; border: 0;"></iframe>
   </div>
   <div class="goal-test">
-    <div class="goal-test-buttons" role="group" aria-label="Test the goal bar">
-      <span class="goal-test-label">Test</span>
-      <button type="button" class="btn btn-secondary goal-test-btn" data-test="small">+ Small donation</button>
-      <button type="button" class="btn btn-secondary goal-test-btn" data-test="big">+ Big donation</button>
-      <button type="button" class="btn btn-secondary goal-test-btn" data-test="reach">🏁 Reach goal</button>
-      <button type="button" class="btn btn-secondary goal-test-btn" data-test="reset">Reset</button>
+    <div class="goal-test-buttons" role="group" aria-label="<%= t('donations.goal.testGroup') %>">
+      <span class="goal-test-label"><%= t('donations.goal.testLabel') %></span>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="small"><%= t('donations.goal.testSmall') %></button>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="big"><%= t('donations.goal.testBig') %></button>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="reach"><%= t('donations.goal.testReach') %></button>
+      <button type="button" class="btn btn-secondary goal-test-btn" data-test="reset"><%= t('donations.goal.testReset') %></button>
     </div>
     <% if (goalOverlayUrl) { %>
       <label class="goal-test-live">
         <input type="checkbox" id="goal-test-live" checked>
-        Also show tests on my OBS overlay
+        <%= t('donations.goal.testLive') %>
       </label>
     <% } %>
   </div>
   <p id="goal-test-status" style="font-size: 12px; color: var(--text-muted); margin: 6px 0 16px;" aria-live="polite">
-    Tests are never saved or counted, and go back to the real amount after 10 seconds.
+    <%= t('donations.goal.testNote') %>
   </p>
 
   <% if (activeGoal) { %>
     <form id="goal-form" method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/update" style="margin-bottom: 16px;">
       <div class="goal-grid">
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Title</label>
+          <label><%= t('donations.goal.fieldTitle') %></label>
           <input type="text" name="title" maxlength="60" required value="<%= activeGoal.title %>" style="width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Target (<%= activeGoal.currency %>)</label>
+          <label><%= t('donations.goal.fieldTargetIn', { currency: activeGoal.currency }) %></label>
           <input type="number" name="target_amount" min="0.01" step="0.01" required value="<%= activeGoal.target_amount %>" style="width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Bar Color</label>
+          <label><%= t('donations.goal.fieldBarColor') %></label>
           <input type="color" name="bar_color" value="<%= activeGoal.bar_color || '#22c55e' %>" style="width: 100%; height: 40px; padding: 2px;">
         </div>
       </div>
       <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
-        <button type="submit" class="btn btn-secondary">Save Goal</button>
+        <button type="submit" class="btn btn-secondary"><%= t('donations.goal.save') %></button>
       </div>
     </form>
 
     <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;">
       <form method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/adjust" style="display: flex; gap: 8px; align-items: flex-end;">
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Manual adjust (<%= activeGoal.currency %>)</label>
-          <input type="number" name="amount" step="0.01" placeholder="e.g. 10 or -5" required style="width: 160px;">
+          <label><%= t('donations.goal.adjust', { currency: activeGoal.currency }) %></label>
+          <input type="number" name="amount" step="0.01" placeholder="<%= t('donations.goal.adjustPlaceholder') %>" required style="width: 160px;">
         </div>
-        <button type="submit" class="btn btn-secondary">Apply</button>
+        <button type="submit" class="btn btn-secondary"><%= t('donations.goal.apply') %></button>
       </form>
-      <form method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/end" onsubmit="return confirm('End this goal? The progress bar will be hidden from the overlay.');">
-        <button type="submit" class="btn btn-secondary" style="color: var(--danger);">End Goal</button>
+      <form method="POST" action="/dashboard/donations/goal/<%= activeGoal.id %>/end" onsubmit="return confirm(<%= JSON.stringify(t('donations.goal.endConfirm')) %>);">
+        <button type="submit" class="btn btn-secondary" style="color: var(--danger);"><%= t('donations.goal.end') %></button>
       </form>
     </div>
-    <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Use manual adjust for donations received elsewhere or in another currency. Negative values subtract.</p>
+    <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;"><%= t('donations.goal.adjustHint') %></p>
   <% } else { %>
     <form id="goal-form" method="POST" action="/dashboard/donations/goal">
       <div class="goal-grid">
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Title</label>
-          <input type="text" name="title" maxlength="60" required placeholder="New sim rig pedals" style="width: 100%;">
+          <label><%= t('donations.goal.fieldTitle') %></label>
+          <input type="text" name="title" maxlength="60" required placeholder="<%= t('donations.goal.titlePlaceholder') %>" style="width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Target</label>
+          <label><%= t('donations.goal.fieldTarget') %></label>
           <input type="number" name="target_amount" min="0.01" step="0.01" required placeholder="500" style="width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Currency</label>
+          <label><%= t('donations.settings.currency') %></label>
           <select name="currency" style="width: 100%;">
             <% ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'].forEach(function (c) { %>
               <option value="<%= c %>" <%= (streamer.donation_currency || 'EUR') === c ? 'selected' : '' %>><%= c %></option>
@@ -191,16 +201,16 @@
           </select>
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Starting Amount</label>
+          <label><%= t('donations.goal.fieldStart') %></label>
           <input type="number" name="current_amount" min="0" step="0.01" value="0" style="width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Bar Color</label>
+          <label><%= t('donations.goal.fieldBarColor') %></label>
           <input type="color" name="bar_color" value="#22c55e" style="width: 100%; height: 40px; padding: 2px;">
         </div>
       </div>
       <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
-        <button type="submit" class="btn btn-primary">Start Goal</button>
+        <button type="submit" class="btn btn-primary"><%= t('donations.goal.start') %></button>
       </div>
     </form>
   <% } %>
@@ -210,25 +220,27 @@
 <div class="card animate-in" style="margin-bottom: 16px;">
   <h3>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-    Goal Overlay (OBS)
+    <%= t('donations.goalOverlay.title') %>
   </h3>
   <% if (goalOverlayUrl) { %>
-    <p style="color: var(--text-muted); font-size: 13px; margin: 8px 0 10px;">Add this as a separate <strong>Browser Source</strong> in OBS (recommended size 800 × 160). It updates live and hides itself when no goal is active.</p>
+    <% const _source = _around('donations.goalOverlay.hint', 'source'); %>
+    <p style="color: var(--text-muted); font-size: 13px; margin: 8px 0 10px;"><%= _source[0] %><strong><%= t('donations.goalOverlay.browserSource') %></strong><%= _source[1] %></p>
     <div style="display: flex; gap: 8px; align-items: center;">
       <input type="text" value="<%= goalOverlayUrl %>" readonly id="goal-overlay-url"
         style="flex: 1; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px;">
-      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('goal-overlay-url').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500);" class="btn btn-secondary" style="flex-shrink: 0;">Copy</button>
+      <button type="button" onclick="copyField('goal-overlay-url', this)" data-copy="<%= t('donations.settings.copy') %>" data-copied="<%= t('donations.settings.copied') %>" class="btn btn-secondary" style="flex-shrink: 0;"><%= t('donations.settings.copy') %></button>
     </div>
   <% } else { %>
+    <% const _need = _around('donations.goalOverlay.need', 'link'); %>
     <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
-      You need an overlay URL first — generate one in <a href="/dashboard/overlay" style="color: var(--accent);">Overlay Settings</a>.
+      <%= _need[0] %><a href="/dashboard/overlay" style="color: var(--accent);"><%= t('donations.goalOverlay.settingsLink') %></a><%= _need[1] %>
     </p>
   <% } %>
 </div>
 
 <% if (goalHistory && goalHistory.length) { %>
   <div class="card animate-in" style="margin-bottom: 24px;">
-    <h3>Past Goals</h3>
+    <h3><%= t('donations.goal.past') %></h3>
     <div style="margin-top: 8px;">
       <% goalHistory.forEach(function (g) { %>
         <div style="display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 13px;">
@@ -241,7 +253,22 @@
 <% } %>
 
 <script>
+  function copyField(id, btn) {
+    navigator.clipboard.writeText(document.getElementById(id).value);
+    btn.textContent = btn.dataset.copied;
+    setTimeout(function () { btn.textContent = btn.dataset.copy; }, 1500);
+  }
+</script>
+
+<script>
   (function () {
+    // Texts for this script, translated on the server ({{seconds}} is filled in below)
+    var T = <%- JSON.stringify({
+      defaultTitle: t('donations.goal.defaultTitle'),
+      testingBoth: t('donations.goal.testingBoth', { seconds: '{{seconds}}' }),
+      testingPreview: t('donations.goal.testingPreview', { seconds: '{{seconds}}' }),
+    }).replace(/</g, '\\u003c') %>;
+    function fmt(text, values) { return String(text).replace(/\{\{(\w+)\}\}/g, function (_, k) { return values[k] != null ? values[k] : ''; }); }
     var frame = document.getElementById('goal-preview');
     var form = document.getElementById('goal-form');
     if (!frame || !form) return;
@@ -262,7 +289,7 @@
       var current = Math.round((start() + simAdded) * 100) / 100;
       return {
         id: 'demo',
-        title: f.title.value.trim() || f.title.placeholder || 'My goal',
+        title: f.title.value.trim() || f.title.placeholder || T.defaultTitle,
         target: target,
         current: current,
         currency: saved ? saved.currency : f.currency.value,
@@ -300,11 +327,11 @@
     function scheduleRevert() {
       clearTimeout(revertTimer); clearInterval(countdown);
       var left = REVERT_MS / 1000;
-      var where = liveBox && liveBox.checked ? 'Showing on preview + OBS overlay' : 'Showing on preview only';
-      statusEl.textContent = where + ' — back to the real amount in ' + left + 's';
+      var template = liveBox && liveBox.checked ? T.testingBoth : T.testingPreview;
+      statusEl.textContent = fmt(template, { seconds: left });
       countdown = setInterval(function () {
         left -= 1;
-        if (left > 0) statusEl.textContent = where + ' — back to the real amount in ' + left + 's';
+        if (left > 0) statusEl.textContent = fmt(template, { seconds: left });
       }, 1000);
       revertTimer = setTimeout(function () { resetTest(false); }, REVERT_MS);
     }

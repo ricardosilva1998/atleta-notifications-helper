@@ -1,49 +1,52 @@
-<%- include('header', { title: 'Donation History', streamer: streamer }) %>
+<%- include('header', { title: t('donations.history.title'), streamer: streamer }) %>
 <%
-  const _fmt = (v, c) => { try { return new Intl.NumberFormat('en', { style: 'currency', currency: c }).format(v); } catch (e) { return (c || '') + ' ' + Number(v).toFixed(2); } };
+  const _lang = typeof lang !== 'undefined' ? lang : 'en';
+  const _fmt = (v, c) => { try { return new Intl.NumberFormat(_lang, { style: 'currency', currency: c }).format(v); } catch (e) { return (c || '') + ' ' + Number(v).toFixed(2); } };
   const _qs = (o) => { const p = new URLSearchParams(); const m = Object.assign({ range: filters.range, source: filters.source }, o); Object.keys(m).forEach(k => { if (m[k]) p.set(k, m[k]); }); return p.toString(); };
-  const _sourceLabels = { paypal: 'PayPal', streamelements: 'StreamElements', legacy: 'Imported' };
-  const _rangeLabels = { '7d': '7 days', '30d': '30 days', '90d': '90 days', '1y': '1 year' };
-  const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const _sourceLabels = { paypal: 'PayPal', streamelements: 'StreamElements', legacy: t('donations.history.sourceImported') };
+  const _rangeLabels = { '7d': t('donations.history.range7d'), '30d': t('donations.history.range30d'), '90d': t('donations.history.range90d'), '1y': t('donations.history.range1y') };
+  // Short month name (0 = January) in the page language
+  const _monthName = (index) => new Date(Date.UTC(2000, index, 1)).toLocaleString(_lang, { month: 'short', timeZone: 'UTC' });
+  const _donations = (n) => t(n === 1 ? 'donations.history.donations' : 'donations.history.donations_plural', { count: n });
   const _max = Math.max(0, ...months.map(m => m.total));
 %>
 
 <a href="/dashboard/donations" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Donation Settings
+  <%= t('donations.history.back') %>
 </a>
-<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in">Donation History</h2>
-<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">PayPal and StreamElements donations from the last year. Donations older than 1 year are removed automatically — export a CSV to keep them longer.</p>
+<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('donations.history.title') %></h2>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;"><%= t('donations.history.intro') %></p>
 
 <!-- Filters -->
 <div class="dh-filters animate-in">
-  <div class="dh-pills" role="group" aria-label="Date range">
+  <div class="dh-pills" role="group" aria-label="<%= t('donations.history.dateRange') %>">
     <% Object.keys(_rangeLabels).forEach(function (r) { %>
       <a href="?<%= _qs({ range: r }) %>" class="dh-pill <%= filters.range === r ? 'active' : '' %>"><%= _rangeLabels[r] %></a>
     <% }) %>
   </div>
-  <select aria-label="Source" onchange="location.search = this.value">
-    <option value="<%= _qs({ source: '' }) %>" <%= !filters.source ? 'selected' : '' %>>All sources</option>
+  <select aria-label="<%= t('donations.history.source') %>" onchange="location.search = this.value">
+    <option value="<%= _qs({ source: '' }) %>" <%= !filters.source ? 'selected' : '' %>><%= t('donations.history.allSources') %></option>
     <% Object.keys(_sourceLabels).forEach(function (s) { %>
       <option value="<%= _qs({ source: s }) %>" <%= filters.source === s ? 'selected' : '' %>><%= _sourceLabels[s] %></option>
     <% }) %>
   </select>
   <a href="/dashboard/donations/history.csv?<%= _qs({}) %>" class="btn btn-secondary dh-export">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    Export CSV
+    <%= t('donations.history.exportCsv') %>
   </a>
 </div>
 
 <!-- Totals per currency (never summed across currencies) -->
 <div class="dh-stats animate-in animate-in-delay-1">
   <% if (totals.length === 0) { %>
-    <div class="card dh-stat"><div class="dh-stat-label">Total · last <%= _rangeLabels[filters.range] %></div><div class="dh-stat-value">—</div><div class="dh-stat-sub">No donations in this period</div></div>
+    <div class="card dh-stat"><div class="dh-stat-label"><%= t('donations.history.totalLast', { range: _rangeLabels[filters.range] }) %></div><div class="dh-stat-value">—</div><div class="dh-stat-sub"><%= t('donations.history.noneInPeriod') %></div></div>
   <% } %>
-  <% totals.forEach(function (t) { %>
+  <% totals.forEach(function (tot) { %>
     <div class="card dh-stat">
-      <div class="dh-stat-label">Total <%= t.currency %> · last <%= _rangeLabels[filters.range] %></div>
-      <div class="dh-stat-value"><%= _fmt(t.total, t.currency) %></div>
-      <div class="dh-stat-sub"><%= t.count %> donation<%= t.count === 1 ? '' : 's' %> · biggest <%= _fmt(t.biggest, t.currency) %></div>
+      <div class="dh-stat-label"><%= t('donations.history.totalCurrencyLast', { currency: tot.currency, range: _rangeLabels[filters.range] }) %></div>
+      <div class="dh-stat-value"><%= _fmt(tot.total, tot.currency) %></div>
+      <div class="dh-stat-sub"><%= _donations(tot.count) %> · <%= t('donations.history.biggest', { amount: _fmt(tot.biggest, tot.currency) }) %></div>
     </div>
   <% }) %>
 </div>
@@ -51,18 +54,18 @@
 <!-- Monthly chart -->
 <% if (chartCurrency) { %>
   <div class="card animate-in animate-in-delay-2" style="margin-bottom: 16px;">
-    <h3 style="margin-bottom: 4px;">Monthly donations (<%= chartCurrency %>)</h3>
-    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Last 12 months<%= filters.source ? ' · ' + _sourceLabels[filters.source] : '' %><%= otherCurrencies.length ? ' · ' + otherCurrencies.join(', ') + ' not included' : '' %></p>
+    <h3 style="margin-bottom: 4px;"><%= t('donations.history.monthlyTitle', { currency: chartCurrency }) %></h3>
+    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;"><%= t('donations.history.last12') %><%= filters.source ? ' · ' + _sourceLabels[filters.source] : '' %><%= otherCurrencies.length ? ' · ' + t('donations.history.notIncluded', { currencies: otherCurrencies.join(', ') }) : '' %></p>
     <div class="dh-chart" id="dh-chart">
       <div class="dh-gridline dh-maxline"><span><%= _max > 0 ? _fmt(_max, chartCurrency) : '' %></span></div>
       <div class="dh-gridline dh-baseline"></div>
       <% months.forEach(function (m) {
            const h = _max > 0 ? (m.total / _max) * 100 : 0;
-           const label = _monthNames[parseInt(m.month.slice(5)) - 1] + ' ' + m.month.slice(0, 4);
-           const tip = label + ': ' + _fmt(m.total, chartCurrency) + ' · ' + m.count + ' donation' + (m.count === 1 ? '' : 's'); %>
+           const label = _monthName(parseInt(m.month.slice(5)) - 1) + ' ' + m.month.slice(0, 4);
+           const tip = label + ': ' + _fmt(m.total, chartCurrency) + ' · ' + _donations(m.count); %>
         <div class="dh-col" tabindex="0" data-tip="<%= tip %>" aria-label="<%= tip %>">
           <div class="dh-bar-area"><div class="dh-bar" style="height: <%= m.total > 0 ? Math.max(h, 1.5).toFixed(2) : 0 %>%;"></div></div>
-          <div class="dh-xlabel"><%= _monthNames[parseInt(m.month.slice(5)) - 1] %></div>
+          <div class="dh-xlabel"><%= _monthName(parseInt(m.month.slice(5)) - 1) %></div>
         </div>
       <% }) %>
       <div class="dh-tooltip" id="dh-tooltip" role="status"></div>
@@ -73,29 +76,29 @@
 <!-- Table -->
 <div class="card animate-in animate-in-delay-3" style="margin-bottom: 16px; padding: 0; overflow: hidden;">
   <div style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px;">
-    <h3 style="margin: 0;">Donations</h3>
-    <span style="color: var(--text-muted); font-size: 12px;"><%= total %> in the last <%= _rangeLabels[filters.range] %></span>
+    <h3 style="margin: 0;"><%= t('donations.history.tableTitle') %></h3>
+    <span style="color: var(--text-muted); font-size: 12px;"><%= t('donations.history.countInLast', { count: total, range: _rangeLabels[filters.range] }) %></span>
   </div>
   <% if (donations.length === 0) { %>
-    <p style="color: var(--text-muted); font-size: 13px; padding: 0 20px 20px;">No donations yet for this period. New PayPal and StreamElements tips will show up here automatically.</p>
+    <p style="color: var(--text-muted); font-size: 13px; padding: 0 20px 20px;"><%= t('donations.history.empty') %></p>
   <% } else { %>
     <div style="overflow-x: auto;">
       <table class="dh-table">
-        <thead><tr><th>Date</th><th>Donor</th><th style="text-align: right;">Amount</th><th>Source</th><th>Message</th><th></th></tr></thead>
+        <thead><tr><th><%= t('donations.history.colDate') %></th><th><%= t('donations.history.colDonor') %></th><th style="text-align: right;"><%= t('donations.history.colAmount') %></th><th><%= t('donations.history.source') %></th><th><%= t('donations.history.colMessage') %></th><th></th></tr></thead>
         <tbody>
           <% donations.forEach(function (d) { %>
             <tr>
               <td class="dh-date" style="white-space: nowrap;"><time data-utc="<%= d.created_at %>"><%= d.created_at.slice(0, 16) %> UTC</time></td>
-              <td class="dh-donor"><%= d.donor_name || 'Anonymous' %></td>
+              <td class="dh-donor"><%= d.donor_name || t('donations.history.anonymous') %></td>
               <td class="dh-amount" style="text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600;"><%= _fmt(d.amount, d.currency || 'USD') %></td>
               <td class="dh-source"><span class="dh-badge"><%= _sourceLabels[d.source] || d.source %></span></td>
               <td class="dh-msg"><%= d.message || '' %></td>
               <td class="dh-actions" style="text-align: right;">
-                <form method="POST" action="/dashboard/donations/history/<%= d.id %>/delete" onsubmit="return confirm('Remove this donation from your history? (e.g. if it was refunded)');" style="margin: 0;">
+                <form method="POST" action="/dashboard/donations/history/<%= d.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('donations.history.removeConfirm')) %>);" style="margin: 0;">
                   <input type="hidden" name="range" value="<%= filters.range %>">
                   <input type="hidden" name="source" value="<%= filters.source %>">
                   <input type="hidden" name="page" value="<%= page %>">
-                  <button type="submit" class="dh-delete" title="Remove from history" aria-label="Remove donation">
+                  <button type="submit" class="dh-delete" title="<%= t('donations.history.removeTitle') %>" aria-label="<%= t('donations.history.removeLabel') %>">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                   </button>
                 </form>
@@ -107,9 +110,9 @@
     </div>
     <% if (pages > 1) { %>
       <div style="display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px; border-top: 1px solid var(--border); font-size: 13px;">
-        <% if (page > 1) { %><a href="?<%= _qs({ page: page - 1 }) %>" class="btn btn-secondary" style="padding: 6px 12px;">← Newer</a><% } %>
-        <span style="color: var(--text-muted);">Page <%= page %> of <%= pages %></span>
-        <% if (page < pages) { %><a href="?<%= _qs({ page: page + 1 }) %>" class="btn btn-secondary" style="padding: 6px 12px;">Older →</a><% } %>
+        <% if (page > 1) { %><a href="?<%= _qs({ page: page - 1 }) %>" class="btn btn-secondary" style="padding: 6px 12px;"><%= t('donations.history.newer') %></a><% } %>
+        <span style="color: var(--text-muted);"><%= t('donations.history.pageOf', { page: page, pages: pages }) %></span>
+        <% if (page < pages) { %><a href="?<%= _qs({ page: page + 1 }) %>" class="btn btn-secondary" style="padding: 6px 12px;"><%= t('donations.history.older') %></a><% } %>
       </div>
     <% } %>
   <% } %>
@@ -119,7 +122,7 @@
   // Show dates in the viewer's local time
   document.querySelectorAll('time[data-utc]').forEach(function (el) {
     var d = new Date(el.getAttribute('data-utc').replace(' ', 'T') + 'Z');
-    if (!isNaN(d)) el.textContent = d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!isNaN(d)) el.textContent = d.toLocaleString(<%- JSON.stringify(_lang) %>, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   });
 
   // Chart hover / focus tooltip
