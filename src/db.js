@@ -4258,6 +4258,11 @@ function getModLog(streamerId, limit = 100) {
   return db.prepare('SELECT * FROM moderation_log WHERE streamer_id = ? ORDER BY created_at DESC LIMIT ?').all(streamerId, limit);
 }
 
+// How many moderation actions the bot took in the streamer's chat in the last 7 days (all the log keeps).
+function countModLog(streamerId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM moderation_log WHERE streamer_id = ? AND created_at >= datetime('now', '-7 days')").get(streamerId).n;
+}
+
 function cleanupOldModLogs() {
   const result = db.prepare("DELETE FROM moderation_log WHERE created_at < datetime('now', '-7 days')").run();
   if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} old moderation log entries`);
@@ -5759,6 +5764,7 @@ module.exports = {
   deleteCustomOverlay,
   addModLogEntry,
   getModLog,
+  countModLog,
   cleanupOldModLogs,
   updateDonationSettings,
   getStreamerByUsername,

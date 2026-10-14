@@ -206,3 +206,16 @@ describe('the settings table against the real database', () => {
     }
   });
 });
+
+describe('the moderation log of the week', () => {
+  test('counts the streamer\'s own actions of the last 7 days', () => {
+    const a = addStreamer();
+    const b = addStreamer();
+    db.addModLogEntry(a, 'viewer1', '1', 'delete', 'link', 'x', 'twitch');
+    db.addModLogEntry(a, 'viewer2', '2', 'timeout_60', 'caps', 'y', 'twitch');
+    db.addModLogEntry(b, 'viewer3', '3', 'delete', 'link', 'z', 'twitch');
+    db.db.prepare("INSERT INTO moderation_log (streamer_id, username, action, created_at) VALUES (?, 'old', 'delete', datetime('now', '-8 days'))").run(a);
+    assert.equal(db.countModLog(a), 2);
+    assert.equal(db.countModLog(b), 1);
+  });
+});

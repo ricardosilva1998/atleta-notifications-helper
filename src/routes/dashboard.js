@@ -34,6 +34,8 @@ const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore }
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
 const { SYNC_DELETE_FAILED } = require('../services/twitchRewards');
 const dashboardSettings = require('../services/dashboardSettings');
+const overlayPresence = require('../services/overlayPresence');
+const { buildCards, cardTexts } = require('../services/dashboardCards');
 
 const router = Router();
 
@@ -327,6 +329,21 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
       highlights: onOff(server.weekly_highlights_enabled && own && digestOwners.get(server.guild_id) === streamer.id
         && db.getDigestChannelForGuild(server.guild_id)),
       subRoles: server.sub_sync_enabled && server.sub_role_id ? (authorized ? 'on' : 'wait') : 'off',
+      // The working card's switches (services/dashboardCards.js): what each one stores, where the posts go (the
+      // channel names, when the bot sees them) and what is set.
+      switches: {
+        goLive,
+        clips,
+        recaps: !!server.recap_enabled,
+        milestones: !!server.milestones_enabled,
+        highlights: !!server.weekly_highlights_enabled,
+        subRoles: !!server.sub_sync_enabled,
+      },
+      liveWhere: liveChannel ? channelName(own.live_channel_id) : null,
+      clipsWhere: own && own.clips_channel_id ? channelName(own.clips_channel_id) : null,
+      hasLiveChannel: liveChannel,
+      hasClipsChannel: !!(own && own.clips_channel_id),
+      hasSubRole: !!server.sub_role_id,
       // Its settings page; its Twitch tab, where the channel is added, while nothing of the channel is posted there.
       url: `/dashboard/guild/${server.guild_id}${goLive || clips ? '' : '?tab=twitch'}`,
     };
@@ -335,6 +352,35 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
     card.servers.push(row);
   }
   return card;
+}
+
+// Everything the Twitch tab's working cards show; services/dashboardCards.js decides each card's state from it.
+// `discord` is discordNotificationsCard()'s result. Only our own tables and the bot's caches are read.
+function gatherCards(req, discord) {
+  const s = req.streamer;
+  const { chatManager } = require('../services/twitchChat');
+  const { hasRedemptionScope } = require('../services/twitch');
+  const giveaway = db.getActiveGiveaway(s.id);
+  return buildCards({
+    streamer: s,
+    features: config.features,
+    now: Date.now(),
+    appUrl: config.app.url,
+    bot: { connected: chatManager.isConnected(), moderator: chatManager.moderatorStatus(s.id), username: config.bot.twitchUsername },
+    overlay: { url: s.overlay_token ? `${config.app.url}/overlay/${s.overlay_token}` : null, open: overlayPresence.isOpen(s.id) },
+    discord,
+    commands: db.getChatCommands(s.id),
+    bannedWords: db.countBannedWords(s.id),
+    modActionsThisWeek: db.countModLog(s.id),
+    sponsorMessages: db.getSponsorMessages(s.id),
+    tips: { recent: db.getDonations(s.id, { sinceDays: 90, limit: 3 }), count90d: db.countDonations(s.id, { sinceDays: 90 }) },
+    tipGoal: db.getActiveTipGoal(s.id),
+    rewards: db.getRewards(s.id).filter((r) => !isPendingDelete(r)),
+    rewardsAccess: { hasScope: hasRedemptionScope(s) },
+    giveaway: giveaway ? { ...giveaway, entryCount: db.getEntryCount(giveaway.id) } : null,
+    spotifyConnected: !!s.spotify_access_token,
+    multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
+  });
 }
 
 // Dashboard home — list guilds
@@ -381,7 +427,6 @@ router.get('/', async (req, res) => {
   // discord.js has no application until the bot's gateway is ready (never, with
   // DISCORD_DISABLED=1); a bot's application id is its OAuth client id.
   const botInviteUrl = inviteUrlFor(client.application?.id ?? config.discord.clientId);
-  const { tier, limits } = getTierLimits(req.streamer.id);
 
   // Twitch tab data
   let botConnected = false;
@@ -402,9 +447,6 @@ router.get('/', async (req, res) => {
   let overlayStats = null;
   try { overlayStats = db.getOverlayStats7d(req.streamer.id); } catch (e) {}
 
-  let iracingSettings = [];
-  try { iracingSettings = db.getIracingOverlaySettings(req.streamer.id); } catch (e) {}
-
   const { hasRedemptionScope, needsBroadcasterReauth } = require('../services/twitch');
   const hasScope = hasRedemptionScope(req.streamer);
   const needsReauth = needsBroadcasterReauth(req.streamer);
@@ -414,6 +456,7 @@ router.get('/', async (req, res) => {
 
   const discordNotifications = discordNotificationsCard(req.streamer,
     enrichedGuilds.map((g, i) => ({ ...g, ...serverViews[i] })), { needsReauth });
+  const cards = gatherCards(req, discordNotifications);
 
   res.render('dashboard', {
     streamer: req.streamer,
@@ -421,22 +464,39 @@ router.get('/', async (req, res) => {
     unclaimedGuilds,
     botInviteUrl,
     msg,
-    tier,
-    limits,
     botConnected,
     botUsername,
     overlayUrl,
     overlayStats,
-    iracingSettings,
     vtuberUrl,
     hasScope,
     needsReauth,
     activeGiveaway,
     discordNotifications,
+    cards,
+    wideLayout: true, // header.ejs: the dashboard uses the wide container
     // The Multistream card is shown only once the relay is configured, and while YouTube is shown (it streams
     // to Twitch and YouTube).
     multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
   });
+});
+
+// The working cards' status lines and counts after a change (public/js/dashboard-cards.js asks after each save).
+router.get('/api/cards', (req, res) => {
+  const { needsBroadcasterReauth } = require('../services/twitch');
+  const servers = db.getGuildsForStreamer(req.streamer.id).map((g) => {
+    const discordGuild = client.guilds.cache.get(g.guild_id);
+    return {
+      ...g,
+      name: discordGuild?.name || g.guild_name || res.locals.t('dashboard.unknownServer'),
+      icon: null,
+      botPresent: !!discordGuild,
+      discordGuild,
+      watchers: db.getWatchedChannelsForGuild(g.guild_id, req.streamer.id),
+    };
+  });
+  const discord = discordNotificationsCard(req.streamer, servers, { needsReauth: needsBroadcasterReauth(req.streamer) });
+  res.json({ ok: true, cards: cardTexts(gatherCards(req, discord), res.locals.t) });
 });
 
 // Disconnect Spotify (the Spotify card): the stored tokens are cleared, so !song gets no answer until the

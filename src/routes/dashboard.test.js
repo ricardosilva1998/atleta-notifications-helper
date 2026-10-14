@@ -4596,3 +4596,71 @@ describe('the Donations card\'s tip goal (JSON)', () => {
     }
   });
 });
+
+// ── The working cards' data (GET /dashboard, GET /dashboard/api/cards) ───
+
+describe('the data of the working cards', () => {
+  const locals = async (id) => (await request('GET', '/dashboard', { streamer: id, json: true })).json().locals;
+
+  test('the page gets each card\'s state and the wide layout; the unused tier, limits and iRacing reads are gone', async () => {
+    const id = addStreamer({ twitch_user_id: 'tw-wc-1', twitch_username: 'synthetic_wc_1', chatbot_enabled: 1, paypal_email: 'tips@example.test', donation_page_enabled: 1 });
+    db.addChatCommand(id, 'discord', 'Join us', 10);
+    db.addSponsorMessage(id, 'Partner line', null);
+    const l = await locals(id);
+    assert.equal(l.wideLayout, true);
+    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'rewards', 'spotify']);
+    assert.deepEqual(l.cards.commands.commands.map((c) => c.name), ['discord']);
+    assert.deepEqual(l.cards.sponsors.messages.map((m) => m.text), ['Partner line']);
+    assert.ok(l.cards.donations.tipUrl.endsWith('/tip/synthetic_wc_1'));
+    for (const gone of ['tier', 'limits', 'iracingSettings']) assert.ok(!(gone in l), gone);
+  });
+
+  test('a server\'s switches as stored, and where its posts go', async () => {
+    const id = addStreamer({ twitch_user_id: 'tw-wc-2', twitch_username: 'synthetic_wc_2' });
+    const g = '600000000000000901';
+    db.upsertGuild(g, id, 'Server');
+    db.updateGuildConfig(g, id, { recap_enabled: true, sub_sync_enabled: true });
+    guilds.set(g, fakeGuild(g));
+    db.addWatchedChannel(g, id, 'synthetic_wc_2', CH_LIVE, null, true, false, null);
+    const [s] = (await locals(id)).discordNotifications.servers;
+    assert.deepEqual(s.switches, { goLive: true, clips: false, recaps: true, milestones: false, highlights: false, subRoles: true });
+    assert.deepEqual([s.liveWhere, s.clipsWhere, s.hasLiveChannel, s.hasClipsChannel, s.hasSubRole], ['#live', null, true, false, false]);
+  });
+
+  test('the overlay card knows whether the overlay is open in OBS; the protection card whether the bot is a moderator', async () => {
+    const presence = require('../services/overlayPresence');
+    const bot = require('../config').bot;
+    const id = addStreamer({ overlay_enabled: 1, overlay_token: 'synthetic-token-wc-3', chatbot_enabled: 1 });
+    assert.equal((await locals(id)).cards.overlay.open, false);
+    presence.opened(id);
+    try { assert.equal((await locals(id)).cards.overlay.open, true); } finally { presence.closed(id); }
+    const { moderatorStatus } = chatStub.chatManager;
+    const name = bot.twitchUsername;
+    chatStub.chatManager.moderatorStatus = () => false;
+    bot.twitchUsername = 'synthetic_bot';
+    try {
+      const card = (await locals(id)).cards.protection;
+      assert.deepEqual([card.moderatorNote, card.botName], [true, 'synthetic_bot']);
+    } finally {
+      chatStub.chatManager.moderatorStatus = moderatorStatus;
+      bot.twitchUsername = name;
+    }
+  });
+
+  test('GET /dashboard/api/cards answers each card\'s status and counts, translated, without the giveaway card', async () => {
+    const id = addStreamer({ twitch_user_id: 'tw-wc-4', twitch_username: 'synthetic_wc_4', chatbot_enabled: 0 });
+    const res = await request('GET', '/dashboard/api/cards', { streamer: id });
+    assert.equal(res.status, 200);
+    const body = res.json();
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.cards.chatbot.status, { text: t('en', 'cards.chatbot.status.off'), tone: 'off' });
+    assert.equal(body.cards.chatbot.counts.thankYous, t('en', 'cards.common.nOfM', { on: 6, total: 6 }), 'a new streamer\'s thank-yous are all on');
+    assert.ok(!('giveaways' in body.cards));
+  });
+
+  test('only the dashboard gets the wide page', async () => {
+    const id = addStreamer();
+    assert.match((await request('GET', '/dashboard', { streamer: id })).text, /<div class="container container-wide">/);
+    assert.match((await request('GET', '/dashboard/chatbot', { streamer: id })).text, /<div class="container">/);
+  });
+});
