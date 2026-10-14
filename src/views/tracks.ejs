@@ -273,12 +273,16 @@
 
 <script>
 (function() {
-  // Track names + class/car names come from .ibt uploads — never trust them
-  // in HTML. Always run user/session strings through escapeHtml when building
-  // markup, and use data-* attributes + delegated handlers instead of inline
-  // onclick to avoid JS-string injection.
+  // Everything this page shows comes from the racing API (tracks, statistics,
+  // sessions, laps, the live session), which the Atleta Racing app fills.
+  // Markup built here takes text only through escapeHtml() (quotes too, so it
+  // is safe inside attributes) and numbers only through num(); text that needs
+  // no markup is set with textContent. Values ride in data-* attributes, with
+  // handlers attached by addEventListener, never inside inline JS.
   const _HTML_ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => _HTML_ESC[c]); }
+  // A number for display, or '--' when the value is not one.
+  function num(v) { return Number.isFinite(+v) ? +v : '--'; }
 
   let allTracks = [];
   let allStats = [];
@@ -385,7 +389,7 @@
     'GTE':         '#eab308', // yellow
     'Mazda':       '#fb923c', // light orange
   };
-  function getClassColor(cls) { return CLASS_COLORS[cls] || '#ffffff'; }
+  function getClassColor(cls) { return Object.prototype.hasOwnProperty.call(CLASS_COLORS, cls) ? CLASS_COLORS[cls] : '#ffffff'; }
 
   function drawTrackPreview(canvas, points) {
     const ctx = canvas.getContext('2d');
@@ -418,15 +422,18 @@
     ctx.beginPath(); ctx.arc(sfx, sfy, 4, 0, Math.PI * 2); ctx.fillStyle = '#3ecf8e'; ctx.fill();
   }
 
+  // Seconds as m:ss.sss, or '--' (also for a value that is not a number).
   function formatLapTime(t) {
-    if (!t || t <= 0) return '--';
+    t = Number(t);
+    if (!Number.isFinite(t) || t <= 0) return '--';
     const m = Math.floor(t / 60);
-    const s = (t % 60).toFixed(3);
-    return m > 0 ? m + ':' + s.padStart(6, '0') : s;
+    const sec = (t % 60).toFixed(3);
+    return m > 0 ? m + ':' + sec.padStart(6, '0') : sec;
   }
 
   function formatSOF(v) {
-    if (!v || v <= 0) return '--';
+    v = Number(v);
+    if (!Number.isFinite(v) || v <= 0) return '--';
     return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
   }
 
@@ -466,11 +473,11 @@
     const named = allTracks.filter(t => isNamedTrack(t.track_name));
 
     // Build stats lookup: track -> { classes, totalRaces }
-    const statsLookup = {};
+    const statsLookup = Object.create(null);
     allStats.forEach(s => {
       if (!statsLookup[s.track_name]) statsLookup[s.track_name] = { classes: new Set(), totalRaces: 0 };
       statsLookup[s.track_name].classes.add(s.car_class);
-      statsLookup[s.track_name].totalRaces += s.race_count || 0;
+      statsLookup[s.track_name].totalRaces += Number(s.race_count) || 0;
     });
 
     // Merge known tracks (missing ones)
@@ -511,8 +518,8 @@
           <div class="track-card-meta">
             ${t.track_length ? '<span>' + safeLength + '</span>' : ''}
             ${t.track_turns ? '<span>' + safeTurns + ' turns</span>' : ''}
-            <span>${s ? s.classes.size : 0} class${(s ? s.classes.size : 0) !== 1 ? 'es' : ''}</span>
-            <span>${s ? s.totalRaces : 0} race${(s ? s.totalRaces : 0) !== 1 ? 's' : ''}</span>
+            <span>${num(s ? s.classes.size : 0)} class${(s ? s.classes.size : 0) !== 1 ? 'es' : ''}</span>
+            <span>${num(s ? s.totalRaces : 0)} race${(s ? s.totalRaces : 0) !== 1 ? 's' : ''}</span>
           </div>
         </div>
       </div>`;
@@ -550,8 +557,8 @@
         <td>${safeLoc}</td>
         <td>${safeLength}</td>
         <td>${safeTurns}</td>
-        <td>${s ? s.classes.size : 0}</td>
-        <td>${s ? s.totalRaces : 0}</td>
+        <td>${num(s ? s.classes.size : 0)}</td>
+        <td>${num(s ? s.totalRaces : 0)}</td>
       </tr>`;
     });
     filteredMissing.forEach(n => {
@@ -614,14 +621,14 @@
       const ai = CLASS_ORDER.indexOf(a), bi = CLASS_ORDER.indexOf(b);
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
     });
-    const totalRaces = trackStats.reduce((sum, s) => sum + (s.race_count || 0), 0);
+    const totalRaces = trackStats.reduce((sum, s) => sum + (Number(s.race_count) || 0), 0);
 
     // Header stats
     let statsHtml = '';
-    if (track && track.track_length) statsHtml += `<div class="track-stat"><div class="track-stat-value">${track.track_length}</div><div class="track-stat-label">Length</div></div>`;
-    if (track && track.track_turns) statsHtml += `<div class="track-stat"><div class="track-stat-value">${track.track_turns}</div><div class="track-stat-label">Turns</div></div>`;
-    statsHtml += `<div class="track-stat"><div class="track-stat-value">${totalRaces}</div><div class="track-stat-label">Races</div></div>`;
-    statsHtml += `<div class="track-stat"><div class="track-stat-value">${classes.length}</div><div class="track-stat-label">Classes</div></div>`;
+    if (track && track.track_length) statsHtml += `<div class="track-stat"><div class="track-stat-value">${escapeHtml(track.track_length)}</div><div class="track-stat-label">Length</div></div>`;
+    if (track && track.track_turns) statsHtml += `<div class="track-stat"><div class="track-stat-value">${num(track.track_turns)}</div><div class="track-stat-label">Turns</div></div>`;
+    statsHtml += `<div class="track-stat"><div class="track-stat-value">${num(totalRaces)}</div><div class="track-stat-label">Races</div></div>`;
+    statsHtml += `<div class="track-stat"><div class="track-stat-value">${num(classes.length)}</div><div class="track-stat-label">Classes</div></div>`;
     document.getElementById('detail-stats').innerHTML = statsHtml;
 
     // Canvas
@@ -659,27 +666,33 @@
     const raceTypes = RACE_TYPES_BY_CLASS[className] || DEFAULT_RACE_TYPES;
 
     // Build lookup
-    const lookup = {};
+    const lookup = Object.create(null);
     trackStats.forEach(s => { lookup[s.race_type] = s; });
 
     let html = '<table class="stats-table"><thead><tr>';
     html += '<th>Race Type</th><th>Avg Lap</th><th>Avg Pit</th><th>Avg Qualify</th><th>Est. Laps</th><th>Avg SOF</th><th>Races</th><th>Avg Drivers</th><th>Top Car</th>';
     html += '</tr></thead><tbody>';
 
+    // One race type's row. The averages are numbers, or '--'.
+    function statsRow(raceType, s) {
+      const pit = Number(s.avg_pit_time), laps = Number(s.est_laps), drivers = Number(s.avg_drivers);
+      return `<tr>
+          <td style="color:#fff;font-family:inherit;font-weight:600;">${escapeHtml(raceType)}</td>
+          <td>${formatLapTime(s.avg_lap_time)}</td>
+          <td>${pit > 0 ? pit.toFixed(1) + 's' : '--'}</td>
+          <td>${formatLapTime(s.avg_qualify_time)}</td>
+          <td>${laps > 0 ? Math.round(laps) : '--'}</td>
+          <td>${formatSOF(s.avg_sof)}</td>
+          <td>${num(s.race_count || 0)}</td>
+          <td>${drivers > 0 ? Math.round(drivers) : '--'}</td>
+          <td>${escapeHtml(s.top_car || '--')}</td>
+        </tr>`;
+    }
+
     raceTypes.forEach(rt => {
       const s = lookup[rt];
       if (s) {
-        html += `<tr>
-          <td style="color:#fff;font-family:inherit;font-weight:600;">${escapeHtml(rt)}</td>
-          <td>${formatLapTime(s.avg_lap_time)}</td>
-          <td>${s.avg_pit_time > 0 ? s.avg_pit_time.toFixed(1) + 's' : '--'}</td>
-          <td>${formatLapTime(s.avg_qualify_time)}</td>
-          <td>${s.est_laps > 0 ? Math.round(s.est_laps) : '--'}</td>
-          <td>${formatSOF(s.avg_sof)}</td>
-          <td>${s.race_count || 0}</td>
-          <td>${s.avg_drivers > 0 ? Math.round(s.avg_drivers) : '--'}</td>
-          <td>${escapeHtml(s.top_car || '--')}</td>
-        </tr>`;
+        html += statsRow(rt, s);
       } else {
         html += `<tr>
           <td style="color:rgba(255,255,255,0.25);font-family:inherit;">${escapeHtml(rt)}</td>
@@ -692,17 +705,7 @@
     // Also show any race types in data not in the predefined list
     trackStats.forEach(s => {
       if (!raceTypes.includes(s.race_type)) {
-        html += `<tr>
-          <td style="color:#fff;font-family:inherit;font-weight:600;">${escapeHtml(s.race_type)}</td>
-          <td>${formatLapTime(s.avg_lap_time)}</td>
-          <td>${s.avg_pit_time > 0 ? s.avg_pit_time.toFixed(1) + 's' : '--'}</td>
-          <td>${formatLapTime(s.avg_qualify_time)}</td>
-          <td>${s.est_laps > 0 ? Math.round(s.est_laps) : '--'}</td>
-          <td>${formatSOF(s.avg_sof)}</td>
-          <td>${s.race_count || 0}</td>
-          <td>${s.avg_drivers > 0 ? Math.round(s.avg_drivers) : '--'}</td>
-          <td>${escapeHtml(s.top_car || '--')}</td>
-        </tr>`;
+        html += statsRow(s.race_type, s);
       }
     });
 
@@ -746,7 +749,7 @@
 
   function loadSessions(trackName) {
     _sessionsLoaded = true;
-    const bridgeId = '<%= (typeof racingUser !== "undefined" && racingUser && racingUser.bridge_id) ? racingUser.bridge_id : "" %>';
+    const bridgeId = <%- JSON.stringify(String((typeof racingUser !== "undefined" && racingUser && racingUser.bridge_id) || '')).replace(/</g, '\\u003c') %>;
     fetch('/api/sessions/' + encodeURIComponent(trackName) + '?bridge_id=' + encodeURIComponent(bridgeId))
       .then(r => r.json())
       .then(sessions => {
@@ -768,14 +771,14 @@
     sessions.forEach((s, idx) => {
       const d = new Date(s.created_at);
       const date = d.toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
-      const best = s.best_lap_time > 0 ? formatLapTime(s.best_lap_time) : '--';
-      const laps = s.actual_laps || s.lap_count || 0;
+      const best = formatLapTime(s.best_lap_time);
+      const laps = num(s.actual_laps || s.lap_count || 0);
       const typeLabel = s.race_type || s.session_type;
       const typeColor = s.session_type === 'practice' ? '#3ecf8e' : s.session_type === 'qualify' ? '#f7c948' : '#b18cff';
       const detailId = containerId + '-detail-' + idx;
       const safeBridge = escapeHtml(s.bridge_id || '');
-      html += '<div class="session-row" data-detail-id="' + detailId + '" data-session-id="' + s.id + '" data-bridge-id="' + safeBridge + '" style="cursor:pointer;">';
-      html += '<span>' + date + '</span>';
+      html += '<div class="session-row" data-detail-id="' + detailId + '" data-session-id="' + num(s.id) + '" data-bridge-id="' + safeBridge + '" style="cursor:pointer;">';
+      html += '<span>' + escapeHtml(date) + '</span>';
       html += '<span style="color:#e8e6f0;">' + escapeHtml(s.car_name || s.car_class || '') + '</span>';
       html += '<span class="session-best" style="text-align:right;">' + best + '</span>';
       html += '<span style="text-align:right;">' + laps + '</span>';
@@ -815,16 +818,19 @@
         }
         const s = data.session || {};
         let conditions = '';
-        try { const c = typeof s.conditions === 'string' ? JSON.parse(s.conditions) : s.conditions; if (c) conditions = (c.airTemp ? Math.round(c.airTemp) + '°C' : '') + (c.skies ? ' ' + c.skies : ''); } catch(e) {}
+        try { const c = typeof s.conditions === 'string' ? JSON.parse(s.conditions) : s.conditions; if (c) conditions = (Number(c.airTemp) ? Math.round(c.airTemp) + '°C' : '') + (c.skies ? ' ' + c.skies : ''); } catch(e) {}
 
         let html = '';
         // Session summary
         html += '<div style="display:flex;gap:16px;margin-bottom:12px;font-size:11px;color:rgba(255,255,255,0.5);flex-wrap:wrap;">';
         if (s.iracing_name) html += '<span>Driver: <b style="color:#e8e6f0;">' + escapeHtml(s.iracing_name) + '</b></span>';
         if (conditions) html += '<span>Conditions: <b style="color:#e8e6f0;">' + escapeHtml(conditions) + '</b></span>';
-        if (s.sof) html += '<span>SOF: <b style="color:#e8e6f0;">' + (s.sof >= 1000 ? (s.sof/1000).toFixed(1) + 'k' : s.sof) + '</b></span>';
-        if (s.finish_position) html += '<span>Finished: <b style="color:#e8e6f0;">P' + s.finish_position + '</b></span>';
-        if (s.irating_change) html += '<span>iR: <b style="color:' + (s.irating_change > 0 ? '#3ecf8e' : '#f04438') + ';">' + (s.irating_change > 0 ? '+' : '') + s.irating_change + '</b></span>';
+        if (s.sof) html += '<span>SOF: <b style="color:#e8e6f0;">' + formatSOF(s.sof) + '</b></span>';
+        if (s.finish_position) html += '<span>Finished: <b style="color:#e8e6f0;">P' + num(s.finish_position) + '</b></span>';
+        if (s.irating_change) {
+          const ir = num(s.irating_change);
+          html += '<span>iR: <b style="color:' + (ir > 0 ? '#3ecf8e' : '#f04438') + ';">' + (ir > 0 ? '+' : '') + ir + '</b></span>';
+        }
         html += '</div>';
 
         // Lap table
@@ -833,22 +839,25 @@
         html += '<td style="padding:4px 8px;">LAP</td><td style="padding:4px 8px;text-align:right;">TIME</td><td style="padding:4px 8px;text-align:right;">DELTA</td><td style="padding:4px 8px;text-align:right;">FUEL</td><td style="padding:4px 8px;text-align:right;">TEMP</td>';
         html += '</tr>';
 
-        const bestTime = Math.min(...data.laps.filter(l => l.is_valid && l.lap_time > 0).map(l => l.lap_time));
+        const bestTime = Math.min(...data.laps.filter(l => l.is_valid && Number(l.lap_time) > 0).map(l => Number(l.lap_time)));
         data.laps.forEach(l => {
-          const isBest = l.lap_time === bestTime && l.is_valid;
-          const delta = l.is_valid && l.lap_time > 0 && bestTime > 0 ? (l.lap_time - bestTime) : null;
+          const lapTime = Number(l.lap_time);
+          const fuel = Number(l.fuel_used);
+          const temp = Number(l.track_temp);
+          const isBest = lapTime === bestTime && l.is_valid;
+          const delta = l.is_valid && lapTime > 0 && bestTime > 0 ? (lapTime - bestTime) : null;
           const dimmed = !l.is_valid ? 'color:rgba(255,255,255,0.2);' : '';
           html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.03);' + dimmed + '">';
-          html += '<td style="padding:5px 8px;' + (isBest ? 'color:#9146ff;font-weight:700;' : '') + '">' + l.lap_number + '</td>';
-          html += '<td style="padding:5px 8px;text-align:right;font-family:monospace;' + (isBest ? 'color:#9146ff;font-weight:700;' : '') + '">' + formatLapTime(l.lap_time) + '</td>';
+          html += '<td style="padding:5px 8px;' + (isBest ? 'color:#9146ff;font-weight:700;' : '') + '">' + num(l.lap_number) + '</td>';
+          html += '<td style="padding:5px 8px;text-align:right;font-family:monospace;' + (isBest ? 'color:#9146ff;font-weight:700;' : '') + '">' + formatLapTime(lapTime) + '</td>';
           html += '<td style="padding:5px 8px;text-align:right;font-family:monospace;">';
           if (isBest) html += '<span style="color:#9146ff;">BEST</span>';
           else if (!l.is_valid) html += '<span style="color:rgba(255,255,255,0.2);">' + (l.is_pit_lap ? 'PIT' : 'OUT') + '</span>';
           else if (delta !== null) html += '<span style="color:#f04438;">+' + delta.toFixed(3) + '</span>';
           else html += '--';
           html += '</td>';
-          html += '<td style="padding:5px 8px;text-align:right;font-family:monospace;">' + (l.fuel_used ? l.fuel_used.toFixed(1) + 'L' : '--') + '</td>';
-          html += '<td style="padding:5px 8px;text-align:right;">' + (l.track_temp ? Math.round(l.track_temp) + '°C' : '--') + '</td>';
+          html += '<td style="padding:5px 8px;text-align:right;font-family:monospace;">' + (Number.isFinite(fuel) && fuel ? fuel.toFixed(1) + 'L' : '--') + '</td>';
+          html += '<td style="padding:5px 8px;text-align:right;">' + (Number.isFinite(temp) && temp ? Math.round(temp) + '°C' : '--') + '</td>';
           html += '</tr>';
         });
         html += '</table>';
@@ -856,13 +865,6 @@
       })
       .catch(() => { el.innerHTML = '<div style="font-size:11px;color:#f04438;text-align:center;">Failed to load laps</div>'; });
   };
-
-  function formatLapTime(t) {
-    if (!t || t <= 0) return '--';
-    var m = Math.floor(t / 60);
-    var s = (t % 60).toFixed(3);
-    return m > 0 ? m + ':' + s.padStart(6, '0') : s;
-  }
 
   // ─── Import Modal ───
   window.openImportModal = function() {
@@ -1299,21 +1301,31 @@
 
     // Confirm dropdowns removed — using top panel selections directly
 
-    // Populate values grid
+    // Populate values grid (as text: the values come from the imported file or its analysis)
     var grid = document.getElementById('import-confirm-grid');
-    grid.innerHTML = '';
+    grid.textContent = '';
+    var number = function(v) { v = Number(v); return Number.isFinite(v) ? v : 0; };
     var fields = [
       { key: 'avgLapTime', label: 'Avg Lap', format: formatLapTime },
       { key: 'avgQualifyTime', label: 'Avg Qualify', format: formatLapTime },
-      { key: 'avgPitTime', label: 'Avg Pit', format: function(v) { return v ? v.toFixed(1) + 's' : '--'; } },
-      { key: 'avgSOF', label: 'SOF', format: function(v) { return v ? Math.round(v).toLocaleString() : '--'; } },
-      { key: 'driverCount', label: 'Drivers', format: function(v) { return v || '--'; } },
-      { key: 'estLaps', label: 'Laps', format: function(v) { return v || '--'; } },
+      { key: 'avgPitTime', label: 'Avg Pit', format: function(v) { v = number(v); return v ? v.toFixed(1) + 's' : '--'; } },
+      { key: 'avgSOF', label: 'SOF', format: function(v) { v = number(v); return v ? Math.round(v).toLocaleString() : '--'; } },
+      { key: 'driverCount', label: 'Drivers', format: function(v) { return number(v) || '--'; } },
+      { key: 'estLaps', label: 'Laps', format: function(v) { return number(v) || '--'; } },
       { key: 'topCar', label: 'Top Car', format: function(v) { return v || '--'; } },
     ];
     fields.forEach(function(f) {
-      var val = data[f.key];
-      grid.innerHTML += '<div class="import-confirm-item"><div class="import-confirm-value">' + f.format(val) + '</div><div class="import-confirm-label">' + f.label + '</div></div>';
+      var item = document.createElement('div');
+      item.className = 'import-confirm-item';
+      var value = document.createElement('div');
+      value.className = 'import-confirm-value';
+      value.textContent = f.format(data[f.key]);
+      var label = document.createElement('div');
+      label.className = 'import-confirm-label';
+      label.textContent = f.label;
+      item.appendChild(value);
+      item.appendChild(label);
+      grid.appendChild(item);
     });
 
     document.getElementById('import-confirm').classList.add('active');
@@ -1364,17 +1376,27 @@
           });
         }, 1000);
       } else {
-        document.getElementById('import-message').innerHTML = '<div class="import-error">Error: ' + (result.error || 'Save failed') + '</div>';
+        showImportError('Error: ' + (result.error || 'Save failed'));
         btn.disabled = false;
         btn.textContent = 'Save to Database';
       }
     })
     .catch(function(e) {
-      document.getElementById('import-message').innerHTML = '<div class="import-error">Request failed: ' + e.message + '</div>';
+      showImportError('Request failed: ' + e.message);
       btn.disabled = false;
       btn.textContent = 'Save to Database';
     });
   };
+
+  // A save error under the import preview, as text.
+  function showImportError(text) {
+    var message = document.getElementById('import-message');
+    var line = document.createElement('div');
+    line.className = 'import-error';
+    line.textContent = text;
+    message.textContent = '';
+    message.appendChild(line);
+  }
 
   window.cancelImport = function() {
     document.getElementById('import-confirm').classList.remove('active');
@@ -1441,11 +1463,29 @@
     if (detailLive) {
       const detailName = document.getElementById('detail-name')?.textContent;
       if (liveSession && liveSession.trackName === detailName) {
-        const classes = (liveSession.classes || []).join(', ');
-        const type = liveSession.raceType || liveSession.eventType || 'Unknown';
-        const drivers = liveSession.driversCount || 0;
-        const timeLeft = liveSession.timeRemain ? Math.round(liveSession.timeRemain / 60) + ' min left' : '';
-        detailLive.innerHTML = '<span class="live-badge">LIVE</span> <span>' + type + '</span> <span style="color:rgba(255,255,255,0.5);">·</span> <span>' + classes + '</span> <span style="color:rgba(255,255,255,0.5);">·</span> <span>' + drivers + ' drivers</span>' + (timeLeft ? ' <span style="color:rgba(255,255,255,0.5);">·</span> <span>' + timeLeft + '</span>' : '');
+        // Built from nodes: every value is text.
+        const classes = Array.isArray(liveSession.classes) ? liveSession.classes.map(String).join(', ') : '';
+        const remain = Number(liveSession.timeRemain);
+        const parts = [
+          String(liveSession.raceType || liveSession.eventType || 'Unknown'),
+          classes,
+          num(liveSession.driversCount || 0) + ' drivers',
+        ];
+        if (Number.isFinite(remain) && remain) parts.push(Math.round(remain / 60) + ' min left');
+        const span = (text, color) => {
+          const node = document.createElement('span');
+          if (color) node.style.color = color;
+          node.textContent = text;
+          return node;
+        };
+        const badge = span('LIVE');
+        badge.className = 'live-badge';
+        detailLive.textContent = '';
+        detailLive.appendChild(badge);
+        parts.forEach((text, i) => {
+          if (i > 0) detailLive.appendChild(span('·', 'rgba(255,255,255,0.5)'));
+          detailLive.appendChild(span(text));
+        });
         detailLive.style.display = 'flex';
       } else {
         detailLive.style.display = 'none';
