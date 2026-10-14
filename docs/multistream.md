@@ -2,7 +2,7 @@
 
 **Status as of 2026-05-10:** Code is fully shipped. Infrastructure (Oracle VM + MediaMTX) is **NOT yet set up** — feature won't work until that's done.
 
-The dashboard at `/dashboard/multistream` will load and accept settings but will show a "relay not configured" warning until the env vars from step 6 below are set on Railway.
+Until the env vars from step 6 below are set on Railway, multistream is switched off: the dashboard card is hidden, `/dashboard/multistream` sends streamers back to the dashboard and `/api/multistream/*` answers 404 (saved settings are kept). Setting them switches it on for every streamer.
 
 ---
 
@@ -10,13 +10,13 @@ The dashboard at `/dashboard/multistream` will load and accept settings but will
 
 All code, tests, and docs are in the repo. Specifically:
 
-- New service files: `src/services/streamKeyCrypto.js`, `src/services/multistreamRelay.js`, `src/services/youtubeBroadcast.js`
-- New route: `src/routes/multistream.js` mounted at `/dashboard/multistream` and `/api/multistream`
+- Service files: `src/services/multistreamRelay.js` (relay API client), `src/services/multistreamSessions.js` (go-live, stop, minute check), `src/services/multistreamAuth.js` (who may publish), `src/services/youtubeBroadcast.js`
+- Route: `src/routes/multistream.js` — a dashboard router at `/dashboard/multistream` and an API router at `/api/multistream` (relay auth + webhooks)
 - New view: `src/views/multistream.ejs`
 - DB migration applied: 9 new columns on `streamers` (`multistream_*`)
 - Twitch broadcaster OAuth scope expanded with `channel:read:stream_key`
 - Dashboard card added (Twitch tab) linking to the multistream page
-- 16 unit tests, all passing: `node --test tests/streamKeyCrypto.test.js tests/multistreamRelay.test.js`
+- Unit tests: `node --test tests/multistreamRelay.test.js src/services/multistream*.test.js src/services/youtubeBroadcast.test.js src/routes/multistream.test.js`
 - Visual mockup: `docs/multistream-mockup.html` (open in browser to see the UI)
 - Detailed operator runbook: `docs/multistream-relay-setup.md`
 - Implementation plan (historical): `docs/superpowers/plans/2026-05-10-multistream-relay.md`
@@ -77,9 +77,9 @@ ssh ubuntu@<your-vm-ip>
 ```
 
 Then follow `docs/multistream-relay-setup.md` sections **2** through **4**. Summary:
-- Install MediaMTX 1.8.0 binary + ffmpeg
+- Install MediaMTX 1.21.2 (1.20 or newer) + ffmpeg
 - Generate two random secrets: `API_PASS=$(openssl rand -hex 32)`, `HOOK_SECRET=$(openssl rand -hex 32)` — **save these somewhere**, you'll need them in Railway
-- Drop in `/etc/mediamtx/mediamtx.yml` (full config in the runbook section 3)
+- Drop in `/etc/mediamtx/mediamtx.yml` (full config in the runbook section 3: the relay asks the website who may publish, with `HOOK_SECRET`)
 - Create the systemd unit, enable+start the service
 - Verify with `sudo systemctl status mediamtx` and `sudo journalctl -u mediamtx -f`
 
@@ -89,11 +89,9 @@ You should see `[RTMP] listener opened on :1935` in the logs.
 
 Install `cloudflared` on the VM, create a tunnel in Cloudflare's Zero Trust dashboard, point `relay.atletanotifications.com` → `http://localhost:9997`. Full steps in runbook section **5**.
 
-Test:
-```bash
-curl -u admin:<API_PASS> https://relay.atletanotifications.com/v3/paths/list
-# Expected: {"itemCount":0,"pageCount":0,"items":[]}
-```
+Recommended: Cloudflare Access with a service token in front of `relay.atletanotifications.com` (runbook section 5).
+
+The API test (`curl -u admin:<API_PASS> https://relay.atletanotifications.com/v3/paths/list`) only works after step 6: the relay asks the website about every login.
 
 ### Step 5 — DNS for the ingest subdomain (2 min)
 
@@ -109,17 +107,10 @@ MEDIAMTX_API_URL=https://relay.atletanotifications.com
 MEDIAMTX_INGEST_URL=rtmp://ingest.atletanotifications.com/live
 MEDIAMTX_API_TOKEN=<API_PASS from step 3>
 MEDIAMTX_WEBHOOK_SECRET=<HOOK_SECRET from step 3>
-MULTISTREAM_KEY_SECRET=<openssl rand -hex 32>
+# Optional: MEDIAMTX_API_USER (default admin), MEDIAMTX_CF_ACCESS_CLIENT_ID / _SECRET (Cloudflare Access)
 ```
 
-Generate the `MULTISTREAM_KEY_SECRET` locally:
-```bash
-openssl rand -hex 32
-```
-
-**Don't lose `MULTISTREAM_KEY_SECRET`.** If it changes, stored YouTube stream IDs become unreadable — recoverable (use the dashboard's "Reset stream binding" link), but annoying.
-
-Restart the Railway service after setting vars. The "relay not configured" warning at `/dashboard/multistream` should disappear.
+All four are needed; `MULTISTREAM_KEY_SECRET` is no longer used. Railway redeploys on the change, and the Multistream card appears for every streamer — run step 8 right away. To hide it again, unset `MEDIAMTX_API_URL`.
 
 ### Step 7 — Re-auth Twitch broadcaster (1 min)
 
@@ -141,12 +132,12 @@ Click **Re-authorize** → confirm Twitch consent → done. The new `channel:rea
    - Server: `rtmp://ingest.atletanotifications.com/live`
    - Stream key: copy from the dashboard
    - Click **Start Streaming**
-3. Within ~10s — live on Twitch. Within another ~10s — live on YouTube (broadcast appears in Studio).
-4. Stop OBS → both go offline within ~10s.
+3. Within ~10s — live on Twitch. YouTube starts the broadcast by itself once it receives the stream (10–30 s more).
+4. Stop OBS → a minute later the forwarders stop and the YouTube broadcast is completed (a restart within that minute continues the same broadcast).
 
 If something fails:
 - **Relay logs:** SSH to VM, `sudo journalctl -u mediamtx -f`
-- **Express logs:** `railway logs --tail` — look for `[multistream on-ready]` lines
+- **Express logs:** `railway logs --tail` — look for `[multistream]` lines
 
 ---
 
@@ -155,12 +146,12 @@ If something fails:
 | Thing | Where |
 |---|---|
 | Detailed step-by-step | `docs/multistream-relay-setup.md` |
-| Code: services | `src/services/{multistreamRelay,youtubeBroadcast,streamKeyCrypto}.js` |
+| Code: services | `src/services/{multistreamRelay,multistreamSessions,multistreamAuth,youtubeBroadcast}.js` |
 | Code: routes + view | `src/routes/multistream.js`, `src/views/multistream.ejs` |
 | DB schema | `src/db.js` (search for "Add multistream relay columns") |
 | Visual mockup | `docs/multistream-mockup.html` (open in browser) |
 | Original implementation plan | `docs/superpowers/plans/2026-05-10-multistream-relay.md` |
-| Run unit tests | `node --test tests/streamKeyCrypto.test.js tests/multistreamRelay.test.js` |
+| Run unit tests | `node --test tests/multistreamRelay.test.js src/services/multistream*.test.js src/services/youtubeBroadcast.test.js src/routes/multistream.test.js` |
 
 ## When you resume
 
