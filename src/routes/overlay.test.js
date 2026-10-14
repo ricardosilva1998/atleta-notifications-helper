@@ -217,20 +217,6 @@ describe('a stream that is already open when the account is disabled', () => {
 // ── What a newly opened overlay is told (M6) ─────────────────────────────
 
 describe('the config an overlay receives when it connects', () => {
-  // Production has the YouTube overlay columns; on a fresh database their migrations run
-  // before the streamers table exists, so only a second boot adds them. Added here only
-  // where they are missing, so this keeps working once that is fixed.
-  before(() => {
-    const present = new Set(db.db.pragma('table_info(streamers)').map((c) => c.name));
-    for (const [name, type] of [
-      ['yt_overlay_superchat_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_member_enabled', 'INTEGER DEFAULT 1'],
-      ['yt_overlay_giftmember_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_superchat_duration', 'INTEGER DEFAULT 6'],
-      ['yt_overlay_member_duration', 'INTEGER DEFAULT 5'], ['yt_overlay_giftmember_duration', 'INTEGER DEFAULT 6'],
-    ]) {
-      if (!present.has(name)) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${type}`);
-    }
-  });
-
   const UPDATE_COLUMNS = (id, columns) => {
     const names = Object.keys(columns);
     db.db.prepare(`UPDATE streamers SET ${names.map((n) => `${n} = ?`).join(', ')} WHERE id = ?`).run(...names.map((n) => columns[n]), id);

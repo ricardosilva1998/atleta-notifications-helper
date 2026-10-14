@@ -2,7 +2,8 @@ name: Server CI
 
 # Checks the web server (everything except the Atleta Racing desktop app in
 # bridge/, which has its own workflow): syntax, the unit tests, and two boots in
-# a row on a fresh database. No secrets: Discord is switched off with
+# a row on a fresh database (each must answer /health, print no failed
+# migration and stop cleanly). No secrets: Discord is switched off with
 # DISCORD_DISABLED=1 and the Twitch credentials are dummies.
 
 on:
@@ -69,6 +70,11 @@ jobs:
             cat "boot-$run.log"
             if [ "$status" -ne 0 ]; then
               echo "Boot $run: exited with $status after SIGTERM (a clean shutdown exits 0)"
+              exit 1
+            fi
+            # Every migration must succeed on a brand-new database, first boot included.
+            if grep -F '[DB migration]' "boot-$run.log"; then
+              echo "Boot $run: a database migration failed (the lines above)"
               exit 1
             fi
             echo "Boot $run: healthy, then stopped cleanly"

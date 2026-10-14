@@ -55,6 +55,24 @@ test('the donation and pending tip migrations run cleanly on a fresh database', 
   assert.deepEqual(cols, ['order_id', 'streamer_id', 'donor_name', 'message', 'payee_merchant_id', 'captured_at', 'created_at']);
 });
 
+test('a brand-new database prints no migration error on its first boot, and already has every streamer column', () => {
+  // The streamer-column migrations used to run before the streamers table was
+  // made, so a new database's first boot printed "[DB migration] ... no such
+  // table" and had no YouTube or multistream columns until the second boot.
+  assert.deepEqual(migrationErrors, []);
+  const cols = new Set(db.db.pragma('table_info(streamers)').map((c) => c.name));
+  for (const column of [
+    'yt_access_token', 'yt_refresh_token', 'yt_token_expires_at', 'yt_channel_name', 'yt_chatbot_enabled',
+    'multistream_enabled', 'multistream_token', 'multistream_youtube_stream_id', 'multistream_active_broadcast_id',
+    'multistream_last_error', 'multistream_last_error_at',
+  ]) {
+    assert.ok(cols.has(column), column);
+  }
+  const indexes = db.db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'streamers'").all().map((r) => r.name);
+  assert.ok(indexes.includes('idx_streamers_multistream_token'));
+  assert.ok(indexes.includes('idx_streamers_overlay_token'));
+});
+
 describe('logDonation', () => {
   const tip = { source: 'paypal', donor_name: 'Viewer', amount: '10.00', currency: 'eur', message: 'hi', external_id: 'ORDER-1' };
 

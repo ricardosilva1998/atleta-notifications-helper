@@ -247,184 +247,6 @@ try {
   }
 } catch {}
 
-// Migration: Add overlay notification columns to streamers
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('overlay_token')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN overlay_token TEXT;
-      ALTER TABLE streamers ADD COLUMN overlay_enabled INTEGER DEFAULT 0;
-      ALTER TABLE streamers ADD COLUMN streamelements_jwt TEXT;
-      ALTER TABLE streamers ADD COLUMN overlay_follow_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_sub_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_bits_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_donation_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_follow_duration INTEGER DEFAULT 5;
-      ALTER TABLE streamers ADD COLUMN overlay_sub_duration INTEGER DEFAULT 7;
-      ALTER TABLE streamers ADD COLUMN overlay_bits_duration INTEGER DEFAULT 6;
-      ALTER TABLE streamers ADD COLUMN overlay_donation_duration INTEGER DEFAULT 6;
-      ALTER TABLE streamers ADD COLUMN overlay_volume REAL DEFAULT 0.8;
-      ALTER TABLE streamers ADD COLUMN broadcaster_scopes TEXT;
-    `);
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_overlay_token ON streamers(overlay_token) WHERE overlay_token IS NOT NULL');
-    console.log('[DB] Added overlay notification columns to streamers');
-  }
-} catch {}
-
-// Migration: Add chatbot columns to streamers
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('bot_access_token')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN bot_access_token TEXT;
-      ALTER TABLE streamers ADD COLUMN bot_refresh_token TEXT;
-      ALTER TABLE streamers ADD COLUMN bot_token_expires_at INTEGER;
-      ALTER TABLE streamers ADD COLUMN bot_username TEXT;
-      ALTER TABLE streamers ADD COLUMN chatbot_enabled INTEGER DEFAULT 0;
-      ALTER TABLE streamers ADD COLUMN chat_follow_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN chat_sub_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN chat_giftsub_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN chat_bits_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN chat_donation_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN chat_raid_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN chat_follow_template TEXT DEFAULT 'Welcome to the pit crew, {username}! 🏎️';
-      ALTER TABLE streamers ADD COLUMN chat_sub_template TEXT DEFAULT '{username} just joined the podium! Tier {tier} for {months} months! 🏆';
-      ALTER TABLE streamers ADD COLUMN chat_giftsub_template TEXT DEFAULT '{username} gifted {amount} subs! What a sponsor! 🎁';
-      ALTER TABLE streamers ADD COLUMN chat_bits_template TEXT DEFAULT '{username} fueled up {amount} bits! 🔥';
-      ALTER TABLE streamers ADD COLUMN chat_donation_template TEXT DEFAULT '{username} donated {amount}! {message} 💰';
-      ALTER TABLE streamers ADD COLUMN chat_raid_template TEXT DEFAULT '{username} is raiding with {viewers} viewers! Welcome racers! 🏁';
-    `);
-    console.log('[DB] Added chatbot columns to streamers');
-  }
-} catch {}
-
-// Migration: Create chat_commands table
-{
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS chat_commands (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      streamer_id INTEGER NOT NULL,
-      command TEXT NOT NULL,
-      response TEXT NOT NULL,
-      enabled INTEGER DEFAULT 1,
-      cooldown INTEGER DEFAULT 5,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (streamer_id) REFERENCES streamers(id),
-      UNIQUE(streamer_id, command)
-    )
-  `);
-}
-
-// Migration: Add overlay raid columns
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('overlay_raid_enabled')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN overlay_raid_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_raid_duration INTEGER DEFAULT 7;
-    `);
-    console.log('[DB] Added overlay raid columns');
-  }
-} catch {}
-
-// Migration: Add YouTube chatbot/overlay columns to streamers
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('yt_chatbot_enabled')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN yt_chatbot_enabled INTEGER DEFAULT 0;
-      ALTER TABLE streamers ADD COLUMN yt_chat_superchat_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_chat_member_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_chat_giftmember_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_chat_superchat_template TEXT DEFAULT '{username} sent a Super Chat of {amount}! {message}';
-      ALTER TABLE streamers ADD COLUMN yt_chat_member_template TEXT DEFAULT 'Welcome to the team, {username}! Thanks for becoming a member!';
-      ALTER TABLE streamers ADD COLUMN yt_chat_giftmember_template TEXT DEFAULT '{username} gifted {amount} memberships! What a legend!';
-      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_member_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_duration INTEGER DEFAULT 6;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_member_duration INTEGER DEFAULT 5;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_duration INTEGER DEFAULT 6;
-    `);
-    console.log('[DB] Added YouTube chatbot/overlay columns to streamers');
-  }
-} catch {}
-
-// Migration: Add YouTube OAuth columns to streamers
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('yt_access_token')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN yt_access_token TEXT;
-      ALTER TABLE streamers ADD COLUMN yt_refresh_token TEXT;
-      ALTER TABLE streamers ADD COLUMN yt_token_expires_at INTEGER;
-      ALTER TABLE streamers ADD COLUMN yt_channel_name TEXT;
-    `);
-    console.log('[DB] Added YouTube OAuth columns to streamers');
-  }
-} catch {}
-
-// Migration: Add Spotify OAuth columns to streamers
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('spotify_access_token')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN spotify_access_token TEXT;
-      ALTER TABLE streamers ADD COLUMN spotify_refresh_token TEXT;
-      ALTER TABLE streamers ADD COLUMN spotify_token_expires_at INTEGER;
-    `);
-    console.log('[DB] Added Spotify columns to streamers');
-  }
-} catch {}
-
-// Migration: Add donation page columns to streamers
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('paypal_email')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN paypal_email TEXT;
-      ALTER TABLE streamers ADD COLUMN donation_page_enabled INTEGER DEFAULT 0;
-      ALTER TABLE streamers ADD COLUMN donation_min_amount REAL DEFAULT 1.00;
-      ALTER TABLE streamers ADD COLUMN donation_currency TEXT DEFAULT 'EUR';
-    `);
-    console.log('[DB] Added donation page columns to streamers');
-  }
-} catch {}
-
-// Migration: Add multistream relay columns to streamers (Twitch + YouTube passthrough via MediaMTX)
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('multistream_token')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN multistream_enabled INTEGER DEFAULT 0;
-      ALTER TABLE streamers ADD COLUMN multistream_token TEXT;
-      ALTER TABLE streamers ADD COLUMN multistream_youtube_stream_key_enc TEXT;
-      ALTER TABLE streamers ADD COLUMN multistream_youtube_stream_id TEXT;
-      ALTER TABLE streamers ADD COLUMN multistream_youtube_privacy TEXT DEFAULT 'public';
-      ALTER TABLE streamers ADD COLUMN multistream_youtube_category_id TEXT DEFAULT '20';
-      ALTER TABLE streamers ADD COLUMN multistream_youtube_default_title TEXT;
-      ALTER TABLE streamers ADD COLUMN multistream_active_broadcast_id TEXT;
-      ALTER TABLE streamers ADD COLUMN multistream_last_started_at INTEGER;
-    `);
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_multistream_token ON streamers(multistream_token) WHERE multistream_token IS NOT NULL');
-    console.log('[DB] Added multistream relay columns to streamers');
-  }
-} catch (e) { _migrationLog('multistream columns', e); }
-
-// Migration: record why a go-live only reached some destinations, so a partial
-// forward (e.g. Twitch key unavailable) is visible on the dashboard instead of
-// silently streaming to one platform.
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('multistream_last_error')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN multistream_last_error TEXT;
-      ALTER TABLE streamers ADD COLUMN multistream_last_error_at INTEGER;
-    `);
-    console.log('[DB] Added multistream_last_error columns to streamers');
-  }
-} catch (e) { _migrationLog('multistream error columns', e); }
-
 // Migration: Create overlay_designs table
 db.exec(`
   CREATE TABLE IF NOT EXISTS overlay_designs (
@@ -886,6 +708,198 @@ db.exec(`
     UNIQUE(streamer_id, chat_command)
   );
 `);
+
+// --- Streamer columns added after the table was first made ---
+// These ALTER the streamers table, so they run after the CREATE TABLE above:
+// on a brand-new database the table must exist first. (They used to run
+// before it, failed on a new database's first boot and only took effect on
+// the second.) On an existing database each one is skipped once its
+// columns are there.
+
+// Migration: Add overlay notification columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('overlay_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN overlay_token TEXT;
+      ALTER TABLE streamers ADD COLUMN overlay_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN streamelements_jwt TEXT;
+      ALTER TABLE streamers ADD COLUMN overlay_follow_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN overlay_sub_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN overlay_bits_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN overlay_donation_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN overlay_follow_duration INTEGER DEFAULT 5;
+      ALTER TABLE streamers ADD COLUMN overlay_sub_duration INTEGER DEFAULT 7;
+      ALTER TABLE streamers ADD COLUMN overlay_bits_duration INTEGER DEFAULT 6;
+      ALTER TABLE streamers ADD COLUMN overlay_donation_duration INTEGER DEFAULT 6;
+      ALTER TABLE streamers ADD COLUMN overlay_volume REAL DEFAULT 0.8;
+      ALTER TABLE streamers ADD COLUMN broadcaster_scopes TEXT;
+    `);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_overlay_token ON streamers(overlay_token) WHERE overlay_token IS NOT NULL');
+    console.log('[DB] Added overlay notification columns to streamers');
+  }
+} catch {}
+
+// Migration: Add chatbot columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('bot_access_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN bot_access_token TEXT;
+      ALTER TABLE streamers ADD COLUMN bot_refresh_token TEXT;
+      ALTER TABLE streamers ADD COLUMN bot_token_expires_at INTEGER;
+      ALTER TABLE streamers ADD COLUMN bot_username TEXT;
+      ALTER TABLE streamers ADD COLUMN chatbot_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN chat_follow_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_sub_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_giftsub_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_bits_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_donation_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_raid_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN chat_follow_template TEXT DEFAULT 'Welcome to the pit crew, {username}! 🏎️';
+      ALTER TABLE streamers ADD COLUMN chat_sub_template TEXT DEFAULT '{username} just joined the podium! Tier {tier} for {months} months! 🏆';
+      ALTER TABLE streamers ADD COLUMN chat_giftsub_template TEXT DEFAULT '{username} gifted {amount} subs! What a sponsor! 🎁';
+      ALTER TABLE streamers ADD COLUMN chat_bits_template TEXT DEFAULT '{username} fueled up {amount} bits! 🔥';
+      ALTER TABLE streamers ADD COLUMN chat_donation_template TEXT DEFAULT '{username} donated {amount}! {message} 💰';
+      ALTER TABLE streamers ADD COLUMN chat_raid_template TEXT DEFAULT '{username} is raiding with {viewers} viewers! Welcome racers! 🏁';
+    `);
+    console.log('[DB] Added chatbot columns to streamers');
+  }
+} catch {}
+
+// Migration: Create chat_commands table
+{
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_commands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      command TEXT NOT NULL,
+      response TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      cooldown INTEGER DEFAULT 5,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id),
+      UNIQUE(streamer_id, command)
+    )
+  `);
+}
+
+// Migration: Add overlay raid columns
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('overlay_raid_enabled')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN overlay_raid_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN overlay_raid_duration INTEGER DEFAULT 7;
+    `);
+    console.log('[DB] Added overlay raid columns');
+  }
+} catch {}
+
+// Migration: Add YouTube chatbot/overlay columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('yt_chatbot_enabled')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN yt_chatbot_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN yt_chat_superchat_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_chat_member_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_chat_giftmember_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_chat_superchat_template TEXT DEFAULT '{username} sent a Super Chat of {amount}! {message}';
+      ALTER TABLE streamers ADD COLUMN yt_chat_member_template TEXT DEFAULT 'Welcome to the team, {username}! Thanks for becoming a member!';
+      ALTER TABLE streamers ADD COLUMN yt_chat_giftmember_template TEXT DEFAULT '{username} gifted {amount} memberships! What a legend!';
+      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_member_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_enabled INTEGER DEFAULT 1;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_duration INTEGER DEFAULT 6;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_member_duration INTEGER DEFAULT 5;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_duration INTEGER DEFAULT 6;
+    `);
+    console.log('[DB] Added YouTube chatbot/overlay columns to streamers');
+  }
+} catch {}
+
+// Migration: Add YouTube OAuth columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('yt_access_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN yt_access_token TEXT;
+      ALTER TABLE streamers ADD COLUMN yt_refresh_token TEXT;
+      ALTER TABLE streamers ADD COLUMN yt_token_expires_at INTEGER;
+      ALTER TABLE streamers ADD COLUMN yt_channel_name TEXT;
+    `);
+    console.log('[DB] Added YouTube OAuth columns to streamers');
+  }
+} catch {}
+
+// Migration: Add Spotify OAuth columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('spotify_access_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN spotify_access_token TEXT;
+      ALTER TABLE streamers ADD COLUMN spotify_refresh_token TEXT;
+      ALTER TABLE streamers ADD COLUMN spotify_token_expires_at INTEGER;
+    `);
+    console.log('[DB] Added Spotify columns to streamers');
+  }
+} catch {}
+
+// Migration: Add donation page columns to streamers
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('paypal_email')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN paypal_email TEXT;
+      ALTER TABLE streamers ADD COLUMN donation_page_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN donation_min_amount REAL DEFAULT 1.00;
+      ALTER TABLE streamers ADD COLUMN donation_currency TEXT DEFAULT 'EUR';
+    `);
+    console.log('[DB] Added donation page columns to streamers');
+  }
+} catch {}
+
+// Migration: Add multistream relay columns to streamers (Twitch + YouTube passthrough via MediaMTX)
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('multistream_token')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN multistream_enabled INTEGER DEFAULT 0;
+      ALTER TABLE streamers ADD COLUMN multistream_token TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_stream_key_enc TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_stream_id TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_privacy TEXT DEFAULT 'public';
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_category_id TEXT DEFAULT '20';
+      ALTER TABLE streamers ADD COLUMN multistream_youtube_default_title TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_active_broadcast_id TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_last_started_at INTEGER;
+    `);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_multistream_token ON streamers(multistream_token) WHERE multistream_token IS NOT NULL');
+    console.log('[DB] Added multistream relay columns to streamers');
+  }
+} catch (e) { _migrationLog('multistream columns', e); }
+
+// Migration: record why a go-live only reached some destinations, so a partial
+// forward (e.g. Twitch key unavailable) is visible on the dashboard instead of
+// silently streaming to one platform.
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('multistream_last_error')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN multistream_last_error TEXT;
+      ALTER TABLE streamers ADD COLUMN multistream_last_error_at INTEGER;
+    `);
+    console.log('[DB] Added multistream_last_error columns to streamers');
+  }
+} catch (e) { _migrationLog('multistream error columns', e); }
+
+// A brand-new database gets overlay_token from the CREATE TABLE above, so the
+// overlay migration (and the index it makes) is skipped there; the index is
+// made here for every database (nothing happens where it exists).
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_overlay_token ON streamers(overlay_token) WHERE overlay_token IS NOT NULL');
+} catch (e) { _migrationLog('overlay token index', e); }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS moderation_log (

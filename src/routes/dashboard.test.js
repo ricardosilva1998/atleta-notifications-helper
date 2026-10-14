@@ -228,20 +228,6 @@ before(async () => {
   delete require.cache[DB_FILE];
   delete require.cache[DASHBOARD_FILE];
   db = require(DB_FILE);
-  // Production has the YouTube columns of the streamers table. On a fresh database
-  // their migrations run before the table exists, so only a second boot adds them.
-  // Added here only where they are missing, so this keeps working once that is fixed.
-  const streamerColumns = new Set(db.db.pragma('table_info(streamers)').map((c) => c.name));
-  for (const [name, type] of [
-    ['yt_access_token', 'TEXT'], ['yt_refresh_token', 'TEXT'], ['yt_token_expires_at', 'INTEGER'], ['yt_channel_name', 'TEXT'],
-    ['yt_chatbot_enabled', 'INTEGER DEFAULT 0'], ['yt_chat_superchat_template', 'TEXT'], ['yt_chat_member_template', 'TEXT'],
-    ['yt_chat_giftmember_template', 'TEXT'],
-    ['yt_chat_superchat_enabled', 'INTEGER DEFAULT 1'], ['yt_chat_member_enabled', 'INTEGER DEFAULT 1'], ['yt_chat_giftmember_enabled', 'INTEGER DEFAULT 1'],
-    ['yt_overlay_superchat_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_member_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_giftmember_enabled', 'INTEGER DEFAULT 1'],
-    ['yt_overlay_superchat_duration', 'INTEGER DEFAULT 6'], ['yt_overlay_member_duration', 'INTEGER DEFAULT 5'], ['yt_overlay_giftmember_duration', 'INTEGER DEFAULT 6'],
-  ]) {
-    if (!streamerColumns.has(name)) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${type}`);
-  }
   ({ t } = require('../i18n'));
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');

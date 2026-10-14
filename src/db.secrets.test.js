@@ -65,11 +65,9 @@ function boot(file, { key = null, inspect } = {}) {
   return logs;
 }
 
-// A database with production's columns: on a new file some streamer columns
-// (YouTube, multistream) only appear from the second boot.
+// A database with production's columns (a new file has them all after its first boot).
 function preparedFile() {
   const file = newFile();
-  boot(file);
   boot(file);
   return file;
 }

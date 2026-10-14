@@ -149,11 +149,6 @@ before(() => {
     console.log = log;
     console.error = error;
   }
-  // A new database gets the YouTube chatbot columns only on its second boot (a
-  // known migration-order problem). Add what a second boot would.
-  if (!db.db.pragma('table_info(streamers)').some((c) => c.name === 'yt_chatbot_enabled')) {
-    db.db.exec('ALTER TABLE streamers ADD COLUMN yt_chatbot_enabled INTEGER DEFAULT 0');
-  }
 });
 
 after(() => {

@@ -112,12 +112,6 @@ before(async () => {
   delete require.cache[DB_FILE];
   delete require.cache[AUTH_FILE];
   db = require(DB_FILE);
-  // Production has the YouTube token columns; on a new database their migration
-  // runs before the streamers table exists, so only a second boot adds them.
-  const streamerColumns = new Set(db.db.pragma('table_info(streamers)').map((c) => c.name));
-  for (const [name, type] of [['yt_access_token', 'TEXT'], ['yt_refresh_token', 'TEXT'], ['yt_token_expires_at', 'INTEGER'], ['yt_channel_name', 'TEXT']]) {
-    if (!streamerColumns.has(name)) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${type}`);
-  }
 
   const app = express();
   app.set('view engine', 'ejs');
