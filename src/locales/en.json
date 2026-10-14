@@ -293,6 +293,9 @@
   "overlay.sounds.error.notAudio": "This file is not an MP3, WAV, OGG or M4A sound",
   "overlay.sounds.error.writeFailed": "The sound could not be saved, please try again",
 
+  "upload.error.diskFull": "The server is short of storage space right now, so this file was not saved. Please try again later.",
+  "upload.error.quota": "This file would take your uploads past {{mb}} MB. Delete sounds, sponsor images, reward clips or VTuber models you no longer use, then try again.",
+
   "donations.error.currency": "Choose one of the listed currencies",
   "donations.error.minAmount": "Enter a minimum amount between {{min}} and {{max}}",
   "donations.error.email": "Enter a valid PayPal email address (at most {{length}} characters)",

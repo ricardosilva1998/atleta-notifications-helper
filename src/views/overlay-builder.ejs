@@ -2268,6 +2268,8 @@ async function uploadSponsor() {
       sponsorImages.push(data.image);
       renderSponsorList();
       updateSponsorPreview();
+    } else if (data.error) {
+      alert(data.error); // e.g. the upload limit was reached
     }
   } catch(e) {}
   spSelectedFile = null;

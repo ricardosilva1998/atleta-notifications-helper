@@ -866,11 +866,19 @@ async function submitReward() {
       }
       if (_selectedFile) {
         var ext2 = _selectedFile.name.split('.').pop().toLowerCase();
-        await fetch('/dashboard/redemptions/' + _editId + '/replace-media?media_type=' + mediaType + '&ext=' + ext2, {
+        var replaceRes = await fetch('/dashboard/redemptions/' + _editId + '/replace-media?media_type=' + mediaType + '&ext=' + ext2, {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: _selectedFile,
         });
+        if (!replaceRes.ok) {
+          // The other changes are saved; the new clip was not (e.g. the upload limit was reached).
+          var d3 = await replaceRes.json().catch(function() { return {}; });
+          if (d3.error) {
+            showToast(d3.error, 'error');
+            btn.disabled = false; btn.textContent = origText; return;
+          }
+        }
       }
       showToast(twitchMessage || 'Reward updated', twitchMessage ? 'error' : 'success');
       setTimeout(function() { location.reload(); }, twitchMessage ? 2500 : 800);

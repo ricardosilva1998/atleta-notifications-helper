@@ -15,6 +15,7 @@ const { normalizeTwitchLogin } = require('../services/twitchLogin');
 const { parseOverlaySettings, giveawayDurationSeconds } = require('../services/overlaySettings');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
+const storageQuota = require('../services/storageQuota');
 const { buildOverlayConfig } = require('../services/overlayConfig');
 const {
   TIP_GOAL_CURRENCIES, SETTINGS_ERRORS, GOAL_ERRORS, MIN_AMOUNT_FLOOR, MIN_AMOUNT_CEIL, PAYPAL_EMAIL_MAX,
@@ -73,6 +74,23 @@ function readBoundedBody(req, res, maxBytes) {
     req.on('end', () => { if (!aborted) resolve(Buffer.concat(chunks, received)); });
     req.on('error', (err) => { if (!aborted) { aborted = true; reject(err); } });
   });
+}
+
+// An upload is not stored when the data volume (which also holds the database)
+// would have less than 200 MB free, or when the streamer's stored media would
+// pass 250 MB (services/storageQuota.js). Answers 507 and returns true then.
+// `replacing`: the size of the file the upload replaces. `media: false` for the
+// files that do not count toward the media quota (profile picture, issue screenshots).
+function refuseUpload(req, res, bytes, { replacing = 0, media = true } = {}) {
+  const reason = storageQuota.uploadRefusal({ streamerId: req.streamer.id, bytes, replacing, media });
+  if (!reason) return false;
+  const t = res.locals.t;
+  const error = reason === 'disk'
+    ? t('upload.error.diskFull')
+    : t('upload.error.quota', { mb: Math.round(storageQuota.MEDIA_QUOTA_BYTES / (1024 * 1024)) });
+  console.warn(`[Upload] Refused a ${Math.ceil(bytes / 1024)} KB upload for streamer ${req.streamer.id}: ${reason === 'disk' ? 'data volume nearly full' : 'media quota reached'}`);
+  res.status(507).json({ ok: false, error });
+  return true;
 }
 
 // All dashboard routes need a logged-in streamer whose account an admin has not
@@ -201,6 +219,7 @@ router.post('/account/avatar', async (req, res) => {
   try { buf = await readBoundedBody(req, res, 2 * 1024 * 1024); }
   catch (e) { return; /* helper already responded */ }
   if (buf.length === 0) return res.status(400).json({ ok: false, error: 'Empty file' });
+  if (refuseUpload(req, res, buf.length, { media: false })) return;
 
   const streamerId = req.streamer.id;
   const avatarDir = path.join(__dirname, '..', '..', 'data', 'avatars', String(streamerId));
@@ -769,6 +788,7 @@ router.post('/overlay/sounds/:eventType', async (req, res) => {
   try { buf = await readBoundedBody(req, res, 10 * 1024 * 1024); }
   catch (e) { return; }
   if (!isAllowedSound(buf)) return res.status(400).json({ error: t('overlay.sounds.error.notAudio') });
+  if (refuseUpload(req, res, buf.length, { replacing: storageQuota.fileBytes(file) })) return;
 
   try {
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
@@ -1492,6 +1512,7 @@ router.post('/report/:id/screenshot', async (req, res) => {
   if (!isAllowedScreenshot(ext, buf)) {
     return res.status(400).json({ ok: false, error: 'invalid_image' });
   }
+  if (refuseUpload(req, res, buf.length, { media: false })) return;
 
   const issueDir = path.join(__dirname, '..', '..', 'data', 'issues', String(issueId));
   try { await fs.promises.mkdir(issueDir, { recursive: true }); } catch (e) {}
@@ -1567,6 +1588,7 @@ router.post('/sponsors/upload', async (req, res) => {
   let buf;
   try { buf = await readBoundedBody(req, res, 5 * 1024 * 1024); }
   catch (e) { return; }
+  if (refuseUpload(req, res, buf.length)) return;
 
   const streamerId = req.streamer.id;
   const sponsorDir = path.join(__dirname, '..', '..', 'data', 'sponsors', String(streamerId));
@@ -1782,6 +1804,7 @@ router.post('/redemptions/upload', async (req, res) => {
   const positionPreset = req.query.position_preset || 'center-large';
 
   if (!validateRewardFields({ title, cost, prompt, position_preset: positionPreset }, res)) return;
+  if (refuseUpload(req, res, buf.length)) return;
 
   const cooldownSeconds = Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0);
   const maxPlaySeconds = clamp(req.query.max_play_seconds, 1, 60);
@@ -1935,6 +1958,8 @@ router.post('/redemptions/:id/replace-media', async (req, res) => {
   catch (e) { return; }
 
   const rewardDir = path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId));
+  const replacing = reward.media_filename ? storageQuota.fileBytes(path.join(rewardDir, reward.media_filename)) : 0;
+  if (refuseUpload(req, res, buf.length, { replacing })) return;
   try { await fs.promises.mkdir(rewardDir, { recursive: true }); } catch (e) {}
 
   const newFilename = `${id}_${Date.now()}.${ext}`;
@@ -2240,6 +2265,7 @@ router.post('/api/vtuber/models', async (req, res) => {
   let buf;
   try { buf = await readBoundedBody(req, res, 50 * 1024 * 1024); }
   catch (e) { return; }
+  if (refuseUpload(req, res, buf.length)) return;
 
   try { await fs.promises.mkdir(modelDir, { recursive: true }); } catch (e) {}
   try { await fs.promises.writeFile(path.join(modelDir, filename), buf); }

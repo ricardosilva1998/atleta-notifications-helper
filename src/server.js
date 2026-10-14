@@ -9,6 +9,7 @@ const db = require('./db');
 const { t, SUPPORTED_LANGS } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
+const { mountBodyParsers } = require('./bodyParsers');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -42,7 +43,18 @@ app.use(helmet({
 // Rate limiters
 const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: 'Too many attempts, please try again later' });
-const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+// Every /api request, counted once per address. One Atleta Racing app polls
+// about 50 times a minute (Spotify every 4 s, Discord voice every 2 s, the live
+// session every 30 s, laps and logs), so 150 leaves room for two apps behind
+// one address plus the website. Reading a stored track map is not counted: the
+// Track Database page draws a preview of every stored track at once.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'GET' && req.path.startsWith('/track-map/'),
+});
 app.use(generalLimiter);
 function secureCookie(res, name, value, opts = {}) {
   res.cookie(name, value, { httpOnly: true, secure: isProduction, sameSite: 'lax', ...opts });
@@ -51,8 +63,8 @@ app.locals.secureCookie = secureCookie;
 
 // Middleware
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json({ limit: '10mb' }));
+// Bodies up to 100 kb; the routes allowed more are listed in bodyParsers.js.
+mountBodyParsers(app);
 
 // Static files — no-cache for overlay assets so OBS gets fresh JS/CSS after deploy
 app.use(express.static(path.join(__dirname, '..', 'public'), {
@@ -174,9 +186,11 @@ app.get('/pricing', (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/dashboard/multistream', require('./routes/multistream'));
-// Mounted ahead of the generic /api handler, so it needs its own limiter —
-// otherwise these webhook endpoints are the one unthrottled /api surface.
-app.use('/api/multistream', apiLimiter, require('./routes/multistream'));
+// Every /api route below (the multistream webhooks, the Atleta Racing app's
+// endpoints, the api router) is behind this one limiter; it counts each request
+// once, so no /api route may be given apiLimiter again.
+app.use('/api', apiLimiter);
+app.use('/api/multistream', require('./routes/multistream'));
 app.use('/dashboard', dashboardRoutes);
 // app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);
@@ -361,7 +375,7 @@ app.get('/api/bridge/spotify', async (req, res) => {
 });
 
 // Spotify playback control — for Bridge overlay media controls
-app.post('/api/bridge/spotify/control', express.json(), async (req, res) => {
+app.post('/api/bridge/spotify/control', async (req, res) => {
   try {
     let streamer = req.streamer;
     if (!streamer && req.racingUser && req.racingUser.streamer_id) {
@@ -502,7 +516,7 @@ app.post('/api/track-map', (req, res) => {
 });
 
 // Track stats API (public — must be before /api auth middleware)
-app.post('/api/track-stats', express.json(), (req, res) => {
+app.post('/api/track-stats', (req, res) => {
   try {
     const { trackName, raceType, stats } = req.body;
     if (!trackName || !raceType || !stats) return res.status(400).json({ error: 'Missing fields' });
@@ -541,7 +555,7 @@ app.post('/api/track-stats', express.json(), (req, res) => {
 });
 
 // Screenshot import — analyze Garage61 screenshot via GPT-4o vision
-app.post('/api/track-stats/import-screenshot', express.json({ limit: '10mb' }), async (req, res) => {
+app.post('/api/track-stats/import-screenshot', async (req, res) => {
   try {
     if (!req.streamer) return res.status(401).json({ error: 'Login required' });
 
@@ -634,7 +648,7 @@ app.post('/api/track-stats/import-screenshot', express.json({ limit: '10mb' }), 
 });
 
 // CSV import — parse iRacing/Garage61 CSV data directly
-app.post('/api/track-stats/import-csv', express.json({ limit: '10mb' }), (req, res) => {
+app.post('/api/track-stats/import-csv', (req, res) => {
   try {
     if (!req.streamer) return res.status(401).json({ error: 'Login required' });
 
@@ -796,7 +810,7 @@ app.get('/api/track-stats/:trackName', (req, res) => {
 let liveSession = null;
 let liveSessionTime = 0;
 
-app.post('/api/live-session', express.json(), (req, res) => {
+app.post('/api/live-session', (req, res) => {
   liveSession = req.body;
   liveSessionTime = Date.now();
   res.json({ ok: true });
@@ -893,7 +907,7 @@ app.patch('/api/bridge-bug-reports/:id', (req, res) => {
 });
 
 // Session upload & query API (public — must be before /api auth middleware)
-app.post('/api/session', express.json({ limit: '10mb' }), (req, res) => {
+app.post('/api/session', (req, res) => {
   try {
     const { bridge_id, iracing_name, session, laps, telemetry } = req.body;
     if (!bridge_id || !iracing_name || !session || !laps) {
@@ -1058,7 +1072,7 @@ function authorizeSessionWrite(req, res, sessionId) {
 }
 
 // Append a single lap to an existing session (progressive upload)
-app.post('/api/session/:id/lap', express.json({ limit: '5mb' }), (req, res) => {
+app.post('/api/session/:id/lap', (req, res) => {
   try {
     const sessionId = parseInt(req.params.id);
     const session = authorizeSessionWrite(req, res, sessionId);
@@ -1090,7 +1104,7 @@ app.post('/api/session/:id/lap', express.json({ limit: '5mb' }), (req, res) => {
 });
 
 // Update session with final stats (position, iRating change)
-app.patch('/api/session/:id/finish', express.json(), (req, res) => {
+app.patch('/api/session/:id/finish', (req, res) => {
   try {
     const sessionId = parseInt(req.params.id);
     const session = authorizeSessionWrite(req, res, sessionId);
@@ -1131,7 +1145,7 @@ app.patch('/api/session/:id/finish', express.json(), (req, res) => {
   }
 });
 
-app.patch('/api/session/:id', express.json(), (req, res) => {
+app.patch('/api/session/:id', (req, res) => {
   try {
     const bridgeId = req.query.bridge_id || req.body.bridge_id;
     if (!bridgeId) return res.status(400).json({ error: 'bridge_id required' });
@@ -1184,7 +1198,7 @@ app.get('/tracks/:trackName', (req, res) => {
   res.render('tracks', { streamer: req.streamer || null, racingUser: req.racingUser || null, t: res.locals.t });
 });
 
-app.use('/api', apiLimiter, apiRoutes);
+app.use('/api', apiRoutes); // apiLimiter is applied above, ahead of every /api route
 app.use('/admin', adminRoutes);
 app.use('/vtuber', vtuberRoutes);
 app.use('/sync', syncRoutes);

@@ -880,6 +880,8 @@
           p.style.color = p.dataset.category === 'all' ? 'white' : 'var(--text-muted)';
         });
         renderVtuberGrid();
+      } else if (data.error) {
+        alert(data.error); // e.g. the upload limit was reached
       }
     } catch (e) { console.error('Failed to upload model', e); }
     input.value = '';
