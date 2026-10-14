@@ -69,6 +69,13 @@ function nameFit(name, holds) {
   return fit < 1 ? ' style="--fit:' + fit.toFixed(2) + '"' : '';
 }
 
+// A name on its plaque. The box carries the size (--fit) and the one line it occupies; the
+// span inside clips a name that is still too long with an ellipsis (see .o-name-text).
+function nameBox(extraClass, name, holds) {
+  return '<div class="' + (extraClass ? extraClass + ' ' : '') + 'o-name"' + nameFit(name, holds) + '>'
+    + '<span class="o-name-text">' + esc(name) + '</span></div>';
+}
+
 // The raid count sits on a 118px banner at 46px; digits are 0.533em wide in
 // Oxanium, so from five digits on it is set smaller to keep every digit inside.
 var COUNT_FULL_SIZE = 46;
@@ -89,7 +96,7 @@ var OBJECTS = {
         + '<div class="o-follow-hatch"></div><div class="o-mesh"></div>'
         + '<div class="o-follow-glyph">✦</div>'
         + '<div class="o-follow-txt">'
-        +   '<div class="o-name"' + nameFit(d.username, NAME_HOLDS.follow) + '>' + esc(d.username) + '</div>'
+        +   nameBox('', d.username, NAME_HOLDS.follow)
         +   '<div class="o-meta">started following</div>'
         + '</div>'
         + '<div class="o-follow-scar"></div><div class="o-blade"></div>'
@@ -111,7 +118,7 @@ var OBJECTS = {
         + '<div class="o-sub-cords"></div>'
         + '<div class="o-sub-gaku"><div class="o-mesh"></div>'
         +   '<div class="o-sub-mark">Subscriber</div>'
-        +   '<div class="o-name"' + nameFit(d.username, NAME_HOLDS.subscription) + '>' + esc(d.username) + '</div>'
+        +   nameBox('', d.username, NAME_HOLDS.subscription)
         +   '<div class="o-meta">' + meta + '</div>'
         +   (d.message ? '<div class="o-sub-msg">' + esc(d.message) + '</div>' : '')
         + '</div></div>';
@@ -134,7 +141,7 @@ var OBJECTS = {
         + '<div class="o-bits-br tl"></div><div class="o-bits-br tr"></div>'
         + '<div class="o-bits-br bl"></div><div class="o-bits-br rb"></div>'
         + '<div class="o-bits-cells">' + tiles + '</div>'
-        + '<div class="o-bits-who o-name"' + nameFit(d.username, NAME_HOLDS.bits) + '>' + esc(d.username) + '</div>'
+        + nameBox('o-bits-who', d.username, NAME_HOLDS.bits)
         + '<div class="o-bits-unit o-meta">bits</div>'
         + '<div class="o-blade"></div>'
         + '</div>';
@@ -188,7 +195,7 @@ var OBJECTS = {
       return '<div class="obj o-raid">'
         + '<div class="o-raid-rank">' + rank + '</div>'
         + '<div class="o-raid-plaque">'
-        +   '<div class="o-name"' + nameFit(d.username, NAME_HOLDS.raid) + '>' + esc(d.username) + '</div>'
+        +   nameBox('', d.username, NAME_HOLDS.raid)
         +   '<div class="o-meta">brought the grid</div>'
         + '</div></div>';
     },

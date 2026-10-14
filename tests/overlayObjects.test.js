@@ -290,6 +290,20 @@ describe('a long name is shown in full when it can fit, and cut cleanly when it 
     }
   });
 
+  test('every name is in the span that clips it, and still escaped there', () => {
+    for (const [key, render] of Object.entries(RENDERS)) {
+      const html = render('<i>Ana</i> & Ço');
+      assert.ok(html.includes('<span class="o-name-text">&lt;i&gt;Ana&lt;/i&gt; &amp; Ço</span></div>'), key);
+      assert.ok(!html.includes('<i>Ana</i>'), `${key}: no raw markup`);
+    }
+  });
+
+  test('accented names are carried whole into the markup', () => {
+    for (const [key, render] of Object.entries(RENDERS)) {
+      assert.ok(render('ÅÜÃ JOÃO ANDRÉ').includes('ÅÜÃ JOÃO ANDRÉ'), key);
+    }
+  });
+
   test('a short name is set at full size (no --fit)', () => {
     for (const [key, render] of Object.entries(RENDERS)) {
       assert.equal(nameTag(render('RacerDan')), '', `${key}: short names carry no style`);
@@ -388,10 +402,28 @@ describe('objects.css — display font and name fitting (N2, N3)', () => {
   });
 
   test('a name never wraps or spills: one line, clipped with an ellipsis', () => {
-    const name = rule('.o-name');
-    assert.match(name, /white-space:\s*nowrap/);
-    assert.match(name, /overflow:\s*hidden/);
-    assert.match(name, /text-overflow:\s*ellipsis/);
+    const text = rule('.o-name-text');
+    assert.match(text, /display:\s*block/);
+    assert.match(text, /white-space:\s*nowrap/);
+    assert.match(text, /overflow:\s*hidden/);
+    assert.match(text, /text-overflow:\s*ellipsis/);
+  });
+
+  test('the clip does not cut an accent or a descender: the span is padded and pulled back by the same amount', () => {
+    // An A-tilde or A-ring rises above the line and a Q hangs below it; a clipping box cuts both.
+    const text = rule('.o-name-text');
+    const padding = /padding:\s*([\d.]+)em 0/.exec(text);
+    const margin = /margin:\s*-([\d.]+)em 0/.exec(text);
+    assert.ok(padding && margin, 'padding and a negative margin of the same size, top and bottom');
+    assert.equal(padding[1], margin[1]);
+    assert.ok(Number(padding[1]) >= 0.25, 'room for a capital with an accent');
+  });
+
+  test('so the name box itself stays one line tall, and its own margins cannot collapse into the span\'s', () => {
+    const box = rule('.o-name');
+    assert.match(box, /display:\s*flow-root/);
+    assert.match(box, /line-height:\s*1\.08/);
+    assert.ok(!/overflow:/.test(box), 'the box itself clips nothing');
   });
 
   test('every size of a name scales with --fit', () => {

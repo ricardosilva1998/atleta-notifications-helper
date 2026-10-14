@@ -19,7 +19,13 @@
 /* ══ Shared discipline ═════════════════════════════════════ */
 /* --fit (set inline by objects/index.js for a long name) scales the font size so the
    name fits its plaque; whatever still does not fit ends in an ellipsis. */
-.o-name{font-weight:800;font-size:calc(24px * var(--fit,1));line-height:1.08;letter-spacing:.004em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-name{display:flow-root;font-weight:800;font-size:calc(24px * var(--fit,1));line-height:1.08;letter-spacing:.004em;text-transform:uppercase}
+/* The span inside clips a long name. An ellipsis needs a clipping box, and a clipping box cuts
+   what rises above or hangs below the line: the accent on an A-tilde or A-ring, the tail of a Q.
+   So the span is padded top and bottom to make room and pulled back by the same amount (inside
+   .o-name, a block formatting context, so the margins cannot collapse into its neighbours),
+   which leaves the name exactly as tall as one line, as it always was. */
+.o-name-text{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.3em 0;margin:-.3em 0}
 .o-meta{font-family:var(--o-cond);font-weight:600;font-size:11.5px;line-height:1;text-transform:uppercase;letter-spacing:.2em}
 
 /* ── The cut: shared blade flash ─────────────────────────── */
