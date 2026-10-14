@@ -187,7 +187,9 @@ function overlayCard({ streamer, overlay }) {
 function commandsCard({ streamer, commands }) {
   const builtins = BUILTINS.map((name) => ({ key: `cmd_${name}_enabled`, name: `!${name}`, on: !!streamer[`cmd_${name}_enabled`] }));
   const builtinsOn = builtins.filter((b) => b.on).length;
-  const rows = commands.map((c, i) => ({ id: c.id, name: c.command, response: c.response, cooldown: c.cooldown, extra: i >= COMMANDS_SHOWN }));
+  // A command switched off on the chatbot page (chat_commands.enabled = 0) stays in the list and in the counts; its
+  // row says `on: false`, so the card can show it dimmed: the bot ignores it.
+  const rows = commands.map((c, i) => ({ id: c.id, name: c.command, response: c.response, cooldown: c.cooldown, on: !!c.enabled, extra: i >= COMMANDS_SHOWN }));
   return {
     needsChatbot: true,
     status: status('cards.commands.status', rows.length + builtinsOn > 0 ? 'ok' : 'off', { commands: rows.length, builtins: builtinsOn }),

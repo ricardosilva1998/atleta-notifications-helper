@@ -203,21 +203,28 @@ describe('OBS overlay', () => {
 });
 
 describe('Commands', () => {
-  const commands = ['discord', 'socials', 'setup', 'schedule', 'sim'].map((name, i) => ({ id: i + 1, command: name, response: `About ${name}`, cooldown: 10 }));
+  // As db.getChatCommands() gives them: chat_commands.enabled is 1 until the chatbot page switches the command off.
+  const commands = ['discord', 'socials', 'setup', 'schedule', 'sim'].map((name, i) => ({ id: i + 1, command: name, response: `About ${name}`, enabled: 1, cooldown: 10 }));
 
   test('the commands and the built-ins that are on; four shown, the rest behind Show all', () => {
     const card = build({ commands }).commands;
     assert.equal(card.needsChatbot, true);
     assert.deepEqual(card.status, { key: 'cards.commands.status', params: { commands: 5, builtins: 1 }, tone: 'ok' });
-    assert.deepEqual(card.commands.map((c) => [c.id, c.name, c.response, c.cooldown, c.extra]), [
-      [1, 'discord', 'About discord', 10, false], [2, 'socials', 'About socials', 10, false], [3, 'setup', 'About setup', 10, false],
-      [4, 'schedule', 'About schedule', 10, false], [5, 'sim', 'About sim', 10, true],
+    assert.deepEqual(card.commands.map((c) => [c.id, c.name, c.response, c.cooldown, c.on, c.extra]), [
+      [1, 'discord', 'About discord', 10, true, false], [2, 'socials', 'About socials', 10, true, false], [3, 'setup', 'About setup', 10, true, false],
+      [4, 'schedule', 'About schedule', 10, true, false], [5, 'sim', 'About sim', 10, true, true],
     ]);
     assert.equal(card.builtins.length, 13);
     assert.deepEqual(card.builtins.slice(0, 4).map((b) => [b.key, b.name, b.on]), [
       ['cmd_followage_enabled', '!followage', true], ['cmd_subage_enabled', '!subage', false], ['cmd_uptime_enabled', '!uptime', false], ['cmd_accountage_enabled', '!accountage', false],
     ]);
     assert.deepEqual(card.counts, { commands: { text: '5' }, builtins: { key: 'cards.common.nOfM', params: { on: 1, total: 13 } } });
+  });
+
+  test('a command switched off on the chatbot page stays in the list with its row off: the bot ignores it', () => {
+    const rows = commands.map((c) => (c.command === 'setup' ? { ...c, enabled: 0 } : c));
+    const card = build({ commands: rows }).commands;
+    assert.deepEqual(card.commands.map((c) => [c.name, c.on]), [['discord', true], ['socials', true], ['setup', false], ['schedule', true], ['sim', true]]);
   });
 
   test('no command and no built-in is grey', () => {
