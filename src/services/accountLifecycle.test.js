@@ -102,16 +102,30 @@ describe('enableAccount', () => {
     assert.deepEqual(names(calls).slice(1).sort(), ['eventsub.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
 
-  test('the chatbot alone needs no overlay, matching how the app boots', () => {
-    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 0, chatbot_enabled: 1, twitch_username: 'some_streamer' });
+  // The event connections serve the overlay and the chatbot's thank-yous and sponsor messages, so either one
+  // being on brings them back, as it does when the app boots (db.getOverlayOrChatbotStreamers).
+  test('the chatbot alone needs no overlay, matching how the app boots: it brings back the event connections too', () => {
+    const { calls, services } = fakeServices({
+      id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 1, twitch_username: 'some_streamer',
+    });
     enableAccount(5, services);
-    assert.deepEqual(names(calls), ['db.enable', 'chat.start']);
+    assert.deepEqual(calls[0], ['db.enable', 5]);
+    assert.deepEqual(names(calls).slice(1).sort(), ['chat.start', 'eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
 
-  test('the overlay needs a broadcaster token to connect', () => {
-    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: '', chatbot_enabled: 0 });
+  test('the overlay alone brings them back too, without the chat bot', () => {
+    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 0 });
     enableAccount(5, services);
-    assert.deepEqual(names(calls), ['db.enable']);
+    assert.deepEqual(names(calls).slice(1).sort(), ['eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
+  });
+
+  test('EventSub needs a broadcaster token to connect; StreamElements and the sponsor rotation do not', () => {
+    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: '', streamelements_jwt: 'jwt', chatbot_enabled: 0 });
+    enableAccount(5, services);
+    assert.deepEqual(names(calls).slice(1).sort(), ['se.start', 'sponsors.restart', 'sponsors.restartChat']);
+    const chatbotOnly = fakeServices({ id: 5, overlay_enabled: 0, chatbot_enabled: 1, twitch_username: 'some_streamer' });
+    enableAccount(5, chatbotOnly.services);
+    assert.deepEqual(names(chatbotOnly.calls).slice(1).sort(), ['chat.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
 
   test('a missing streamer starts nothing', () => {

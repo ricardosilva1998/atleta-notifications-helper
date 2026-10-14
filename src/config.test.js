@@ -174,3 +174,9 @@ test('multistream stays off when MEDIAMTX_API_URL is not an http(s) address (eve
     assert.equal(loadWith({ ...RELAY, MEDIAMTX_API_URL: apiUrl }).config.multistream.enabled, true, apiUrl);
   }
 });
+
+test('the OBS overlay features are switched off until features.overlays is set to true in config.js; YouTube stays on', () => {
+  const { features } = loadWith({}).config;
+  assert.equal(features.overlays, false);
+  assert.equal(features.youtube, true);
+});

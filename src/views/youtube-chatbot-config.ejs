@@ -114,10 +114,10 @@
   <div class="card animate-in animate-in-delay-1" style="margin-bottom: 16px;">
     <h3 style="margin-bottom: 4px;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-      <%= t('ytChatbot.events') %>
+      <%= t(features.overlays ? 'ytChatbot.events' : 'ytChatbot.eventsChat') %>
     </h3>
     <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
-      <%= t('ytChatbot.eventsHint') %>
+      <%= t(features.overlays ? 'ytChatbot.eventsHint' : 'ytChatbot.eventsHintChat') %>
     </p>
 
     <!-- Super Chat -->
@@ -144,15 +144,17 @@
       </div>
       <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;"><%= t('ytChatbot.variables') %> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{message}</code></p>
 
+      <% if (features.overlays) { %>
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_overlay_superchat_enabled" name="yt_overlay_superchat_enabled" value="1" <%= streamer.yt_overlay_superchat_enabled ? 'checked' : '' %>>
           <label for="yt_overlay_superchat_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.showOverlay') %></label>
         </div>
       </div>
+      <% } %>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_superchat', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button>
+        <% if (features.overlays) { %><button type="button" onclick="testEvent('yt_superchat', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button><% } %>
         <button type="button" onclick="testChatOnly('superchat', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testChat') %></button>
         <button type="button" onclick="previewMessage('superchat')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;"><%= t('ytChatbot.preview') %></button>
       </div>
@@ -182,15 +184,17 @@
       </div>
       <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;"><%= t('ytChatbot.variables') %> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{level}</code></p>
 
+      <% if (features.overlays) { %>
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_overlay_member_enabled" name="yt_overlay_member_enabled" value="1" <%= streamer.yt_overlay_member_enabled ? 'checked' : '' %>>
           <label for="yt_overlay_member_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.showOverlay') %></label>
         </div>
       </div>
+      <% } %>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_member', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button>
+        <% if (features.overlays) { %><button type="button" onclick="testEvent('yt_member', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button><% } %>
         <button type="button" onclick="testChatOnly('member', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testChat') %></button>
         <button type="button" onclick="previewMessage('member')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;"><%= t('ytChatbot.preview') %></button>
       </div>
@@ -220,15 +224,17 @@
       </div>
       <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;"><%= t('ytChatbot.variables') %> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{level}</code></p>
 
+      <% if (features.overlays) { %>
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_overlay_giftmember_enabled" name="yt_overlay_giftmember_enabled" value="1" <%= streamer.yt_overlay_giftmember_enabled ? 'checked' : '' %>>
           <label for="yt_overlay_giftmember_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.showOverlay') %></label>
         </div>
       </div>
+      <% } %>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_giftmember', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button>
+        <% if (features.overlays) { %><button type="button" onclick="testEvent('yt_giftmember', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button><% } %>
         <button type="button" onclick="testChatOnly('giftmember', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testChat') %></button>
         <button type="button" onclick="previewMessage('giftmember')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;"><%= t('ytChatbot.preview') %></button>
       </div>
@@ -312,11 +318,13 @@
 
 <script>
 const I18N = <%- JSON.stringify({
-  sending: t('ytChatbot.js.sending'), overlayChatSent: t('ytChatbot.js.overlayChatSent'), overlaySent: t('ytChatbot.js.overlaySent'),
+  sending: t('ytChatbot.js.sending'),
+  ...(features.overlays ? { overlayChatSent: t('ytChatbot.js.overlayChatSent'), overlaySent: t('ytChatbot.js.overlaySent') } : {}), // the overlay test's texts
   error: t('ytChatbot.js.error'), sentToChat: t('ytChatbot.js.sentToChat'), failed: t('ytChatbot.js.failed'),
   emptyTemplate: t('ytChatbot.js.emptyTemplate'), previewLabel: t('ytChatbot.js.previewLabel'),
 }).replace(/</g, '\\u003c') %>;
 
+<% if (features.overlays) { %>
 async function testEvent(eventType, btn) {
   const orig = btn.textContent;
   btn.textContent = I18N.sending;
@@ -337,6 +345,7 @@ async function testEvent(eventType, btn) {
   }
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
 }
+<% } %>
 
 async function testChatOnly(type, btn) {
   const orig = btn.textContent;

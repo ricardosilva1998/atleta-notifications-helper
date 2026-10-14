@@ -68,8 +68,8 @@ async function checkStreamer(streamer) {
     } catch (error) {
       // A dead refresh token can never recover on its own. Clear the scopes so
       // the dashboard prompts for re-authorization, and stop retrying every
-      // poll — this is also the only detector when overlays (and therefore the
-      // EventSub client) are disabled for this streamer.
+      // poll — this is also the only detector when neither the overlay nor the
+      // chatbot is on (and so there is no EventSub client) for this streamer.
       if (error.code === 'INVALID_REFRESH_TOKEN') {
         db.clearStreamerBroadcasterScopes(streamer.id);
         console.warn(`[SubSync] ${streamer.twitch_username}: broadcaster token permanently invalid — cleared scopes, re-authorization required`);

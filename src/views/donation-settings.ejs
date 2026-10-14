@@ -20,7 +20,7 @@
     <%= t('donations.history.title') %>
   </a>
 </div>
-<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;"><%= t('donations.settings.intro') %></p>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;"><%= t(features.overlays ? 'donations.settings.intro' : 'donations.settings.introChat') %></p>
 
 <% if (settingsError) { %>
   <div class="alert alert-danger" role="alert"><%= settingsError %></div>
@@ -106,6 +106,8 @@
   </div>
 </form>
 
+<%# The tip goal is a progress bar shown on stream in OBS: its form, preview, test buttons, OBS link and past goals are hidden while the overlay features are off. %>
+<% if (features.overlays) { %>
 <!-- Tip Goal -->
 <% const _fmt = (v, c) => { try { return new Intl.NumberFormat(_lang, { style: 'currency', currency: c }).format(v); } catch (e) { return c + ' ' + Number(v).toFixed(2); } }; %>
 <div id="tip-goal" class="card animate-in" style="margin-bottom: 16px;">
@@ -251,6 +253,7 @@
     </div>
   </div>
 <% } %>
+<% } %>
 
 <script>
   function copyField(id, btn) {
@@ -260,6 +263,7 @@
   }
 </script>
 
+<% if (features.overlays) { %>
 <script>
   (function () {
     // Texts for this script, translated on the server ({{seconds}} is filled in below)
@@ -362,6 +366,7 @@
     });
   })();
 </script>
+<% } %>
 
 <style>
   .goal-test { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-top: 10px; }

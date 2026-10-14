@@ -194,6 +194,15 @@ const SAMPLES = {
   ],
 };
 
+// These pages show less while the overlay features are off (features.overlays, off by default): each of their
+// samples is rendered both ways.
+const OVERLAY_SWITCH_PAGES = ['dashboard', 'donation-settings', 'timed-notifications'];
+for (const page of OVERLAY_SWITCH_PAGES) {
+  SAMPLES[page] = SAMPLES[page].flatMap(([name, data]) => [true, false].map((overlays) => [
+    `${name}, overlay features ${overlays ? 'on' : 'off'}`, { ...data, features: { ...(data.features || { youtube: true }), overlays } },
+  ]));
+}
+
 // What header.ejs and the layout need besides a page's own data.
 const layout = (lang, translate) => ({
   t: translate || ((key, params) => t(lang, key, params)), lang, SUPPORTED_LANGS, currentPath: '/', isAdmin: false, notifications: [], unreadNotifCount: 0,
@@ -282,6 +291,65 @@ describe('rendered with each message as its key, no English is left on the page'
           }
         }
         assert.deepEqual([...new Set(left)], [], `${where}: words that are not from a key`);
+      }
+    });
+  }
+});
+
+// ── The overlay features switched off (features.overlays) ────────────────
+
+describe('while the overlay features are off, the pages say nothing about the overlays', () => {
+  // The wording that says a text is about the overlays. Left out: the multistream card, which names OBS because the
+  // relay is fed from it, and the layout's own site description (common.siteDescription, the link preview in
+  // header.ejs), which is not a text of these pages.
+  const ABOUT_OVERLAYS = /overlay|\bOBS\b|browser source|vtuber|channel point|tip goal|goal bar|progress bar/i;
+  const NOT_ABOUT_OVERLAYS = /^(?:dashboard\.cards\.multistream\.|common\.siteDescription$)/;
+
+  // Every key a page asks t() for while it renders one sample.
+  async function keysAsked(page, data) {
+    const keys = new Set();
+    const record = (key, params) => { keys.add(key); return t('en', key, params); };
+    await ejs.renderFile(path.join(VIEWS, `${page}.ejs`), { ...layout('en', record), ...data }, { views: [VIEWS] });
+    return keys;
+  }
+  const samples = (page, overlays) => SAMPLES[page].filter(([name]) => name.endsWith(`overlay features ${overlays ? 'on' : 'off'}`));
+
+  for (const page of OVERLAY_SWITCH_PAGES) {
+    test(`${page}: asks for no text about them`, async () => {
+      assert.ok(samples(page, false).length > 0);
+      for (const [name, data] of samples(page, false)) {
+        const about = [...await keysAsked(page, data)].filter((key) => !NOT_ABOUT_OVERLAYS.test(key) && ABOUT_OVERLAYS.test(en[key]));
+        assert.deepEqual(about, [], `${page} / ${name} asks for texts about the overlays`);
+      }
+    });
+  }
+
+  test('switched on, they ask for the texts about them again', async () => {
+    const wanted = {
+      dashboard: ['dashboard.cards.overlay.title', 'dashboard.cards.overlay.customize', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental',
+        'dashboard.youtube.overlayDesc', 'dashboard.cards.giveaways.desc', 'dashboard.cards.sponsors.desc'],
+      'donation-settings': ['donations.settings.intro', 'donations.goal.title', 'donations.goal.testLive', 'donations.goalOverlay.title', 'donations.goal.past'],
+      'timed-notifications': ['sponsors.intro', 'sponsors.builderLink'],
+    };
+    for (const page of OVERLAY_SWITCH_PAGES) {
+      const asked = new Set();
+      for (const [, data] of samples(page, true)) for (const key of await keysAsked(page, data)) asked.add(key);
+      assert.deepEqual(wanted[page].filter((key) => !asked.has(key)), [], `${page} no longer asks for a text it asked for before`);
+    }
+  });
+
+  // The texts that replace them (src/locales): none of them says overlay, in any language.
+  const REPLACEMENTS = [
+    'dashboard.cards.giveaways.descChat', 'dashboard.cards.sponsors.descChat', 'dashboard.cards.donations.setupChat', 'donations.settings.introChat', 'sponsors.introChat',
+    'ytChatbot.eventsChat', 'ytChatbot.eventsHintChat', 'dashboard.youtube.comingSoonChat', 'dashboard.kick.comingSoonChat', 'account.disabled.bodyChat',
+  ];
+  const OVERLAY_IN_ANY_LANGUAGE = /overlay|\bOBS\b|browser|navegador|navigateur|叠加|オーバーレイ|ブラウザ/i;
+  for (const lang of SUPPORTED_LANGS) {
+    test(`${lang}: the texts that replace them do not mention them`, () => {
+      const texts = JSON.parse(fs.readFileSync(path.join(SRC, 'locales', `${lang}.json`), 'utf8'));
+      for (const key of REPLACEMENTS) {
+        assert.ok(typeof texts[key] === 'string' && texts[key].trim() !== '', `${lang}: ${key} is a text`);
+        assert.ok(!OVERLAY_IN_ANY_LANGUAGE.test(texts[key]), `${lang}: ${key} mentions the overlays: ${texts[key]}`);
       }
     });
   }

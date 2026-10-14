@@ -5,7 +5,7 @@
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
   </div>
   <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;"><%= t('account.disabled.title') %></h2>
-  <p style="color: var(--text-secondary); font-size: 16px;"><%= t('account.disabled.body') %></p>
+  <p style="color: var(--text-secondary); font-size: 16px;"><%= t(features.overlays ? 'account.disabled.body' : 'account.disabled.bodyChat') %></p>
   <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;"><%= t('account.disabled.hint') %></p>
   <form method="POST" action="/auth/logout" style="margin-top: 20px;"><button type="submit" class="btn btn-secondary"><%= t('account.disabled.logout') %></button></form>
 </div>
