@@ -63,8 +63,8 @@ function startGiveaway(streamerId, opts) {
     const streamer = db.getStreamerById(streamerId);
     if (streamer && streamer.chatbot_enabled && streamer.twitch_username) {
       const prizeText = row.prize ? ` — Prize: ${row.prize}` : '';
-      chatManager.sendRawMessage(
-        streamer.twitch_username,
+      chatManager.sendMessage(
+        streamerId,
         `\u{1F381} Giveaway started! Type !${normalizedKeyword} to enter${prizeText}`
       );
     }
@@ -127,7 +127,7 @@ function closeGiveaway(streamerId, opts) {
       const { chatManager } = require('./twitchChat');
       const streamer = db.getStreamerById(streamerId);
       if (streamer && streamer.chatbot_enabled && streamer.twitch_username) {
-        chatManager.sendRawMessage(streamer.twitch_username, '\u{1F381} Giveaway closed!');
+        chatManager.sendMessage(streamerId, '\u{1F381} Giveaway closed!');
       }
     } catch (e) {
       console.error('[Giveaway] chat close error:', e.message);
@@ -207,8 +207,8 @@ function pickWinners(giveawayId, streamerId, opts) {
         const streamer = db.getStreamerById(streamerId);
         if (streamer && streamer.chatbot_enabled && streamer.twitch_username) {
           const prizeText = prize ? ` You won ${prize}!` : ' You won the giveaway!';
-          chatManager.sendRawMessage(
-            streamer.twitch_username,
+          chatManager.sendMessage(
+            streamerId,
             `\u{1F389} Congrats @${w.username}!${prizeText}`
           );
         }

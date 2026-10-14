@@ -24,7 +24,7 @@ const dbStub = {
 
 // Synthetic credentials; src/config.js would exit without real env vars.
 const configStub = {
-  bot: { twitchUsername: 'atletabot', twitchToken: 'oauth:synthetic-bot-token' },
+  bot: { twitchUsername: 'atletabot', twitchToken: 'oauth:synthetic-bot-token', chatMessagesPer30s: 20 },
   twitch: { clientId: 'synthetic-app-client-id' },
 };
 
@@ -53,6 +53,39 @@ function stubModule(file, exports) {
 stubModule('./builtinCommands', { handleBuiltinCommand: async () => false });
 stubModule('./giveawayManager', { tryAddEntry: () => false });
 
+// The real chat dispatcher (bot-wide limit, 1.5 s per channel, merged
+// thank-yous), on a clock that only the tests move.
+const chatClock = (() => {
+  let t = 0;
+  let timers = [];
+  return {
+    now: () => t,
+    setTimer: (fn, ms) => { const timer = { at: t + ms, fn }; timers.push(timer); return timer; },
+    clearTimer: (timer) => { timers = timers.filter((x) => x !== timer); },
+    advance(ms) {
+      const end = t + ms;
+      for (;;) {
+        timers.sort((a, b) => a.at - b.at);
+        const next = timers[0];
+        if (!next || next.at > end) break;
+        timers.shift();
+        t = next.at;
+        next.fn();
+      }
+      t = end;
+    },
+  };
+})();
+const realDispatcher = require('./chatDispatcher');
+const dispatcherStub = {
+  ...realDispatcher,
+  created: null, // the options twitchChat.js passed
+  createChatDispatcher(options) {
+    dispatcherStub.created = options;
+    return realDispatcher.createChatDispatcher({ ...options, now: chatClock.now, setTimer: chatClock.setTimer, clearTimer: chatClock.clearTimer });
+  },
+};
+
 const Module = require('module');
 const origLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -61,6 +94,7 @@ Module._load = function (request, parent, isMain) {
     if (request === '../db') return dbStub;
     if (request === '../config') return configStub;
     if (request === 'tmi.js') return { Client: FakeTmiClient };
+    if (request === './chatDispatcher') return dispatcherStub;
   }
   return origLoad.call(this, request, parent, isMain);
 };
@@ -290,6 +324,7 @@ describe('custom commands in chat', () => {
 
   test('a stored cooldown of zero or less still holds the command for 5 seconds, so it cannot be called in a flood', async () => {
     for (const cooldown of [0, -10, 1]) {
+      chatClock.advance(1_500); // the bot's own gap between two lines in one chat
       tmiClient.said.length = 0;
       chatCommands = { [`cmd${cooldown < 0 ? 'n' : ''}${Math.abs(cooldown)}`]: { ...command('x', 'Follow us!'), cooldown } };
       const name = Object.keys(chatCommands)[0];
@@ -304,5 +339,83 @@ describe('custom commands in chat', () => {
     chatCommands = { hi: command('hi', 'hello!') };
     await chat('!HI there', tags());
     assert.deepEqual(tmiClient.said.map((m) => m.text), ['hello!']);
+  });
+});
+
+// ── Everything the bot says goes through the dispatcher (H11) ────────
+
+describe('the bot\'s chat output', () => {
+  const command = (name, response) => ({ id: 1, command: name, response, cooldown: 5, enabled: 1 });
+  const texts = () => tmiClient.said.map((m) => m.text);
+
+  test('uses the bot-wide limit from the configuration', () => {
+    assert.equal(dispatcherStub.created.maxMessages, configStub.bot.chatMessagesPer30s);
+  });
+
+  test('two replies in one chat are 1.5 seconds apart', async () => {
+    chatCommands = { a: command('a', 'first'), b: command('b', 'second') };
+    await chat('!a', tags());
+    await chat('!b', tags({ id: 'msg-2' }));
+    assert.deepEqual(texts(), ['first']);
+    chatClock.advance(1_499);
+    assert.deepEqual(texts(), ['first']);
+    chatClock.advance(1);
+    assert.deepEqual(texts(), ['first', 'second']);
+  });
+
+  test('a moderation warning goes before a waiting thank-you, and that before a sponsor message', async () => {
+    streamer = streamerRow({ mod_action_response: 'warn' });
+    chatManager.sendMessage(1, 'sponsor going now', { priority: 'low' });
+    chatManager.sendMessage(1, 'sponsor waiting', { priority: 'low' });
+    chatManager.sendEventMessage(1, 'raid', { username: 'RaidLeader', viewers: 42 });
+    await chat('look https://example.com', tags());
+    chatClock.advance(10_000);
+    assert.deepEqual(texts(), [
+      'sponsor going now',
+      '@viewer, warning: Link posted without permission',
+      'Welcome raiders from RaidLeader!',
+      'sponsor waiting',
+    ]);
+  });
+
+  test('follows that arrive together are thanked in one line; a dashboard test goes at once, on its own', () => {
+    streamer = streamerRow({ chat_follow_enabled: 1, chat_follow_template: 'Welcome to the pit crew, {username}!' });
+    chatManager.sendEventMessage(1, 'follow', { username: 'A' });
+    chatClock.advance(1_000);
+    chatManager.sendEventMessage(1, 'follow', { username: 'B' });
+    chatManager.sendEventMessage(1, 'follow', { username: '!C' });
+    chatManager.sendEventMessage(1, 'follow', { username: 'TestRacer' }, { test: true });
+    assert.deepEqual(texts(), ['Welcome to the pit crew, TestRacer!']);
+    chatClock.advance(4_000);
+    assert.deepEqual(texts(), ['Welcome to the pit crew, TestRacer!', 'Welcome to the pit crew, A, B and C!']);
+  });
+
+  test('subs share a line only with the same tier and months; bits never do', () => {
+    streamer = streamerRow({
+      chat_sub_enabled: 1, chat_sub_template: '{username}: Tier {tier}, {months} months',
+      chat_bits_enabled: 1, chat_bits_template: '{username} cheered {amount} bits',
+    });
+    chatManager.sendEventMessage(1, 'subscription', { username: 'A', tier: '1', months: 1, message: null });
+    chatManager.sendEventMessage(1, 'subscription', { username: 'B', tier: '1', months: 1, message: null });
+    chatManager.sendEventMessage(1, 'subscription', { username: 'C', tier: '2', months: 1, message: null });
+    chatManager.sendEventMessage(1, 'bits', { username: 'D', amount: 100, message: null });
+    chatManager.sendEventMessage(1, 'bits', { username: 'E', amount: 100, message: null });
+    chatClock.advance(30_000);
+    assert.deepEqual(texts().sort(), ['A and B: Tier 1, 1 months', 'C: Tier 2, 1 months', 'D cheered 100 bits', 'E cheered 100 bits']);
+  });
+
+  test('a disabled account\'s chat gets nothing, and switching a chat off drops what waits for it', async () => {
+    streamer = streamerRow({ enabled: 0 });
+    chatCommands = { socials: command('socials', 'Follow us!') };
+    chatManager.sendMessage(1, 'a giveaway line');
+    await chat('!socials', tags());
+    assert.deepEqual(texts(), []);
+
+    streamer = streamerRow();
+    chatManager.sendMessage(1, 'first');
+    chatManager.sendMessage(1, 'second');
+    chatManager.stopForStreamer(1);
+    chatClock.advance(5_000);
+    assert.deepEqual(texts(), ['first']);
   });
 });

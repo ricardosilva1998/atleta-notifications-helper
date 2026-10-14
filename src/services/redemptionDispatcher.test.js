@@ -87,7 +87,7 @@ describe('the redemption flow', () => {
       }
       if (from === DISPATCHER_FILE) {
         if (request === 'fs') return { ...realFs, existsSync: (p) => mediaOnDisk.has(path.basename(p)) };
-        if (request === './twitchChat') return { chatManager: { sendRawMessage: (channel, message) => chatLines.push({ channel, message }) } };
+        if (request === './twitchChat') return { chatManager: { sendMessage: (streamerId, message, options) => chatLines.push({ streamerId, message, options }) } };
       }
       return saved.load.call(this, request, parent, isMain);
     };
@@ -204,7 +204,8 @@ describe('the redemption flow', () => {
       await flush();
 
       assert.deepEqual(clips.map((c) => c.twitchRedemptionId), [event.twitchRedemptionId]);
-      assert.deepEqual(chatLines.map((l) => l.message), ['Viewer redeemed Air Horn']);
+      // To the streamer's chat at the default (thank-you) priority.
+      assert.deepEqual(chatLines, [{ streamerId: id, message: 'Viewer redeemed Air Horn', options: undefined }]);
       assert.deepEqual(helix.statusesOf(event), ['FULFILLED']);
       assert.deepEqual(outcomes(event), ['played']);
     });

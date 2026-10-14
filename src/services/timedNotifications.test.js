@@ -20,7 +20,7 @@ const dbStub = {
   getOverlayEnabledStreamers: () => [],
 };
 const chatSends = [];
-const chatStub = { chatManager: { sendRawMessage: (channel, text) => chatSends.push({ channel, text }) } };
+const chatStub = { chatManager: { sendMessage: (streamerId, text, options) => chatSends.push({ streamerId, text, ...options }) } };
 
 const realLog = console.log;
 const origLoad = Module._load;
@@ -135,7 +135,7 @@ describe('sponsor chat messages', () => {
     t.mock.timers.tick(59_999);
     assert.equal(chatSends.length, 0);
     t.mock.timers.tick(1);
-    assert.deepEqual(chatSends, [{ channel: 'somechannel', text: 'Thanks to our sponsors' }]);
+    assert.deepEqual(chatSends, [{ streamerId: STREAMER_ID, text: 'Thanks to our sponsors', priority: 'low' }], 'sponsor lines are the least important');
   });
 
   test('zero is every minute as well', (t) => {

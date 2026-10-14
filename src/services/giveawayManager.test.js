@@ -124,7 +124,7 @@ Module._load = function (request, parent, isMain) {
   ) {
     return dbStub;
   }
-  if (request === './twitchChat') return { chatManager: { sendRawMessage(channel, line) { announced.chat.push(line); } } };
+  if (request === './twitchChat') return { chatManager: { sendMessage(streamerId, line) { announced.chat.push(line); } } };
   if (request === './overlayBus') return { emit(channel, event) { announced.overlay.push(event); } };
   return origLoad(request, parent, isMain);
 };

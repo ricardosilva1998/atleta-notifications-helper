@@ -722,8 +722,8 @@ router.post('/overlay/test/:eventType', limitTests, (req, res) => {
   // Fire overlay alert
   bus.emit(`overlay:${req.streamer.id}`, event);
 
-  // Fire chatbot message in sync
-  chatManager.sendEventMessage(req.streamer.id, type, event.data);
+  // Fire chatbot message in sync (a test is never merged with real thank-yous)
+  chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
 
   res.json({ ok: true });
 });
@@ -1137,7 +1137,8 @@ router.post('/chatbot/test/custom', limitTests, (req, res) => {
   }
   try {
     const { chatManager } = require('../services/twitchChat');
-    chatManager.sendRawMessage(req.streamer.twitch_username, message);
+    // Sent like the custom command reply it tries out.
+    chatManager.sendMessage(req.streamer.id, message, { priority: 'high' });
     res.json({ ok: true });
   } catch (e) {
     console.error('[Dashboard] Test chat message failed:', e.message);
@@ -1162,7 +1163,7 @@ router.post('/chatbot/test/:eventType', limitTests, (req, res) => {
 
   try {
     const { chatManager } = require('../services/twitchChat');
-    chatManager.sendEventMessage(req.streamer.id, test.eventType, test.data);
+    chatManager.sendEventMessage(req.streamer.id, test.eventType, test.data, { test: true });
     res.json({ ok: true });
   } catch (e) {
     console.error('[Dashboard] Test chat message failed:', e.message);
@@ -1671,7 +1672,7 @@ router.post('/sponsor-messages/:id/test', limitTests, (req, res) => {
   const { chatManager } = require('../services/twitchChat');
   let fullMessage = msg.message_text;
   if (msg.url) fullMessage += ' ' + msg.url;
-  chatManager.sendRawMessage(req.streamer.twitch_username, fullMessage);
+  chatManager.sendMessage(req.streamer.id, fullMessage, { priority: 'low' });
   res.json({ ok: true });
 });
 

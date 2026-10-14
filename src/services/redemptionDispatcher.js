@@ -86,8 +86,8 @@ async function handleRedemption(streamerId, eventData) {
       const { fulfillRedemption } = require('./twitchRewards');
       await fulfillRedemption(streamer, twitchRewardId, twitchRedemptionId, 'CANCELED');
       if (streamer && streamer.twitch_username && streamer.chatbot_enabled) {
-        chatManager.sendRawMessage(
-          streamer.twitch_username,
+        chatManager.sendMessage(
+          streamerId,
           `[Atleta] Reward "${reward.title}" had a missing media file — redemption refunded.`
         );
       }
@@ -129,7 +129,7 @@ async function handleRedemption(streamerId, eventData) {
         title: reward.title,
         cost: rewardCost,
       });
-      if (msg) chatManager.sendRawMessage(streamer.twitch_username, msg);
+      if (msg) chatManager.sendMessage(streamerId, msg);
     }
   }
 

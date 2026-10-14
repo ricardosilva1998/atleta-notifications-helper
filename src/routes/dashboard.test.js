@@ -79,7 +79,7 @@ const chatStub = {
   chatManager: {
     isConnected: () => false,
     sendEventMessage: (...args) => chatCalls.push(['event', ...args]),
-    sendRawMessage: (...args) => chatCalls.push(['raw', ...args]),
+    sendMessage: (...args) => chatCalls.push(['say', ...args]),
   },
 };
 // The real one starts a polling interval when it loads.
@@ -956,7 +956,7 @@ describe('the test buttons', () => {
     const first = await customTest(id, 'hello chat');
     assert.equal(first.status, 200);
     assert.deepEqual(first.json(), { ok: true });
-    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'hello chat']]);
+    assert.deepEqual(chatCalls, [['say', id, 'hello chat', { priority: 'high' }]], 'sent like a command reply');
 
     for (const route of testRoutes) {
       const res = await post(route, id);
@@ -966,7 +966,7 @@ describe('the test buttons', () => {
       assert.match(body.error, /^Please wait [1-5] seconds before sending another test\.$/, route);
       assert.match(res.headers['retry-after'], /^[1-5]$/, route);
     }
-    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'hello chat']], 'the bot was not asked again');
+    assert.deepEqual(chatCalls, [['say', id, 'hello chat', { priority: 'high' }]], 'the bot was not asked again');
   });
 
   test('each streamer has their own cooldown', async () => {
@@ -1016,27 +1016,27 @@ describe('the test buttons', () => {
     const id = addStreamer({ twitch_username: 'somechannel' });
     const res = await customTest(id, 'hi\r\nPRIVMSG #other :spam');
     assert.equal(res.status, 200);
-    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'hi PRIVMSG #other :spam']]);
+    assert.deepEqual(chatCalls, [['say', id, 'hi PRIVMSG #other :spam', { priority: 'high' }]]);
   });
 
   test('the text can also come in the body', async () => {
     const id = addStreamer({ twitch_username: 'somechannel' });
     const res = await post('/dashboard/chatbot/test/custom', id, { body: { response: 'from the body' } });
     assert.equal(res.status, 200);
-    assert.deepEqual(chatCalls, [['raw', 'somechannel', 'from the body']]);
+    assert.deepEqual(chatCalls, [['say', id, 'from the body', { priority: 'high' }]]);
   });
 
   test('a failure to send is a generic message, not the internal error text', async () => {
     const id = addStreamer({ twitch_username: 'somechannel' });
-    const original = chatStub.chatManager.sendRawMessage;
-    chatStub.chatManager.sendRawMessage = () => { throw new Error('socket at 10.0.0.5 is on fire'); };
+    const original = chatStub.chatManager.sendMessage;
+    chatStub.chatManager.sendMessage = () => { throw new Error('socket at 10.0.0.5 is on fire'); };
     try {
       const res = await customTest(id, 'hello');
       assert.equal(res.status, 500);
       assert.deepEqual(res.json(), { ok: false, error: 'The test message could not be sent.' });
       assert.ok(!res.text.includes('10.0.0.5'));
     } finally {
-      chatStub.chatManager.sendRawMessage = original;
+      chatStub.chatManager.sendMessage = original;
     }
   });
 
@@ -1044,7 +1044,19 @@ describe('the test buttons', () => {
     const id = addStreamer({ twitch_username: 'somechannel' });
     const res = await post('/dashboard/overlay/test/follow', id);
     assert.deepEqual(res.json(), { ok: true });
-    assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }]]);
+    assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]], 'a test is never merged with real thank-yous');
+  });
+
+  test('the chatbot test sends the thank-you as a test, and the sponsor test as a sponsor message', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    assert.deepEqual((await post('/dashboard/chatbot/test/follow', id)).json(), { ok: true });
+    assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]]);
+
+    const other = addStreamer({ twitch_username: 'otherchannel' });
+    db.addSponsorMessage(other, 'Thanks to our sponsors', 'https://example.com');
+    const messageId = db.getSponsorMessages(other)[0].id;
+    assert.deepEqual((await post(`/dashboard/sponsor-messages/${messageId}/test`, other)).json(), { ok: true });
+    assert.deepEqual(chatCalls[1], ['say', other, 'Thanks to our sponsors https://example.com', { priority: 'low' }]);
   });
 });
 

@@ -104,9 +104,9 @@ function startChatRotation(streamerId) {
 
     try {
       const { chatManager } = require('./twitchChat');
-      if (streamer.twitch_username) {
-        chatManager.sendRawMessage(streamer.twitch_username, fullMessage);
-      }
+      // The least important chat line: it waits behind everything else, and
+      // one that waits more than a minute is dropped (chatDispatcher.js).
+      chatManager.sendMessage(streamerId, fullMessage, { priority: 'low' });
     } catch (e) {
       console.error('[Sponsor Chat] Failed to send chat message:', e.message);
     }

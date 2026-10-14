@@ -6,17 +6,45 @@ const { isExempt, runFilters, getAction, executeAction, handleModCommand, activa
 const { isStreamerDisabled } = require('./streamerAccess');
 const { commandCooldownSeconds } = require('./chatCommands');
 const { fillChatTemplate } = require('./chatTemplate');
+const { createChatDispatcher } = require('./chatDispatcher');
 
 let client = null;
+// Every line the bot posts goes out through it: the bot-wide rate limit, the
+// gap per channel, priorities and merged thank-yous (chatDispatcher.js).
+// Made by connect().
+let dispatcher = null;
 const channelMap = new Map(); // channelName -> streamerId
 const cooldowns = new Map(); // "streamerId:command" -> timestamp
 
 const chatTypeMap = { subscription: 'sub', follow: 'follow', giftsub: 'giftsub', bits: 'bits', donation: 'donation', raid: 'raid' };
 
+// Thank-yous of these kinds that arrive close together share one line
+// ("Welcome to the pit crew, A, B and C!"). The others carry amounts or viewer
+// counts (bits, gifts, donations, raids) that would read as a total.
+const MERGED_EVENT_TYPES = new Set(['follow', 'subscription']);
+
 function getStreamerIdForChannel(channel) {
   const clean = channel.replace(/^#/, '').toLowerCase();
   return channelMap.get(clean);
 }
+
+// Queues a line for a channel. priority: 'high' (moderation notices, command
+// replies), 'normal' (thank-yous, announcements) or 'low' (sponsor and timed
+// messages). merge: see chatDispatcher.js.
+function post(channel, text, priority, merge) {
+  if (!client || !dispatcher) return;
+  dispatcher.enqueue({ channel, text, priority, merge });
+}
+
+// What the moderation and command helpers get in place of the tmi.js client:
+// their warnings, !permit and !slow answers, raid protection notices and
+// command replies go out through the dispatcher as the most important messages.
+const replies = {
+  say(channel, text) {
+    post(channel, text, 'high');
+    return Promise.resolve();
+  },
+};
 
 async function handleMessage(channel, tags, message, self) {
   if (self) return;
@@ -25,14 +53,14 @@ async function handleMessage(channel, tags, message, self) {
   if (!streamerId) return;
 
   const streamer = db.getStreamerById(streamerId);
-  if (!streamer) return;
+  if (!streamer || isStreamerDisabled(streamer)) return;
 
   // Banned words always enforced (except mods/broadcaster)
   if (!(tags.mod || tags.badges?.broadcaster) && streamer.mod_banned_words_enabled) {
     const bwViolation = checkBannedWords(message, streamer.id);
     if (bwViolation) {
       const action = getAction(channel, tags.username, streamer);
-      await executeAction(client, channel, tags, action, bwViolation.reason, streamer);
+      await executeAction(replies, channel, tags, action, bwViolation.reason, streamer);
       return;
     }
   }
@@ -42,10 +70,10 @@ async function handleMessage(channel, tags, message, self) {
     const violation = await runFilters(channel, tags, message, streamer);
     if (violation) {
       if (violation.flagOnly) {
-        client.say(channel, `[Mod] ${violation.reason}`).catch(() => {});
+        post(channel, `[Mod] ${violation.reason}`, 'high');
       } else {
         const action = getAction(channel, tags.username, streamer);
-        await executeAction(client, channel, tags, action, violation.reason, streamer);
+        await executeAction(replies, channel, tags, action, violation.reason, streamer);
         return;
       }
     }
@@ -61,7 +89,7 @@ async function handleMessage(channel, tags, message, self) {
   }
 
   // Mod-only commands (!permit, !slow, !slowoff)
-  if (await handleModCommand(client, channel, tags, message, streamer)) return;
+  if (await handleModCommand(replies, channel, tags, message, streamer)) return;
 
   // Giveaway entry hook — keyword owned by the active giveaway while one is open
   if (message.startsWith('!')) {
@@ -85,7 +113,7 @@ async function handleMessage(channel, tags, message, self) {
 
   // Built-in commands (followage, 8ball, rps, etc.)
   const { handleBuiltinCommand } = require('./builtinCommands');
-  if (await handleBuiltinCommand(client, channel, tags, commandName, args, streamer)) return;
+  if (await handleBuiltinCommand(replies, channel, tags, commandName, args, streamer)) return;
 
   // Built-in !song command
   if (commandName === 'song') {
@@ -105,7 +133,7 @@ async function handleMessage(channel, tags, message, self) {
         case 'not_connected': msg = `Spotify not connected`; break;
         default: msg = `Could not fetch current song`;
       }
-      if (client) client.say(channel, msg).catch(() => {});
+      post(channel, msg, 'high');
     }).catch(() => {});
     return;
   }
@@ -124,9 +152,7 @@ async function handleMessage(channel, tags, message, self) {
 
   cooldowns.set(cooldownKey, now);
   console.log(`[Chat] Sending response for !${commandName} in ${channel}`);
-  client.say(channel, cmd.response).catch((err) => {
-    console.error(`[Chat] Failed to send !${commandName} response:`, err.message);
-  });
+  post(channel, cmd.response, 'high');
 }
 
 const chatManager = {
@@ -138,6 +164,12 @@ const chatManager = {
     }
 
     console.log(`[Chat] Connecting as ${twitchUsername}...`);
+
+    if (dispatcher) dispatcher.clear();
+    dispatcher = createChatDispatcher({
+      send: (channel, line) => (client ? client.say(channel, line) : Promise.reject(new Error('Not connected'))),
+      maxMessages: config.bot.chatMessagesPer30s,
+    });
 
     client = new tmi.Client({
       options: { debug: false },
@@ -193,6 +225,10 @@ const chatManager = {
       client.disconnect().catch(() => {});
       client = null;
     }
+    if (dispatcher) {
+      dispatcher.clear();
+      dispatcher = null;
+    }
     channelMap.clear();
     cooldowns.clear();
   },
@@ -210,6 +246,9 @@ const chatManager = {
     if (!client) return;
     const clean = channel.toLowerCase();
     channelMap.delete(clean);
+    // Whatever still waits for this chat (the chatbot was switched off, or the
+    // account was disabled) is not sent.
+    if (dispatcher) dispatcher.dropChannel(clean);
     client.part(clean).catch((err) => {
       console.error(`[Chat] Failed to leave #${clean}:`, err.message);
     });
@@ -226,7 +265,9 @@ const chatManager = {
     return Array.from(channelMap.keys());
   },
 
-  sendEventMessage(streamerId, eventType, data) {
+  // An event thank-you from the streamer's template. Follows and subs that
+  // arrive together share a line; a dashboard test (options.test) never does.
+  sendEventMessage(streamerId, eventType, data, options = {}) {
     if (!client) return;
 
     const streamer = db.getStreamerById(streamerId);
@@ -242,12 +283,20 @@ const chatManager = {
     if (!template) return;
 
     // Names and messages come from viewers: see chatTemplate.js.
-    const message = fillChatTemplate(template, data || {});
-    if (!message) return;
-
-    client.say(streamer.twitch_username, message).catch((err) => {
-      console.error(`[Chat] Failed to send event message for streamer ${streamerId}:`, err.message);
-    });
+    const values = data || {};
+    const name = values.username;
+    if (!options.test && MERGED_EVENT_TYPES.has(eventType) && typeof name === 'string' && name) {
+      // Same kind and same details (tier, months, message): only the names differ.
+      const details = { ...values };
+      delete details.username;
+      post(streamer.twitch_username, null, 'normal', {
+        key: `${eventType}:${JSON.stringify(details)}`,
+        name,
+        render: (names) => fillChatTemplate(template, { ...values, username: names }),
+      });
+      return;
+    }
+    post(streamer.twitch_username, fillChatTemplate(template, values), 'normal');
   },
 
   // Real raids only (EventSub). It is separate from sendEventMessage because the
@@ -256,17 +305,20 @@ const chatManager = {
   startRaidProtection(streamerId) {
     if (!client) return;
     const streamer = db.getStreamerById(streamerId);
-    if (!streamer || !streamer.chatbot_enabled || !streamer.twitch_username) return;
-    activateRaidProtection(client, streamer.twitch_username, streamer).catch((err) => {
+    if (!streamer || isStreamerDisabled(streamer) || !streamer.chatbot_enabled || !streamer.twitch_username) return;
+    activateRaidProtection(replies, streamer.twitch_username, streamer).catch((err) => {
       console.error(`[Mod] Raid protection failed for streamer ${streamerId}:`, err.message);
     });
   },
 
-  sendRawMessage(channel, message) {
+  // Any other line for a streamer's chat: giveaway and redemption messages
+  // ('normal', the default), sponsor and timed messages ('low'), the dashboard's
+  // custom-command test ('high'). A disabled account's chat gets nothing.
+  sendMessage(streamerId, text, { priority = 'normal' } = {}) {
     if (!client) return;
-    client.say(channel, message).catch(err => {
-      console.error(`[Chat] Failed to send timed message to ${channel}:`, err.message);
-    });
+    const streamer = db.getStreamerById(streamerId);
+    if (!streamer || isStreamerDisabled(streamer) || !streamer.twitch_username) return;
+    post(streamer.twitch_username, text, priority);
   },
 
   // Backward-compatible aliases

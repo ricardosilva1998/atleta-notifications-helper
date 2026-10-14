@@ -14,6 +14,12 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// BOT_CHAT_RATE_LIMIT as a whole number from 1 to 100; 20 when unset or unreadable.
+function chatRateLimit(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 100) : 20;
+}
+
 module.exports = {
   discord: {
     token: process.env.DISCORD_TOKEN,
@@ -27,6 +33,11 @@ module.exports = {
   bot: {
     twitchUsername: process.env.BOT_TWITCH_USERNAME || '',
     twitchToken: process.env.BOT_TWITCH_TOKEN || '',
+    // Messages the shared Twitch bot may post in any 30 seconds, across all
+    // channels (services/chatDispatcher.js). Twitch allows an ordinary account
+    // 20; raise BOT_CHAT_RATE_LIMIT (up to 100) only if the bot's account may
+    // post more.
+    chatMessagesPer30s: chatRateLimit(process.env.BOT_CHAT_RATE_LIMIT),
   },
   youtube: {
     apiKey: process.env.YOUTUBE_API_KEY || '',
