@@ -126,7 +126,6 @@ const PAGES = [
   (t) => `/overlay/sponsors/${t}`,
   (t) => `/overlay/goal/${t}`,
   (t) => `/overlay/iracing/standings/${t}`,
-  (t) => `/overlay/debug/${t}`,
   (t) => `/overlay/events/${t}`,
   (t) => `/overlay/sponsors/events/${t}`,
   (t) => `/overlay/goal/events/${t}`,
@@ -140,7 +139,6 @@ describe('overlay links of a disabled account', () => {
     assert.equal(page.status, 200);
     assert.match(page.text, /window\.OVERLAY_TOKEN/);
     assert.equal((await get(`/overlay/goal/${token}`)).status, 200);
-    assert.equal((await get(`/overlay/debug/${token}`)).status, 200);
   });
 
   test('every link answers as an unknown token once the account is disabled', async () => {
@@ -274,5 +272,15 @@ describe('the config an overlay receives when it connects', () => {
     UPDATE_COLUMNS(id, { overlay_volume: 0.35, overlay_follow_duration: 11 });
     const { config } = await firstEvent(token);
     assert.deepEqual(config, buildOverlayConfig(db.getStreamerById(id)));
+  });
+
+  test('the diagnostic endpoint that listed the streamer id and the sponsor names is gone', async () => {
+    const { id, token } = addStreamer();
+    db.db.prepare('INSERT INTO sponsor_images (streamer_id, filename, display_name, enabled) VALUES (?, ?, ?, 1)').run(id, 'a.png', 'Secret Sponsor Name');
+    for (const link of [`/overlay/debug/${token}`, `/overlay/debug/${encodeURIComponent('x')}`]) {
+      const res = await get(link);
+      assert.equal(res.status, 404, link);
+      assert.doesNotMatch(res.text, /Secret Sponsor Name|streamerId/, link);
+    }
   });
 });

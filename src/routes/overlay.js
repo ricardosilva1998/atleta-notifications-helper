@@ -88,22 +88,6 @@ router.get('/sounds/:token/:type', async (req, res) => {
   });
 });
 
-// Diagnostic endpoint — check overlay status
-router.get('/debug/:token', (req, res) => {
-  const streamer = db.getStreamerByOverlayToken(req.params.token);
-  if (!streamer) return res.status(404).json({ error: 'Invalid token' });
-
-  const images = db.getEnabledSponsorImages(streamer.id);
-  const designs = db.getAllOverlayDesigns(streamer.id);
-  res.json({
-    streamerId: streamer.id,
-    overlayEnabled: streamer.overlay_enabled,
-    sponsorRotationEnabled: streamer.sponsor_rotation_enabled,
-    enabledImages: images.map(i => ({ id: i.id, name: i.display_name, duration: i.display_duration, enabled: i.enabled })),
-    designs: designs.map(d => ({ type: d.event_type, animation: d.sponsor_animation, position: d.card_position })),
-  });
-});
-
 // Clear overlay — removes all queued alerts and cards
 router.post('/clear', (req, res) => {
   if (!req.streamer) return res.status(401).json({ error: 'Not authenticated' });
