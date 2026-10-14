@@ -878,10 +878,15 @@ router.get('/donations/history', (req, res) => {
     months.push({ month: key, total: byMonth[key] ? byMonth[key].total : 0, count: byMonth[key] ? byMonth[key].count : 0 });
   }
 
+  // A donation with no donor name is stored under the name 'Anonymous' (db.logDonation); the
+  // page shows it as the translated word, so those rows read like the rest of the page.
+  const donations = db.getDonations(req.streamer.id, { ...f, limit: perPage, offset: (page - 1) * perPage })
+    .map((d) => (d.donor_name === 'Anonymous' ? { ...d, donor_name: null } : d));
+
   res.render('donation-history', {
     streamer: req.streamer,
     filters: f,
-    donations: db.getDonations(req.streamer.id, { ...f, limit: perPage, offset: (page - 1) * perPage }),
+    donations,
     total, page, pages, totals, months, chartCurrency,
     otherCurrencies: yearTotals.filter(t => t.currency !== chartCurrency).map(t => t.currency),
   });

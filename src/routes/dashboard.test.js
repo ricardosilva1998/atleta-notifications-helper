@@ -2057,9 +2057,9 @@ describe('the AI analysis of a reported issue', () => {
   });
 });
 
-// ── What the giveaway, sponsor-message and server-list routes say is in the streamer's language ──
+// ── What the giveaway, sponsor-message, donation-history and server-list routes say is in the streamer's language ──
 
-describe('the messages of the giveaway, sponsor-message and server-list routes', () => {
+describe('the messages and names those routes show', () => {
   let id;
   beforeEach(() => { id = addStreamer(); });
 
@@ -2101,6 +2101,18 @@ describe('the messages of the giveaway, sponsor-message and server-list routes',
 
     const test = await request('POST', '/dashboard/sponsor-messages/999999/test', { streamer: id });
     assert.deepEqual(test.json(), { ok: false, error: t('en', 'sponsors.error.notFound') });
+  });
+
+  test('the donation history shows a donor with no name as the translated word, and keeps real names', async () => {
+    db.logDonation(id, { source: 'paypal', donor_name: '', amount: 5, currency: 'EUR', external_id: 'route-anon-1' });
+    db.logDonation(id, { source: 'paypal', donor_name: 'Synthetic Donor', amount: 6, currency: 'EUR', external_id: 'route-anon-2' });
+    const rows = (await request('GET', '/dashboard/donations/history', { streamer: id, json: true })).json().locals.donations;
+    assert.deepEqual(rows.map((d) => d.donor_name).sort(), ['Synthetic Donor', null]);
+    const page = await request('GET', '/dashboard/donations/history', { streamer: id });
+    assert.ok(page.text.includes(`<td class="dh-donor">${t('en', 'donations.history.anonymous')}</td>`));
+    assert.ok(page.text.includes('<td class="dh-donor">Synthetic Donor</td>'));
+    // the stored name and the CSV keep what was recorded
+    assert.equal(db.getDonations(id, { sinceDays: 30, limit: 10, offset: 0 }).filter((d) => d.donor_name === 'Anonymous').length, 1);
   });
 
   test('a server the bot cannot see is listed under a translated name', async () => {
