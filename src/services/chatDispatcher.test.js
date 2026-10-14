@@ -230,6 +230,16 @@ describe('merged thank-yous (H11)', () => {
     assert.ok(sent[1].line.includes(longName('c')));
   });
 
+  test('once a line is full, later names join the next waiting line instead of starting more', () => {
+    const chat = dispatcher();
+    const longName = (letter) => letter.repeat(200);
+    for (const letter of ['a', 'b', 'c']) follow(chat, longName(letter));
+    assert.equal(follow(chat, longName('d')), 'merged', 'd joins the line c started');
+    assert.equal(chat.pending(), 2);
+    time.advance(20_000);
+    assert.deepEqual(sent.map((s) => s.line.length), [429, 429]);
+  });
+
   test('a thank-you still waiting because of the limits keeps taking names', () => {
     const chat = dispatcher({ maxMessages: 1 });
     chat.enqueue({ channel: 'x', text: 'uses the only token' });

@@ -244,8 +244,10 @@ function createChatDispatcher(options = {}) {
     const t = now();
 
     if (merge) {
-      const open = waiting.find((e) => e.key === key && e.merge && e.merge.key === merge.key);
-      if (open && mergeInto(open, merge.name)) return 'merged';
+      // Any waiting line of the same kind in this channel that still has room.
+      for (const open of waiting) {
+        if (open.key === key && open.merge && open.merge.key === merge.key && mergeInto(open, merge.name)) return 'merged';
+      }
     }
     const line = chatLine(merge ? merge.render([merge.name]) : message.text);
     if (!line) return 'dropped';
