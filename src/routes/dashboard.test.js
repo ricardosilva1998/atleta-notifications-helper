@@ -21,6 +21,10 @@ for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET'
   process.env[key] = process.env[key] || 'test';
 }
 
+// The overlay pages, cards and links are hidden while config.features.overlays is off, which is its
+// default. These tests cover those pages, so the switch is on for the file; the last section turns it off.
+require('../config').features.overlays = true;
+
 const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
 const DASHBOARD_FILE = path.join(__dirname, 'dashboard.js');
@@ -264,7 +268,7 @@ before(async () => {
     res.locals.t = (key, params) => t('en', key, params);
     res.locals.esc = esc; // as server.js: the views print their sentences with rich() and escape their data with esc()
     res.locals.rich = richFor(res.locals.t);
-    res.locals.features = { youtube: true };
+    res.locals.features = require('../config').features; // as server.js
     res.locals.streamer = req.streamer || null;
     if (req.get('x-test-render') === 'json') res.render = (view, locals) => res.json({ view, locals });
     next();
@@ -3004,6 +3008,96 @@ describe('channel point rewards', () => {
       assert.equal((await patch(reward, { cost: 0 })).json().error, t('en', 'redemptions.error.costRange'));
       assert.equal((await patch(reward + 9999, { title: 'Fine title' })).json().error, t('en', 'redemptions.error.notFound'));
       assert.equal((await del(reward + 9999)).json().error, t('en', 'redemptions.error.notFound'));
+    });
+  });
+});
+
+// ── The OBS overlay features switched off (config.features.overlays) ─────
+
+describe('with the OBS overlay features switched off', () => {
+  const { features } = require('../config');
+  beforeEach(() => { features.overlays = false; });
+  afterEach(() => { features.overlays = true; });
+
+  // The pages that exist only for the overlays, and the view each is while the features are on.
+  const OVERLAY_PAGES = {
+    '/dashboard/overlay': 'overlay-config',
+    '/dashboard/overlay-builder': 'overlay-builder',
+    '/dashboard/redemptions': 'redemptions-config',
+    '/dashboard/vtuber-preview': 'vtuber',
+  };
+
+  test('the pages that exist only for the overlays send the streamer back to the dashboard', async () => {
+    const id = addStreamer({ overlay_enabled: 1, overlay_token: 'synthetic-token-off-1' });
+    for (const page of Object.keys(OVERLAY_PAGES)) {
+      const res = await request('GET', page, { streamer: id, json: true });
+      assert.equal(res.status, 302, page);
+      assert.equal(res.headers.location, '/dashboard', page);
+    }
+  });
+
+  test('switched on, the same addresses are the overlay pages', async () => {
+    features.overlays = true;
+    const id = addStreamer({ overlay_enabled: 1, overlay_token: 'synthetic-token-off-2' });
+    for (const [page, view] of Object.entries(OVERLAY_PAGES)) {
+      const res = await request('GET', page, { streamer: id, json: true });
+      assert.equal(res.status, 200, page);
+      assert.equal(res.json().view, view, page);
+    }
+  });
+
+  test('a visitor who is not logged in still goes to the login page, as before', async () => {
+    for (const page of Object.keys(OVERLAY_PAGES)) {
+      const res = await request('GET', page);
+      assert.equal(res.headers.location, '/auth/login', page);
+    }
+  });
+
+  test('the POST routes of those pages are as they were (no page reaches them, an old tab may)', async () => {
+    const id = addStreamer({ overlay_enabled: 1, overlay_follow_duration: 5 });
+    const res = await request('POST', '/dashboard/overlay', { streamer: id, form: { overlay_enabled: '1', overlay_follow_duration: '20' } });
+    assert.equal(res.status, 302);
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 20);
+  });
+
+  describe('saving the YouTube chatbot', () => {
+    const SWITCHES = ['yt_overlay_superchat_enabled', 'yt_overlay_member_enabled', 'yt_overlay_giftmember_enabled'];
+    const storedSwitches = (id) => SWITCHES.map((column) => db.getStreamerById(id)[column]);
+
+    test('keeps the stored overlay switches (it must not switch the alerts off), whatever the form says', async () => {
+      const id = addStreamer({ yt_overlay_superchat_enabled: 1, yt_overlay_member_enabled: 0, yt_overlay_giftmember_enabled: 1 });
+      const res = await request('POST', '/dashboard/youtube-chatbot', {
+        streamer: id,
+        form: { yt_chatbot_enabled: '1', yt_chat_superchat_enabled: '1', yt_chat_superchat_template: 'Thanks {username}!', yt_overlay_member_enabled: '1' },
+      });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/dashboard/youtube-chatbot');
+      assert.deepEqual(storedSwitches(id), [1, 0, 1]);
+      const row = db.getStreamerById(id);
+      assert.equal(row.yt_chatbot_enabled, 1);
+      assert.equal(row.yt_chat_superchat_enabled, 1);
+      assert.equal(row.yt_chat_member_enabled, 0, 'the chat settings are saved as before: a switch the form leaves out is off');
+      assert.equal(row.yt_chat_superchat_template, 'Thanks {username}!');
+    });
+
+    test('tells an overlay that is open the alerts it already had', async () => {
+      const bus = require('../services/overlayBus');
+      const id = addStreamer({ overlay_enabled: 1, yt_overlay_superchat_enabled: 1, yt_overlay_member_enabled: 0, yt_overlay_giftmember_enabled: 1 });
+      const seen = [];
+      const listener = (event) => seen.push(event);
+      bus.on(`overlay:${id}`, listener);
+      try { await request('POST', '/dashboard/youtube-chatbot', { streamer: id, form: { yt_chatbot_enabled: '1' } }); } finally { bus.off(`overlay:${id}`, listener); }
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0].config.yt_superchat.enabled, true);
+      assert.equal(seen[0].config.yt_member.enabled, false);
+      assert.equal(seen[0].config.yt_giftmember.enabled, true);
+    });
+
+    test('switched on, writes the switches the form sends, as before', async () => {
+      features.overlays = true;
+      const id = addStreamer({ yt_overlay_superchat_enabled: 1, yt_overlay_member_enabled: 0, yt_overlay_giftmember_enabled: 1 });
+      await request('POST', '/dashboard/youtube-chatbot', { streamer: id, form: { yt_overlay_member_enabled: '1' } });
+      assert.deepEqual(storedSwitches(id), [0, 1, 0]);
     });
   });
 });

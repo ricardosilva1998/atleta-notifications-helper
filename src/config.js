@@ -118,6 +118,12 @@ module.exports = {
   },
   features: {
     youtube: true,
+    // The OBS overlay features: the alert overlay and its settings page, the Overlay Builder,
+    // sponsor images and the tip-goal bar on stream, Channel Point Rewards, the VTuber source
+    // and the giveaway winner card. Off hides every page, card and link that leads to them
+    // (routes/dashboard.js and the views); the OBS links themselves keep working. Set it to
+    // true to bring everything back.
+    overlays: false,
   },
   // Most Twitch channels one Discord server may watch. Adding past it is
   // refused; a server already over it keeps what it has.

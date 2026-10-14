@@ -98,6 +98,16 @@ function refuseUpload(req, res, bytes, { replacing = 0, media = true } = {}) {
 // disabled (a disabled one is shown the account-disabled page instead).
 router.use(requireActiveStreamer);
 
+// A page that exists only for the OBS overlay features (the overlay settings, the Overlay
+// Builder, Channel Point Rewards, the VTuber preview). While config.features.overlays is off
+// it sends the streamer back to the dashboard, which no longer links to it. The POST routes
+// behind these pages stay as they are: nothing links to them either, and the OBS links
+// (/overlay/*, /vtuber/*) are not served from here.
+function overlayPage(req, res, next) {
+  if (config.features.overlays) return next();
+  res.redirect('/dashboard');
+}
+
 // The buttons that make the shared bots speak or spend shared API quota share
 // one cooldown per streamer (see services/testCooldown.js).
 function limitTests(req, res, next) {
@@ -698,7 +708,7 @@ router.post('/feedback', (req, res) => {
 // --- Overlay Config ---
 
 // Overlay config page
-router.get('/overlay', (req, res) => {
+router.get('/overlay', overlayPage, (req, res) => {
   const streamer = req.streamer;
   const appUrl = config.app.url || `${req.protocol}://${req.get('host')}`;
   const overlayUrl = streamer.overlay_token ? `${appUrl}/overlay/${streamer.overlay_token}` : null;
@@ -1372,7 +1382,7 @@ router.get('/youtube-chatbot', async (req, res) => {
 // Save YouTube chatbot settings
 router.post('/youtube-chatbot', (req, res) => {
   const b = req.body;
-  db.updateYoutubeChatbotConfig(req.streamer.id, {
+  const settings = {
     yt_chatbot_enabled: b.yt_chatbot_enabled ? 1 : 0,
     yt_mod_enabled: b.yt_mod_enabled ? 1 : 0,
     yt_chat_superchat_enabled: b.yt_chat_superchat_enabled ? 1 : 0,
@@ -1381,10 +1391,16 @@ router.post('/youtube-chatbot', (req, res) => {
     yt_chat_superchat_template: b.yt_chat_superchat_template || '',
     yt_chat_member_template: b.yt_chat_member_template || '',
     yt_chat_giftmember_template: b.yt_chat_giftmember_template || '',
-    yt_overlay_superchat_enabled: b.yt_overlay_superchat_enabled ? 1 : 0,
-    yt_overlay_member_enabled: b.yt_overlay_member_enabled ? 1 : 0,
-    yt_overlay_giftmember_enabled: b.yt_overlay_giftmember_enabled ? 1 : 0,
-  });
+  };
+  // The "show overlay banner" switches are on the page only while the overlay features are on. A save
+  // without them would store every switch as off and silence the YouTube alerts of a browser source
+  // that is already in use in OBS, so the stored values are left alone, whatever a form sends.
+  if (config.features.overlays) {
+    settings.yt_overlay_superchat_enabled = b.yt_overlay_superchat_enabled ? 1 : 0;
+    settings.yt_overlay_member_enabled = b.yt_overlay_member_enabled ? 1 : 0;
+    settings.yt_overlay_giftmember_enabled = b.yt_overlay_giftmember_enabled ? 1 : 0;
+  }
+  db.updateYoutubeChatbotConfig(req.streamer.id, settings);
   pushOverlayConfig(req.streamer.id);
   res.redirect('/dashboard/youtube-chatbot');
 });
@@ -1819,7 +1835,7 @@ function isPendingDelete(reward) {
   return reward.twitch_sync_status === SYNC_DELETE_FAILED;
 }
 
-router.get('/redemptions', (req, res) => {
+router.get('/redemptions', overlayPage, (req, res) => {
   const { hasRedemptionScope } = require('../services/twitch');
   const streamerId = req.streamer.id;
   const allRewards = db.getRewards(streamerId);
@@ -2248,7 +2264,7 @@ router.delete('/giveaways/:id', (req, res) => {
 
 // --- Overlay Builder ---
 
-router.get('/overlay-builder', async (req, res) => {
+router.get('/overlay-builder', overlayPage, async (req, res) => {
   const designs = db.getAllOverlayDesigns(req.streamer.id);
   const overlayUrl = req.streamer.overlay_token
     ? `${config.app.url}/overlay/${req.streamer.overlay_token}`
@@ -2316,7 +2332,7 @@ router.post('/overlay-builder/reset', (req, res) => {
 
 // --- VTuber Preview (authenticated, no overlay token needed) ---
 
-router.get('/vtuber-preview', (req, res) => {
+router.get('/vtuber-preview', overlayPage, (req, res) => {
   const model = req.streamer.vtuber_model_id ? db.getVtuberModel(req.streamer.vtuber_model_id) : null;
   let modelUrl = null;
   if (model) {
