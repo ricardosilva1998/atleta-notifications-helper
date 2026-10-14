@@ -86,14 +86,17 @@
   <!-- By Type -->
   <div class="card" style="padding: 24px;">
     <h3 style="font-size: 15px; margin-bottom: 20px;"><%= t('account.byType') %></h3>
-    <% if (notificationsByType.length === 0) { %>
+    <%# The YouTube posts are left out while YouTube is hidden (features.youtube); they are still in the totals. %>
+    <% const _byType = notificationsByType.filter(function(d) { return features.youtube || String(d.type).indexOf('youtube_') !== 0; }); %>
+    <% if (_byType.length === 0) { %>
       <p style="color: var(--text-muted); font-size: 13px;"><%= t('account.chart.empty') %></p>
     <% } else { %>
       <% const typeColors = { twitch_live: '#9146ff', twitch_clip: '#bf94ff', twitch_recap: '#6d28d9', youtube_video: '#f04438', youtube_live: '#ff6b6b', weekly_digest: '#3498db', twitch_milestone: '#f1c40f' }; %>
-      <% const typeLabels = { twitch_live: t('account.type.twitchLive'), twitch_clip: t('account.type.twitchClip'), twitch_recap: t('account.type.twitchRecap'), youtube_video: t('account.type.youtubeVideo'), youtube_live: t('account.type.youtubeLive'), weekly_digest: t('account.type.weeklyDigest'), twitch_milestone: t('account.type.twitchMilestone') }; %>
-      <% const totalByType = notificationsByType.reduce((s, d) => s + d.count, 0); %>
+      <% const typeLabels = { twitch_live: t('account.type.twitchLive'), twitch_clip: t('account.type.twitchClip'), twitch_recap: t('account.type.twitchRecap'), weekly_digest: t('account.type.weeklyDigest'), twitch_milestone: t('account.type.twitchMilestone') }; %>
+      <% if (features.youtube) Object.assign(typeLabels, { youtube_video: t('account.type.youtubeVideo'), youtube_live: t('account.type.youtubeLive') }); %>
+      <% const totalByType = _byType.reduce((s, d) => s + d.count, 0); %>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <% notificationsByType.forEach(function(d) { %>
+        <% _byType.forEach(function(d) { %>
           <div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
               <span style="font-size: 12px; color: var(--text-secondary);"><%= typeLabels[d.type] || d.type %></span>
@@ -122,11 +125,13 @@
         <div style="font-size: 20px; font-weight: 700; font-family: var(--font-display);"><%= stats.total_twitch_channels %></div>
         <div style="font-size: 11px; color: var(--text-muted);"><%= t('guild.twitchChannels') %></div>
       </div>
+      <% if (features.youtube) { %>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 20px; font-weight: 700; font-family: var(--font-display);"><%= stats.total_youtube_channels %></div>
         <div style="font-size: 11px; color: var(--text-muted);"><%= t('guild.youtubeChannels') %></div>
       </div>
-      <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
+      <% } %>
+      <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);<%= features.youtube ? '' : ' grid-column: 1 / -1;' %>">
         <div style="font-size: 20px; font-weight: 700; font-family: var(--font-display); color: var(--success);"><%= stats.notifications_week %></div>
         <div style="font-size: 11px; color: var(--text-muted);"><%= t('account.stats.week') %></div>
       </div>

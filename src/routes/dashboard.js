@@ -108,6 +108,13 @@ function overlayPage(req, res, next) {
   res.redirect('/dashboard');
 }
 
+// The same for a page that exists only for YouTube (the YouTube chatbot) while config.features.youtube is off.
+// Its POST routes stay as they are, like the overlay pages' ones.
+function youtubePage(req, res, next) {
+  if (config.features.youtube) return next();
+  res.redirect('/dashboard');
+}
+
 // The buttons that make the shared bots speak or spend shared API quota share
 // one cooldown per streamer (see services/testCooldown.js).
 function limitTests(req, res, next) {
@@ -263,15 +270,80 @@ router.delete('/account/avatar', (req, res) => {
   res.json({ ok: true });
 });
 
+// The Twitch tab's "Discord notifications" card: for each server the streamer has claimed, what it posts about
+// the streamer's own Twitch channel. Each state is decided as the pollers decide it, from the database and the
+// bot's cache only (nothing is asked of Discord or Twitch):
+//   goLive, clips  the streamer's own watcher row for the channel in that server: enabled, with its switch on
+//                  and a Discord channel (pollers/manager.js); `where` names the channel when the bot sees it;
+//   recaps         the server's switch; recaps go into that row's go-live channel;
+//   milestones     the same, and they need a working broadcaster authorization: 'wait' without one (the poller
+//                  could also use another streamer's who watches the channel; the card does not count on it);
+//   highlights     the server's switch, when the server's digest is this streamer's (pollers/weeklyDigest.js:
+//                  the first streamer who switched it on there), the channel is in it, and there is a go-live
+//                  channel in the server to post in;
+//   subRoles       the server's switch and role (pollers/subSync.js); 'wait' without a working authorization.
+// `servers`: the dashboard's server rows, each with the bot's view of the server (discordGuild, when it sees it)
+// and the streamer's Twitch watcher rows there. `needsReauth`: the authorization stopped working.
+function discordNotificationsCard(streamer, servers, { needsReauth }) {
+  const login = (streamer.twitch_username || '').toLowerCase();
+  const twitchLinked = !!(streamer.twitch_user_id && login);
+  const authorized = !!streamer.broadcaster_access_token && !needsReauth;
+  const card = {
+    twitchLinked,
+    servers: [],
+    announcing: 0, // servers that post the go-live
+    needsAuth: false, // a server waits for the authorization
+    authAction: streamer.broadcaster_access_token ? 'reconnect' : 'enable', // the link that gives it
+  };
+  if (!twitchLinked) return card;
+
+  const digestOwners = new Map(db.getGuildsWithWeeklyHighlights().map((row) => [row.guild_id, row.streamer_id]));
+  for (const server of servers) {
+    const own = server.watchers.find((w) => w.twitch_username === login && w.enabled);
+    const channelName = (id) => {
+      const channel = server.discordGuild && server.discordGuild.channels.cache.get(id);
+      return channel ? `#${channel.name}` : null;
+    };
+    const onOff = (on) => (on ? 'on' : 'off');
+    const goLive = !!(own && own.notify_live && own.live_channel_id);
+    const clips = !!(own && own.notify_clips && own.clips_channel_id);
+    const liveChannel = !!(own && own.live_channel_id);
+    const row = {
+      guildId: server.guild_id,
+      name: server.name,
+      icon: server.icon,
+      botPresent: server.botPresent,
+      goLive: { state: onOff(goLive), where: goLive ? channelName(own.live_channel_id) : null },
+      clips: { state: onOff(clips), where: clips ? channelName(own.clips_channel_id) : null },
+      recaps: onOff(server.recap_enabled && liveChannel),
+      milestones: server.milestones_enabled && liveChannel ? (authorized ? 'on' : 'wait') : 'off',
+      highlights: onOff(server.weekly_highlights_enabled && own && digestOwners.get(server.guild_id) === streamer.id
+        && db.getDigestChannelForGuild(server.guild_id)),
+      subRoles: server.sub_sync_enabled && server.sub_role_id ? (authorized ? 'on' : 'wait') : 'off',
+      // Its settings page; its Twitch tab, where the channel is added, while nothing of the channel is posted there.
+      url: `/dashboard/guild/${server.guild_id}${goLive || clips ? '' : '?tab=twitch'}`,
+    };
+    if (goLive) card.announcing++;
+    if (row.milestones === 'wait' || row.subRoles === 'wait') card.needsAuth = true;
+    card.servers.push(row);
+  }
+  return card;
+}
+
 // Dashboard home — list guilds
 router.get('/', async (req, res) => {
   const guilds = db.getGuildsForStreamer(req.streamer.id);
   const msg = req.query.msg;
 
-  const enrichedGuilds = guilds.map((g) => {
-    const discordGuild = client.guilds.cache.get(g.guild_id);
+  // The bot's view of each server, and the streamer's Twitch watchers there (for the Discord notifications card).
+  const serverViews = guilds.map((g) => ({
+    discordGuild: client.guilds.cache.get(g.guild_id),
+    watchers: db.getWatchedChannelsForGuild(g.guild_id, req.streamer.id),
+  }));
+  const enrichedGuilds = guilds.map((g, i) => {
+    const { discordGuild } = serverViews[i];
     const stats = db.getGuildNotificationStats(req.streamer.id, g.guild_id);
-    const twitchCount = db.getWatchedChannelsForGuild(g.guild_id, req.streamer.id).length;
+    const twitchCount = serverViews[i].watchers.length;
     const youtubeCount = db.getWatchedYoutubeChannelsForGuild(g.guild_id, req.streamer.id).length;
     const chartData = db.getGuildNotificationsByTypeOverTime(req.streamer.id, g.guild_id, '30d');
     return {
@@ -333,6 +405,9 @@ router.get('/', async (req, res) => {
   let activeGiveaway = null;
   try { activeGiveaway = db.getActiveGiveaway(req.streamer.id); } catch (e) {}
 
+  const discordNotifications = discordNotificationsCard(req.streamer,
+    enrichedGuilds.map((g, i) => ({ ...g, ...serverViews[i] })), { needsReauth });
+
   res.render('dashboard', {
     streamer: req.streamer,
     guilds: enrichedGuilds,
@@ -350,8 +425,10 @@ router.get('/', async (req, res) => {
     hasScope,
     needsReauth,
     activeGiveaway,
-    // The Multistream card is shown only once the relay is configured.
-    multistreamAvailable: !!config.multistream.enabled,
+    discordNotifications,
+    // The Multistream card is shown only once the relay is configured, and while YouTube is shown (it streams
+    // to Twitch and YouTube).
+    multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
   });
 });
 
@@ -381,9 +458,10 @@ router.get('/guild/:guildId/stats', (req, res) => {
   });
 });
 
-// The tabs of the server page. ?tab= may name one; the page prints it into its
-// script, so anything else (a repeated parameter, any other text) is the default.
+// The tabs of the server page (the YouTube one only while config.features.youtube is on). ?tab= may name one;
+// the page prints it into its script, so anything else (a repeated parameter, any other text) counts as none.
 const GUILD_PAGE_TABS = ['twitch', 'youtube', 'discord', 'iracing', 'settings'];
+const guildPageTabs = () => (config.features.youtube ? GUILD_PAGE_TABS : GUILD_PAGE_TABS.filter((tab) => tab !== 'youtube'));
 
 // Guild config page
 router.get('/guild/:guildId', async (req, res) => {
@@ -431,6 +509,9 @@ router.get('/guild/:guildId', async (req, res) => {
   };
 
   const { tier, limits } = getTierLimits(req.streamer.id);
+  // The tab the address names (after a save, or from a dashboard link); the page opens it ahead of the one
+  // picked last time.
+  const requestedTab = guildPageTabs().includes(req.query.tab) ? req.query.tab : null;
 
   // Once the page has been sent, look the missing ones up; they show on the next load.
   if (missingInfo.twitchRows.length || missingInfo.youtubeRows.length) {
@@ -464,7 +545,8 @@ router.get('/guild/:guildId', async (req, res) => {
     limits,
     msg: req.query.msg,
     saved: req.query.saved,
-    activeTab: GUILD_PAGE_TABS.includes(req.query.tab) ? req.query.tab : 'twitch',
+    requestedTab,
+    activeTab: requestedTab || 'twitch',
   });
 });
 
@@ -500,7 +582,9 @@ router.post('/guild/:guildId', async (req, res) => {
     welcome_message: clampWelcomeMessage(req.body.welcome_message) || null,
     twitch_live_enabled: req.body.twitch_live_enabled === 'on',
     twitch_clips_enabled: req.body.twitch_clips_enabled === 'on',
-    youtube_enabled: req.body.youtube_enabled === 'on',
+    // A hidden field the page sends only while YouTube is shown (config.features.youtube): a save without it
+    // keeps the stored value.
+    youtube_enabled: req.body.youtube_enabled === undefined ? !!guildConfig.youtube_enabled : req.body.youtube_enabled === 'on',
     welcome_enabled: req.body.welcome_enabled === 'on',
     sub_sync_enabled: req.body.sub_sync_enabled === 'on',
     recap_enabled: req.body.recap_enabled === 'on',
@@ -1392,7 +1476,7 @@ const YT_CHATBOT_ERRORS = {
 };
 
 // YouTube chatbot config page
-router.get('/youtube-chatbot', async (req, res) => {
+router.get('/youtube-chatbot', youtubePage, async (req, res) => {
   const commands = db.getChatCommands(req.streamer.id);
   let ytPolling = false;
   try {

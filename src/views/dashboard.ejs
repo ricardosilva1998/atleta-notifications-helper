@@ -4,15 +4,45 @@
   // text before and after it, so the markup stays out of the translation and all of
   // it is still escaped.
   const _around = (key, name, params) => t(key, Object.assign({}, params, { [name]: '\u0001' })).split('\u0001');
+  const _isAdmin = typeof isAdmin !== 'undefined' && !!isAdmin;
+  // The tabs, in order: Twitch (the one a first visit opens), Discord, then the ones that are switched on.
+  const _tabs = ['twitch', 'discord'];
+  if (features.youtube) _tabs.push('youtube');
+  if (features.kick) _tabs.push('kick');
+  if (features.overlays) _tabs.push('experimental');
+  if (_isAdmin) _tabs.push('admin');
 %>
+<%# The tab picked last time (localStorage 'dashboard_tab'), or Twitch, is named on <html data-dashboard-tab> before
+    the tab bar is drawn: the styles below show its button and pane, so no other tab shows first. A remembered tab
+    this page does not have (YouTube or Kick while they are switched off) opens Twitch. %>
+<script>
+  // Names the tab to open before the tab bar is drawn: the one picked last time if the page has it, else the first.
+  (function () {
+    var tabs = <%- JSON.stringify(_tabs).replace(/</g, '\\u003c') %>;
+    var saved = null;
+    try { saved = localStorage.getItem('dashboard_tab'); } catch (e) { /* storage refused: the first tab */ }
+    document.documentElement.setAttribute('data-dashboard-tab', tabs.indexOf(saved) >= 0 ? saved : tabs[0]);
+  })();
+</script>
 
 <style>
-  .tab-discord.active { background: #5865F2; }
-  .tab-twitch.active { background: #9146ff; }
-  .tab-youtube.active { background: #ff0000; }
-  .tab-kick.active { background: #53fc18; color: #000; }
-  .tab-experimental.active { background: linear-gradient(135deg, #667eea, #764ba2); }
-  .tab-admin.active { background: #e74c3c; }
+  /* The open tab is the one <html data-dashboard-tab> names (set by the script above, and by switchTab() at the
+     end of the page); without that script (no JavaScript) the Twitch tab shows. */
+  html[data-dashboard-tab="twitch"] #tab-twitch,
+  html[data-dashboard-tab="discord"] #tab-discord,
+  html[data-dashboard-tab="youtube"] #tab-youtube,
+  html[data-dashboard-tab="kick"] #tab-kick,
+  html[data-dashboard-tab="experimental"] #tab-experimental,
+  html[data-dashboard-tab="admin"] #tab-admin,
+  html:not([data-dashboard-tab]) #tab-twitch { display: block; animation: fadeUp 0.3s ease-out; }
+  html[data-dashboard-tab="twitch"] .tab-btn.tab-twitch { background: #9146ff; color: white; }
+  html[data-dashboard-tab="discord"] .tab-btn.tab-discord { background: #5865F2; color: white; }
+  html[data-dashboard-tab="youtube"] .tab-btn.tab-youtube { background: #ff0000; color: white; }
+  html[data-dashboard-tab="kick"] .tab-btn.tab-kick { background: #53fc18; color: #000; }
+  html[data-dashboard-tab="experimental"] .tab-btn.tab-experimental { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+  html[data-dashboard-tab="admin"] .tab-btn.tab-admin { background: #e74c3c; color: white; }
+  /* On a narrow screen the tab bar scrolls sideways, not the page */
+  .dash-tabs { overflow-x: auto; }
 </style>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px;" class="animate-in">
@@ -26,7 +56,7 @@
 <% if (msg === 'broadcaster_authorized') { %><div class="alert alert-success"><%= t('dashboard.broadcasterAuthorized') %></div><% } %>
 <%# The name comes from the streamer's own row, never from the URL. %>
 <% if (msg === 'broadcaster_wrong_account') { %><div class="alert alert-danger"><%= streamer.twitch_user_id ? t('dashboard.broadcasterWrongAccount', { name: streamer.twitch_display_name || streamer.twitch_username }) : t('dashboard.broadcasterNeedsTwitch') %></div><% } %>
-<% if (msg === 'youtube_saved') { %><div class="alert alert-success"><%= t('dashboard.youtubeSaved') %></div><% } %>
+<% if (msg === 'youtube_saved' && features.youtube) { %><div class="alert alert-success"><%= t('dashboard.youtubeSaved') %></div><% } %>
 <% if (msg === 'guild_limit') { %><div class="alert alert-warning"><%= t('dashboard.guildLimit') %></div><% } %>
 <% if (msg === 'already_claimed') { %><div class="alert alert-danger"><%= t('dashboard.alreadyClaimed') %></div><% } %>
 <% if (msg === 'claim_not_allowed') { %><div class="alert alert-danger"><%= t('dashboard.claimNotAllowed') %></div><% } %>
@@ -45,22 +75,26 @@
 <% } %>
 
 <!-- Platform Tabs -->
-<div class="tab-bar animate-in animate-in-delay-1">
-  <button class="tab-btn tab-discord" data-tab="discord">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.9 5a19.5 19.5 0 0 0-4.8-1.5 14.6 14.6 0 0 0-.6 1.3 18 18 0 0 0-5 0A14 14 0 0 0 7.9 3.5 19.5 19.5 0 0 0 3.1 5 20.6 20.6 0 0 0 .5 17.6a19.6 19.6 0 0 0 6 3 14.8 14.8 0 0 0 1.3-2 12.7 12.7 0 0 1-2-.9l.5-.4a14 14 0 0 0 11.9 0l.5.4a12.7 12.7 0 0 1-2 .9 14.8 14.8 0 0 0 1.3 2 19.6 19.6 0 0 0 6-3A20.6 20.6 0 0 0 21 5z"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/></svg>
-    Discord
-  </button>
+<div class="tab-bar dash-tabs animate-in animate-in-delay-1">
   <button class="tab-btn tab-twitch" data-tab="twitch">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></svg>
     Twitch
   </button>
+  <button class="tab-btn tab-discord" data-tab="discord">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.9 5a19.5 19.5 0 0 0-4.8-1.5 14.6 14.6 0 0 0-.6 1.3 18 18 0 0 0-5 0A14 14 0 0 0 7.9 3.5 19.5 19.5 0 0 0 3.1 5 20.6 20.6 0 0 0 .5 17.6a19.6 19.6 0 0 0 6 3 14.8 14.8 0 0 0 1.3-2 12.7 12.7 0 0 1-2-.9l.5-.4a14 14 0 0 0 11.9 0l.5.4a12.7 12.7 0 0 1-2 .9 14.8 14.8 0 0 0 1.3 2 19.6 19.6 0 0 0 6-3A20.6 20.6 0 0 0 21 5z"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/></svg>
+    Discord
+  </button>
+  <% if (features.youtube) { %>
   <button class="tab-btn tab-youtube" data-tab="youtube">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 7.7a2.8 2.8 0 0 0-2-2C18.9 5 12 5 12 5s-6.9 0-8.5.7a2.8 2.8 0 0 0-2 2A29 29 0 0 0 1 12a29 29 0 0 0 .5 4.3 2.8 2.8 0 0 0 2 2c1.6.7 8.5.7 8.5.7s6.9 0 8.5-.7a2.8 2.8 0 0 0 2-2A29 29 0 0 0 23 12a29 29 0 0 0-.5-4.3z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>
     YouTube
   </button>
+  <% } %>
+  <% if (features.kick) { %>
   <button class="tab-btn tab-kick" data-tab="kick">
     <svg width="30" height="10" viewBox="0 0 78 26" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 0.0307312H8.34073V5.79423H11.1163V2.91248H13.8919V0.0307312H22.2326V8.69274H19.457V11.5745H16.6815V14.4562H19.457V17.338H22.2326V26H13.8919V23.1182H11.1163V20.2365H8.34073V26H0V0.0307312ZM55.6444 0.0307312H63.9852V5.79423H66.7608V2.91248H69.5363V0.0307312H77.8771V8.69274H75.1015V11.5745H72.3259V14.4562H75.1015V17.338H77.8771V26H69.5363V23.1182H66.7608V20.2365H63.9852V26H55.6444V0.0307312ZM25.039 0.0307312H33.3797V26H25.039V0.0307312ZM38.9462 0.0307312V2.91248H36.1706V23.1029H38.9462V25.9846H52.8535V17.3226H44.5128V8.66061H52.8535V0H38.9462V0.0307312Z"/></svg>
   </button>
+  <% } %>
   <%# The Experimental tab holds only the VTuber face tracker, an OBS source: hidden with the overlay features. %>
   <% if (features.overlays) { %>
   <button class="tab-btn tab-experimental" data-tab="experimental">
@@ -68,7 +102,7 @@
     <%= t('dashboard.tab.experimental') %>
   </button>
   <% } %>
-  <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+  <% if (_isAdmin) { %>
   <button class="tab-btn tab-admin" data-tab="admin">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
     <%= t('dashboard.tab.admin') %>
@@ -76,7 +110,7 @@
   <% } %>
 </div>
 
-<div class="tab-content active" id="tab-discord">
+<div class="tab-content" id="tab-discord">
 
 <div class="animate-in animate-in-delay-2" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
   <h3 class="section-title" style="margin: 0; line-height: 1;">
@@ -99,24 +133,24 @@
   </div>
 <% } %>
 
-<div style="display: grid; gap: 16px;">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;">
   <% guilds.forEach(function(g, i) { %>
     <div class="card animate-in" style="animation-delay: <%= 0.1 + i * 0.05 %>s; padding: 20px;">
       <!-- Server Header -->
-      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+      <div class="dash-server-head" style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
         <div class="guild-icon">
           <% if (g.icon) { %><img src="<%= g.icon %>" alt=""><% } else { %><%= g.name.charAt(0) %><% } %>
         </div>
         <div style="flex: 1; min-width: 0;">
           <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><%= g.name %></h4>
-          <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="dash-server-meta" style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 12px; color: var(--text-secondary);">
               <% if (g.botPresent) { %><span class="status-dot online"></span><%= t('dashboard.active') %><% } else { %><span class="status-dot offline"></span><%= t('dashboard.offline') %><% } %>
             </span>
-            <span style="font-size: 11px; color: var(--text-muted);"><%= g.twitchCount %> Twitch &middot; <%= g.youtubeCount %> YouTube</span>
+            <span style="font-size: 11px; color: var(--text-muted);"><%= g.twitchCount %> Twitch<% if (features.youtube) { %> &middot; <%= g.youtubeCount %> YouTube<% } %></span>
           </div>
         </div>
-        <div style="display: flex; gap: 6px; flex-shrink: 0;">
+        <div class="dash-server-actions" style="display: flex; gap: 6px; flex-shrink: 0;">
           <button onclick="toggleStats('<%= g.guild_id %>')" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;" id="stats-btn-<%= g.guild_id %>">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             <%= t('dashboard.stats') %>
@@ -126,7 +160,7 @@
       </div>
 
       <!-- Summary (always visible) -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+      <div class="dash-summary" style="display: grid; grid-template-columns: repeat(<%= features.youtube ? 4 : 3 %>, 1fr); gap: 8px;">
         <div class="stat-card">
           <div class="stat-tooltip"><%= t('dashboard.summary.liveTip') %></div>
           <div class="stat-value" style="color: var(--accent);"><%= g.stats.live_count %></div>
@@ -137,11 +171,13 @@
           <div class="stat-value" style="color: #bf94ff;"><%= g.stats.clip_count %></div>
           <div class="stat-label"><%= t('dashboard.summary.clipsLabel') %></div>
         </div>
+        <% if (features.youtube) { %>
         <div class="stat-card">
           <div class="stat-tooltip"><%= t('dashboard.summary.youtubeTip') %></div>
           <div class="stat-value" style="color: #f04438;"><%= g.stats.youtube_video_count + g.stats.youtube_live_count %></div>
           <div class="stat-label"><%= t('dashboard.summary.youtubeLabel') %></div>
         </div>
+        <% } %>
         <div class="stat-card">
           <div class="stat-tooltip"><%= t('dashboard.summary.allTip') %></div>
           <div class="stat-value" style="color: var(--text-primary);"><%= g.stats.total %></div>
@@ -154,14 +190,18 @@
 
         <!-- Individual charts per notification type -->
         <%
-          const typeKeys = ['twitch_live', 'twitch_clip', 'twitch_recap', 'twitch_milestone', 'youtube_video', 'youtube_short', 'youtube_live', 'weekly_digest', 'instagram_post', 'tiktok_video', 'twitter_tweet', 'iracing_result'];
+          // The YouTube posts are left out of the charts while YouTube is hidden (they are still in the totals).
+          const typeKeys = ['twitch_live', 'twitch_clip', 'twitch_recap', 'twitch_milestone', 'youtube_video', 'youtube_short', 'youtube_live', 'weekly_digest', 'instagram_post', 'tiktok_video', 'twitter_tweet', 'iracing_result']
+            .filter(function(tk) { return features.youtube || tk.indexOf('youtube_') !== 0; });
           const typeColors = { twitch_live: '#9146ff', twitch_clip: '#bf94ff', twitch_recap: '#6d28d9', twitch_milestone: '#f1c40f', youtube_video: '#f04438', youtube_short: '#ff6b6b', youtube_live: '#ff4444', weekly_digest: '#3498db', instagram_post: '#E1306C', tiktok_video: '#010101', twitter_tweet: '#1DA1F2', iracing_result: '#1a1a2e' };
           const typeNames = {
             twitch_live: t('dashboard.type.twitch_live'), twitch_clip: t('dashboard.type.twitch_clip'), twitch_recap: t('dashboard.type.twitch_recap'),
-            twitch_milestone: t('dashboard.type.twitch_milestone'), youtube_video: t('dashboard.type.youtube_video'), youtube_short: t('dashboard.type.youtube_short'),
-            youtube_live: t('dashboard.type.youtube_live'), weekly_digest: t('dashboard.type.weekly_digest'), instagram_post: t('dashboard.type.instagram_post'),
+            twitch_milestone: t('dashboard.type.twitch_milestone'), weekly_digest: t('dashboard.type.weekly_digest'), instagram_post: t('dashboard.type.instagram_post'),
             tiktok_video: t('dashboard.type.tiktok_video'), twitter_tweet: t('dashboard.type.twitter_tweet'), iracing_result: t('dashboard.type.iracing_result'),
           };
+          if (features.youtube) {
+            Object.assign(typeNames, { youtube_video: t('dashboard.type.youtube_video'), youtube_short: t('dashboard.type.youtube_short'), youtube_live: t('dashboard.type.youtube_live') });
+          }
           const activeTypes = typeKeys.filter(function(tk) { return g.chartData.some(function(d) { return (d[tk] || 0) > 0; }); });
         %>
 
@@ -232,6 +272,7 @@
           </div>
         </div>
 
+        <% if (features.youtube) { %>
         <!-- === YOUTUBE === -->
         <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border); margin-bottom: 12px;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
@@ -252,6 +293,7 @@
             </div>
           </div>
         </div>
+        <% } %>
 
         <!-- === DISCORD / COMMUNITY === -->
         <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border);">
@@ -327,6 +369,10 @@
     <% if (streamer.twitch_user_id && !streamer.broadcaster_access_token) { %>
       <a href="/auth/broadcaster" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;"><%= t('dashboard.enableSubSync') %></a>
     <% } %>
+    <%# The authorization stopped working (the banner above says what is paused). %>
+    <% if (streamer.broadcaster_access_token && needsReauth) { %>
+      <a href="/auth/broadcaster" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px; color: var(--warning);"><%= t('dashboard.reconnectTwitch') %></a>
+    <% } %>
   </div>
 
   <!-- 7-Day Stream Activity -->
@@ -344,7 +390,7 @@
       </div>
       <span style="font-size: 12px; color: var(--text-muted); font-family: var(--font-display);"><%= t('dashboard.week.total', { count: overlayStats.total }) %></span>
     </div>
-    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;">
+    <div class="dash-week-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;">
       <div style="background: var(--bg-elevated); border-radius: 10px; padding: 12px; text-align: center;">
         <div style="font-size: 22px; font-weight: 800; color: #8888cc; font-family: var(--font-display);"><%= overlayStats.follows %></div>
         <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;"><%= t('dashboard.week.follows') %></div>
@@ -374,6 +420,218 @@
   <% } %>
 
   <div class="twitch-cards-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; align-items: stretch;">
+
+    <%# The cards, in the order a Twitch streamer sets them up: chat first, Discord next, then the rest. The OBS-overlay
+        cards come after them (features.overlays), the Multistream card last. %>
+    <!-- Chatbot Card -->
+    <div class="card animate-in animate-in-delay-1" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(145,71,255,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.chatbot.title') %></h3>
+          <% if (botConnected && streamer.chatbot_enabled) { %>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= botUsername ? t('dashboard.cards.chatbot.onlineAs', { name: botUsername }) : t('dashboard.cards.chatbot.online') %></span>
+          <% } else if (botConnected && !streamer.chatbot_enabled) { %>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.cards.chatbot.availableNotEnabled') %></span>
+          <% } else { %>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConfigured') %></span>
+          <% } %>
+        </div>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
+        <% if (streamer.chatbot_enabled) { %>
+          <% const _chat = _around('dashboard.cards.chatbot.activeOn', 'channel'); %><%= _chat[0] %><strong>#<%= streamer.twitch_username %></strong><%= _chat[1] %>
+        <% } else { %>
+          <%= t('dashboard.cards.chatbot.setup') %>
+        <% } %>
+      </p>
+      <a href="/dashboard/chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= streamer.chatbot_enabled ? t('dashboard.cards.chatbot.settings') : t('dashboard.cards.chatbot.configure') %></a>
+    </div>
+
+    <%# The Discord notifications card: what each server the streamer has claimed posts about their own Twitch channel.
+        discordNotificationsCard() in routes/dashboard.js decides every state; this only shows them. %>
+    <% {
+      const _dn = typeof discordNotifications !== 'undefined' && discordNotifications
+        ? discordNotifications
+        : { twitchLinked: !!streamer.twitch_user_id, servers: [], announcing: 0, needsAuth: false, authAction: 'enable' };
+      const _dnLabels = {
+        goLive: t('dashboard.cards.discord.goLive'), clips: t('dashboard.cards.discord.clips'), recaps: t('dashboard.cards.discord.recaps'),
+        milestones: t('dashboard.cards.discord.milestones'), highlights: t('dashboard.cards.discord.highlights'), subRoles: t('dashboard.cards.discord.subRoles'),
+      };
+      // What a state is, in words (read out by a screen reader before the item), and its icon.
+      const _dnSaid = { on: t('dashboard.cards.discord.on'), off: t('dashboard.cards.discord.off'), wait: t('dashboard.cards.discord.wait') };
+      const _dnIcon = {
+        on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+        off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"/></svg>',
+        wait: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>',
+      };
+      const _dnPosts = (server) => server.goLive.state === 'on' || server.clips.state === 'on';
+      let _dnStatus = t('dashboard.cards.discord.statusNone');
+      let _dnColor = 'var(--text-muted)';
+      if (!_dn.twitchLinked) _dnStatus = t('dashboard.cards.discord.statusNoTwitch');
+      else if (_dn.servers.length === 0) _dnStatus = t('dashboard.cards.discord.statusNoServer');
+      else if (_dn.announcing === _dn.servers.length) { _dnStatus = t('dashboard.cards.discord.statusAll'); _dnColor = 'var(--success)'; }
+      else if (_dn.announcing > 0) { _dnStatus = t('dashboard.cards.discord.statusSome', { count: _dn.announcing, total: _dn.servers.length }); _dnColor = 'var(--warning)'; }
+    %>
+    <div class="card animate-in animate-in-delay-1" id="discord-notifications" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(88,101,242,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5865F2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.discord.title') %></h3>
+          <span style="color: <%= _dnColor %>; font-size: 12px; font-weight: 600;">● <%= _dnStatus %></span>
+        </div>
+      </div>
+      <% if (!_dn.twitchLinked) { %>
+        <p class="dn-lead"><%= t('dashboard.cards.discord.noTwitch') %></p>
+        <a href="/auth/twitch" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.linkTwitch') %></a>
+      <% } else if (_dn.servers.length === 0) { %>
+        <p class="dn-lead"><%= t('dashboard.cards.discord.noServer') %></p>
+        <%# The bot is already in a server the streamer manages: claiming it is the next step (as on the Discord tab). %>
+        <% if (unclaimedGuilds.length > 0) { %>
+          <p class="dn-lead"><%= t('dashboard.availableServersDesc') %></p>
+          <ul class="dn-servers">
+            <% unclaimedGuilds.forEach(function (g) { %>
+              <li class="dn-server dn-server-head">
+                <span class="dn-server-icon"><% if (g.icon) { %><img src="<%= g.icon %>" alt=""><% } else { %><%= g.name.charAt(0) %><% } %></span>
+                <h4 class="dn-server-name"><%= g.name %></h4>
+                <form method="POST" action="/dashboard/claim/<%= g.id %>" style="margin: 0;">
+                  <button type="submit" class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;"><%= t('dashboard.claim') %></button>
+                </form>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+        <a href="<%= botInviteUrl %>" target="_blank" rel="noopener" class="btn <%= unclaimedGuilds.length > 0 ? 'btn-secondary' : 'btn-discord' %>" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.addBot') %></a>
+      <% } else { %>
+        <p class="dn-lead"><%= t('dashboard.cards.discord.desc') %></p>
+        <ul class="dn-servers">
+          <% _dn.servers.forEach(function (s) { %>
+            <li class="dn-server" data-guild="<%= s.guildId %>">
+              <div class="dn-server-head">
+                <span class="dn-server-icon"><% if (s.icon) { %><img src="<%= s.icon %>" alt=""><% } else { %><%= s.name.charAt(0) %><% } %></span>
+                <h4 class="dn-server-name"><%= s.name %></h4>
+                <% if (!s.botPresent) { %><span class="dn-offline"><span class="status-dot offline"></span><%= t('dashboard.offline') %></span><% } %>
+                <% if (_dn.servers.length > 1) { %><a href="<%= s.url %>" class="dn-server-link"><%= _dnPosts(s) ? t('dashboard.configure') : t('dashboard.cards.discord.setUp') %></a><% } %>
+              </div>
+              <ul class="dn-states">
+                <% [['goLive', s.goLive.state, s.goLive.where], ['clips', s.clips.state, s.clips.where], ['recaps', s.recaps], ['milestones', s.milestones], ['highlights', s.highlights], ['subRoles', s.subRoles]].forEach(function (item) { %>
+                  <li class="dn-state dn-<%= item[1] %>" data-item="<%= item[0] %>"><%- _dnIcon[item[1]] %><span class="dn-sr"><%= _dnSaid[item[1]] %>: </span><%= _dnLabels[item[0]] %><% if (item[2]) { %> <span class="dn-where"><%= item[2] %></span><% } %></li>
+                <% }); %>
+              </ul>
+            </li>
+          <% }); %>
+        </ul>
+        <% if (_dn.needsAuth) { const _authNote = _around('dashboard.cards.discord.authNote', 'link'); %>
+          <p class="dn-note"><%= _authNote[0] %><a href="/auth/broadcaster"><%= _dn.authAction === 'reconnect' ? t('dashboard.reconnect.cta') : t('dashboard.enableSubSync') %></a><%= _authNote[1] %></p>
+        <% } %>
+        <%# One server: one button to it. Several: each row has its own link. %>
+        <% if (_dn.servers.length === 1) { %>
+          <a href="<%= _dn.servers[0].url %>" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= _dnPosts(_dn.servers[0]) ? t('dashboard.cards.discord.serverSettings') : t('dashboard.cards.discord.setUpPosts') %></a>
+        <% } %>
+      <% } %>
+    </div>
+    <!-- end discord-notifications -->
+    <% } %>
+
+    <!-- Giveaways Card -->
+    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245,158,11,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.giveaways') %></h3>
+          <% if (typeof activeGiveaway !== 'undefined' && activeGiveaway) { %>
+            <span style="color: var(--danger); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--danger); display: inline-block; animation: pulse 1.2s ease-in-out infinite;"></span>
+              <%= t('dashboard.cards.giveaways.live', { keyword: activeGiveaway.keyword }) %>
+            </span>
+          <% } else { %>
+            <span style="color: var(--text-muted); font-size: 12px;"><%= t('giveaways.state.noActive') %></span>
+          <% } %>
+        </div>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+        <%= t(features.overlays ? 'dashboard.cards.giveaways.desc' : 'dashboard.cards.giveaways.descChat') %>
+      </p>
+      <a href="/dashboard/giveaways" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.giveaways.cta') %></a>
+    </div>
+
+    <!-- Donations Card -->
+    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(0,112,186,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0070ba" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.donations.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.donations.sub') %></span>
+        </div>
+      </div>
+      <% if (streamer.paypal_email && streamer.donation_page_enabled) { %>
+        <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <% const _tip = _around('dashboard.cards.donations.active', 'link'); %><%= _tip[0] %><a href="/tip/<%= streamer.twitch_username %>" target="_blank" style="color: var(--accent); text-decoration: none;">/tip/<%= streamer.twitch_username %></a><%= _tip[1] %>
+        </p>
+      <% } else { %>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          <%= t(features.overlays ? 'dashboard.cards.donations.setup' : 'dashboard.cards.donations.setupChat') %>
+        </p>
+      <% } %>
+      <div style="display: flex; gap: 8px; margin-top: auto;">
+        <a href="/dashboard/donations" class="btn btn-primary" style="flex: 1; font-size: 13px; padding: 8px 16px; text-decoration: none; text-align: center;"><%= t('dashboard.cards.donations.cta') %></a>
+        <a href="/dashboard/donations/history" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= t('dashboard.cards.donations.history') %></a>
+      </div>
+    </div>
+
+    <!-- Sponsor Messages Card -->
+    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(247,144,9,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('sponsors.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.sponsors.sub') %></span>
+        </div>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+        <%= t(features.overlays ? 'dashboard.cards.sponsors.desc' : 'dashboard.cards.sponsors.descChat') %>
+      </p>
+      <a href="/dashboard/timed-notifications" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.sponsors.cta') %></a>
+    </div>
+
+    <!-- Spotify Card -->
+    <div class="card animate-in animate-in-delay-2" style="padding: 24px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(30,215,96,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        </div>
+        <div style="line-height: 1.2;">
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Spotify</h3>
+          <% if (streamer.spotify_access_token) { %>
+            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= t('dashboard.status.connected') %></span>
+          <% } else { %>
+            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConnected') %></span>
+          <% } %>
+        </div>
+      </div>
+      <% if (streamer.spotify_access_token) { %>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          <% const _spotify = _around('dashboard.cards.spotify.connectedDesc', 'command'); %><%= _spotify[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotify[1] %>
+        </p>
+        <a href="/auth/spotify" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.reconnect') %></a>
+      <% } else { %>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          <% const _spotifyConnect = _around('dashboard.cards.spotify.connectDesc', 'command'); %><%= _spotifyConnect[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotifyConnect[1] %>
+        </p>
+        <a href="/auth/spotify" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.connect') %></a>
+      <% } %>
+    </div>
 
     <%# The OBS Overlay card (with its OBS links and the Overlay Builder link) is hidden while the overlay features are off. %>
     <% if (features.overlays) { %>
@@ -424,131 +682,6 @@
     </div>
     <% } %>
 
-    <!-- Chatbot Card -->
-    <div class="card animate-in animate-in-delay-1" style="padding: 24px; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(145,71,255,0.15); display: flex; align-items: center; justify-content: center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.chatbot.title') %></h3>
-          <% if (botConnected && streamer.chatbot_enabled) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= botUsername ? t('dashboard.cards.chatbot.onlineAs', { name: botUsername }) : t('dashboard.cards.chatbot.online') %></span>
-          <% } else if (botConnected && !streamer.chatbot_enabled) { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.cards.chatbot.availableNotEnabled') %></span>
-          <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConfigured') %></span>
-          <% } %>
-        </div>
-      </div>
-      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
-        <% if (streamer.chatbot_enabled) { %>
-          <% const _chat = _around('dashboard.cards.chatbot.activeOn', 'channel'); %><%= _chat[0] %><strong>#<%= streamer.twitch_username %></strong><%= _chat[1] %>
-        <% } else { %>
-          <%= t('dashboard.cards.chatbot.setup') %>
-        <% } %>
-      </p>
-      <a href="/dashboard/chatbot" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= streamer.chatbot_enabled ? t('dashboard.cards.chatbot.settings') : t('dashboard.cards.chatbot.configure') %></a>
-    </div>
-
-    <!-- Spotify Card -->
-    <div class="card animate-in animate-in-delay-2" style="padding: 24px; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(30,215,96,0.15); display: flex; align-items: center; justify-content: center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-        </div>
-        <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Spotify</h3>
-          <% if (streamer.spotify_access_token) { %>
-            <span style="color: var(--success); font-size: 12px; font-weight: 600;">● <%= t('dashboard.status.connected') %></span>
-          <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;">● <%= t('dashboard.status.notConnected') %></span>
-          <% } %>
-        </div>
-      </div>
-      <% if (streamer.spotify_access_token) { %>
-        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          <% const _spotify = _around('dashboard.cards.spotify.connectedDesc', 'command'); %><%= _spotify[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotify[1] %>
-        </p>
-        <a href="/auth/spotify" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.reconnect') %></a>
-      <% } else { %>
-        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          <% const _spotifyConnect = _around('dashboard.cards.spotify.connectDesc', 'command'); %><%= _spotifyConnect[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotifyConnect[1] %>
-        </p>
-        <a href="/auth/spotify" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.connect') %></a>
-      <% } %>
-    </div>
-
-    <!-- Sponsor Messages Card -->
-    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(247,144,9,0.15); display: flex; align-items: center; justify-content: center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('sponsors.title') %></h3>
-          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.sponsors.sub') %></span>
-        </div>
-      </div>
-      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        <%= t(features.overlays ? 'dashboard.cards.sponsors.desc' : 'dashboard.cards.sponsors.descChat') %>
-      </p>
-      <a href="/dashboard/timed-notifications" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.sponsors.cta') %></a>
-    </div>
-
-    <!-- Donations Card -->
-    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(0,112,186,0.15); display: flex; align-items: center; justify-content: center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0070ba" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        </div>
-        <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.donations.title') %></h3>
-          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.donations.sub') %></span>
-        </div>
-      </div>
-      <% if (streamer.paypal_email && streamer.donation_page_enabled) { %>
-        <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          <% const _tip = _around('dashboard.cards.donations.active', 'link'); %><%= _tip[0] %><a href="/tip/<%= streamer.twitch_username %>" target="_blank" style="color: var(--accent); text-decoration: none;">/tip/<%= streamer.twitch_username %></a><%= _tip[1] %>
-        </p>
-      <% } else { %>
-        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          <%= t(features.overlays ? 'dashboard.cards.donations.setup' : 'dashboard.cards.donations.setupChat') %>
-        </p>
-      <% } %>
-      <div style="display: flex; gap: 8px; margin-top: auto;">
-        <a href="/dashboard/donations" class="btn btn-primary" style="flex: 1; font-size: 13px; padding: 8px 16px; text-decoration: none; text-align: center;"><%= t('dashboard.cards.donations.cta') %></a>
-        <a href="/dashboard/donations/history" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none;"><%= t('dashboard.cards.donations.history') %></a>
-      </div>
-    </div>
-
-    <%# Multistream Card: only once the relay is configured (config.multistream.enabled). %>
-    <% if (typeof multistreamAvailable !== 'undefined' && multistreamAvailable) { %>
-    <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #9146ff, #ff0000); display: flex; align-items: center; justify-content: center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        </div>
-        <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.multistream.title') %></h3>
-          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.multistream.sub') %></span>
-        </div>
-      </div>
-      <% if (streamer.multistream_enabled) { %>
-        <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          <%= t('dashboard.cards.multistream.active') %>
-        </p>
-      <% } else { %>
-        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          <%= t('dashboard.cards.multistream.desc') %>
-        </p>
-      <% } %>
-      <a href="/dashboard/multistream" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.multistream.cta') %></a>
-    </div>
-    <% } %>
-
     <%# The Channel Point Rewards card: the rewards play clips on the overlay, so it is hidden with the overlay features. %>
     <% if (features.overlays) { %>
     <!-- Channel Point Rewards Card -->
@@ -591,29 +724,31 @@
     <% } %>
     <% } %>
 
-    <!-- Giveaways Card -->
+    <%# Multistream Card: only once the relay is configured (config.multistream.enabled). %>
+    <% if (typeof multistreamAvailable !== 'undefined' && multistreamAvailable) { %>
     <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245,158,11,0.15); display: flex; align-items: center; justify-content: center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #9146ff, #ff0000); display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
         </div>
         <div style="line-height: 1.2;">
-          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.giveaways') %></h3>
-          <% if (typeof activeGiveaway !== 'undefined' && activeGiveaway) { %>
-            <span style="color: var(--danger); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-              <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--danger); display: inline-block; animation: pulse 1.2s ease-in-out infinite;"></span>
-              <%= t('dashboard.cards.giveaways.live', { keyword: activeGiveaway.keyword }) %>
-            </span>
-          <% } else { %>
-            <span style="color: var(--text-muted); font-size: 12px;"><%= t('giveaways.state.noActive') %></span>
-          <% } %>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0;"><%= t('dashboard.cards.multistream.title') %></h3>
+          <span style="color: var(--text-muted); font-size: 12px;"><%= t('dashboard.cards.multistream.sub') %></span>
         </div>
       </div>
-      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        <%= t(features.overlays ? 'dashboard.cards.giveaways.desc' : 'dashboard.cards.giveaways.descChat') %>
-      </p>
-      <a href="/dashboard/giveaways" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.giveaways.cta') %></a>
+      <% if (streamer.multistream_enabled) { %>
+        <p style="color: var(--success); font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <%= t('dashboard.cards.multistream.active') %>
+        </p>
+      <% } else { %>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          <%= t('dashboard.cards.multistream.desc') %>
+        </p>
+      <% } %>
+      <a href="/dashboard/multistream" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.multistream.cta') %></a>
     </div>
+    <% } %>
 
     <% if (features.overlays) { %>
     <!-- Custom Overlays Card — DISABLED for now
@@ -628,8 +763,9 @@
   </div>
 </div>
 
-<div class="tab-content" id="tab-youtube">
+<%# The YouTube tab (features.youtube). %>
 <% if (features.youtube) { %>
+<div class="tab-content" id="tab-youtube">
 
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
 
@@ -682,17 +818,11 @@
     </div>
 
   </div>
-<% } else { %>
-  <div class="card" style="text-align: center; padding: 48px 24px;">
-    <div style="margin-bottom: 16px;">
-      <svg width="64" height="45" viewBox="0 0 24 24" fill="none" stroke="#ff0000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 7.7a2.8 2.8 0 0 0-2-2C18.9 5 12 5 12 5s-6.9 0-8.5.7a2.8 2.8 0 0 0-2 2A29 29 0 0 0 1 12a29 29 0 0 0 .5 4.3 2.8 2.8 0 0 0 2 2c1.6.7 8.5.7 8.5.7s6.9 0 8.5-.7a2.8 2.8 0 0 0 2-2A29 29 0 0 0 23 12a29 29 0 0 0-.5-4.3z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>
-    </div>
-    <p style="color: var(--text-secondary); font-size: 16px; font-weight: 600; margin-bottom: 4px;"><%= t('dashboard.comingSoon') %></p>
-    <p style="color: var(--text-muted); font-size: 13px;"><%= t(features.overlays ? 'dashboard.youtube.comingSoon' : 'dashboard.youtube.comingSoonChat') %></p>
-  </div>
-<% } %>
 </div>
+<% } %>
 
+<%# The Kick tab (features.kick): coming soon. %>
+<% if (features.kick) { %>
 <div class="tab-content" id="tab-kick">
   <div class="card" style="text-align: center; padding: 48px 24px;">
     <div style="margin-bottom: 16px;">
@@ -702,6 +832,7 @@
     <p style="color: var(--text-muted); font-size: 13px;"><%= t(features.overlays ? 'dashboard.kick.comingSoon' : 'dashboard.kick.comingSoonChat') %></p>
   </div>
 </div>
+<% } %>
 
 <% if (features.overlays) { %>
 <div class="tab-content" id="tab-experimental">
@@ -1033,30 +1164,70 @@ function toggleStats(guildId) {
 
 <style>
   .twitch-cards-grid .card { margin-bottom: 0; }
+  /* Discord notifications card */
+  .dn-lead { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5; }
+  .dn-servers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 14px; list-style: none; }
+  .dn-server { padding: 12px; border-radius: var(--radius-sm); background: var(--bg-base); border: 1px solid var(--border); }
+  .dn-server-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dn-server > .dn-server-head { margin-bottom: 10px; }
+  .dn-server-icon {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
+    display: flex; align-items: center; justify-content: center; background: var(--bg-elevated);
+    font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--text-muted);
+  }
+  .dn-server-icon img { width: 28px; height: 28px; }
+  .dn-server-name { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dn-offline { flex-shrink: 0; font-size: 11px; color: var(--text-secondary); }
+  .dn-server-link { flex-shrink: 0; font-family: var(--font-display); font-size: 12px; font-weight: 600; }
+  .dn-states { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; }
+  .dn-state {
+    display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 10px;
+    border: 1px solid transparent; border-radius: 999px; font-size: 12px; line-height: 1.5;
+  }
+  .dn-state svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .dn-on { background: var(--success-bg); border-color: rgba(62,207,142,0.2); color: var(--success); }
+  .dn-off { background: var(--bg-elevated); color: var(--text-secondary); }
+  .dn-wait { background: var(--warning-bg); border-color: rgba(247,144,9,0.25); color: var(--warning); }
+  .dn-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+  .dn-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .dn-note { margin-bottom: 12px; font-size: 12px; line-height: 1.5; color: var(--warning); }
+  .dn-note a { color: var(--warning); text-decoration: underline; }
   @media (max-width: 640px) {
     .stat-tooltip { display: none !important; }
   }
   @media (max-width: 520px) {
-    div[style*="grid-template-columns: repeat(4, 1fr)"] { grid-template-columns: repeat(2, 1fr) !important; }
-    div[style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: 1fr 1fr !important; }
-    div[style*="grid-template-columns: repeat(2, 1fr)"] { grid-template-columns: 1fr !important; }
+    div[style*="grid-template-columns: repeat(4, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    div[style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    div[style*="grid-template-columns: repeat(2, 1fr)"] { grid-template-columns: minmax(0, 1fr) !important; }
+    .dash-week-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    /* A server of the Discord tab: its buttons on a line of their own, under the name; three count tiles in one row */
+    .dash-server-head { flex-wrap: wrap; }
+    .dash-server-actions { flex-basis: 100%; }
+    .dash-server-actions > * { flex: 1; justify-content: center; }
+    .dash-server-meta { flex-wrap: wrap; row-gap: 2px; }
+    .dash-summary[style*="repeat(3, 1fr)"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
   }
 </style>
 
 <script>
   const tabs = document.querySelectorAll('.tab-btn');
   const panes = document.querySelectorAll('.tab-content');
+  // Shows a tab: <html data-dashboard-tab> (the styles at the top show its button and pane) and the marks on them.
   function switchTab(tabName) {
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+    document.documentElement.setAttribute('data-dashboard-tab', tabName);
+    tabs.forEach(t => {
+      const open = t.dataset.tab === tabName;
+      t.classList.toggle('active', open);
+      if (open) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current');
+    });
     panes.forEach(p => p.classList.toggle('active', p.id === 'tab-' + tabName));
   }
   tabs.forEach(t => t.addEventListener('click', () => {
     switchTab(t.dataset.tab);
-    localStorage.setItem('dashboard_tab', t.dataset.tab);
+    try { localStorage.setItem('dashboard_tab', t.dataset.tab); } catch (e) { /* storage refused: not remembered */ }
   }));
-  // A remembered tab that this page does not have opens Discord
-  const savedTab = localStorage.getItem('dashboard_tab');
-  switchTab(Array.from(tabs).some(t => t.dataset.tab === savedTab) ? savedTab : 'discord');
+  // The tab the script above the tab bar opened: the one picked last time, or Twitch
+  switchTab(document.documentElement.getAttribute('data-dashboard-tab') || 'twitch');
 </script>
 
 <%- include('footer') %>

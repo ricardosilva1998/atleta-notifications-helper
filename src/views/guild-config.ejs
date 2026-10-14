@@ -53,7 +53,7 @@
 <% if (msg === 'channel_limit') { %>
   <div class="alert alert-warning"><%= t('guild.channelCapReached', { max: maxTwitchChannels }) %></div>
 <% } %>
-<% if (msg === 'yt_not_found') { %>
+<% if (msg === 'yt_not_found' && features.youtube) { %>
   <div class="alert alert-danger"><%= t('guild.ytNotFound') %></div>
 <% } %>
 
@@ -203,8 +203,8 @@
   <% } %>
 </div>
 
-<!-- ==================== YOUTUBE TAB ==================== -->
 <% if (features.youtube) { %>
+<!-- ==================== YOUTUBE TAB ==================== -->
 <div class="tab-content" id="tab-youtube">
   <div class="card animate-in">
     <h3><%= t('guild.addYoutubeChannel') %></h3>
@@ -334,8 +334,11 @@
     <input type="hidden" name="twitch_clips_channel_id" value="<%= guild.twitch_clips_channel_id || '' %>">
     <input type="hidden" name="twitch_live_enabled" value="on">
     <input type="hidden" name="twitch_clips_enabled" value="on">
+    <%# Sent only while YouTube is shown (features.youtube): a save without them keeps the stored values. %>
+    <% if (features.youtube) { %>
     <input type="hidden" name="youtube_channel_id" value="<%= guild.youtube_channel_id || '' %>">
     <input type="hidden" name="youtube_enabled" value="on">
+    <% } %>
 
     <div class="card animate-in">
       <h3><%= t('guild.welcomeMessage') %></h3>
@@ -434,15 +437,17 @@
 <div class="tab-content" id="tab-settings">
   <div class="card animate-in">
     <h3><%= t('guild.serverSummary') %></h3>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+    <div style="display: grid; grid-template-columns: <%= features.youtube ? '1fr 1fr' : '1fr' %>; gap: 16px; margin-top: 12px;">
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border);">
         <div style="font-size: 28px; font-weight: 800; font-family: var(--font-display); color: var(--accent);"><%= watchedTwitchChannels.length %></div>
         <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;"><%= t('guild.twitchChannels') %></div>
       </div>
+      <% if (features.youtube) { %>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border);">
         <div style="font-size: 28px; font-weight: 800; font-family: var(--font-display); color: #f04438;"><%= watchedYoutubeChannels.length %></div>
         <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;"><%= t('guild.youtubeChannels') %></div>
       </div>
+      <% } %>
     </div>
   </div>
 
@@ -465,10 +470,14 @@
   }
   tabs.forEach(t => t.addEventListener('click', () => {
     switchTab(t.dataset.tab);
-    localStorage.setItem('guildconfig_tab', t.dataset.tab);
+    try { localStorage.setItem('guildconfig_tab', t.dataset.tab); } catch (e) { /* storage refused: not remembered */ }
   }));
-  const savedTab = localStorage.getItem('guildconfig_tab');
-  switchTab(savedTab || '<%= activeTab || "twitch" %>');
+  // The tab the address names (?tab=, after a save or from a dashboard link), else the one picked last time, else
+  // Twitch. A tab this page does not show does not count.
+  const onPage = (name) => Array.from(tabs).some(t => t.dataset.tab === name);
+  let savedTab = null;
+  try { savedTab = localStorage.getItem('guildconfig_tab'); } catch (e) { /* storage refused: the default */ }
+  switchTab([<%- JSON.stringify(typeof requestedTab !== 'undefined' && requestedTab ? requestedTab : null).replace(/</g, '\\u003c') %>, savedTab].find(onPage) || 'twitch');
 
   function toggleEdit(id) {
     var el = document.getElementById('edit-' + id);

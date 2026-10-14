@@ -24,6 +24,10 @@ for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET'
 // The overlay pages, cards and links are hidden while config.features.overlays is off, which is its
 // default. These tests cover those pages, so the switch is on for the file; the last section turns it off.
 require('../config').features.overlays = true;
+// The same for YouTube and Kick (config.features.youtube and .kick, off by default): on for the file, so the
+// tests of the YouTube pages and tabs keep covering them; the sections at the end turn them off.
+require('../config').features.youtube = true;
+require('../config').features.kick = true;
 
 const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
@@ -190,8 +194,8 @@ const CSRF_SECRET = 'synthetic-csrf-secret';
 // (the upload routes read the raw bytes, so those use application/octet-stream).
 // A POST, PUT, PATCH or DELETE says it comes from this site's own page, as a
 // browser's does (`origin` names another one, or false sends none); `csrf` is
-// sent as the X-CSRF-Token header and `fetchMode` as Sec-Fetch-Mode.
-function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false, cookie, origin = 'self', csrf, fetchMode } = {}) {
+// sent as the X-CSRF-Token header and `fetchMode` as Sec-Fetch-Mode. `admin` renders the page as an admin's.
+function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false, cookie, origin = 'self', csrf, fetchMode, admin = false } = {}) {
   return new Promise((resolve, reject) => {
     const body = rawBody
       || (jsonBody !== undefined ? JSON.stringify(jsonBody) : null)
@@ -200,6 +204,7 @@ function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, con
     const headers = body ? { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body) } : {};
     if (streamer) headers['x-test-streamer'] = String(streamer);
     if (json) headers['x-test-render'] = 'json';
+    if (admin) headers['x-test-admin'] = '1';
     if (cookie) headers.Cookie = cookie;
     if (origin && !['GET', 'HEAD'].includes(method)) headers.Origin = origin === 'self' ? `http://127.0.0.1:${port}` : origin;
     if (csrf) headers['X-CSRF-Token'] = csrf;
@@ -278,9 +283,12 @@ before(async () => {
     }
     applyAccountStatus(req);
     res.locals.t = (key, params) => t('en', key, params);
+    res.locals.lang = 'en'; // as server.js: the language, and the ones the language picker offers
+    res.locals.SUPPORTED_LANGS = require('../i18n').SUPPORTED_LANGS;
     res.locals.esc = esc; // as server.js: the views print their sentences with rich() and escape their data with esc()
     res.locals.rich = richFor(res.locals.t);
     res.locals.features = require('../config').features; // as server.js
+    res.locals.isAdmin = req.get('x-test-admin') === '1'; // server.js: db.isAdmin()
     res.locals.streamer = req.streamer || null;
     if (req.get('x-test-render') === 'json') res.render = (view, locals) => res.json({ view, locals });
     next();
@@ -843,9 +851,9 @@ describe('the tab named in the server page URL', () => {
   test('the page script holds a tab name from the list and nothing from the URL', async () => {
     const res = await request('GET', `/dashboard/guild/${G}?tab=%0A%5C%27%22%3C`, { streamer: id });
     assert.equal(res.status, 200);
-    assert.ok(res.text.includes("switchTab(savedTab || 'twitch');"));
+    assert.ok(res.text.includes("switchTab([null, savedTab].find(onPage) || 'twitch');"));
     const ok = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
-    assert.ok(ok.text.includes("switchTab(savedTab || 'discord');"));
+    assert.ok(ok.text.includes(`switchTab(["discord", savedTab].find(onPage) || 'twitch');`));
   });
 });
 
@@ -3351,36 +3359,19 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       assert.ok(page.includes(`/overlay/${db.getStreamerById(streamer).overlay_token}`), 'the OBS link');
     });
 
-    // The tab buttons and panes of a rendered dashboard run against a fake document: which tab is open after the page script ran.
-    function openTabAfterScript(pageHtml, savedTab) {
-      const names = [...pageHtml.matchAll(/class="tab-btn[^"]*" data-tab="(\w+)"/g)].map((m) => m[1]);
-      const open = new Set();
-      const mark = (kind, name) => ({
-        dataset: { tab: name },
-        id: `tab-${name}`,
-        addEventListener() {},
-        classList: { toggle: (cls, on) => (on ? open.add(`${kind}:${name}`) : open.delete(`${kind}:${name}`)) },
-      });
-      const tabs = names.map((name) => mark('button', name));
-      const panes = names.map((name) => mark('pane', name));
-      const document = { querySelectorAll: (selector) => (selector === '.tab-btn' ? tabs : panes) };
-      const script = [...pageHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('dashboard_tab'));
-      new Function('document', 'localStorage', script)(document, { getItem: () => savedTab, setItem() {} });
-      return [...open].sort();
-    }
-
-    test('a tab remembered from before that the page no longer has (Experimental) opens Discord, not an empty dashboard', async () => {
+    test('a tab remembered from before that the page no longer has (Experimental) opens Twitch, not an empty dashboard', async () => {
       const res = await request('GET', '/dashboard', { streamer: addStreamer() });
-      assert.deepEqual(openTabAfterScript(res.text, 'experimental'), ['button:discord', 'pane:discord']);
-      assert.deepEqual(openTabAfterScript(res.text, 'admin'), ['button:discord', 'pane:discord'], 'the Admin tab is not on a non-admin\'s page either');
-      assert.deepEqual(openTabAfterScript(res.text, null), ['button:discord', 'pane:discord']);
-      assert.deepEqual(openTabAfterScript(res.text, 'twitch'), ['button:twitch', 'pane:twitch'], 'a tab that is there is opened');
+      const twitchOpen = { html: 'twitch', open: ['button:twitch', 'pane:twitch'] };
+      assert.deepEqual(openDashboardTab(res.text, 'experimental'), twitchOpen);
+      assert.deepEqual(openDashboardTab(res.text, 'admin'), twitchOpen, 'the Admin tab is not on a non-admin\'s page either');
+      assert.deepEqual(openDashboardTab(res.text, null), twitchOpen);
+      assert.deepEqual(openDashboardTab(res.text, 'discord'), { html: 'discord', open: ['button:discord', 'pane:discord'] }, 'a tab that is there is opened');
     });
 
     test('switched on, the remembered Experimental tab opens, as before', async () => {
       features.overlays = true;
       const res = await request('GET', '/dashboard', { streamer: addStreamer() });
-      assert.deepEqual(openTabAfterScript(res.text, 'experimental'), ['button:experimental', 'pane:experimental']);
+      assert.deepEqual(openDashboardTab(res.text, 'experimental'), { html: 'experimental', open: ['button:experimental', 'pane:experimental'] });
     });
   });
 
@@ -3476,5 +3467,537 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       const res = await request('GET', '/dashboard', { streamer: addStreamer({ enabled: 0 }) });
       assert.ok(res.text.includes(esc(t('en', 'account.disabled.body'))));
     });
+  });
+});
+
+// ── Twitch at the centre of the dashboard ────────────────────────────────
+
+// Which tab a rendered dashboard opens, from its own two tab scripts run against a fake page: the one above the
+// tab bar names the tab on <html data-dashboard-tab> from what localStorage remembers, before anything is drawn;
+// the one at the end marks that tab's button and pane. `saved` is what localStorage holds ('throws': a browser
+// that refuses storage). Returns the tab <html> names and the buttons and panes marked open.
+function openDashboardTab(pageHtml, saved) {
+  const open = new Set();
+  const attributes = {};
+  const element = (kind, name) => ({
+    dataset: { tab: name },
+    id: `tab-${name}`,
+    addEventListener() {},
+    setAttribute() {},
+    removeAttribute() {},
+    classList: { toggle: (cls, on) => { if (cls === 'active') { if (on) open.add(`${kind}:${name}`); else open.delete(`${kind}:${name}`); } } },
+  });
+  const tabs = [...pageHtml.matchAll(/class="tab-btn[^"]*" data-tab="(\w+)"/g)].map((m) => element('button', m[1]));
+  const panes = [...pageHtml.matchAll(/class="tab-content[^"]*" id="tab-(\w+)"/g)].map((m) => element('pane', m[1]));
+  const document = {
+    documentElement: { setAttribute: (name, value) => { attributes[name] = String(value); }, getAttribute: (name) => attributes[name] ?? null },
+    querySelectorAll: (selector) => ({ '.tab-btn': tabs, '.tab-content': panes }[selector] || []),
+  };
+  const refuse = () => { throw new Error('storage refused'); };
+  const localStorage = saved === 'throws' ? { getItem: refuse, setItem: refuse } : { getItem: () => saved, setItem() {} };
+  const scripts = [...pageHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).filter((s) => s.includes('dashboard_tab') || s.includes('data-dashboard-tab'));
+  assert.equal(scripts.length, 2, 'the script above the tab bar and the page script at the end');
+  for (const script of scripts) new Function('document', 'localStorage', script)(document, localStorage);
+  return { html: attributes['data-dashboard-tab'] ?? null, open: [...open].sort() };
+}
+
+// The tab buttons of a rendered dashboard, in order.
+const dashboardTabs = (html) => [...html.matchAll(/class="tab-btn[^"]*" data-tab="(\w+)"/g)].map((m) => m[1]);
+// A pane of a rendered dashboard: from its opening tag to the next pane.
+function dashboardPane(html, tab) {
+  const start = html.indexOf(`id="tab-${tab}"`);
+  assert.ok(start > 0, `the ${tab} pane is on the page`);
+  const next = html.indexOf('<div class="tab-content', start);
+  return html.slice(start, next > 0 ? next : html.length);
+}
+// The headings of the cards of the Twitch tab, in order.
+const twitchCardTitles = (html) => [...dashboardPane(html, 'twitch').matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map((m) => m[1].replace(/<[^>]*>/g, '').trim());
+
+describe('the dashboard puts Twitch first', () => {
+  const { features } = require('../config');
+  afterEach(() => Object.assign(features, { overlays: true, youtube: true, kick: true }));
+  let made = 0;
+  const linked = (over = {}) => { made++; return addStreamer({ twitch_user_id: `tw-first-${made}`, twitch_username: `synthetic_first_${made}`, ...over }); };
+
+  test('the tabs are Twitch, then Discord, then the ones that are switched on, and Admin for an admin', async () => {
+    const id = addStreamer();
+    assert.deepEqual(dashboardTabs((await request('GET', '/dashboard', { streamer: id })).text), ['twitch', 'discord', 'youtube', 'kick', 'experimental']);
+    assert.deepEqual(dashboardTabs((await request('GET', '/dashboard', { streamer: id, admin: true })).text), ['twitch', 'discord', 'youtube', 'kick', 'experimental', 'admin']);
+    Object.assign(features, { overlays: false, youtube: false, kick: false });
+    assert.deepEqual(dashboardTabs((await request('GET', '/dashboard', { streamer: id })).text), ['twitch', 'discord']);
+    assert.deepEqual(dashboardTabs((await request('GET', '/dashboard', { streamer: id, admin: true })).text), ['twitch', 'discord', 'admin']);
+  });
+
+  test('a first visit opens Twitch, the tab picked last time opens the next time, and one the page no longer has opens Twitch', async () => {
+    Object.assign(features, { overlays: false, youtube: false, kick: false });
+    const html = (await request('GET', '/dashboard', { streamer: addStreamer() })).text;
+    const twitchOpen = { html: 'twitch', open: ['button:twitch', 'pane:twitch'] };
+    assert.deepEqual(openDashboardTab(html, null), twitchOpen, 'nothing remembered');
+    assert.deepEqual(openDashboardTab(html, 'twitch'), twitchOpen);
+    assert.deepEqual(openDashboardTab(html, 'discord'), { html: 'discord', open: ['button:discord', 'pane:discord'] });
+    for (const gone of ['youtube', 'kick', 'experimental', 'admin', 'tab-twitch', '', 'constructor']) assert.deepEqual(openDashboardTab(html, gone), twitchOpen, JSON.stringify(gone));
+    assert.deepEqual(openDashboardTab(html, 'throws'), twitchOpen, 'a browser that refuses storage');
+  });
+
+  test('switched on, a remembered YouTube or Kick tab opens as before, and an admin\'s Admin tab', async () => {
+    const id = addStreamer();
+    const html = (await request('GET', '/dashboard', { streamer: id })).text;
+    for (const tab of ['youtube', 'kick']) assert.deepEqual(openDashboardTab(html, tab), { html: tab, open: [`button:${tab}`, `pane:${tab}`] });
+    const admin = (await request('GET', '/dashboard', { streamer: id, admin: true })).text;
+    assert.deepEqual(openDashboardTab(admin, 'admin'), { html: 'admin', open: ['button:admin', 'pane:admin'] });
+  });
+
+  test('the page is drawn on that tab from the start: the tab is named above the tab bar, and nothing is marked open in the page as sent', async () => {
+    for (const on of [false, true]) {
+      Object.assign(features, { overlays: on, youtube: on, kick: on });
+      const html = (await request('GET', '/dashboard', { streamer: addStreamer(), admin: true })).text;
+      const named = html.indexOf("localStorage.getItem('dashboard_tab')");
+      assert.ok(named > 0 && named < html.indexOf('class="tab-bar'), 'the remembered tab is read before the tab bar');
+      assert.ok(named < html.indexOf('class="tab-content'), 'and before the panes');
+      assert.doesNotMatch(html, /class="tab-btn[^"]*\bactive\b/, 'no tab button is marked open as sent');
+      assert.doesNotMatch(html, /class="tab-content[^"]*\bactive\b/, 'no pane is marked open as sent');
+      // The stylesheet shows the pane and the button that <html data-dashboard-tab> names, for every tab of the page.
+      for (const tab of dashboardTabs(html)) {
+        assert.ok(html.includes(`html[data-dashboard-tab="${tab}"] #tab-${tab}`), `${tab}: its pane`);
+        assert.ok(html.includes(`html[data-dashboard-tab="${tab}"] .tab-btn.tab-${tab}`), `${tab}: its button`);
+      }
+      assert.ok(html.includes('html:not([data-dashboard-tab]) #tab-twitch'), 'without that script (no JavaScript) the Twitch tab shows');
+    }
+  });
+
+  test('the Twitch tab: the account row, then Chatbot, Discord notifications, Giveaways, Donations, Sponsor messages and Spotify', async () => {
+    features.overlays = false;
+    const html = (await request('GET', '/dashboard', { streamer: linked() })).text;
+    const pane = dashboardPane(html, 'twitch');
+    assert.deepEqual(twitchCardTitles(html), [t('en', 'dashboard.week.title'), t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'),
+      t('en', 'dashboard.cards.giveaways'), t('en', 'dashboard.cards.donations.title'), t('en', 'sponsors.title'), 'Spotify']);
+    assert.ok(pane.indexOf(`Twitch: synthetic_first_${made}`) < pane.indexOf('class="card'), 'the linked channel is above the cards');
+  });
+
+  test('switched on, the overlay cards come after those, and the Multistream card (relay configured) last', async () => {
+    const multistream = require('../config').multistream;
+    const relay = multistream.enabled;
+    multistream.enabled = true;
+    try {
+      const html = (await request('GET', '/dashboard', { streamer: linked({ overlay_token: 'synthetic-token-first-1' }) })).text;
+      assert.deepEqual(twitchCardTitles(html).slice(1), [t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'), t('en', 'dashboard.cards.giveaways'),
+        t('en', 'dashboard.cards.donations.title'), t('en', 'sponsors.title'), 'Spotify', t('en', 'dashboard.cards.overlay.title'), t('en', 'dashboard.cards.cpRewards'),
+        t('en', 'dashboard.cards.multistream.title')]);
+    } finally {
+      multistream.enabled = relay;
+    }
+  });
+
+  test('every card has one main button, and says what state it is in', async () => {
+    features.overlays = false;
+    const pane = dashboardPane((await request('GET', '/dashboard', { streamer: linked({ chatbot_enabled: 1 }) })).text, 'twitch');
+    const cards = pane.split('<div class="card').slice(2); // the 7-day activity card has no button
+    assert.equal(cards.length, 6);
+    for (const card of cards) {
+      const title = (card.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/) || [])[1];
+      assert.equal((card.match(/class="btn btn-(?:primary|discord)\b/g) || []).length, 1, `${title}: one main button`);
+      assert.match(card, /<\/h3>\s*<span\b/, `${title}: a status line under its title`);
+    }
+  });
+
+  test('the Twitch account row: link the account, give the broadcaster authorization, or reconnect when it stopped working', async () => {
+    const row = async (id) => {
+      const pane = dashboardPane((await request('GET', '/dashboard', { streamer: id })).text, 'twitch');
+      return pane.slice(0, pane.indexOf('class="card'));
+    };
+    const notLinked = await row(addStreamer());
+    assert.ok(notLinked.includes('href="/auth/twitch"') && notLinked.includes(esc(t('en', 'dashboard.linkTwitch'))));
+    const noAuthorization = await row(linked());
+    assert.ok(noAuthorization.includes(`Twitch: synthetic_first_${made}`));
+    assert.ok(noAuthorization.includes('href="/auth/broadcaster"') && noAuthorization.includes(esc(t('en', 'dashboard.enableSubSync'))));
+    const authorized = await row(linked({ broadcaster_access_token: 'synthetic-broadcaster' }));
+    assert.ok(!authorized.includes('/auth/broadcaster'), 'nothing to do');
+    const reauth = twitchStub.needsBroadcasterReauth;
+    twitchStub.needsBroadcasterReauth = () => true;
+    try {
+      const stale = await row(linked({ broadcaster_access_token: 'synthetic-broadcaster' }));
+      assert.ok(stale.includes('href="/auth/broadcaster"') && stale.includes(esc(t('en', 'dashboard.reconnectTwitch'))));
+    } finally {
+      twitchStub.needsBroadcasterReauth = reauth;
+    }
+  });
+});
+
+describe('the Discord notifications card on the Twitch tab', () => {
+  let made = 0;
+  let guildCount = 0;
+  const nextGuild = () => `60000000000000${String(500 + ++guildCount).padStart(4, '0')}`;
+  const linked = (over = {}) => { made++; return addStreamer({ twitch_user_id: `tw-dn-${made}`, twitch_username: `synthetic_dn_${made}`, ...over }); };
+  const loginOf = (id) => db.getStreamerById(id).twitch_username;
+  // A server the streamer has claimed, that the bot can see (unless seen: false).
+  const claimed = (id, settings = {}, { seen = true, name = 'Synthetic Server' } = {}) => {
+    const g = nextGuild();
+    db.upsertGuild(g, id, name);
+    db.updateGuildConfig(g, id, settings);
+    if (seen) guilds.set(g, fakeGuild(g));
+    return g;
+  };
+  const page = async (id) => {
+    const res = await request('GET', '/dashboard', { streamer: id });
+    assert.equal(res.status, 200);
+    return res.text;
+  };
+  const cardOf = async (id) => {
+    const html = await page(id);
+    const start = html.indexOf('id="discord-notifications"');
+    assert.ok(start > 0, 'the card is on the page');
+    return html.slice(start, html.indexOf('<!-- end discord-notifications -->', start));
+  };
+  const dataOf = async (id) => (await request('GET', '/dashboard', { streamer: id, json: true })).json().locals.discordNotifications;
+  // A state of a server's row: 'on', 'off' or 'wait', the words it shows, and the state in words for a screen reader.
+  const state = (card, guildId, item) => {
+    const row = card.slice(card.indexOf(`data-guild="${guildId}"`));
+    const m = row.match(new RegExp(`<li class="dn-state dn-(on|off|wait)" data-item="${item}">([\\s\\S]*?)</li>`));
+    assert.ok(m, `${item} is shown for ${guildId}`);
+    const spoken = (m[2].match(/<span class="dn-sr">([\s\S]*?)<\/span>/) || [])[1];
+    const shown = m[2].replace(/<span class="dn-sr">[\s\S]*?<\/span>/, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    return { state: m[1], text: shown, spoken: spoken && spoken.replace(/[:\s]+$/, '') };
+  };
+  const states = (card, guildId) => Object.fromEntries(['goLive', 'clips', 'recaps', 'milestones', 'highlights', 'subRoles'].map((item) => [item, state(card, guildId, item).state]));
+  const ALL_ON = { recap_enabled: true, milestones_enabled: true, weekly_highlights_enabled: true, sub_sync_enabled: true, sub_role_id: '700000000000000005' };
+
+  test('without a linked Twitch account it says so, and offers to link it', async () => {
+    const id = addStreamer();
+    claimed(id, ALL_ON);
+    const card = await cardOf(id);
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.statusNoTwitch'))));
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.noTwitch'))));
+    assert.ok(card.includes('href="/auth/twitch"') && card.includes(esc(t('en', 'dashboard.linkTwitch'))));
+    assert.ok(!card.includes('data-guild='), 'no server is listed: nothing can be said about a channel that is not linked');
+    assert.equal((await dataOf(id)).twitchLinked, false);
+  });
+
+  test('with no server: what the bot would post, the bot invite, and a server the bot is already in to claim', async () => {
+    const id = linked();
+    let card = await cardOf(id);
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.statusNoServer'))));
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.noServer'))));
+    assert.ok(card.includes('href="https://discord.com/oauth2/authorize?client_id=') && card.includes(esc(t('en', 'dashboard.addBot'))));
+    assert.ok(!card.includes('/dashboard/claim/'));
+
+    const g = nextGuild();
+    guilds.set(g, fakeGuild(g, { manage: [discordId(id)] }));
+    card = await cardOf(id);
+    assert.ok(card.includes(`action="/dashboard/claim/${g}"`), 'the server the streamer manages can be claimed from the card');
+    assert.ok(card.includes(esc(t('en', 'dashboard.claim'))));
+  });
+
+  test('a server that announces the streamer\'s channel: go-live and clips with their channels, the server\'s switches, sub roles, and one button to its settings', async () => {
+    const id = linked({ broadcaster_access_token: 'synthetic-broadcaster' });
+    const g = claimed(id, ALL_ON);
+    db.addWatchedChannel(g, id, loginOf(id), CH_LIVE, CH_CLIPS, true, true, null);
+    const card = await cardOf(id);
+    assert.deepEqual(states(card, g), { goLive: 'on', clips: 'on', recaps: 'on', milestones: 'on', highlights: 'on', subRoles: 'on' });
+    assert.equal(state(card, g, 'goLive').text, `${t('en', 'dashboard.cards.discord.goLive')} #live`);
+    assert.equal(state(card, g, 'clips').text, `${t('en', 'dashboard.cards.discord.clips')} #clips`);
+    assert.equal(state(card, g, 'goLive').spoken, t('en', 'dashboard.cards.discord.on'), 'the state is in words too, for a screen reader');
+    assert.ok(card.includes(`Server ${g}`), 'the server\'s name as Discord has it');
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.statusAll'))));
+    assert.deepEqual([...card.matchAll(/href="(\/dashboard\/guild\/[^"]*)"/g)].map((m) => m[1]), [`/dashboard/guild/${g}`], 'one way to its settings');
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.serverSettings'))));
+    assert.ok(!card.includes(esc(t('en', 'dashboard.cards.discord.authNote', { link: '' }).slice(0, 20))), 'nothing waits for an authorization');
+  });
+
+  test('a server that does not watch the streamer\'s channel: nothing of it is posted there, whatever its switches; the card offers to set it up', async () => {
+    const id = linked({ broadcaster_access_token: 'synthetic-broadcaster' });
+    const g = claimed(id, ALL_ON);
+    db.addWatchedChannel(g, id, 'someone_else', CH_LIVE, CH_CLIPS, true, true, null);
+    const card = await cardOf(id);
+    const shown = states(card, g);
+    assert.deepEqual(shown, { goLive: 'off', clips: 'off', recaps: 'off', milestones: 'off', highlights: 'off', subRoles: 'on' }, 'recaps, milestones and highlights go into the go-live channel of the streamer\'s own row');
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.statusNone'))));
+    assert.ok(card.includes(`href="/dashboard/guild/${g}?tab=twitch"`) && card.includes(esc(t('en', 'dashboard.cards.discord.setUpPosts'))));
+    assert.equal(state(card, g, 'goLive').spoken, t('en', 'dashboard.cards.discord.off'));
+  });
+
+  test('go-live without clips; a channel the bot cannot see is not named; a watcher row that is off counts as off', async () => {
+    const id = linked();
+    const g = claimed(id);
+    db.addWatchedChannel(g, id, loginOf(id), '599999999999999999', null, true, false, null);
+    let card = await cardOf(id);
+    assert.equal(state(card, g, 'goLive').state, 'on');
+    assert.equal(state(card, g, 'goLive').text, t('en', 'dashboard.cards.discord.goLive'), 'no channel name');
+    assert.equal(state(card, g, 'clips').state, 'off');
+    db.db.prepare('UPDATE watched_channels SET enabled = 0 WHERE guild_id = ?').run(g);
+    card = await cardOf(id);
+    assert.equal(state(card, g, 'goLive').state, 'off', 'the pollers skip a row that is off');
+  });
+
+  test('sub roles: off without the switch or without a role, waiting without the broadcaster authorization, with the way to give it', async () => {
+    const off = linked({ broadcaster_access_token: 'synthetic-broadcaster' });
+    const noSwitch = claimed(off, { sub_role_id: '700000000000000005' });
+    const noRole = claimed(off, { sub_sync_enabled: true });
+    let card = await cardOf(off);
+    assert.equal(state(card, noSwitch, 'subRoles').state, 'off');
+    assert.equal(state(card, noRole, 'subRoles').state, 'off');
+
+    const waiting = linked();
+    const g = claimed(waiting, { sub_sync_enabled: true, sub_role_id: '700000000000000005' });
+    card = await cardOf(waiting);
+    assert.equal(state(card, g, 'subRoles').state, 'wait');
+    assert.equal(state(card, g, 'subRoles').spoken, t('en', 'dashboard.cards.discord.wait'));
+    const [before] = t('en', 'dashboard.cards.discord.authNote', { link: '\u0001' }).split('\u0001');
+    assert.ok(card.includes(esc(before)), 'it says what is waiting');
+    assert.ok(card.includes('href="/auth/broadcaster"') && card.includes(esc(t('en', 'dashboard.enableSubSync'))));
+    assert.deepEqual(await dataOf(waiting).then((d) => [d.needsAuth, d.authAction]), [true, 'enable']);
+
+    const reauth = twitchStub.needsBroadcasterReauth;
+    twitchStub.needsBroadcasterReauth = () => true;
+    try {
+      const stale = linked({ broadcaster_access_token: 'synthetic-broadcaster' });
+      const s = claimed(stale, { sub_sync_enabled: true, sub_role_id: '700000000000000005' });
+      card = await cardOf(stale);
+      assert.equal(state(card, s, 'subRoles').state, 'wait', 'an authorization that stopped working counts as none');
+      assert.ok(card.includes(esc(t('en', 'dashboard.reconnect.cta'))));
+    } finally {
+      twitchStub.needsBroadcasterReauth = reauth;
+    }
+  });
+
+  test('milestones wait for the broadcaster authorization too; recaps do not need it', async () => {
+    const id = linked();
+    const g = claimed(id, { recap_enabled: true, milestones_enabled: true });
+    db.addWatchedChannel(g, id, loginOf(id), CH_LIVE, null, true, false, null);
+    const card = await cardOf(id);
+    assert.equal(state(card, g, 'recaps').state, 'on');
+    assert.equal(state(card, g, 'milestones').state, 'wait');
+  });
+
+  test('weekly highlights: the server\'s switch, for the streamer the digest is made for (the first to switch it on in a shared server)', async () => {
+    const first = linked();
+    const second = linked();
+    const g = nextGuild();
+    guilds.set(g, fakeGuild(g));
+    for (const id of [first, second]) {
+      db.upsertGuild(g, id, 'Shared Server');
+      db.updateGuildConfig(g, id, { weekly_highlights_enabled: true });
+      db.addWatchedChannel(g, id, loginOf(id), CH_LIVE, null, true, false, null);
+    }
+    assert.equal(state(await cardOf(first), g, 'highlights').state, 'on');
+    assert.equal(state(await cardOf(second), g, 'highlights').state, 'off', 'the digest of this server is made of the first streamer\'s channels');
+  });
+
+  test('several servers: how many announce the streamer\'s channel, and a link of its own on each; no big button', async () => {
+    const id = linked();
+    const announcing = claimed(id);
+    db.addWatchedChannel(announcing, id, loginOf(id), CH_LIVE, CH_CLIPS, true, true, null);
+    const quiet = claimed(id, {}, { seen: false, name: 'Stored Name' });
+    const card = await cardOf(id);
+    assert.ok(card.includes(esc(t('en', 'dashboard.cards.discord.statusSome', { count: 1, total: 2 }))));
+    assert.deepEqual([...card.matchAll(/href="(\/dashboard\/guild\/[^"]*)"/g)].map((m) => m[1]), [`/dashboard/guild/${announcing}`, `/dashboard/guild/${quiet}?tab=twitch`]);
+    assert.ok(!/class="btn btn-(?:primary|discord)\b/.test(card), 'the links of the rows are the actions');
+    // the bot cannot see the second server: it is named as stored, and marked offline as on the Discord tab
+    const row = card.slice(card.indexOf(`data-guild="${quiet}"`));
+    assert.ok(row.includes('Stored Name') && row.includes(esc(t('en', 'dashboard.offline'))));
+    const data = await dataOf(id);
+    assert.equal(data.announcing, 1);
+    assert.deepEqual(data.servers.map((s) => [s.guildId, s.botPresent]), [[announcing, true], [quiet, false]]);
+  });
+
+  test('a name made of markup is printed as text', async () => {
+    const id = linked();
+    claimed(id, {}, { seen: false, name: '<img src=x onerror=alert(1)>' });
+    const card = await cardOf(id);
+    assert.ok(!card.includes('<img src=x'));
+    assert.ok(card.includes(esc('<img src=x onerror=alert(1)>')));
+  });
+});
+
+// ── YouTube and Kick switched off (config.features.youtube, .kick) ───────
+
+describe('with YouTube switched off', () => {
+  const { features } = require('../config');
+  beforeEach(() => { features.youtube = false; });
+  afterEach(() => { features.youtube = true; });
+
+  // A page says nothing of YouTube: not in its text, its links, its attributes or its comments (a class name in a
+  // stylesheet, such as the layout's .tab-youtube, is not something a streamer reads).
+  const YOUTUBE = /youtube|youtu\.be|super ?chat|\byt_/i;
+  const noYoutube = (html, label) => {
+    const page = html.replace(/<style\b[\s\S]*?<\/style>/gi, ' ');
+    const m = page.match(YOUTUBE);
+    assert.ok(!m, `${label} talks about YouTube: ${m && page.slice(Math.max(0, m.index - 80), m.index + 60).replace(/\s+/g, ' ')}`);
+  };
+  let made = 0;
+  const G = () => `60000000000000${String(700 + ++made).padStart(4, '0')}`;
+  const YT = 'UC000000000000000000yt01';
+  // A streamer with a server that watches a YouTube channel too, and has posted about it.
+  const withYoutube = () => {
+    const id = addStreamer({ twitch_user_id: `tw-yt-${made}`, twitch_username: `synthetic_yt_${made}`, yt_chatbot_enabled: 1, overlay_token: `synthetic-token-yt-${made}` });
+    const g = G();
+    db.upsertGuild(g, id, 'Server');
+    db.updateGuildConfig(g, id, { youtube_enabled: true, youtube_channel_id: 'UC000000000000000legacy', welcome_enabled: true });
+    guilds.set(g, fakeGuild(g));
+    db.addWatchedChannel(g, id, `synthetic_yt_${made}`, CH_LIVE, CH_CLIPS, true, true, null);
+    db.addWatchedYoutubeChannel(g, id, YT, 'Synthetic Tube', CH_LIVE, CH_CLIPS, null);
+    db.logNotification(id, g, 'youtube_video', true);
+    db.logNotification(id, g, 'twitch_live', true);
+    return { id, g };
+  };
+
+  test('the dashboard has no YouTube tab, pane, card, count, link or word', async () => {
+    const multistream = require('../config').multistream;
+    const relay = multistream.enabled;
+    multistream.enabled = true; // the multistream card streams to YouTube: hidden with it
+    try {
+      const { id, g } = withYoutube();
+      const res = await request('GET', '/dashboard', { streamer: id, admin: true });
+      assert.equal(res.status, 200);
+      noYoutube(res.text, 'dashboard');
+      assert.deepEqual(dashboardTabs(res.text), ['twitch', 'discord', 'kick', 'experimental', 'admin']);
+      assert.ok(!res.text.includes('/dashboard/multistream'));
+      // the Discord tab still has the server, its Twitch count and the notifications it sent
+      const discord = dashboardPane(res.text, 'discord');
+      assert.ok(discord.includes(`href="/dashboard/guild/${g}"`) && discord.includes('1 Twitch'));
+      assert.ok(discord.includes(esc(t('en', 'dashboard.type.twitch_live'))), 'the Twitch posts are in the chart');
+    } finally {
+      multistream.enabled = relay;
+    }
+  });
+
+  test('switched on, the dashboard is as it was: the YouTube tab and its cards, the YouTube counts, tile and chart', async () => {
+    features.youtube = true;
+    const { id } = withYoutube();
+    const html = (await request('GET', '/dashboard', { streamer: id })).text;
+    assert.deepEqual(dashboardTabs(html), ['twitch', 'discord', 'youtube', 'kick', 'experimental']);
+    assert.ok(dashboardPane(html, 'youtube').includes('href="/dashboard/youtube-chatbot"'));
+    const discord = dashboardPane(html, 'discord');
+    for (const there of ['1 Twitch &middot; 1 YouTube', esc(t('en', 'dashboard.summary.youtubeLabel')), esc(t('en', 'dashboard.type.youtube_video')), esc(t('en', 'dashboard.youtubeBox.videoLabel'))]) {
+      assert.ok(discord.includes(there), there);
+    }
+  });
+
+  test('the YouTube chatbot page sends the streamer back to the dashboard; its saves are as they were (no page reaches them)', async () => {
+    const { id } = withYoutube();
+    const res = await request('GET', '/dashboard/youtube-chatbot', { streamer: id, json: true });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard');
+    assert.equal((await request('GET', '/dashboard/youtube-chatbot')).headers.location, '/auth/login', 'a visitor who is not logged in still goes to the login page');
+    const save = await request('POST', '/dashboard/youtube-chatbot', { streamer: id, form: { yt_chatbot_enabled: '1', yt_chat_member_template: 'Welcome {username}' } });
+    assert.equal(save.status, 302);
+    assert.equal(db.getStreamerById(id).yt_chat_member_template, 'Welcome {username}');
+    features.youtube = true;
+    const on = await request('GET', '/dashboard/youtube-chatbot', { streamer: id, json: true });
+    assert.equal(on.status, 200);
+    assert.equal(on.json().view, 'youtube-chatbot-config');
+  });
+
+  test('the server page has no YouTube tab, section, field or count, and ?tab=youtube opens Twitch', async () => {
+    const { id, g } = withYoutube();
+    const res = await request('GET', `/dashboard/guild/${g}`, { streamer: id });
+    assert.equal(res.status, 200);
+    noYoutube(res.text, 'server page');
+    assert.ok(!res.text.includes('data-tab="youtube"') && !res.text.includes('id="tab-youtube"'));
+    assert.ok(res.text.includes(`/dashboard/guild/${g}/channels`), 'the Twitch channels are there');
+    const locals = (await request('GET', `/dashboard/guild/${g}?tab=youtube`, { streamer: id, json: true })).json().locals;
+    assert.equal(locals.requestedTab, null);
+    assert.equal(locals.activeTab, 'twitch');
+    features.youtube = true;
+    const on = await request('GET', `/dashboard/guild/${g}`, { streamer: id });
+    for (const there of ['data-tab="youtube"', 'id="tab-youtube"', 'name="youtube_enabled"', 'Synthetic Tube', esc(t('en', 'guild.youtubeChannels'))]) assert.ok(on.text.includes(there), there);
+  });
+
+  test('a save of the server page keeps the YouTube channels it watches and the stored YouTube settings', async () => {
+    const { id, g } = withYoutube();
+    const watchers = () => db.getWatchedYoutubeChannelsForGuild(g, id).map((w) => [w.youtube_channel_id, w.videos_channel_id, w.live_channel_id, w.notify_videos, w.notify_live]);
+    const before = watchers();
+    // what the page sends while YouTube is hidden: no YouTube field at all
+    const res = await request('POST', `/dashboard/guild/${g}`, { streamer: id, form: { twitch_live_enabled: 'on', twitch_clips_enabled: 'on', welcome_enabled: 'on', welcome_channel_id: CH_LIVE, recap_enabled: 'on' } });
+    assert.equal(res.status, 302);
+    const row = db.getGuildConfig(g, id);
+    assert.equal(row.youtube_enabled, 1, 'the stored YouTube switch stays on');
+    assert.equal(row.youtube_channel_id, 'UC000000000000000legacy');
+    assert.equal(row.recap_enabled, 1, 'the rest is saved');
+    assert.deepEqual(watchers(), before);
+    assert.equal(before.length, 1);
+    db.updateGuildConfig(g, id, { youtube_enabled: false });
+    await request('POST', `/dashboard/guild/${g}`, { streamer: id, form: { welcome_enabled: 'on' } });
+    assert.equal(db.getGuildConfig(g, id).youtube_enabled, 0, 'and an off one stays off');
+    // with YouTube shown the page sends the field, as today
+    features.youtube = true;
+    await request('POST', `/dashboard/guild/${g}`, { streamer: id, form: { youtube_enabled: 'on' } });
+    assert.equal(db.getGuildConfig(g, id).youtube_enabled, 1);
+  });
+
+  test('the server page\'s tabs: the one the address names, else the one picked last time, else Twitch; one the page does not have does not count', async () => {
+    const { id, g } = withYoutube();
+    const openTab = (html, saved) => {
+      const open = new Set();
+      const element = (kind, name) => ({ dataset: { tab: name }, id: `tab-${name}`, addEventListener() {}, classList: { toggle: (c, on) => { if (on) open.add(`${kind}:${name}`); else open.delete(`${kind}:${name}`); } } });
+      const tabs = [...html.matchAll(/class="tab-btn[^"]*" data-tab="(\w+)"/g)].map((m) => element('button', m[1]));
+      const panes = [...html.matchAll(/class="tab-content[^"]*" id="tab-(\w+)"/g)].map((m) => element('pane', m[1]));
+      const document = { querySelectorAll: (selector) => ({ '.tab-btn': tabs, '.tab-content': panes }[selector] || []), getElementById: () => null };
+      const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('guildconfig_tab'));
+      new Function('document', 'localStorage', script)(document, { getItem: () => saved, setItem() {} });
+      return [...open].sort();
+    };
+    const pageAt = async (query) => (await request('GET', `/dashboard/guild/${g}${query}`, { streamer: id })).text;
+    assert.deepEqual(openTab(await pageAt(''), 'youtube'), ['button:twitch', 'pane:twitch'], 'a remembered YouTube tab');
+    assert.deepEqual(openTab(await pageAt(''), 'discord'), ['button:discord', 'pane:discord'], 'the one picked last time');
+    assert.deepEqual(openTab(await pageAt('?tab=twitch'), 'discord'), ['button:twitch', 'pane:twitch'], 'the address wins (a dashboard link to the Twitch tab)');
+    assert.deepEqual(openTab(await pageAt('?tab=youtube'), 'settings'), ['button:settings', 'pane:settings'], 'a hidden tab in the address does not count');
+    features.youtube = true;
+    assert.deepEqual(openTab(await pageAt(''), 'youtube'), ['button:youtube', 'pane:youtube'], 'switched on, it opens as before');
+  });
+
+  test('the account page shows no YouTube channels and no YouTube posts', async () => {
+    const { id } = withYoutube();
+    const res = await request('GET', '/dashboard/account', { streamer: id });
+    assert.equal(res.status, 200);
+    noYoutube(res.text, 'account page');
+    assert.ok(res.text.includes(esc(t('en', 'account.type.twitchLive'))), 'the Twitch posts are listed');
+    features.youtube = true;
+    const on = (await request('GET', '/dashboard/account', { streamer: id })).text;
+    for (const there of [esc(t('en', 'guild.youtubeChannels')), esc(t('en', 'account.type.youtubeVideo'))]) assert.ok(on.includes(there), there);
+  });
+
+  test('the server statistics page shows no YouTube section', async () => {
+    const { id, g } = withYoutube();
+    const res = await request('GET', `/dashboard/guild/${g}/stats`, { streamer: id });
+    assert.equal(res.status, 200);
+    noYoutube(res.text, 'server statistics');
+    features.youtube = true;
+    assert.match((await request('GET', `/dashboard/guild/${g}/stats`, { streamer: id })).text, /YouTube/);
+  });
+
+  test('the overlay settings page and the Overlay Builder show no YouTube alerts (overlay features on)', async () => {
+    const { id } = withYoutube();
+    for (const url of ['/dashboard/overlay', '/dashboard/overlay-builder']) {
+      const res = await request('GET', url, { streamer: id });
+      assert.equal(res.status, 200, url);
+      assert.ok(!/data-alert-tab="youtube"|data-type="yt_/.test(res.text), `${url}: a YouTube alert`);
+    }
+  });
+});
+
+describe('with Kick switched off', () => {
+  const { features } = require('../config');
+  beforeEach(() => { features.kick = false; });
+  afterEach(() => { features.kick = true; });
+
+  test('the dashboard has no Kick tab or pane, and the overlay pages no Kick tab or label', async () => {
+    const id = addStreamer({ overlay_token: 'synthetic-token-kick-1' });
+    const html = (await request('GET', '/dashboard', { streamer: id })).text;
+    assert.ok(!html.includes('data-tab="kick"') && !html.includes('id="tab-kick"'));
+    assert.ok(!html.includes(esc(t('en', 'dashboard.kick.comingSoon'))) && !html.includes(esc(t('en', 'dashboard.kick.comingSoonChat'))));
+    const overlay = (await request('GET', '/dashboard/overlay', { streamer: id })).text;
+    assert.ok(!overlay.includes('data-alert-tab="kick"') && !overlay.includes('id="alert-tab-kick"'));
+    assert.ok(!overlay.includes(esc(t('en', 'overlay.kickTitle'))));
+    const builder = (await request('GET', '/dashboard/overlay-builder', { streamer: id })).text;
+    assert.ok(!builder.includes(esc(t('en', 'overlayBuilder.tab.kickSoon'))));
+  });
+
+  test('switched on, they are as they were', async () => {
+    features.kick = true;
+    const id = addStreamer({ overlay_token: 'synthetic-token-kick-2' });
+    const html = (await request('GET', '/dashboard', { streamer: id })).text;
+    assert.ok(html.includes('data-tab="kick"') && html.includes('id="tab-kick"'));
+    assert.ok((await request('GET', '/dashboard/overlay', { streamer: id })).text.includes('data-alert-tab="kick"'));
+    assert.ok((await request('GET', '/dashboard/overlay-builder', { streamer: id })).text.includes(esc(t('en', 'overlayBuilder.tab.kickSoon'))));
   });
 });
