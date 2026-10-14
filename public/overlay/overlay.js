@@ -21,6 +21,16 @@ function alertSeconds(type) {
   return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
 }
 
+// The timers of the alert on screen and of the queue: dismissing it, removing it,
+// and starting the next one. Clear All cancels every one of them, so a cleared
+// alert cannot start "the next one" later, on top of an alert that began after the clear.
+const alertTimers = new Set();
+function alertTimer(fn, ms) {
+  const id = setTimeout(() => { alertTimers.delete(id); fn(); }, ms);
+  alertTimers.add(id);
+  return id;
+}
+
 // Load Google Fonts used by custom designs
 const loadedFonts = new Set();
 function loadDesignFonts(designs) {
@@ -330,6 +340,8 @@ connectSSE();
 function clearOverlay() {
   queue.length = 0;
   isPlaying = false;
+  alertTimers.forEach((id) => clearTimeout(id));
+  alertTimers.clear();
   stopCurrentSound();
   // Remove all alert cards and screen effects
   document.querySelectorAll('.alert-card, .alert-pos, .screen-effect').forEach(e => e.remove());
@@ -435,7 +447,7 @@ function showNotification(event) {
   if (!objectDef) spawnEffects(event.type);
 
   // Dismiss after duration
-  setTimeout(() => {
+  alertTimer(() => {
     // Clean up screen effects
     document.querySelectorAll('.screen-effect').forEach(e => {
       e.style.animation = 'none';
@@ -454,9 +466,9 @@ function showNotification(event) {
       card.style.transition = 'opacity 0.3s ease-in';
       card.style.opacity = '0';
     }
-    setTimeout(() => {
+    alertTimer(() => {
       card.remove();
-      setTimeout(playNext, 500);
+      alertTimer(playNext, 500);
     }, 400);
   }, duration);
 }
@@ -1172,7 +1184,7 @@ function stopRedemption(andPlayNext) {
   }
 
   if (andPlayNext !== false) {
-    setTimeout(playNext, 200);
+    alertTimer(playNext, 200);
   }
 }
 
@@ -1190,7 +1202,7 @@ function playRedemption(event) {
 
   if (mediaType === 'video') {
     const vid = document.getElementById('redemption-video');
-    if (!vid) { console.error('[Redemption] #redemption-video element missing'); setTimeout(playNext, 200); return; }
+    if (!vid) { console.error('[Redemption] #redemption-video element missing'); alertTimer(playNext, 200); return; }
 
     const rect = resolveRedemptionRect(data);
     applyRectToElement(vid, rect);
@@ -1204,7 +1216,7 @@ function playRedemption(event) {
     vid.play().catch(err => console.error('[Redemption] video.play() rejected:', err.message, 'src=', vid.currentSrc));
   } else {
     const aud = document.getElementById('redemption-audio');
-    if (!aud) { console.error('[Redemption] #redemption-audio element missing'); setTimeout(playNext, 200); return; }
+    if (!aud) { console.error('[Redemption] #redemption-audio element missing'); alertTimer(playNext, 200); return; }
 
     aud.src = mediaUrl;
     aud.volume = finalVolume;

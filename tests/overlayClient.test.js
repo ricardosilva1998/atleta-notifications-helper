@@ -306,3 +306,85 @@ describe('chat lines stay out of the alert queue', () => {
     assert.equal(overlay.run('queue.length'), 0);
   });
 });
+
+// ── L5: Clear All ────────────────────────────────────────────────────────
+
+describe('Clear All', () => {
+  // Counts every alert slot that is ever put on screen, and how many are on screen at once.
+  function watch(overlay) {
+    const seen = { shown: 0, maxAtOnce: 0 };
+    const append = overlay.container.appendChild.bind(overlay.container);
+    overlay.container.appendChild = (child) => {
+      if (child.classList.contains('alert-pos')) seen.shown++;
+      return append(child);
+    };
+    seen.sample = () => { seen.maxAtOnce = Math.max(seen.maxAtOnce, overlay.slots().length); };
+    return seen;
+  }
+
+  test('removes the alert on screen and everything waiting behind it', () => {
+    const overlay = loadOverlay();
+    overlay.send(follow('A')); overlay.send(follow('B')); overlay.send(follow('C'));
+    assert.equal(overlay.slots().length, 1);
+    assert.equal(overlay.run('queue.length'), 2);
+    overlay.send({ type: 'clear' });
+    assert.equal(overlay.slots().length, 0);
+    assert.equal(overlay.run('queue.length'), 0);
+    assert.equal(overlay.run('isPlaying'), false);
+  });
+
+  test('cancels the dismiss, removal and next-alert timers of what it cleared', () => {
+    const overlay = loadOverlay();
+    overlay.send({ type: 'giveaway_winner', data: { username: 'Winner', prize: 'Steam key' } });
+    overlay.clock.advance(2000);
+    assert.ok(overlay.run('alertTimers.size') > 0, 'the alert has a dismiss timer running');
+    overlay.send({ type: 'clear' });
+    assert.equal(overlay.run('alertTimers.size'), 0);
+    assert.equal(overlay.clock.pending, 0, 'no timer of the cleared alert is left to fire');
+  });
+
+  test('two alerts that come after a clear play one at a time, not on top of each other', () => {
+    const overlay = loadOverlay();
+    // An alert is cleared two seconds in; its timers used to keep running.
+    overlay.send({ type: 'giveaway_winner', data: { username: 'Winner', prize: 'Steam key' } });
+    overlay.clock.advance(2000);
+    overlay.send({ type: 'clear' });
+    overlay.clock.advance(1000);
+
+    const seen = watch(overlay);
+    overlay.send(follow('A')); overlay.send(follow('B')); overlay.send(follow('C')); overlay.send(follow('D'));
+    seen.sample();
+    overlay.clock.advance(120000, seen.sample);
+    assert.equal(seen.shown, 4, 'every alert after the clear is shown');
+    assert.equal(seen.maxAtOnce, 1, 'never two at once');
+    assert.equal(overlay.slots().length, 0, 'and all are gone at the end');
+    assert.equal(overlay.run('isPlaying'), false);
+  });
+
+  test('clearing a second time, while a replacement is on screen, cleans that up too', () => {
+    const overlay = loadOverlay();
+    overlay.send(follow('A'));
+    overlay.clock.advance(1500);
+    overlay.send({ type: 'clear' });
+    overlay.send(follow('B'));
+    overlay.clock.advance(1500);
+    overlay.send({ type: 'clear' });
+    assert.equal(overlay.slots().length, 0);
+    const seen = watch(overlay);
+    overlay.send(follow('C'));
+    seen.sample();
+    overlay.clock.advance(60000, seen.sample);
+    assert.equal(seen.shown, 1);
+    assert.equal(seen.maxAtOnce, 1);
+  });
+
+  test('alerts that were never cleared keep their normal pace: one every duration plus the exit and the gap', () => {
+    const overlay = loadOverlay();
+    const seen = watch(overlay);
+    overlay.send(follow('A')); overlay.send(follow('B'));
+    overlay.clock.advance(5000 + 400 + 500 - 1);
+    assert.equal(seen.shown, 1, 'B waits for A\'s 5 s, its exit and the half-second gap');
+    overlay.clock.advance(1);
+    assert.equal(seen.shown, 2);
+  });
+});
