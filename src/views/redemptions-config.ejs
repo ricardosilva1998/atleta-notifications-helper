@@ -290,7 +290,7 @@
 <% if (rewards.length === 0) { %>
   <div class="cp-empty animate-in" id="rewards-empty">
     <h4><%= t('redemptions.empty.title') %></h4>
-    <p><%= t('redemptions.empty.body') %></p>
+    <p><%= t('redemptions.empty.body', { button: t('redemptions.addReward') }) %></p>
   </div>
 <% } %>
 
@@ -552,7 +552,7 @@ const T = <%- JSON.stringify({
   deleted: t('redemptions.toast.deleted'),
   removeFailed: t('redemptions.error.removeFailed'),
   emptyTitle: t('redemptions.empty.title'),
-  emptyBody: t('redemptions.empty.body'),
+  emptyBody: t('redemptions.empty.body', { button: t('redemptions.addReward') }),
   addReward: t('redemptions.addReward'),
   editReward: t('redemptions.editReward'),
   saveChanges: t('redemptions.saveChanges'),
