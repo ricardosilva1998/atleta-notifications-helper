@@ -571,6 +571,7 @@
   "chatbot.commands.error.responseRequired": "このコマンドでBotが送信するメッセージを入力してください。",
   "chatbot.commands.error.responseTooLong": "コマンドの応答は最大{{max}}文字までです。",
   "chatbot.commands.error.duplicate": "その名前のコマンドは既に存在します。",
+  "chatbot.commands.error.tooMany": "コマンドは最大{{max}}件までです。先にどれか1件を削除してください。",
   "dashboard.test.tooFast": "次のテストを送信するまで、{{seconds}}秒お待ちください。",
   "chatbot.test.noText": "送信するテキストがありません。",
   "chatbot.test.tooLong": "テストメッセージは最大{{max}}文字までです。",

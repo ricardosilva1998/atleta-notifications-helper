@@ -571,6 +571,7 @@
   "chatbot.commands.error.responseRequired": "Enter the message the bot should send for this command.",
   "chatbot.commands.error.responseTooLong": "A command response can be at most {{max}} characters.",
   "chatbot.commands.error.duplicate": "You already have a command with that name.",
+  "chatbot.commands.error.tooMany": "You have the most commands there can be ({{max}}). Delete one first.",
   "dashboard.test.tooFast": "Please wait {{seconds}} seconds before sending another test.",
   "chatbot.test.noText": "There is no text to send.",
   "chatbot.test.tooLong": "A test message can be at most {{max}} characters.",

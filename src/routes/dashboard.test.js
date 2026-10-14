@@ -4403,3 +4403,196 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
     assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Sponsor chat restart failed: synthetic sponsor failure'));
   });
 });
+
+// ── The working cards' text routes ───────────────────────────────────────
+
+describe('the Commands card (JSON)', () => {
+  const add = (id, body) => request('POST', '/dashboard/api/commands', { streamer: id, body });
+
+  test('adds, edits and deletes the streamer\'s own commands with the chatbot page\'s rules', async () => {
+    const id = addStreamer();
+    const added = await add(id, { command: '!Discord', response: 'Join us', cooldown: 10 });
+    assert.equal(added.status, 201);
+    const command = added.json().command;
+    assert.equal(command.command, 'discord');
+    assert.equal(command.cooldown, 10);
+
+    const edited = await request('PATCH', `/dashboard/api/commands/${command.id}`, { streamer: id, body: { response: 'Join our Discord' } });
+    assert.equal(edited.status, 200);
+    assert.equal(edited.json().command.command, 'discord', 'the name stays');
+    assert.equal(edited.json().command.response, 'Join our Discord');
+
+    const other = addStreamer();
+    assert.equal((await request('PATCH', `/dashboard/api/commands/${command.id}`, { streamer: other, body: { response: 'x' } })).status, 404);
+    assert.equal((await request('DELETE', `/dashboard/api/commands/${command.id}`, { streamer: other })).status, 404);
+    assert.equal((await request('DELETE', `/dashboard/api/commands/${command.id}`, { streamer: id })).status, 200);
+    assert.equal((await request('DELETE', `/dashboard/api/commands/${command.id}`, { streamer: id })).status, 404);
+  });
+
+  test('a bad name, a name in use and the 101st command are refused with their reason', async () => {
+    const id = addStreamer();
+    const bad = await add(id, { command: 'two words', response: 'x' });
+    assert.equal(bad.status, 400);
+    assert.deepEqual(bad.json(), { ok: false, code: 'name_invalid', error: t('en', 'chatbot.commands.error.nameInvalid') });
+    assert.equal((await add(id, { command: 'socials', response: 'x' })).status, 201);
+    const dup = await add(id, { command: 'socials', response: 'y' });
+    assert.equal(dup.status, 409);
+    assert.equal(dup.json().code, 'duplicate');
+    for (let i = db.countChatCommands(id); i < 100; i++) db.addChatCommand(id, `cmd${i}`, 'x', 5);
+    const tooMany = await add(id, { command: 'onemore', response: 'x' });
+    assert.equal(tooMany.status, 409);
+    assert.deepEqual(tooMany.json(), { ok: false, code: 'too_many', error: t('en', 'chatbot.commands.error.tooMany', { max: 100 }) });
+  });
+
+  test('an edit that breaks a rule is refused with its reason and leaves the command as it was; a good one keeps the switch', async () => {
+    const id = addStreamer();
+    db.addChatCommand(id, 'socials', 'Find me everywhere', 30);
+    const mine = Number(db.addChatCommand(id, 'discord', 'Join us', 10).lastInsertRowid);
+    db.db.prepare('UPDATE chat_commands SET enabled = 0 WHERE id = ?').run(mine);
+    const edit = (body) => request('PATCH', `/dashboard/api/commands/${mine}`, { streamer: id, body });
+
+    assert.equal((await edit({ command: 'two words' })).json().code, 'name_invalid');
+    const inUse = await edit({ command: '!Socials' });
+    assert.equal(inUse.status, 409);
+    assert.deepEqual(inUse.json(), { ok: false, code: 'duplicate', error: t('en', 'chatbot.commands.error.duplicate') });
+    const tooLong = await edit({ response: 'x'.repeat(501) });
+    assert.equal(tooLong.status, 400);
+    assert.deepEqual(tooLong.json(), { ok: false, code: 'response_too_long', error: t('en', 'chatbot.commands.error.responseTooLong', { max: 500 }) });
+    assert.equal((await edit({ response: '   ' })).json().code, 'response_required');
+    let row = db.getChatCommandById(mine, id);
+    assert.deepEqual([row.command, row.response, row.cooldown, row.enabled], ['discord', 'Join us', 10, 0], 'the refusals wrote nothing');
+
+    const renamed = await edit({ command: '!Chat', cooldown: 60 });
+    assert.equal(renamed.status, 200);
+    row = renamed.json().command;
+    assert.deepEqual([row.command, row.response, row.cooldown, row.enabled], ['chat', 'Join us', 60, 0], 'a switched-off command stays off');
+  });
+
+  test('an id that is not a number is a command that is not there', async () => {
+    const id = addStreamer();
+    const expected = { ok: false, code: 'not_found', error: t('en', 'dashboard.settings.error.notFound') };
+    assert.deepEqual((await request('PATCH', '/dashboard/api/commands/abc', { streamer: id, body: { response: 'x' } })).json(), expected);
+    assert.deepEqual((await request('DELETE', '/dashboard/api/commands/abc', { streamer: id })).json(), expected);
+  });
+});
+
+describe('a sponsor message edit changes only what it is given', () => {
+  test('switching a message off keeps its text and link; an empty text is refused; another streamer\'s answers 404', async () => {
+    const id = addStreamer();
+    const msg = Number(db.addSponsorMessage(id, 'Partner line', 'https://example.test').lastInsertRowid);
+    const update = (streamerId, body) => request('POST', `/dashboard/sponsor-messages/${msg}/update`, { streamer: streamerId, body });
+    assert.equal((await update(id, { enabled: 0 })).status, 200);
+    let row = db.getSponsorMessages(id)[0];
+    assert.deepEqual([row.message_text, row.url, row.enabled], ['Partner line', 'https://example.test', 0]);
+    assert.equal((await update(id, { message_text: 'New line' })).status, 200);
+    row = db.getSponsorMessages(id)[0];
+    assert.deepEqual([row.message_text, row.url, row.enabled], ['New line', 'https://example.test', 0]);
+    const empty = await update(id, { message_text: '   ' });
+    assert.equal(empty.status, 400);
+    assert.equal(empty.json().code, 'required');
+    assert.equal((await update(addStreamer(), { enabled: 1 })).status, 404);
+  });
+
+  test('adding answers with the new message, its text trimmed; an empty or too long text is refused', async () => {
+    const id = addStreamer();
+    const added = await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: '  Partner line  ', url: 'https://example.test' } });
+    assert.equal(added.status, 200);
+    const message = added.json().message;
+    assert.deepEqual([message.message_text, message.url, message.enabled], ['Partner line', 'https://example.test', 1]);
+    assert.equal(db.getSponsorMessages(id)[0].id, message.id);
+    assert.equal((await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: '   ' } })).json().code, 'required');
+    assert.equal((await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: 'x'.repeat(501) } })).json().code, 'too_long');
+  });
+
+  test('a switch that is not a switch, or a text past 500 characters, is refused before anything is written', async () => {
+    const id = addStreamer();
+    const msg = Number(db.addSponsorMessage(id, 'Partner line', 'https://example.test').lastInsertRowid);
+    const update = (body) => request('POST', `/dashboard/sponsor-messages/${msg}/update`, { streamer: id, body });
+    const maybe = await update({ message_text: 'Other line', enabled: 'maybe' });
+    assert.equal(maybe.status, 400);
+    assert.deepEqual(maybe.json(), { ok: false, code: 'invalid', error: t('en', 'dashboard.settings.error.invalid') });
+    const long = await update({ message_text: 'x'.repeat(501), enabled: 0 });
+    assert.equal(long.status, 400);
+    assert.deepEqual(long.json(), { ok: false, code: 'too_long', error: t('en', 'dashboard.settings.error.tooLong') });
+    const row = db.getSponsorMessages(id)[0];
+    assert.deepEqual([row.message_text, row.url, row.enabled], ['Partner line', 'https://example.test', 1]);
+    assert.deepEqual(sponsorCalls, [], 'a refused update does not restart the rotation');
+  });
+
+  // src/views/timed-notifications.ejs sends the text, the link and the switch together: null for no link,
+  // '1' for on and '' for off.
+  test('the sponsor messages page\'s own calls keep working: text, link and switch together', async () => {
+    const id = addStreamer();
+    const added = await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: 'Partner line', url: null } });
+    const msg = added.json().message;
+    assert.equal(msg.url, null);
+    const update = (body) => request('POST', `/dashboard/sponsor-messages/${msg.id}/update`, { streamer: id, body });
+    const stored = () => { const row = db.getSponsorMessages(id)[0]; return [row.message_text, row.url, row.enabled]; };
+
+    assert.equal((await update({ message_text: 'Partner line', url: null, enabled: '' })).status, 200);
+    assert.deepEqual(stored(), ['Partner line', null, 0], 'its switch off');
+    assert.equal((await update({ message_text: 'New line', url: 'https://example.test', enabled: '1' })).status, 200);
+    assert.deepEqual(stored(), ['New line', 'https://example.test', 1], 'a saved edit, which switches the message on');
+    assert.equal((await update({ message_text: 'New line', url: null, enabled: '1' })).status, 200);
+    assert.deepEqual(stored(), ['New line', null, 1], 'a link taken away');
+  });
+});
+
+describe('the Donations card\'s tip goal (JSON)', () => {
+  test('starts a goal in the tip page\'s currency, edits it keeping its bar colour, and ends it', async () => {
+    const bus = require('../services/overlayBus');
+    const id = addStreamer({ donation_currency: 'USD' });
+    const told = [];
+    const listener = () => told.push('goal');
+    bus.on(`tipgoal:${id}`, listener);
+    try {
+      const started = await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'New wheel', target_amount: 500 } });
+      assert.equal(started.status, 201);
+      assert.equal(started.json().goal.currency, 'USD');
+      db.db.prepare('UPDATE tip_goals SET bar_color = ? WHERE streamer_id = ?').run('#ff0000', id);
+      const edited = await request('PATCH', '/dashboard/api/tip-goal', { streamer: id, body: { target_amount: 750 } });
+      assert.equal(edited.status, 200);
+      assert.equal(edited.json().goal.target_amount, 750);
+      assert.equal(edited.json().goal.title, 'New wheel');
+      assert.equal(edited.json().goal.bar_color, '#ff0000');
+      const bad = await request('PATCH', '/dashboard/api/tip-goal', { streamer: id, body: { title: '' } });
+      assert.equal(bad.status, 400);
+      assert.equal(bad.json().code, 'title_required');
+      assert.equal((await request('POST', '/dashboard/api/tip-goal/end', { streamer: id, body: {} })).status, 200);
+      assert.equal(db.getActiveTipGoal(id), null);
+      assert.equal((await request('POST', '/dashboard/api/tip-goal/end', { streamer: id, body: {} })).status, 404);
+    } finally {
+      bus.off(`tipgoal:${id}`, listener);
+    }
+    assert.equal(told.length, 3, 'the goal bar is told after the start, the edit and the end');
+  });
+
+  test('a goal needs a title and a target, and an edit with no goal is a goal that is not there; a new goal replaces the old', async () => {
+    const bus = require('../services/overlayBus');
+    const id = addStreamer();
+    const told = [];
+    const listener = () => told.push('goal');
+    bus.on(`tipgoal:${id}`, listener);
+    try {
+      const noTarget = await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'New wheel', target_amount: 0 } });
+      assert.equal(noTarget.status, 400);
+      assert.deepEqual(noTarget.json(), { ok: false, code: 'target_invalid', error: t('en', 'donations.goal.error.targetInvalid') });
+      assert.equal((await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { target_amount: 5 } })).json().code, 'title_required');
+      assert.equal(db.getActiveTipGoal(id), null, 'a refused start creates nothing');
+      const gone = await request('PATCH', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'x' } });
+      assert.equal(gone.status, 404);
+      assert.deepEqual(gone.json(), { ok: false, code: 'not_found', error: t('en', 'donations.goal.error.notFound') });
+      assert.deepEqual(told, [], 'a refusal does not tell the goal bar');
+
+      const first = await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'New wheel', target_amount: '12.5' } });
+      assert.equal(first.status, 201);
+      assert.equal(first.json().goal.currency, 'EUR', 'the tip page\'s currency, EUR when it was never set');
+      assert.equal(first.json().goal.target_amount, 12.5);
+      const second = await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'Second', target_amount: 20 } });
+      assert.equal(db.getActiveTipGoal(id).id, second.json().goal.id, 'one active goal per streamer');
+      assert.equal(told.length, 2);
+    } finally {
+      bus.off(`tipgoal:${id}`, listener);
+    }
+  });
+});

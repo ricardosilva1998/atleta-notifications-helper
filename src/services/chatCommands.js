@@ -9,6 +9,7 @@ const { clampInt } = require('./inputLimits');
 const COMMAND_NAME_MAX = 50;
 // A Twitch chat message is at most 500 characters.
 const COMMAND_RESPONSE_MAX = 500;
+const COMMANDS_PER_STREAMER_MAX = 100; // custom commands one streamer may have
 const COMMAND_COOLDOWN_SECONDS = Object.freeze({ min: 5, max: 3600, fallback: 5 });
 
 // The cooldown to use for a command: 5-3600 seconds, 5 when it is missing or unreadable.
@@ -67,6 +68,7 @@ function isUniqueViolation(err) {
 module.exports = {
   COMMAND_NAME_MAX,
   COMMAND_RESPONSE_MAX,
+  COMMANDS_PER_STREAMER_MAX,
   COMMAND_COOLDOWN_SECONDS,
   COMMAND_ERRORS,
   commandCooldownSeconds,

@@ -571,6 +571,7 @@
   "chatbot.commands.error.responseRequired": "请输入机器人在此命令下应发送的消息。",
   "chatbot.commands.error.responseTooLong": "命令回复最多只能有 {{max}} 个字符。",
   "chatbot.commands.error.duplicate": "你已经有同名的命令了。",
+  "chatbot.commands.error.tooMany": "命令最多只能有 {{max}} 个。请先删除一个。",
   "dashboard.test.tooFast": "请等待 {{seconds}} 秒后再发送下一条测试。",
   "chatbot.test.noText": "没有可发送的文本。",
   "chatbot.test.tooLong": "测试消息最多只能有 {{max}} 个字符。",

@@ -26,7 +26,7 @@ const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction, parseSwitch } = require('../services/inputLimits');
-const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
+const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
 const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
@@ -1006,6 +1006,92 @@ router.post('/settings', (req, res) => {
   res.json({ ok: true, value });
 });
 
+// ── The working cards' text routes (JSON) ──
+
+// A Commands card refusal: the chatbot page's texts, plus the limit and a command that is not there.
+function commandJsonError(res, status, code) {
+  const key = code === 'not_found' ? 'dashboard.settings.error.notFound'
+    : code === 'too_many' ? 'chatbot.commands.error.tooMany'
+      : COMMAND_ERRORS[code];
+  const max = code === 'too_many' ? COMMANDS_PER_STREAMER_MAX : COMMAND_RESPONSE_MAX;
+  res.status(status).json({ ok: false, code, error: res.locals.t(key, { max }) });
+}
+
+router.post('/api/commands', (req, res) => {
+  const parsed = parseCommand(req.body);
+  if (parsed.error) return commandJsonError(res, 400, parsed.error);
+  if (db.countChatCommands(req.streamer.id) >= COMMANDS_PER_STREAMER_MAX) return commandJsonError(res, 409, 'too_many');
+  try {
+    const info = db.addChatCommand(req.streamer.id, parsed.command, parsed.response, parsed.cooldown);
+    res.status(201).json({ ok: true, command: db.getChatCommandById(Number(info.lastInsertRowid), req.streamer.id) });
+  } catch (e) {
+    if (isUniqueViolation(e)) return commandJsonError(res, 409, 'duplicate');
+    throw e;
+  }
+});
+
+router.patch('/api/commands/:id', (req, res) => {
+  const row = db.getChatCommandById(Number(req.params.id), req.streamer.id);
+  if (!row) return commandJsonError(res, 404, 'not_found');
+  const b = req.body || {};
+  const parsed = parseCommand({
+    command: b.command !== undefined ? b.command : row.command,
+    response: b.response !== undefined ? b.response : row.response,
+    cooldown: b.cooldown !== undefined ? b.cooldown : row.cooldown,
+  });
+  if (parsed.error) return commandJsonError(res, 400, parsed.error);
+  try {
+    db.updateChatCommand(row.id, req.streamer.id, parsed.command, parsed.response, row.enabled, parsed.cooldown);
+  } catch (e) {
+    if (isUniqueViolation(e)) return commandJsonError(res, 409, 'duplicate');
+    throw e;
+  }
+  res.json({ ok: true, command: db.getChatCommandById(row.id, req.streamer.id) });
+});
+
+router.delete('/api/commands/:id', (req, res) => {
+  if (!db.deleteChatCommand(Number(req.params.id), req.streamer.id)) return commandJsonError(res, 404, 'not_found');
+  res.json({ ok: true });
+});
+
+// The Donations card's tip goal: start, edit (title and target; the bar keeps its colour) and end.
+function goalJsonError(res, status, code) {
+  res.status(status).json({ ok: false, code, error: errorMessage(GOAL_ERRORS, code, res.locals.t) });
+}
+
+router.post('/api/tip-goal', (req, res) => {
+  const b = req.body || {};
+  const fields = parseTipGoalFields({ title: b.title, target_amount: b.target_amount });
+  if (fields.error) return goalJsonError(res, 400, fields.error);
+  const currency = TIP_GOAL_CURRENCIES.includes(req.streamer.donation_currency) ? req.streamer.donation_currency : 'EUR';
+  const goal = db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: 0 });
+  require('../services/tipGoals').broadcast(req.streamer.id);
+  res.status(201).json({ ok: true, goal });
+});
+
+router.patch('/api/tip-goal', (req, res) => {
+  const goal = db.getActiveTipGoal(req.streamer.id);
+  if (!goal) return goalJsonError(res, 404, 'not_found');
+  const b = req.body || {};
+  const fields = parseTipGoalFields({
+    title: b.title !== undefined ? b.title : goal.title,
+    target_amount: b.target_amount !== undefined ? b.target_amount : goal.target_amount,
+    bar_color: goal.bar_color,
+  });
+  if (fields.error) return goalJsonError(res, 400, fields.error);
+  const updated = db.updateTipGoal(goal.id, req.streamer.id, fields);
+  require('../services/tipGoals').broadcast(req.streamer.id);
+  res.json({ ok: true, goal: updated });
+});
+
+router.post('/api/tip-goal/end', (req, res) => {
+  const goal = db.getActiveTipGoal(req.streamer.id);
+  if (!goal) return goalJsonError(res, 404, 'not_found');
+  db.endTipGoal(goal.id, req.streamer.id);
+  require('../services/tipGoals').broadcast(req.streamer.id);
+  res.json({ ok: true });
+});
+
 // Custom alert sounds live in the logged-in streamer's own folder
 // (data/sounds/<streamerId>/), never in a folder shared with other streamers.
 
@@ -1947,9 +2033,13 @@ router.post('/sponsors/toggle-rotation', (req, res) => {
 // --- Sponsor Chat Messages ---
 
 router.post('/sponsor-messages/add', (req, res) => {
-  const { message_text, url } = req.body;
-  if (!message_text) return res.status(400).json({ error: res.locals.t('sponsors.error.textRequired') });
-  db.addSponsorMessage(req.streamer.id, message_text, url);
+  const t = res.locals.t;
+  const b = req.body || {};
+  const text = typeof b.message_text === 'string' ? b.message_text.trim() : '';
+  if (!text) return res.status(400).json({ ok: false, code: 'required', error: t('sponsors.error.textRequired') });
+  if (text.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ ok: false, code: 'too_long', error: t('dashboard.settings.error.tooLong') });
+  const url = typeof b.url === 'string' ? b.url.trim() : '';
+  const id = Number(db.addSponsorMessage(req.streamer.id, text, url).lastInsertRowid);
   // The rotation reads the enabled messages when it starts: with none before this one it was not running.
   try {
     const { timedNotificationManager } = require('../services/timedNotifications');
@@ -1957,18 +2047,38 @@ router.post('/sponsor-messages/add', (req, res) => {
   } catch (e) {
     console.error('[Dashboard] Sponsor chat restart failed:', e.message);
   }
-  res.json({ ok: true });
+  res.json({ ok: true, message: db.getSponsorMessages(req.streamer.id).find((m) => m.id === id) });
 });
 
+// A sponsor message's text, link or switch: only the fields given change (the page's switch and the
+// Sponsor messages card send one at a time).
 router.post('/sponsor-messages/:id/update', (req, res) => {
-  db.updateSponsorMessage(
-    parseInt(req.params.id), req.streamer.id,
-    req.body.message_text, req.body.url, req.body.enabled
-  );
+  const b = req.body || {};
+  const id = parseInt(req.params.id, 10);
+  const t = res.locals.t;
+  const fields = {};
+  if (b.message_text !== undefined) {
+    const text = typeof b.message_text === 'string' ? b.message_text.trim() : '';
+    if (!text) return res.status(400).json({ ok: false, code: 'required', error: t('sponsors.error.textRequired') });
+    if (text.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ ok: false, code: 'too_long', error: t('dashboard.settings.error.tooLong') });
+    fields.message_text = text;
+  }
+  if (b.url !== undefined) fields.url = typeof b.url === 'string' ? b.url.trim() : '';
+  let enabled = null;
+  if (b.enabled !== undefined) {
+    enabled = parseSwitch(b.enabled);
+    if (enabled === null) return res.status(400).json({ ok: false, code: 'invalid', error: t('dashboard.settings.error.invalid') });
+  }
+  if (!db.updateSponsorMessageFields(id, req.streamer.id, fields)) {
+    return res.status(404).json({ ok: false, code: 'not_found', error: t('sponsors.error.notFound') });
+  }
+  if (enabled !== null) db.setSponsorMessageEnabled(id, req.streamer.id, enabled);
   try {
     const { timedNotificationManager } = require('../services/timedNotifications');
     timedNotificationManager.restartChatForStreamer(req.streamer.id);
-  } catch(e) {}
+  } catch (e) {
+    console.error('[Dashboard] Sponsor chat restart failed:', e.message);
+  }
   res.json({ ok: true });
 });
 

@@ -571,6 +571,7 @@
   "chatbot.commands.error.responseRequired": "Gib die Nachricht ein, die der Bot für diesen Befehl senden soll.",
   "chatbot.commands.error.responseTooLong": "Eine Befehlsantwort darf höchstens {{max}} Zeichen lang sein.",
   "chatbot.commands.error.duplicate": "Du hast bereits einen Befehl mit diesem Namen.",
+  "chatbot.commands.error.tooMany": "Du hast bereits die höchstmögliche Anzahl an Befehlen ({{max}}). Lösche zuerst einen.",
   "dashboard.test.tooFast": "Bitte warte {{seconds}} Sekunden, bevor du einen weiteren Test sendest.",
   "chatbot.test.noText": "Es gibt keinen Text zum Senden.",
   "chatbot.test.tooLong": "Eine Testnachricht darf höchstens {{max}} Zeichen lang sein.",

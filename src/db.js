@@ -3072,8 +3072,17 @@ function updateChatCommand(id, streamerId, command, response, enabled, cooldown)
     .run(command, response, enabled, cooldown, id, streamerId);
 }
 
+function getChatCommandById(id, streamerId) {
+  return db.prepare('SELECT * FROM chat_commands WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+function countChatCommands(streamerId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM chat_commands WHERE streamer_id = ?').get(streamerId).n;
+}
+
+// False when the command is not the streamer's (or is already gone).
 function deleteChatCommand(id, streamerId) {
-  db.prepare('DELETE FROM chat_commands WHERE id = ? AND streamer_id = ?').run(id, streamerId);
+  return db.prepare('DELETE FROM chat_commands WHERE id = ? AND streamer_id = ?').run(id, streamerId).changes > 0;
 }
 
 const CHATBOT_COLUMNS = new Set([
@@ -4048,6 +4057,16 @@ function addSponsorMessage(streamerId, messageText, url) {
 function updateSponsorMessage(id, streamerId, messageText, url, enabled) {
   db.prepare('UPDATE sponsor_messages SET message_text = ?, url = ?, enabled = ? WHERE id = ? AND streamer_id = ?')
     .run(messageText, url || null, enabled ? 1 : 0, id, streamerId);
+}
+// A sponsor message's text and link: only the ones given (undefined leaves one as it is). False when the
+// message is not the streamer's.
+function updateSponsorMessageFields(id, streamerId, { message_text, url } = {}) {
+  const fields = [];
+  const values = [];
+  if (message_text !== undefined) { fields.push('message_text = ?'); values.push(message_text); }
+  if (url !== undefined) { fields.push('url = ?'); values.push(url || null); }
+  if (fields.length === 0) return !!db.prepare('SELECT 1 FROM sponsor_messages WHERE id = ? AND streamer_id = ?').get(id, streamerId);
+  return db.prepare(`UPDATE sponsor_messages SET ${fields.join(', ')} WHERE id = ? AND streamer_id = ?`).run(...values, id, streamerId).changes > 0;
 }
 function deleteSponsorMessage(id, streamerId) {
   return db.prepare('DELETE FROM sponsor_messages WHERE id = ? AND streamer_id = ?').run(id, streamerId);
@@ -5679,6 +5698,8 @@ module.exports = {
   getChatbotEnabledStreamers,
   getChatCommands,
   getChatCommand,
+  getChatCommandById,
+  countChatCommands,
   addChatCommand,
   updateChatCommand,
   deleteChatCommand,
@@ -5710,6 +5731,7 @@ module.exports = {
   getEnabledSponsorMessages,
   addSponsorMessage,
   updateSponsorMessage,
+  updateSponsorMessageFields,
   deleteSponsorMessage,
   updateSponsorChatSettings,
   // The dashboard's working cards: one setting at a time (services/dashboardSettings.js).
