@@ -9,7 +9,7 @@ const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');
 const { clientIp } = require('./clientIp');
-const { applyAccountStatus } = require('./services/streamerAccess');
+const { applyAccountStatus, isStreamerDisabled } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
 const { csrfProtection } = require('./csrf');
@@ -292,6 +292,15 @@ app.get('/api/bridge/config', (req, res) => {
   res.json({ whisperProxyEnabled: !!process.env.OPENAI_API_KEY });
 });
 
+// The streamer a Racing account is linked to, or null. An account an admin
+// disabled counts as no linked streamer, as it does everywhere else
+// (services/streamerAccess.js).
+function linkedStreamer(racingUser) {
+  if (!racingUser || !racingUser.streamer_id) return null;
+  const streamer = db.getStreamerById(racingUser.streamer_id);
+  return streamer && !isStreamerDisabled(streamer) ? streamer : null;
+}
+
 // Bridge: full account info for the Atleta Racing Account tab. Authenticated
 // by session cookie OR by ?bridge_id= matching a known Racing user. The
 // pitwall_token column is intentionally NOT returned — it's sensitive.
@@ -307,16 +316,14 @@ app.get('/api/bridge/account', (req, res) => {
     let twitchUsername = null;
     let twitchConnected = false;
     let spotifyConnected = false;
-    if (user.streamer_id) {
-      try {
-        const streamer = db.getStreamerById(user.streamer_id);
-        if (streamer) {
-          twitchUsername = streamer.twitch_display_name || streamer.twitch_username || null;
-          twitchConnected = !!streamer.twitch_username;
-          spotifyConnected = !!streamer.spotify_refresh_token;
-        }
-      } catch (e) {}
-    }
+    try {
+      const streamer = linkedStreamer(user);
+      if (streamer) {
+        twitchUsername = streamer.twitch_display_name || streamer.twitch_username || null;
+        twitchConnected = !!streamer.twitch_username;
+        spotifyConnected = !!streamer.spotify_refresh_token;
+      }
+    } catch (e) {}
 
     res.json({
       id: user.id,
@@ -425,13 +432,10 @@ app.post('/api/bridge/whisper', (req, res) => {
 app.get('/api/bridge/spotify', async (req, res) => {
   try {
     // Find streamer: from session cookie, racingUser link, or bridge_id query param
-    let streamer = req.streamer;
-    if (!streamer && req.racingUser && req.racingUser.streamer_id) {
-      streamer = db.getStreamerById(req.racingUser.streamer_id);
-    }
+    // (req.streamer is never a disabled account: applyAccountStatus)
+    let streamer = req.streamer || linkedStreamer(req.racingUser);
     if (!streamer && req.query.bridge_id && /^[a-f0-9-]{20,}$/i.test(req.query.bridge_id)) {
-      const ru = db.getRacingUserByBridgeId(req.query.bridge_id);
-      if (ru && ru.streamer_id) streamer = db.getStreamerById(ru.streamer_id);
+      streamer = linkedStreamer(db.getRacingUserByBridgeId(req.query.bridge_id));
     }
     if (!streamer || !streamer.spotify_access_token) {
       return res.json({ status: 'not_connected' });
@@ -447,13 +451,9 @@ app.get('/api/bridge/spotify', async (req, res) => {
 // Spotify playback control — for Bridge overlay media controls
 app.post('/api/bridge/spotify/control', async (req, res) => {
   try {
-    let streamer = req.streamer;
-    if (!streamer && req.racingUser && req.racingUser.streamer_id) {
-      streamer = db.getStreamerById(req.racingUser.streamer_id);
-    }
+    let streamer = req.streamer || linkedStreamer(req.racingUser);
     if (!streamer && req.body.bridge_id && /^[a-f0-9-]{20,}$/i.test(req.body.bridge_id)) {
-      const ru = db.getRacingUserByBridgeId(req.body.bridge_id);
-      if (ru && ru.streamer_id) streamer = db.getStreamerById(ru.streamer_id);
+      streamer = linkedStreamer(db.getRacingUserByBridgeId(req.body.bridge_id));
     }
     if (!streamer || !streamer.spotify_access_token) return res.json({ ok: false });
 

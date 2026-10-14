@@ -18,6 +18,14 @@ const Module = require('node:module');
 const SERVER_FILE = path.join(__dirname, 'server.js');
 const DB_FILE = path.join(__dirname, 'db.js');
 const CONFIG_FILE = path.join(__dirname, 'config.js');
+const SPOTIFY_FILE = path.join(__dirname, 'services', 'spotify.js');
+
+// services/spotify.js as the Racing-app routes load it (on first use): no network.
+const spotifyCalls = [];
+const spotifyStub = {
+  getCurrentlyPlaying: async (streamer) => { spotifyCalls.push(['playing', streamer.id]); return { status: 'playing', track: 'Synthetic Song' }; },
+  refreshSpotifyToken: async (streamer) => { spotifyCalls.push(['refresh', streamer.id]); return 'synthetic-refreshed-token'; },
+};
 const RealDatabase = require('better-sqlite3');
 const realFs = require('fs');
 const realExpress = require('express');
@@ -69,6 +77,9 @@ before(async () => {
   } finally {
     Module._load = origLoad;
   }
+  const spotify = new Module(SPOTIFY_FILE, module);
+  Object.assign(spotify, { filename: SPOTIFY_FILE, loaded: true, exports: spotifyStub });
+  require.cache[SPOTIFY_FILE] = spotify;
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   port = server.address().port;
 });
@@ -536,5 +547,92 @@ describe('POST /api/bridge-logs and /api/bridge-bug-reports: the bridge id', () 
     assert.equal(res.status, 200);
     assert.ok(Number.isInteger(res.json.id));
     assert.equal((await send('POST', '/api/bridge-bug-reports', { json: { bridgeId: BRIDGE_ID, errorPattern: { a: 1 }, explanation: 'why', suggestedFix: 'fix' } })).status, 400);
+  });
+});
+
+// ── A disabled streamer and the Atleta Racing app ───────────────────────
+// GET /api/bridge/account, GET /api/bridge/spotify and POST
+// /api/bridge/spotify/control find the streamer through the racer's link (by
+// session or by ?bridge_id=): a disabled one must answer as no linked streamer.
+
+describe('a disabled streamer, through the Atleta Racing app\'s account and Spotify calls', () => {
+  const { csrfToken } = require('./csrf');
+  const BRIDGE_ENABLED = 'e0000000-0000-4000-8000-000000000001';
+  const BRIDGE_DISABLED = 'd0000000-0000-4000-8000-000000000002';
+  const BRIDGE_ALONE = 'a0000000-0000-4000-8000-000000000003';
+  const ids = {};
+
+  before(() => {
+    const addStreamer = (n, enabled) => Number(db.db.prepare(`INSERT INTO streamers
+      (discord_user_id, discord_username, twitch_username, twitch_display_name, spotify_access_token, spotify_refresh_token, spotify_token_expires_at, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(`90000000000000000${n}`, `streamer${n}`, `twitch_${n}`, `Twitch_${n}`, `synthetic-access-${n}`, `synthetic-refresh-${n}`, Date.now() + 3600_000, enabled).lastInsertRowid);
+    const addRacer = (username, bridgeId, streamerId) => {
+      const id = Number(db.createRacingUser(username, 'x', 'Synthetic Driver', bridgeId).lastInsertRowid);
+      if (streamerId) db.linkRacingUserToStreamer(id, streamerId);
+      return id;
+    };
+    ids.enabled = addStreamer(1, 1);
+    ids.disabled = addStreamer(2, 0);
+    ids.racerEnabled = addRacer('racer-enabled', BRIDGE_ENABLED, ids.enabled);
+    ids.racerDisabled = addRacer('racer-disabled', BRIDGE_DISABLED, ids.disabled);
+    ids.racerAlone = addRacer('racer-alone', BRIDGE_ALONE, null);
+  });
+
+  const linkedPart = (account) => [account.twitch_connected, account.twitch_username, account.spotify_connected];
+
+  test('GET /api/bridge/account answers as for a racer with no linked streamer', async () => {
+    const account = async (bridgeId) => (await send('GET', `/api/bridge/account?bridge_id=${bridgeId}`)).json;
+    assert.deepEqual(linkedPart(await account(BRIDGE_ENABLED)), [true, 'Twitch_1', true]);
+    const disabled = await account(BRIDGE_DISABLED);
+    assert.deepEqual(linkedPart(disabled), linkedPart(await account(BRIDGE_ALONE)));
+    assert.deepEqual(linkedPart(disabled), [false, null, false]);
+    assert.equal(disabled.username, 'racer-disabled', 'the Racing account itself still answers');
+  });
+
+  test('GET /api/bridge/spotify answers "not connected", and Spotify is never asked', async () => {
+    spotifyCalls.length = 0;
+    assert.deepEqual((await send('GET', `/api/bridge/spotify?bridge_id=${BRIDGE_ENABLED}`)).json, { status: 'playing', track: 'Synthetic Song' });
+    assert.deepEqual((await send('GET', `/api/bridge/spotify?bridge_id=${BRIDGE_DISABLED}`)).json, { status: 'not_connected' });
+    assert.deepEqual((await send('GET', `/api/bridge/spotify?bridge_id=${BRIDGE_ALONE}`)).json, { status: 'not_connected' });
+    assert.deepEqual(spotifyCalls, [['playing', ids.enabled]]);
+  });
+
+  test('POST /api/bridge/spotify/control answers { ok: false }, and nothing is sent to Spotify', async () => {
+    const realFetch = globalThis.fetch;
+    const outbound = [];
+    globalThis.fetch = async (url, options = {}) => { outbound.push(`${options.method} ${url}`); return { ok: true, status: 204 }; };
+    try {
+      assert.deepEqual((await send('POST', '/api/bridge/spotify/control', { json: { bridge_id: BRIDGE_ENABLED, action: 'play' } })).json, { ok: true });
+      assert.deepEqual((await send('POST', '/api/bridge/spotify/control', { json: { bridge_id: BRIDGE_DISABLED, action: 'play' } })).json, { ok: false });
+      assert.deepEqual((await send('POST', '/api/bridge/spotify/control', { json: { bridge_id: BRIDGE_ALONE, action: 'next' } })).json, { ok: false });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(outbound, ['PUT https://api.spotify.com/v1/me/player/play']);
+  });
+
+  test('the same through a website login: a Racing session, and a session linked to both accounts', async () => {
+    const realFetch = globalThis.fetch;
+    const outbound = [];
+    globalThis.fetch = async (url, options = {}) => { outbound.push(`${options.method} ${url}`); return { ok: true, status: 204 }; };
+    spotifyCalls.length = 0;
+    try {
+      const expires = Date.now() + 3600_000;
+      db.createRacingSession('synthetic-racing-session', ids.racerDisabled, expires);
+      db.createLinkedSession('synthetic-linked-session', ids.disabled, ids.racerDisabled, expires);
+      for (const sid of ['synthetic-racing-session', 'synthetic-linked-session']) {
+        const headers = { Cookie: `session=${sid}` };
+        assert.deepEqual((await send('GET', '/api/bridge/spotify', { headers })).json, { status: 'not_connected' }, sid);
+        const account = (await send('GET', '/api/bridge/account', { headers })).json;
+        assert.equal(account.username, 'racer-disabled', sid);
+        assert.deepEqual(linkedPart(account), [false, null, false], sid);
+        const withToken = { ...headers, 'X-CSRF-Token': csrfToken(db.hashSessionId(sid), config.csrf.secret) };
+        assert.deepEqual((await send('POST', '/api/bridge/spotify/control', { headers: withToken, json: { action: 'pause' } })).json, { ok: false }, sid);
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(spotifyCalls, []);
+    assert.deepEqual(outbound, []);
   });
 });
