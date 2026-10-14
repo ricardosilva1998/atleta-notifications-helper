@@ -1395,8 +1395,8 @@ router.post('/youtube-chatbot/test/:eventType', limitTests, async (req, res) => 
   const event = Object.hasOwn(YOUTUBE_TEST_EVENTS, type) ? YOUTUBE_TEST_EVENTS[type] : null;
   if (!event) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
-  // Send to overlay
-  bus.emit(`overlay:${req.streamer.id}`, event);
+  // Send to overlay (a copy: the samples are shared by every request)
+  bus.emit(`overlay:${req.streamer.id}`, { ...event, data: { ...event.data } });
 
   // Send chat message if bot is polling live chat
   let chatSent = false;
