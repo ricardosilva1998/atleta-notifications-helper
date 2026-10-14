@@ -7,6 +7,7 @@ const { PermissionFlagsBits: P } = require('discord.js');
 const {
   subRoleEligibility, roleFacts, PRIVILEGED_ROLE_PERMISSIONS,
   isChannelInGuild, isTextChannel, canManageGuild,
+  guildListsAvailable, serverPagePicks,
   clampWelcomeMessage, WELCOME_MESSAGE_MAX,
   BOT_INVITE_PERMISSIONS, botInviteUrl,
 } = require('./discordGuards');
@@ -238,6 +239,37 @@ describe('canManageGuild', () => {
       const slow = scriptedGuild('100000000000000014', [() => new Promise((resolve) => setTimeout(() => resolve({ permissions: { has: () => true } }), 40))]);
       assert.equal(await canManageGuild(slow, 'owner'), true, 'without a limit it waits for Discord');
     });
+  });
+});
+
+describe('saving the server page while Discord cannot be read', () => {
+  const stored = { welcome_channel_id: '500000000000000001', sub_role_id: '500000000000000009' };
+
+  test('the lists can be filled only for a server in the cache that Discord has not marked unavailable', () => {
+    assert.equal(guildListsAvailable({ id: GUILD }), true);
+    assert.equal(guildListsAvailable({ id: GUILD, available: true }), true);
+    assert.equal(guildListsAvailable({ id: GUILD, available: false }), false, 'an outage that hides the server');
+    assert.equal(guildListsAvailable(undefined), false, 'the bot is not ready, or no longer in the server');
+    assert.equal(guildListsAvailable(null), false);
+  });
+
+  test('without the lists the stored channel and role stand, whatever the form sent', () => {
+    for (const sent of [{ welcome_channel_id: '', sub_role_id: '' }, {}, undefined, { welcome_channel_id: '500000000000000002', sub_role_id: '500000000000000008' }]) {
+      assert.deepEqual(serverPagePicks(false, stored, sent), { welcomeChannelId: '500000000000000001', subRoleId: '500000000000000009', kept: true });
+    }
+  });
+
+  test('without the lists, a server with nothing stored stays without', () => {
+    assert.deepEqual(serverPagePicks(false, { welcome_channel_id: null, sub_role_id: null }, { welcome_channel_id: '500000000000000002', sub_role_id: '' }),
+      { welcomeChannelId: null, subRoleId: null, kept: true });
+    assert.deepEqual(serverPagePicks(false, { welcome_channel_id: '', sub_role_id: '' }, {}), { welcomeChannelId: null, subRoleId: null, kept: true });
+  });
+
+  test('with the lists the form decides, and an empty choice switches the setting off', () => {
+    assert.deepEqual(serverPagePicks(true, stored, { welcome_channel_id: '500000000000000002', sub_role_id: '500000000000000008' }),
+      { welcomeChannelId: '500000000000000002', subRoleId: '500000000000000008', kept: false });
+    assert.deepEqual(serverPagePicks(true, stored, { welcome_channel_id: '', sub_role_id: '' }), { welcomeChannelId: null, subRoleId: null, kept: false });
+    assert.deepEqual(serverPagePicks(true, stored, {}), { welcomeChannelId: null, subRoleId: null, kept: false });
   });
 });
 

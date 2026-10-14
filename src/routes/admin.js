@@ -20,8 +20,12 @@ router.get('/', requireAdmin, (req, res) => {
   res.redirect('/admin/dashboard');
 });
 
+// The tabs of the admin panel. ?tab= may name one; the page prints it into its
+// script, so anything else (a repeated parameter, any other text) is the default.
+const ADMIN_TABS = ['stats', 'users', 'issues', 'feedback', 'discounts', 'testing'];
+
 router.get('/dashboard', requireAdmin, (req, res) => {
-  const activeTab = req.query.tab || 'stats';
+  const activeTab = ADMIN_TABS.includes(req.query.tab) ? req.query.tab : 'stats';
 
   // Stats tab data
   const stats = db.getGlobalStats();

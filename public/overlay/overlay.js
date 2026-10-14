@@ -483,6 +483,13 @@ function showNotification(event) {
       slot.classList.remove('playing');
       slot.classList.add('exiting');
     } else {
+      // The entrance animation keeps its last frame (opacity 1) over an inline
+      // opacity, so a fade only runs once the entrance is taken off: both the
+      // default one (.entering) and a saved one (inline). 'none' rather than
+      // '' because .sub-shake carries an animation of its own.
+      card.classList.remove('entering');
+      card.style.animation = 'none';
+      void card.offsetWidth; // the fade starts from the card's own opacity
       card.style.transition = 'opacity 0.3s ease-in';
       card.style.opacity = '0';
     }
@@ -494,9 +501,10 @@ function showNotification(event) {
 }
 
 // ─── Build card HTML per event type ───────────────────────────
-// Default side icons per event type
+// Default side icons per event type (the builder's table, DEFAULT_SIDE_ICONS in
+// overlay-builder.ejs: the alerts it gives no icon are left out here)
 const DEFAULT_SIDE_ICONS = {
-  subscription: '🏆', yt_member: '⭐',
+  subscription: '🏆', yt_member: '⭐', giveaway_winner: '🎉',
 };
 
 function getSideIcon(eventType) {

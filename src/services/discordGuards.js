@@ -139,6 +139,35 @@ async function canManageGuild(guild, userId, { fresh = false, timeoutMs = 0 } = 
   }
 }
 
+// ─── Saving the server page ───────────────────────────────────────────────────
+// The server page fills its channel and role pickers from discord.js's cache.
+// While the bot cannot see the server (Discord is not ready yet after a deploy,
+// it is down, or its login was refused) that cache is empty: the pickers come up
+// empty and a save would send empty values, wiping the stored welcome channel
+// and subscriber role. Whether the pickers could be filled decides what a save
+// may change.
+
+// True when the server is in the cache and Discord has not marked it unavailable.
+function guildListsAvailable(guild) {
+  return !!guild && guild.available !== false;
+}
+
+// The welcome channel and subscriber role a save of the server page stores.
+//   listsAvailable: guildListsAvailable() for the server
+//   stored:         the server's saved row (welcome_channel_id, sub_role_id)
+//   sent:           the form's fields (welcome_channel_id, sub_role_id)
+// With the lists available the form's choice counts (an empty one switches the
+// setting off). Without them the form cannot have shown the current values, so
+// the stored ones stand whatever it sent, and `kept` is true: they are not
+// checked against Discord, which cannot be asked.
+function serverPagePicks(listsAvailable, stored, sent) {
+  const pick = (value) => value || null;
+  if (!listsAvailable) {
+    return { welcomeChannelId: pick(stored && stored.welcome_channel_id), subRoleId: pick(stored && stored.sub_role_id), kept: true };
+  }
+  return { welcomeChannelId: pick(sent && sent.welcome_channel_id), subRoleId: pick(sent && sent.sub_role_id), kept: false };
+}
+
 // ─── Welcome message ──────────────────────────────────────────────────────────
 // Sent as an embed description, which Discord rejects over 4096 characters.
 const WELCOME_MESSAGE_MAX = 4000;
@@ -165,6 +194,8 @@ module.exports = {
   isTextChannel,
   DELIVERY_CHANNEL_UNAVAILABLE,
   canManageGuild,
+  guildListsAvailable,
+  serverPagePicks,
   WELCOME_MESSAGE_MAX,
   clampWelcomeMessage,
 };

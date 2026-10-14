@@ -3,18 +3,19 @@
 const crypto = require('crypto');
 const db = require('../db');
 
-// streamerId (number) -> { giveawayId, keyword, subsOnly, winnersCount, prize, watchdogTimer }
+// streamerId (number) -> { giveawayId, keyword, subsOnly, winnersCount, prize, endsAtMs, watchdogTimer }
 const activeStates = new Map();
+
+// A giveaway picked up at boot is not closed and drawn sooner than this after the
+// boot. One whose end time passed while the app was down (or passes just after it
+// starts) would otherwise be drawn before the Twitch chat bot has joined its
+// channels and before OBS has reconnected, and its chat lines and winner card would
+// be lost. Entries still stop at the end time (see tryAddEntry).
+const BOOT_GRACE_MS = 30_000;
 
 function init() {
   const open = db.getAllOpenGiveaways();
-  for (const g of open) {
-    _track(g);
-    // If ends_at already passed (server was down), fire auto-end immediately
-    if (g.ends_at && new Date(g.ends_at) <= new Date()) {
-      setImmediate(() => _autoEnd(g.streamer_id));
-    }
-  }
+  for (const g of open) _track(g, { atBoot: true });
   console.log(`[Giveaway] init: rehydrated ${open.length} active giveaway${open.length === 1 ? '' : 's'}`);
 }
 
@@ -82,6 +83,10 @@ function tryAddEntry(streamerId, tags, message) {
 
   const firstWord = message.trim().split(/\s+/)[0].toLowerCase();
   if (firstWord !== '!' + state.keyword) return false;
+
+  // Past its end time a giveaway takes no more entries, even while it waits to be
+  // closed (after a restart); the keyword is still the giveaway's.
+  if (state.endsAtMs !== null && Date.now() >= state.endsAtMs) return true;
 
   if (state.subsOnly) {
     // tmi.js exposes subscriber as a string '1'/'0' or boolean depending on version
@@ -245,18 +250,22 @@ function getActive(streamerId) {
 
 // ── Internal helpers ─────────────────────────────────────────────────
 
-function _track(row) {
+function _track(row, { atBoot = false } = {}) {
+  // ends_at is an ISO time written by startGiveaway; one that cannot be read counts as due now.
+  const endsAtMs = row.ends_at ? (Date.parse(row.ends_at) || Date.now()) : null;
   const entry = {
     giveawayId: row.id,
     keyword: row.keyword,
     subsOnly: !!row.subs_only,
     winnersCount: row.winners_count || 1,
     prize: row.prize || null,
+    endsAtMs,
     watchdogTimer: null,
   };
 
-  if (row.ends_at) {
-    const msLeft = Math.max(0, new Date(row.ends_at).getTime() - Date.now());
+  if (endsAtMs !== null) {
+    // The one timer that ends the giveaway; at boot it waits out BOOT_GRACE_MS.
+    const msLeft = Math.max(endsAtMs - Date.now(), atBoot ? BOOT_GRACE_MS : 0);
     const timer = setTimeout(() => _autoEnd(row.streamer_id), msLeft);
     timer.unref();
     entry.watchdogTimer = timer;

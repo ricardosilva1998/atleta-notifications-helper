@@ -544,6 +544,57 @@ describe('the giveaway winner and the YouTube cards honour them too (M7)', () =>
     assert.equal(overlay.container.children.length, 0);
   });
 
+  // An animation's last frame (opacity 1) is held over any inline opacity, so the fade only runs once
+  // the entrance is off the card: the default one (.entering) and a saved one (inline), which for
+  // the member card also means the animation .sub-shake brings. Checked in a real browser too:
+  // before, these cards stayed at full opacity until the slot was removed.
+  describe('the fade at the end of a card', () => {
+    const CARDS = [
+      ['giveaway_winner', { username: 'RacerDan', prize: 'x' }],
+      ['yt_superchat', { username: 'RacerDan', amount: '$5.00', message: 'hi' }],
+      ['yt_member', { username: 'RacerDan', level: 'Member' }],
+      ['yt_giftmember', { username: 'RacerDan', amount: 5 }],
+    ];
+
+    for (const [type, data] of CARDS) {
+      for (const entrance of [undefined, 'slideDown', 'slideUp', 'zoomIn', 'fadeIn']) {
+        test(`${type}${entrance ? ` with the saved entrance ${entrance}` : ' with the default entrance'}: the entrance is off when the fade starts`, () => {
+          const overlay = loadOverlay({ designs: entrance ? { [type]: design({ entrance_animation: entrance }) } : {} });
+          overlay.send({ type, data });
+          const card = overlay.slots()[0].children[0];
+          const seconds = overlay.run(`alertSeconds(${JSON.stringify(type)})`);
+
+          overlay.clock.advance(seconds * 1000 - 1);
+          assert.equal(card.style.opacity, '', 'not faded while the alert is on screen');
+          assert.notEqual(card.style.animation, 'none', 'the entrance is left alone until then');
+
+          overlay.clock.advance(1);
+          assert.ok(!card.classList.contains('entering'), 'the default entrance is taken off');
+          assert.equal(card.style.animation, 'none', 'so is a saved one (and the shake of the member card)');
+          assert.equal(card.style.transition, 'opacity 0.3s ease-in');
+          assert.equal(card.style.opacity, '0');
+          assert.equal(overlay.slots().length, 1, 'the slot stays for the fade');
+
+          overlay.clock.advance(400);
+          assert.equal(overlay.slots().length, 0, 'and goes when it is done');
+        });
+      }
+    }
+
+    test('the five alert objects are not touched: they leave with their own exit', () => {
+      for (const [type, data] of OBJECT_ALERTS) {
+        const overlay = loadOverlay();
+        overlay.send({ type, data });
+        const [slot] = overlay.slots();
+        overlay.clock.advance(overlay.run(`alertSeconds(${JSON.stringify(type)})`) * 1000);
+        assert.ok(slot.classList.contains('exiting'), `${type} exits`);
+        assert.ok(!slot.classList.contains('playing'), type);
+        assert.equal(slot.style.opacity, '', `${type}: no inline fade on an object`);
+        assert.equal(slot.style.animation, '', type);
+      }
+    });
+  });
+
   test('a border radius of 0 is a square corner, not 16', () => {
     const overlay = loadOverlay({ designs: { giveaway_winner: design({ border_radius: 0 }) } });
     overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
@@ -580,6 +631,25 @@ describe('text is shown as text (N17)', () => {
     const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_side_icon: '🏆' }) } });
     overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Steam key' } });
     assert.equal(overlay.slots()[0].children[0].innerHTML.split('<span class="cup">🏆</span>').length - 1, 2);
+  });
+
+  test('the default side icons are the builder\'s, alert for alert', () => {
+    // overlay-builder.ejs keeps the table the preview draws; the overlay must draw the same cups.
+    const builder = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'overlay-builder.ejs'), 'utf8');
+    const match = builder.match(/const DEFAULT_SIDE_ICONS = (\{[\s\S]*?\n\});/);
+    assert.ok(match, 'found the table in the builder');
+    const builderIcons = vm.runInNewContext(`(${match[1]})`);
+    assert.ok(Object.keys(builderIcons).length >= 10);
+    const overlay = loadOverlay();
+    for (const [type, icon] of Object.entries(builderIcons)) {
+      assert.equal(overlay.run(`getSideIcon(${JSON.stringify(type)})`), icon, type);
+    }
+  });
+
+  test('a giveaway winner card has the party popper on both sides when the design sets no icon', () => {
+    const overlay = loadOverlay();
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Steam key' } });
+    assert.equal(overlay.slots()[0].children[0].innerHTML.split('<span class="cup">🎉</span>').length - 1, 2);
   });
 
   test('the default icon of a card type is still there when the design sets none', () => {

@@ -7,6 +7,7 @@ const { client, fetchGuildChannel, streamerGuildForChannel } = require('../disco
 const {
   canManageGuild, botInviteUrl: inviteUrlFor, subRoleEligibility, roleFacts, botTopRolePosition,
   clampWelcomeMessage, WELCOME_MESSAGE_MAX, DELIVERY_CHANNEL_UNAVAILABLE,
+  guildListsAvailable, serverPagePicks,
 } = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
@@ -370,6 +371,10 @@ router.get('/guild/:guildId/stats', (req, res) => {
   });
 });
 
+// The tabs of the server page. ?tab= may name one; the page prints it into its
+// script, so anything else (a repeated parameter, any other text) is the default.
+const GUILD_PAGE_TABS = ['twitch', 'youtube', 'discord', 'iracing', 'settings'];
+
 // Guild config page
 router.get('/guild/:guildId', async (req, res) => {
   const { guildId } = req.params;
@@ -378,6 +383,10 @@ router.get('/guild/:guildId', async (req, res) => {
 
   const discordGuild = client.guilds.cache.get(guildId);
   const channels = getDiscordChannels(guildId);
+  // Before the bot is ready (the first seconds after a deploy), during a Discord
+  // outage or after its login was refused, the cache holds no channels or roles:
+  // the page says so, and a save keeps the stored welcome channel and role.
+  const discordListsUnavailable = !guildListsAvailable(discordGuild);
   // Only roles sub sync may give and take; a saved role that no longer
   // qualifies is reported (sub sync skips it) instead of silently dropped.
   let roles = [];
@@ -433,6 +442,7 @@ router.get('/guild/:guildId', async (req, res) => {
     channels,
     roles,
     subRoleProblem,
+    discordListsUnavailable,
     welcomeMessageMax: WELCOME_MESSAGE_MAX,
     deliveryError: lastDeliveryError(guildConfig, channels, watchedTwitchChannels, watchedYoutubeChannels, req.streamer),
     watchedTwitchChannels,
@@ -444,7 +454,7 @@ router.get('/guild/:guildId', async (req, res) => {
     limits,
     msg: req.query.msg,
     saved: req.query.saved,
-    activeTab: req.query.tab || 'twitch',
+    activeTab: GUILD_PAGE_TABS.includes(req.query.tab) ? req.query.tab : 'twitch',
   });
 });
 
@@ -454,13 +464,19 @@ router.post('/guild/:guildId', async (req, res) => {
   const guildConfig = db.getGuildConfig(guildId, req.streamer.id);
   if (!guildConfig) return res.redirect('/dashboard');
 
-  const welcomeChannelId = req.body.welcome_channel_id || null;
-  if (!(await channelsInGuild(guildId, [welcomeChannelId]))) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_channel`);
-  }
-  const subRoleId = req.body.sub_role_id || null;
-  if (subRoleId && !(await subRoleUsable(guildId, subRoleId))) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_role`);
+  // The page's channel and role pickers come from Discord's cache. When the bot
+  // cannot see the server they were empty, so what the form sent says nothing:
+  // the stored welcome channel and sub role stay, and the other fields are saved.
+  const { welcomeChannelId, subRoleId, kept } = serverPagePicks(
+    guildListsAvailable(client.guilds.cache.get(guildId)), guildConfig, req.body,
+  );
+  if (!kept) {
+    if (!(await channelsInGuild(guildId, [welcomeChannelId]))) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_channel`);
+    }
+    if (subRoleId && !(await subRoleUsable(guildId, subRoleId))) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_role`);
+    }
   }
 
   db.updateGuildConfig(guildId, req.streamer.id, {
@@ -560,6 +576,10 @@ router.post('/guild/:guildId/channels/:channelId/remove', (req, res) => {
 router.post('/guild/:guildId/channels/:channelId/edit', async (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  // The form's channel lists come from Discord's cache: when the bot cannot see
+  // the server they are empty and a save would switch both channels off. The
+  // page says why nothing changed.
+  if (!guildListsAvailable(client.guilds.cache.get(guildId))) return res.redirect(`/dashboard/guild/${guildId}?tab=twitch`);
   const liveChannelId = req.body.live_channel_id || null;
   const clipsChannelId = req.body.clips_channel_id || null;
   if (!(await channelsInGuild(guildId, [liveChannelId, clipsChannelId]))) {
@@ -642,6 +662,7 @@ router.post('/guild/:guildId/youtube/:channelId/remove', (req, res) => {
 router.post('/guild/:guildId/youtube/:channelId/edit', async (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  if (!guildListsAvailable(client.guilds.cache.get(guildId))) return res.redirect(`/dashboard/guild/${guildId}?tab=youtube`); // as the Twitch edit above
   const videosChannelId = req.body.videos_channel_id || null;
   const liveChannelId = req.body.live_channel_id || null;
   if (!(await channelsInGuild(guildId, [videosChannelId, liveChannelId]))) {
@@ -701,6 +722,9 @@ router.get('/overlay', (req, res) => {
 // parseOverlaySettings; a blank StreamElements field keeps the stored token.
 router.post('/overlay', (req, res) => {
   const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
+  // Whether the overlay was on before this save: the connections below were
+  // started then (at boot, or by the save that switched it on).
+  const wasEnabled = !!req.streamer.overlay_enabled;
   db.updateOverlayConfig(req.streamer.id, columns);
   pushOverlayConfig(req.streamer.id);
 
@@ -708,9 +732,15 @@ router.post('/overlay', (req, res) => {
     const { eventSubManager } = require('../services/eventsub');
     const { streamElementsManager } = require('../services/streamelements');
     if (columns.overlay_enabled) {
-      eventSubManager.startForStreamer(req.streamer.id);
-      if (streamElementsJwt) streamElementsManager.startForStreamer(req.streamer.id);
-      else streamElementsManager.stopForStreamer(req.streamer.id); // token removed (or never set)
+      // Settings reach an open OBS source as they are saved, so a save must not
+      // reconnect Twitch (a restart drops events for a second or two): the
+      // connections are started when the overlay is switched on, and the
+      // StreamElements one also when its token is added, replaced or removed.
+      if (!wasEnabled) eventSubManager.startForStreamer(req.streamer.id);
+      if (!wasEnabled || 'streamelements_jwt' in columns) {
+        if (streamElementsJwt) streamElementsManager.startForStreamer(req.streamer.id);
+        else streamElementsManager.stopForStreamer(req.streamer.id); // token removed (or never set)
+      }
     } else {
       eventSubManager.stopForStreamer(req.streamer.id);
       streamElementsManager.stopForStreamer(req.streamer.id);
@@ -732,27 +762,50 @@ router.post('/overlay/generate-token', (req, res) => {
   res.redirect('/dashboard/overlay');
 });
 
+// The sample alert each "Preview Alert" button plays on the streamer's own overlay.
+// Every alert type the overlay settings page lists is here: the five Twitch ones
+// (which also post their thank-you in Twitch chat), the giveaway winner (the shape
+// giveawayManager.pickWinners() emits) and the three YouTube ones (YOUTUBE_TEST_EVENTS).
+const TWITCH_ALERT_TYPES = ['follow', 'subscription', 'bits', 'donation', 'raid'];
+const YOUTUBE_TEST_EVENTS = {
+  yt_superchat: { type: 'yt_superchat', data: { username: 'TestViewer', amount: '$10.00', message: 'Great stream!' } },
+  yt_member: { type: 'yt_member', data: { username: 'NewFan', level: 'Member' } },
+  yt_giftmember: { type: 'yt_giftmember', data: { username: 'GenerousViewer', amount: 5, level: 'Member' } },
+};
+const OVERLAY_TEST_EVENTS = {
+  follow: { type: 'follow', data: { username: 'TestRacer' } },
+  subscription: { type: 'subscription', data: { username: 'SpeedDemon', message: 'Love the stream!', tier: '1', months: 6 } },
+  bits: { type: 'bits', data: { username: 'NitroFan', amount: 500, message: 'Take my bits!' } },
+  donation: { type: 'donation', data: { username: 'BigSponsor', amount: 25, message: 'Keep racing!', currency: 'USD' } },
+  raid: { type: 'raid', data: { username: 'RaidLeader', viewers: 42 } },
+  giveaway_winner: { type: 'giveaway_winner', data: { username: 'LuckyViewer', prize: 'Signed poster', keyword: 'giveaway' } },
+  ...YOUTUBE_TEST_EVENTS,
+};
+
+// A type the overlay does not have is refused before the shared cooldown starts,
+// so a refused click does not hold up the next test.
+function knownOverlayTestType(req, res, next) {
+  if (!Object.hasOwn(OVERLAY_TEST_EVENTS, req.params.eventType)) {
+    return res.status(400).json({ error: res.locals.t('overlay.test.invalidType') });
+  }
+  next();
+}
+
 // Test notification
-router.post('/overlay/test/:eventType', limitTests, (req, res) => {
+router.post('/overlay/test/:eventType', knownOverlayTestType, limitTests, (req, res) => {
   const bus = require('../services/overlayBus');
-  const { chatManager } = require('../services/twitchChat');
   const type = req.params.eventType;
-  const testEvents = {
-    follow: { type: 'follow', data: { username: 'TestRacer' } },
-    subscription: { type: 'subscription', data: { username: 'SpeedDemon', message: 'Love the stream!', tier: '1', months: 6 } },
-    bits: { type: 'bits', data: { username: 'NitroFan', amount: 500, message: 'Take my bits!' } },
-    donation: { type: 'donation', data: { username: 'BigSponsor', amount: 25, message: 'Keep racing!', currency: 'USD' } },
-    raid: { type: 'raid', data: { username: 'RaidLeader', viewers: 42 } },
-  };
+  const event = OVERLAY_TEST_EVENTS[type];
 
-  const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: res.locals.t('overlay.test.invalidType') });
+  // Fire overlay alert (a copy: the samples above are shared by every request)
+  bus.emit(`overlay:${req.streamer.id}`, { ...event, data: { ...event.data } });
 
-  // Fire overlay alert
-  bus.emit(`overlay:${req.streamer.id}`, event);
-
-  // Fire chatbot message in sync (a test is never merged with real thank-yous)
-  chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
+  // Fire chatbot message in sync (a test is never merged with real thank-yous).
+  // Only the Twitch alerts have a thank-you in Twitch chat.
+  if (TWITCH_ALERT_TYPES.includes(type)) {
+    const { chatManager } = require('../services/twitchChat');
+    chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
+  }
 
   res.json({ ok: true });
 });
@@ -1339,16 +1392,11 @@ router.post('/youtube-chatbot', (req, res) => {
 router.post('/youtube-chatbot/test/:eventType', limitTests, async (req, res) => {
   const bus = require('../services/overlayBus');
   const type = req.params.eventType;
-  const testEvents = {
-    yt_superchat: { type: 'yt_superchat', data: { username: 'TestViewer', amount: '$10.00', message: 'Great stream!' } },
-    yt_member: { type: 'yt_member', data: { username: 'NewFan', level: 'Member' } },
-    yt_giftmember: { type: 'yt_giftmember', data: { username: 'GenerousViewer', amount: 5, level: 'Member' } },
-  };
-  const event = testEvents[type];
+  const event = Object.hasOwn(YOUTUBE_TEST_EVENTS, type) ? YOUTUBE_TEST_EVENTS[type] : null;
   if (!event) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
-  // Send to overlay
-  bus.emit(`overlay:${req.streamer.id}`, event);
+  // Send to overlay (a copy: the samples are shared by every request)
+  bus.emit(`overlay:${req.streamer.id}`, { ...event, data: { ...event.data } });
 
   // Send chat message if bot is polling live chat
   let chatSent = false;
@@ -1609,7 +1657,7 @@ router.post('/sponsors/upload', async (req, res) => {
   try { await fs.promises.writeFile(path.join(sponsorDir, filename), buf); }
   catch (e) { return res.status(500).json({ error: res.locals.t('upload.error.writeFailed') }); }
 
-  const displayName = req.query.name || 'Sponsor';
+  const displayName = req.query.name || res.locals.t('overlayBuilder.sponsors.defaultName');
   const displayDuration = sponsorDurationSeconds(req.query.dur);
   db.addSponsorImage(streamerId, filename, displayName, null, displayDuration);
   const newImage = db.getSponsorImages(streamerId).find(i => i.filename === filename);
@@ -2168,7 +2216,8 @@ router.post('/giveaways/:id/pick', (req, res) => {
   const redraw = !!(req.body && req.body.redraw);
   const giveawayMgr = require('../services/giveawayManager');
   const result = giveawayMgr.pickWinners(id, streamerId, { redraw });
-  if (result.error) return res.status(404).json({ error: result.error });
+  // pickWinners reports the giveaway being gone by a code; the page shows words
+  if (result.error) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   if (result.winners.length === 0) return res.json({ winners: [], message: res.locals.t('giveaways.error.noEligible') });
   res.json({ winners: result.winners });
 });

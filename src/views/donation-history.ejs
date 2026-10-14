@@ -122,7 +122,7 @@
   // Show dates in the viewer's local time
   document.querySelectorAll('time[data-utc]').forEach(function (el) {
     var d = new Date(el.getAttribute('data-utc').replace(' ', 'T') + 'Z');
-    if (!isNaN(d)) el.textContent = d.toLocaleString(<%- JSON.stringify(_lang) %>, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!isNaN(d)) el.textContent = d.toLocaleString(<%- JSON.stringify(_lang).replace(/</g, '\\u003c') %>, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   });
 
   // Chart hover / focus tooltip

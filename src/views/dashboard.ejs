@@ -790,7 +790,7 @@
   let vtuberActive = false;
   let vtuberModels = [];
   let vtuberSelectedId = <%= typeof streamer !== 'undefined' && streamer.vtuber_model_id ? streamer.vtuber_model_id : 'null' %>;
-  const vtuberUrl = <%- typeof vtuberUrl !== 'undefined' && vtuberUrl ? JSON.stringify(vtuberUrl) : 'null' %>;
+  const vtuberUrl = <%- typeof vtuberUrl !== 'undefined' && vtuberUrl ? JSON.stringify(vtuberUrl).replace(/</g, '\\u003c') : 'null' %>;
   let vtuberCategoryFilter = 'all';
 
   const CATEGORY_ICONS = {

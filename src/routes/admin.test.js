@@ -142,6 +142,8 @@ before(async () => {
   app.use((req, res, next) => {
     const id = Number(req.get('x-test-streamer'));
     req.streamer = id ? db.getStreamerById(id) : undefined;
+    // A page is answered with its name and the values the route hands it (no views here).
+    res.render = (view, locals) => res.json({ view, locals });
     next();
   });
   app.use('/admin', require('./admin'));
@@ -172,6 +174,21 @@ beforeEach(() => {
   logs.length = 0;
   admin = db.getStreamerByDiscordId(ADMIN_DISCORD_ID)?.id || addStreamer({ discord_user_id: ADMIN_DISCORD_ID, discord_username: 'admin' });
 });
+
+function get(urlPath, streamer) {
+  return new Promise((resolve, reject) => {
+    const headers = {};
+    if (streamer) headers['x-test-streamer'] = String(streamer);
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'GET', agent: false, headers }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { text += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text, json: () => JSON.parse(text) }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 const FULLY_ON = { overlay_enabled: 1, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 1, twitch_username: 'some_streamer' };
 
@@ -404,5 +421,34 @@ describe('the Testing buttons count only what was really posted', () => {
       assert.equal(messageOf(res), 'test_sent_0', name);
     }
     assert.equal(messageOf(await postForm('/admin/test/welcome', { guild_id: GUILD }, admin)), 'test_sent_0');
+  });
+});
+
+describe('the tab named in the admin panel URL', () => {
+  // The page prints the tab into its script, so only a tab of the panel is ever handed to it.
+  const activeTab = async (query) => {
+    const res = await get(`/admin/dashboard${query}`, admin);
+    assert.equal(res.status, 200, query);
+    assert.equal(res.json().view, 'admin-dashboard');
+    return res.json().locals.activeTab;
+  };
+
+  test('a tab of the panel is used, and without one the panel opens on the stats', async () => {
+    for (const tab of ['stats', 'users', 'issues', 'feedback', 'discounts', 'testing']) assert.equal(await activeTab(`?tab=${tab}`), tab, tab);
+    assert.equal(await activeTab(''), 'stats');
+    assert.equal(await activeTab('?tab='), 'stats');
+  });
+
+  test('anything else is the default', async () => {
+    const odd = ["x'); alert(1); ('", '\n', '\\', "'", '"', 'Users', 'users ', 'constructor', '__proto__', 'a'.repeat(5000)];
+    for (const tab of odd) assert.equal(await activeTab(`?tab=${encodeURIComponent(tab)}`), 'stats', JSON.stringify(tab.slice(0, 30)));
+    assert.equal(await activeTab('?tab=users&tab=issues'), 'stats', 'a repeated parameter');
+    assert.equal(await activeTab('?tab[x]=users'), 'stats', 'a parameter with a key');
+  });
+
+  test('someone who is not an admin is sent away, whatever the tab', async () => {
+    const res = await get('/admin/dashboard?tab=users', addStreamer());
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard');
   });
 });

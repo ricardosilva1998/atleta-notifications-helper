@@ -480,6 +480,7 @@ describe('adding a Twitch channel', () => {
   beforeEach(() => {
     id = addStreamer();
     db.upsertGuild(G, id, 'Server');
+    guilds.set(G, fakeGuild(G)); // the bot sees the server (a channel edit needs it to)
   });
   const add = (name, over = {}) => request('POST', `/dashboard/guild/${G}/channels`, {
     streamer: id, form: { twitch_username: name, live_channel_id: CH_LIVE, clips_channel_id: '', ...over },
@@ -653,6 +654,183 @@ describe('the server page says what happened when a channel is added', () => {
   });
 });
 
+// ── Saving the server page while Discord cannot be read ──────────────────
+
+describe('the server page while the bot cannot see the server', () => {
+  const G = '600000000000000030';
+  const ROLE = '700000000000000005';
+  const OTHER_ROLE = '700000000000000006';
+  const fakeRole = (roleId, name) => ({ id: roleId, name, guild: { id: G }, managed: false, position: 3, permissions: { bitfield: 0n } });
+  let id;
+
+  beforeEach(() => {
+    id = addStreamer();
+    db.upsertGuild(G, id, 'Server');
+    db.updateGuildConfig(G, id, {
+      welcome_channel_id: CH_LIVE, sub_role_id: ROLE, welcome_message: 'Hello', welcome_enabled: true, sub_sync_enabled: true,
+    });
+  });
+  // The bot can see the server: its channels and two plain roles are in the cache.
+  const seeServer = () => {
+    const guild = fakeGuild(G);
+    guild.roles.cache.set(ROLE, fakeRole(ROLE, 'Subscribers'));
+    guild.roles.cache.set(OTHER_ROLE, fakeRole(OTHER_ROLE, 'Supporters'));
+    guilds.set(G, guild);
+    return guild;
+  };
+  const stored = () => db.getGuildConfig(G, id);
+  // The form as a page with empty pickers sends it.
+  const save = (form = {}) => request('POST', `/dashboard/guild/${G}`, {
+    streamer: id, form: { welcome_enabled: 'on', sub_sync_enabled: 'on', welcome_channel_id: '', sub_role_id: '', ...form },
+  });
+  const notice = (text) => text.includes(t('en', 'guild.listsUnavailable').replace(/'/g, '&#39;'));
+
+  test('a save keeps the welcome channel and the sub role, and saves the other fields', async () => {
+    const res = await save({ welcome_message: 'Changed text', recap_enabled: 'on', weekly_highlights_enabled: 'on' });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, `/dashboard/guild/${G}?tab=discord&saved=1`);
+    const row = stored();
+    assert.equal(row.welcome_channel_id, CH_LIVE, 'the welcome channel stays');
+    assert.equal(row.sub_role_id, ROLE, 'the sub role stays');
+    assert.equal(row.welcome_message, 'Changed text');
+    assert.equal(row.recap_enabled, 1);
+    assert.equal(row.weekly_highlights_enabled, 1);
+    assert.equal(row.milestones_enabled, 0, 'a switch left off is saved off');
+    assert.equal(row.welcome_enabled, 1);
+    assert.equal(row.sub_sync_enabled, 1);
+  });
+
+  test('a channel or role the form names is not taken either: nothing can be checked against Discord', async () => {
+    await save({ welcome_channel_id: CH_CLIPS, sub_role_id: OTHER_ROLE });
+    assert.equal(stored().welcome_channel_id, CH_LIVE);
+    assert.equal(stored().sub_role_id, ROLE);
+  });
+
+  test('a server with no welcome channel or role saved stays without', async () => {
+    db.updateGuildConfig(G, id, { welcome_enabled: true });
+    await save({ welcome_channel_id: CH_CLIPS, sub_role_id: OTHER_ROLE });
+    assert.equal(stored().welcome_channel_id, null);
+    assert.equal(stored().sub_role_id, null);
+  });
+
+  test('a server Discord has marked unavailable counts the same', async () => {
+    seeServer().available = false;
+    await save({ welcome_message: 'During an outage' });
+    assert.equal(stored().welcome_channel_id, CH_LIVE);
+    assert.equal(stored().sub_role_id, ROLE);
+    assert.equal(stored().welcome_message, 'During an outage');
+  });
+
+  test('once the bot sees the server the form decides again: an empty choice switches the setting off', async () => {
+    seeServer();
+    const res = await save();
+    assert.equal(res.headers.location, `/dashboard/guild/${G}?tab=discord&saved=1`);
+    assert.equal(stored().welcome_channel_id, null);
+    assert.equal(stored().sub_role_id, null);
+  });
+
+  test('once the bot sees the server a new choice is saved, and one that is not the server\'s is still refused', async () => {
+    seeServer();
+    const ok = await save({ welcome_channel_id: CH_CLIPS, sub_role_id: OTHER_ROLE });
+    assert.equal(ok.headers.location, `/dashboard/guild/${G}?tab=discord&saved=1`);
+    assert.equal(stored().welcome_channel_id, CH_CLIPS);
+    assert.equal(stored().sub_role_id, OTHER_ROLE);
+
+    const wrongChannel = await save({ welcome_channel_id: '999999999999999999', sub_role_id: ROLE });
+    assert.equal(messageOf(wrongChannel), 'invalid_channel');
+    const wrongRole = await save({ welcome_channel_id: CH_LIVE, sub_role_id: '999999999999999999' });
+    assert.equal(messageOf(wrongRole), 'invalid_role');
+    assert.equal(stored().welcome_channel_id, CH_CLIPS, 'a refused save changes nothing');
+    assert.equal(stored().sub_role_id, OTHER_ROLE);
+  });
+
+  test('the page says the lists cannot be loaded, and its pickers still show the saved channel and role', async () => {
+    const res = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(notice(res.text), 'the notice is on the page');
+    assert.ok(res.text.includes(`<option value="${CH_LIVE}" selected>#${CH_LIVE}</option>`), 'the welcome channel picker');
+    assert.ok(res.text.includes(`<option value="${ROLE}" selected>${ROLE}</option>`), 'the sub role picker');
+    assert.equal((await request('GET', `/dashboard/guild/${G}`, { streamer: id, json: true })).json().locals.discordListsUnavailable, true);
+  });
+
+  test('with the bot in the server the page has no notice and the pickers list the server', async () => {
+    seeServer();
+    const res = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(!notice(res.text));
+    assert.ok(res.text.includes(`<option value="${CH_LIVE}" selected>#live</option>`));
+    assert.ok(!res.text.includes(`>#${CH_LIVE}<`));
+    assert.equal((await request('GET', `/dashboard/guild/${G}`, { streamer: id, json: true })).json().locals.discordListsUnavailable, false);
+  });
+
+  describe('the edit forms of a watched channel', () => {
+    const YT = 'UC0000000000000000000001';
+    let twitchRow;
+    let youtubeRow;
+    beforeEach(() => {
+      db.addWatchedChannel(G, id, 'some_channel', CH_LIVE, CH_CLIPS, true, true, null);
+      twitchRow = db.getWatchedChannelsForGuild(G, id)[0];
+      db.addWatchedYoutubeChannel(G, id, YT, 'Some Channel', CH_LIVE, CH_CLIPS, null);
+      youtubeRow = db.getWatchedYoutubeChannelsForGuild(G, id)[0];
+    });
+    const twitchEdit = (form) => request('POST', `/dashboard/guild/${G}/channels/${twitchRow.id}/edit`, { streamer: id, form });
+    const youtubeEdit = (form) => request('POST', `/dashboard/guild/${G}/youtube/${youtubeRow.id}/edit`, { streamer: id, form });
+
+    test('a save from empty pickers does not switch the channels off', async () => {
+      const twitch = await twitchEdit({ live_channel_id: '', clips_channel_id: '' });
+      assert.equal(twitch.headers.location, `/dashboard/guild/${G}?tab=twitch`);
+      const youtube = await youtubeEdit({ videos_channel_id: '', live_channel_id: '' });
+      assert.equal(youtube.headers.location, `/dashboard/guild/${G}?tab=youtube`);
+      const twitchAfter = db.getWatchedChannelsForGuild(G, id)[0];
+      assert.equal(twitchAfter.live_channel_id, CH_LIVE);
+      assert.equal(twitchAfter.clips_channel_id, CH_CLIPS);
+      const youtubeAfter = db.getWatchedYoutubeChannelsForGuild(G, id)[0];
+      assert.equal(youtubeAfter.videos_channel_id, CH_LIVE);
+      assert.equal(youtubeAfter.live_channel_id, CH_CLIPS);
+    });
+
+    test('with the bot in the server the same save does switch them off', async () => {
+      seeServer();
+      assert.equal(messageOf(await twitchEdit({ live_channel_id: '', clips_channel_id: '' })), 'updated');
+      assert.equal(messageOf(await youtubeEdit({ videos_channel_id: '', live_channel_id: '' })), 'updated');
+      assert.equal(db.getWatchedChannelsForGuild(G, id)[0].live_channel_id, null);
+      assert.equal(db.getWatchedYoutubeChannelsForGuild(G, id)[0].videos_channel_id, null);
+    });
+  });
+});
+
+describe('the tab named in the server page URL', () => {
+  const G = '600000000000000040';
+  let id;
+  beforeEach(() => {
+    id = addStreamer();
+    db.upsertGuild(G, id, 'Server');
+    guilds.set(G, fakeGuild(G));
+  });
+  const activeTab = async (query) => (await request('GET', `/dashboard/guild/${G}${query}`, { streamer: id, json: true })).json().locals.activeTab;
+
+  test('a tab of the page is used, and without one the page opens on Twitch', async () => {
+    for (const tab of ['twitch', 'youtube', 'discord', 'iracing', 'settings']) assert.equal(await activeTab(`?tab=${tab}`), tab, tab);
+    assert.equal(await activeTab(''), 'twitch');
+    assert.equal(await activeTab('?tab='), 'twitch');
+  });
+
+  test('anything else is the default, so it cannot reach the page\'s script', async () => {
+    const odd = ["x'); alert(1); ('", '\n', '\\', "'", '"', 'Twitch', 'twitch ', 'constructor', '__proto__', 'a'.repeat(5000)];
+    for (const tab of odd) assert.equal(await activeTab(`?tab=${encodeURIComponent(tab)}`), 'twitch', JSON.stringify(tab.slice(0, 30)));
+    assert.equal(await activeTab('?tab=discord&tab=settings'), 'twitch', 'a repeated parameter');
+    assert.equal(await activeTab('?tab[x]=discord'), 'twitch', 'a parameter with a key');
+  });
+
+  test('the page script holds a tab name from the list and nothing from the URL', async () => {
+    const res = await request('GET', `/dashboard/guild/${G}?tab=%0A%5C%27%22%3C`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes("switchTab(savedTab || 'twitch');"));
+    const ok = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
+    assert.ok(ok.text.includes("switchTab(savedTab || 'discord');"));
+  });
+});
+
 // ── Removed routes (N25) ─────────────────────────────────────────────────
 
 describe('routes that were removed', () => {
@@ -729,6 +907,41 @@ describe('the overlay settings page', () => {
     assert.match(button, /type="button"/);
   });
 
+  // The page's <div>s, in document order, with the attributes of the ones still open at `needle`.
+  // Scripts, styles and comments are blanked out first (their text has "<div" in it).
+  function openDivsAt(html, needle) {
+    const blank = (m) => m.replace(/[^\n]/g, ' ');
+    const clean = html.replace(/<script\b[\s\S]*?<\/script>/gi, blank).replace(/<style\b[\s\S]*?<\/style>/gi, blank).replace(/<!--[\s\S]*?-->/g, blank);
+    const at = needle ? clean.indexOf(needle) : clean.length;
+    assert.ok(at >= 0, `${needle} is on the page`);
+    const open = [];
+    let depthLow = 0;
+    for (const tag of clean.matchAll(/<(\/?)div\b([^>]*)>/gi)) {
+      if (tag.index >= at) break;
+      if (!tag[1]) open.push(tag[2]);
+      else if (open.length) open.pop();
+      else depthLow++;
+    }
+    return { open, closedMoreThanOpened: depthLow };
+  }
+
+  test('every <div> the page opens is closed, so the Kick tab and the StreamElements card are where they belong', async () => {
+    const page = (await request('GET', '/dashboard/overlay', { streamer: id })).text;
+    const whole = openDivsAt(page);
+    assert.equal(whole.closedMoreThanOpened, 0, 'no </div> without a <div>');
+    assert.deepEqual(whole.open, [], 'no <div> left open at the end of the page');
+
+    // The Kick tab is a tab of the alerts section, not part of the YouTube one.
+    const kick = openDivsAt(page, 'id="alert-tab-kick"').open.slice(0, -1); // minus the tab's own <div>
+    assert.ok(kick.some((attributes) => attributes.includes('animate-in-delay-2')), 'the Kick tab is inside the alerts section');
+    assert.ok(!kick.some((attributes) => attributes.includes('alert-tab-content')), 'but not inside another tab');
+
+    // The StreamElements card follows the alerts section; it is not inside it.
+    const streamElements = openDivsAt(page, 'id="streamelements_jwt"').open;
+    assert.ok(!streamElements.some((attributes) => attributes.includes('animate-in-delay-2') || attributes.includes('alert-tab-content')),
+      'the StreamElements card is outside the alerts section');
+  });
+
   test('saves the raid and giveaway toggles and durations (they never were)', async () => {
     const res = await save({
       overlay_enabled: '1', overlay_follow_enabled: '1', overlay_sub_enabled: '1', overlay_bits_enabled: '1', overlay_donation_enabled: '1',
@@ -765,22 +978,67 @@ describe('the overlay settings page', () => {
     assert.equal(row.overlay_volume, 1);
   });
 
-  test('a blank token field keeps the saved token, and EventSub and StreamElements keep running', async () => {
+  // Settings reach an open OBS source as they are saved, so a save does not reconnect
+  // Twitch (a restart drops events for a second or two): the connections are started
+  // when the overlay is switched on, and StreamElements' when its token changes.
+  test('a save while the overlay is on leaves the connections running', async () => {
+    await save({ overlay_enabled: '1', overlay_follow_duration: '9', streamelements_jwt: '' });
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 9, 'the settings are saved');
+    assert.deepEqual(managerCalls, []);
+  });
+
+  test('a blank token field keeps the saved token', async () => {
     await save({ overlay_enabled: '1', streamelements_jwt: '' });
     assert.equal(db.getStreamerById(id).streamelements_jwt, JWT);
-    assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.start', id]]);
+    assert.deepEqual(managerCalls, []);
   });
 
-  test('a typed token replaces the saved one', async () => {
+  test('a typed token replaces the saved one and reconnects StreamElements only', async () => {
     await save({ overlay_enabled: '1', streamelements_jwt: ' other.token.value ' });
     assert.equal(db.getStreamerById(id).streamelements_jwt, 'other.token.value');
+    assert.deepEqual(managerCalls, [['se.start', id]]);
+  });
+
+  test('typing the token that is already saved changes nothing', async () => {
+    await save({ overlay_enabled: '1', streamelements_jwt: JWT });
+    assert.deepEqual(managerCalls, []);
+  });
+
+  test('the remove box clears the token and stops the StreamElements connection only', async () => {
+    await save({ overlay_enabled: '1', streamelements_jwt: '', streamelements_jwt_remove: '1' });
+    assert.equal(db.getStreamerById(id).streamelements_jwt, null);
+    assert.deepEqual(managerCalls, [['se.stop', id]]);
+  });
+
+  test('switching the overlay on connects EventSub, and StreamElements when a token is saved', async () => {
+    db.db.prepare('UPDATE streamers SET overlay_enabled = 0 WHERE id = ?').run(id);
+    await save({ overlay_enabled: '1', streamelements_jwt: '' });
+    assert.equal(db.getStreamerById(id).overlay_enabled, 1);
     assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.start', id]]);
   });
 
-  test('the remove box clears the token and stops the StreamElements connection', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: '', streamelements_jwt_remove: '1' });
-    assert.equal(db.getStreamerById(id).streamelements_jwt, null);
-    assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.stop', id]]);
+  test('switching the overlay on without a StreamElements token connects EventSub only', async () => {
+    const noToken = addStreamer({ overlay_enabled: 0, broadcaster_access_token: 'tok' });
+    await request('POST', '/dashboard/overlay', { streamer: noToken, form: { overlay_enabled: '1' } });
+    assert.ok(managerCalls.some(([name, who]) => name === 'eventsub.start' && who === noToken));
+    assert.ok(!managerCalls.some(([name]) => name === 'se.start'), 'there is no token to connect with');
+  });
+
+  test('on, saved again, token changed, off, on again: the connections follow the switch', async () => {
+    db.db.prepare('UPDATE streamers SET overlay_enabled = 0 WHERE id = ?').run(id);
+    const steps = [
+      [{ overlay_enabled: '1' }, [['eventsub.start', id], ['se.start', id]]],
+      [{ overlay_enabled: '1', overlay_sub_duration: '10' }, []],
+      [{ overlay_enabled: '1', streamelements_jwt: 'new.token.value' }, [['se.start', id]]],
+      [{ overlay_enabled: '1', overlay_bits_duration: '12' }, []],
+      [{}, [['eventsub.stop', id], ['se.stop', id]]],
+      [{ overlay_enabled: '1' }, [['eventsub.start', id], ['se.start', id]]],
+    ];
+    for (const [form, expected] of steps) {
+      managerCalls.length = 0;
+      await save(form);
+      assert.deepEqual(managerCalls, expected, JSON.stringify(form));
+    }
   });
 
   test('turning the overlay off stops both connections and keeps the token', async () => {
@@ -910,6 +1168,16 @@ describe('a save is pushed to the overlays that are open', () => {
       assert.match(form[0], /data-confirm="[^"]*OBS[^"]*"/, 'the confirmation names OBS');
       assert.match(form[0], /onsubmit="return confirm\(this\.dataset\.confirm\)"/);
       assert.match(form[0], /<button type="submit"/);
+    });
+
+    // The VTuber browser source (/vtuber/<token>) is opened with the same link.
+    test('the warning names the VTuber source too, in every language', async () => {
+      const { SUPPORTED_LANGS } = require('../i18n');
+      for (const lang of SUPPORTED_LANGS) {
+        assert.match(t(lang, 'overlay.regenerate.confirm'), /VTuber/, lang);
+      }
+      const res = await request('GET', '/dashboard/overlay', { streamer: id });
+      assert.match(res.text.match(/data-confirm="([^"]*)"/)[1], /VTuber/);
     });
   });
 });
@@ -1128,6 +1396,26 @@ describe('custom chat commands', () => {
   const stored = (streamer = id) => db.getChatCommands(streamer).map((c) => [c.command, c.response, c.cooldown, c.enabled]);
   const errorOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('cmd_error');
   const tabOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('tab');
+
+  // What a browser makes of an attribute value: each entity once.
+  const attributeValue = (html) => html.replace(/&(#\d+|amp|lt|gt|quot|apos);/g, (m, name) => (
+    { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[name] || String.fromCharCode(Number(name.slice(1)))));
+
+  test('the Test button hands the script the response exactly as it was typed, quotes and all', async () => {
+    const responses = ['Say "hello" to chat', "it's a 'quoted' <b>bold</b> & more", 'plain', '5 &quot; is not an entity here'];
+    responses.forEach((response, i) => db.addChatCommand(id, `cmd${i}`, response, 5));
+    const page = (await request('GET', '/dashboard/chatbot', { streamer: id })).text;
+    const sent = [...page.matchAll(/data-response="([^"]*)" onclick="testCustomCommand\(this\.dataset\.response, this\)"/g)].map((m) => attributeValue(m[1]));
+    assert.deepEqual(sent.sort(), [...responses].sort());
+  });
+
+  test('the response reaches chat as it was typed: the route takes it as plain text', async () => {
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run('somechannel', id);
+    const typed = 'Say "hello" & <b>wave</b>';
+    const res = await request('POST', `/dashboard/chatbot/test/custom?response=${encodeURIComponent(typed)}`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.deepEqual(chatCalls, [['say', id, typed, { priority: 'high' }]]);
+  });
 
   test('adds a command with a cleaned name and response, and a cooldown held to 5-3600 s', async () => {
     const res = await add({ command: '!Socials ', response: '  Follow us!  ', cooldown: '-30' });
@@ -1356,6 +1644,110 @@ describe('the test buttons', () => {
     assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]], 'a test is never merged with real thank-yous');
   });
 
+  describe('Preview Alert on the overlay settings page', () => {
+    const bus = require('../services/overlayBus');
+    const TWITCH_TYPES = ['follow', 'subscription', 'bits', 'donation', 'raid'];
+    // The types the page's buttons ask for: openPreview('<type>') in the view.
+    const buttonTypes = [...new Set([...realFs.readFileSync(path.join(SRC, 'views', 'overlay-config.ejs'), 'utf8').matchAll(/openPreview\('([a-z_]+)'\)/g)].map((m) => m[1]))];
+
+    // Everything this streamer's overlay is sent while `action` runs.
+    async function overlayDuring(streamerId, action) {
+      const seen = [];
+      const listener = (event) => seen.push(event);
+      bus.on(`overlay:${streamerId}`, listener);
+      try { await action(); } finally { bus.off(`overlay:${streamerId}`, listener); }
+      return seen;
+    }
+    const preview = (streamerId, type) => post(`/dashboard/overlay/test/${type}`, streamerId);
+
+    test('the page offers a button for each of the nine alerts', () => {
+      assert.deepEqual([...buttonTypes].sort(), [...TWITCH_TYPES, 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember'].sort());
+    });
+
+    test('every button is answered with that alert on the overlay (the four that used to be refused included)', async () => {
+      for (const type of buttonTypes) {
+        const id = addStreamer({ twitch_username: 'somechannel' }); // one streamer per button: the cooldown is per streamer
+        let res;
+        const events = await overlayDuring(id, async () => { res = await preview(id, type); });
+        assert.equal(res.status, 200, type);
+        assert.deepEqual(res.json(), { ok: true }, type);
+        assert.equal(events.length, 1, `${type}: one alert is sent to the overlay`);
+        assert.equal(events[0].type, type);
+        assert.ok(events[0].data && typeof events[0].data.username === 'string' && events[0].data.username, `${type}: a name to show`);
+      }
+    });
+
+    test('the giveaway winner is the card giveawayManager sends: a name, the prize and the keyword', async () => {
+      const id = addStreamer();
+      const [event] = await overlayDuring(id, () => preview(id, 'giveaway_winner'));
+      assert.deepEqual(Object.keys(event.data).sort(), ['keyword', 'prize', 'username']);
+      assert.deepEqual(Object.keys(event).sort(), ['data', 'type']);
+    });
+
+    test('the YouTube alerts are the same samples the YouTube chatbot page plays', async () => {
+      for (const type of ['yt_superchat', 'yt_member', 'yt_giftmember']) {
+        const a = addStreamer();
+        const b = addStreamer();
+        const [fromSettings] = await overlayDuring(a, () => preview(a, type));
+        const [fromChatbot] = await overlayDuring(b, () => post(`/dashboard/youtube-chatbot/test/${type}`, b));
+        assert.deepEqual(fromSettings, fromChatbot, type);
+      }
+    });
+
+    test('only the five Twitch alerts post a thank-you in Twitch chat, and as a test', async () => {
+      for (const type of buttonTypes) {
+        chatCalls.length = 0;
+        const id = addStreamer({ twitch_username: 'somechannel' });
+        const res = await preview(id, type);
+        assert.equal(res.status, 200, type);
+        if (TWITCH_TYPES.includes(type)) {
+          assert.equal(chatCalls.length, 1, type);
+          assert.deepEqual([chatCalls[0][0], chatCalls[0][1], chatCalls[0][2]], ['event', id, type]);
+          assert.deepEqual(chatCalls[0][4], { test: true });
+        } else {
+          assert.deepEqual(chatCalls, [], `${type} is not a Twitch alert`);
+        }
+      }
+    });
+
+    test('a sample is not changed by being sent: the next test sends the same alert', async () => {
+      const a = addStreamer();
+      const b = addStreamer();
+      const [first] = await overlayDuring(a, () => preview(a, 'giveaway_winner'));
+      first.data.username = 'changed on the way';
+      const [second] = await overlayDuring(b, () => preview(b, 'giveaway_winner'));
+      assert.notEqual(second.data.username, 'changed on the way');
+    });
+
+    test('a type the overlay does not have is refused before the cooldown starts', async () => {
+      const id = addStreamer({ twitch_username: 'somechannel' });
+      const seen = await overlayDuring(id, async () => {
+        const refused = await preview(id, 'nope');
+        assert.equal(refused.status, 400);
+        assert.equal(refused.json().error, t('en', 'overlay.test.invalidType'));
+        const next = await preview(id, 'follow'); // straight after: not held for 5 seconds
+        assert.equal(next.status, 200);
+        assert.deepEqual(next.json(), { ok: true });
+        const held = await preview(id, 'raid'); // a real test does start it
+        assert.equal(held.status, 429);
+        const refusedAgain = await preview(id, 'nope'); // and a refusal inside it is still a refusal
+        assert.equal(refusedAgain.status, 400);
+      });
+      assert.deepEqual(seen.map((event) => event.type), ['follow']);
+    });
+
+    test('names that are on every object are not alert types', async () => {
+      const id = addStreamer({ twitch_username: 'somechannel' });
+      const seen = await overlayDuring(id, async () => {
+        for (const type of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+          assert.equal((await preview(id, type)).status, 400, type);
+        }
+      });
+      assert.deepEqual(seen, []);
+      assert.deepEqual(chatCalls, []);
+    });
+  });
+
   test('the chatbot test sends the thank-you as a test, and the sponsor test as a sponsor message', async () => {
     const id = addStreamer({ twitch_username: 'somechannel' });
     assert.deepEqual((await post('/dashboard/chatbot/test/follow', id)).json(), { ok: true });
@@ -1443,6 +1835,16 @@ describe('a name made of markup, printed in a sentence of a translated page', ()
 });
 
 describe('the sponsor image upload', () => {
+  test('an upload without a name is stored under the default sponsor name', async () => {
+    // two streamers: a file is named by the millisecond, and one streamer's two quick uploads could share it
+    const upload = (streamer, query) => request('POST', `/dashboard/sponsors/upload?${query}ext=png&dur=30`, { streamer, rawBody: 'not-really-a-png', contentType: 'application/octet-stream' });
+    const unnamed = await upload(addStreamer(), '');
+    assert.equal(unnamed.status, 200);
+    assert.equal(unnamed.json().image.display_name, t('en', 'overlayBuilder.sponsors.defaultName'));
+    const named = await upload(addStreamer(), 'name=Acme&');
+    assert.equal(named.json().image.display_name, 'Acme');
+  });
+
   test('a file type that is not an image is refused with the translated message', async () => {
     const res = await request('POST', '/dashboard/sponsors/upload?name=Acme&ext=exe', { streamer: addStreamer(), rawBody: 'x', contentType: 'application/octet-stream' });
     assert.equal(res.status, 400);
@@ -2209,6 +2611,21 @@ describe('the messages and names those routes show', () => {
     const deleting = await request('DELETE', `/dashboard/giveaways/${open.id}`, { streamer: id });
     assert.equal(deleting.status, 409);
     assert.equal(deleting.json().error, t('en', 'giveaways.error.closeFirst'));
+  });
+
+  test('a pick that finds the giveaway gone is answered in words, never with the code', async () => {
+    const giveaway = db.insertGiveaway({ streamer_id: id, keyword: 'gone', status: 'closed' });
+    const manager = require('../services/giveawayManager');
+    const original = manager.pickWinners;
+    manager.pickWinners = () => ({ winners: [], error: 'not_found' }); // deleted between the lookup and the draw
+    try {
+      const res = await request('POST', `/dashboard/giveaways/${giveaway.id}/pick`, { streamer: id, body: {} });
+      assert.equal(res.status, 404);
+      assert.deepEqual(res.json(), { error: t('en', 'giveaways.error.notFound') });
+      assert.ok(!res.text.includes('not_found'));
+    } finally {
+      manager.pickWinners = original;
+    }
   });
 
   test('a sponsor message with no text, and a test of one that is gone, are refused in words', async () => {

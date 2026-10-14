@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ejs = require('ejs');
-const { t, esc, richFor } = require('../src/i18n');
+const { t, esc, richFor, SUPPORTED_LANGS } = require('../src/i18n');
 const en = require('../src/locales/en.json');
 const { EVENT_DEFAULTS } = require('../src/services/overlayDesign');
 
@@ -120,7 +120,7 @@ const channels = [{ id: '111', name: 'general' }];
 const limits = { recaps: true, milestones: true, weeklyHighlights: true };
 const guildPage = {
   streamer, guild: { welcome_enabled: 1, welcome_channel_id: '111', welcome_message: 'Hello', sub_sync_enabled: 1, sub_role_id: 'r1' },
-  guildName: 'GuildName', guildId: 'g1', channels, roles: [{ id: 'r1', name: 'Subscriber' }], subRoleProblem: null, welcomeMessageMax: 500, deliveryError: null,
+  guildName: 'GuildName', guildId: 'g1', channels, roles: [{ id: 'r1', name: 'Subscriber' }], subRoleProblem: null, discordListsUnavailable: false, welcomeMessageMax: 500, deliveryError: null,
   watchedTwitchChannels: [
     { id: 1, twitch_username: 'shroud', live_channel_id: '111', clips_channel_id: '111', is_live: true, profile_image_url: null },
     { id: 2, twitch_username: 'ninja', live_channel_id: null, clips_channel_id: null, is_live: false, profile_image_url: null },
@@ -167,6 +167,8 @@ const PAGE_LOCALS = {
     guildPage,
     { ...guildPage, msg: 'channel_limit', limits: { recaps: false, milestones: false, weeklyHighlights: false }, hasBroadcasterToken: true, features: { youtube: false }, watchedTwitchChannels: [], watchedYoutubeChannels: [],
       deliveryError: { channel: '#general', when: '2026-10-13 UTC', unavailable: false, error: 'Boom' }, subRoleProblem: 'missing' },
+    // the bot cannot see the server: no lists, a notice, and the pickers show what is saved
+    { ...guildPage, discordListsUnavailable: true, channels: [], roles: [] },
   ],
   'overlay-config': [
     { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true } },
@@ -255,6 +257,46 @@ describe('the rendered page has no text of its own', () => {
 const STUB_DATA = new Set(['FREE', 'free', 'tester', 'Tester', 'tester_tv', 'Tester_TV', 'GuildName', 'shroud', 'ninja', 'ChannelOne', 'ChannelName', 'StreamTitle', 'TitleText',
   'ErrorText', 'SponsorName', 'BotName', 'badword', 'socials', 'rules', 'general', 'Subscriber', 'Hello', 'reason', 'other', 'username', 'tok123']);
 const isStubData = (word) => STUB_DATA.has(word) || /^(?:user|key)\d*$/.test(word);
+
+describe('the overlay builder\'s sponsor name and font sample are texts of the page', () => {
+  const source = fs.readFileSync(path.join(VIEWS, 'overlay-builder.ejs'), 'utf8');
+
+  test('the page source holds neither the default sponsor name nor the sample sentence', () => {
+    assert.ok(!/'Sponsor'/.test(source), "no 'Sponsor' fallback typed into the script");
+    assert.ok(!/value="Sponsor"/.test(source), 'no default name typed into the upload field');
+    assert.ok(!source.includes('The quick brown fox'), 'no sample sentence typed into the font gallery');
+  });
+
+  for (const lang of SUPPORTED_LANGS) {
+    test(`${lang}: the upload field starts with the sponsor name of that language, and the script gets it and the sample`, () => {
+      const translate = (key, params) => t(lang, key, params);
+      const html = render('overlay-builder', PAGE_LOCALS['overlay-builder'][0], translate);
+      const name = t(lang, 'overlayBuilder.sponsors.defaultName');
+      assert.ok(html.includes(`id="sp-upload-name" class="sp-upload-input" placeholder="${esc(t(lang, 'overlayBuilder.sponsors.namePlaceholder'))}" value="${esc(name)}"`));
+      const texts = JSON.parse(html.match(/const I18N = (\{.*\});/)[1]);
+      assert.equal(texts.defaultSponsorName, name);
+      assert.equal(texts.fontSample, t(lang, 'overlayBuilder.text.fontSample'));
+    });
+  }
+});
+
+describe('every page renders in every language, with nothing left unfilled, and its scripts parse', () => {
+  for (const page of PAGES) {
+    test(page, () => {
+      for (const lang of SUPPORTED_LANGS) {
+        const translate = (key, params) => t(lang, key, params);
+        for (const locals of PAGE_LOCALS[page]) {
+          const html = render(page, { lang, ...locals }, translate);
+          assert.ok(!/\{\{\w+\}\}/.test(html.replace(/<script\b[\s\S]*?<\/script>/gi, '')), `${page} (${lang}): a {{field}} was left in the page`);
+          assert.ok(!/>\s*undefined\s*</.test(html) && !/="undefined"/.test(html), `${page} (${lang}): "undefined" is printed`);
+          for (const m of html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+            assert.doesNotThrow(() => new Function(m[1]), `${page} (${lang}): an inline script does not parse`);
+          }
+        }
+      }
+    });
+  }
+});
 
 // ── 3. The texts handed to the scripts ───────────────────────────────────
 
