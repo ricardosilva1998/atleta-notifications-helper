@@ -16,10 +16,67 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-var CURRENCY = { EUR: '€', USD: '$', GBP: '£', BRL: 'R$', JPY: '¥' };
+// A donation amount as the currency writes it ("€10.50", "$1,234.50", "CA$7.50").
+// The locale is fixed so the OBS overlay and the builder preview print the same
+// text whatever language each browser runs in. A code Intl cannot format (not
+// three letters) is shown in front of the amount, and an amount that is not a
+// number is shown as it came.
 function money(amount, currency) {
-  var sym = CURRENCY[String(currency || '').toUpperCase()] || String(currency || '');
-  return sym + String(amount == null ? '' : amount);
+  var code = String(currency == null ? '' : currency).trim().toUpperCase();
+  var prefix = code ? code + ' ' : '';
+  var number = Number(amount);
+  if (amount == null || String(amount).trim() === '' || !isFinite(number)) {
+    return (prefix + String(amount == null ? '' : amount)).trim();
+  }
+  if (/^[A-Z]{3}$/.test(code)) {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(number);
+    } catch (e) { /* fall through to the plain form */ }
+  }
+  return prefix + number.toFixed(2);
+}
+
+// A name wider than its plaque is shown smaller, and the stylesheet cuts what
+// still does not fit with an ellipsis (.o-name). NAME_HOLDS is how many typical
+// capitals each plaque holds at full size, measured with Oxanium 800 (about
+// 0.66em per capital) at the default 420px width; a wide character (CJK, Hangul,
+// full-width forms, emoji) counts 1.5. The floor keeps a name readable.
+var NAME_HOLDS = { follow: 22, subscription: 16, bits: 23, raid: 22 };
+var NAME_FIT_FLOOR = 0.6;
+
+function isWide(codePoint) {
+  return (codePoint >= 0x1100 && codePoint <= 0x11FF)
+    || (codePoint >= 0x2E80 && codePoint <= 0xA4CF)
+    || (codePoint >= 0xAC00 && codePoint <= 0xD7A3)
+    || (codePoint >= 0xF900 && codePoint <= 0xFAFF)
+    || (codePoint >= 0xFE30 && codePoint <= 0xFE6F)
+    || (codePoint >= 0xFF00 && codePoint <= 0xFF60)
+    || (codePoint >= 0xFFE0 && codePoint <= 0xFFE6)
+    || codePoint >= 0x1F000;
+}
+
+function nameWidth(name) {
+  var chars = Array.from(String(name == null ? '' : name));
+  var width = 0;
+  for (var i = 0; i < chars.length; i++) width += isWide(chars[i].codePointAt(0)) ? 1.5 : 1;
+  return width;
+}
+
+// The style attribute for a .o-name: --fit scales its font size (see objects.css).
+function nameFit(name, holds) {
+  var width = nameWidth(name);
+  var fit = width > holds ? Math.max(NAME_FIT_FLOOR, holds / width) : 1;
+  return fit < 1 ? ' style="--fit:' + fit.toFixed(2) + '"' : '';
+}
+
+// The raid count sits on a 118px banner at 46px; digits are 0.533em wide in
+// Oxanium, so from five digits on it is set smaller to keep every digit inside.
+var COUNT_FULL_SIZE = 46;
+var COUNT_WIDTH_BUDGET = 108;
+function countFit(digits) {
+  var size = Math.floor(COUNT_WIDTH_BUDGET / (digits.length * 0.533));
+  size = Math.max(14, size);
+  return size < COUNT_FULL_SIZE ? ' style="font-size:' + size + 'px"' : '';
 }
 
 var OBJECTS = {
@@ -32,7 +89,7 @@ var OBJECTS = {
         + '<div class="o-follow-hatch"></div><div class="o-mesh"></div>'
         + '<div class="o-follow-glyph">✦</div>'
         + '<div class="o-follow-txt">'
-        +   '<div class="o-name">' + esc(d.username) + '</div>'
+        +   '<div class="o-name"' + nameFit(d.username, NAME_HOLDS.follow) + '>' + esc(d.username) + '</div>'
         +   '<div class="o-meta">started following</div>'
         + '</div>'
         + '<div class="o-follow-scar"></div><div class="o-blade"></div>'
@@ -54,7 +111,7 @@ var OBJECTS = {
         + '<div class="o-sub-cords"></div>'
         + '<div class="o-sub-gaku"><div class="o-mesh"></div>'
         +   '<div class="o-sub-mark">Subscriber</div>'
-        +   '<div class="o-name">' + esc(d.username) + '</div>'
+        +   '<div class="o-name"' + nameFit(d.username, NAME_HOLDS.subscription) + '>' + esc(d.username) + '</div>'
         +   '<div class="o-meta">' + meta + '</div>'
         +   (d.message ? '<div class="o-sub-msg">' + esc(d.message) + '</div>' : '')
         + '</div></div>';
@@ -77,7 +134,7 @@ var OBJECTS = {
         + '<div class="o-bits-br tl"></div><div class="o-bits-br tr"></div>'
         + '<div class="o-bits-br bl"></div><div class="o-bits-br rb"></div>'
         + '<div class="o-bits-cells">' + tiles + '</div>'
-        + '<div class="o-bits-who o-name">' + esc(d.username) + '</div>'
+        + '<div class="o-bits-who o-name"' + nameFit(d.username, NAME_HOLDS.bits) + '>' + esc(d.username) + '</div>'
         + '<div class="o-bits-unit o-meta">bits</div>'
         + '<div class="o-blade"></div>'
         + '</div>';
@@ -122,7 +179,7 @@ var OBJECTS = {
       for (var i = 0; i < rankDef.length; i++) {
         var b = rankDef[i];
         var inner = b.cls.indexOf('main') > -1
-          ? '<div class="o-mesh"></div><div class="o-raid-cnt">' + count + '</div>'
+          ? '<div class="o-mesh"></div><div class="o-raid-cnt"' + countFit(String(count)) + '>' + count + '</div>'
             + '<div class="o-raid-clbl">raiders</div>'
           : '';
         rank += '<div class="' + b.cls + '" style="--rdelay:calc('
@@ -131,7 +188,7 @@ var OBJECTS = {
       return '<div class="obj o-raid">'
         + '<div class="o-raid-rank">' + rank + '</div>'
         + '<div class="o-raid-plaque">'
-        +   '<div class="o-name">' + esc(d.username) + '</div>'
+        +   '<div class="o-name"' + nameFit(d.username, NAME_HOLDS.raid) + '>' + esc(d.username) + '</div>'
         +   '<div class="o-meta">brought the grid</div>'
         + '</div></div>';
     },
