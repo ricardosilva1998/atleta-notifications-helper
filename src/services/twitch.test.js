@@ -6,10 +6,14 @@ const assert = require('node:assert/strict');
 // ── Minimal DB stub ──────────────────────────────────────────────────
 
 let _savedTokens = null;
+let _clearedScopes = [];
 
 const dbStub = {
   updateStreamerBroadcasterTokens(streamerId, accessToken, refreshToken, expiresAt) {
     _savedTokens = { streamerId, accessToken, refreshToken, expiresAt };
+  },
+  clearStreamerBroadcasterScopes(streamerId) {
+    _clearedScopes.push(streamerId);
   },
 };
 
@@ -310,5 +314,138 @@ describe('the optional signal of the Twitch getters', () => {
     controller.abort(new Error('page gave up'));
     await assert.rejects(() => tw.getStream('someone', { signal: controller.signal }), /page gave up/);
     assert.equal(helix.length, 0);
+  });
+});
+
+// ── Follow checks use the streamer's own token (M10) ──────────────────
+
+describe('getFollowAge', () => {
+  const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+  const FOLLOWERS_URL = 'https://api.twitch.tv/helix/channels/followers?broadcaster_id=111&user_id=555';
+  let calls;
+
+  // A fresh module per test, so no token refresh is left over from another.
+  function freshTwitch() {
+    delete require.cache[require.resolve('./twitch')];
+    return require('./twitch');
+  }
+
+  // Helix answers `answers` in order (the last one repeats): { status, follows }.
+  // The token endpoint answers `refreshStatus`, with a fresh token on 200.
+  function stubTwitch(answers, refreshStatus = 200) {
+    calls = [];
+    let helixCalls = 0;
+    global.fetch = async (url, opts = {}) => {
+      if (calls.length > 10) throw new Error('runaway retry loop');
+      if (String(url) === TOKEN_URL) {
+        calls.push({ to: 'token', signal: opts.signal });
+        if (refreshStatus !== 200) return { ok: false, status: refreshStatus, json: async () => ({}), text: async () => '' };
+        return { ok: true, status: 200, json: async () => ({ access_token: 'fresh-token', refresh_token: 'fresh-refresh', expires_in: 3600 }), text: async () => '' };
+      }
+      const answer = answers[Math.min(helixCalls++, answers.length - 1)];
+      calls.push({ to: 'helix', url: String(url), auth: opts.headers && opts.headers.Authorization, clientId: opts.headers && opts.headers['Client-Id'], signal: opts.signal });
+      return { ok: answer.status >= 200 && answer.status < 300, status: answer.status, json: async () => ({ data: answer.follows || [] }), text: async () => '' };
+    };
+  }
+
+  // A synthetic streamer whose broadcaster token can read followers.
+  const streamer = (overrides = {}) => ({
+    id: 1,
+    twitch_user_id: '111',
+    broadcaster_access_token: 'broadcaster-token',
+    broadcaster_refresh_token: 'refresh-token',
+    broadcaster_token_expires_at: Date.now() + 3_600_000,
+    broadcaster_scopes: 'channel:read:subscriptions moderator:read:followers bits:read',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    _savedTokens = null;
+    _clearedScopes = [];
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  test('asks Twitch with the streamer\'s own broadcaster token, not the app token', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 200, follows: [{ user_id: '555', followed_at: '2025-01-02T03:04:05Z' }] }]);
+    assert.deepEqual(await tw.getFollowAge(streamer(), '555'), { following: true, followedAt: '2025-01-02T03:04:05Z' });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, FOLLOWERS_URL);
+    assert.equal(calls[0].auth, 'Bearer broadcaster-token');
+    assert.equal(calls[0].clientId, 'test-client-id');
+    assert.ok(calls[0].signal instanceof AbortSignal, 'the request has a timeout');
+  });
+
+  test('an empty answer means "not following"', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 200, follows: [] }]);
+    assert.deepEqual(await tw.getFollowAge(streamer(), '555'), { following: false, followedAt: null });
+  });
+
+  test('a 401 refreshes the token once and asks again with the new one', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 401 }, { status: 200, follows: [{ followed_at: '2025-01-02T03:04:05Z' }] }]);
+    assert.equal((await tw.getFollowAge(streamer(), '555')).following, true);
+    assert.deepEqual(calls.map((c) => c.to), ['helix', 'token', 'helix']);
+    assert.equal(calls[2].auth, 'Bearer fresh-token');
+    assert.equal(_savedTokens.accessToken, 'fresh-token');
+  });
+
+  test('an expired token is refreshed before asking, and the refresh has a timeout', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 200, follows: [] }]);
+    await tw.getFollowAge(streamer({ broadcaster_token_expires_at: Date.now() - 1 }), '555');
+    assert.deepEqual(calls.map((c) => c.to), ['token', 'helix']);
+    assert.ok(calls[0].signal instanceof AbortSignal);
+    assert.equal(calls[1].auth, 'Bearer fresh-token');
+  });
+
+  for (const status of [401, 403, 500]) {
+    test(`Twitch answering ${status} is an error, never "not following"`, async () => {
+      const tw = freshTwitch();
+      stubTwitch([{ status }]);
+      await assert.rejects(() => tw.getFollowAge(streamer(), '555'), new RegExp(`Followers API error: ${status}`));
+      assert.equal(calls.filter((c) => c.to === 'token').length, status === 401 ? 1 : 0, 'only a 401 refreshes, once');
+    });
+  }
+
+  test('without a token that can read followers, or without the ids, it is an error and Twitch is not asked', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 200, follows: [] }]);
+    for (const columns of [{ broadcaster_scopes: 'channel:read:subscriptions bits:read' }, { broadcaster_scopes: null }, { broadcaster_access_token: null }]) {
+      await assert.rejects(() => tw.getFollowAge(streamer(columns), '555'), (err) => err.code === 'NO_FOLLOWER_ACCESS', JSON.stringify(columns));
+    }
+    await assert.rejects(() => tw.getFollowAge(streamer({ twitch_user_id: null }), '555'));
+    await assert.rejects(() => tw.getFollowAge(streamer(), undefined));
+    await assert.rejects(() => tw.getFollowAge(null, '555'));
+    assert.equal(calls.length, 0);
+  });
+
+  test('a dead refresh token clears the scopes, so later checks stop at the scope test', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 401 }], 400);
+    const realWarn = console.warn;
+    const warnings = [];
+    console.warn = (...args) => warnings.push(args.join(' '));
+    try {
+      await assert.rejects(() => tw.getFollowAge(streamer(), '555'), (err) => err.code === 'INVALID_REFRESH_TOKEN');
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.deepEqual(_clearedScopes, [1]);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /streamer 1/);
+  });
+
+  test('checks that arrive together share one token refresh', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 200, follows: [] }]);
+    const expired = streamer({ broadcaster_token_expires_at: Date.now() - 1 });
+    await Promise.all(['1', '2', '3'].map((userId) => tw.getFollowAge(expired, userId)));
+    assert.equal(calls.filter((c) => c.to === 'token').length, 1);
+    assert.equal(calls.filter((c) => c.to === 'helix').length, 3);
   });
 });

@@ -220,16 +220,23 @@ async function handleBuiltinCommand(client, channel, tags, commandName, args, st
     case 'followage': {
       if (!streamer.cmd_followage_enabled) return false;
       if (onCooldown(sid, 'followage')) return true;
+      // Checked with the streamer's own Twitch token. Only Twitch's answer says
+      // "not following"; when it cannot be asked, the reply stays neutral.
+      let result;
       try {
         const { getFollowAge } = require('./twitch');
-        const result = await getFollowAge(channel.replace(/^#/, ''), tags.username);
-        if (result.following && result.followedAt) {
-          const dur = formatDuration(Date.now() - new Date(result.followedAt).getTime());
-          client.say(channel, `🏁 ${name} has been following for ${dur}!`).catch(() => {});
-        } else {
-          client.say(channel, `${name} is not following the channel.`).catch(() => {});
-        }
+        result = await getFollowAge(streamer, tags['user-id']);
       } catch (e) {
+        console.warn(`[Chat] !followage could not be checked in ${channel}: ${e.message}`);
+        result = null;
+      }
+      const since = result && result.following && result.followedAt ? new Date(result.followedAt).getTime() : NaN;
+      if (result && !result.following) {
+        client.say(channel, `${name} is not following the channel.`).catch(() => {});
+      } else if (Number.isFinite(since)) {
+        const dur = formatDuration(Date.now() - since);
+        client.say(channel, `🏁 ${name} has been following for ${dur}!`).catch(() => {});
+      } else {
         client.say(channel, `Could not check follow age.`).catch(() => {});
       }
       return true;

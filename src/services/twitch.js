@@ -222,6 +222,7 @@ async function refreshBroadcasterToken(streamer) {
   const res = await fetch('https://id.twitch.tv/oauth2/token', {
     method: 'POST',
     body: params,
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -270,29 +271,73 @@ async function refreshBotToken(streamer) {
   return data.access_token;
 }
 
-async function getFollowAge(broadcasterLogin, userLogin) {
-  try {
-    const token = await (async () => {
-      if (!accessToken || Date.now() >= tokenExpiresAt) await authenticate();
-      return accessToken;
-    })();
-    const broadcasterId = await getUserId(broadcasterLogin);
-    const userId = await getUserId(userLogin);
-    if (!broadcasterId || !userId) return { following: false, followedAt: null };
+const FOLLOWERS_SCOPE = 'moderator:read:followers';
 
-    const res = await fetch(
-      `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${userId}`,
-      { headers: { 'Client-ID': config.twitch.clientId, 'Authorization': `Bearer ${token}` } }
-    );
-    const data = await res.json();
-    if (data.data && data.data.length > 0) {
-      return { following: true, followedAt: data.data[0].followed_at };
-    }
-    return { following: false, followedAt: null };
-  } catch (e) {
-    console.error('[Twitch] getFollowAge error:', e.message);
-    return { following: false, followedAt: null };
+function hasBroadcasterScope(streamer, scope) {
+  return (streamer.broadcaster_scopes || '').split(' ').includes(scope);
+}
+
+// One broadcaster-token refresh at a time per streamer for the follow checks:
+// the follow-age filter can look up several chatters at the same moment.
+const followTokenRefreshes = new Map(); // streamerId -> pending refresh (removed when it settles)
+
+function refreshFollowToken(streamer) {
+  let pending = followTokenRefreshes.get(streamer.id);
+  if (!pending) {
+    pending = refreshBroadcasterToken(streamer)
+      .catch((err) => {
+        // A dead grant never recovers: clear the scopes (as EventSub and the sub
+        // sync do), so the dashboard asks for re-authorization and later checks
+        // stop before asking Twitch again.
+        if (err.code === 'INVALID_REFRESH_TOKEN') {
+          db.clearStreamerBroadcasterScopes(streamer.id);
+          console.warn(`[Twitch] Broadcaster token of streamer ${streamer.id} is permanently invalid; cleared scopes, re-authorization required`);
+        }
+        throw err;
+      })
+      .finally(() => followTokenRefreshes.delete(streamer.id));
+    followTokenRefreshes.set(streamer.id, pending);
   }
+  return pending;
+}
+
+// Whether a viewer (Twitch user id) follows the streamer's channel, and since
+// when: { following: true, followedAt } or { following: false, followedAt: null }.
+// Twitch only tells a user token of the broadcaster (or a moderator) with
+// moderator:read:followers, so this uses the streamer's broadcaster token,
+// refreshed once if Twitch says it expired. (It used the app token, which
+// always got an error, and an error read as "not following".) Any failure
+// throws: a caller must never take an error for "not following".
+async function getFollowAge(streamer, userId) {
+  if (!streamer || !streamer.twitch_user_id || !userId) {
+    throw new Error('A follow check needs the channel and the viewer');
+  }
+  if (!streamer.broadcaster_access_token || !hasBroadcasterScope(streamer, FOLLOWERS_SCOPE)) {
+    const err = new Error(`The broadcaster token cannot read followers (needs ${FOLLOWERS_SCOPE})`);
+    err.code = 'NO_FOLLOWER_ACCESS';
+    throw err;
+  }
+
+  const params = new URLSearchParams({ broadcaster_id: streamer.twitch_user_id, user_id: String(userId) });
+  const ask = (token) => fetch(`https://api.twitch.tv/helix/channels/followers?${params}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Client-Id': config.twitch.clientId },
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+  });
+
+  let token = streamer.broadcaster_access_token;
+  if (streamer.broadcaster_token_expires_at && Date.now() >= streamer.broadcaster_token_expires_at) {
+    token = await refreshFollowToken(streamer);
+  }
+  let res = await ask(token);
+  if (res.status === 401) {
+    token = await refreshFollowToken(streamer);
+    res = await ask(token);
+  }
+  if (!res.ok) throw new Error(`Followers API error: ${res.status}`);
+
+  const data = await res.json();
+  const follow = Array.isArray(data && data.data) ? data.data[0] : null;
+  return follow ? { following: true, followedAt: follow.followed_at || null } : { following: false, followedAt: null };
 }
 
 function hasRedemptionScope(streamer) {

@@ -20,6 +20,7 @@ const raidProtectionTimers = new Map();
 // just stops being looked up and is swept.
 const bannedWordMatchers = new Map(); // value: { regex, literal, usedAt }
 const chatSettingsWarnedAt = new Map(); // streamerId -> when a missing-scope warning was logged
+const followCheckWarnedAt = new Map(); // streamerId -> when a failed follow-age check was logged
 // Per-streamer regex matching time; over budget, regex words match as text.
 const regexBudget = createRegexBudget();
 
@@ -30,9 +31,11 @@ const regexBudget = createRegexBudget();
 //  - offenseCounts: keep 24 h (escalation ladder must remember through a stream)
 //  - bannedWordMatchers: keep 10 min after last use
 //  - chatSettingsWarnedAt: keep 24 h, so the warning repeats at most once a day
+//  - followCheckWarnedAt: keep 1 h, so a failing follow check is logged once an hour
 //  - regexBudget: drop idle streamers, end trips whose hour is over
 const FIVE_MIN = 5 * 60 * 1000;
 const TEN_MIN = 10 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
 setInterval(() => {
   const now = Date.now();
@@ -53,6 +56,9 @@ setInterval(() => {
   }
   for (const [k, warnedAt] of chatSettingsWarnedAt) {
     if (now - warnedAt > ONE_DAY) chatSettingsWarnedAt.delete(k);
+  }
+  for (const [k, warnedAt] of followCheckWarnedAt) {
+    if (now - warnedAt >= ONE_HOUR) followCheckWarnedAt.delete(k);
   }
   regexBudget.sweep();
 }, 60 * 1000).unref?.();
@@ -173,7 +179,10 @@ function checkSymbolSpam(message, streamer) {
   return null;
 }
 
-async function checkFollowAge(channel, username, streamer) {
+// Twitch is asked with the streamer's own token (twitch.getFollowAge). When it
+// cannot answer, the message goes through: an error is not "not following".
+async function checkFollowAge(channel, tags, streamer) {
+  const username = tags.username;
   const key = `${channel}:${username.toLowerCase()}`;
   const now = Date.now();
   const cached = followCache.get(key);
@@ -189,7 +198,7 @@ async function checkFollowAge(channel, username, streamer) {
   }
   try {
     const { getFollowAge } = require('./twitch');
-    const result = await getFollowAge(channel.replace(/^#/, ''), username);
+    const result = await getFollowAge(streamer, tags['user-id']);
     followCache.set(key, { following: result.following, followedAt: result.followedAt, cachedAt: now });
     if (!result.following) {
       return { violated: true, reason: 'Not following the channel' };
@@ -199,9 +208,19 @@ async function checkFollowAge(channel, username, streamer) {
       return { violated: true, reason: `Follow age too short (${Math.round(ageMinutes)}min)` };
     }
   } catch (e) {
+    noteFollowCheckFailed(streamer, e);
     return null;
   }
   return null;
+}
+
+// A streamer whose token cannot read followers would otherwise log on every message.
+function noteFollowCheckFailed(streamer, err) {
+  const now = Date.now();
+  const warnedAt = followCheckWarnedAt.get(streamer.id);
+  if (warnedAt !== undefined && now - warnedAt < ONE_HOUR) return;
+  followCheckWarnedAt.set(streamer.id, now);
+  console.warn(`[Mod] Follow-age check failed for streamer ${streamer.id}; messages go through until it works: ${err.message}`);
 }
 
 function checkFirstTimeChatter(tags) {
@@ -239,7 +258,7 @@ async function runFilters(channel, tags, message, streamer) {
     if (r) return r;
   }
   if (streamer.mod_follow_age_enabled) {
-    const r = await checkFollowAge(channel, username, streamer);
+    const r = await checkFollowAge(channel, tags, streamer);
     if (r) return r;
   }
   if (streamer.mod_first_chatter_enabled) {

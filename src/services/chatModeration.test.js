@@ -33,6 +33,23 @@ const budgetStub = {
   }),
 };
 
+// The follow check (twitch.getFollowAge) answers what a test sets. It is placed
+// in the module cache because chatModeration.js loads ./twitch only when a
+// check runs, and the real module would load the real config.
+const followStub = {
+  calls: [],
+  answer: null,
+  fail: null,
+  async getFollowAge(streamer, userId) {
+    followStub.calls.push({ streamerId: streamer.id, userId });
+    if (followStub.fail) throw followStub.fail;
+    return followStub.answer;
+  },
+  async getUserId() { return null; },
+};
+const twitchPath = require.resolve('./twitch');
+require.cache[twitchPath] = { id: twitchPath, filename: twitchPath, loaded: true, exports: followStub };
+
 const Module = require('module');
 const origLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -378,6 +395,63 @@ describe('!permit', () => {
     const client = fakeClient();
     assert.equal(await mod.handleModCommand(client, '#chan', modTags(), '!permit some.thing!', streamerRow()), true);
     assert.deepEqual(client.said, []);
+  });
+});
+
+// ── M10: the follow-age filter ───────────────────────────────────────
+
+describe('the follow-age filter', () => {
+  // Only the follow check is on, so nothing else can act on the message.
+  const gateOn = (overrides = {}) => streamerRow({
+    mod_follow_age_enabled: 1, mod_follow_age_minutes: 60,
+    mod_link_protection_enabled: 0, mod_caps_enabled: 0, mod_symbol_spam_enabled: 0,
+    ...overrides,
+  });
+  let chatters = 0; // a new chatter per check, so the 5-minute cache never answers
+  const someone = () => {
+    chatters++;
+    return viewerTags({ username: `chatter${chatters}`, 'user-id': String(7000 + chatters) });
+  };
+  const minutesAgo = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+  beforeEach(() => {
+    followStub.calls = [];
+    followStub.answer = null;
+    followStub.fail = null;
+  });
+
+  test('asks with the streamer and the viewer\'s Twitch id, and lets an old enough follower through', async () => {
+    followStub.answer = { following: true, followedAt: minutesAgo(120) };
+    const tags = someone();
+    assert.equal(await mod.runFilters('#chan', tags, 'hello', gateOn()), null);
+    assert.deepEqual(followStub.calls, [{ streamerId: 1, userId: tags['user-id'] }]);
+  });
+
+  test('acts on Twitch\'s answer: not following, or following for less than the limit', async () => {
+    followStub.answer = { following: false, followedAt: null };
+    assert.deepEqual(await mod.runFilters('#chan', someone(), 'hello', gateOn()), { violated: true, reason: 'Not following the channel' });
+    followStub.answer = { following: true, followedAt: minutesAgo(10) };
+    assert.match((await mod.runFilters('#chan', someone(), 'hello', gateOn())).reason, /^Follow age too short/);
+  });
+
+  test('lets the message through when Twitch cannot say, and asks again next time', async () => {
+    followStub.fail = new Error('Followers API error: 500');
+    const tags = someone();
+    assert.equal(await mod.runFilters('#chan', tags, 'hello', gateOn()), null);
+    assert.equal(await mod.runFilters('#chan', tags, 'hello again', gateOn()), null);
+    assert.equal(followStub.calls.length, 2, 'an error is not kept as an answer');
+  });
+
+  test('a failing check is logged once an hour per streamer, not on every message', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: 5_000_000 });
+    followStub.fail = Object.assign(new Error('The broadcaster token cannot read followers'), { code: 'NO_FOLLOWER_ACCESS' });
+    const streamer = gateOn({ id: 42 });
+    for (let i = 0; i < 3; i++) assert.equal(await mod.runFilters('#chan', someone(), 'hello', streamer), null);
+    t.mock.timers.tick(3_600_000);
+    await mod.runFilters('#chan', someone(), 'hello', streamer);
+    const warnings = logs.filter((l) => l.level === 'warn' && l.text.includes('Follow-age check failed'));
+    assert.equal(warnings.length, 2);
+    assert.match(warnings[0].text, /streamer 42/);
   });
 });
 
