@@ -907,38 +907,6 @@ describe('the overlay settings page', () => {
     assert.match(button, /type="button"/);
   });
 
-  test('saves the raid and giveaway toggles and durations (they never were)', async () => {
-    const res = await save({
-      overlay_enabled: '1', overlay_follow_enabled: '1', overlay_sub_enabled: '1', overlay_bits_enabled: '1', overlay_donation_enabled: '1',
-      overlay_follow_duration: '5', overlay_sub_duration: '7', overlay_bits_duration: '6', overlay_donation_duration: '6',
-      overlay_raid_duration: '12', overlay_giveaway_duration: '20', overlay_volume: '0.4',
-      // raid and giveaway switched off: their checkboxes are not sent
-    });
-    assert.equal(res.status, 302);
-    assert.equal(res.headers.location, '/dashboard/overlay');
-    const row = db.getStreamerById(id);
-    assert.equal(row.overlay_raid_enabled, 0);
-    assert.equal(row.overlay_giveaway_enabled, 0);
-    assert.equal(row.overlay_raid_duration, 12);
-    assert.equal(row.overlay_giveaway_duration, 20, 'seconds, like every other duration');
-    assert.equal(row.overlay_volume, 0.4);
-    assert.equal(row.overlay_follow_enabled, 1);
-  });
-
-  test('switching raid and giveaway back on is saved too', async () => {
-    db.db.prepare('UPDATE streamers SET overlay_raid_enabled = 0, overlay_giveaway_enabled = 0 WHERE id = ?').run(id);
-    await save({ overlay_enabled: '1', overlay_raid_enabled: '1', overlay_giveaway_enabled: '1' });
-    const row = db.getStreamerById(id);
-    assert.equal(row.overlay_raid_enabled, 1);
-    assert.equal(row.overlay_giveaway_enabled, 1);
-  });
-
-  test('bounds the values on the server, whatever the page said', async () => {
-    await save({ overlay_enabled: '1', overlay_follow_duration: '9999', overlay_sub_duration: '0', overlay_giveaway_duration: '500', overlay_raid_duration: 'abc', overlay_volume: '7' });
-    const row = db.getStreamerById(id);
-    assert.equal(row.overlay_follow_duration, 30);
-    assert.equal(row.overlay_sub_duration, 1);
-    assert.equal(row.overlay_giveaway_duration, 60);
   // The page's <div>s, in document order, with the attributes of the ones still open at `needle`.
   // Scripts, styles and comments are blanked out first (their text has "<div" in it).
   function openDivsAt(html, needle) {
@@ -974,6 +942,38 @@ describe('the overlay settings page', () => {
       'the StreamElements card is outside the alerts section');
   });
 
+  test('saves the raid and giveaway toggles and durations (they never were)', async () => {
+    const res = await save({
+      overlay_enabled: '1', overlay_follow_enabled: '1', overlay_sub_enabled: '1', overlay_bits_enabled: '1', overlay_donation_enabled: '1',
+      overlay_follow_duration: '5', overlay_sub_duration: '7', overlay_bits_duration: '6', overlay_donation_duration: '6',
+      overlay_raid_duration: '12', overlay_giveaway_duration: '20', overlay_volume: '0.4',
+      // raid and giveaway switched off: their checkboxes are not sent
+    });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard/overlay');
+    const row = db.getStreamerById(id);
+    assert.equal(row.overlay_raid_enabled, 0);
+    assert.equal(row.overlay_giveaway_enabled, 0);
+    assert.equal(row.overlay_raid_duration, 12);
+    assert.equal(row.overlay_giveaway_duration, 20, 'seconds, like every other duration');
+    assert.equal(row.overlay_volume, 0.4);
+    assert.equal(row.overlay_follow_enabled, 1);
+  });
+
+  test('switching raid and giveaway back on is saved too', async () => {
+    db.db.prepare('UPDATE streamers SET overlay_raid_enabled = 0, overlay_giveaway_enabled = 0 WHERE id = ?').run(id);
+    await save({ overlay_enabled: '1', overlay_raid_enabled: '1', overlay_giveaway_enabled: '1' });
+    const row = db.getStreamerById(id);
+    assert.equal(row.overlay_raid_enabled, 1);
+    assert.equal(row.overlay_giveaway_enabled, 1);
+  });
+
+  test('bounds the values on the server, whatever the page said', async () => {
+    await save({ overlay_enabled: '1', overlay_follow_duration: '9999', overlay_sub_duration: '0', overlay_giveaway_duration: '500', overlay_raid_duration: 'abc', overlay_volume: '7' });
+    const row = db.getStreamerById(id);
+    assert.equal(row.overlay_follow_duration, 30);
+    assert.equal(row.overlay_sub_duration, 1);
+    assert.equal(row.overlay_giveaway_duration, 60);
     assert.equal(row.overlay_raid_duration, 7);
     assert.equal(row.overlay_volume, 1);
   });
@@ -1835,6 +1835,16 @@ describe('a name made of markup, printed in a sentence of a translated page', ()
 });
 
 describe('the sponsor image upload', () => {
+  test('an upload without a name is stored under the default sponsor name', async () => {
+    // two streamers: a file is named by the millisecond, and one streamer's two quick uploads could share it
+    const upload = (streamer, query) => request('POST', `/dashboard/sponsors/upload?${query}ext=png&dur=30`, { streamer, rawBody: 'not-really-a-png', contentType: 'application/octet-stream' });
+    const unnamed = await upload(addStreamer(), '');
+    assert.equal(unnamed.status, 200);
+    assert.equal(unnamed.json().image.display_name, t('en', 'overlayBuilder.sponsors.defaultName'));
+    const named = await upload(addStreamer(), 'name=Acme&');
+    assert.equal(named.json().image.display_name, 'Acme');
+  });
+
   test('a file type that is not an image is refused with the translated message', async () => {
     const res = await request('POST', '/dashboard/sponsors/upload?name=Acme&ext=exe', { streamer: addStreamer(), rawBody: 'x', contentType: 'application/octet-stream' });
     assert.equal(res.status, 400);

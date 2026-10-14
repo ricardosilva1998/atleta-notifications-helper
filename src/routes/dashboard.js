@@ -1657,7 +1657,7 @@ router.post('/sponsors/upload', async (req, res) => {
   try { await fs.promises.writeFile(path.join(sponsorDir, filename), buf); }
   catch (e) { return res.status(500).json({ error: res.locals.t('upload.error.writeFailed') }); }
 
-  const displayName = req.query.name || 'Sponsor';
+  const displayName = req.query.name || res.locals.t('overlayBuilder.sponsors.defaultName');
   const displayDuration = sponsorDurationSeconds(req.query.dur);
   db.addSponsorImage(streamerId, filename, displayName, null, displayDuration);
   const newImage = db.getSponsorImages(streamerId).find(i => i.filename === filename);

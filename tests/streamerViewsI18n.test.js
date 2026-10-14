@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ejs = require('ejs');
-const { t, esc, richFor } = require('../src/i18n');
+const { t, esc, richFor, SUPPORTED_LANGS } = require('../src/i18n');
 const en = require('../src/locales/en.json');
 const { EVENT_DEFAULTS } = require('../src/services/overlayDesign');
 
@@ -257,6 +257,46 @@ describe('the rendered page has no text of its own', () => {
 const STUB_DATA = new Set(['FREE', 'free', 'tester', 'Tester', 'tester_tv', 'Tester_TV', 'GuildName', 'shroud', 'ninja', 'ChannelOne', 'ChannelName', 'StreamTitle', 'TitleText',
   'ErrorText', 'SponsorName', 'BotName', 'badword', 'socials', 'rules', 'general', 'Subscriber', 'Hello', 'reason', 'other', 'username', 'tok123']);
 const isStubData = (word) => STUB_DATA.has(word) || /^(?:user|key)\d*$/.test(word);
+
+describe('the overlay builder\'s sponsor name and font sample are texts of the page', () => {
+  const source = fs.readFileSync(path.join(VIEWS, 'overlay-builder.ejs'), 'utf8');
+
+  test('the page source holds neither the default sponsor name nor the sample sentence', () => {
+    assert.ok(!/'Sponsor'/.test(source), "no 'Sponsor' fallback typed into the script");
+    assert.ok(!/value="Sponsor"/.test(source), 'no default name typed into the upload field');
+    assert.ok(!source.includes('The quick brown fox'), 'no sample sentence typed into the font gallery');
+  });
+
+  for (const lang of SUPPORTED_LANGS) {
+    test(`${lang}: the upload field starts with the sponsor name of that language, and the script gets it and the sample`, () => {
+      const translate = (key, params) => t(lang, key, params);
+      const html = render('overlay-builder', PAGE_LOCALS['overlay-builder'][0], translate);
+      const name = t(lang, 'overlayBuilder.sponsors.defaultName');
+      assert.ok(html.includes(`id="sp-upload-name" class="sp-upload-input" placeholder="${esc(t(lang, 'overlayBuilder.sponsors.namePlaceholder'))}" value="${esc(name)}"`));
+      const texts = JSON.parse(html.match(/const I18N = (\{.*\});/)[1]);
+      assert.equal(texts.defaultSponsorName, name);
+      assert.equal(texts.fontSample, t(lang, 'overlayBuilder.text.fontSample'));
+    });
+  }
+});
+
+describe('every page renders in every language, with nothing left unfilled, and its scripts parse', () => {
+  for (const page of PAGES) {
+    test(page, () => {
+      for (const lang of SUPPORTED_LANGS) {
+        const translate = (key, params) => t(lang, key, params);
+        for (const locals of PAGE_LOCALS[page]) {
+          const html = render(page, { lang, ...locals }, translate);
+          assert.ok(!/\{\{\w+\}\}/.test(html.replace(/<script\b[\s\S]*?<\/script>/gi, '')), `${page} (${lang}): a {{field}} was left in the page`);
+          assert.ok(!/>\s*undefined\s*</.test(html) && !/="undefined"/.test(html), `${page} (${lang}): "undefined" is printed`);
+          for (const m of html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+            assert.doesNotThrow(() => new Function(m[1]), `${page} (${lang}): an inline script does not parse`);
+          }
+        }
+      }
+    });
+  }
+});
 
 // ── 3. The texts handed to the scripts ───────────────────────────────────
 

@@ -921,7 +921,7 @@
               <div class="sp-upload-text"><%= t('overlayBuilder.sponsors.drop') %></div>
             </div>
             <div class="sp-upload-row">
-              <input type="text" id="sp-upload-name" class="sp-upload-input" placeholder="<%= t('overlayBuilder.sponsors.namePlaceholder') %>" value="Sponsor">
+              <input type="text" id="sp-upload-name" class="sp-upload-input" placeholder="<%= t('overlayBuilder.sponsors.namePlaceholder') %>" value="<%= t('overlayBuilder.sponsors.defaultName') %>">
               <input type="number" id="sp-upload-dur" class="sp-dur" value="30" min="5" max="300" step="5" title="<%= t('overlayBuilder.sponsors.durationTitle') %>">
               <span class="sp-dur-label">s</span>
               <button type="button" id="sp-upload-btn" class="sp-upload-btn" disabled onclick="uploadSponsor()"><%= t('overlayBuilder.sponsors.upload') %></button>
@@ -1180,7 +1180,8 @@ const I18N = <%- JSON.stringify({
   iconDefault: t('overlayBuilder.icons.defaultIcon', { icon: '{{icon}}' }), iconDefaultNone: t('overlayBuilder.icons.defaultNone'),
   noSponsors: t('overlayBuilder.sponsors.none'), durationTitle: t('overlayBuilder.sponsors.displayDurationTitle'), deleteTitle: t('overlayBuilder.sponsors.deleteTitle'),
   scale: t('overlayBuilder.sponsors.scale'), deleteSponsorConfirm: t('overlayBuilder.sponsors.deleteConfirm'),
-  systemDefault: t('overlayBuilder.text.systemDefault'),
+  systemDefault: t('overlayBuilder.text.systemDefault'), fontSample: t('overlayBuilder.text.fontSample'),
+  defaultSponsorName: t('overlayBuilder.sponsors.defaultName'),
   entrance: {
     slideDown: t('overlayBuilder.anim.slideDown'), slideUp: t('overlayBuilder.anim.slideUp'), slideLeft: t('overlayBuilder.anim.slideLeft'),
     slideRight: t('overlayBuilder.anim.slideRight'), zoomIn: t('overlayBuilder.anim.zoomIn'), fadeIn: t('overlayBuilder.anim.fadeIn'),
@@ -2136,7 +2137,7 @@ function renderSponsorList() {
   const _ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => _ESC[c]);
   list.innerHTML = sponsorImages.map((s, i) => {
-    const displayName = s.display_name || 'Sponsor';
+    const displayName = s.display_name || I18N.defaultSponsorName;
     const safeName = esc(displayName);
     const safeAlt = esc(s.display_name || '');
     const filenameUrl = encodeURIComponent(s.filename || '');
@@ -2231,7 +2232,7 @@ async function updateSponsorDuration(id, duration) {
   if (img) img.display_duration = duration;
   await fetch(`/dashboard/sponsors/${id}/update`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: duration, image_scale: img?.image_scale != null ? img.image_scale : 1.0 }),
+    body: JSON.stringify({ display_name: img?.display_name || I18N.defaultSponsorName, chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: duration, image_scale: img?.image_scale != null ? img.image_scale : 1.0 }),
   });
 }
 
@@ -2240,7 +2241,7 @@ async function updateSponsorEnabled(id, enabled) {
   if (img) img.enabled = enabled ? 1 : 0;
   await fetch(`/dashboard/sponsors/${id}/update`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: img?.image_scale != null ? img.image_scale : 1.0 }),
+    body: JSON.stringify({ display_name: img?.display_name || I18N.defaultSponsorName, chat_message: img?.chat_message || '', enabled: enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: img?.image_scale != null ? img.image_scale : 1.0 }),
   });
   updateSponsorPreview();
 }
@@ -2260,7 +2261,7 @@ async function saveSponsorScale(id, scale) {
   if (img) img.image_scale = scale;
   await fetch(`/dashboard/sponsors/${id}/update`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_name: img?.display_name || 'Sponsor', chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: scale }),
+    body: JSON.stringify({ display_name: img?.display_name || I18N.defaultSponsorName, chat_message: img?.chat_message || '', enabled: img?.enabled ? '1' : '', display_duration: img?.display_duration || 30, image_scale: scale }),
   });
 }
 
@@ -2294,7 +2295,7 @@ async function uploadSponsor() {
   if (!spSelectedFile) return;
   spUploadBtn.disabled = true;
   spUploadBtn.textContent = '...';
-  const name = document.getElementById('sp-upload-name').value || 'Sponsor';
+  const name = document.getElementById('sp-upload-name').value || I18N.defaultSponsorName;
   const ext = spSelectedFile.name.split('.').pop() || 'png';
   const dur = parseInt(document.getElementById('sp-upload-dur').value) || 30;
   try {
@@ -2315,7 +2316,7 @@ async function uploadSponsor() {
   spFileInput.value = '';
   spUploadBtn.textContent = I18N.upload;
   spUploadBtn.disabled = true;
-  document.getElementById('sp-upload-name').value = 'Sponsor';
+  document.getElementById('sp-upload-name').value = I18N.defaultSponsorName;
   document.getElementById('sp-upload-dur').value = '30';
 }
 
@@ -2370,7 +2371,7 @@ function showSponsorInPreview(sponsor) {
   const img = document.createElement('img');
   img.className = 'preview-sponsor-img';
   img.src = `/sponsors/${STREAMER_ID}/${sponsor.filename}`;
-  img.alt = sponsor.display_name || 'Sponsor';
+  img.alt = sponsor.display_name || I18N.defaultSponsorName;
   img.style.objectFit = 'contain';
   img.style.maxWidth = '100%';
   img.style.maxHeight = '100%';
@@ -3122,8 +3123,9 @@ function buildFontGallery(containerId, tabKey) {
     const div = document.createElement('div');
     div.className = 'font-gallery-item' + (modalFonts[tabKey] === f.name ? ' selected' : '');
     div.dataset.font = f.name;
-    div.innerHTML = `<div class="font-name"></div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}">The quick brown fox</div>`;
+    div.innerHTML = `<div class="font-name"></div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}"></div>`;
     div.querySelector('.font-name').textContent = f.label || f.name; // the first label is a translation: text, never markup
+    div.querySelector('.font-sample').textContent = I18N.fontSample; // so is the sample
     div.addEventListener('click', () => {
       container.querySelectorAll('.font-gallery-item').forEach(i => i.classList.remove('selected'));
       div.classList.add('selected');
