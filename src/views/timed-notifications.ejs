@@ -77,10 +77,15 @@
   <%= t('guild.backToDashboard') %>
 </a>
 <h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('sponsors.heading') %></h2>
+<%# The sponsor images are shown on stream by the Overlay Builder: the intro sends the streamer there only while the overlay features are on. %>
+<% if (features.overlays) { %>
 <% const _intro = _around('sponsors.intro', 'link'); %>
 <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 28px;">
   <%= _intro[0] %><a href="/dashboard/overlay-builder" style="color: var(--accent);"><%= t('sponsors.builderLink') %></a><%= _intro[1] %>
 </p>
+<% } else { %>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 28px;"><%= t('sponsors.introChat') %></p>
+<% } %>
 
 <div id="status-msg" class="status-msg"></div>
 

@@ -29,7 +29,7 @@ const VIEWS = path.join(__dirname, '..', 'src', 'views');
 const PAGES = [
   'guild-config', 'overlay-config', 'overlay-builder', 'chatbot-config', 'mod-log', 'youtube-chatbot-config', 'multistream',
   // linked from the site's menus, or the pages a streamer meets before logging in
-  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
+  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result', 'account-disabled',
 ];
 
 // Words that are not the page's own wording and may stay in every page: product names and units.
@@ -201,7 +201,12 @@ const PAGE_LOCALS = {
     { ...multistreamPage, isLive: false, liveUnknown: true, twitchHasStreamKeyScope: false, youtubeConnected: false, query: { error: 'live' }, multistream: { multistream_enabled: 0 } },
     { ...multistreamPage, isLive: false, twitchAuthorized: false, query: { error: 'relay' }, multistream: { multistream_enabled: 0 } },
   ],
+  'account-disabled': [{ streamer: null }],
 };
+// These pages show less while the overlay features are off (features.overlays, off by default): each of their samples is rendered both ways.
+for (const page of ['youtube-chatbot-config', 'account-disabled']) {
+  PAGE_LOCALS[page] = PAGE_LOCALS[page].flatMap((locals) => [true, false].map((overlays) => ({ ...locals, features: { youtube: true, overlays } })));
+}
 
 // t() that marks everything it returns, so whatever is not marked in the rendered page is the page's own.
 // It also refuses a key that does not exist and a call that leaves a {{field}} of the text unfilled (t() would print nothing for it).
@@ -297,6 +302,49 @@ describe('every page renders in every language, with nothing left unfilled, and 
       }
     });
   }
+});
+
+// ── The overlay features switched off (features.overlays) ────────────────
+
+describe('while the overlay features are off, the YouTube chatbot and the disabled-account pages say nothing about the overlays', () => {
+  // The wording that says a text is about the overlays; the layout's own site description (the link preview in header.ejs) is not the page's.
+  const ABOUT_OVERLAYS = /overlay|\bOBS\b|browser source|vtuber|channel point/i;
+  const samples = (page, overlays) => PAGE_LOCALS[page].filter((locals) => locals.features.overlays === overlays);
+  const keysAsked = (page, locals) => {
+    const keys = new Set();
+    render(page, locals, (key, params) => { keys.add(key); return t('en', key, params); });
+    return keys;
+  };
+
+  for (const page of ['youtube-chatbot-config', 'account-disabled']) {
+    test(`${page}: asks for no text about them`, () => {
+      assert.ok(samples(page, false).length > 0);
+      for (const locals of samples(page, false)) {
+        const about = [...keysAsked(page, locals)].filter((key) => key !== 'common.siteDescription' && ABOUT_OVERLAYS.test(en[key]));
+        assert.deepEqual(about, [], `${page} asks for texts about the overlays`);
+      }
+    });
+  }
+
+  test('the YouTube chatbot page has none of the overlay switches, test buttons or script', () => {
+    for (const locals of samples('youtube-chatbot-config', false)) {
+      const html = render('youtube-chatbot-config', locals, (key, params) => t('en', key, params));
+      assert.ok(!/yt_overlay_|testEvent|youtube-chatbot\/test\/|overlayChatSent|overlaySent/.test(html), 'an overlay switch, button or text is on the page');
+      assert.ok(/testChatOnly/.test(html) && /name="yt_chat_superchat_template"/.test(html), 'the chat settings and tests are');
+    }
+  });
+
+  test('switched on, they ask for the texts about them again', () => {
+    const wanted = {
+      'youtube-chatbot-config': ['ytChatbot.events', 'ytChatbot.eventsHint', 'ytChatbot.showOverlay', 'ytChatbot.testOverlay', 'ytChatbot.js.overlaySent'],
+      'account-disabled': ['account.disabled.body'],
+    };
+    for (const [page, keys] of Object.entries(wanted)) {
+      const asked = new Set();
+      for (const locals of samples(page, true)) for (const key of keysAsked(page, locals)) asked.add(key);
+      assert.deepEqual(keys.filter((key) => !asked.has(key)), [], `${page} no longer asks for a text it asked for before`);
+    }
+  });
 });
 
 // ── 3. The texts handed to the scripts ───────────────────────────────────

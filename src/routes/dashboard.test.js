@@ -3101,3 +3101,211 @@ describe('with the OBS overlay features switched off', () => {
     });
   });
 });
+
+// ── What a streamer sees while the OBS overlay features are off ──────────
+
+describe('with the OBS overlay features switched off, the pages show nothing of them', () => {
+  const { features } = require('../config');
+  beforeEach(() => { features.overlays = false; });
+  afterEach(() => { features.overlays = true; });
+
+  // The page's own part: the layout (head, sidebar, lightbox and the script after it) comes before it.
+  const body = (text) => {
+    const layoutEnd = text.indexOf('</script>', text.indexOf('function toggleUserMenu'));
+    assert.ok(layoutEnd > 0, 'the layout\'s last script is where the page starts');
+    return text.slice(layoutEnd + '</script>'.length);
+  };
+  // A link or form that leads a streamer into the overlays: their pages, the Builder's sponsor list, the
+  // tip goal, the VTuber, or an OBS link.
+  const INTO_OVERLAYS = /\/dashboard\/(?:overlay|redemptions|vtuber|api\/vtuber|sponsors)|\/dashboard\/donations\/goal|\/overlay\/|\/vtuber\//;
+  // Words that say a page is about the overlays.
+  const OVERLAY_WORDS = /overlay|vtuber|browser source|\bOBS\b|channel point|experimental/i;
+  const noOverlays = (html, label) => {
+    const page = html.replace(/<style\b[\s\S]*?<\/style>/gi, ' '); // class names in a stylesheet are not what a streamer reads
+    assert.ok(!INTO_OVERLAYS.test(page), `${label}: a link into the overlays: ${page.match(INTO_OVERLAYS)}`);
+    const word = page.match(OVERLAY_WORDS);
+    assert.ok(!word, `${label}: talks about the overlays: ${word && page.slice(Math.max(0, word.index - 60), word.index + 60).replace(/\s+/g, ' ')}`);
+  };
+
+  describe('the dashboard', () => {
+    let made = 0;
+    const streamerWithEverything = () => {
+      made++;
+      return addStreamer({
+        overlay_enabled: 1, overlay_token: `synthetic-token-off-3-${made}`, twitch_user_id: `tw-off-3-${made}`, twitch_username: `synthetic_off_${made}`,
+        broadcaster_access_token: 'synthetic-broadcaster', chatbot_enabled: 1, yt_chatbot_enabled: 1, cp_rewards_enabled: 1,
+      });
+    };
+
+    test('has no overlay card, tab, link or wording: not the OBS Overlay card, the rewards card, the VTuber tab or the YouTube overlay card', async () => {
+      const res = await request('GET', '/dashboard', { streamer: streamerWithEverything() });
+      assert.equal(res.status, 200);
+      const page = body(res.text);
+      noOverlays(page, 'dashboard');
+      for (const key of ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental', 'dashboard.youtube.overlayDesc']) {
+        assert.ok(!page.includes(esc(t('en', key))), key);
+      }
+      assert.ok(!page.includes('data-tab="experimental"') && !page.includes('id="tab-experimental"'));
+    });
+
+    test('keeps the tabs and the cards that are not about the overlays, and words the giveaways, sponsor and kick texts without them', async () => {
+      const res = await request('GET', '/dashboard', { streamer: streamerWithEverything() });
+      const page = body(res.text);
+      for (const tab of ['discord', 'twitch', 'youtube', 'kick']) assert.ok(page.includes(`data-tab="${tab}"`), tab);
+      for (const href of ['/dashboard/chatbot', '/dashboard/timed-notifications', '/dashboard/donations', '/dashboard/donations/history', '/dashboard/giveaways', '/dashboard/youtube-chatbot', '/auth/spotify']) {
+        assert.ok(page.includes(`href="${href}"`), href);
+      }
+      for (const key of ['dashboard.cards.giveaways.descChat', 'dashboard.cards.sponsors.descChat', 'dashboard.kick.comingSoonChat']) {
+        assert.ok(page.includes(esc(t('en', key))), key);
+      }
+      for (const key of ['dashboard.cards.giveaways.desc', 'dashboard.cards.sponsors.desc', 'dashboard.kick.comingSoon']) {
+        assert.ok(!page.includes(esc(t('en', key))), `${key} is the wording with the overlays`);
+      }
+    });
+
+    test('the donations card does not promise overlay alerts', async () => {
+      const res = await request('GET', '/dashboard', { streamer: addStreamer({ paypal_email: null }) });
+      assert.ok(body(res.text).includes(esc(t('en', 'dashboard.cards.donations.setupChat'))));
+    });
+
+    test('switched on, it is the dashboard it was: both overlay cards, the rewards card, the VTuber tab and the original wording', async () => {
+      features.overlays = true;
+      const streamer = streamerWithEverything();
+      const res = await request('GET', '/dashboard', { streamer });
+      const page = body(res.text);
+      for (const href of ['/dashboard/overlay', '/dashboard/overlay-builder', '/dashboard/redemptions']) assert.ok(page.includes(`href="${href}"`), href);
+      for (const key of ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental', 'dashboard.youtube.overlayDesc',
+        'dashboard.cards.giveaways.desc', 'dashboard.cards.sponsors.desc', 'dashboard.kick.comingSoon']) {
+        assert.ok(page.includes(esc(t('en', key))), key);
+      }
+      assert.ok(page.includes('data-tab="experimental"') && page.includes('id="tab-experimental"'));
+      assert.ok(page.includes(`/overlay/${db.getStreamerById(streamer).overlay_token}`), 'the OBS link');
+    });
+
+    // The tab buttons and panes of a rendered dashboard run against a fake document: which tab is open after the page script ran.
+    function openTabAfterScript(pageHtml, savedTab) {
+      const names = [...pageHtml.matchAll(/class="tab-btn[^"]*" data-tab="(\w+)"/g)].map((m) => m[1]);
+      const open = new Set();
+      const mark = (kind, name) => ({
+        dataset: { tab: name },
+        id: `tab-${name}`,
+        addEventListener() {},
+        classList: { toggle: (cls, on) => (on ? open.add(`${kind}:${name}`) : open.delete(`${kind}:${name}`)) },
+      });
+      const tabs = names.map((name) => mark('button', name));
+      const panes = names.map((name) => mark('pane', name));
+      const document = { querySelectorAll: (selector) => (selector === '.tab-btn' ? tabs : panes) };
+      const script = [...pageHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('dashboard_tab'));
+      new Function('document', 'localStorage', script)(document, { getItem: () => savedTab, setItem() {} });
+      return [...open].sort();
+    }
+
+    test('a tab remembered from before that the page no longer has (Experimental) opens Discord, not an empty dashboard', async () => {
+      const res = await request('GET', '/dashboard', { streamer: addStreamer() });
+      assert.deepEqual(openTabAfterScript(res.text, 'experimental'), ['button:discord', 'pane:discord']);
+      assert.deepEqual(openTabAfterScript(res.text, 'admin'), ['button:discord', 'pane:discord'], 'the Admin tab is not on a non-admin\'s page either');
+      assert.deepEqual(openTabAfterScript(res.text, null), ['button:discord', 'pane:discord']);
+      assert.deepEqual(openTabAfterScript(res.text, 'twitch'), ['button:twitch', 'pane:twitch'], 'a tab that is there is opened');
+    });
+
+    test('switched on, the remembered Experimental tab opens, as before', async () => {
+      features.overlays = true;
+      const res = await request('GET', '/dashboard', { streamer: addStreamer() });
+      assert.deepEqual(openTabAfterScript(res.text, 'experimental'), ['button:experimental', 'pane:experimental']);
+    });
+  });
+
+  describe('the donations page', () => {
+    let made = 0;
+    const streamerWithGoal = () => {
+      made++;
+      const id = addStreamer({ twitch_username: `synthetic_off_tip_${made}`, paypal_email: 'tips@example.test', donation_page_enabled: 1, overlay_token: `synthetic-token-off-4-${made}` });
+      db.createTipGoal(id, { title: 'Synthetic goal title', target_amount: 100, current_amount: 5, currency: 'EUR', bar_color: '#22c55e' });
+      db.createTipGoal(id, { title: 'Synthetic second goal', target_amount: 50, current_amount: 0, currency: 'EUR', bar_color: '#22c55e' }); // the first one is now in the history
+      return id;
+    };
+
+    test('keeps the PayPal settings, the tip page link and the history link, and has no tip goal, goal bar or OBS link', async () => {
+      const res = await request('GET', '/dashboard/donations', { streamer: streamerWithGoal() });
+      assert.equal(res.status, 200);
+      const page = body(res.text);
+      noOverlays(page, 'donations');
+      for (const gone of ['id="tip-goal"', 'goal-form', 'Synthetic goal title', 'Synthetic second goal', esc(t('en', 'donations.goal.title')), esc(t('en', 'donations.goalOverlay.title')), esc(t('en', 'donations.goal.past'))]) {
+        assert.ok(!page.includes(gone), gone);
+      }
+      for (const kept of ['name="donation_page_enabled"', 'name="paypal_email"', 'name="donation_min_amount"', 'name="donation_currency"', 'href="/dashboard/donations/history"', `/tip/synthetic_off_tip_${made}`, 'id="tip-url"']) {
+        assert.ok(page.includes(kept), kept);
+      }
+      assert.ok(page.includes(esc(t('en', 'donations.settings.introChat'))));
+    });
+
+    test('switched on, the tip goal, its preview and its OBS link are there', async () => {
+      features.overlays = true;
+      const res = await request('GET', '/dashboard/donations', { streamer: streamerWithGoal() });
+      const page = body(res.text);
+      for (const there of ['id="tip-goal"', '/overlay/goal-demo', `/overlay/goal/synthetic-token-off-4-${made}`, 'Synthetic second goal', 'Synthetic goal title', esc(t('en', 'donations.settings.intro'))]) {
+        assert.ok(page.includes(there), there);
+      }
+    });
+  });
+
+  describe('the sponsor messages page', () => {
+    test('does not send the streamer to the Overlay Builder, and keeps the chat settings and the messages', async () => {
+      const id = addStreamer();
+      db.addSponsorMessage(id, 'Synthetic sponsor message', null);
+      const res = await request('GET', '/dashboard/timed-notifications', { streamer: id });
+      assert.equal(res.status, 200);
+      const page = body(res.text);
+      noOverlays(page, 'sponsor messages');
+      assert.ok(page.includes(esc(t('en', 'sponsors.introChat'))));
+      for (const kept of ['id="chat-enabled"', 'id="chat-interval"', 'id="new-msg-text"', 'Synthetic sponsor message', '/dashboard/sponsor-messages/settings']) assert.ok(page.includes(kept), kept);
+    });
+
+    test('switched on, the intro links to the Overlay Builder', async () => {
+      features.overlays = true;
+      const res = await request('GET', '/dashboard/timed-notifications', { streamer: addStreamer() });
+      assert.ok(res.text.includes('href="/dashboard/overlay-builder"'));
+    });
+  });
+
+  describe('the YouTube chatbot page', () => {
+    const SWITCHES = ['yt_overlay_superchat_enabled', 'yt_overlay_member_enabled', 'yt_overlay_giftmember_enabled'];
+
+    test('has no "show overlay banner" switches and no overlay test buttons, and keeps the chat settings and chat tests', async () => {
+      const res = await request('GET', '/dashboard/youtube-chatbot', { streamer: addStreamer({ yt_overlay_superchat_enabled: 1 }) });
+      assert.equal(res.status, 200);
+      const page = body(res.text);
+      noOverlays(page, 'YouTube chatbot');
+      for (const gone of [...SWITCHES, '/dashboard/youtube-chatbot/test/', esc(t('en', 'ytChatbot.showOverlay')), esc(t('en', 'ytChatbot.testOverlay')), esc(t('en', 'ytChatbot.events'))]) {
+        assert.ok(!page.includes(gone), gone);
+      }
+      for (const kept of ['name="yt_chatbot_enabled"', 'name="yt_chat_superchat_enabled"', 'name="yt_chat_member_template"', 'name="yt_chat_giftmember_enabled"', 'name="yt_mod_enabled"', '/dashboard/youtube-chatbot/test-chat/',
+        esc(t('en', 'ytChatbot.eventsChat')), esc(t('en', 'ytChatbot.eventsHintChat'))]) {
+        assert.ok(page.includes(kept), kept);
+      }
+    });
+
+    test('switched on, it has the switches and the overlay test buttons', async () => {
+      features.overlays = true;
+      const page = body((await request('GET', '/dashboard/youtube-chatbot', { streamer: addStreamer() })).text);
+      for (const there of [...SWITCHES.map((name) => `name="${name}"`), '/dashboard/youtube-chatbot/test/', esc(t('en', 'ytChatbot.showOverlay')), esc(t('en', 'ytChatbot.testOverlay')), esc(t('en', 'ytChatbot.events'))]) {
+        assert.ok(page.includes(there), there);
+      }
+    });
+  });
+
+  describe('the account-disabled page', () => {
+    test('does not say OBS overlays are switched off', async () => {
+      const res = await request('GET', '/dashboard', { streamer: addStreamer({ enabled: 0 }) });
+      assert.equal(res.status, 403);
+      assert.ok(res.text.includes(esc(t('en', 'account.disabled.bodyChat'))));
+      noOverlays(body(res.text), 'account disabled');
+    });
+
+    test('switched on, it says so', async () => {
+      features.overlays = true;
+      const res = await request('GET', '/dashboard', { streamer: addStreamer({ enabled: 0 }) });
+      assert.ok(res.text.includes(esc(t('en', 'account.disabled.body'))));
+    });
+  });
+});
