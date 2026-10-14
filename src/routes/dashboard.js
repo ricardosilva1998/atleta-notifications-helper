@@ -1880,6 +1880,13 @@ router.post('/sponsor-messages/add', (req, res) => {
   const { message_text, url } = req.body;
   if (!message_text) return res.status(400).json({ error: res.locals.t('sponsors.error.textRequired') });
   db.addSponsorMessage(req.streamer.id, message_text, url);
+  // The rotation reads the enabled messages when it starts: with none before this one it was not running.
+  try {
+    const { timedNotificationManager } = require('../services/timedNotifications');
+    timedNotificationManager.restartChatForStreamer(req.streamer.id);
+  } catch (e) {
+    console.error('[Dashboard] Sponsor chat restart failed:', e.message);
+  }
   res.json({ ok: true });
 });
 

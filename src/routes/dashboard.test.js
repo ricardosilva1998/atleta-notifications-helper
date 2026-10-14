@@ -2890,6 +2890,12 @@ describe('the messages and names those routes show', () => {
     }
   });
 
+  test('adding a sponsor message restarts the chat rotation, so the first one starts it', async () => {
+    const res = await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: 'Thanks to our partner!' } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(sponsorCalls, [['sponsors.restartChat', id]]);
+  });
+
   test('a sponsor message with no text, and a test of one that is gone, are refused in words', async () => {
     const add = await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: '' } });
     assert.equal(add.status, 400);
