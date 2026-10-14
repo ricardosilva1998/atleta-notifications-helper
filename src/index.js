@@ -5,6 +5,7 @@ const server = require('./server');
 const commands = require('./commands');
 const welcome = require('./welcome');
 const pollers = require('./pollers/manager');
+const storageQuota = require('./services/storageQuota');
 
 // Long-running server: a single unhandled rejection / uncaught exception must
 // not take the process down. Log loudly and keep going — Railway will still
@@ -99,6 +100,17 @@ function startHousekeeping() {
   // Clean up old notifications (every 24 hours)
   setInterval(() => { try { db.cleanupOldNotifications(); } catch (e) {} }, 24 * 60 * 60 * 1000);
   db.cleanupOldNotifications();
+
+  // Nightly copy of the database, kept 7 days (services/backups.js). Skipped
+  // when the copy would leave the data volume with less than 200 MB free.
+  require('./services/backups').scheduleNightlyBackups({
+    vacuumInto: db.vacuumInto,
+    databaseFile: db.db.name,
+    canWrite: (bytes) => {
+      const free = storageQuota.freeBytes();
+      return free === null || free - bytes >= storageQuota.MIN_FREE_BYTES;
+    },
+  });
 }
 
 // Once Discord is ready: what posts to or reads from Discord.

@@ -5551,4 +5551,7 @@ module.exports = {
   backup(dest) { return db.backup(dest); },
   // GET /health: throws when the database cannot answer (or has been closed).
   ping() { return db.prepare('SELECT 1 AS ok').get(); },
+  // A consistent, compacted copy of the whole database in a new file (which must
+  // not exist yet); safe while the app keeps reading and writing.
+  vacuumInto(file) { db.prepare('VACUUM INTO ?').run(file); },
 };
