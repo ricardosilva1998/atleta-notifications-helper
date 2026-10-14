@@ -279,7 +279,42 @@ describe('the redemption flow', () => {
       assert.deepEqual(clips, []);
       assert.deepEqual(chatLines, []);
       assert.deepEqual(helix.statusesOf(event), ['CANCELED']);
+      // Its own outcome: the history must not blame a reward that is switched on.
+      assert.deepEqual(outcomes(event), ['refunded_switch_off']);
+    });
+
+    test('off, with the reward off too: the reward is the reason that is logged', async () => {
+      const id = addStreamer({ cp_rewards_enabled: 0 });
+      const reward = addReward(id, { enabled: 0 });
+      const event = redemption(reward);
+
+      await dispatcher.handleRedemption(id, event);
+
+      assert.deepEqual(helix.statusesOf(event), ['CANCELED']);
       assert.deepEqual(outcomes(event), ['refunded_disabled']);
+    });
+
+    test('on, with the reward off: still logged as the reward being off', async () => {
+      const id = addStreamer({ cp_rewards_enabled: 1 });
+      const reward = addReward(id, { enabled: 0 });
+      const event = redemption(reward);
+
+      await dispatcher.handleRedemption(id, event);
+
+      assert.deepEqual(outcomes(event), ['refunded_disabled']);
+    });
+
+    test('off, when Twitch refuses the refund: logged as an error with the reason, not as a refund', async () => {
+      const id = addStreamer({ cp_rewards_enabled: 0 });
+      const reward = addReward(id);
+      const event = redemption(reward);
+      global.fetch = async () => ({ ok: false, status: 500, statusText: '500', json: async () => ({ message: 'Twitch is having a problem' }), text: async () => '' });
+
+      await dispatcher.handleRedemption(id, event);
+
+      assert.deepEqual(outcomes(event), ['error']);
+      const logged = db.db.prepare('SELECT error_message FROM channel_point_redemptions WHERE twitch_redemption_id = ?').get(event.twitchRedemptionId);
+      assert.match(logged.error_message, /^refund failed:/);
     });
 
     test('off, for a redemption that can no longer be canceled: nothing plays and it is logged as disabled', async () => {
