@@ -16,6 +16,5 @@ test-results
 *.png
 bun.lock
 public/vtuber
-public/screenshots/*.png
 !bridge/overlays
 !bridge/overlays/**
