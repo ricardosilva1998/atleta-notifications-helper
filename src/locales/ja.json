@@ -277,6 +277,7 @@
   "giveaways.state.open": "LIVE",
   "giveaways.state.noActive": "開催中のプレゼント企画はありません",
   "giveaways.error.alreadyActive": "既にプレゼント企画が開催中です",
+  "giveaways.error.chatbotOff": "先にチャットボットを有効にしてください：チャットでの応募はチャットボットが受け付けます。",
   "giveaways.error.invalidKeyword": "キーワードは半角英数字の1–25文字にしてください",
   "giveaways.error.noEligible": "対象となる応募がありません",
   "giveaways.history.when": "日時",

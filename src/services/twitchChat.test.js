@@ -509,6 +509,19 @@ describe('the bot\'s chat output', () => {
     chatClock.advance(5_000);
     assert.deepEqual(texts(), ['first']);
   });
+
+  test('nothing is posted for a streamer whose chatbot is off: sponsor, giveaway and reward lines alike', () => {
+    streamer = streamerRow({ chatbot_enabled: 0 });
+    chatManager.sendMessage(1, 'sponsor line', { priority: 'low' });
+    chatManager.sendMessage(1, 'giveaway line');
+    chatClock.advance(5_000);
+    assert.deepEqual(texts(), []);
+
+    streamer = streamerRow({ chatbot_enabled: 1 });
+    chatManager.sendMessage(1, 'sponsor line', { priority: 'low' });
+    chatClock.advance(5_000);
+    assert.deepEqual(texts(), ['sponsor line']);
+  });
 });
 
 // ── Merged thank-yous through the real template (H11 + M9) ───────────

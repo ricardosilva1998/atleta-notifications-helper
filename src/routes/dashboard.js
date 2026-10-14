@@ -2321,6 +2321,10 @@ router.get('/giveaways', (req, res) => {
 
 router.post('/giveaways/start', (req, res) => {
   const streamerId = req.streamer.id;
+  // The chatbot collects the entries in chat: without it nobody could enter.
+  if (!req.streamer.chatbot_enabled) {
+    return res.status(409).json({ ok: false, code: 'chatbot_off', error: res.locals.t('giveaways.error.chatbotOff') });
+  }
   const { keyword, prize, subs_only, duration_seconds, winners_count } = req.body;
   try {
     const giveawayMgr = require('../services/giveawayManager');

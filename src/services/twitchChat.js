@@ -322,11 +322,12 @@ const chatManager = {
 
   // Any other line for a streamer's chat: giveaway and redemption messages
   // ('normal', the default), sponsor and timed messages ('low'), the dashboard's
-  // custom-command test ('high'). A disabled account's chat gets nothing.
+  // custom-command test ('high'). Nothing is posted for a streamer whose chatbot
+  // is switched off, or whose account is disabled.
   sendMessage(streamerId, text, { priority = 'normal' } = {}) {
     if (!client) return;
     const streamer = db.getStreamerById(streamerId);
-    if (!streamer || isStreamerDisabled(streamer) || !streamer.twitch_username) return;
+    if (!streamer || isStreamerDisabled(streamer) || !streamer.chatbot_enabled || !streamer.twitch_username) return;
     post(streamer.twitch_username, text, priority);
   },
 

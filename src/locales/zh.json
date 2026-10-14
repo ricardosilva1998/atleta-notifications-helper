@@ -277,6 +277,7 @@
   "giveaways.state.open": "LIVE",
   "giveaways.state.noActive": "没有进行中的抽奖",
   "giveaways.error.alreadyActive": "已有进行中的抽奖",
+  "giveaways.error.chatbotOff": "请先启用聊天机器人：它会在聊天中收集参与者。",
   "giveaways.error.invalidKeyword": "关键词必须为 1–25 个字母或数字",
   "giveaways.error.noEligible": "没有符合条件的参与者",
   "giveaways.history.when": "时间",

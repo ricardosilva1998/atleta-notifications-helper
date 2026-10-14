@@ -277,6 +277,7 @@
   "giveaways.state.open": "En Direct",
   "giveaways.state.noActive": "Aucun giveaway en cours",
   "giveaways.error.alreadyActive": "Un giveaway est déjà en cours",
+  "giveaways.error.chatbotOff": "Activez d'abord le chatbot : il recueille les participations dans le chat.",
   "giveaways.error.invalidKeyword": "Le mot-clé doit contenir 1–25 lettres ou chiffres",
   "giveaways.error.noEligible": "Aucune participation éligible",
   "giveaways.history.when": "Quand",

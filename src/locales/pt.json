@@ -277,6 +277,7 @@
   "giveaways.state.open": "Ao Vivo",
   "giveaways.state.noActive": "Nenhum sorteio ativo",
   "giveaways.error.alreadyActive": "Já existe um sorteio ativo",
+  "giveaways.error.chatbotOff": "Ative o chatbot primeiro: ele coleta as participações no chat.",
   "giveaways.error.invalidKeyword": "A palavra-chave deve ter de 1 a 25 letras ou números",
   "giveaways.error.noEligible": "Nenhuma participação elegível",
   "giveaways.history.when": "Quando",

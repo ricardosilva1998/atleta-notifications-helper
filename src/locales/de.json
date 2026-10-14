@@ -277,6 +277,7 @@
   "giveaways.state.open": "Live",
   "giveaways.state.noActive": "Kein aktives Giveaway",
   "giveaways.error.alreadyActive": "Es läuft bereits ein Giveaway",
+  "giveaways.error.chatbotOff": "Aktiviere zuerst den Chatbot: Er sammelt die Teilnahmen im Chat.",
   "giveaways.error.invalidKeyword": "Das Stichwort muss aus 1–25 Buchstaben oder Zahlen bestehen",
   "giveaways.error.noEligible": "Keine gültigen Teilnahmen",
   "giveaways.history.when": "Wann",

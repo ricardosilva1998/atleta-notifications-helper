@@ -2834,7 +2834,15 @@ describe('the AI analysis of a reported issue', () => {
 
 describe('the messages and names those routes show', () => {
   let id;
-  beforeEach(() => { id = addStreamer(); });
+  beforeEach(() => { id = addStreamer({ chatbot_enabled: 1 }); });
+
+  test('a giveaway cannot start while the chatbot is off: it says so and starts nothing', async () => {
+    const off = addStreamer({ chatbot_enabled: 0 });
+    const res = await request('POST', '/dashboard/giveaways/start', { streamer: off, body: { keyword: 'gw' } });
+    assert.equal(res.status, 409);
+    assert.deepEqual(res.json(), { ok: false, code: 'chatbot_off', error: t('en', 'giveaways.error.chatbotOff') });
+    assert.equal(count('giveaways', 'streamer_id = ?', off), 0);
+  });
 
   test('starting a giveaway with values that are not allowed says which, in words', async () => {
     const start = (body) => request('POST', '/dashboard/giveaways/start', { streamer: id, body });
