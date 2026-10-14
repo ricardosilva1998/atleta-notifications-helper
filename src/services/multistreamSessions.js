@@ -20,7 +20,11 @@
 //                     are stopped as for a stream that ended.
 //
 // What happens to one stream key never overlaps: each operation starts after
-// the previous one for that key has finished (withLock).
+// the previous one for that key has finished (withLock). A streamer has one
+// key at a time; when they replace it, the old key is cleared before the new
+// one is shown to them (routes/multistream.js), so the two never overlap.
+
+const { relaySettings: pickRelaySettings } = require('./multistreamRelay');
 
 const TWITCH_INGEST = 'rtmp://live.twitch.tv/app';
 const YOUTUBE_INGEST = 'rtmp://a.rtmp.youtube.com/live2';
@@ -53,8 +57,7 @@ function createMultistreamSessions(deps) {
   let checking = null;
 
   function relaySettings() {
-    const { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret } = settings();
-    return { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret };
+    return pickRelaySettings(settings());
   }
 
   function withLock(key, operation) {
@@ -262,8 +265,13 @@ function createMultistreamSessions(deps) {
         }
         continue;
       }
+      // It is on the relay: a stop waiting for it (its stream left, came back,
+      // and the on-ready webhook was lost) must not run, whatever happens
+      // below. Such a stream is set up again like a go-live (its broadcast may
+      // have ended meanwhile), unless retries are on hold.
+      const cameBack = cancelStop(key);
       const missing = expectedDestinations(streamer).filter((name) => !have.has(name));
-      if (missing.length === 0 && !pendingStops.has(key)) {
+      if (missing.length === 0 && !cameBack) {
         retries.delete(key);
         continue;
       }

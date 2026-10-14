@@ -14,7 +14,7 @@ Streamer sets OBS to server `rtmp://ingest.atletanotifications.com/live` with th
 
 ## Who may publish (`POST /api/multistream/auth`)
 
-MediaMTX runs with `authMethod: http` and asks the website before every publish, read and control-API login (`services/multistreamAuth.js`): publish only to `live/<token>` of an enabled account with multistream on; read only from the relay itself (its forwarders); the control API only with `MEDIAMTX_API_USER` / `MEDIAMTX_API_TOKEN`; everything else refused. Every `/api/multistream` request must carry `MEDIAMTX_WEBHOOK_SECRET` (Bearer, or the Basic password of the address MediaMTX posts to).
+MediaMTX runs with `authMethod: http` and asks the website before every publish, read and control-API login (`services/multistreamAuth.js`): publish only to `live/<token>` of an enabled account with multistream on; read only from the relay itself (its forwarders); the control API only with `MEDIAMTX_API_USER` / `MEDIAMTX_API_TOKEN`; everything else refused. Every `/api/multistream` request must carry `MEDIAMTX_WEBHOOK_SECRET` (Bearer, or the Basic password of the address MediaMTX posts to). Those requests are not counted by the rate limits: the relay asks from one address, and anyone can make it ask.
 
 ## Relay Flow (`services/multistreamSessions.js`, one operation at a time per stream key)
 
@@ -65,7 +65,7 @@ About 150 YouTube units per session (liveStreams.list 1 + liveBroadcasts.insert 
 
 ## Env Vars
 
-- Required for the feature: `MEDIAMTX_API_URL`, `MEDIAMTX_INGEST_URL`, `MEDIAMTX_API_TOKEN`, `MEDIAMTX_WEBHOOK_SECRET`
+- Required for the feature: `MEDIAMTX_API_URL` (an `http://` or `https://` address), `MEDIAMTX_INGEST_URL`, `MEDIAMTX_API_TOKEN`, `MEDIAMTX_WEBHOOK_SECRET`
 - Optional: `MEDIAMTX_API_USER` (default `admin`), `MEDIAMTX_CF_ACCESS_CLIENT_ID` + `MEDIAMTX_CF_ACCESS_CLIENT_SECRET` (Cloudflare Access service token for the relay API hostname)
 - `MULTISTREAM_KEY_SECRET` is no longer used.
 

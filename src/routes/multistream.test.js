@@ -42,6 +42,7 @@ const twitchStub = {
 // What the relay answers about live/<key>: stats, null (no such path), or an Error.
 const relayAnswer = { stats: null };
 const relayStub = {
+  relaySettings: require('../services/multistreamRelay').relaySettings, // the real one: it only picks fields
   addForwardPaths: record('relay.add', ['twitch']),
   removeForwardPaths: record('relay.remove', undefined),
   getPathStats: async (options) => {
@@ -63,7 +64,10 @@ const sessionsStub = {
       return session.goLive;
     },
     streamEnded: (key) => { calls.push(['sessions.streamEnded', key]); },
-    keyReplaced: async (key, streamerId) => { calls.push(['sessions.keyReplaced', key, streamerId]); },
+    keyReplaced: async (key, streamerId) => {
+      calls.push(['sessions.keyReplaced', key, streamerId]);
+      if (session.keyReplaced) await session.keyReplaced; // a test holds the clean-up open
+    },
   }),
 };
 
@@ -456,6 +460,32 @@ describe('a new stream key (MS12)', () => {
     assert.equal(db.getStreamerByMultistreamToken(old), undefined);
     assert.equal(db.getStreamerByMultistreamToken(fresh).id, id);
     assert.deepEqual(calls, [['relay.stats', old, true], ['sessions.keyReplaced', old, id]]);
+  });
+
+  test('shows the new key only once the old one is cleared, so no go-live on the new key overlaps the clean-up', async () => {
+    const id = addStreamer();
+    const old = db.ensureMultistreamToken(id);
+    let release;
+    session.keyReplaced = new Promise((resolve) => { release = resolve; });
+    let answered = false;
+    const pending = regenerate(id).then((res) => { answered = true; return res; });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(calls.at(-1), ['sessions.keyReplaced', old, id]);
+    assert.equal(answered, false, 'no answer while the old key is being cleared');
+    release();
+    const res = await pending;
+    assert.equal(res.headers.location, '/dashboard/multistream?regenerated=1');
+    session.keyReplaced = null;
+  });
+
+  test('a clean-up that fails is logged, and the new key is still shown', async () => {
+    const id = addStreamer();
+    session.keyReplaced = Promise.reject(new Error('Relay delete (twitch) failed: 500'));
+    session.keyReplaced.catch(() => {});
+    const res = await regenerate(id);
+    session.keyReplaced = null;
+    assert.equal(res.headers.location, '/dashboard/multistream?regenerated=1');
+    assert.ok(logs.some(([level, line]) => level === 'error' && line.includes(`old stream key of streamer ${id}`)));
   });
 
   test('is refused while the streamer is live, and when the relay cannot say', async () => {

@@ -15,7 +15,7 @@ const db = require('../db');
 const twitch = require('../services/twitch');
 const relay = require('../services/multistreamRelay');
 const { sanitizeBroadcastTitle } = require('../services/youtubeBroadcast');
-const { decideRelayAuth, streamTokenFromPath, sameSecret } = require('../services/multistreamAuth');
+const { decideRelayAuth, streamTokenFromPath, sameSecret, presentedSecret } = require('../services/multistreamAuth');
 const { sessions, STOP_GRACE_MS } = require('../services/multistreamSessions');
 const { requireActiveStreamer } = require('../services/streamerAccess');
 
@@ -34,17 +34,11 @@ dashboardRouter.use((req, res, next) => (config.multistream.enabled ? next() : r
 dashboardRouter.use(requireActiveStreamer);
 apiRouter.use((req, res, next) => (config.multistream.enabled ? next() : res.status(404).json({ error: 'not found' })));
 
-// The relay API settings (config.multistream) for services/multistreamRelay.js.
-function relaySettings() {
-  const { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret } = config.multistream;
-  return { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret };
-}
-
 // Whether the streamer's stream is on the relay right now, as the relay sees
 // it: 'live', 'offline', or 'unknown' when the relay did not answer in time.
 async function liveState(token, streamerId) {
   try {
-    const stats = await relay.getPathStats({ ...relaySettings(), sourceToken: token, signal: AbortSignal.timeout(RELAY_LOOKUP_TIMEOUT_MS) });
+    const stats = await relay.getPathStats({ ...relay.relaySettings(config.multistream), sourceToken: token, signal: AbortSignal.timeout(RELAY_LOOKUP_TIMEOUT_MS) });
     return relay.isLive(stats) ? 'live' : 'offline';
   } catch (err) {
     console.warn(`[multistream] could not ask the relay whether streamer ${streamerId} is live: ${err.message}`);
@@ -92,15 +86,20 @@ dashboardRouter.post('/save', (req, res) => {
 
 // A new stream key, for one that was shared or leaked. Refused while the
 // streamer is live (or the relay cannot say), because the stream on the old
-// key would lose its forwarders.
+// key would lose its forwarders. What the old key still had on the relay (and
+// its YouTube broadcast) is cleared before the page shows the new key, so no
+// go-live on the new key can overlap that clean-up.
 dashboardRouter.post('/regenerate-key', async (req, res) => {
   const streamer = req.streamer;
   const current = db.ensureMultistreamToken(streamer.id);
   const state = await liveState(current, streamer.id);
   if (state !== 'offline') return res.redirect(`/dashboard/multistream?error=${state === 'live' ? 'live' : 'relay'}`);
   db.rotateMultistreamToken(streamer.id);
-  sessions().keyReplaced(current, streamer.id)
-    .catch((err) => console.error(`[multistream] clearing the old stream key of streamer ${streamer.id}: ${err.message}`));
+  try {
+    await sessions().keyReplaced(current, streamer.id);
+  } catch (err) {
+    console.error(`[multistream] clearing the old stream key of streamer ${streamer.id}: ${err.message}`);
+  }
   res.redirect('/dashboard/multistream?regenerated=1');
 });
 
@@ -111,24 +110,11 @@ dashboardRouter.post('/reset-youtube-stream', (req, res) => {
 
 // --- Routes the relay calls (MediaMTX, not the streamer) ---
 
-// The secret a caller presents: "Authorization: Bearer <secret>" (the
-// webhooks' curl), or the password of HTTP Basic (MediaMTX's auth requests,
-// which carry it in the address they are sent to).
-function presentedSecret(req) {
-  const header = req.get('Authorization') || '';
-  const bearer = /^Bearer (.+)$/.exec(header);
-  if (bearer) return bearer[1];
-  const basic = /^Basic ([A-Za-z0-9+/]+={0,2})$/.exec(header);
-  if (!basic) return '';
-  const login = Buffer.from(basic[1], 'base64').toString('utf8');
-  const colon = login.indexOf(':');
-  return colon === -1 ? '' : login.slice(colon + 1);
-}
-
 // Everything under /api/multistream comes from the relay, with
-// MEDIAMTX_WEBHOOK_SECRET.
+// MEDIAMTX_WEBHOOK_SECRET (as Bearer, or as the Basic password:
+// services/multistreamAuth.js presentedSecret).
 function authenticateRelay(req, res) {
-  if (!sameSecret(presentedSecret(req), config.multistream.webhookSecret)) {
+  if (!sameSecret(presentedSecret(req.get('Authorization')), config.multistream.webhookSecret)) {
     res.status(401).json({ error: 'unauthorized' });
     return false;
   }

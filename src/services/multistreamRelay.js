@@ -5,20 +5,31 @@
 // each destination the website adds a path "fwd_<stream key>_<destination>"
 // whose ffmpeg copies that stream to Twitch or YouTube (no re-encoding).
 //
-// Every function takes the relay settings (config.multistream: apiUrl,
-// apiUser, apiToken and, optional, the Cloudflare Access service token) along
-// with its own arguments. Each request logs in with HTTP Basic, the user
-// MEDIAMTX_API_USER (admin when unset) and MEDIAMTX_API_TOKEN as its
-// password; without a token nothing is sent. Each request has a timeout.
+// Every function takes the relay settings (relaySettings(config.multistream):
+// apiUrl, apiUser, apiToken and, optional, the Cloudflare Access service
+// token) along with its own arguments. Each request logs in with HTTP Basic,
+// the user MEDIAMTX_API_USER (admin when unset) and MEDIAMTX_API_TOKEN as its
+// password; without a token nothing is sent. Each request has a timeout, and
+// no error it throws carries a stream key.
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const DESTINATIONS = ['twitch', 'youtube'];
 const LIST_PAGE_SIZE = 500;
 const LIST_MAX_PAGES = 20;
 
-// A stream key (db.ensureMultistreamToken), in the relay's path names.
-const LIVE_PATH = /^live\/([A-Za-z0-9_-]{16,128})$/;
-const FORWARDER_PATH = new RegExp(`^fwd_([A-Za-z0-9_-]{16,128})_(${DESTINATIONS.join('|')})$`);
+// A stream key (base64url from 24 random bytes, db.ensureMultistreamToken) in
+// the relay's path names: OBS publishes to live/<key>, the forwarders are
+// fwd_<key>_<destination>. The one definition of both, for every module.
+const KEY_PATTERN = '[A-Za-z0-9_-]{16,128}';
+const LIVE_PATH = new RegExp(`^live/(${KEY_PATTERN})$`);
+const FORWARDER_PATH = new RegExp(`^fwd_(${KEY_PATTERN})_(${DESTINATIONS.join('|')})$`);
+
+// The relay API settings out of config.multistream (or anything shaped like
+// it): what every function below takes.
+function relaySettings(source) {
+  const { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret } = source || {};
+  return { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret };
+}
 
 // A forwarding address goes into ffmpeg's command line, which MediaMTX splits
 // at spaces and quotes (expanding $variables), so only plain address
@@ -56,16 +67,26 @@ function requestHeaders(settings) {
   return headers;
 }
 
-function relayRequest(settings, method, apiPath, { body, signal } = {}) {
+async function relayRequest(settings, method, apiPath, { body, signal } = {}) {
   if (!settings.apiUrl) throw new Error('The relay API address (MEDIAMTX_API_URL) is not set');
   const headers = requestHeaders(settings);
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  return fetch(`${settings.apiUrl.replace(/\/+$/, '')}${apiPath}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  try {
+    return await fetch(`${settings.apiUrl.replace(/\/+$/, '')}${apiPath}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    // fetch's own messages can quote the address, and the address can hold a
+    // stream key (fwd_<key>_twitch): only the kind of failure is kept.
+    const name = err && err.name;
+    const code = err && err.cause && typeof err.cause.code === 'string' ? ` (${err.cause.code})` : '';
+    throw new Error(name === 'TimeoutError' ? 'The relay did not answer in time'
+      : name === 'AbortError' ? 'The request to the relay was cancelled'
+        : `The relay could not be reached${code}`);
+  }
 }
 
 // What the relay answered, for an error message: never a stream key (they are
@@ -160,6 +181,8 @@ async function listForwarders({ signal, ...settings }) {
 module.exports = {
   REQUEST_TIMEOUT_MS,
   DESTINATIONS,
+  LIVE_PATH,
+  relaySettings,
   forwarderName,
   buildFfmpegCmd,
   addForwardPaths,

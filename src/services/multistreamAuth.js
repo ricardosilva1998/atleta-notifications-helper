@@ -15,14 +15,12 @@
 //   anything else (playback, metrics, pprof, an unknown action) is refused.
 
 const crypto = require('crypto');
+const { LIVE_PATH } = require('./multistreamRelay');
 
-// A stream key is base64url from 24 random bytes (db.ensureMultistreamToken).
-// Validated, never cleaned up: rewriting a malformed path could turn it into
-// someone else's key.
-const STREAM_PATH = /^live\/([A-Za-z0-9_-]{16,128})$/;
-
+// The stream key in live/<key>. Validated, never cleaned up: rewriting a
+// malformed path could turn it into someone else's key.
 function streamTokenFromPath(path) {
-  const match = STREAM_PATH.exec(typeof path === 'string' ? path : '');
+  const match = LIVE_PATH.exec(typeof path === 'string' ? path : '');
   return match ? match[1] : null;
 }
 
@@ -40,6 +38,30 @@ function sameSecret(given, expected) {
   if (typeof given !== 'string' || typeof expected !== 'string' || expected === '') return false;
   const digest = (value) => crypto.createHash('sha256').update(value, 'utf8').digest();
   return crypto.timingSafeEqual(digest(given), digest(expected));
+}
+
+// The secret an Authorization header presents: "Bearer <secret>" (the
+// webhooks' curl), or the password of HTTP Basic (MediaMTX's auth requests,
+// which carry it in the address they post to). '' when there is none.
+function presentedSecret(authorization) {
+  const header = typeof authorization === 'string' ? authorization : '';
+  const bearer = /^Bearer (.+)$/.exec(header);
+  if (bearer) return bearer[1];
+  const basic = /^Basic ([A-Za-z0-9+/]+={0,2})$/.exec(header);
+  if (!basic) return '';
+  const login = Buffer.from(basic[1], 'base64').toString('utf8');
+  const colon = login.indexOf(':');
+  return colon === -1 ? '' : login.slice(colon + 1);
+}
+
+// A request from the relay: to /api/multistream/..., carrying its secret
+// (MEDIAMTX_WEBHOOK_SECRET). The rate limits do not count these (server.js):
+// the relay asks before every publish, read and API login, all from one
+// address, and anyone can make it ask.
+function isRelayRequest(req, secret) {
+  const url = (req && (req.originalUrl || req.url)) || '';
+  if (!url.startsWith('/api/multistream/')) return false;
+  return sameSecret(presentedSecret(req.headers && req.headers.authorization), secret);
 }
 
 // request: what MediaMTX sent. findStreamer(token): the enabled account with
@@ -69,4 +91,4 @@ function decideRelayAuth(request, { findStreamer, apiUser, apiToken }) {
   }
 }
 
-module.exports = { decideRelayAuth, streamTokenFromPath, isLoopback, sameSecret };
+module.exports = { decideRelayAuth, streamTokenFromPath, isLoopback, sameSecret, presentedSecret, isRelayRequest };

@@ -407,6 +407,35 @@ describe('the check every minute', () => {
     assert.equal(tries(), RETRY_ATTEMPTS + 1, 'a new stream starts over');
   });
 
+  test('a stream that is on the relay is never stopped by a waiting stop, even while its retries are on hold', async () => {
+    relayState.live.add(KEY);
+    failures['yt.getOrCreateLiveStream'] = new Error('YouTube API GET /liveStreams -> 403');
+    await sessions.check(); // Twitch set up, YouTube failing: retries now on hold for 2 minutes
+    assert.deepEqual(relayState.forwarders.get(KEY), new Set(['twitch']));
+    sessions.streamEnded(KEY); // a blip: the stream left and came back, and the on-ready webhook was lost
+    assert.equal(sessions.pendingStopCount(), 1);
+    calls = [];
+    await sessions.check(); // within the 2 minutes: no go-live, but the stop must go
+    assert.equal(sessions.pendingStopCount(), 0);
+    assert.ok(timers.filter((t) => t.ms === STOP_GRACE_MS).every((t) => t.cleared));
+    assert.deepEqual(named('yt.getOrCreateLiveStream'), [], 'retries stay on hold');
+    fireStopTimers();
+    await settle();
+    assert.deepEqual(named('relay.remove'), []);
+  });
+
+  test('a stream that came back without its on-ready webhook is set up again like a go-live, with nothing missing', async () => {
+    relayState.live.add(KEY);
+    await sessions.goLive(KEY);
+    sessions.streamEnded(KEY);
+    youtubeState.status.set('yt-broadcast-1', 'complete'); // YouTube ended the broadcast meanwhile
+    calls = [];
+    await sessions.check();
+    assert.equal(sessions.pendingStopCount(), 0);
+    assert.equal(youtubeState.created, 2, 'a new broadcast for the stream that is back');
+    assert.deepEqual(named('relay.add'), [], 'its forwarders were still there');
+  });
+
   test('stops forwarding a stream whose account was disabled, or whose multistream was switched off, after it started', async () => {
     rows[2] = streamerRow({ id: 2, multistream_token: KEY_TWO, multistream_active_broadcast_id: 'yt-broadcast-two' });
     youtubeState.status.set('yt-broadcast-two', 'live');

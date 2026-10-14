@@ -165,3 +165,12 @@ test('CSRF_SECRET is the CSRF token secret; unset it is empty (csrf.js then make
   assert.equal(loadWith({ CSRF_SECRET: undefined }).config.csrf.secret, '');
   assert.equal(loadWith({ CSRF_SECRET: 'synthetic-csrf-secret' }).config.csrf.secret, 'synthetic-csrf-secret');
 });
+
+test('multistream stays off when MEDIAMTX_API_URL is not an http(s) address (every relay request would fail)', () => {
+  for (const apiUrl of ['relay.example.test', 'relay.example.test:9997/v3', 'ftp://relay.example.test', 'not a url', ' ']) {
+    assert.equal(loadWith({ ...RELAY, MEDIAMTX_API_URL: apiUrl }).config.multistream.enabled, false, apiUrl);
+  }
+  for (const apiUrl of ['http://127.0.0.1:9997', 'https://relay.example.test', 'https://relay.example.test/']) {
+    assert.equal(loadWith({ ...RELAY, MEDIAMTX_API_URL: apiUrl }).config.multistream.enabled, true, apiUrl);
+  }
+});

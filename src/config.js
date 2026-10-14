@@ -30,6 +30,16 @@ if (tokenEncryptionKey && !isValidKey(tokenEncryptionKey)) {
   process.exit(1);
 }
 
+// Whether a value is an http:// or https:// address.
+function isHttpUrl(value) {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // BOT_CHAT_RATE_LIMIT as a whole number from 1 to 100; 20 when unset or unreadable.
 function chatRateLimit(value) {
   const n = Number.parseInt(value, 10);
@@ -82,9 +92,10 @@ module.exports = {
     triageModel: process.env.TRIAGE_MODEL || 'claude-sonnet-5-5',
   },
   // Multistream relay (MediaMTX, docs/multistream-relay-setup.md). The feature
-  // is offered only when all four relay settings are set: until then its
-  // dashboard card and page are hidden and the relay's routes answer 404 (the
-  // settings streamers saved are kept).
+  // is offered only when all four relay settings are set, MEDIAMTX_API_URL as
+  // an http(s) address (without its scheme every relay request would fail):
+  // until then its dashboard card and page are hidden and the relay's routes
+  // answer 404 (the settings streamers saved are kept).
   multistream: {
     apiUrl: process.env.MEDIAMTX_API_URL || '',
     ingestUrl: process.env.MEDIAMTX_INGEST_URL || '',
@@ -97,7 +108,7 @@ module.exports = {
     // hostname when an Access application protects it.
     accessClientId: process.env.MEDIAMTX_CF_ACCESS_CLIENT_ID || '',
     accessClientSecret: process.env.MEDIAMTX_CF_ACCESS_CLIENT_SECRET || '',
-    enabled: !!(process.env.MEDIAMTX_API_URL && process.env.MEDIAMTX_INGEST_URL
+    enabled: !!(isHttpUrl(process.env.MEDIAMTX_API_URL) && process.env.MEDIAMTX_INGEST_URL
       && process.env.MEDIAMTX_API_TOKEN && process.env.MEDIAMTX_WEBHOOK_SECRET),
   },
   email: {

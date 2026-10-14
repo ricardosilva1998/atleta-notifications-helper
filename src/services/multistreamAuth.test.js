@@ -5,7 +5,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { decideRelayAuth, streamTokenFromPath, isLoopback, sameSecret } = require('./multistreamAuth');
+const { decideRelayAuth, streamTokenFromPath, isLoopback, sameSecret, presentedSecret, isRelayRequest } = require('./multistreamAuth');
 
 const KEY_ON = 'AbCdEfGhIjKlMnOpQrStUvWxYz012345';
 const KEY_OFF = 'Zz9Yy8Xx7Ww6Vv5Uu4Tt3Ss2Rr1Qq0Pp';
@@ -111,5 +111,62 @@ describe('helpers', () => {
     assert.equal(sameSecret('', ''), false);
     assert.equal(sameSecret(undefined, 'abc'), false);
     assert.equal(sameSecret('abc', undefined), false);
+  });
+});
+
+describe('the relay\'s own requests', () => {
+  const SECRET = 'synthetic-relay-secret';
+  const basic = (user, pass) => `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
+  const req = (url, authorization) => ({ originalUrl: url, headers: authorization === undefined ? {} : { authorization } });
+
+  test('presentedSecret reads a Bearer token, or the password of HTTP Basic', () => {
+    assert.equal(presentedSecret(`Bearer ${SECRET}`), SECRET);
+    assert.equal(presentedSecret(basic('mediamtx', SECRET)), SECRET);
+    assert.equal(presentedSecret(basic('mediamtx', 'pa:ss')), 'pa:ss', 'only the first colon separates the user');
+    for (const none of [undefined, '', 'Basic', 'Basic !!!', `Token ${SECRET}`, basic('', '').replace(/=+$/, '') + '*']) {
+      assert.equal(presentedSecret(none), '', String(none));
+    }
+  });
+
+  test('isRelayRequest: only a request to /api/multistream/... with the relay\'s secret', () => {
+    assert.equal(isRelayRequest(req('/api/multistream/auth', basic('mediamtx', SECRET)), SECRET), true);
+    assert.equal(isRelayRequest(req('/api/multistream/webhook/on-ready', `Bearer ${SECRET}`), SECRET), true);
+    assert.equal(isRelayRequest(req('/api/multistream/auth', basic('mediamtx', 'wrong')), SECRET), false);
+    assert.equal(isRelayRequest(req('/api/multistream/auth'), SECRET), false);
+    assert.equal(isRelayRequest(req('/api/session', `Bearer ${SECRET}`), SECRET), false, 'the secret does not lift the limits elsewhere');
+    assert.equal(isRelayRequest(req('/dashboard/multistream/save', `Bearer ${SECRET}`), SECRET), false);
+    assert.equal(isRelayRequest(req('/api/multistream/auth', 'Bearer '), ''), false, 'no secret configured: nothing is the relay');
+  });
+
+  test('under real rate limits (as server.js mounts them) the relay is never refused, while everyone else still is', async () => {
+    const express = require('express');
+    const rateLimit = require('express-rate-limit');
+    const http = require('http');
+    const skip = (r) => isRelayRequest(r, SECRET);
+    const app = express();
+    app.use(rateLimit({ windowMs: 60_000, max: 2, standardHeaders: true, legacyHeaders: false, skip }));
+    app.use('/api', rateLimit({ windowMs: 60_000, max: 2, standardHeaders: true, legacyHeaders: false, skip }));
+    app.post('/api/multistream/auth', (r, res) => res.sendStatus(200));
+    app.get('/api/other', (r, res) => res.sendStatus(200));
+    const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    const send = (method, path, authorization) => new Promise((resolve, reject) => {
+      const headers = authorization ? { Authorization: authorization } : {};
+      const r = http.request({ host: '127.0.0.1', port: server.address().port, method, path, headers, agent: false }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+      r.on('error', reject);
+      r.end();
+    });
+    try {
+      const relay = () => send('POST', '/api/multistream/auth', basic('mediamtx', SECRET));
+      for (let i = 0; i < 6; i++) assert.equal(await relay(), 200, `relay request ${i + 1}`);
+      // Anyone else from the same address is counted as before.
+      assert.equal(await send('POST', '/api/multistream/auth'), 200);
+      assert.equal(await send('POST', '/api/multistream/auth', basic('mediamtx', 'wrong')), 200);
+      assert.equal(await send('POST', '/api/multistream/auth'), 429);
+      assert.equal(await send('GET', '/api/other', `Bearer ${SECRET}`), 429, 'the secret lifts nothing outside /api/multistream');
+      // Past the limit, the relay is still answered.
+      assert.equal(await relay(), 200);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });

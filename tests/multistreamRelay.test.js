@@ -182,3 +182,63 @@ describe('the minute check\'s lists', () => {
     await assert.rejects(relay.listForwarders(SETTINGS), (err) => /failed: 500$/.test(err.message) && !err.message.includes(KEY_A));
   });
 });
+
+describe('failures never carry a stream key (it would let anyone who reads the log publish as the streamer)', () => {
+  const KEY = 'SecretStreamKey0000000000000000Z';
+
+  test('fetch\'s own error, which quotes the address (and the forwarder name in it), is replaced', async () => {
+    global.fetch = async (url) => { throw new TypeError(`Failed to parse URL from ${url}`, { cause: Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' }) }); };
+    for (const call of [
+      () => relay.addForwardPaths({ ...SETTINGS, sourceToken: KEY, destinations: [TWITCH] }),
+      () => relay.removeForwardPaths({ ...SETTINGS, sourceToken: KEY, destinationNames: ['twitch'] }),
+      () => relay.getPathStats({ ...SETTINGS, sourceToken: KEY }),
+      () => relay.listForwarders(SETTINGS),
+    ]) {
+      await assert.rejects(call(), (err) => err.message === 'The relay could not be reached (ERR_INVALID_URL)' && !err.message.includes(KEY));
+    }
+  });
+
+  test('with the real fetch, an address without its scheme fails before any request, and the message names no key', async () => {
+    global.fetch = realFetch; // parsing the address fails before anything is sent
+    await assert.rejects(
+      relay.addForwardPaths({ ...SETTINGS, apiUrl: 'relay.example.test:9997', sourceToken: KEY, destinations: [TWITCH] }),
+      (err) => /^The relay could not be reached/.test(err.message) && !err.message.includes(KEY) && !err.message.includes('fwd_'),
+    );
+  });
+
+  test('a timeout and a refused connection say only that', async () => {
+    global.fetch = async () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); };
+    await assert.rejects(relay.getPathStats({ ...SETTINGS, sourceToken: KEY }), { message: 'The relay did not answer in time' });
+    global.fetch = async () => { throw new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:9'), { code: 'ECONNREFUSED' }) }); };
+    await assert.rejects(relay.getPathStats({ ...SETTINGS, sourceToken: KEY }), { message: 'The relay could not be reached (ECONNREFUSED)' });
+  });
+});
+
+describe('the one definition of the relay settings and of live/<key>', () => {
+  test('relaySettings takes the API fields out of config.multistream, and nothing else', () => {
+    const picked = relay.relaySettings({ ...SETTINGS, accessClientId: 'id', accessClientSecret: 'secret', webhookSecret: 'hook', ingestUrl: 'rtmp://x/live', enabled: true });
+    assert.deepEqual(picked, { apiUrl: SETTINGS.apiUrl, apiUser: 'admin', apiToken: 'tok', accessClientId: 'id', accessClientSecret: 'secret' });
+    assert.deepEqual(relay.relaySettings(undefined), { apiUrl: undefined, apiUser: undefined, apiToken: undefined, accessClientId: undefined, accessClientSecret: undefined });
+  });
+
+  test('LIVE_PATH matches live/<key> only', () => {
+    assert.equal(relay.LIVE_PATH.exec('live/AbCdEfGhIjKlMnOp_-12')[1], 'AbCdEfGhIjKlMnOp_-12');
+    for (const path of ['live/short', 'fwd_AbCdEfGhIjKlMnOp_-12_twitch', 'live/AbCdEfGhIjKlMnOp_-12/x', 'xlive/AbCdEfGhIjKlMnOp_-12']) {
+      assert.equal(relay.LIVE_PATH.test(path), false, path);
+    }
+  });
+
+  test('every module takes them from here: no second copy of the key pattern or of the settings picker', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const read = (file) => fs.readFileSync(path.join(__dirname, '..', 'src', file), 'utf8');
+    for (const file of ['routes/multistream.js', 'services/multistreamSessions.js', 'services/multistreamAuth.js']) {
+      const source = read(file);
+      assert.doesNotMatch(source, /\{16,128\}/, `${file} has no key pattern of its own`);
+      assert.doesNotMatch(source, /const \{ apiUrl, apiUser, apiToken/, `${file} picks no settings of its own`);
+    }
+    assert.match(read('services/multistreamAuth.js'), /require\('\.\/multistreamRelay'\)/);
+    assert.match(read('services/multistreamSessions.js'), /relaySettings: pickRelaySettings \} = require\('\.\/multistreamRelay'\)/);
+    assert.match(read('routes/multistream.js'), /relay\.relaySettings\(config\.multistream\)/);
+  });
+});

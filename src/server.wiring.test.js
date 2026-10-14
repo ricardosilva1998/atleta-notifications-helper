@@ -135,3 +135,17 @@ test('pages tell this site which page a request comes from (the CSRF check reads
   // Under helmet's default (no-referrer) a form post arrives with "Origin: null".
   at("referrerPolicy: { policy: 'same-origin' },");
 });
+
+test('the relay\'s requests (with its secret) are counted by neither the general limit nor the /api limit', () => {
+  // MediaMTX asks /api/multistream/auth before every publish, read and API login
+  // from one address; counting them would let anyone get every streamer refused.
+  at('const fromRelay = (req) => config.multistream.enabled && isRelayRequest(req, config.multistream.webhookSecret);');
+  at("const { isRelayRequest } = require('./services/multistreamAuth');");
+  const general = code.match(/const generalLimiter = rateLimit\(\{[^}]*\}\);/);
+  assert.ok(general, 'generalLimiter is declared in one statement');
+  assert.match(general[0], /skip: fromRelay\b/);
+  const api = code.match(/const apiLimiter = rateLimit\(\{[\s\S]*?\}\);/);
+  assert.ok(api, 'apiLimiter is declared');
+  assert.match(api[0], /skip: \(req\) => fromRelay\(req\) \|\|/);
+  assert.equal(code.match(/\bfromRelay\b/g).length, 3, 'declared, and used by those two limits only');
+});

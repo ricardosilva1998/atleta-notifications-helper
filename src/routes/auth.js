@@ -195,11 +195,15 @@ async function validateTwitchToken(accessToken) {
 router.get('/broadcaster', (req, res) => {
   if (!req.streamer) return res.redirect('/auth/login');
 
+  const scopes = ['channel:read:subscriptions', 'moderator:read:followers', 'bits:read', 'channel:manage:redemptions'];
+  // The stream key is read only to forward a multistream to Twitch, so it is
+  // asked for only while the relay is configured (config.multistream.enabled).
+  if (config.multistream.enabled) scopes.push('channel:read:stream_key');
   const params = new URLSearchParams({
     client_id: config.twitch.clientId,
     redirect_uri: `${config.app.url}/auth/broadcaster/callback`,
     response_type: 'code',
-    scope: 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions channel:read:stream_key',
+    scope: scopes.join(' '),
     state: issueOAuthState(req, res, 'broadcaster'),
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);

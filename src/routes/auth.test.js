@@ -295,6 +295,25 @@ describe('broadcaster authorization', () => {
     return request(`/auth/broadcaster/callback?code=synthetic-code&state=${state}`, { streamer: id, cookie });
   };
 
+  test('asks for the stream key (channel:read:stream_key) only while multistream is configured', async () => {
+    const multistream = require('../config').multistream;
+    const saved = multistream.enabled;
+    const scopesAskedFor = async () => {
+      const { res } = await start('broadcaster', linked().id);
+      return new URL(res.headers.location).searchParams.get('scope').split(' ');
+    };
+    try {
+      multistream.enabled = false;
+      const off = await scopesAskedFor();
+      assert.deepEqual(off, ['channel:read:subscriptions', 'moderator:read:followers', 'bits:read', 'channel:manage:redemptions']);
+      multistream.enabled = true;
+      const on = await scopesAskedFor();
+      assert.deepEqual(on, [...off, 'channel:read:stream_key']);
+    } finally {
+      multistream.enabled = saved;
+    }
+  });
+
   test('the linked channel\'s own token is stored (encrypted) with the scopes Twitch granted, and EventSub restarts', async () => {
     const { id, twitchId } = linked();
     answers[TWITCH_TOKEN] = tokenAnswer('broadcaster');
@@ -309,7 +328,7 @@ describe('broadcaster authorization', () => {
     const streamer = db.getStreamerById(id);
     assert.equal(streamer.broadcaster_access_token, 'broadcaster-access');
     assert.equal(streamer.broadcaster_refresh_token, 'broadcaster-refresh');
-    assert.equal(streamer.broadcaster_scopes, 'bits:read moderator:read:followers', 'what was granted, not the five asked for');
+    assert.equal(streamer.broadcaster_scopes, 'bits:read moderator:read:followers', 'what was granted, not what was asked for');
     assert.match(rawRow(id).broadcaster_refresh_token, /^enc:v1:/);
     assert.deepEqual(eventSubStarts, [id]);
   });

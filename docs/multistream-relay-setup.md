@@ -181,7 +181,7 @@ MEDIAMTX_CF_ACCESS_CLIENT_ID=<from step 5>     # only with Cloudflare Access
 MEDIAMTX_CF_ACCESS_CLIENT_SECRET=<from step 5>
 ```
 
-All four of the first block are needed: with any of them missing, multistream stays switched off. **Setting them switches the feature on for every streamer** (the dashboard card appears), so do it when the relay is up, and run step 8 right after. `MULTISTREAM_KEY_SECRET` is no longer used; remove it if it is set.
+All four of the first block are needed (`MEDIAMTX_API_URL` with its `https://`): with any of them missing, multistream stays switched off. **Setting them switches the feature on for every streamer** (the dashboard card appears), so do it when the relay is up, and run step 8 right after. `MULTISTREAM_KEY_SECRET` is no longer used; remove it if it is set.
 
 Railway redeploys on the variable change. Then check the API through the tunnel (the relay asks the website about the login, so this only works once the variables are set):
 
@@ -194,7 +194,7 @@ curl -u admin:<API_PASS> https://relay.atletanotifications.com/v3/paths/list
 
 ## 7. Twitch broadcaster scope upgrade
 
-Existing connected streamers need to **re-authorize** via `/auth/broadcaster` (one click) to grant the new `channel:read:stream_key` scope. The dashboard surfaces this with an amber banner: "Authorized, but missing the stream-key permission. Re-authorize to enable multistream."
+Existing connected streamers need to **re-authorize** via `/auth/broadcaster` (one click) to grant the `channel:read:stream_key` scope, which is asked for only once the four variables are set. The dashboard surfaces this with an amber banner: "Authorized, but missing the stream-key permission. Re-authorize to enable multistream."
 
 New streamers get the right scopes from the start.
 

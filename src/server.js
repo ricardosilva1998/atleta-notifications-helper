@@ -11,6 +11,7 @@ const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
 const { csrfProtection } = require('./csrf');
+const { isRelayRequest } = require('./services/multistreamAuth');
 const { healthHandler } = require('./health');
 const httpDrain = require('./httpDrain');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
@@ -61,19 +62,26 @@ app.use(helmet({
 }));
 
 // Rate limiters
-const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+// The multistream relay (MediaMTX) asks /api/multistream/auth before every
+// publish, read and API login, all from its one address, and anyone can make it
+// ask (an RTMP connection to the ingest is enough): if those were counted, a
+// stranger could get every streamer refused. Requests that carry the relay's
+// secret (MEDIAMTX_WEBHOOK_SECRET) are not counted by either limit below.
+const fromRelay = (req) => config.multistream.enabled && isRelayRequest(req, config.multistream.webhookSecret);
+const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false, skip: fromRelay });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: 'Too many attempts, please try again later' });
 // Every /api request, counted once per address. One Atleta Racing app polls
 // about 50 times a minute (Spotify every 4 s, Discord voice every 2 s, the live
 // session every 30 s, laps and logs), so 150 leaves room for two apps behind
 // one address plus the website. Reading a stored track map is not counted: the
-// Track Database page draws a preview of every stored track at once.
+// Track Database page draws a preview of every stored track at once. Nor are
+// the relay's requests (above).
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 150,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.method === 'GET' && req.path.startsWith('/track-map/'),
+  skip: (req) => fromRelay(req) || (req.method === 'GET' && req.path.startsWith('/track-map/')),
 });
 // The Discord voice overlay asks every 2 s (30 a minute); twice that per address.
 const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
