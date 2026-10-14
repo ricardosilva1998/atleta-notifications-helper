@@ -5,6 +5,7 @@ const { refreshYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages } 
 const { getBuiltinResponse, getCommandsList } = require('./builtinCommands');
 const { moderateYoutubeMessage, grantYoutubePermit } = require('./youtubeModeration');
 const { commandCooldownSeconds } = require('./chatCommands');
+const { fillChatTemplate } = require('./chatTemplate');
 
 let botAccessToken = null;
 const activePollers = new Map(); // streamerId -> { liveChatId, pageToken, timer }
@@ -195,10 +196,9 @@ async function handleChatMessage(streamerId, item) {
 }
 
 async function sendTemplateMessage(streamerId, template, data) {
-  let message = template;
-  for (const [key, value] of Object.entries(data)) {
-    message = message.replace(new RegExp(`\\{${key}\\}`, 'g'), value ?? '');
-  }
+  // Names and Super Chat comments come from viewers: see chatTemplate.js.
+  const message = fillChatTemplate(template, data);
+  if (!message) return;
 
   const poller = activePollers.get(streamerId);
   if (!poller) return;

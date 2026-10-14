@@ -1,5 +1,7 @@
 'use strict';
 
+const { stripCommandPrefix } = require('./chatTemplate');
+
 const cooldowns = new Map();
 const COOLDOWN_MS = 5000;
 
@@ -169,7 +171,8 @@ function getBuiltinResponse(commandName, args, streamer, displayName) {
     case 'roast': {
       if (!streamer.cmd_roast_enabled) return null;
       if (onCooldown(sid, 'roast')) return null;
-      const roastTarget = args[0]?.replace('@', '') || displayName;
+      // The target starts the bot's line, so it must not start with a command.
+      const roastTarget = stripCommandPrefix(args[0]?.replace('@', '') || '') || displayName;
       return { response: `${roastTarget}, ${pick(ROASTS)}` };
     }
     default:

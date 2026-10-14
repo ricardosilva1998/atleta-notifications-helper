@@ -5,6 +5,7 @@ const bus = require('./overlayBus');
 const { isExempt, runFilters, getAction, executeAction, handleModCommand, activateRaidProtection, checkBannedWords } = require('./chatModeration');
 const { isStreamerDisabled } = require('./streamerAccess');
 const { commandCooldownSeconds } = require('./chatCommands');
+const { fillChatTemplate } = require('./chatTemplate');
 
 let client = null;
 const channelMap = new Map(); // channelName -> streamerId
@@ -240,10 +241,9 @@ const chatManager = {
     const template = streamer[templateKey];
     if (!template) return;
 
-    let message = template;
-    for (const [key, value] of Object.entries(data)) {
-      message = message.replace(new RegExp(`\\{${key}\\}`, 'g'), value ?? '');
-    }
+    // Names and messages come from viewers: see chatTemplate.js.
+    const message = fillChatTemplate(template, data || {});
+    if (!message) return;
 
     client.say(streamer.twitch_username, message).catch((err) => {
       console.error(`[Chat] Failed to send event message for streamer ${streamerId}:`, err.message);

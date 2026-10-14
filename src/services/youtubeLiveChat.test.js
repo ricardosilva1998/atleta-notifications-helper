@@ -17,8 +17,9 @@ let pages; // what YouTube answers, one page per poll
 let commands = {}; // command name -> row, as db.getChatCommand returns it
 let clock = 1_700_000_000_000; // what Date.now() says: the cooldowns are measured on it
 
+let streamerExtra = {}; // more columns of the streamer row, set by a test
 const dbStub = {
-  getStreamerById: (id) => (id === STREAMER_ID ? { id, yt_chatbot_enabled: 1, mod_link_permit_seconds: 60 } : null),
+  getStreamerById: (id) => (id === STREAMER_ID ? { id, yt_chatbot_enabled: 1, mod_link_permit_seconds: 60, ...streamerExtra } : null),
   getChatCommand: (_streamerId, name) => commands[name] || null,
 };
 const youtubeStub = {
@@ -59,6 +60,7 @@ beforeEach(() => {
   sent.length = 0;
   pages = [];
   commands = {};
+  streamerExtra = {};
   console.log = () => {};
 });
 afterEach(() => {
@@ -79,8 +81,12 @@ async function flush() {
 // Starts polling and delivers `texts` as chat messages. The first poll's messages
 // are skipped by the module (so old chat is not replayed), so they arrive on the second.
 async function say(...texts) {
+  await deliver(texts.map(textItem));
+}
+
+async function deliver(items) {
   pages.push({ items: [], nextPageToken: 'a', pollingIntervalMillis: 5000 });
-  pages.push({ items: texts.map(textItem), nextPageToken: 'b', pollingIntervalMillis: 5000 });
+  pages.push({ items, nextPageToken: 'b', pollingIntervalMillis: 5000 });
   youtubeChatManager.startPolling(STREAMER_ID, 'chat-1');
   await flush();
   mock.timers.tick(5000);
@@ -136,5 +142,18 @@ describe('custom commands in YouTube live chat', () => {
     clock += 1_000;
     await say('!huge');
     assert.equal(sent.length, 2, 'an hour later it answers again');
+  });
+});
+
+describe('Super Chat thank-yous', () => {
+  const superChat = (displayName, comment) => ({
+    snippet: { type: 'superChatEvent', superChatDetails: { amountDisplayString: '$5.00', userComment: comment } },
+    authorDetails: { displayName },
+  });
+
+  test('the viewer\'s name and comment are filled in as plain text that cannot start a command', async () => {
+    streamerExtra = { yt_chat_superchat_enabled: 1, yt_chat_superchat_template: '{username} sent {amount}! {message}' };
+    await deliver([superChat('!commands $&$&', "$'$'$' and\nmore")]);
+    assert.deepEqual(sent, [{ liveChatId: 'chat-1', text: "commands $&$& sent $5.00! $'$'$' and more" }]);
   });
 });

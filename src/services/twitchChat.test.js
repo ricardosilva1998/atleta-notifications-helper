@@ -259,6 +259,16 @@ describe('an account an admin disabled', () => {
   });
 });
 
+// ── Thank-you templates filled with viewers' text (M9) ───────────────
+
+describe('event thank-yous', () => {
+  test('a donor\'s name and message are plain text on one line that cannot start a command', () => {
+    streamer = streamerRow({ chat_donation_enabled: 1, chat_donation_template: '{username} donated {amount}! {message}' });
+    chatManager.sendEventMessage(1, 'donation', { username: '!commands edit !x $&', amount: 'USD 5', message: "$'$'\r\nPRIVMSG #other :hi" });
+    assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: "commands edit !x $& donated USD 5! $'$' PRIVMSG #other :hi" }]);
+  });
+});
+
 // ── Custom commands: a lone "!" names no command (N16) ───────────────
 
 describe('custom commands in chat', () => {
