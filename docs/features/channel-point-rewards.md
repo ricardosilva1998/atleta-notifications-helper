@@ -28,10 +28,10 @@ Native Twitch Channel Points → audio/video clips on the OBS overlay. Streamers
 
 1. Looks up reward by `twitch_reward_id`. A reward this app does not manage (made on Twitch itself or by another app) is left alone: no history row, no refund, no sync.
 2. Records the redemption before anything else (`db.claimRedemption()`, outcome `pending`; the unique `twitch_redemption_id` index makes a repeat delivery a no-op), so a redemption Twitch delivers twice plays, refunds and fulfils once.
-3. A reward that is switched off here, deleted here while Twitch still has it (`delete_failed`, see Edits and Deletes), or any reward while **Enable Channel Point Rewards** (`streamers.cp_rewards_enabled`) is off, does not play: the redemption is CANCELED on Twitch so the viewer gets their points back (`refundUnavailableReward()`; only a redemption still `unfulfilled` can be canceled).
+3. A reward that is switched off here, deleted here while Twitch still has it (`delete_failed`, see Edits and Deletes), or any reward while **Enable Channel Point Rewards** (`streamers.cp_rewards_enabled`) is off, does not play: the redemption is CANCELED on Twitch so the viewer gets their points back (`refundUnavailableReward()`; only a redemption still `unfulfilled` can be canceled). The outcome says which of the three it was (`refunded_disabled`, `refunded_deleted`, `refunded_switch_off`, see History); a reward that is itself off or waiting to be deleted wins over the switch.
 4. Verifies file on disk. If missing → auto-CANCELED + chat warning.
 5. Emits `redemption` event to `overlayBus`.
-6. Optionally posts chat message (template formatted via `redemptionTemplates.formatChatTemplate`).
+6. Optionally posts chat message (template formatted via `redemptionTemplates.formatChatTemplate`, sent with `chatManager.sendMessage()` so it goes through the shared chat dispatcher like every other line the bot posts).
 7. Schedules auto-fulfill via Helix PATCH at `maxPlaySeconds + 1s`.
 8. Sets the outcome on the history row (`db.setRedemptionOutcome()`).
 
@@ -61,18 +61,18 @@ A PATCH or DELETE the dashboard sends answers `502 { ok: false, error, reward }`
 ## Sync
 
 `syncRewards()` reconciles local DB with upstream:
-- **Twitch is source of truth** for title, cost, prompt, **paused** (`is_paused` = disabled here) and the **cooldown** (an off cooldown is 0), for a reward that is in step.
+- **Twitch is source of truth** for title, cost, prompt, **paused** (`is_paused` = disabled here) and the **cooldown** (an off cooldown is 0), for a reward that is in step. Twitch's list answer nests the cooldown (`global_cooldown_setting: { is_enabled, global_cooldown_seconds }`); the flat `is_global_cooldown_enabled` / `global_cooldown_seconds` are request fields only (`upstreamCooldownSeconds()`). A reward that says nothing about a cooldown keeps the local one.
 - A reward with `update_failed` is **sent** to Twitch instead (what is here wins until Twitch has it); one with `delete_failed` is **deleted** again, or dropped when Twitch no longer lists it.
 - A reward Twitch no longer lists is `orphaned`; a reward never created there is created.
 - **Local-only fields:** media file, position, volume, chat template.
 
 ## History
 
-Logged to `channel_point_redemptions` with `outcome` ∈ `{ pending, played, refunded_no_file, refunded_disabled, refunded_deleted, disabled, error, test }`. `pending` is a redemption being handled (it is recorded before anything is done for it). `refunded_disabled` / `refunded_deleted` mean a redemption of a reward that is off (or while Channel Point Rewards is switched off) / waiting to be deleted was canceled; `disabled` is such a redemption that could not be canceled (it was not `unfulfilled`); `error` with `refund failed: ...` is a cancel Twitch refused. Redemptions of rewards this app does not manage are not logged.
+Logged to `channel_point_redemptions` with `outcome` ∈ `{ pending, played, refunded_no_file, refunded_disabled, refunded_deleted, refunded_switch_off, disabled, error, test }`. `pending` is a redemption being handled (it is recorded before anything is done for it). `refunded_disabled` / `refunded_deleted` / `refunded_switch_off` mean a redemption was canceled, and why: the reward is off here / is waiting to be deleted (`delete_failed`) / the **Enable Channel Point Rewards** switch is off while the reward itself is fine (so the history does not blame a reward that is on); `disabled` is such a redemption that could not be canceled (it was not `unfulfilled`); `error` with `refund failed: ...` is a cancel Twitch refused (or an affiliate-gated 403). Redemptions of rewards this app does not manage are not logged. The history page labels every outcome (`redemptions.outcome.*` keys) and never shows the raw code.
 
 ## DB Columns Added on `streamers`
 
-- `cp_rewards_enabled` (in `OVERLAY_COLUMNS` whitelist so `updateOverlayConfig()` accepts it via the existing settings route). The master switch **Enable Channel Point Rewards**: while it is off, redemptions are refunded instead of played. It was not read before; a one-time data migration (`cp_rewards_enabled_for_existing_rewards`, recorded in `data_migrations`) switched it on for every streamer who had an enabled reward, so nothing that played stopped. New streamers start with it off.
+- `cp_rewards_enabled` (in `OVERLAY_COLUMNS` whitelist so `updateOverlayConfig()` accepts it via the existing settings route). The master switch **Enable Channel Point Rewards**: while it is off, redemptions are refunded instead of played, and a hint under the switch says so (it turns warning-coloured while the switch is off). It was not read before; a one-time data migration (`cp_rewards_enabled_for_existing_rewards`, recorded in `data_migrations`) switched it on for every streamer who had an enabled reward, so nothing that played stopped. New streamers start with it off, and **creating their first reward switches it on** (`POST /dashboard/redemptions/upload` sees that the streamer had no reward and the switch was off, then answers `rewardsSwitchedOn: true`; the page says so and ticks the toggle). After that the switch is theirs: a later reward never turns it back on, and deleting every reward and adding one again switches it on again.
 - `cp_affiliate_status` ∈ `{ unknown, ok, not_affiliate }`
 - `cp_last_sync_at`
 
@@ -89,6 +89,7 @@ The dashboard route MUST pre-compute `hasScope` via `hasRedemptionScope(req.stre
 - `src/services/twitchRewards.js` — Helix client (list/create/update/delete, fulfill/cancel, syncRewards, Affiliate-gate detection) and the sync-status logic: `pushRewardChanges()`, `removeReward()`, `retryPending()`, `refundRedemption()`, `unavailableReason()`
 - `src/services/redemptionDispatcher.js` — full redemption flow (`refundUnavailableReward()` for rewards that are off or waiting to be deleted)
 - `src/services/redemptionTemplates.js` — pure `formatChatTemplate` helper
+- `src/services/messageDedupe.js` — the 10-minute `message_id` memory `eventsub.js` uses to drop a notification Twitch delivers twice
 - `src/services/redemptionDispatcher.test.js` — the template helper, and the redemption flow (a repeat delivery acted on once, recorded before anything happens, the master switch, rewards the app does not manage)
 - `src/services/twitchRewards.test.js` — sync-status transitions, sync, refunds (in-memory DB, fake Helix)
 - `src/routes/dashboard.js` — `/dashboard/redemptions` GET/POST (precomputes `hasScope`)

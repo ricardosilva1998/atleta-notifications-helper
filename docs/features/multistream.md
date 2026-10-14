@@ -21,7 +21,7 @@ MediaMTX runs with `authMethod: http` and asks the website before every publish,
 **On stream start (`runOnAvailable` webhook → `POST /api/multistream/webhook/on-ready`):**
 
 1. Ask the relay which forwarders the key already has; set up only what is missing.
-2. Fetch the streamer's Twitch RTMP key via Helix `streams/key` (requires `channel:read:stream_key` scope on broadcaster auth).
+2. Fetch the streamer's Twitch RTMP key via Helix `streams/key` (requires `channel:read:stream_key` scope on broadcaster auth; `/auth/broadcaster` asks for it only while `config.multistream.enabled`, so a streamer who authorized before the relay existed re-authorizes once, from the banner on the multistream page).
 3. YouTube: the stored reusable `liveStream` (a failed lookup is an error; only "no such stream" makes a new one). Reuse the current `liveBroadcast` while it is ready/testing/live; otherwise create one (title: the saved default, else the channel's Twitch title from Helix `GET /channels`, else the date; `<`/`>` removed, cut at 100 code points) and bind it. Broadcasts have `enableAutoStart` and `enableAutoStop`, so no transition to live is needed.
 4. Call MediaMTX `/v3/config/paths/add/fwd_<token>_<dest>` (Basic auth) to spawn one `ffmpeg -c copy` forwarder per destination — pure passthrough.
 5. A relay error answers 502 so MediaMTX's curl retries; a go-live that reached only some platforms is shown on the page (`multistream_last_error`).
