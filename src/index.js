@@ -17,6 +17,11 @@ process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err && err.stack || err);
 });
 
+// Stored OAuth tokens are encrypted only when TOKEN_ENCRYPTION_KEY is set (db.js).
+if (!db.tokenEncryptionEnabled) {
+  console.warn('[DB] TOKEN_ENCRYPTION_KEY is not set: OAuth tokens and the StreamElements token are stored unencrypted. Set it to 64 hex characters (openssl rand -hex 32).');
+}
+
 // Alert sounds used to be one set shared by every streamer. Move those files
 // into their owner's folder before anything serves sounds; later boots find
 // nothing to move.

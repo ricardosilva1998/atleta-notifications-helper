@@ -1,9 +1,11 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const config = require('./config');
 const { isAdminStreamer } = require('./adminAccess');
 const { EVENT_DEFAULTS } = require('./services/overlayDesign');
+const secretBox = require('./services/secretBox');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'bot.db');
 
@@ -51,6 +53,74 @@ function _runOnce(name, migrate) {
       db.prepare('INSERT INTO data_migrations (name) VALUES (?)').run(name);
     })();
   } catch (e) { _migrationLog(name, e); }
+}
+
+// ── Secrets at rest ──────────────────────────────────────────────────────
+// The OAuth tokens and the StreamElements token below are stored encrypted
+// (enc:v1:, services/secretBox.js) when TOKEN_ENCRYPTION_KEY is set. Every
+// query that returns streamer rows passes them through openTokens, and every
+// write of these columns goes through sealToken, so the rest of the app only
+// ever sees plain text. A value stored before the key was set is read as it is
+// until the boot step at the end of this file encrypts it.
+const TOKEN_COLUMNS = Object.freeze([
+  'broadcaster_access_token', 'broadcaster_refresh_token',
+  'yt_access_token', 'yt_refresh_token',
+  'spotify_access_token', 'spotify_refresh_token',
+  'bot_access_token', 'bot_refresh_token',
+  'streamelements_jwt',
+]);
+const tokenKey = config.tokenEncryption && config.tokenEncryption.key
+  ? secretBox.parseKey(config.tokenEncryption.key)
+  : null;
+
+// What to store: encrypted when there is a key. null and '' (no token) are
+// stored as they are, and so is everything when there is no key.
+function sealToken(value) {
+  if (!tokenKey || value == null || value === '') return value;
+  return secretBox.seal(String(value), tokenKey);
+}
+
+// Set once a token that cannot be decrypted has been reported (by the boot
+// step at the end of this file, or by the first read that meets one).
+let _reportedUnreadableToken = false;
+
+// What was stored, as plain text. A value stored unencrypted is returned as it
+// is. An encrypted value that cannot be decrypted (no key, another key, a
+// damaged value) reads as missing: the account shows as not connected, and the
+// encrypted text is never sent to Twitch, YouTube or Spotify as a token.
+function openToken(value) {
+  if (!secretBox.isSealed(value)) return value;
+  if (tokenKey) {
+    try { return secretBox.open(value, tokenKey); } catch { /* reported below */ }
+  }
+  if (!_reportedUnreadableToken) {
+    _reportedUnreadableToken = true;
+    console.error(`[DB] A stored token cannot be decrypted ${tokenKey ? 'with this TOKEN_ENCRYPTION_KEY' : '(TOKEN_ENCRYPTION_KEY is not set)'}; it reads as not connected`);
+  }
+  return null;
+}
+
+// The row with its token columns as plain text (a row without them, or no row,
+// comes back as it is).
+function openTokens(row) {
+  if (!row) return row;
+  for (const column of TOKEN_COLUMNS) {
+    if (secretBox.isSealed(row[column])) row[column] = openToken(row[column]);
+  }
+  return row;
+}
+
+function openTokensOfAll(rows) {
+  for (const row of rows) openTokens(row);
+  return rows;
+}
+
+// Web session ids are stored as their SHA-256 (hex), never as they are: the
+// cookie holds the id, so the database (or a backup or copy of it) holds
+// nothing that logs anyone in. The session functions take the cookie's value
+// and hash it themselves.
+function hashSessionId(sid) {
+  return crypto.createHash('sha256').update(String(sid)).digest('hex');
 }
 
 // --- Migrations ---
@@ -1174,6 +1244,18 @@ try {
   }
 } catch(e) { console.error('[DB] Sessions migration error:', e.message); }
 
+// Session ids used to be stored as they are; from here on only their hash is
+// (hashSessionId). The ids already stored are hashed once, so every cookie in
+// use keeps working and nobody is logged out. This is recorded as a one-time
+// migration rather than decided per row: a hash cannot be told apart from an
+// id by its form (Racing and linked session ids are 64 hex characters too).
+_runOnce('hash_web_session_ids', () => {
+  const rows = db.prepare('SELECT sid FROM sessions WHERE sid IS NOT NULL').all();
+  const update = db.prepare('UPDATE sessions SET sid = ? WHERE sid = ?');
+  for (const { sid } of rows) update.run(hashSessionId(sid), sid);
+  if (rows.length > 0) console.log(`[DB] Stored ${rows.length} web session id(s) as hashes`);
+});
+
 // --- Bridge Remote Logs ---
 db.exec(`
   CREATE TABLE IF NOT EXISTS bridge_logs (
@@ -1274,23 +1356,23 @@ const _updateStreamerYoutube = db.prepare(`
 `);
 
 function getStreamerByDiscordId(discordUserId) {
-  return _getStreamerByDiscordId.get(discordUserId);
+  return openTokens(_getStreamerByDiscordId.get(discordUserId));
 }
 
 function getStreamerByTwitchId(twitchUserId) {
-  return _getStreamerByTwitchId.get(twitchUserId);
+  return openTokens(_getStreamerByTwitchId.get(twitchUserId));
 }
 
 function getStreamerById(id) {
-  return _getStreamerById.get(id);
+  return openTokens(_getStreamerById.get(id));
 }
 
 function getAllStreamers() {
-  return _getAllStreamers.all();
+  return openTokensOfAll(_getAllStreamers.all());
 }
 
 function upsertStreamerDiscord(discordUserId, discordUsername, discordDisplayName, discordAvatar) {
-  return _upsertStreamerDiscord.get(discordUserId, discordUsername, discordDisplayName, discordAvatar);
+  return openTokens(_upsertStreamerDiscord.get(discordUserId, discordUsername, discordDisplayName, discordAvatar));
 }
 
 // profile_picture prepared statements are initialized after migration (see below)
@@ -1310,7 +1392,7 @@ function linkTwitch(streamerId, twitchUserId, twitchUsername, twitchDisplayName)
 }
 
 function updateStreamerBroadcasterTokens(streamerId, accessToken, refreshToken, expiresAt) {
-  _updateStreamerBroadcasterTokens.run(accessToken, refreshToken, expiresAt, streamerId);
+  _updateStreamerBroadcasterTokens.run(sealToken(accessToken), sealToken(refreshToken), expiresAt, streamerId);
 }
 
 function updateStreamerYoutube(streamerId, youtubeChannelId, youtubeApiKey) {
@@ -1537,6 +1619,9 @@ function linkUser(streamerId, discordUserId, twitchUserId, twitchUsername) {
 }
 
 // --- Sessions ---
+// Each function takes the session id as the cookie holds it; the table keeps
+// only its hash (hashSessionId, "Secrets at rest" above). The row's sid is that
+// hash.
 
 const _createSession = db.prepare('INSERT OR REPLACE INTO sessions (sid, streamer_id, expires_at) VALUES (?, ?, ?)');
 const _getSession = db.prepare('SELECT * FROM sessions WHERE sid = ? AND expires_at > ?');
@@ -1546,19 +1631,20 @@ const _deleteOtherSessionsByStreamer = db.prepare('DELETE FROM sessions WHERE st
 const _cleanExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
 function createSession(sid, streamerId, expiresAt) {
-  _createSession.run(sid, streamerId, expiresAt);
+  _createSession.run(hashSessionId(sid), streamerId, expiresAt);
 }
 
 function getSession(sid) {
-  return _getSession.get(sid, Date.now());
+  return _getSession.get(hashSessionId(sid), Date.now());
 }
 
 function deleteSession(sid) {
-  _deleteSession.run(sid);
+  _deleteSession.run(hashSessionId(sid));
 }
 function deleteOtherSessions(currentSid, { racingUserId, streamerId } = {}) {
-  if (racingUserId) _deleteOtherSessionsByRacingUser.run(racingUserId, currentSid);
-  if (streamerId) _deleteOtherSessionsByStreamer.run(streamerId, currentSid);
+  const keep = hashSessionId(currentSid);
+  if (racingUserId) _deleteOtherSessionsByRacingUser.run(racingUserId, keep);
+  if (streamerId) _deleteOtherSessionsByStreamer.run(streamerId, keep);
 }
 
 function cleanExpiredSessions() {
@@ -1866,7 +1952,7 @@ function deleteStreamer(id) {
 }
 
 function getAllStreamersAdmin() {
-  return _getAllStreamersAdmin.all();
+  return openTokensOfAll(_getAllStreamersAdmin.all());
 }
 
 function getGlobalStats() {
@@ -2828,19 +2914,19 @@ function getAllFeedback() {
 // An overlay link belongs to an account: while an admin has the account
 // disabled (enabled = 0) its link finds nobody, so no overlay route serves it.
 function getStreamerByOverlayToken(token) {
-  return db.prepare('SELECT * FROM streamers WHERE overlay_token = ? AND COALESCE(enabled, 1) = 1').get(token);
+  return openTokens(db.prepare('SELECT * FROM streamers WHERE overlay_token = ? AND COALESCE(enabled, 1) = 1').get(token));
 }
 
 // Disabled accounts are left out, so the managers that start from this list
 // at boot (EventSub, StreamElements, sponsor rotation) skip them.
 function getOverlayEnabledStreamers() {
-  return db.prepare(`
+  return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
     WHERE overlay_enabled = 1
     AND COALESCE(enabled, 1) = 1
     AND broadcaster_access_token IS NOT NULL
     AND broadcaster_access_token != ''
-  `).all();
+  `).all());
 }
 
 const OVERLAY_COLUMNS = new Set([
@@ -2860,7 +2946,7 @@ function updateOverlayConfig(streamerId, config) {
   for (const [key, value] of Object.entries(config)) {
     if (!OVERLAY_COLUMNS.has(key)) continue; // Whitelist columns
     fields.push(`${key} = ?`);
-    values.push(value);
+    values.push(TOKEN_COLUMNS.includes(key) ? sealToken(value) : value); // streamelements_jwt
   }
   if (fields.length === 0) return;
   values.push(streamerId);
@@ -2881,17 +2967,17 @@ function updateBotTokens(streamerId, accessToken, refreshToken, expiresAt, usern
   db.prepare(`
     UPDATE streamers SET bot_access_token = ?, bot_refresh_token = ?, bot_token_expires_at = ?, bot_username = ?
     WHERE id = ?
-  `).run(accessToken, refreshToken, expiresAt, username, streamerId);
+  `).run(sealToken(accessToken), sealToken(refreshToken), expiresAt, username, streamerId);
 }
 
 // Disabled accounts are left out, so the chatbot does not join their channel at boot.
 function getChatbotEnabledStreamers() {
-  return db.prepare(`
+  return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
     WHERE chatbot_enabled = 1
     AND COALESCE(enabled, 1) = 1
     AND twitch_username IS NOT NULL
-  `).all();
+  `).all());
 }
 
 function getChatCommands(streamerId) {
@@ -3038,21 +3124,21 @@ function updateStreamerYoutubeTokens(streamerId, accessToken, refreshToken, expi
   db.prepare(`
     UPDATE streamers SET yt_access_token = ?, yt_refresh_token = ?, yt_token_expires_at = ?, yt_channel_name = ?
     WHERE id = ?
-  `).run(accessToken, refreshToken, expiresAt, channelName, streamerId);
+  `).run(sealToken(accessToken), sealToken(refreshToken), expiresAt, channelName, streamerId);
 }
 
 function getYoutubeChatbotEnabledStreamers() {
-  return db.prepare(`
+  return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
     WHERE yt_chatbot_enabled = 1
     AND youtube_channel_id IS NOT NULL
     AND youtube_channel_id != ''
-  `).all();
+  `).all());
 }
 
 function updateSpotifyTokens(streamerId, accessToken, refreshToken, expiresAt) {
   db.prepare('UPDATE streamers SET spotify_access_token = ?, spotify_refresh_token = ?, spotify_token_expires_at = ? WHERE id = ?')
-    .run(accessToken, refreshToken, expiresAt, streamerId);
+    .run(sealToken(accessToken), sealToken(refreshToken), expiresAt, streamerId);
 }
 
 // ─── Overlay Designs ────────────────────────────────────────────
@@ -4012,7 +4098,7 @@ function updateDonationSettings(streamerId, settings) {
 }
 
 function getStreamerByUsername(username) {
-  return db.prepare('SELECT * FROM streamers WHERE twitch_username = ? COLLATE NOCASE').get(username);
+  return openTokens(db.prepare('SELECT * FROM streamers WHERE twitch_username = ? COLLATE NOCASE').get(username));
 }
 
 // --- Overlay Events ---
@@ -4360,8 +4446,9 @@ const _deleteRacingUserAndData = db.transaction((id) => {
 function deleteRacingUser(id) {
   return _deleteRacingUserAndData(id);
 }
-function createRacingSession(sid, racingUserId, expiresAt) { return _createRacingSession.run(sid, racingUserId, expiresAt); }
-function createLinkedSession(sid, streamerId, racingUserId, expiresAt) { return _createLinkedSession.run(sid, streamerId, racingUserId, expiresAt); }
+// Web sessions (the cookie's id; stored hashed, see hashSessionId).
+function createRacingSession(sid, racingUserId, expiresAt) { return _createRacingSession.run(hashSessionId(sid), racingUserId, expiresAt); }
+function createLinkedSession(sid, streamerId, racingUserId, expiresAt) { return _createLinkedSession.run(hashSessionId(sid), streamerId, racingUserId, expiresAt); }
 
 // Account lockout
 const _recordFailedLogin = db.prepare('UPDATE racing_users SET login_attempts = login_attempts + 1 WHERE id = ?');
@@ -4855,7 +4942,7 @@ function ensureMultistreamToken(streamerId) {
 }
 
 function getStreamerByMultistreamToken(token) {
-  return db.prepare(`
+  return openTokens(db.prepare(`
     SELECT
       id,
       twitch_user_id, twitch_username, twitch_display_name,
@@ -4866,7 +4953,7 @@ function getStreamerByMultistreamToken(token) {
       multistream_youtube_privacy, multistream_youtube_category_id, multistream_youtube_default_title,
       multistream_active_broadcast_id
     FROM streamers WHERE multistream_token = ?
-  `).get(token);
+  `).get(token));
 }
 
 function setMultistreamYoutubeStream(streamerId, streamId, encryptedKey) {
@@ -4909,7 +4996,7 @@ function setMultistreamLastError(streamerId, message) {
 // Streamers whose last go-live left a YouTube broadcast mid-flight. Used on boot
 // to finish work that a restart interrupted.
 function getStreamersWithActiveMultistreamBroadcast() {
-  return db.prepare(`
+  return openTokensOfAll(db.prepare(`
     SELECT
       id, twitch_username,
       yt_access_token, yt_refresh_token, yt_token_expires_at,
@@ -4918,7 +5005,7 @@ function getStreamersWithActiveMultistreamBroadcast() {
       multistream_active_broadcast_id
     FROM streamers
     WHERE multistream_active_broadcast_id IS NOT NULL
-  `).all();
+  `).all());
 }
 
 // ── Giveaway queries ────────────────────────────────────────────────
@@ -5195,8 +5282,74 @@ function endTipGoal(id, streamerId) {
   ).run(id, streamerId);
 }
 
+// ── Boot: tokens at rest (see "Secrets at rest" at the top) ─────────────
+// Runs after every migration above, so all the token columns exist (on a new
+// database some appear only from the second boot; the ones missing are skipped).
+
+function existingTokenColumns() {
+  const names = new Set(db.prepare('PRAGMA table_info(streamers)').all().map((c) => c.name));
+  return TOKEN_COLUMNS.filter((column) => names.has(column));
+}
+
+// With TOKEN_ENCRYPTION_KEY set: encrypts the token values still in plain text
+// (stored before the key was set). Encrypted values are left as they are, so
+// a later boot changes nothing. Returns how many values it encrypted.
+function encryptPlainTokens() {
+  const columns = existingTokenColumns();
+  if (!tokenKey || columns.length === 0) return 0;
+  let encrypted = 0;
+  db.transaction(() => {
+    const rows = db.prepare(`SELECT id, ${columns.join(', ')} FROM streamers`).all();
+    for (const row of rows) {
+      for (const column of columns) {
+        const value = row[column];
+        if (typeof value !== 'string' || value === '' || secretBox.isSealed(value)) continue;
+        db.prepare(`UPDATE streamers SET ${column} = ? WHERE id = ?`).run(sealToken(value), row.id);
+        encrypted++;
+      }
+    }
+  })();
+  return encrypted;
+}
+
+// Encrypted token values this boot cannot decrypt (the key was removed or
+// changed, or a value is damaged): { values, streamers }.
+function countUnreadableTokens() {
+  const columns = existingTokenColumns();
+  const unreadable = { values: 0, streamers: 0 };
+  if (columns.length === 0) return unreadable;
+  for (const row of db.prepare(`SELECT id, ${columns.join(', ')} FROM streamers`).all()) {
+    let rowUnreadable = false;
+    for (const column of columns) {
+      if (!secretBox.isSealed(row[column])) continue;
+      let readable = false;
+      if (tokenKey) {
+        try { secretBox.open(row[column], tokenKey); readable = true; } catch { /* counted */ }
+      }
+      if (!readable) { unreadable.values++; rowUnreadable = true; }
+    }
+    if (rowUnreadable) unreadable.streamers++;
+  }
+  return unreadable;
+}
+
+try {
+  const encrypted = encryptPlainTokens();
+  if (encrypted > 0) console.log(`[DB] Encrypted ${encrypted} stored token(s) with TOKEN_ENCRYPTION_KEY`);
+  const unreadable = countUnreadableTokens();
+  if (unreadable.values > 0) {
+    const why = tokenKey ? 'with this TOKEN_ENCRYPTION_KEY (not the key they were encrypted with)' : 'because TOKEN_ENCRYPTION_KEY is not set';
+    console.error(`[DB] ${unreadable.values} stored token(s) of ${unreadable.streamers} streamer(s) cannot be decrypted ${why}: those connections read as not connected until the right key is set or the streamer connects again`);
+    _reportedUnreadableToken = true;
+  }
+} catch (e) { _migrationLog('token encryption', e); }
+
 module.exports = {
   db,
+  // Whether stored tokens are encrypted (TOKEN_ENCRYPTION_KEY is set); index.js warns at boot when not.
+  tokenEncryptionEnabled: tokenKey !== null,
+  // What the sessions table stores for a session id (the cookie's value).
+  hashSessionId,
   getStreamerByDiscordId,
   getStreamerByTwitchId,
   getStreamerById,

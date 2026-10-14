@@ -1,4 +1,5 @@
 const { parseAdminDiscordIds } = require('./adminAccess');
+const { isValidKey } = require('./services/secretBox');
 
 // DISCORD_DISABLED=1 is for development and CI only: the site runs without the
 // Discord bot (nothing logs in to Discord, no slash commands, welcome messages
@@ -15,6 +16,17 @@ const required = [
 const missing = required.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(`Missing required environment variables:\n  ${missing.join('\n  ')}`);
+  process.exit(1);
+}
+
+// TOKEN_ENCRYPTION_KEY encrypts the OAuth tokens and the StreamElements token
+// kept in the database (src/db.js, services/secretBox.js): 64 hex characters,
+// made with `openssl rand -hex 32`. Unset, they are stored unencrypted and the
+// boot log says so. Set but malformed, the boot stops: running anyway would
+// keep new tokens unencrypted and leave the encrypted ones unreadable.
+const tokenEncryptionKey = (process.env.TOKEN_ENCRYPTION_KEY || '').trim();
+if (tokenEncryptionKey && !isValidKey(tokenEncryptionKey)) {
+  console.error('TOKEN_ENCRYPTION_KEY must be 64 hex characters (make one with: openssl rand -hex 32)');
   process.exit(1);
 }
 
@@ -94,6 +106,10 @@ module.exports = {
   // Unset: a per-boot secret is used and links stop working after a restart.
   link: {
     signingSecret: process.env.LINK_SIGNING_SECRET || '',
+  },
+  // TOKEN_ENCRYPTION_KEY (see above); '' when unset.
+  tokenEncryption: {
+    key: tokenEncryptionKey,
   },
   // Discord user ids with admin access: the built-in admin plus any
   // comma-separated ids in ADMIN_DISCORD_IDS. Names never grant admin.

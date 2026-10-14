@@ -107,3 +107,21 @@ test('Discord is on unless DISCORD_DISABLED is exactly 1', () => {
     assert.equal(loadWith({ DISCORD_DISABLED: value }).config.discord.disabled, false, String(value));
   }
 });
+
+const TOKEN_KEY = '0123456789abcdef'.repeat(4); // synthetic
+
+test('TOKEN_ENCRYPTION_KEY: unset means no encryption key; 64 hex characters are taken (spaces around them trimmed)', () => {
+  assert.equal(loadWith({ TOKEN_ENCRYPTION_KEY: undefined }).config.tokenEncryption.key, '');
+  assert.equal(loadWith({ TOKEN_ENCRYPTION_KEY: '' }).config.tokenEncryption.key, '');
+  assert.equal(loadWith({ TOKEN_ENCRYPTION_KEY: TOKEN_KEY }).config.tokenEncryption.key, TOKEN_KEY);
+  assert.equal(loadWith({ TOKEN_ENCRYPTION_KEY: ` ${TOKEN_KEY.toUpperCase()}\n` }).config.tokenEncryption.key, TOKEN_KEY.toUpperCase());
+});
+
+test('a TOKEN_ENCRYPTION_KEY that is set but is not 64 hex characters stops the app at boot, without printing it', () => {
+  for (const bad of ['short', TOKEN_KEY.slice(0, 63), `${TOKEN_KEY}00`, `${TOKEN_KEY.slice(0, 62)}zz`, `"${TOKEN_KEY}"`]) {
+    const { exitCode, errors } = loadWith({ TOKEN_ENCRYPTION_KEY: bad });
+    assert.equal(exitCode, 1, bad);
+    assert.match(errors.join('\n'), /TOKEN_ENCRYPTION_KEY must be 64 hex characters/, bad);
+    assert.ok(!errors.join('\n').includes(bad), 'the value is not logged');
+  }
+});
