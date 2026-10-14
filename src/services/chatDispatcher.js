@@ -13,14 +13,15 @@
 //    notices and command replies, then event thank-yous, then sponsor and timed
 //    messages; oldest first within each. When the bot-wide limit is what holds
 //    them, the channel that posted least recently goes next, so one busy chat
-//    cannot hold up the bot for the other streamers.
+//    cannot hold up the bot for the other streamers; a sponsor or timed message
+//    gets a turn only when no other message is ready in any channel.
 //  - A thank-you that can be merged waits 5 s, and thank-yous of the same kind
 //    in the same channel that arrive while it waits join it ("Welcome to the pit
 //    crew, A, B and C!") as long as the line stays short enough.
 //  - A sponsor or timed message that has waited more than 60 s is dropped, and
 //    at most 20 messages wait per channel.
 //  - Every line is cleaned (chatLine): one line, trimmed, and short enough for
-//    tmi.js to send as one message.
+//    tmi.js to send as one message (an action line, "/me ...", a little shorter).
 // The clock and the timer functions can be passed in, for tests. The timer is
 // unref'd, so a waiting message never keeps the process alive.
 
@@ -33,6 +34,14 @@ const PRIORITY = Object.freeze({ high: 0, normal: 1, low: 2 });
 // units into two chat messages, the second outside this dispatcher. Twitch takes
 // 500 characters, so one line is at most 499 units.
 const MAX_CHAT_LINE = 499;
+// tmi.js say() sends a line starting "/me " (or ".me ", "\me ") as the action
+// "\u0001ACTION ...\u0001", which is 5 units longer, so such a line is at most 494.
+const ACTION_LINE = /^[/.\\]me /;
+const MAX_ACTION_LINE = MAX_CHAT_LINE - 5;
+
+function lineLimit(line) {
+  return ACTION_LINE.test(line) ? MAX_ACTION_LINE : MAX_CHAT_LINE;
+}
 
 const DEFAULTS = Object.freeze({
   maxMessages: 20, // per windowMs, across all channels
@@ -45,12 +54,13 @@ const DEFAULTS = Object.freeze({
 });
 
 // One chat line: control characters (line breaks included) become spaces, the
-// ends are trimmed, and the text is cut to MAX_CHAT_LINE without splitting an
-// emoji's surrogate pair.
+// ends are trimmed, and the text is cut to its limit (lineLimit) without
+// splitting an emoji's surrogate pair.
 function chatLine(text) {
   let line = singleLine(text ?? '');
-  if (line.length > MAX_CHAT_LINE) {
-    let end = MAX_CHAT_LINE;
+  const limit = lineLimit(line);
+  if (line.length > limit) {
+    let end = limit;
     const last = line.charCodeAt(end - 1);
     if (last >= 0xd800 && last <= 0xdbff) end -= 1;
     line = line.slice(0, end).trimEnd();
@@ -89,26 +99,33 @@ function createChatDispatcher(options = {}) {
 
   const spentAt = []; // when each token in use was spent, oldest first
   const waiting = []; // messages not sent yet
-  const channels = new Map(); // channel key -> { lastSentAt, dropped, droppedLoggedAt }
+  const channels = new Map(); // channel key -> { lastSentAt, dropped, dropReason, droppedLoggedAt }
   let timer = null;
   let nextSeq = 0;
 
   function stateOf(key) {
     let state = channels.get(key);
     if (!state) {
-      state = { lastSentAt: undefined, dropped: 0, droppedLoggedAt: undefined };
+      state = { lastSentAt: undefined, dropped: 0, dropReason: '', droppedLoggedAt: undefined };
       channels.set(key, state);
     }
     return state;
   }
 
+  function reportDrops(key, state, t) {
+    log.warn(`[Chat] Dropped ${state.dropped} waiting message(s) for ${key}: ${state.dropReason}`);
+    state.dropped = 0;
+    state.droppedLoggedAt = t;
+  }
+
+  // Counted at once, logged at most once per dropLogIntervalMs per channel: drops
+  // within that minute are reported with the next line, or by prune once it is over.
   function noteDrop(entry, t, reason) {
     const state = stateOf(entry.key);
     state.dropped += 1;
+    state.dropReason = reason;
     if (state.droppedLoggedAt !== undefined && t - state.droppedLoggedAt < limits.dropLogIntervalMs) return;
-    log.warn(`[Chat] Dropped ${state.dropped} waiting message(s) for ${entry.key}: ${reason}`);
-    state.dropped = 0;
-    state.droppedLoggedAt = t;
+    reportDrops(entry.key, state, t);
   }
 
   function deliver(entry) {
@@ -137,13 +154,19 @@ function createChatDispatcher(options = {}) {
     return last === undefined ? -Infinity : last + limits.channelGapMs;
   }
 
-  // The message to send now: among those whose channel may post, the channel
-  // that posted least recently, then the most important, then the oldest.
+  // The message to send now. Among the moderation, command and thank-you lines
+  // whose channel may post: the channel that posted least recently, then the
+  // most important, then the oldest. A sponsor or timed line (same order) only
+  // when none of those is ready in any channel.
   function nextReady(t) {
+    return readiest(t, (entry) => entry.rank !== PRIORITY.low) || readiest(t, (entry) => entry.rank === PRIORITY.low);
+  }
+
+  function readiest(t, wanted) {
     let best = null;
     let bestLast = 0;
     for (const entry of waiting) {
-      if (entry.notBefore > t || channelFreeAt(entry) > t) continue;
+      if (!wanted(entry) || entry.notBefore > t || channelFreeAt(entry) > t) continue;
       const last = channels.get(entry.key)?.lastSentAt ?? -Infinity;
       if (!best || last < bestLast
         || (last === bestLast && (entry.rank < best.rank || (entry.rank === best.rank && entry.seq < best.seq)))) {
@@ -156,11 +179,13 @@ function createChatDispatcher(options = {}) {
 
   // A channel's state goes once nothing waits for it and nothing in it is recent:
   // its last send is remembered for the whole rate window, so the channel that
-  // posted least recently is still known when the bot-wide limit decides.
+  // posted least recently is still known when the bot-wide limit decides. Drops
+  // not reported yet keep it, and are reported here once their minute is over.
   function prune(t) {
     const remember = Math.max(limits.windowMs, limits.channelGapMs);
     for (const [key, state] of channels) {
-      if (waiting.some((entry) => entry.key === key)) continue;
+      if (state.dropped > 0 && t - state.droppedLoggedAt >= limits.dropLogIntervalMs) reportDrops(key, state, t);
+      if (state.dropped > 0 || waiting.some((entry) => entry.key === key)) continue;
       const recentSend = state.lastSentAt !== undefined && t - state.lastSentAt < remember;
       const recentDropLog = state.droppedLoggedAt !== undefined && t - state.droppedLoggedAt < limits.dropLogIntervalMs;
       if (!recentSend && !recentDropLog) channels.delete(key);
@@ -208,7 +233,7 @@ function createChatDispatcher(options = {}) {
     if (entry.merge.names.some((n) => String(n).toLowerCase() === same)) return true;
     const names = [...entry.merge.names, name];
     const line = singleLine(entry.merge.render(names) ?? '');
-    if (!line || line.length > MAX_CHAT_LINE) return false;
+    if (!line || line.length > lineLimit(line)) return false;
     entry.merge.names = names;
     entry.line = line;
     return true;
@@ -235,7 +260,9 @@ function createChatDispatcher(options = {}) {
 
   // message: { channel, text, priority: 'high' | 'normal' | 'low', merge }
   // merge (thank-yous that may share a line): { key, name, render(names) -> text };
-  // the text is then render([name]). Returns 'sent', 'queued', 'merged' or 'dropped'.
+  // the text is then render([name]). render must return the whole line, never
+  // one cut to a length: a name is added only when the whole line still fits.
+  // Returns 'sent', 'queued', 'merged' or 'dropped'.
   function enqueue(message = {}) {
     const { channel, priority, merge } = message;
     const key = channelKey(channel);
@@ -285,4 +312,4 @@ function createChatDispatcher(options = {}) {
   return { enqueue, dropChannel, clear, pending: () => waiting.length };
 }
 
-module.exports = { createChatDispatcher, chatLine, channelKey, MAX_CHAT_LINE, PRIORITY, DEFAULTS };
+module.exports = { createChatDispatcher, chatLine, channelKey, MAX_CHAT_LINE, MAX_ACTION_LINE, PRIORITY, DEFAULTS };

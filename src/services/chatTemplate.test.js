@@ -52,10 +52,10 @@ describe('fillChatTemplate', () => {
 
   test('a name or message cannot start the line with another bot\'s command or a chat command', () => {
     for (const lead of ['!', '/', '.', '\\', '!!', ' ! ', '.\\/!', '\n/']) {
-      const line = fillChatTemplate(DONATION, { username: `${lead}commands edit !hi gotcha`, amount: 'USD 5', message: `${lead}ban someone` });
-      assert.equal(line, 'commands edit !hi gotcha donated USD 5! ban someone', JSON.stringify(lead));
+      const line = fillChatTemplate(DONATION, { username: `${lead}somecommand !word`, amount: 'USD 5', message: `${lead}othercommand words` });
+      assert.equal(line, 'somecommand !word donated USD 5! othercommand words', JSON.stringify(lead));
     }
-    assert.equal(fillChatTemplate('{message}', { message: '!title new title' }), 'title new title');
+    assert.equal(fillChatTemplate('{message}', { message: '!somecommand some text' }), 'somecommand some text');
     assert.equal(fillChatTemplate('{username}{message}', { username: '!', message: '/x' }), 'x');
   });
 
@@ -71,7 +71,7 @@ describe('fillChatTemplate', () => {
   });
 
   test('a command word the template leaves to a value is not kept', () => {
-    assert.equal(fillChatTemplate('!{message}', { message: 'commands edit !x hi' }), 'commands edit !x hi');
+    assert.equal(fillChatTemplate('!{message}', { message: 'somecommand x' }), 'somecommand x');
     assert.equal(fillChatTemplate('/{username} hi', { username: 'ban' }), 'ban hi');
     assert.equal(fillChatTemplate('  !so   {username}', { username: 'A' }), '!so   A', 'spaces before the command are fine');
   });
@@ -96,6 +96,16 @@ describe('fillChatTemplate', () => {
     assert.equal(RESULT_MAX, 500);
     const long = fillChatTemplate('x'.repeat(490) + ' {username}', { username: 'abcdefghijklmnop' });
     assert.equal(Array.from(long).length, 500);
+  });
+
+  test('maxLength: Infinity leaves the whole line, so a caller can see that it does not fit', () => {
+    const template = 'x'.repeat(490) + ' {username}!';
+    assert.equal(fillChatTemplate(template, { username: 'abcdefghijklmnop' }, { maxLength: Infinity }).length, 508);
+    assert.equal(Array.from(fillChatTemplate(template, { username: 'abcdefghijklmnop' })).length, 500, 'cut to 500 by default');
+    // The default cut can end on a space, which trimming then removes: the line
+    // is 499 long but has lost its end. Only the whole line shows that.
+    const cut = fillChatTemplate('x'.repeat(495) + ' and {username}!', { username: 'LateViewer' });
+    assert.equal(cut, 'x'.repeat(495) + ' and');
   });
 
   test('cutting never splits an emoji in two', () => {

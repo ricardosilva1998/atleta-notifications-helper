@@ -13,7 +13,8 @@
 //    another bot's command could run that command;
 //  - line breaks and other control characters become spaces;
 //  - names are cut to 50 characters, messages to 300, any other value to 50,
-//    and the line to 500;
+//    and the line to 500 (options.maxLength; Infinity leaves the whole line,
+//    for a caller that must see whether it fits, as merged thank-yous do);
 //  - a list of names (thank-yous merged into one line) reads "A, B and C".
 
 const { singleLine } = require('./chatCommands');
@@ -59,7 +60,7 @@ function joinNames(names) {
 
 // `values` maps placeholder names to text or numbers; a list is joined as names.
 // Placeholders without a value stay as they are. Returns '' without a template.
-function fillChatTemplate(template, values = {}) {
+function fillChatTemplate(template, values = {}, { maxLength = RESULT_MAX } = {}) {
   if (typeof template !== 'string') return '';
   const filled = template.replace(PLACEHOLDER, (placeholder, key) => {
     if (!Object.prototype.hasOwnProperty.call(values, key)) return placeholder;
@@ -70,7 +71,7 @@ function fillChatTemplate(template, values = {}) {
   });
   let line = singleLine(filled);
   if (!startsWithOwnCommand(template)) line = stripCommandPrefix(line);
-  return limitCharacters(line, RESULT_MAX).trim();
+  return (Number.isFinite(maxLength) ? limitCharacters(line, maxLength) : line).trim();
 }
 
 module.exports = {

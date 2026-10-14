@@ -192,6 +192,36 @@ describe('raid protection triggers', () => {
     await flush();
     assert.deepEqual(helixCalls.map((c) => [c.method, c.body]), [['PATCH', { follower_mode: true, follower_mode_duration: 10 }]]);
     assert.ok(tmiClient.said.some((m) => m.text.startsWith('Raid protection activated')));
+    // Let the protection end: a timer left pending in chatModeration would be
+    // cleared by the next test's mocked timers and break them.
+    t.mock.timers.tick(120_000);
+    await flush();
+  });
+
+  test('while the bot is still in the chat, the end of raid protection is announced', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    chatManager.startRaidProtection(1);
+    await flush();
+    t.mock.timers.tick(120_000);
+    await flush();
+    chatClock.advance(1_500);
+    assert.deepEqual(helixCalls.map((c) => c.body), [{ follower_mode: true, follower_mode_duration: 10 }, { follower_mode: false }]);
+    assert.ok(tmiClient.said.some((m) => m.text.startsWith('Raid protection ended')));
+  });
+
+  test('a chat the bot has left (account disabled, chatbot off) gets no "ended" notice, but followers-only still goes off', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    chatManager.startRaidProtection(1);
+    await flush();
+    assert.ok(tmiClient.said.some((m) => m.text.startsWith('Raid protection activated')));
+
+    streamer = streamerRow({ enabled: 0 });
+    chatManager.stopForStreamer(1); // what disabling the account does
+    t.mock.timers.tick(120_000);
+    await flush();
+    chatClock.advance(5_000);
+    assert.deepEqual(helixCalls.map((c) => c.body), [{ follower_mode: true, follower_mode_duration: 10 }, { follower_mode: false }]);
+    assert.ok(!tmiClient.said.some((m) => m.text.startsWith('Raid protection ended')));
   });
 
   test('the raid thank-you (also used by dashboard test alerts) never changes chat settings', async () => {
@@ -298,8 +328,8 @@ describe('an account an admin disabled', () => {
 describe('event thank-yous', () => {
   test('a donor\'s name and message are plain text on one line that cannot start a command', () => {
     streamer = streamerRow({ chat_donation_enabled: 1, chat_donation_template: '{username} donated {amount}! {message}' });
-    chatManager.sendEventMessage(1, 'donation', { username: '!commands edit !x $&', amount: 'USD 5', message: "$'$'\r\nPRIVMSG #other :hi" });
-    assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: "commands edit !x $& donated USD 5! $'$' PRIVMSG #other :hi" }]);
+    chatManager.sendEventMessage(1, 'donation', { username: '!somecommand $&', amount: 'USD 5', message: "$'$'\r\nPRIVMSG #other :hi" });
+    assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: "somecommand $& donated USD 5! $'$' PRIVMSG #other :hi" }]);
   });
 });
 
@@ -418,4 +448,51 @@ describe('the bot\'s chat output', () => {
     chatClock.advance(5_000);
     assert.deepEqual(texts(), ['first']);
   });
+});
+
+// ── Merged thank-yous through the real template (H11 + M9) ───────────
+
+describe('merged follow thank-yous, filled from the real template', () => {
+  const TEMPLATES = ['Welcome to the pit crew, {username}!', 'Welcome to the pit crew, {username}! 🏎️'];
+  const PREFIX = 'Welcome to the pit crew, ';
+  const texts = () => tmiClient.said.map((m) => m.text);
+
+  // Every line ends as the template does, fits in one chat message, and every
+  // follower is thanked exactly once.
+  function assertEveryoneThanked(template, names) {
+    const ending = template.slice(template.indexOf('{username}') + '{username}'.length);
+    const thanked = [];
+    for (const line of texts()) {
+      assert.ok(line.startsWith(PREFIX) && line.endsWith(ending), `line ends as the template does: ...${line.slice(-40)}`);
+      assert.ok(line.length <= 499, `${line.length} UTF-16 units`);
+      thanked.push(...line.slice(PREFIX.length, line.length - ending.length).split(/, | and /));
+    }
+    assert.deepEqual(thanked.sort(), [...names].sort());
+  }
+
+  for (const template of TEMPLATES) {
+    test(`a line filled to the brim takes no more names; the next one starts a new line (${template})`, () => {
+      streamer = streamerRow({ chat_follow_enabled: 1, chat_follow_template: template });
+      // With the first template these 34 names make a line of exactly 499 units.
+      const names = [...Array.from({ length: 33 }, (_, i) => `follower${String(i).padStart(4, '0')}`), 'eightchr', 'LateViewer'];
+      for (const username of names) chatManager.sendEventMessage(1, 'follow', { username });
+      chatClock.advance(30_000);
+      assert.equal(texts().length, 2);
+      assertEveryoneThanked(template, names);
+    });
+
+    test(`a burst of 120 follows thanks every name once (${template})`, () => {
+      streamer = streamerRow({ chat_follow_enabled: 1, chat_follow_template: template });
+      // Twitch logins are 4-25 characters; a fixed pseudo-random sequence of lengths.
+      let seed = 12345;
+      const names = Array.from({ length: 120 }, (_, i) => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        const length = 4 + (seed % 22);
+        return `f${i}_`.concat('x'.repeat(30)).slice(0, Math.max(length, `f${i}_`.length));
+      });
+      for (const username of names) chatManager.sendEventMessage(1, 'follow', { username });
+      chatClock.advance(120_000);
+      assertEveryoneThanked(template, names);
+    });
+  }
 });

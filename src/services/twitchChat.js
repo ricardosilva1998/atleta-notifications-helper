@@ -39,9 +39,11 @@ function post(channel, text, priority, merge) {
 // What the moderation and command helpers get in place of the tmi.js client:
 // their warnings, !permit and !slow answers, raid protection notices and
 // command replies go out through the dispatcher as the most important messages.
+// A chat the bot has left (chatbot switched off, account disabled) gets nothing,
+// not even a notice from a timer started before it left (raid protection's end).
 const replies = {
   say(channel, text) {
-    post(channel, text, 'high');
+    if (getStreamerIdForChannel(channel)) post(channel, text, 'high');
     return Promise.resolve();
   },
 };
@@ -292,7 +294,10 @@ const chatManager = {
       post(streamer.twitch_username, null, 'normal', {
         key: `${eventType}:${JSON.stringify(details)}`,
         name,
-        render: (names) => fillChatTemplate(template, { ...values, username: names }),
+        // The whole line, not cut to length: the dispatcher adds a name only
+        // when the line with it still fits, and a cut line would lose the name
+        // and the template's ending while looking short enough.
+        render: (names) => fillChatTemplate(template, { ...values, username: names }, { maxLength: Infinity }),
       });
       return;
     }

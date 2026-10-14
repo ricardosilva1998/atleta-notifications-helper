@@ -171,16 +171,26 @@ describe('one channel (H11)', () => {
     assert.deepEqual(lines(), ['already going', 'unknown', 'sponsor']);
   });
 
-  test('when the bot-wide limit is reached, the channel that posted least recently goes next', () => {
+  test('when the bot-wide limit is reached, the channel that posted least recently goes next; sponsor lines wait for all others', () => {
     const chat = dispatcher({ maxMessages: 1, windowMs: 1_000, channelGapMs: 0 });
     chat.enqueue({ channel: 'busy', text: 'busy 1', priority: 'high' });
     chat.enqueue({ channel: 'busy', text: 'busy 2', priority: 'high' });
     chat.enqueue({ channel: 'busy', text: 'busy 3', priority: 'high' });
     chat.enqueue({ channel: 'quiet', text: 'quiet sponsor', priority: 'low' });
     chat.enqueue({ channel: 'quiet2', text: 'quiet command', priority: 'high' });
+    chat.enqueue({ channel: 'quiet3', text: 'quiet thanks', priority: 'normal' });
     time.advance(10_000);
-    // quiet and quiet2 have not posted: the more important of the two goes first.
-    assert.deepEqual(lines(), ['busy 1', 'quiet command', 'quiet sponsor', 'busy 2', 'busy 3']);
+    // quiet2 and quiet3 have not posted, so they go before busy's next line (the
+    // more important first); the sponsor line takes a token only when no other
+    // line is ready in any chat.
+    assert.deepEqual(lines(), ['busy 1', 'quiet command', 'quiet thanks', 'busy 2', 'busy 3', 'quiet sponsor']);
+  });
+
+  test('a sponsor line still goes when the only other waiting lines are held back', () => {
+    const chat = dispatcher();
+    chat.enqueue({ channel: 'busy', text: 'busy 1', priority: 'high' });
+    chat.enqueue({ channel: 'busy', text: 'busy 2', priority: 'high' }); // waits for the 1.5 s gap
+    assert.equal(chat.enqueue({ channel: 'quiet', text: 'quiet sponsor', priority: 'low' }), 'sent');
   });
 });
 
@@ -284,6 +294,21 @@ describe('dropping (H11)', () => {
     assert.deepEqual(logs, [['warn', '[Chat] Dropped 1 waiting message(s) for chan: queue full']], 'one line a minute per channel');
   });
 
+  test('drops after the last "dropped" line are still reported once that minute is over', () => {
+    const chat = dispatcher();
+    chat.enqueue({ channel: 'chan', text: 'going' });
+    for (let i = 0; i < 20; i++) chat.enqueue({ channel: 'chan', text: `reply ${i}`, priority: 'high' });
+    chat.enqueue({ channel: 'chan', text: 'one too many', priority: 'high' });
+    chat.enqueue({ channel: 'chan', text: 'two too many', priority: 'high' });
+    assert.deepEqual(logs, [['warn', '[Chat] Dropped 1 waiting message(s) for chan: queue full']]);
+    time.advance(60_000); // the 20 replies are sent within 30 s; nothing waits for chan after that
+    chat.enqueue({ channel: 'other', text: 'any later line' });
+    assert.deepEqual(logs, [
+      ['warn', '[Chat] Dropped 1 waiting message(s) for chan: queue full'],
+      ['warn', '[Chat] Dropped 1 waiting message(s) for chan: queue full'],
+    ]);
+  });
+
   test('a stopped channel loses its waiting messages; clear() empties everything', () => {
     const chat = dispatcher();
     chat.enqueue({ channel: 'chan', text: 'first' });
@@ -311,6 +336,27 @@ describe('every line is cleaned', () => {
     const emoji = chatLine('x'.repeat(498) + '🏁🏁');
     assert.equal(emoji, 'x'.repeat(498), 'an emoji is never cut in half');
     assert.equal(chatLine(null), '');
+  });
+
+  test('a line tmi.js sends as an action (/me, .me, \\me) is at most 494 units, so it is not split either', () => {
+    for (const lead of ['/me ', '.me ', '\\me ']) {
+      const line = chatLine(lead + 'x'.repeat(600));
+      assert.equal(line.length, 494, lead);
+      const onTheWire = `\u0001ACTION ${line.slice(4)}\u0001`; // what tmi.js action() sends
+      assert.ok(onTheWire.length < 500, `${onTheWire.length} units on the wire`);
+    }
+    assert.equal(chatLine('/men ' + 'x'.repeat(600)).length, 499, 'not an action');
+    assert.equal(chatLine('..me ' + 'x'.repeat(600)).length, 499, 'tmi.js sends a ".." line as text');
+  });
+
+  test('a merged /me thank-you keeps to the action limit too', () => {
+    const chat = dispatcher();
+    const render = (names) => `/me thanks ${names.join(' + ')}!`;
+    for (const letter of ['a', 'b', 'c']) chat.enqueue({ channel: 'chan', merge: { key: 'follow', name: letter.repeat(240), render } });
+    time.advance(20_000);
+    // Two of these names make a 495-unit line: fine as text, one too many as an action.
+    assert.equal(sent.length, 3, 'no two names of 240 share an action line');
+    assert.ok(sent.every((s) => s.line.length <= 494));
   });
 
   test('the dispatcher sends the cleaned line, and nothing for an empty one', () => {
