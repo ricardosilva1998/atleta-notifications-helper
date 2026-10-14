@@ -47,6 +47,31 @@ function sponsorImageScale(value) {
   return Math.round(clampNumber(value, min, max, fallback) * 100) / 100;
 }
 
+// The moderation numbers (the chatbot page's Moderation fields): the page's range, and the default a value
+// that is not a number gets.
+const MODERATION_LIMITS = Object.freeze({
+  mod_link_permit_seconds: Object.freeze({ min: 10, max: 600, fallback: 60 }),
+  mod_caps_min_length: Object.freeze({ min: 3, max: 100, fallback: 10 }),
+  mod_caps_max_percent: Object.freeze({ min: 30, max: 100, fallback: 70 }),
+  mod_emote_max_count: Object.freeze({ min: 1, max: 100, fallback: 15 }),
+  mod_repetition_window: Object.freeze({ min: 5, max: 300, fallback: 30 }),
+  mod_symbol_max_percent: Object.freeze({ min: 10, max: 100, fallback: 50 }),
+  mod_follow_age_minutes: Object.freeze({ min: 1, max: 1440, fallback: 10 }),
+  mod_raid_protection_duration: Object.freeze({ min: 30, max: 600, fallback: 120 }),
+});
+
+function moderationNumber(column, value) {
+  const { min, max, fallback } = MODERATION_LIMITS[column];
+  return clampInt(value, min, max, fallback);
+}
+
+// What the bot does with a message a filter catches: the page's choices and the escalation ladder's steps.
+const MODERATION_ACTIONS = Object.freeze(['delete', 'warn', 'timeout_10', 'timeout_60', 'timeout_600', 'timeout_1800']);
+
+function moderationAction(value) {
+  return MODERATION_ACTIONS.includes(value) ? value : 'delete';
+}
+
 module.exports = {
   clampNumber,
   clampInt,
@@ -56,4 +81,8 @@ module.exports = {
   sponsorDurationSeconds,
   sponsorChatIntervalMinutes,
   sponsorImageScale,
+  MODERATION_LIMITS,
+  moderationNumber,
+  MODERATION_ACTIONS,
+  moderationAction,
 };

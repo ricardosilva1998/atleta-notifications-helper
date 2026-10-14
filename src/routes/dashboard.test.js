@@ -4076,3 +4076,24 @@ describe('the giveaways page countdown', () => {
     assert.doesNotMatch(page.text, /(?:ACTIVE_ENDS_AT|dateStr) \+ 'Z'\)/, 'no time is read by adding a Z to it');
   });
 });
+
+// ── The moderation save keeps its numbers in range ───────────────────────
+
+describe('the moderation save keeps its settings in the page\'s ranges', () => {
+  test('numbers past a range are brought into it, numbers that are not numbers get the default, an unknown action is delete', async () => {
+    const id = addStreamer();
+    const res = await request('POST', '/dashboard/chatbot/moderation', { streamer: id, form: {
+      mod_link_permit_seconds: '99999', mod_caps_min_length: '-5', mod_caps_max_percent: 'abc',
+      mod_emote_max_count: '0', mod_repetition_window: '1000', mod_symbol_max_percent: '5',
+      mod_follow_age_minutes: '100000', mod_raid_protection_duration: '1', mod_action_response: 'ban_forever',
+    } });
+    assert.equal(res.status, 302);
+    const row = db.getStreamerById(id);
+    assert.deepEqual(
+      [row.mod_link_permit_seconds, row.mod_caps_min_length, row.mod_caps_max_percent, row.mod_emote_max_count,
+        row.mod_repetition_window, row.mod_symbol_max_percent, row.mod_follow_age_minutes, row.mod_raid_protection_duration],
+      [600, 3, 70, 1, 300, 10, 1440, 30],
+    );
+    assert.equal(row.mod_action_response, 'delete');
+  });
+});

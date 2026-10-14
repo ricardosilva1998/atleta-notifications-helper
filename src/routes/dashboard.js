@@ -25,7 +25,7 @@ const {
 const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
-const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('../services/inputLimits');
+const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
 const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
@@ -1300,23 +1300,23 @@ router.post('/chatbot/moderation', (req, res) => {
   db.updateModerationConfig(req.streamer.id, {
     mod_banned_words_enabled: b.mod_banned_words_enabled ? 1 : 0,
     mod_link_protection_enabled: b.mod_link_protection_enabled ? 1 : 0,
-    mod_link_permit_seconds: parseInt(b.mod_link_permit_seconds) || 60,
+    mod_link_permit_seconds: moderationNumber('mod_link_permit_seconds', b.mod_link_permit_seconds),
     mod_caps_enabled: b.mod_caps_enabled ? 1 : 0,
-    mod_caps_min_length: parseInt(b.mod_caps_min_length) || 10,
-    mod_caps_max_percent: parseInt(b.mod_caps_max_percent) || 70,
+    mod_caps_min_length: moderationNumber('mod_caps_min_length', b.mod_caps_min_length),
+    mod_caps_max_percent: moderationNumber('mod_caps_max_percent', b.mod_caps_max_percent),
     mod_emote_spam_enabled: b.mod_emote_spam_enabled ? 1 : 0,
-    mod_emote_max_count: parseInt(b.mod_emote_max_count) || 15,
+    mod_emote_max_count: moderationNumber('mod_emote_max_count', b.mod_emote_max_count),
     mod_repetition_enabled: b.mod_repetition_enabled ? 1 : 0,
-    mod_repetition_window: parseInt(b.mod_repetition_window) || 30,
+    mod_repetition_window: moderationNumber('mod_repetition_window', b.mod_repetition_window),
     mod_symbol_spam_enabled: b.mod_symbol_spam_enabled ? 1 : 0,
-    mod_symbol_max_percent: parseInt(b.mod_symbol_max_percent) || 50,
+    mod_symbol_max_percent: moderationNumber('mod_symbol_max_percent', b.mod_symbol_max_percent),
     mod_slow_mode_cmd_enabled: b.mod_slow_mode_cmd_enabled ? 1 : 0,
     mod_raid_protection_enabled: b.mod_raid_protection_enabled ? 1 : 0,
-    mod_raid_protection_duration: parseInt(b.mod_raid_protection_duration) || 120,
+    mod_raid_protection_duration: moderationNumber('mod_raid_protection_duration', b.mod_raid_protection_duration),
     mod_first_chatter_enabled: b.mod_first_chatter_enabled ? 1 : 0,
     mod_follow_age_enabled: b.mod_follow_age_enabled ? 1 : 0,
-    mod_follow_age_minutes: parseInt(b.mod_follow_age_minutes) || 10,
-    mod_action_response: b.mod_action_response || 'delete',
+    mod_follow_age_minutes: moderationNumber('mod_follow_age_minutes', b.mod_follow_age_minutes),
+    mod_action_response: moderationAction(b.mod_action_response),
     mod_escalation_enabled: b.mod_escalation_enabled ? 1 : 0,
     mod_log_discord_enabled: b.mod_log_discord_enabled ? 1 : 0,
     mod_log_discord_channel_id: modLogChannelId,

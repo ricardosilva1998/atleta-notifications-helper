@@ -103,3 +103,36 @@ describe('sponsor image scale', () => {
     for (const missing of [undefined, null, '', 'big', NaN]) assert.equal(sponsorImageScale(missing), 1, String(missing));
   });
 });
+
+describe('moderation numbers and actions', () => {
+  const { MODERATION_LIMITS, moderationNumber, MODERATION_ACTIONS, moderationAction } = require('./inputLimits');
+
+  test('every number has the chatbot page\'s range and today\'s default', () => {
+    assert.deepEqual(MODERATION_LIMITS, {
+      mod_link_permit_seconds: { min: 10, max: 600, fallback: 60 },
+      mod_caps_min_length: { min: 3, max: 100, fallback: 10 },
+      mod_caps_max_percent: { min: 30, max: 100, fallback: 70 },
+      mod_emote_max_count: { min: 1, max: 100, fallback: 15 },
+      mod_repetition_window: { min: 5, max: 300, fallback: 30 },
+      mod_symbol_max_percent: { min: 10, max: 100, fallback: 50 },
+      mod_follow_age_minutes: { min: 1, max: 1440, fallback: 10 },
+      mod_raid_protection_duration: { min: 30, max: 600, fallback: 120 },
+    });
+  });
+
+  test('a number past its range is brought into it, one that is not a number gets the default', () => {
+    assert.equal(moderationNumber('mod_link_permit_seconds', '99999'), 600);
+    assert.equal(moderationNumber('mod_link_permit_seconds', '-5'), 10);
+    assert.equal(moderationNumber('mod_link_permit_seconds', '0'), 10);
+    assert.equal(moderationNumber('mod_link_permit_seconds', 'abc'), 60);
+    assert.equal(moderationNumber('mod_link_permit_seconds', undefined), 60);
+    assert.equal(moderationNumber('mod_caps_max_percent', '55.6'), 56);
+  });
+
+  test('the action is one the bot knows, else delete', () => {
+    assert.deepEqual(MODERATION_ACTIONS, ['delete', 'warn', 'timeout_10', 'timeout_60', 'timeout_600', 'timeout_1800']);
+    assert.equal(moderationAction('timeout_60'), 'timeout_60');
+    assert.equal(moderationAction('ban_forever'), 'delete');
+    assert.equal(moderationAction(undefined), 'delete');
+  });
+});
