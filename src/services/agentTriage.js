@@ -6,6 +6,12 @@ const db = require('../db');
 
 const BRIDGE_DIR = path.join(__dirname, '..', '..', 'bridge');
 
+// The request gives up after 2 minutes and is tried once more, so an analysis ends
+// well inside the 15 minutes after which an issue still marked "analyzing" counts as
+// abandoned (ANALYSIS_STALE_MS in issueAnalysis.js). The SDK's own limits, 10 minutes
+// and 2 retries, could keep it running past that.
+const REQUEST_OPTIONS = { timeout: 120_000, maxRetries: 1 };
+
 // Bridge source files to include in context
 const BRIDGE_FILES = [
   'main.js', 'telemetry.js', 'websocket.js', 'settings.js',
@@ -125,7 +131,7 @@ async function analyzeIssue(issueId) {
     max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content }],
-  });
+  }, REQUEST_OPTIONS);
 
   const text = response.content.find(b => b.type === 'text')?.text || '';
 

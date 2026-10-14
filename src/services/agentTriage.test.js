@@ -9,13 +9,14 @@ const path = require('path');
 const Module = require('module');
 
 const requests = []; // what the fake client was asked
+const requestOptions = []; // the per-request options it was given with each
 const saved = []; // what was stored for the issue
 let reply;
 
 class FakeAnthropic {
   constructor(options) { this.options = options; }
   get messages() {
-    return { create: async (params) => { requests.push(params); return reply; } };
+    return { create: async (params, options) => { requests.push(params); requestOptions.push(options); return reply; } };
   }
 }
 
@@ -48,6 +49,7 @@ after(() => { Module._load = origLoad; });
 
 beforeEach(() => {
   requests.length = 0;
+  requestOptions.length = 0;
   saved.length = 0;
   reply = { content: [{ type: 'text', text: JSON.stringify({ summary: 'The overlay URL is wrong', root_cause: 'x', can_fix: false, confidence: 'low', patch: [], notes: '' }) }] };
   console.log = () => {};
@@ -80,6 +82,16 @@ describe('the model of the AI issue analysis', () => {
   test('an unknown issue is an error and asks the model nothing', async () => {
     await assert.rejects(() => agentTriage.analyzeIssue(99), /Issue not found/);
     assert.equal(requests.length, 0);
+  });
+});
+
+describe('how long an analysis can take', () => {
+  test('the request is cut off after 2 minutes and retried once, well inside the 15-minute stale window', async () => {
+    const { ANALYSIS_STALE_MS } = require('./issueAnalysis');
+    await agentTriage.analyzeIssue(7);
+    assert.deepEqual(requestOptions, [{ timeout: 120000, maxRetries: 1 }]);
+    const worstCase = requestOptions[0].timeout * (requestOptions[0].maxRetries + 1);
+    assert.ok(worstCase < ANALYSIS_STALE_MS, `${worstCase} ms of waiting must end before ${ANALYSIS_STALE_MS} ms`);
   });
 });
 
