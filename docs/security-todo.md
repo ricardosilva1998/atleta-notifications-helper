@@ -22,11 +22,8 @@ Last audited: 2026-04-11
 - **Fix:** Purchase a Windows code signing certificate (EV recommended for SmartScreen reputation). Configure in `electron-builder` config and GitHub Actions secrets.
 - **Complexity:** Medium — needs certificate purchase + CI config
 
-### 4. CSRF Protection Missing on POST Endpoints
-- **Files:** `src/routes/racing-team.js` (create, invite, kick, leave, delete), `src/routes/tip.js` (donation form)
-- **Issue:** No CSRF tokens on form submissions. Attacker can forge POST requests via malicious links/images.
-- **Fix:** Add CSRF middleware (e.g., `csrf-csrf` or `csurf`). Generate token per-session, embed in hidden form fields, validate on POST.
-- **Complexity:** Medium — needs middleware + all forms updated
+### 4. CSRF Protection Missing on POST Endpoints — fixed (2026-10-14)
+- **Fix:** `src/csrf.js`. Every POST, PUT, PATCH and DELETE must come from this site (Origin, or Referer without one) and, from a logged-in visitor, carry the session's token; logout is a POST. The routes it leaves alone, each with its reason, are in `CSRF_EXEMPT` there. See "CSRF" in `CLAUDE.md`.
 
 ### 5. Pitwall Token in JSON Response
 - **File:** `src/routes/racing-auth.js` (line 143, `/racing/auth/login-api`)
