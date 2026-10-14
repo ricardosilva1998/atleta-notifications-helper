@@ -35,7 +35,7 @@ These are placed BEFORE the `/api` auth middleware in `server.js`:
 
 ### What the routes store
 
-The routes the app calls have no login, so each value is brought to what its column holds before it is stored (the "What the Atleta Racing app's routes store" block in `src/server.js`). Everything the app sends today passes unchanged.
+Each value the app sends is brought to what its column holds before it is stored (the "What the Atleta Racing app's routes store" block in `src/server.js`). Everything the app sends today passes unchanged.
 
 - **Numbers** (positions, times, temperatures, counts): a number, or text that is a number; anything else stores nothing. A lap needs a lap number and a lap time (`400 Missing lap data` otherwise); `sector_times` is stored only as a list of at most 64 numbers; the weather keeps the app's five keys (`airTemp`, `trackTemp`, `humidity`, `skies`, `windSpeed`).
 - **Text** is cut to a length: iRacing name, car class and car name 100; track name 200; race type 40 (64 for track stats); country and city 80. The session type is a short word of letters (the app sends `practice`, `qualify` or `race`); without one the session is refused (`400 Missing session fields`). Telemetry is stored only as text.
