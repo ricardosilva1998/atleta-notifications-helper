@@ -53,7 +53,7 @@ function readBoundedBody(req, res, maxBytes) {
   return new Promise((resolve, reject) => {
     const declared = parseInt(req.headers['content-length'] || '0', 10);
     if (declared && declared > maxBytes) {
-      res.status(413).json({ ok: false, error: 'File too large' });
+      res.status(413).json({ ok: false, error: res.locals.t('redemptions.error.fileTooLarge') });
       try { req.destroy(); } catch (e) {}
       return reject(new Error('content-length exceeds cap'));
     }
@@ -66,7 +66,7 @@ function readBoundedBody(req, res, maxBytes) {
       if (received > maxBytes) {
         aborted = true;
         try { req.destroy(); } catch (e) {}
-        if (!res.headersSent) res.status(413).json({ ok: false, error: 'File too large' });
+        if (!res.headersSent) res.status(413).json({ ok: false, error: res.locals.t('redemptions.error.fileTooLarge') });
         return reject(new Error('body exceeds cap'));
       }
       chunks.push(chunk);
@@ -265,7 +265,7 @@ router.get('/', async (req, res) => {
     const chartData = db.getGuildNotificationsByTypeOverTime(req.streamer.id, g.guild_id, '30d');
     return {
       ...g,
-      name: discordGuild?.name || g.guild_name || 'Unknown Server',
+      name: discordGuild?.name || g.guild_name || res.locals.t('dashboard.unknownServer'),
       icon: discordGuild?.iconURL({ size: 64 }) || null,
       botPresent: !!discordGuild,
       stats,
@@ -1673,7 +1673,7 @@ router.post('/sponsors/toggle-rotation', (req, res) => {
 
 router.post('/sponsor-messages/add', (req, res) => {
   const { message_text, url } = req.body;
-  if (!message_text) return res.status(400).json({ error: 'Message text required' });
+  if (!message_text) return res.status(400).json({ error: res.locals.t('sponsors.error.textRequired') });
   db.addSponsorMessage(req.streamer.id, message_text, url);
   res.json({ ok: true });
 });
@@ -1714,7 +1714,7 @@ router.post('/sponsor-messages/settings', (req, res) => {
 
 router.post('/sponsor-messages/:id/test', limitTests, (req, res) => {
   const msg = db.getSponsorMessages(req.streamer.id).find(m => m.id === parseInt(req.params.id));
-  if (!msg) return res.json({ ok: false, error: 'Message not found' });
+  if (!msg) return res.json({ ok: false, error: res.locals.t('sponsors.error.notFound') });
   const { chatManager } = require('../services/twitchChat');
   let fullMessage = msg.message_text;
   if (msg.url) fullMessage += ' ' + msg.url;
@@ -1732,24 +1732,26 @@ function clamp(val, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
+// The message for a bad reward field, in the streamer's language (the page shows it).
 function validateRewardFields(fields, res) {
+  const t = res.locals.t;
   const { title, cost, prompt, position_preset } = fields;
   const titleStr = title ? String(title).trim() : '';
   if (titleStr.length < 2 || titleStr.length > 45) {
-    res.status(400).json({ error: 'Title must be 2–45 characters' });
+    res.status(400).json({ error: t('redemptions.error.titleLength') });
     return false;
   }
   const costNum = parseInt(cost, 10);
   if (isNaN(costNum) || costNum < 1 || costNum > 1000000) {
-    res.status(400).json({ error: 'Cost must be 1–1,000,000' });
+    res.status(400).json({ error: t('redemptions.error.costRange') });
     return false;
   }
   if (prompt && String(prompt).length > 200) {
-    res.status(400).json({ error: 'Prompt must be ≤200 characters' });
+    res.status(400).json({ error: t('redemptions.error.promptLength') });
     return false;
   }
   if (position_preset !== undefined && !VALID_POSITION_PRESETS.has(position_preset)) {
-    res.status(400).json({ error: 'Invalid position_preset' });
+    res.status(400).json({ error: t('redemptions.error.position') });
     return false;
   }
   return true;
@@ -1787,7 +1789,9 @@ router.post('/redemptions/sync', async (req, res) => {
     const result = await syncRewards(req.streamer.id);
     res.json(result);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    // Twitch's own wording stays in the log; the streamer gets a message in their language
+    console.error('[Redemptions] sync failed:', e.message);
+    res.status(500).json({ error: res.locals.t('redemptions.error.syncFailed') });
   }
 });
 
@@ -1795,7 +1799,7 @@ router.post('/redemptions/upload', async (req, res) => {
   const mediaType = (req.query.media_type || '').toLowerCase();
   const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   const mediaError = redemptionMediaError(mediaType, ext);
-  if (mediaError) return res.status(400).json({ error: mediaError });
+  if (mediaError) return res.status(400).json({ error: res.locals.t(mediaError) });
 
   const maxBytes = mediaType === 'video' ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
   let buf;
@@ -1821,6 +1825,8 @@ router.post('/redemptions/upload', async (req, res) => {
   const autoFulfill = req.query.auto_fulfill === '0' ? 0 : 1;
 
   const streamerId = req.streamer.id;
+  // How many rewards the streamer already had: 0 makes this their first one.
+  const rewardsBefore = db.getRewards(streamerId).length;
 
   // Step 1: insert local DB row (placeholder filename, will update after file write)
   const row = db.insertReward({
@@ -1845,7 +1851,7 @@ router.post('/redemptions/upload', async (req, res) => {
     max_play_seconds: maxPlaySeconds,
     chat_message_template: chatMessageTemplate,
     auto_fulfill: autoFulfill,
-    sort_order: db.getRewards(streamerId).length,
+    sort_order: rewardsBefore,
     twitch_sync_status: 'ok',
   });
 
@@ -1858,11 +1864,21 @@ router.post('/redemptions/upload', async (req, res) => {
   try { await fs.promises.writeFile(path.join(rewardDir, filename), buf); }
   catch (e) {
     db.deleteReward(rowId, streamerId);
-    return res.status(500).json({ error: 'File write failed' });
+    return res.status(500).json({ error: res.locals.t('redemptions.error.writeFailed') });
   }
 
   // Step 3: update media_filename in DB
   db.updateReward(rowId, streamerId, { media_filename: filename });
+
+  // New streamers start with "Enable Channel Point Rewards" off, and while it is off
+  // every redemption is refunded. Someone who creates their first reward wants it to
+  // work, so the switch comes on with it. (After that the switch is theirs: a later
+  // reward never turns it back on.)
+  let switchedOn = false;
+  if (rewardsBefore === 0 && !req.streamer.cp_rewards_enabled) {
+    db.updateOverlayConfig(streamerId, { cp_rewards_enabled: 1 });
+    switchedOn = true;
+  }
 
   // Step 4: create reward on Twitch
   let affiliateGated = false;
@@ -1889,30 +1905,30 @@ router.post('/redemptions/upload', async (req, res) => {
   }
 
   const reward = db.getRewardById(rowId, streamerId);
-  res.json({ ok: true, reward, affiliateGated: affiliateGated || undefined });
+  res.json({ ok: true, reward, affiliateGated: affiliateGated || undefined, rewardsSwitchedOn: switchedOn || undefined });
 });
 
 router.patch('/redemptions/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: 'Not found' });
+  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: res.locals.t('redemptions.error.notFound') });
 
   const body = req.body || {};
   const updates = {};
 
   if (body.title !== undefined) {
     const t = String(body.title).trim();
-    if (t.length < 2 || t.length > 45) return res.status(400).json({ error: 'Title must be 2–45 characters' });
+    if (t.length < 2 || t.length > 45) return res.status(400).json({ error: res.locals.t('redemptions.error.titleLength') });
     updates.title = t;
   }
   if (body.cost !== undefined) {
     const c = parseInt(body.cost, 10);
-    if (isNaN(c) || c < 1 || c > 1000000) return res.status(400).json({ error: 'Cost must be 1–1,000,000' });
+    if (isNaN(c) || c < 1 || c > 1000000) return res.status(400).json({ error: res.locals.t('redemptions.error.costRange') });
     updates.cost = c;
   }
   if (body.prompt !== undefined) {
-    if (body.prompt && String(body.prompt).length > 200) return res.status(400).json({ error: 'Prompt must be ≤200 characters' });
+    if (body.prompt && String(body.prompt).length > 200) return res.status(400).json({ error: res.locals.t('redemptions.error.promptLength') });
     updates.prompt = body.prompt ? String(body.prompt).trim() : null;
   }
   if (body.cooldown_seconds !== undefined) updates.cooldown_seconds = Math.max(0, parseInt(body.cooldown_seconds, 10) || 0);
@@ -1922,7 +1938,7 @@ router.patch('/redemptions/:id', async (req, res) => {
   if (body.chat_message_template !== undefined) updates.chat_message_template = body.chat_message_template || null;
   if (body.auto_fulfill !== undefined) updates.auto_fulfill = body.auto_fulfill ? 1 : 0;
   if (body.position_preset !== undefined) {
-    if (!VALID_POSITION_PRESETS.has(body.position_preset)) return res.status(400).json({ error: 'Invalid position_preset' });
+    if (!VALID_POSITION_PRESETS.has(body.position_preset)) return res.status(400).json({ error: res.locals.t('redemptions.error.position') });
     updates.position_preset = body.position_preset;
   }
   if (body.custom_x !== undefined) updates.custom_x = clamp(body.custom_x, 0, 1);
@@ -1948,13 +1964,13 @@ router.post('/redemptions/:id/replace-media', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: 'Not found' });
+  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: res.locals.t('redemptions.error.notFound') });
 
   const mediaType = (req.query.media_type || reward.media_type || '').toLowerCase();
   const ext = (req.query.ext || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   // Same rules as the upload route: audio or video only, per-type extensions.
   const mediaError = redemptionMediaError(mediaType, ext);
-  if (mediaError) return res.status(400).json({ error: mediaError });
+  if (mediaError) return res.status(400).json({ error: res.locals.t(mediaError) });
 
   const maxBytes = mediaType === 'video' ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
   let buf;
@@ -1968,7 +1984,7 @@ router.post('/redemptions/:id/replace-media', async (req, res) => {
 
   const newFilename = `${id}_${Date.now()}.${ext}`;
   try { await fs.promises.writeFile(path.join(rewardDir, newFilename), buf); }
-  catch (e) { return res.status(500).json({ error: 'File write failed' }); }
+  catch (e) { return res.status(500).json({ error: res.locals.t('redemptions.error.writeFailed') }); }
 
   // Update DB first, then delete old file
   db.updateReward(id, streamerId, {
@@ -1991,7 +2007,7 @@ router.delete('/redemptions/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward) return res.status(404).json({ error: 'Not found' });
+  if (!reward) return res.status(404).json({ error: res.locals.t('redemptions.error.notFound') });
 
   // The reward is gone here only once Twitch no longer has it. If Twitch refuses,
   // the row is kept as delete_failed (listed with a retry, and redemptions of it are
@@ -2009,7 +2025,7 @@ router.post('/redemptions/:id/retry', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward) return res.status(404).json({ error: 'Not found' });
+  if (!reward) return res.status(404).json({ error: res.locals.t('redemptions.error.notFound') });
 
   const { retryPending } = require('../services/twitchRewards');
   const result = await retryPending(req.streamer, reward);
@@ -2025,7 +2041,7 @@ router.post('/redemptions/:id/test', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const streamerId = req.streamer.id;
   const reward = db.getRewardById(id, streamerId);
-  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: 'Not found' });
+  if (!reward || isPendingDelete(reward)) return res.status(404).json({ error: res.locals.t('redemptions.error.notFound') });
 
   const bus = require('../services/overlayBus');
   const fakeRedemptionId = `test-${id}-${Date.now()}`;
@@ -2112,13 +2128,14 @@ router.post('/giveaways/start', (req, res) => {
     });
     res.status(201).json(row);
   } catch (e) {
-    if (e.message === 'already_active') return res.status(409).json({ error: 'A giveaway is already active' });
-    if (e.message === 'invalid_keyword') return res.status(400).json({ error: 'Keyword must be 1-25 alphanumeric characters' });
-    if (e.message === 'invalid_duration') return res.status(400).json({ error: 'Duration must be between 30 and 86400 seconds' });
-    if (e.message === 'invalid_winners_count') return res.status(400).json({ error: 'Winners count must be between 1 and 10' });
-    if (e.message === 'invalid_prize') return res.status(400).json({ error: 'Prize must be 100 characters or fewer' });
+    const t = res.locals.t;
+    if (e.message === 'already_active') return res.status(409).json({ error: t('giveaways.error.alreadyActive') });
+    if (e.message === 'invalid_keyword') return res.status(400).json({ error: t('giveaways.error.invalidKeyword') });
+    if (e.message === 'invalid_duration') return res.status(400).json({ error: t('giveaways.error.invalidDuration') });
+    if (e.message === 'invalid_winners_count') return res.status(400).json({ error: t('giveaways.error.invalidWinners') });
+    if (e.message === 'invalid_prize') return res.status(400).json({ error: t('giveaways.error.invalidPrize') });
     console.error('[Giveaway] start error:', e.message);
-    res.status(500).json({ error: 'Internal error' });
+    res.status(500).json({ error: t('giveaways.error.internal') });
   }
 });
 
@@ -2126,7 +2143,7 @@ router.post('/giveaways/:id/close', (req, res) => {
   const streamerId = req.streamer.id;
   const id = parseInt(req.params.id, 10);
   const giveaway = db.getGiveawayById(id, streamerId);
-  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  if (!giveaway) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   const giveawayMgr = require('../services/giveawayManager');
   const result = giveawayMgr.closeGiveaway(streamerId, { silent: false });
   if (!result) {
@@ -2140,12 +2157,12 @@ router.post('/giveaways/:id/pick', (req, res) => {
   const streamerId = req.streamer.id;
   const id = parseInt(req.params.id, 10);
   const giveaway = db.getGiveawayById(id, streamerId);
-  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  if (!giveaway) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   const redraw = !!(req.body && req.body.redraw);
   const giveawayMgr = require('../services/giveawayManager');
   const result = giveawayMgr.pickWinners(id, streamerId, { redraw });
   if (result.error) return res.status(404).json({ error: result.error });
-  if (result.winners.length === 0) return res.json({ winners: [], message: 'No eligible entries' });
+  if (result.winners.length === 0) return res.json({ winners: [], message: res.locals.t('giveaways.error.noEligible') });
   res.json({ winners: result.winners });
 });
 
@@ -2153,7 +2170,7 @@ router.get('/giveaways/:id/entries', (req, res) => {
   const streamerId = req.streamer.id;
   const id = parseInt(req.params.id, 10);
   const giveaway = db.getGiveawayById(id, streamerId);
-  if (!giveaway) return res.status(404).json({ error: 'Not found' });
+  if (!giveaway) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   res.json({
     count: db.getEntryCount(id),
     entries: db.getEntries(id),
@@ -2166,8 +2183,8 @@ router.delete('/giveaways/:id', (req, res) => {
   const streamerId = req.streamer.id;
   const id = parseInt(req.params.id, 10);
   const giveaway = db.getGiveawayById(id, streamerId);
-  if (!giveaway) return res.status(404).json({ error: 'Not found' });
-  if (giveaway.status === 'open') return res.status(409).json({ error: 'Close the giveaway before deleting' });
+  if (!giveaway) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
+  if (giveaway.status === 'open') return res.status(409).json({ error: res.locals.t('giveaways.error.closeFirst') });
   db.deleteGiveaway(id, streamerId);
   res.json({ ok: true });
 });
@@ -2273,7 +2290,7 @@ router.post('/api/vtuber/models', async (req, res) => {
 
   try { await fs.promises.mkdir(modelDir, { recursive: true }); } catch (e) {}
   try { await fs.promises.writeFile(path.join(modelDir, filename), buf); }
-  catch (e) { return res.status(500).json({ error: 'Write failed' }); }
+  catch (e) { return res.status(500).json({ error: res.locals.t('dashboard.vtuber.writeFailed') }); }
 
   const result = db.addVtuberModel(req.streamer.id, originalName, 'custom', filename);
   const model = db.getVtuberModel(result.lastInsertRowid);

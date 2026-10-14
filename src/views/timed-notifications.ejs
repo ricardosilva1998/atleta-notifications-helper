@@ -1,4 +1,10 @@
-<%- include('header', { title: 'Sponsor Messages', streamer: streamer }) %>
+<%- include('header', { title: t('sponsors.title'), streamer: streamer }) %>
+<%
+  // A sentence with markup in the middle holds a {{name}} marker; this returns the
+  // text before and after it, so the markup stays out of the translation and all of
+  // it is still escaped.
+  const _around = (key, name, params) => t(key, Object.assign({}, params, { [name]: '\u0001' })).split('\u0001');
+%>
 
 <style>
   .sp-input {
@@ -68,12 +74,12 @@
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
-<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in">Sponsor Chat Messages</h2>
+<h2 style="margin: 16px 0 6px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('sponsors.heading') %></h2>
+<% const _intro = _around('sponsors.intro', 'link'); %>
 <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 28px;">
-  Send rotating sponsor messages to your Twitch chat at set intervals. For sponsor image overlays, use the
-  <a href="/dashboard/overlay-builder" style="color: var(--accent);">Overlay Builder</a> (Timed tab).
+  <%= _intro[0] %><a href="/dashboard/overlay-builder" style="color: var(--accent);"><%= t('sponsors.builderLink') %></a><%= _intro[1] %>
 </p>
 
 <div id="status-msg" class="status-msg"></div>
@@ -85,9 +91,9 @@
       <span style="width: 30px; height: 30px; background: rgba(145,70,255,0.12); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 1 4.93 19.07"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/></svg>
       </span>
-      Chat Settings
+      <%= t('sponsors.chatSettings') %>
     </h3>
-    <label class="toggle-pill" title="Enable Chat Messages">
+    <label class="toggle-pill" title="<%= t('sponsors.enableChat') %>">
       <input type="checkbox" id="chat-enabled" <%= streamer.sponsor_send_chat ? 'checked' : '' %>>
       <span class="toggle-pill-slider"></span>
     </label>
@@ -95,25 +101,25 @@
 
   <div class="settings-row">
     <div class="settings-row-label">
-      Enable Chat Messages
-      <div class="settings-row-sub">Automatically send sponsor messages to Twitch chat</div>
+      <%= t('sponsors.enableChat') %>
+      <div class="settings-row-sub"><%= t('sponsors.enableChatHint') %></div>
     </div>
   </div>
 
   <div class="settings-row">
     <div class="settings-row-label">
-      Interval Between Messages
-      <div class="settings-row-sub">How long to wait between each chat message</div>
+      <%= t('sponsors.interval') %>
+      <div class="settings-row-sub"><%= t('sponsors.intervalHint') %></div>
     </div>
     <select id="chat-interval" class="sp-input" style="width: auto; min-width: 160px;">
       <% [5,10,15,20,30].forEach(function(m){ %>
-        <option value="<%= m %>" <%= (streamer.sponsor_chat_interval_minutes || 10) == m ? 'selected' : '' %>>Every <%= m %> min</option>
+        <option value="<%= m %>" <%= (streamer.sponsor_chat_interval_minutes || 10) == m ? 'selected' : '' %>><%= t('sponsors.everyMin', { minutes: m }) %></option>
       <% }); %>
     </select>
   </div>
 
   <div style="margin-top: 20px;">
-    <button type="button" class="btn btn-primary" onclick="saveChatSettings()">Save Settings</button>
+    <button type="button" class="btn btn-primary" onclick="saveChatSettings()"><%= t('sponsors.saveSettings') %></button>
   </div>
 </div>
 
@@ -123,23 +129,23 @@
     <span style="width: 30px; height: 30px; background: rgba(145,70,255,0.12); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9146ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     </span>
-    Add Message
+    <%= t('sponsors.addMessage') %>
   </h3>
 
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
     <div>
-      <label class="sp-label">Message Text</label>
-      <input type="text" id="new-msg-text" class="sp-input" placeholder="e.g. Check out our sponsor Acme Corp!">
+      <label class="sp-label"><%= t('sponsors.messageText') %></label>
+      <input type="text" id="new-msg-text" class="sp-input" placeholder="<%= t('sponsors.messagePlaceholder') %>">
     </div>
     <div>
-      <label class="sp-label">URL <span style="font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted);">(optional)</span></label>
-      <input type="text" id="new-msg-url" class="sp-input" placeholder="e.g. https://acme.com">
+      <label class="sp-label"><%= t('sponsors.url') %> <span style="font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted);"><%= t('sponsors.optional') %></span></label>
+      <input type="text" id="new-msg-url" class="sp-input" placeholder="<%= t('sponsors.urlPlaceholder') %>">
     </div>
   </div>
 
   <button type="button" class="btn btn-primary" onclick="addMessage()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    Add Message
+    <%= t('sponsors.addMessage') %>
   </button>
 </div>
 
@@ -150,8 +156,8 @@
     <div class="empty-state-icon">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     </div>
-    <h4>No messages yet</h4>
-    <p>Add your first sponsor chat message above.</p>
+    <h4><%= t('sponsors.empty.title') %></h4>
+    <p><%= t('sponsors.empty.body') %></p>
   </div>
 
 <% } else { %>
@@ -159,7 +165,7 @@
   <div class="animate-in" id="messages-container">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
       <h3 style="font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em;">
-        Messages
+        <%= t('sponsors.messages') %>
         <span style="font-size: 12px; font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; margin-left: 6px; color: var(--text-muted); letter-spacing: 0;" id="msg-count"><%= messages.length %></span>
       </h3>
     </div>
@@ -168,7 +174,7 @@
     <div class="msg-card" id="msg-card-<%= m.id %>" style="position: relative;">
       <!-- Toggle in top right -->
       <div style="position: absolute; top: 12px; right: 12px;">
-        <label class="toggle-pill" title="<%= m.enabled ? 'Enabled' : 'Disabled' %>">
+        <label class="toggle-pill" title="<%= m.enabled ? t('sponsors.enabled') : t('sponsors.disabled') %>">
           <input type="checkbox" <%= m.enabled ? 'checked' : '' %> onchange="toggleMessage(<%= m.id %>, this.checked)">
           <span class="toggle-pill-slider"></span>
         </label>
@@ -187,39 +193,39 @@
       <div class="msg-card-footer">
         <button type="button" class="btn btn-secondary" onclick="toggleEdit(<%= m.id %>)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Edit
+          <%= t('sponsors.edit') %>
         </button>
 
         <button type="button" class="btn btn-secondary" id="test-btn-<%= m.id %>" onclick="testMessage(<%= m.id %>)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Test
+          <%= t('sponsors.test') %>
         </button>
 
         <div class="spacer"></div>
 
         <button type="button" class="btn btn-danger" style="padding: 8px 16px; font-size: 13px;" onclick="deleteMessage(<%= m.id %>)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 5px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          Delete
+          <%= t('sponsors.delete') %>
         </button>
       </div>
 
       <!-- Inline edit -->
       <div class="inline-edit-wrap" id="edit-<%= m.id %>">
         <div class="inline-edit-inner">
-          <h4>Edit Message</h4>
+          <h4><%= t('sponsors.editMessage') %></h4>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
             <div>
-              <label class="sp-label">Message Text</label>
+              <label class="sp-label"><%= t('sponsors.messageText') %></label>
               <input type="text" id="edit-text-<%= m.id %>" class="sp-input" value="<%= m.message_text %>">
             </div>
             <div>
-              <label class="sp-label">URL</label>
+              <label class="sp-label"><%= t('sponsors.url') %></label>
               <input type="text" id="edit-url-<%= m.id %>" class="sp-input" value="<%= m.url || '' %>" placeholder="https://...">
             </div>
           </div>
           <div style="display: flex; gap: 8px;">
-            <button type="button" class="btn btn-primary" style="padding: 9px 20px;" onclick="saveMessage(<%= m.id %>)">Save Changes</button>
-            <button type="button" class="btn btn-secondary" style="padding: 9px 20px;" onclick="toggleEdit(<%= m.id %>)">Cancel</button>
+            <button type="button" class="btn btn-primary" style="padding: 9px 20px;" onclick="saveMessage(<%= m.id %>)"><%= t('sponsors.saveChanges') %></button>
+            <button type="button" class="btn btn-secondary" style="padding: 9px 20px;" onclick="toggleEdit(<%= m.id %>)"><%= t('sponsors.cancel') %></button>
           </div>
         </div>
       </div>
@@ -230,6 +236,18 @@
 <% } %>
 
 <script>
+// Texts for this script, translated on the server
+const T = <%- JSON.stringify({
+  saved: t('sponsors.saved'),
+  textRequired: t('sponsors.error.textRequired'),
+  sending: t('sponsors.sending'),
+  sent: t('sponsors.sent'),
+  failed: t('sponsors.failed'),
+  error: t('sponsors.errorShort'),
+  deleted: t('sponsors.deleted'),
+  confirmDelete: t('sponsors.confirmDelete'),
+}).replace(/</g, '\\u003c') %>;
+
 function getSocialIcon(url) {
   if (!url) return '';
   const u = url.toLowerCase();
@@ -269,13 +287,13 @@ async function saveChatSettings() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: enabled ? '1' : '', interval_minutes: interval }),
   });
-  showStatus('Settings saved!');
+  showStatus(T.saved);
 }
 
 async function addMessage() {
   const text = document.getElementById('new-msg-text').value.trim();
   const url = document.getElementById('new-msg-url').value.trim();
-  if (!text) return alert('Please enter a message');
+  if (!text) return alert(T.textRequired);
   const res = await fetch('/dashboard/sponsor-messages/add', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -288,7 +306,7 @@ async function addMessage() {
 async function saveMessage(id) {
   const text = document.getElementById('edit-text-' + id).value.trim();
   const url = document.getElementById('edit-url-' + id).value.trim();
-  if (!text) return alert('Message text is required');
+  if (!text) return alert(T.textRequired);
   await fetch(`/dashboard/sponsor-messages/${id}/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -312,31 +330,32 @@ async function toggleMessage(id, enabled) {
 
 async function testMessage(id) {
   const btn = document.getElementById('test-btn-' + id);
+  const original = btn.innerHTML; // the play icon and the "Test" label as the page rendered them
   btn.disabled = true;
-  btn.textContent = 'Sending...';
-  const resetButton = () => { btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Test'; btn.disabled = false; };
+  btn.textContent = T.sending;
+  const resetButton = () => { btn.innerHTML = original; btn.disabled = false; };
   try {
     const res = await fetch(`/dashboard/sponsor-messages/${id}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
     const data = await res.json().catch(() => ({}));
     if (data.ok) {
-      btn.textContent = 'Sent!';
+      btn.textContent = T.sent;
     } else {
-      btn.textContent = 'Failed';
+      btn.textContent = T.failed;
       if (data.error) showStatus(data.error);
     }
     setTimeout(resetButton, 2000);
-  } catch(e) { btn.textContent = 'Error'; setTimeout(resetButton, 2000); }
+  } catch(e) { btn.textContent = T.error; setTimeout(resetButton, 2000); }
 }
 
 async function deleteMessage(id) {
-  if (!confirm('Delete this message?')) return;
+  if (!confirm(T.confirmDelete)) return;
   await fetch(`/dashboard/sponsor-messages/${id}/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
   const card = document.getElementById('msg-card-' + id);
   if (card) card.remove();
-  showStatus('Message deleted');
+  showStatus(T.deleted);
 }
 </script>
 
