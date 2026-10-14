@@ -8,6 +8,11 @@ const { isStreamerDisabled } = require('./streamerAccess');
 const { createMessageDedupe } = require('./messageDedupe');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
+const SUBSCRIPTIONS_URL = 'https://api.twitch.tv/helix/eventsub/subscriptions';
+
+// A subscribe request Twitch never answers must not hold the subscribe loop, and
+// with it the whole session, for good.
+const SUBSCRIBE_TIMEOUT_MS = 10_000;
 
 // Twitch's default keepalive. A session that has been silent for its keepalive
 // plus this grace is treated as lost.
@@ -338,30 +343,33 @@ class EventSubClient {
       transport: { method: 'websocket', session_id: sessionId },
     };
 
-    let res = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+    const post = (bearer) => fetch(SUBSCRIPTIONS_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${bearer}`,
         'Client-Id': config.twitch.clientId,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(SUBSCRIBE_TIMEOUT_MS),
     });
+
+    let res;
+    try {
+      res = await post(token);
+    } catch (err) {
+      // No answer in time, or the network failed: this event type is not
+      // subscribed, and the others still get their turn.
+      console.error(`[EventSub] Subscribe request for ${subType.type} failed for streamer ${this.streamerId}:`, err.message);
+      return false;
+    }
 
     // Retry with refreshed token on 401
     if (res.status === 401) {
       try {
         streamer = db.getStreamerById(this.streamerId);
         token = await refreshBroadcasterToken(streamer);
-        res = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Client-Id': config.twitch.clientId,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
+        res = await post(token);
       } catch (err) {
         console.error(`[EventSub] Token refresh failed for streamer ${this.streamerId}:`, err.message);
         if (err.code === 'INVALID_REFRESH_TOKEN') this.markNeedsReauth();

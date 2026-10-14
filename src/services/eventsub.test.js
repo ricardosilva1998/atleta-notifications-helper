@@ -79,7 +79,7 @@ beforeEach(() => {
   saved.fetch = global.fetch;
   subscribeCalls = [];
   global.fetch = async (url, opts) => {
-    subscribeCalls.push({ url, body: JSON.parse(opts.body) });
+    subscribeCalls.push({ url, body: JSON.parse(opts.body), signal: opts.signal, auth: opts.headers && opts.headers.Authorization });
     return { ok: true, status: 202, json: async () => ({}) };
   };
   sockets.length = 0;
@@ -243,6 +243,60 @@ describe('a reconnect requested by Twitch (session_reconnect)', () => {
     assert.deepEqual(followAlerts(), []);
     first.receive(follow('FromTheSession'));
     assert.deepEqual(followAlerts(), ['FromTheSession']);
+  });
+});
+
+// ── Subscribe requests ───────────────────────────────────────────────────
+
+describe('the subscribe requests to Twitch', () => {
+  test('each one has a timeout, so a Twitch that never answers cannot hold the subscribe loop', async () => {
+    await connected();
+    assert.equal(subscribeCalls.length, 7);
+    for (const call of subscribeCalls) {
+      assert.ok(call.signal instanceof AbortSignal, call.body.type);
+      assert.equal(call.signal.aborted, false);
+    }
+  });
+
+  test('one that times out leaves only its own event type unsubscribed; the rest are still made', async () => {
+    const answer = global.fetch;
+    let requests = 0;
+    global.fetch = async (url, opts) => {
+      requests += 1;
+      if (requests === 3) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      return answer(url, opts);
+    };
+    const logged = [];
+    console.error = (...args) => logged.push(args.join(' '));
+
+    await connected();
+
+    assert.equal(requests, 7, 'every event type was tried');
+    assert.equal(subscribeCalls.length, 6, 'all but the one that timed out were subscribed');
+    assert.equal(logged.filter((line) => /Subscribe request for channel\.subscription\.gift failed for streamer 1/.test(line)).length, 1, logged.join('\n'));
+    assert.ok(!logged.some((line) => /Could not handle a message/.test(line)), 'the failure did not escape the subscribe loop');
+  });
+
+  test('after a 401 the retry with a refreshed token has a timeout too', async () => {
+    const answer = global.fetch;
+    let requests = 0;
+    global.fetch = async (url, opts) => {
+      requests += 1;
+      if (requests === 1) {
+        subscribeCalls.push({ url, body: JSON.parse(opts.body), signal: opts.signal, auth: opts.headers.Authorization });
+        return { ok: false, status: 401, json: async () => ({ message: 'Invalid OAuth token' }) };
+      }
+      return answer(url, opts);
+    };
+
+    await connected();
+
+    assert.equal(subscribeCalls.length, 8, 'the first type was asked twice');
+    const [stale, retry] = subscribeCalls;
+    assert.equal(stale.auth, 'Bearer synthetic-token');
+    assert.equal(retry.auth, 'Bearer synthetic-fresh-token');
+    assert.ok(retry.signal instanceof AbortSignal);
+    assert.equal(retry.signal.aborted, false);
   });
 });
 
