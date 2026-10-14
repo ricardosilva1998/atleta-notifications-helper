@@ -1126,8 +1126,10 @@ describe('the event connections follow the overlay and the chatbot switches', ()
   const STARTED = [['eventsub.start'], ['se.start']];
   const SPONSORS_STARTED = [['sponsors.restart'], ['sponsors.restartChat']];
   const forId = (id, calls) => calls.map(([name]) => [name, id]);
-  // A browser's form always sends its text fields; a test form with none would have no body to read.
-  const saveChatbot = (id, form) => request('POST', '/dashboard/chatbot', { streamer: id, form: { chat_follow_template: '', ...form } });
+  // Two forms post to /dashboard/chatbot and name their part: the Connection tab's switch (form=connection; an
+  // unchecked switch is not sent: off) and the Event Messages tab (form=events).
+  const saveChatbot = (id, form) => request('POST', '/dashboard/chatbot', { streamer: id, form: { form: 'connection', ...form } });
+  const saveMessages = (id, form) => request('POST', '/dashboard/chatbot', { streamer: id, form: { form: 'events', chat_follow_template: '', ...form } });
   const saveOverlay = (id, form) => request('POST', '/dashboard/overlay', { streamer: id, form: { overlay_volume: '0.8', ...form } });
   const make = (over = {}) => addStreamer({ overlay_enabled: 0, chatbot_enabled: 0, twitch_username: `synthetic_conn_${counter + 1}`, broadcaster_access_token: 'tok', streamelements_jwt: JWT, ...over });
 
@@ -1171,12 +1173,51 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       assert.deepEqual(sponsorCalls, []);
     });
 
-    test('saving it again while it stays on (a template edit) does not reconnect anything', async () => {
+    test('posting the switch again while it stays on does not reconnect anything', async () => {
       const id = make({ chatbot_enabled: 1 });
-      await saveChatbot(id, { chatbot_enabled: '1', chat_follow_enabled: '1', chat_follow_template: 'Thanks {username}!' });
-      assert.equal(db.getStreamerById(id).chat_follow_template, 'Thanks {username}!');
+      await saveChatbot(id, { chatbot_enabled: '1' });
+      assert.equal(db.getStreamerById(id).chatbot_enabled, 1);
       assert.deepEqual(managerCalls, [['chat.start', id]]);
       assert.deepEqual(sponsorCalls, []);
+    });
+
+    test('the switch changes only the switch: the thank-you messages and their switches stay as saved', async () => {
+      const id = make({ chat_follow_enabled: 0, chat_follow_template: 'Keep me, {username}' });
+      await saveChatbot(id, { chatbot_enabled: '1' });
+      const row = db.getStreamerById(id);
+      assert.equal(row.chatbot_enabled, 1);
+      assert.equal(row.chat_follow_enabled, 0);
+      assert.equal(row.chat_follow_template, 'Keep me, {username}');
+    });
+
+    test('saving the thank-you messages keeps the chatbot on and leaves chat and the connections alone', async () => {
+      const id = make({ chatbot_enabled: 1 });
+      const res = await saveMessages(id, { chat_follow_enabled: '1', chat_follow_template: 'Thanks {username}!' });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/dashboard/chatbot?tab=events');
+      const row = db.getStreamerById(id);
+      assert.equal(row.chatbot_enabled, 1, 'the chatbot stays on');
+      assert.equal(row.chat_follow_enabled, 1);
+      assert.equal(row.chat_follow_template, 'Thanks {username}!');
+      assert.equal(row.chat_sub_enabled, 0, 'an unchecked message switch is off');
+      assert.deepEqual(managerCalls, [], 'the bot stays in chat');
+      assert.deepEqual(sponsorCalls, []);
+    });
+
+    test('saving the thank-you messages never switches the chatbot on either', async () => {
+      const id = make({ chatbot_enabled: 0 });
+      await saveMessages(id, { chatbot_enabled: '1', chat_follow_template: 'Hi {username}' });
+      assert.equal(db.getStreamerById(id).chatbot_enabled, 0);
+      assert.deepEqual(managerCalls, []);
+    });
+
+    test('a post that names no part (a page opened before the forms named theirs) saves the messages and keeps the chatbot as it was', async () => {
+      const id = make({ chatbot_enabled: 1 });
+      await request('POST', '/dashboard/chatbot', { streamer: id, form: { chat_follow_template: 'Old page {username}' } });
+      const row = db.getStreamerById(id);
+      assert.equal(row.chatbot_enabled, 1);
+      assert.equal(row.chat_follow_template, 'Old page {username}');
+      assert.deepEqual(managerCalls, []);
     });
 
     test('switching it off with the overlay off leaves chat and stops EventSub, StreamElements and the sponsor rotation', async () => {

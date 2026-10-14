@@ -1215,24 +1215,31 @@ router.get('/chatbot', (req, res) => {
   res.render('chatbot-config', { streamer, commands, botConnected, botUsername, bannedWords, discordChannels, commandError });
 });
 
-// Save chatbot settings
+// Save chatbot settings. Two forms post here and each names its part: the Connection tab's switch
+// (form=connection) and the Event Messages tab (form=events). Each changes only its own fields, so saving
+// the thank-you messages never switches the chatbot off. A post that names no part (a page opened before the
+// forms named theirs) is a messages save.
 router.post('/chatbot', (req, res) => {
-  const b = req.body;
-  db.updateChatbotConfig(req.streamer.id, {
-    chatbot_enabled: b.chatbot_enabled ? 1 : 0,
-    chat_follow_enabled: b.chat_follow_enabled ? 1 : 0,
-    chat_sub_enabled: b.chat_sub_enabled ? 1 : 0,
-    chat_giftsub_enabled: b.chat_giftsub_enabled ? 1 : 0,
-    chat_bits_enabled: b.chat_bits_enabled ? 1 : 0,
-    chat_donation_enabled: b.chat_donation_enabled ? 1 : 0,
-    chat_raid_enabled: b.chat_raid_enabled ? 1 : 0,
-    chat_follow_template: b.chat_follow_template || '',
-    chat_sub_template: b.chat_sub_template || '',
-    chat_giftsub_template: b.chat_giftsub_template || '',
-    chat_bits_template: b.chat_bits_template || '',
-    chat_donation_template: b.chat_donation_template || '',
-    chat_raid_template: b.chat_raid_template || '',
-  });
+  const b = req.body || {};
+  if (b.form !== 'connection') {
+    db.updateChatbotConfig(req.streamer.id, {
+      chat_follow_enabled: b.chat_follow_enabled ? 1 : 0,
+      chat_sub_enabled: b.chat_sub_enabled ? 1 : 0,
+      chat_giftsub_enabled: b.chat_giftsub_enabled ? 1 : 0,
+      chat_bits_enabled: b.chat_bits_enabled ? 1 : 0,
+      chat_donation_enabled: b.chat_donation_enabled ? 1 : 0,
+      chat_raid_enabled: b.chat_raid_enabled ? 1 : 0,
+      chat_follow_template: b.chat_follow_template || '',
+      chat_sub_template: b.chat_sub_template || '',
+      chat_giftsub_template: b.chat_giftsub_template || '',
+      chat_bits_template: b.chat_bits_template || '',
+      chat_donation_template: b.chat_donation_template || '',
+      chat_raid_template: b.chat_raid_template || '',
+    });
+    return res.redirect('/dashboard/chatbot?tab=events');
+  }
+
+  db.updateChatbotConfig(req.streamer.id, { chatbot_enabled: b.chatbot_enabled ? 1 : 0 });
 
   // Start/stop chat bot
   try {

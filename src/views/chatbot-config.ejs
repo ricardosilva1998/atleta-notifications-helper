@@ -94,19 +94,9 @@
 <div class="tab-content" id="tab-connection">
 
   <div class="card animate-in">
+    <%# This form saves only the chatbot switch; the Event Messages tab saves the messages (the route reads `form`). %>
     <form method="POST" action="/dashboard/chatbot">
-      <input type="hidden" name="chat_follow_enabled" value="<%= streamer.chat_follow_enabled ? '1' : '' %>">
-      <input type="hidden" name="chat_sub_enabled" value="<%= streamer.chat_sub_enabled ? '1' : '' %>">
-      <input type="hidden" name="chat_giftsub_enabled" value="<%= streamer.chat_giftsub_enabled ? '1' : '' %>">
-      <input type="hidden" name="chat_bits_enabled" value="<%= streamer.chat_bits_enabled ? '1' : '' %>">
-      <input type="hidden" name="chat_donation_enabled" value="<%= streamer.chat_donation_enabled ? '1' : '' %>">
-      <input type="hidden" name="chat_raid_enabled" value="<%= streamer.chat_raid_enabled ? '1' : '' %>">
-      <input type="hidden" name="chat_follow_template" value="<%= streamer.chat_follow_template || '' %>">
-      <input type="hidden" name="chat_sub_template" value="<%= streamer.chat_sub_template || '' %>">
-      <input type="hidden" name="chat_giftsub_template" value="<%= streamer.chat_giftsub_template || '' %>">
-      <input type="hidden" name="chat_bits_template" value="<%= streamer.chat_bits_template || '' %>">
-      <input type="hidden" name="chat_donation_template" value="<%= streamer.chat_donation_template || '' %>">
-      <input type="hidden" name="chat_raid_template" value="<%= streamer.chat_raid_template || '' %>">
+      <input type="hidden" name="form" value="connection">
     <div style="display: flex; align-items: center; justify-content: space-between;">
       <h3>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -154,6 +144,7 @@
 <div class="tab-content" id="tab-events">
 
   <form method="POST" action="/dashboard/chatbot">
+    <input type="hidden" name="form" value="events">
 
     <!-- Event Templates -->
     <div class="card animate-in animate-in-delay-1">
