@@ -298,3 +298,95 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     assert.equal(db.getWatchedYoutubeChannelsForGuild(G1, streamerA)[0].live_channel_id, 'L3');
   });
 });
+
+describe('the channels the pollers watch', () => {
+  const G1 = '400000000000000031';
+  const G2 = '400000000000000032';
+  const names = (rows, key) => rows.map((r) => r[key]).sort();
+  const disable = (id) => db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(id);
+
+  test('a Twitch channel watched in several servers or by several streamers is listed once', () => {
+    db.addWatchedChannel(G1, streamerA, 'shared_channel', '1', null, true, false);
+    db.addWatchedChannel(G2, streamerA, 'shared_channel', '1', null, true, false);
+    db.addWatchedChannel(G1, streamerB, 'shared_channel', '1', null, true, false);
+    db.addWatchedChannel(G1, streamerA, 'solo_channel', '1', null, true, false);
+    assert.deepEqual(names(db.getAllUniqueWatchedChannels(), 'twitch_username'), ['shared_channel', 'solo_channel']);
+  });
+
+  test('a channel only a disabled account watches is left out; one an active account also watches stays', () => {
+    db.addWatchedChannel(G1, streamerA, 'disabled_only', '1', null, true, false);
+    db.addWatchedChannel(G1, streamerA, 'both_watch', '1', null, true, false);
+    db.addWatchedChannel(G1, streamerB, 'both_watch', '1', null, true, false);
+    disable(streamerA);
+    assert.deepEqual(names(db.getAllUniqueWatchedChannels(), 'twitch_username'), ['both_watch']);
+    assert.deepEqual(db.getWatchersForChannel('both_watch').map((w) => w.streamer_id), [streamerB], 'the watchers agree with the list');
+    assert.deepEqual(db.getWatchersForChannel('disabled_only'), []);
+  });
+
+  test('a watcher that is switched off does not keep its channel in the list', () => {
+    db.addWatchedChannel(G1, streamerA, 'paused_channel', '1', null, true, false);
+    db.db.prepare('UPDATE watched_channels SET enabled = 0 WHERE twitch_username = ?').run('paused_channel');
+    assert.deepEqual(db.getAllUniqueWatchedChannels(), []);
+  });
+
+  test('the same rules hold for YouTube channels', () => {
+    db.addWatchedYoutubeChannel(G1, streamerA, 'UCshared', 'Shared', 'V1', 'L1', null);
+    db.addWatchedYoutubeChannel(G2, streamerA, 'UCshared', 'Shared', 'V1', 'L1', null);
+    db.addWatchedYoutubeChannel(G1, streamerB, 'UCshared', 'Shared', 'V1', 'L1', null);
+    db.addWatchedYoutubeChannel(G1, streamerA, 'UCdisabledonly', 'Mine', 'V1', 'L1', null);
+    assert.deepEqual(names(db.getAllUniqueWatchedYoutubeChannels(), 'youtube_channel_id'), ['UCdisabledonly', 'UCshared']);
+
+    disable(streamerA);
+    assert.deepEqual(names(db.getAllUniqueWatchedYoutubeChannels(), 'youtube_channel_id'), ['UCshared']);
+    assert.deepEqual(db.getYoutubeWatchersForChannel('UCshared').map((w) => w.streamer_id), [streamerB]);
+  });
+});
+
+describe('channel_state: what the live poller remembers about a broadcast', () => {
+  const login = (suffix) => `state_probe_${suffix}`;
+
+  test('a fresh database has the stream id and the missed-poll count', () => {
+    const cols = db.db.pragma('table_info(channel_state)').map((c) => c.name);
+    assert.ok(cols.includes('last_stream_id'));
+    assert.ok(cols.includes('offline_polls'));
+    assert.deepEqual(migrationErrors.filter((m) => /channel_state|last_stream_id|offline_polls/i.test(m)), []);
+  });
+
+  test('a new channel starts with no stream id and no missed polls', () => {
+    const state = db.getChannelState(login('new'));
+    assert.equal(state.last_stream_id, null);
+    assert.equal(state.offline_polls, 0);
+  });
+
+  test('the stream id and the count are saved, and an update that leaves them out keeps them', () => {
+    const name = login('keep');
+    db.getChannelState(name);
+    db.updateChannelState(name, { is_live: 1, last_stream_id: '40000000001', offline_polls: 1 });
+    db.updateChannelState(name, { stream_title: 'Race night' });
+    const state = db.getChannelState(name);
+    assert.equal(state.last_stream_id, '40000000001');
+    assert.equal(state.offline_polls, 1);
+    assert.equal(state.stream_title, 'Race night');
+  });
+
+  test('a count of 0 is written: it is a value, not "no change"', () => {
+    const name = login('zero');
+    db.getChannelState(name);
+    db.updateChannelState(name, { offline_polls: 1 });
+    db.updateChannelState(name, { offline_polls: 0 });
+    assert.equal(db.getChannelState(name).offline_polls, 0);
+  });
+
+  test('ending a session clears the session and the missed polls but keeps the last stream id', () => {
+    const name = login('end');
+    db.getChannelState(name);
+    db.updateChannelState(name, { is_live: 1, last_stream_id: '40000000002', offline_polls: 1, stream_title: 'T', stream_started_at: '2026-10-13T10:00:00Z', peak_viewers: 55 });
+    db.clearStreamSession(name);
+    const state = db.getChannelState(name);
+    assert.equal(state.stream_title, null);
+    assert.equal(state.stream_started_at, null);
+    assert.equal(state.peak_viewers, 0);
+    assert.equal(state.offline_polls, 0);
+    assert.equal(state.last_stream_id, '40000000002', 'kept: it is how the same broadcast is recognised if it comes back');
+  });
+});

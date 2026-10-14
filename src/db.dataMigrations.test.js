@@ -119,3 +119,42 @@ test('on an existing database the switch goes on once for every streamer with an
     assert.equal(db.getStreamerById(ids.enabledReward).cp_rewards_enabled, 0, 'a later boot does not switch it on again');
   });
 });
+
+test('a database from before the live poller kept a stream id gets the two columns on the next boot, keeping its rows', () => {
+  const file = path.join(tmpDir, 'before-stream-id.db');
+  boot(file); // the schema production will have
+
+  // What production has today: channel_state without the two columns, with a channel live.
+  const raw = new RealDatabase(file);
+  try {
+    raw.exec('ALTER TABLE channel_state DROP COLUMN last_stream_id');
+    raw.exec('ALTER TABLE channel_state DROP COLUMN offline_polls');
+    raw.prepare("INSERT INTO channel_state (twitch_username, is_live, stream_title, peak_viewers) VALUES ('live_channel', 1, 'Race night', 42)").run();
+  } finally {
+    raw.close();
+  }
+
+  const stateErrors = (errors) => errors.filter((line) => /channel_state|last_stream_id|offline_polls/i.test(line));
+
+  const errors = boot(file, (db) => {
+    const cols = db.db.pragma('table_info(channel_state)').map((c) => c.name);
+    assert.ok(cols.includes('last_stream_id'));
+    assert.ok(cols.includes('offline_polls'));
+    const row = db.getChannelState('live_channel');
+    assert.equal(row.is_live, 1);
+    assert.equal(row.stream_title, 'Race night');
+    assert.equal(row.peak_viewers, 42);
+    assert.equal(row.last_stream_id, null, 'unknown: the poller learns it from the next poll');
+    assert.equal(row.offline_polls, 0);
+    db.updateChannelState('live_channel', { last_stream_id: '123', offline_polls: 1 });
+  });
+  assert.deepEqual(stateErrors(errors), []);
+
+  // And a second boot changes nothing.
+  const again = boot(file, (db) => {
+    const row = db.getChannelState('live_channel');
+    assert.equal(row.last_stream_id, '123');
+    assert.equal(row.offline_polls, 1);
+  });
+  assert.deepEqual(stateErrors(again), []);
+});

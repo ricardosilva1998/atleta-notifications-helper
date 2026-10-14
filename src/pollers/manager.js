@@ -12,80 +12,100 @@ const tiktokFeed = require('./tiktokFeed');
 const twitterFeed = require('./twitterFeed');
 const iracingResults = require('./iracingResults');
 const iracing = require('../services/iracing');
-const { getFollowerCount, getSubscribers } = require('../services/twitch');
+const { getFollowerCount, getSubscriberCount, getStreams, STREAMS_PER_REQUEST } = require('../services/twitch');
+const { chunk } = require('../services/chunk');
+const { exclusiveRun } = require('./exclusiveRun');
+const { planMilestoneCheck } = require('./milestones');
 
 // --- Twitch polling (channel-centric) ---
 
+// Whether the watched channels are live, a batch of them per Twitch request:
+// each channel is asked about once, however many servers watch it (one request
+// per channel per minute used up the shared app token's budget).
 async function pollAllTwitchLive() {
-  const channels = db.getAllUniqueWatchedChannels();
-  if (channels.length > 0 && !pollAllTwitchLive._logged) {
-    console.log(`[TwitchLive] Polling ${channels.length} channels: ${channels.map(c => c.twitch_username).join(', ')}`);
+  const logins = [...new Set(db.getAllUniqueWatchedChannels().map((c) => String(c.twitch_username).toLowerCase()))];
+  if (logins.length > 0 && !pollAllTwitchLive._logged) {
+    console.log(`[TwitchLive] Polling ${logins.length} channels: ${logins.join(', ')}`);
     pollAllTwitchLive._logged = true;
   }
-  for (const { twitch_username } of channels) {
+
+  for (const batch of chunk(logins, STREAMS_PER_REQUEST)) {
+    let streams;
     try {
-      const state = db.getChannelState(twitch_username);
-
-      // Find a broadcaster token from any watcher of this channel
-      let broadcasterToken = null;
-      const channelWatchers = db.getWatchersForChannel(twitch_username);
-      for (const w of channelWatchers) {
-        const streamer = db.getStreamerById(w.streamer_id);
-        if (streamer?.broadcaster_access_token) {
-          broadcasterToken = streamer.broadcaster_access_token;
-          break;
-        }
-      }
-
-      const result = await twitchLive.check(twitch_username, state, broadcasterToken);
-      if (!result) {
-        // Channel is still in same state — check milestones if live
-        if (state.is_live) {
-          await checkMilestones(twitch_username, state);
-        }
-        continue;
-      }
-
-      if (result.stateUpdate) {
-        db.updateChannelState(twitch_username, result.stateUpdate);
-        if (result.stateUpdate.is_live === 1) {
-          console.log(`[TwitchLive] ${twitch_username} went LIVE — "${result.stateUpdate.stream_title}" (${result.stateUpdate.stream_category})`);
-        }
-      }
-      if (result.clearSession) {
-        console.log(`[TwitchLive] ${twitch_username} went OFFLINE — clearing session`);
-        db.clearStreamSession(twitch_username);
-      }
-
-      // Go-live notification (existing behavior)
-      if (result.notify) {
-        const watchers = db.getWatchersForChannel(twitch_username).filter((w) => w.notify_live && w.live_channel_id);
-        for (const w of watchers) {
-          try {
-            await sendNotification(w.live_channel_id, result.embed, {
-              streamerId: w.streamer_id,
-              guildId: w.guild_id,
-              type: 'twitch_live',
-            });
-          } catch (e) {
-            console.error(`[TwitchLive] Send failed for ${twitch_username} to ${w.guild_id}: ${e.message}`);
-          }
-        }
-      }
-
-      // Stream recap on offline
-      if (result.recapData) {
-        console.log(`[Recap] ${twitch_username} went offline — duration: ${Math.floor(result.recapData.duration / 60)}m, clips: ${result.recapData.clips.length}`);
-        await sendRecaps(twitch_username, result.recapData);
-      }
-
-      // Check milestones when channel is live
-      if (result.stateUpdate?.is_live === 1) {
-        await checkMilestones(twitch_username, db.getChannelState(twitch_username));
-      }
+      streams = await getStreams(batch);
     } catch (error) {
-      console.error(`[TwitchLive] Error for ${twitch_username}: ${error.message}`);
+      // A request that failed says nothing about whether these channels are
+      // live: they keep their stored state until the next poll.
+      console.error(`[TwitchLive] Could not check ${batch.length} channel(s): ${error.message}`);
+      continue;
     }
+    for (const login of batch) {
+      try {
+        await pollTwitchLiveChannel(login, streams.get(login) || null);
+      } catch (error) {
+        console.error(`[TwitchLive] Error for ${login}: ${error.message}`);
+      }
+    }
+  }
+}
+
+// A broadcaster token from any watcher of the channel.
+function findBroadcasterToken(twitchUsername) {
+  for (const w of db.getWatchersForChannel(twitchUsername)) {
+    const streamer = db.getStreamerById(w.streamer_id);
+    if (streamer?.broadcaster_access_token) return streamer.broadcaster_access_token;
+  }
+  return null;
+}
+
+// `stream` is what Twitch answered for the channel: the live stream, or null.
+async function pollTwitchLiveChannel(twitchUsername, stream) {
+  const state = db.getChannelState(twitchUsername);
+  // The token is only used for the follower count of a recap.
+  const broadcasterToken = state.is_live ? findBroadcasterToken(twitchUsername) : null;
+
+  const result = await twitchLive.check(twitchUsername, state, broadcasterToken, stream);
+  if (!result) return;
+
+  // What was learned is stored before anything is posted, and the old
+  // broadcast's session is cleared before a new one's is stored.
+  if (result.clearSession) db.clearStreamSession(twitchUsername);
+  if (result.stateUpdate) db.updateChannelState(twitchUsername, result.stateUpdate);
+
+  if (result.kind === 'started' || result.kind === 'replaced') {
+    console.log(`[TwitchLive] ${twitchUsername} went LIVE — "${result.stateUpdate.stream_title}" (${result.stateUpdate.stream_category})`);
+  } else if (result.kind === 'resumed') {
+    console.log(`[TwitchLive] ${twitchUsername} is live again with the broadcast announced before — not announcing it twice`);
+  } else if (result.kind === 'ended') {
+    console.log(`[TwitchLive] ${twitchUsername} went OFFLINE — clearing session`);
+  }
+
+  // Recap of the broadcast that ended; when another began meanwhile, it comes
+  // before that one's announcement.
+  if (result.recapData) {
+    console.log(`[Recap] ${twitchUsername} went offline — duration: ${Math.floor(result.recapData.duration / 60)}m, clips: ${result.recapData.clips.length}`);
+    await sendRecaps(twitchUsername, result.recapData);
+  }
+
+  // Go-live notification
+  if (result.notify) {
+    const watchers = db.getWatchersForChannel(twitchUsername).filter((w) => w.notify_live && w.live_channel_id);
+    for (const w of watchers) {
+      try {
+        await sendNotification(w.live_channel_id, result.embed, {
+          streamerId: w.streamer_id,
+          guildId: w.guild_id,
+          type: 'twitch_live',
+        });
+      } catch (e) {
+        console.error(`[TwitchLive] Send failed for ${twitchUsername} to ${w.guild_id}: ${e.message}`);
+      }
+    }
+  }
+
+  // Milestones are looked at when a broadcast starts.
+  if (result.kind === 'started' || result.kind === 'replaced') {
+    await checkMilestones(twitchUsername, db.getChannelState(twitchUsername));
   }
 }
 
@@ -121,23 +141,6 @@ async function sendRecaps(twitchUsername, recapData) {
   }
 }
 
-function getFollowerMilestone(count) {
-  if (count < 1000) return Math.floor(count / 100) * 100;
-  if (count < 10000) return Math.floor(count / 500) * 500;
-  return Math.floor(count / 1000) * 1000;
-}
-
-const SUB_MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
-
-function getSubMilestone(count) {
-  let milestone = 0;
-  for (const m of SUB_MILESTONES) {
-    if (count >= m) milestone = m;
-    else break;
-  }
-  return milestone;
-}
-
 async function checkMilestones(twitchUsername, channelState) {
   const broadcasterId = channelState.twitch_broadcaster_id;
   if (!broadcasterId) return;
@@ -164,45 +167,39 @@ async function checkMilestones(twitchUsername, channelState) {
 
   try {
     const followerCount = await getFollowerCount(broadcasterId, streamer.broadcaster_access_token);
-    const currentFollowerMilestone = getFollowerMilestone(followerCount);
-
-    if (currentFollowerMilestone > milestones.last_follower_milestone && currentFollowerMilestone > 0) {
-      console.log(`[Milestones] ${twitchUsername} hit ${currentFollowerMilestone} followers!`);
+    const followers = planMilestoneCheck('follower', followerCount, milestones);
+    if (followers.firstLook) {
+      console.log(`[Milestones] ${twitchUsername}: ${followerCount} followers recorded as the starting point`);
+    }
+    if (followers.announce) {
+      console.log(`[Milestones] ${twitchUsername} hit ${followers.announce} followers!`);
       const embed = buildMilestoneEmbed({
         twitchUsername,
         milestoneType: 'follower',
-        count: currentFollowerMilestone,
+        count: followers.announce,
       });
       await sendMilestoneNotifications(twitchUsername, watchers, embed);
-      db.updateChannelMilestones(twitchUsername, {
-        last_follower_count: followerCount,
-        last_follower_milestone: currentFollowerMilestone,
-      });
-    } else {
-      db.updateChannelMilestones(twitchUsername, { last_follower_count: followerCount });
     }
+    db.updateChannelMilestones(twitchUsername, followers.update);
 
-    // Subscriber milestones
+    // Subscriber milestones. Twitch states the total on every page of the list,
+    // so one request for a single entry gives the count.
     try {
-      const subs = await getSubscribers(broadcasterId, streamer.broadcaster_access_token);
-      const subCount = subs.length;
-      const currentSubMilestone = getSubMilestone(subCount);
-
-      if (currentSubMilestone > milestones.last_subscriber_milestone && currentSubMilestone > 0) {
-        console.log(`[Milestones] ${twitchUsername} hit ${currentSubMilestone} subscribers!`);
+      const subCount = await getSubscriberCount(broadcasterId, streamer.broadcaster_access_token);
+      const subscribers = planMilestoneCheck('subscriber', subCount, milestones);
+      if (subscribers.firstLook) {
+        console.log(`[Milestones] ${twitchUsername}: ${subCount} subscribers recorded as the starting point`);
+      }
+      if (subscribers.announce) {
+        console.log(`[Milestones] ${twitchUsername} hit ${subscribers.announce} subscribers!`);
         const embed = buildMilestoneEmbed({
           twitchUsername,
           milestoneType: 'subscriber',
-          count: currentSubMilestone,
+          count: subscribers.announce,
         });
         await sendMilestoneNotifications(twitchUsername, watchers, embed);
-        db.updateChannelMilestones(twitchUsername, {
-          last_subscriber_count: subCount,
-          last_subscriber_milestone: currentSubMilestone,
-        });
-      } else {
-        db.updateChannelMilestones(twitchUsername, { last_subscriber_count: subCount });
       }
+      db.updateChannelMilestones(twitchUsername, subscribers.update);
     } catch (e) {
       // Sub count may fail if token doesn't have the right scope — that's ok
       console.warn(`[Milestones] Sub count failed for ${twitchUsername}: ${e.message}`);
@@ -586,12 +583,23 @@ async function pollAllIracingResults() {
 }
 
 function startAll() {
-  setInterval(pollAllTwitchLive, config.intervals.twitchLive);
-  setInterval(pollAllTwitchClips, config.intervals.twitchClips);
-  setInterval(pollAllYouTubeFeed, config.intervals.youtubeFeed);
-  setInterval(pollAllYouTubeLive, config.intervals.youtubeLive);
-  setInterval(pollAllSubSync, config.intervals.subSync);
-  setInterval(pollWeeklyDigest, config.intervals.weeklyDigest);
+  // A tick that fires while the previous run of the same poller is still going
+  // is skipped: overlapping runs read the same stored state and both post.
+  const run = {
+    twitchLive: exclusiveRun('TwitchLive', pollAllTwitchLive),
+    twitchClips: exclusiveRun('TwitchClips', pollAllTwitchClips),
+    youtubeFeed: exclusiveRun('YouTubeFeed', pollAllYouTubeFeed),
+    youtubeLive: exclusiveRun('YouTubeLive', pollAllYouTubeLive),
+    subSync: exclusiveRun('SubSync', pollAllSubSync),
+    weeklyDigest: exclusiveRun('WeeklyDigest', pollWeeklyDigest),
+  };
+
+  setInterval(run.twitchLive, config.intervals.twitchLive);
+  setInterval(run.twitchClips, config.intervals.twitchClips);
+  setInterval(run.youtubeFeed, config.intervals.youtubeFeed);
+  setInterval(run.youtubeLive, config.intervals.youtubeLive);
+  setInterval(run.subSync, config.intervals.subSync);
+  setInterval(run.weeklyDigest, config.intervals.weeklyDigest);
   // Instagram and TikTok disabled — no reliable free API/scraping available
   // setInterval(pollAllInstagram, config.intervals.instagramFeed);
   // setInterval(pollAllTikTok, config.intervals.tiktokFeed);
@@ -603,11 +611,11 @@ function startAll() {
   console.log('[Manager] All pollers started');
 
   // First poll immediately
-  pollAllTwitchLive();
-  pollAllTwitchClips();
-  pollAllSubSync();
+  run.twitchLive();
+  run.twitchClips();
+  run.subSync();
   // pollAllInstagram();
   // pollAllTikTok();
 }
 
-module.exports = { startAll };
+module.exports = { startAll, pollAllTwitchLive, pollAllTwitchClips, pollAllYouTubeFeed, pollAllYouTubeLive, pollAllSubSync };

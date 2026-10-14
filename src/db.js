@@ -122,6 +122,22 @@ try {
   }
 } catch {}
 
+// Migration 9b: remember which broadcast a channel was last announced live for,
+// and how many polls in a row found it offline. The live poller needs both to
+// tell a one-poll blip, or the same stream coming back, from a stream that
+// really ended. These must exist before the statements below are prepared.
+try {
+  const cols = db.prepare("PRAGMA table_info(channel_state)").all();
+  if (cols.length > 0) {
+    for (const [col, type] of [['last_stream_id', 'TEXT'], ['offline_polls', 'INTEGER DEFAULT 0']]) {
+      if (!cols.find((c) => c.name === col)) {
+        db.exec(`ALTER TABLE channel_state ADD COLUMN ${col} ${type}`);
+        console.log(`[DB] Added ${col} column to channel_state`);
+      }
+    }
+  }
+} catch {}
+
 // Migration 6: add profile_image_url to watched_channels
 try {
   const cols = db.prepare("PRAGMA table_info(watched_channels)").all();
@@ -619,7 +635,9 @@ db.exec(`
     stream_category TEXT,
     stream_thumbnail_url TEXT,
     stream_started_at TEXT,
-    peak_viewers INTEGER DEFAULT 0
+    peak_viewers INTEGER DEFAULT 0,
+    last_stream_id TEXT,
+    offline_polls INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS watched_youtube_channels (
@@ -1867,7 +1885,14 @@ const _addWatchedChannel = db.prepare(`
 const _updateWatchedChannelProfileImage = db.prepare('UPDATE watched_channels SET profile_image_url = ? WHERE id = ?');
 const _removeWatchedChannel = db.prepare('DELETE FROM watched_channels WHERE id = ? AND streamer_id = ?');
 const _getWatchedChannelsForGuild = db.prepare('SELECT * FROM watched_channels WHERE guild_id = ? AND streamer_id = ?');
-const _getAllUniqueWatchedChannels = db.prepare('SELECT DISTINCT twitch_username FROM watched_channels WHERE enabled = 1');
+// One row per channel being watched, whoever watches it. A channel only
+// disabled accounts watch is left out: nothing would be posted for it.
+const _getAllUniqueWatchedChannels = db.prepare(`
+  SELECT DISTINCT wc.twitch_username
+  FROM watched_channels wc
+  JOIN streamers s ON wc.streamer_id = s.id
+  WHERE wc.enabled = 1 AND s.enabled = 1
+`);
 const _getWatchersForChannel = db.prepare(`
   SELECT wc.*, s.id AS owner_id, s.enabled AS streamer_enabled
   FROM watched_channels wc
@@ -1888,6 +1913,8 @@ const _updateChannelState = db.prepare(`
     stream_category = COALESCE(?, stream_category),
     stream_thumbnail_url = COALESCE(?, stream_thumbnail_url),
     stream_started_at = COALESCE(?, stream_started_at),
+    last_stream_id = COALESCE(?, last_stream_id),
+    offline_polls = COALESCE(?, offline_polls),
     peak_viewers = CASE WHEN ? > COALESCE(peak_viewers, 0) THEN ? ELSE peak_viewers END
   WHERE twitch_username = ?
 `);
@@ -1971,6 +1998,8 @@ function updateChannelState(twitchUsername, updates) {
     updates.stream_category ?? null,
     updates.stream_thumbnail_url ?? null,
     updates.stream_started_at ?? null,
+    updates.last_stream_id ?? null,
+    updates.offline_polls ?? null,
     peakViewers, peakViewers, // twice for the CASE WHEN comparison
     twitchUsername.toLowerCase()
   );
@@ -2073,7 +2102,8 @@ const _clearStreamSession = db.prepare(`
     stream_category = NULL,
     stream_thumbnail_url = NULL,
     stream_started_at = NULL,
-    peak_viewers = 0
+    peak_viewers = 0,
+    offline_polls = 0
   WHERE twitch_username = ?
 `);
 
@@ -2089,7 +2119,12 @@ const _addWatchedYoutubeChannel = db.prepare(`
 `);
 const _removeWatchedYoutubeChannel = db.prepare('DELETE FROM watched_youtube_channels WHERE id = ? AND streamer_id = ?');
 const _getWatchedYoutubeChannelsForGuild = db.prepare('SELECT * FROM watched_youtube_channels WHERE guild_id = ? AND streamer_id = ?');
-const _getAllUniqueWatchedYoutubeChannels = db.prepare('SELECT DISTINCT youtube_channel_id FROM watched_youtube_channels WHERE enabled = 1');
+const _getAllUniqueWatchedYoutubeChannels = db.prepare(`
+  SELECT DISTINCT wyc.youtube_channel_id
+  FROM watched_youtube_channels wyc
+  JOIN streamers s ON wyc.streamer_id = s.id
+  WHERE wyc.enabled = 1 AND s.enabled = 1
+`);
 const _getYoutubeWatchersForChannel = db.prepare(`
   SELECT wyc.*, s.id AS owner_id, s.enabled AS streamer_enabled, s.youtube_api_key
   FROM watched_youtube_channels wyc
