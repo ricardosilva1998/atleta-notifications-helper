@@ -4057,6 +4057,53 @@ function updateSponsorChatSettings(streamerId, intervalMinutes, enabled) {
     .run(intervalMinutes, enabled ? 1 : 0, streamerId);
 }
 
+// ─── The dashboard's working cards: one setting at a time ───────────────
+// Each writes one column, so a switch on a card never changes another setting.
+
+// Runs fn inside one transaction: all of its writes, or none.
+function runInTransaction(fn) {
+  return db.transaction(fn)();
+}
+
+const GUILD_SWITCH_COLUMNS = new Set(['recap_enabled', 'milestones_enabled', 'weekly_highlights_enabled', 'sub_sync_enabled']);
+
+// One of a claimed server's switches. False when the streamer has no such server.
+function setGuildSwitch(guildId, streamerId, column, value) {
+  if (!GUILD_SWITCH_COLUMNS.has(column)) throw new Error(`not a server switch: ${column}`);
+  return db.prepare(`UPDATE guilds SET ${column} = ? WHERE guild_id = ? AND streamer_id = ?`)
+    .run(value ? 1 : 0, guildId, streamerId).changes > 0;
+}
+
+// The watcher row of the streamer's own Twitch channel in one of their servers, or null.
+function getOwnWatcher(guildId, streamerId, twitchLogin) {
+  if (!twitchLogin) return null;
+  return db.prepare('SELECT * FROM watched_channels WHERE guild_id = ? AND streamer_id = ? AND twitch_username = ? AND enabled = 1')
+    .get(guildId, streamerId, String(twitchLogin).toLowerCase()) || null;
+}
+
+const WATCHER_NOTIFY_COLUMNS = new Set(['notify_live', 'notify_clips']);
+
+// A watcher row's go-live or clips switch; its channels stay as they are. False when the row is not theirs.
+function setWatcherNotify(watcherId, streamerId, column, value) {
+  if (!WATCHER_NOTIFY_COLUMNS.has(column)) throw new Error(`not a watcher switch: ${column}`);
+  return db.prepare(`UPDATE watched_channels SET ${column} = ? WHERE id = ? AND streamer_id = ?`)
+    .run(value ? 1 : 0, watcherId, streamerId).changes > 0;
+}
+
+// A sponsor chat message's switch. False when the message is not theirs.
+function setSponsorMessageEnabled(id, streamerId, value) {
+  return db.prepare('UPDATE sponsor_messages SET enabled = ? WHERE id = ? AND streamer_id = ?')
+    .run(value ? 1 : 0, id, streamerId).changes > 0;
+}
+
+const SPONSOR_CHAT_COLUMNS = new Set(['sponsor_send_chat', 'sponsor_chat_interval_minutes']);
+
+// The sponsor chat switch or interval, one at a time (updateSponsorChatSettings writes both).
+function setSponsorChatSetting(streamerId, column, value) {
+  if (!SPONSOR_CHAT_COLUMNS.has(column)) throw new Error(`not a sponsor chat setting: ${column}`);
+  db.prepare(`UPDATE streamers SET ${column} = ? WHERE id = ?`).run(value, streamerId);
+}
+
 function getTimedNotifications(streamerId) {
   return db.prepare('SELECT * FROM timed_notifications WHERE streamer_id = ? ORDER BY created_at').all(streamerId);
 }
@@ -5665,6 +5712,13 @@ module.exports = {
   updateSponsorMessage,
   deleteSponsorMessage,
   updateSponsorChatSettings,
+  // The dashboard's working cards: one setting at a time (services/dashboardSettings.js).
+  runInTransaction,
+  setGuildSwitch,
+  getOwnWatcher,
+  setWatcherNotify,
+  setSponsorMessageEnabled,
+  setSponsorChatSetting,
   getTimedNotifications,
   getEnabledTimedNotifications,
   addTimedNotification,
