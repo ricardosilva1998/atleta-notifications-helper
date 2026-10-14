@@ -282,3 +282,28 @@ describe('the texts a page hands its script are all there', () => {
     assert.deepEqual(offenders, []);
   });
 });
+
+// ── 4. Texts printed into the page as HTML ───────────────────────────────
+
+describe('texts printed into the page as HTML', () => {
+  // <%- t('key', ...) %> and <%- rich('key') %> print the translation as it is (the markup of a link or a bold word
+  // is put in through its {{fields}}), so none of these texts may hold a "<" or ">" of its own in any language:
+  // it would break the page. Languages that do not have a key yet are skipped.
+  const rawKeys = new Set();
+  for (const page of PAGES) {
+    const source = fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8');
+    for (const m of source.matchAll(/<%-\s*(?:t|rich)\(\s*'([A-Za-z0-9_.]+)'/g)) rawKeys.add(m[1]);
+  }
+
+  test('the pages print a number of them', () => {
+    assert.ok(rawKeys.size >= 35, `found ${rawKeys.size}`);
+  });
+
+  for (const lang of ['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja']) {
+    test(lang, () => {
+      const locale = require(`../src/locales/${lang}.json`);
+      const bad = [...rawKeys].filter((key) => key in locale && /[<>]/.test(locale[key]));
+      assert.deepEqual(bad, [], `${lang}.json has markup of its own in texts that are printed as HTML`);
+    });
+  }
+});
