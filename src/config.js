@@ -88,8 +88,15 @@ module.exports = {
   multistream: {
     apiUrl: process.env.MEDIAMTX_API_URL || '',
     ingestUrl: process.env.MEDIAMTX_INGEST_URL || '',
+    // The relay API login (HTTP Basic): this user, with MEDIAMTX_API_TOKEN as
+    // its password.
+    apiUser: process.env.MEDIAMTX_API_USER || 'admin',
     apiToken: process.env.MEDIAMTX_API_TOKEN || '',
     webhookSecret: process.env.MEDIAMTX_WEBHOOK_SECRET || '',
+    // Optional: a Cloudflare Access service token, sent to the relay's API
+    // hostname when an Access application protects it.
+    accessClientId: process.env.MEDIAMTX_CF_ACCESS_CLIENT_ID || '',
+    accessClientSecret: process.env.MEDIAMTX_CF_ACCESS_CLIENT_SECRET || '',
     enabled: !!(process.env.MEDIAMTX_API_URL && process.env.MEDIAMTX_INGEST_URL
       && process.env.MEDIAMTX_API_TOKEN && process.env.MEDIAMTX_WEBHOOK_SECRET),
   },

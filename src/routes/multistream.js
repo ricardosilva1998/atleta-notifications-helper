@@ -10,12 +10,12 @@
 // dashboard and the relay's routes answer 404. Saved settings are kept.
 
 const express = require('express');
-const crypto = require('crypto');
 const config = require('../config');
 const db = require('../db');
 const twitch = require('../services/twitch');
 const ytBroadcast = require('../services/youtubeBroadcast');
 const relay = require('../services/multistreamRelay');
+const { decideRelayAuth, streamTokenFromPath, sameSecret } = require('../services/multistreamAuth');
 const { requireActiveStreamer } = require('../services/streamerAccess');
 
 const TWITCH_INGEST = 'rtmp://live.twitch.tv/app';
@@ -67,41 +67,55 @@ dashboardRouter.post('/reset-youtube-stream', (req, res) => {
   res.redirect('/dashboard/multistream?reset=1');
 });
 
-// --- MediaMTX webhooks (called by the relay box, not the streamer) ---
+// --- Routes the relay calls (MediaMTX, not the streamer) ---
 
-function authenticateWebhook(req, res) {
-  if (!config.multistream.webhookSecret) {
-    res.status(503).json({ error: 'webhook secret not configured' });
-    return false;
-  }
-  const presented = Buffer.from(req.get('Authorization') || '', 'utf8');
-  const expected = Buffer.from(`Bearer ${config.multistream.webhookSecret}`, 'utf8');
-  // timingSafeEqual throws on a length mismatch, so compare lengths first —
-  // that leaks the secret's length only, never its contents.
-  if (presented.length !== expected.length || !crypto.timingSafeEqual(presented, expected)) {
+// The relay API settings (config.multistream) for services/multistreamRelay.js.
+function relaySettings() {
+  const { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret } = config.multistream;
+  return { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret };
+}
+
+// The secret a caller presents: "Authorization: Bearer <secret>" (the
+// webhooks' curl), or the password of HTTP Basic (MediaMTX's auth requests,
+// which carry it in the address they are sent to).
+function presentedSecret(req) {
+  const header = req.get('Authorization') || '';
+  const bearer = /^Bearer (.+)$/.exec(header);
+  if (bearer) return bearer[1];
+  const basic = /^Basic ([A-Za-z0-9+/]+={0,2})$/.exec(header);
+  if (!basic) return '';
+  const login = Buffer.from(basic[1], 'base64').toString('utf8');
+  const colon = login.indexOf(':');
+  return colon === -1 ? '' : login.slice(colon + 1);
+}
+
+// Everything under /api/multistream comes from the relay, with
+// MEDIAMTX_WEBHOOK_SECRET.
+function authenticateRelay(req, res) {
+  if (!sameSecret(presentedSecret(req), config.multistream.webhookSecret)) {
     res.status(401).json({ error: 'unauthorized' });
     return false;
   }
   return true;
 }
 
-// Validate rather than sanitize. Stripping unexpected characters could silently
-// rewrite one streamer's malformed path into another streamer's valid token, so
-// anything that isn't already a well-formed token is rejected outright.
-// Tokens are base64url from crypto.randomBytes(24) — see db.ensureMultistreamToken.
-const TOKEN_RE = /^[A-Za-z0-9_-]{16,128}$/;
-
-function tokenFromPath(path) {
-  const candidate = String(path || '').replace(/^live\//, '');
-  return TOKEN_RE.test(candidate) ? candidate : null;
-}
+// MediaMTX's authMethod: http. The relay asks before every publish, read and
+// control-API login; a 2xx answer allows it (services/multistreamAuth.js).
+apiRouter.post('/auth', (req, res) => {
+  if (!authenticateRelay(req, res)) return;
+  const decision = decideRelayAuth(req.body, {
+    findStreamer: (token) => db.getStreamerByMultistreamToken(token),
+    apiUser: config.multistream.apiUser,
+    apiToken: config.multistream.apiToken,
+  });
+  res.status(decision.allow ? 200 : 401).json({ ok: decision.allow });
+});
 
 apiRouter.post('/webhook/on-ready', async (req, res) => {
-  if (!authenticateWebhook(req, res)) return;
+  if (!authenticateRelay(req, res)) return;
 
-  const path = req.body?.path || '';
-  const token = tokenFromPath(path);
-  if (!token) return res.status(400).json({ error: 'missing path' });
+  const token = streamTokenFromPath(req.body?.path);
+  if (!token) return res.status(400).json({ error: 'not a stream path' });
 
   const streamer = db.getStreamerByMultistreamToken(token);
   if (!streamer) return res.status(404).json({ error: 'unknown stream key' });
@@ -164,12 +178,7 @@ apiRouter.post('/webhook/on-ready', async (req, res) => {
   }
 
   try {
-    await relay.addForwardPaths({
-      apiUrl: config.multistream.apiUrl,
-      apiToken: config.multistream.apiToken,
-      sourceToken: token,
-      destinations,
-    });
+    await relay.addForwardPaths({ ...relaySettings(), sourceToken: token, destinations });
     db.markMultistreamStarted(streamer.id);
   } catch (err) {
     console.error('[multistream on-ready] addForwardPaths failed:', err.message);
@@ -209,22 +218,16 @@ apiRouter.post('/webhook/on-ready', async (req, res) => {
 });
 
 apiRouter.post('/webhook/on-not-ready', async (req, res) => {
-  if (!authenticateWebhook(req, res)) return;
+  if (!authenticateRelay(req, res)) return;
 
-  const path = req.body?.path || '';
-  const token = tokenFromPath(path);
-  if (!token) return res.status(400).json({ error: 'missing path' });
+  const token = streamTokenFromPath(req.body?.path);
+  if (!token) return res.status(400).json({ error: 'not a stream path' });
 
   const streamer = db.getStreamerByMultistreamToken(token);
   if (!streamer) return res.status(404).json({ error: 'unknown stream key' });
 
   try {
-    await relay.removeForwardPaths({
-      apiUrl: config.multistream.apiUrl,
-      apiToken: config.multistream.apiToken,
-      sourceToken: token,
-      destinationNames: ['twitch', 'youtube'],
-    });
+    await relay.removeForwardPaths({ ...relaySettings(), sourceToken: token, destinationNames: ['twitch', 'youtube'] });
   } catch (err) {
     console.error('[multistream on-not-ready] removeForwardPaths failed:', err.message);
   }

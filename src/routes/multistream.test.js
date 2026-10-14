@@ -166,6 +166,12 @@ const hook = (name, path) => request('POST', `/api/multistream/webhook/${name}`,
   body: { path },
   headers: { Authorization: `Bearer ${WEBHOOK_SECRET}` },
 });
+// MediaMTX's auth request: the secret is the password of the address it posts to.
+const basic = (user, pass) => `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
+const relayAuth = (body, authorization = basic('mediamtx', WEBHOOK_SECRET)) => request('POST', '/api/multistream/auth', {
+  body,
+  headers: authorization ? { Authorization: authorization } : {},
+});
 
 beforeEach(() => {
   calls.length = 0;
@@ -208,6 +214,8 @@ describe('while the relay is not configured', () => {
       const res = await hook(name, `live/${token}`);
       assert.equal(res.status, 404, name);
     }
+    const auth = await relayAuth({ action: 'publish', path: `live/${token}`, ip: '203.0.113.7' });
+    assert.equal(auth.status, 404, 'the relay is told no for every publish');
     assert.deepEqual(calls, []);
   });
 });
@@ -249,6 +257,53 @@ describe('once the relay is configured', () => {
       headers: { Authorization: `Bearer ${WEBHOOK_SECRET}` },
     });
     assert.notEqual(res.status, 200);
+    assert.deepEqual(calls, []);
+  });
+});
+
+// ── The relay's authentication requests (MS3) ────────────────────────────
+
+describe('POST /api/multistream/auth (MediaMTX authMethod: http)', () => {
+  beforeEach(() => relayConfigured(true));
+  const KEY = 'tok-auth-on-00000000000000';
+
+  test('a publish with the key of an enabled account that has multistream on is allowed (2xx)', async () => {
+    addStreamer({ multistream_enabled: 1, multistream_token: KEY });
+    const res = await relayAuth({ action: 'publish', path: `live/${KEY}`, ip: '203.0.113.7', protocol: 'rtmp', user: '', password: '', query: '' });
+    assert.equal(res.status, 200);
+  });
+
+  test('a publish is refused for an unknown key, a disabled account, or multistream switched off', async () => {
+    addStreamer({ multistream_enabled: 1, multistream_token: 'tok-auth-disabled-00000000', enabled: 0 });
+    addStreamer({ multistream_enabled: 0, multistream_token: 'tok-auth-off-0000000000000' });
+    for (const key of ['tok-auth-unknown-000000000', 'tok-auth-disabled-00000000', 'tok-auth-off-0000000000000']) {
+      const res = await relayAuth({ action: 'publish', path: `live/${key}`, ip: '203.0.113.7' });
+      assert.equal(res.status, 401, key);
+    }
+  });
+
+  test('reads are allowed from the relay itself only, and the API only with the relay API login', async () => {
+    assert.equal((await relayAuth({ action: 'read', path: `live/${KEY}`, ip: '127.0.0.1' })).status, 200);
+    assert.equal((await relayAuth({ action: 'read', path: `live/${KEY}`, ip: '203.0.113.7' })).status, 401);
+    assert.equal((await relayAuth({ action: 'api', user: 'admin', password: RELAY_SETTINGS.apiToken, ip: '127.0.0.1' })).status, 200);
+    assert.equal((await relayAuth({ action: 'api', user: 'admin', password: 'wrong', ip: '127.0.0.1' })).status, 401);
+    assert.equal((await relayAuth({ action: 'playback', path: `live/${KEY}`, ip: '127.0.0.1' })).status, 401);
+  });
+
+  test('only the relay may ask: without MEDIAMTX_WEBHOOK_SECRET (as Basic password or Bearer) the answer is 401', async () => {
+    addStreamer({ multistream_enabled: 1, multistream_token: 'tok-auth-caller-0000000000' });
+    const publish = { action: 'publish', path: 'live/tok-auth-caller-0000000000', ip: '203.0.113.7' };
+    assert.equal((await relayAuth(publish, null)).status, 401);
+    assert.equal((await relayAuth(publish, basic('mediamtx', 'wrong-secret'))).status, 401);
+    assert.equal((await relayAuth(publish, `Bearer ${WEBHOOK_SECRET}x`)).status, 401);
+    assert.equal((await relayAuth(publish, `Bearer ${WEBHOOK_SECRET}`)).status, 200);
+  });
+
+  test('the webhooks take the same secret, and refuse a path that is not live/<key>', async () => {
+    const res = await request('POST', '/api/multistream/webhook/on-ready', { body: { path: `live/${KEY}` }, headers: { Authorization: 'Bearer wrong' } });
+    assert.equal(res.status, 401);
+    const notAKey = await hook('on-ready', `fwd_${KEY}_twitch`);
+    assert.equal(notAKey.status, 400);
     assert.deepEqual(calls, []);
   });
 });

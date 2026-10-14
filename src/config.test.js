@@ -147,3 +147,16 @@ test('multistream is offered only when all four relay settings are set', () => {
   assert.equal(none.ingestUrl, '', 'no made-up ingest address');
   assert.equal('keySecret' in none, false);
 });
+
+test('the relay API login is MEDIAMTX_API_USER (admin when unset) with MEDIAMTX_API_TOKEN; the Cloudflare Access token is optional', () => {
+  const plain = loadWith({ ...RELAY, MEDIAMTX_API_USER: undefined, MEDIAMTX_CF_ACCESS_CLIENT_ID: undefined, MEDIAMTX_CF_ACCESS_CLIENT_SECRET: undefined }).config.multistream;
+  assert.equal(plain.apiUser, 'admin');
+  assert.equal(plain.apiToken, RELAY.MEDIAMTX_API_TOKEN);
+  assert.equal(plain.accessClientId, '');
+  assert.equal(plain.accessClientSecret, '');
+  const full = loadWith({ ...RELAY, MEDIAMTX_API_USER: 'operator', MEDIAMTX_CF_ACCESS_CLIENT_ID: 'cf-id', MEDIAMTX_CF_ACCESS_CLIENT_SECRET: 'cf-secret' }).config.multistream;
+  assert.equal(full.apiUser, 'operator');
+  assert.equal(full.accessClientId, 'cf-id');
+  assert.equal(full.accessClientSecret, 'cf-secret');
+  assert.equal(full.enabled, true, 'neither is needed to switch the feature on');
+});
