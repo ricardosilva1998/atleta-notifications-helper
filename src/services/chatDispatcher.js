@@ -20,6 +20,11 @@
 //    crew, A, B and C!") as long as the line stays short enough.
 //  - A sponsor or timed message that has waited more than 60 s is dropped, and
 //    at most 20 messages wait per channel.
+//  - While the bot has no connection to Twitch (isReady() says false: it is
+//    connecting or reconnecting) nothing is sent, because a line sent then is
+//    lost and would still use up one of the 20. Lines wait for the connection
+//    instead, and are looked for every second; one that has waited more than
+//    60 s is dropped, whatever it is.
 //  - Every line is cleaned (chatLine): one line, trimmed, and short enough for
 //    tmi.js to send as one message (an action line, "/me ...", a little shorter).
 // The clock and the timer functions can be passed in, for tests. The timer is
@@ -49,6 +54,8 @@ const DEFAULTS = Object.freeze({
   channelGapMs: 1_500,
   mergeWindowMs: 5_000,
   lowPriorityMaxAgeMs: 60_000,
+  heldMaxAgeMs: 60_000, // the longest any line waits for a connection that is down
+  notReadyRecheckMs: 1_000, // how often a down connection is looked at again while lines wait
   maxWaitingPerChannel: 20,
   dropLogIntervalMs: 60_000, // at most one "dropped" log line per channel this often
 });
@@ -80,7 +87,8 @@ function defaultSetTimer(fn, ms) {
 }
 
 // options: send(channel, line) (returns a promise, or throws), and optionally
-// now, setTimer, clearTimer, log and any of DEFAULTS.
+// isReady() (false while there is no connection to send on; a check that throws
+// counts as connected), now, setTimer, clearTimer, log and any of DEFAULTS.
 function createChatDispatcher(options = {}) {
   const { send } = options;
   if (typeof send !== 'function') throw new TypeError('createChatDispatcher needs a send function');
@@ -88,6 +96,10 @@ function createChatDispatcher(options = {}) {
   const setTimer = options.setTimer || defaultSetTimer;
   const clearTimer = options.clearTimer || clearTimeout;
   const log = options.log || console;
+  // A line is never held back for good because the check itself failed.
+  const connected = typeof options.isReady === 'function'
+    ? () => { try { return Boolean(options.isReady()); } catch (err) { return true; } }
+    : () => true;
 
   const limits = { ...DEFAULTS };
   for (const name of Object.keys(DEFAULTS)) {
@@ -138,12 +150,15 @@ function createChatDispatcher(options = {}) {
     }
   }
 
-  function dropStale(t) {
+  function dropStale(t, up) {
     for (let i = waiting.length - 1; i >= 0; i--) {
       const entry = waiting[i];
       if (entry.rank === PRIORITY.low && t - entry.createdAt > limits.lowPriorityMaxAgeMs) {
         waiting.splice(i, 1);
         noteDrop(entry, t, `waited over ${Math.round(limits.lowPriorityMaxAgeMs / 1000)} s`);
+      } else if (!up && t - entry.createdAt > limits.heldMaxAgeMs) {
+        waiting.splice(i, 1);
+        noteDrop(entry, t, `waited over ${Math.round(limits.heldMaxAgeMs / 1000)} s for the connection to Twitch`);
       }
     }
   }
@@ -197,9 +212,15 @@ function createChatDispatcher(options = {}) {
     timer = null;
   }
 
-  function schedule(t) {
+  function schedule(t, up) {
     stopTimer();
     if (!waiting.length) return;
+    if (!up) {
+      // Nothing can go until the connection is back: look again soon (this also
+      // lets lines that have waited too long go).
+      timer = setTimer(pump, Math.max(1, limits.notReadyRecheckMs));
+      return;
+    }
     let at = Infinity;
     for (const entry of waiting) at = Math.min(at, Math.max(entry.notBefore, channelFreeAt(entry)));
     if (spentAt.length >= limits.maxMessages) at = Math.max(at, spentAt[0] + limits.windowMs);
@@ -211,12 +232,13 @@ function createChatDispatcher(options = {}) {
     stopTimer();
     for (;;) {
       const t = now();
+      const up = connected();
       while (spentAt.length && t - spentAt[0] >= limits.windowMs) spentAt.shift();
-      dropStale(t);
-      const entry = spentAt.length < limits.maxMessages ? nextReady(t) : null;
+      dropStale(t, up);
+      const entry = up && spentAt.length < limits.maxMessages ? nextReady(t) : null;
       if (!entry) {
         prune(t);
-        schedule(t);
+        schedule(t, up);
         return;
       }
       waiting.splice(waiting.indexOf(entry), 1);
@@ -301,7 +323,7 @@ function createChatDispatcher(options = {}) {
     for (let i = waiting.length - 1; i >= 0; i--) {
       if (waiting[i].key === key) waiting.splice(i, 1);
     }
-    schedule(now());
+    schedule(now(), connected());
   }
 
   function clear() {

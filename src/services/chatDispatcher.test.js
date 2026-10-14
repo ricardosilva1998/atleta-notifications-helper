@@ -328,6 +328,147 @@ describe('dropping (H11)', () => {
   });
 });
 
+describe('a connection that is down', () => {
+  // isReady() is the bot's connection to Twitch: while it is down, a line sent would only be lost.
+  let up;
+  const chat = (options = {}) => dispatcher({ isReady: () => up, ...options });
+  beforeEach(() => { up = true; });
+
+  test('lines wait instead of being sent, and use none of the limit; they go once the connection is back', () => {
+    up = false;
+    const bot = chat({ maxMessages: 2 });
+    for (const text of ['one', 'two', 'three']) assert.equal(bot.enqueue({ channel: 'chan', text, priority: 'high' }), 'queued');
+    time.advance(5_000);
+    assert.deepEqual(sent, [], 'nothing was sent into the void');
+    assert.equal(bot.pending(), 3);
+
+    up = true;
+    time.advance(1_000);
+    assert.deepEqual(sent.map((s) => [s.at, s.line]), [[6_000, 'one']], 'the first goes at the next look');
+    time.advance(1_500);
+    assert.deepEqual(lines(), ['one', 'two'], 'the channel gap still applies');
+    time.advance(28_499);
+    assert.deepEqual(lines(), ['one', 'two'], 'only two tokens: the outage spent none, and these two are not back yet');
+    time.advance(1);
+    assert.deepEqual(sent.map((s) => [s.at, s.line]).at(-1), [36_000, 'three'], 'the third needs the first one\'s token, 30 s after it was spent');
+  });
+
+  test('a line that is sent while the connection is up goes at once, as before', () => {
+    const bot = chat();
+    assert.equal(bot.enqueue({ channel: 'chan', text: 'hello', priority: 'high' }), 'sent');
+    assert.deepEqual(sent, [{ at: 0, channel: 'chan', line: 'hello' }]);
+    assert.equal(time.timerCount(), 0);
+  });
+
+  test('a line older than 60 s is dropped while the connection is down; younger ones go when it is back', () => {
+    up = false;
+    const bot = chat();
+    bot.enqueue({ channel: 'chan', text: 'old', priority: 'high' });
+    time.advance(40_000);
+    bot.enqueue({ channel: 'chan', text: 'newer', priority: 'normal' });
+    time.advance(20_000);
+    assert.equal(bot.pending(), 2, 'both are still held at 60 s');
+    time.advance(1_000);
+    assert.equal(bot.pending(), 1, 'the old one is dropped once it is over 60 s');
+    assert.equal(logs.length, 1);
+    assert.match(logs[0][1], /^\[Chat\] Dropped 1 waiting message\(s\) for chan: .*60 s/);
+
+    up = true;
+    time.advance(1_000);
+    assert.deepEqual(lines(), ['newer']);
+  });
+
+  test('after a short outage nothing is dropped, whatever its priority', () => {
+    up = false;
+    const bot = chat();
+    bot.enqueue({ channel: 'chan', text: 'reply', priority: 'high' });
+    bot.enqueue({ channel: 'chan', text: 'thanks', priority: 'normal' });
+    bot.enqueue({ channel: 'chan', text: 'sponsor', priority: 'low' });
+    time.advance(50_000);
+    assert.deepEqual(sent, [], 'held, not sent into the void');
+    up = true;
+    time.advance(10_000);
+    assert.deepEqual(lines(), ['reply', 'thanks', 'sponsor'], 'in the usual order, a gap apart (the sponsor line is still under its own 60 s)');
+    assert.deepEqual(logs, []);
+  });
+
+  test('the 60 s rule is for a missing connection only: with the connection up, a thank-you waits for as long as the limits make it', () => {
+    const bot = chat({ maxMessages: 1, windowMs: 120_000 });
+    bot.enqueue({ channel: 'a', text: 'uses the only token' });
+    bot.enqueue({ channel: 'b', text: 'thanks', priority: 'normal' });
+    time.advance(100_000);
+    assert.equal(bot.pending(), 1);
+    time.advance(20_000);
+    assert.deepEqual(lines(), ['uses the only token', 'thanks']);
+  });
+
+  test('no more than 20 lines wait per channel while the connection is down', () => {
+    up = false;
+    const bot = chat();
+    for (let i = 0; i < 25; i++) bot.enqueue({ channel: 'chan', text: `line ${i}`, priority: 'high' });
+    assert.equal(bot.pending(), 20);
+    assert.equal(bot.enqueue({ channel: 'other', text: 'another channel has its own room', priority: 'high' }), 'queued');
+    assert.equal(bot.pending(), 21);
+  });
+
+  test('thank-yous that are merged keep merging through the outage and go out as one line', () => {
+    up = false;
+    const bot = chat();
+    const render = (names) => `Welcome to the pit crew, ${names.join(' + ')}!`;
+    bot.enqueue({ channel: 'chan', merge: { key: 'follow', name: 'A', render } });
+    time.advance(3_000);
+    bot.enqueue({ channel: 'chan', merge: { key: 'follow', name: 'B', render } });
+    time.advance(7_000);
+    assert.deepEqual(sent, [], 'ready to go after its 5 s, but the connection is down');
+    up = true;
+    time.advance(1_000);
+    assert.deepEqual(lines(), ['Welcome to the pit crew, A + B!']);
+  });
+
+  test('a channel that is stopped loses what it was holding', () => {
+    up = false;
+    const bot = chat();
+    bot.enqueue({ channel: 'chan', text: 'held' });
+    bot.enqueue({ channel: 'other', text: 'also held' });
+    bot.dropChannel('#Chan');
+    up = true;
+    time.advance(2_000);
+    assert.deepEqual(lines(), ['also held']);
+  });
+
+  test('it looks for the connection every second while it holds lines, and not at all otherwise', () => {
+    up = false;
+    const bot = chat();
+    assert.equal(time.timerCount(), 0, 'nothing held, nothing to look for');
+    bot.enqueue({ channel: 'chan', text: 'held' });
+    assert.equal(time.timerCount(), 1);
+    time.advance(30_000);
+    assert.equal(time.timerCount(), 1, 'still one timer');
+    bot.clear();
+    assert.equal(time.timerCount(), 0);
+    time.advance(30_000);
+    assert.deepEqual(sent, []);
+  });
+
+  test('the look-again interval can be set', () => {
+    up = false;
+    const bot = chat({ notReadyRecheckMs: 250 });
+    bot.enqueue({ channel: 'chan', text: 'held' });
+    time.advance(100);
+    up = true;
+    time.advance(149);
+    assert.deepEqual(sent, []);
+    time.advance(1);
+    assert.deepEqual(lines(), ['held']);
+  });
+
+  test('a connection check that fails counts as connected, so a line is never held back for good', () => {
+    const bot = dispatcher({ isReady: () => { throw new Error('probe failed'); } });
+    assert.equal(bot.enqueue({ channel: 'chan', text: 'hello' }), 'sent');
+    assert.deepEqual(lines(), ['hello']);
+  });
+});
+
 describe('every line is cleaned', () => {
   test('one line, trimmed, short enough for tmi.js to send it as one message', () => {
     assert.equal(chatLine('  hi\r\nPRIVMSG #other :spam\u0000 '), 'hi PRIVMSG #other :spam');
@@ -374,6 +515,17 @@ test('its timer does not keep the process alive', () => {
     const chat = createChatDispatcher({ send: () => Promise.resolve(), channelGapMs: 60000 });
     chat.enqueue({ channel: 'chan', text: 'one' });
     if (chat.enqueue({ channel: 'chan', text: 'two' }) !== 'queued') process.exit(2);
+  `;
+  const run = spawnSync(process.execPath, ['-e', script], { timeout: 10_000 });
+  assert.equal(run.signal, null, 'the process ended by itself');
+  assert.equal(run.status, 0);
+});
+
+test('the timer that looks for the connection does not keep the process alive either', () => {
+  const script = `
+    const { createChatDispatcher } = require(${JSON.stringify(path.join(__dirname, 'chatDispatcher.js'))});
+    const chat = createChatDispatcher({ send: () => Promise.resolve(), isReady: () => false });
+    if (chat.enqueue({ channel: 'chan', text: 'held' }) !== 'queued') process.exit(2);
   `;
   const run = spawnSync(process.execPath, ['-e', script], { timeout: 10_000 });
   assert.equal(run.signal, null, 'the process ended by itself');
