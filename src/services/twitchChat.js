@@ -164,6 +164,14 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// The Twitch channel (lower case) the bot should be in for this streamer, or null: no such streamer, the account is
+// disabled, the chatbot is off or no channel is linked.
+function channelToJoin(streamerId) {
+  const streamer = db.getStreamerById(streamerId);
+  if (!streamer || isStreamerDisabled(streamer) || !streamer.chatbot_enabled || !streamer.twitch_username) return null;
+  return streamer.twitch_username.toLowerCase();
+}
+
 const chatManager = {
   connect() {
     const { twitchUsername, twitchToken } = config.bot;
@@ -292,18 +300,22 @@ const chatManager = {
 
   // Asks Twitch again (the Chat protection card's Check again): the bot leaves the streamer's channel and
   // joins it again, which makes Twitch tell it its state there. Nothing is posted in chat. Resolves with
-  // moderatorStatus(), or null when the chatbot is off or the join does not complete in time.
+  // moderatorStatus(), or null when the chatbot is off (also when it was switched off while the bot was
+  // leaving: it then stays out) or the join does not complete in time.
   async recheckModerator(streamerId, { timeoutMs = 5000 } = {}) {
     if (!client) return null;
-    const streamer = db.getStreamerById(streamerId);
-    if (!streamer || isStreamerDisabled(streamer) || !streamer.chatbot_enabled || !streamer.twitch_username) return null;
-    const login = streamer.twitch_username.toLowerCase();
+    const login = channelToJoin(streamerId);
+    if (!login) return null;
     try { await client.part(login); } catch (e) { /* the bot was not in it: it joins below */ }
+    // The chatbot may have been switched off, the account disabled or another Twitch channel linked while the bot
+    // was leaving: the app has dealt with that chat by now, so the bot does not come back to it.
+    if (channelToJoin(streamerId) !== login) return null;
     channelMap.set(login, streamerId);
     try {
       await withTimeout(client.join(login), timeoutMs);
     } catch (e) {
-      console.error(`[Chat] Rejoining #${login} failed:`, e.message);
+      // tmi.js rejects with plain text ('No response from Twitch.'), withTimeout() with an Error.
+      console.error(`[Chat] Rejoining #${login} failed:`, e && e.message ? e.message : e);
       return null;
     }
     return this.moderatorStatus(streamerId);

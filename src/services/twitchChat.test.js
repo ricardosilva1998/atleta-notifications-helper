@@ -610,4 +610,48 @@ describe('whether the bot is a moderator in a streamer\'s channel', () => {
     assert.equal(await chatManager.recheckModerator(1), null);
     assert.equal(tmiClient.joins.length, joins, 'the bot does not join a chat whose chatbot is off');
   });
+
+  // The moment in which the streamer's settings change: the next part() waits until the returned function is
+  // called, as while Twitch has not yet confirmed that the bot left. Every part() waiting by then finishes.
+  function holdLeaving() {
+    const waiting = [];
+    const realPart = tmiClient.part.bind(tmiClient);
+    tmiClient.part = (channel) => new Promise((resolve) => { waiting.push(() => resolve(realPart(channel))); });
+    return () => waiting.forEach((finish) => finish());
+  }
+
+  // What the app does with each change (the chatbot switch, disabling the account, linking another Twitch channel).
+  const CHANGES_WHILE_LEAVING = [
+    ['the chatbot is switched off', { chatbot_enabled: 0 }, () => chatManager.stopForStreamer(1), []],
+    ['the account is disabled', { enabled: 0 }, () => chatManager.stopForStreamer(1), []],
+    ['another Twitch channel is linked', { twitch_username: 'otherstreamer' }, () => {
+      chatManager.partChannel('somestreamer');
+      chatManager.startForStreamer(1);
+    }, ['otherstreamer']],
+  ];
+  for (const [what, change, appDoes, inChannels] of CHANGES_WHILE_LEAVING) {
+    test(`a bot that is leaving for the check does not come back when ${what} meanwhile`, async () => {
+      const finishLeaving = holdLeaving();
+      const pending = chatManager.recheckModerator(1); // the bot starts to leave the channel...
+      streamer = streamerRow(change); // ...the streamer's settings change...
+      appDoes(); // ...the app does what that change calls for...
+      finishLeaving(); // ...and Twitch confirms that the bot has left
+      assert.equal(await pending, null);
+      assert.deepEqual(tmiClient.joins, ['somestreamer', ...inChannels], 'the bot joined nothing it is not meant to be in');
+      assert.deepEqual(chatManager.getJoinedChannels(), inChannels);
+    });
+  }
+
+  test('a rejoin that fails says why in the log, whether tmi.js rejects with plain text or the wait runs out', async () => {
+    const logged = [];
+    console.error = (...args) => logged.push(args);
+    tmiClient.join = () => Promise.reject('No response from Twitch.'); // tmi.js rejects with text, not an Error
+    assert.equal(await chatManager.recheckModerator(1), null);
+    tmiClient.join = () => new Promise(() => {}); // Twitch never confirms the join
+    assert.equal(await chatManager.recheckModerator(1, { timeoutMs: 10 }), null);
+    assert.deepEqual(logged, [
+      ['[Chat] Rejoining #somestreamer failed:', 'No response from Twitch.'],
+      ['[Chat] Rejoining #somestreamer failed:', 'timed out'],
+    ]);
+  });
 });
