@@ -28,8 +28,9 @@ const { DEFAULT_DURATION_SECONDS } = require('../src/services/overlaySettings');
 const VIEWS = path.join(__dirname, '..', 'src', 'views');
 const PAGES = [
   'guild-config', 'overlay-config', 'overlay-builder', 'chatbot-config', 'mod-log', 'youtube-chatbot-config', 'multistream',
+  'account-disabled', // what a streamer is shown once an admin has disabled the account
   // linked from the site's menus, or the pages a streamer meets before logging in
-  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result', 'account-disabled',
+  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
 ];
 
 // Words that are not the page's own wording and may stay in every page: product names and units.
@@ -201,8 +202,8 @@ const PAGE_LOCALS = {
     { ...multistreamPage, isLive: false, liveUnknown: true, twitchHasStreamKeyScope: false, youtubeConnected: false, query: { error: 'live' }, multistream: { multistream_enabled: 0 } },
     { ...multistreamPage, isLive: false, twitchAuthorized: false, query: { error: 'relay' }, multistream: { multistream_enabled: 0 } },
   ],
-  'account-disabled': [{ streamer: null }],
 };
+PAGE_LOCALS['account-disabled'] = [{ streamer: null }];
 // These pages show less while the overlay features are off (features.overlays, off by default): each of their samples is rendered both ways.
 for (const page of ['youtube-chatbot-config', 'account-disabled']) {
   PAGE_LOCALS[page] = PAGE_LOCALS[page].flatMap((locals) => [true, false].map((overlays) => ({ ...locals, features: { youtube: true, overlays } })));
