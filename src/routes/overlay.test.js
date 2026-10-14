@@ -215,3 +215,64 @@ describe('a stream that is already open when the account is disabled', () => {
     assert.equal(bus.listenerCount(`overlay:${id}`), 0);
   });
 });
+
+// ── What a newly opened overlay is told (M6) ─────────────────────────────
+
+describe('the config an overlay receives when it connects', () => {
+  // Production has the YouTube overlay columns; on a fresh database their migrations run
+  // before the streamers table exists, so only a second boot adds them. Added here only
+  // where they are missing, so this keeps working once that is fixed.
+  before(() => {
+    const present = new Set(db.db.pragma('table_info(streamers)').map((c) => c.name));
+    for (const [name, type] of [
+      ['yt_overlay_superchat_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_member_enabled', 'INTEGER DEFAULT 1'],
+      ['yt_overlay_giftmember_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_superchat_duration', 'INTEGER DEFAULT 6'],
+      ['yt_overlay_member_duration', 'INTEGER DEFAULT 5'], ['yt_overlay_giftmember_duration', 'INTEGER DEFAULT 6'],
+    ]) {
+      if (!present.has(name)) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${type}`);
+    }
+  });
+
+  const UPDATE_COLUMNS = (id, columns) => {
+    const names = Object.keys(columns);
+    db.db.prepare(`UPDATE streamers SET ${names.map((n) => `${n} = ?`).join(', ')} WHERE id = ?`).run(...names.map((n) => columns[n]), id);
+  };
+  // The first message of the alerts stream is the config event.
+  const firstEvent = async (token) => {
+    const stream = await openStream(`/overlay/events/${token}`);
+    return JSON.parse(stream.chunks[0].replace(/^data: /, ''));
+  };
+
+  test('has an entry for every alert, raid and YouTube included', async () => {
+    const { token } = addStreamer();
+    const event = await firstEvent(token);
+    assert.equal(event.type, 'config');
+    for (const type of ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember']) {
+      assert.equal(typeof event.config[type].enabled, 'boolean', type);
+      assert.equal(typeof event.config[type].duration, 'number', type);
+    }
+    assert.equal(typeof event.serverVersion, 'string');
+  });
+
+  test('carries what the streamer saved: volume 0, a switched-off raid, the giveaway duration in seconds', async () => {
+    const { id, token } = addStreamer();
+    UPDATE_COLUMNS(id, {
+      overlay_volume: 0, overlay_raid_enabled: 0, overlay_raid_duration: 12, overlay_giveaway_duration: 20,
+      yt_overlay_superchat_enabled: 0, yt_overlay_member_duration: 9,
+    });
+    const { config } = await firstEvent(token);
+    assert.equal(config.volume, 0, 'a silent overlay stays silent');
+    assert.deepEqual(config.raid, { enabled: false, duration: 12 });
+    assert.deepEqual(config.giveaway_winner, { enabled: true, duration: 20 });
+    assert.equal(config.yt_superchat.enabled, false);
+    assert.equal(config.yt_member.duration, 9);
+  });
+
+  test('is the same config the dashboard pushes after a save', async () => {
+    const { buildOverlayConfig } = require('../services/overlayConfig');
+    const { id, token } = addStreamer();
+    UPDATE_COLUMNS(id, { overlay_volume: 0.35, overlay_follow_duration: 11 });
+    const { config } = await firstEvent(token);
+    assert.deepEqual(config, buildOverlayConfig(db.getStreamerById(id)));
+  });
+});

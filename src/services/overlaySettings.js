@@ -91,4 +91,8 @@ module.exports = {
   parseOverlaySettings,
   decideStreamElementsJwt,
   giveawayDurationSeconds,
+  // Shared with services/overlayConfig.js, which sends the saved values to the
+  // OBS overlay with the same bounds a save applies.
+  wholeSeconds,
+  volumeOf,
 };

@@ -235,6 +235,9 @@ before(async () => {
     ['yt_access_token', 'TEXT'], ['yt_refresh_token', 'TEXT'], ['yt_token_expires_at', 'INTEGER'], ['yt_channel_name', 'TEXT'],
     ['yt_chatbot_enabled', 'INTEGER DEFAULT 0'], ['yt_chat_superchat_template', 'TEXT'], ['yt_chat_member_template', 'TEXT'],
     ['yt_chat_giftmember_template', 'TEXT'],
+    ['yt_chat_superchat_enabled', 'INTEGER DEFAULT 1'], ['yt_chat_member_enabled', 'INTEGER DEFAULT 1'], ['yt_chat_giftmember_enabled', 'INTEGER DEFAULT 1'],
+    ['yt_overlay_superchat_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_member_enabled', 'INTEGER DEFAULT 1'], ['yt_overlay_giftmember_enabled', 'INTEGER DEFAULT 1'],
+    ['yt_overlay_superchat_duration', 'INTEGER DEFAULT 6'], ['yt_overlay_member_duration', 'INTEGER DEFAULT 5'], ['yt_overlay_giftmember_duration', 'INTEGER DEFAULT 6'],
   ]) {
     if (!streamerColumns.has(name)) db.db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${type}`);
   }
@@ -668,6 +671,76 @@ describe('the overlay settings page', () => {
     const res = await request('GET', '/dashboard/overlay', { streamer: id });
     assert.ok(!res.text.includes('other.token.value'));
     assert.ok(!res.text.includes(JWT));
+  });
+});
+
+// ── Settings reach an open OBS source (M6) and a new link ends the old ones (L5) ──
+
+describe('a save is pushed to the overlays that are open', () => {
+  const bus = require('../services/overlayBus');
+  const { accountDisabledChannel } = require('../services/streamerAccess');
+  let id;
+  beforeEach(() => {
+    id = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok', overlay_token: `tok-push-${counter}` });
+  });
+
+  // Everything the streamer's overlay would receive while `action` runs.
+  async function overlayMessagesDuring(action, streamerId = id) {
+    const seen = [];
+    const listener = (event) => seen.push(event);
+    bus.on(`overlay:${streamerId}`, listener);
+    try { await action(); } finally { bus.off(`overlay:${streamerId}`, listener); }
+    return seen;
+  }
+
+  test('saving the overlay settings sends the new config: volume 0, raid and giveaway included', async () => {
+    const seen = await overlayMessagesDuring(() => request('POST', '/dashboard/overlay', {
+      streamer: id,
+      form: {
+        overlay_enabled: '1', overlay_follow_enabled: '1', overlay_follow_duration: '9',
+        overlay_raid_duration: '12', overlay_giveaway_duration: '20', overlay_volume: '0',
+        // raid and giveaway are switched off: their checkboxes are not sent
+      },
+    }));
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].type, 'config-update');
+    const { config } = seen[0];
+    assert.equal(config.volume, 0, 'a silent overlay is told 0, not the default');
+    assert.deepEqual(config.follow, { enabled: true, duration: 9 });
+    assert.deepEqual(config.raid, { enabled: false, duration: 12 });
+    assert.deepEqual(config.giveaway_winner, { enabled: false, duration: 20 });
+  });
+
+  test('what is pushed is what was saved: the same builder reads the row afterwards', async () => {
+    const { buildOverlayConfig } = require('../services/overlayConfig');
+    const seen = await overlayMessagesDuring(() => request('POST', '/dashboard/overlay', {
+      streamer: id, form: { overlay_enabled: '1', overlay_bits_enabled: '1', overlay_bits_duration: '99', overlay_volume: '0.35' },
+    }));
+    assert.deepEqual(seen[0].config, buildOverlayConfig(db.getStreamerById(id)));
+    assert.equal(seen[0].config.bits.duration, 30, 'bounded like the save');
+  });
+
+  test('the push goes to this streamer\'s overlays only', async () => {
+    const other = addStreamer({ overlay_enabled: 1 });
+    const seenByOther = await overlayMessagesDuring(() => request('POST', '/dashboard/overlay', { streamer: id, form: { overlay_enabled: '1' } }), other);
+    assert.deepEqual(seenByOther, []);
+  });
+
+  test('saving the YouTube overlay toggles sends them too', async () => {
+    const seen = await overlayMessagesDuring(() => request('POST', '/dashboard/youtube-chatbot', {
+      streamer: id, form: { yt_overlay_member_enabled: '1' }, // superchat and gift alerts switched off
+    }));
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].type, 'config-update');
+    assert.equal(seen[0].config.yt_member.enabled, true);
+    assert.equal(seen[0].config.yt_superchat.enabled, false);
+    assert.equal(seen[0].config.yt_giftmember.enabled, false);
+  });
+
+  test('a rejected save (disabled account) pushes nothing', async () => {
+    const disabled = addStreamer({ enabled: 0, overlay_enabled: 1 });
+    const seen = await overlayMessagesDuring(() => request('POST', '/dashboard/overlay', { streamer: disabled, form: { overlay_enabled: '1' } }), disabled);
+    assert.deepEqual(seen, []);
   });
 });
 

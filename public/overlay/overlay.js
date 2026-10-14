@@ -7,6 +7,20 @@ let serverVersion = null;
 const queue = [];
 let isPlaying = false;
 
+// The settings the dashboard saved, read fresh for every alert so a change (sent
+// live by the server, see the config-update message) applies to the next one.
+// 0 is a real volume (silent); only a missing or unreadable value gets 0.8.
+function overlayVolume() {
+  const volume = overlayConfig.volume;
+  return typeof volume === 'number' && Number.isFinite(volume) ? Math.min(Math.max(volume, 0), 1) : 0.8;
+}
+
+// How long an alert of this type stays, in seconds (5 when the config has no usable number).
+function alertSeconds(type) {
+  const seconds = overlayConfig[type] && overlayConfig[type].duration;
+  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
+}
+
 // Load Google Fonts used by custom designs
 const loadedFonts = new Set();
 function loadDesignFonts(designs) {
@@ -51,7 +65,7 @@ function createNoise(duration, vol) {
 }
 
 function engineRev(startFreq, endFreq, duration, vol) {
-  const masterVol = (overlayConfig.volume || 0.8) * vol;
+  const masterVol = overlayVolume() * vol;
   const t = audioCtx.currentTime;
 
   // Engine oscillator (sawtooth for gritty engine sound)
@@ -92,7 +106,7 @@ function engineRev(startFreq, endFreq, duration, vol) {
 }
 
 function turboBlowoff(vol) {
-  const masterVol = (overlayConfig.volume || 0.8) * vol;
+  const masterVol = overlayVolume() * vol;
   const t = audioCtx.currentTime;
 
   // Turbo spool (rising whine)
@@ -132,7 +146,7 @@ function turboBlowoff(vol) {
 }
 
 function tireScreech(vol) {
-  const masterVol = (overlayConfig.volume || 0.8) * vol;
+  const masterVol = overlayVolume() * vol;
   const t = audioCtx.currentTime;
   const { source: noise, gain: noiseGain } = createNoise(0.3, masterVol * 0.3);
   const filter = audioCtx.createBiquadFilter();
@@ -230,7 +244,7 @@ function connectSSE() {
         return;
       }
       serverVersion = data.serverVersion;
-      overlayConfig = data.config;
+      overlayConfig = data.config || overlayConfig;
       if (data.designs) {
         overlayDesigns = data.designs;
         loadDesignFonts(data.designs);
@@ -240,6 +254,8 @@ function connectSSE() {
 
     if (data.type === 'config-update') {
       console.log('[Overlay] Config updated from the dashboard');
+      // Sent after a settings save: which alerts are on, how long they stay, the volume
+      if (data.config) overlayConfig = data.config;
       if (data.designs) {
         overlayDesigns = data.designs;
         loadDesignFonts(data.designs);
@@ -364,8 +380,7 @@ function stopCurrentSound() {
 }
 
 function showNotification(event) {
-  const typeConfig = overlayConfig[event.type] || {};
-  const duration = (typeConfig.duration || 5) * 1000;
+  const duration = alertSeconds(event.type) * 1000;
 
   // Stop any currently playing sound before starting new one
   stopCurrentSound();
@@ -379,9 +394,12 @@ function showNotification(event) {
   };
   const sounds = overlayConfig.sounds || {};
   const soundUrl = Object.prototype.hasOwnProperty.call(sounds, event.type) ? sounds[event.type] : null;
-  if (soundUrl) {
+  const volume = overlayVolume();
+  if (volume === 0) {
+    // silent: no custom sound, no synthesized one
+  } else if (soundUrl) {
     const audio = new Audio(soundUrl);
-    audio.volume = overlayConfig.volume || 0.8;
+    audio.volume = volume;
     currentAudio = audio;
     audio.play().catch(playDefaultSound);
   } else {
@@ -1164,7 +1182,7 @@ function playRedemption(event) {
   const mediaUrl      = data.mediaUrl || '';
   const maxPlaySec    = Math.min(Math.max(data.maxPlaySeconds || 15, 1), 60);
   const rewardVolume  = Math.min(Math.max(data.volume != null ? data.volume : 1, 0), 1);
-  const masterVolume  = Math.min(Math.max(overlayConfig.volume != null ? overlayConfig.volume : 0.8, 0), 1);
+  const masterVolume  = overlayVolume();
   const finalVolume   = masterVolume * rewardVolume;
 
   console.log('[Redemption] play', { mediaType, mediaUrl, finalVolume, masterVolume, rewardVolume });

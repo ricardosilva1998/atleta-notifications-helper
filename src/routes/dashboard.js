@@ -15,6 +15,7 @@ const { normalizeTwitchLogin } = require('../services/twitchLogin');
 const { parseOverlaySettings, giveawayDurationSeconds } = require('../services/overlaySettings');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
+const { buildOverlayConfig } = require('../services/overlayConfig');
 const {
   TIP_GOAL_CURRENCIES, SETTINGS_ERRORS, GOAL_ERRORS, MIN_AMOUNT_FLOOR, MIN_AMOUNT_CEIL, PAYPAL_EMAIL_MAX,
   parseDonationSettings, parseTipGoalFields, errorMessage, goalCurrencyMismatch,
@@ -678,6 +679,7 @@ router.get('/overlay', (req, res) => {
 router.post('/overlay', (req, res) => {
   const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
   db.updateOverlayConfig(req.streamer.id, columns);
+  pushOverlayConfig(req.streamer.id);
 
   try {
     const { eventSubManager } = require('../services/eventsub');
@@ -727,6 +729,19 @@ router.post('/overlay/test/:eventType', limitTests, (req, res) => {
 
   res.json({ ok: true });
 });
+
+// Send the streamer's open overlays their saved settings (which alerts are on,
+// how long they stay, the volume), so a save applies to the next alert without
+// reloading the OBS browser source. Built by the same function a newly opened
+// overlay gets its config from.
+function pushOverlayConfig(streamerId) {
+  const streamer = db.getStreamerById(streamerId);
+  if (!streamer) return;
+  require('../services/overlayBus').emit(`overlay:${streamerId}`, {
+    type: 'config-update',
+    config: buildOverlayConfig(streamer),
+  });
+}
 
 // Custom alert sounds live in the logged-in streamer's own folder
 // (data/sounds/<streamerId>/), never in a folder shared with other streamers.
@@ -1281,6 +1296,7 @@ router.post('/youtube-chatbot', (req, res) => {
     yt_overlay_member_enabled: b.yt_overlay_member_enabled ? 1 : 0,
     yt_overlay_giftmember_enabled: b.yt_overlay_giftmember_enabled ? 1 : 0,
   });
+  pushOverlayConfig(req.streamer.id);
   res.redirect('/dashboard/youtube-chatbot');
 });
 

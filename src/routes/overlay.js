@@ -5,6 +5,7 @@ const path = require('path');
 const db = require('../db');
 const bus = require('../services/overlayBus');
 const customSounds = require('../services/customSounds');
+const { buildOverlayConfig } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
 
 // Unique ID per server process — changes on every restart/deploy
@@ -32,17 +33,8 @@ router.get('/events/:token', (req, res) => {
     Connection: 'keep-alive',
   });
 
-  // Send initial config
-  const config = {
-    follow: { enabled: streamer.overlay_follow_enabled, duration: streamer.overlay_follow_duration },
-    subscription: { enabled: streamer.overlay_sub_enabled, duration: streamer.overlay_sub_duration },
-    bits: { enabled: streamer.overlay_bits_enabled, duration: streamer.overlay_bits_duration },
-    donation: { enabled: streamer.overlay_donation_enabled, duration: streamer.overlay_donation_duration },
-    giveaway_winner: { enabled: streamer.overlay_giveaway_enabled, duration: streamer.overlay_giveaway_duration },
-    volume: streamer.overlay_volume,
-    // { type: '/overlay/sounds/<token>/<type>?v=<mtimeMs>' } for each custom sound
-    sounds: customSounds.soundUrls(streamer),
-  };
+  // Send initial config: the same builder the dashboard's live pushes use
+  const config = buildOverlayConfig(streamer);
 
   // Include overlay designs keyed by event type
   const designs = db.getAllOverlayDesigns(streamer.id);
