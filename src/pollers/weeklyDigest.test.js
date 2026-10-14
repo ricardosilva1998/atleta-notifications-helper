@@ -23,7 +23,11 @@ const dbStub = {
   getWatchedChannelsForGuild: (guildId) => (world.watched[guildId] || []).map((twitch_username) => ({ twitch_username })),
   getChannelState: () => ({ twitch_broadcaster_id: '777' }),
   updateChannelState: () => {},
-  updateWeeklyDigestDate: (guildId, date) => { world.postedOn[guildId] = date; world.recorded.push([guildId, date]); },
+  updateWeeklyDigestDate: (guildId, date) => {
+    if (world.recordFails) throw new Error('database is locked');
+    world.postedOn[guildId] = date;
+    world.recorded.push([guildId, date]);
+  },
 };
 const configStub = { tiers: { free: { weeklyHighlights: true }, none: { weeklyHighlights: false } } };
 const discordStub = {
@@ -64,7 +68,9 @@ let monday; // the date (YYYY-MM-DD) of this test's own Monday: 2026-10-12 is on
 
 beforeEach(() => {
   // The poller remembers its tries per server and week; a Monday of its own keeps one test from affecting the next.
-  monday = new Date(Date.UTC(2026, 9, 12) + (weekNumber++) * 7 * DAY).toISOString().slice(0, 10);
+  // Two weeks apart, so the week after a test's Monday (which a test may use) is nobody else's.
+  monday = new Date(Date.UTC(2026, 9, 12) + weekNumber * 7 * DAY).toISOString().slice(0, 10);
+  weekNumber += 2;
   Object.keys(world).forEach((key) => delete world[key]);
   Object.assign(world, {
     guilds: [{ guild_id: G1, streamer_id: 1 }],
@@ -75,6 +81,7 @@ beforeEach(() => {
     videos: [{ duration: '2h30m10s', created_at: '2026-10-08T18:00:00Z' }, { duration: '45m', created_at: '2026-10-10T18:00:00Z' }],
     clips: [],
     twitchDown: false,
+    recordFails: false,
     twitchCalls: [],
     sends: [],
     recorded: [],
@@ -220,6 +227,18 @@ describe('a post that did not go out is not recorded, and is tried again', () =>
     await tick('09:20');
     assert.deepEqual(world.sends.map((s) => s.meta.guildId), [G1, G2, G1], 'only G1 was tried again');
     assert.deepEqual(world.recorded, [[G2, monday], [G1, monday]]);
+  });
+
+  test('a digest that went out but could not be recorded is not posted a second time', async () => {
+    world.recordFails = true;
+    await tick('09:00');
+    assert.equal(world.sends.length, 1);
+    assert.match(logs.join('\n'), /Posted for guild 400000000000000051 but could not record it: database is locked/);
+
+    world.recordFails = false;
+    await tick('09:15');
+    await tick('09:30');
+    assert.equal(world.sends.length, 1, 'nothing in the database says it was posted, but the poller remembers');
   });
 
   test('a new week starts with fresh tries', async () => {

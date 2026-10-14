@@ -139,10 +139,15 @@ async function pollWeeklyDigest(now = new Date()) {
           type: 'weekly_digest',
         });
         if (posted) {
-          // Only record after a post that went out: a refused channel returns normally.
-          db.updateWeeklyDigestDate(guild_id, todayStr);
-          attempts.delete(guild_id);
           console.log(`[WeeklyDigest] Posted digest for guild ${guild_id}${attempt > 1 ? ` (attempt ${attempt} of ${MAX_ATTEMPTS})` : ''}`);
+          // It is out: no more tries this week, even if recording it fails below.
+          attempts.set(guild_id, { date: todayStr, count: MAX_ATTEMPTS, lastAt: nowMs });
+          try {
+            // Only recorded after a post that went out: a refused channel returns normally.
+            db.updateWeeklyDigestDate(guild_id, todayStr);
+          } catch (e) {
+            console.error(`[WeeklyDigest] Posted for guild ${guild_id} but could not record it: ${e.message}`);
+          }
           continue;
         }
         outcome = 'the channel is not one the bot can reach';
