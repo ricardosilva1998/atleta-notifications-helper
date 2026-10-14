@@ -6,7 +6,7 @@
 // a tone ('ok' green, 'off' grey, 'warn' amber: something is missing); a count is a text key with its params, or a
 // plain { text }. The view translates them, and so does GET /dashboard/api/cards after a change (cardTexts()).
 
-const { DURATIONS } = require('./overlaySettings');
+const { DURATIONS, wholeSeconds, volumeOf } = require('./overlaySettings');
 const { sponsorChatIntervalMinutes } = require('./inputLimits');
 
 // The cards in reading order, which is also their order on a phone. The OBS overlay and rewards cards are left out
@@ -147,13 +147,14 @@ function discordCard({ discord: d }) {
   };
 }
 
+// The seconds and the volume are what the overlay is told: buildOverlayConfig() reads the same stored values through
+// the same two functions, so the card never shows a number the overlay does not play.
 function overlayCard({ streamer, overlay }) {
   const on = !!streamer.overlay_enabled;
   const alerts = ALERTS.map((a) => {
     const durationKey = `overlay_${a.column}_duration`;
     const { fallback, longest } = DURATION[durationKey];
-    const stored = Number(streamer[durationKey]);
-    const seconds = Number.isInteger(stored) && stored >= 1 && stored <= longest ? stored : fallback;
+    const seconds = wholeSeconds(streamer[durationKey], fallback, longest);
     return {
       label: a.label,
       test: a.test,
@@ -164,8 +165,6 @@ function overlayCard({ streamer, overlay }) {
       choices: choices(longest > 30 ? LONG_SECONDS : SECONDS, seconds),
     };
   });
-  const rawVolume = streamer.overlay_volume;
-  const volume = rawVolume === null || rawVolume === undefined || rawVolume === '' ? 0.8 : Number(rawVolume);
   let st;
   if (!on) st = status('cards.overlay.status.off', 'off');
   else if (overlay.open) st = status('cards.overlay.status.open');
@@ -179,7 +178,7 @@ function overlayCard({ streamer, overlay }) {
     shown,
     masked: shown ? shown.replace(/\/overlay\/.*$/, `/overlay/${'•'.repeat(12)}`) : null,
     alerts,
-    volume: Math.round((Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 0.8) * 100),
+    volume: Math.round(volumeOf(streamer.overlay_volume) * 100),
     counts: { alerts: nOfM(alerts.filter((a) => a.on).length, alerts.length) },
   };
 }
@@ -188,11 +187,13 @@ function commandsCard({ streamer, commands }) {
   const builtins = BUILTINS.map((name) => ({ key: `cmd_${name}_enabled`, name: `!${name}`, on: !!streamer[`cmd_${name}_enabled`] }));
   const builtinsOn = builtins.filter((b) => b.on).length;
   // A command switched off on the chatbot page (chat_commands.enabled = 0) stays in the list and in the counts; its
-  // row says `on: false`, so the card can show it dimmed: the bot ignores it.
+  // row says `on: false`, so the card can show it dimmed: the bot ignores it. The status is green only while something
+  // answers in chat, a command that is on or a built-in that is on.
   const rows = commands.map((c, i) => ({ id: c.id, name: c.command, response: c.response, cooldown: c.cooldown, on: !!c.enabled, extra: i >= COMMANDS_SHOWN }));
+  const answering = rows.some((r) => r.on) || builtinsOn > 0;
   return {
     needsChatbot: true,
-    status: status('cards.commands.status', rows.length + builtinsOn > 0 ? 'ok' : 'off', { commands: rows.length, builtins: builtinsOn }),
+    status: status('cards.commands.status', answering ? 'ok' : 'off', { commands: rows.length, builtins: builtinsOn }),
     commands: rows,
     builtins,
     counts: { commands: plain(rows.length), builtins: nOfM(builtinsOn, builtins.length) },

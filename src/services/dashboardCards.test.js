@@ -192,13 +192,21 @@ describe('OBS overlay', () => {
     assert.deepEqual(card.counts.alerts, { key: 'cards.common.nOfM', params: { on: 5, total: 6 } });
   });
 
-  test('not open in OBS, off, no link yet; a stored value out of range shows the default', () => {
+  test('not open in OBS, off, no link yet; no volume saved shows the default', () => {
     assert.deepEqual(build({ overlay: { url: 'https://atleta.example/overlay/x', open: false } }).overlay.status, { key: 'cards.overlay.status.notOpen', params: {}, tone: 'warn' });
     assert.deepEqual(build({ streamer: { overlay_enabled: 0 } }).overlay.status, { key: 'cards.overlay.status.off', params: {}, tone: 'off' });
     const noLink = build({ overlay: { url: null, open: false } }).overlay;
     assert.deepEqual([noLink.url, noLink.shown, noLink.masked], [null, null, null]);
-    assert.equal(build({ streamer: { overlay_follow_duration: 99 } }).overlay.alerts[0].seconds, 8);
     assert.equal(build({ streamer: { overlay_volume: null } }).overlay.volume, 80);
+  });
+
+  // The overlay is told these numbers through overlaySettings.wholeSeconds (overlayConfig.js): the card shows the same.
+  test('a stored duration shows the seconds the overlay plays: past the longest, the longest; below one, one; whole seconds; unreadable, the default', () => {
+    const seconds = (column, value) => build({ streamer: { [column]: value } }).overlay.alerts.find((a) => a.durationKey === column).seconds;
+    assert.equal(seconds('overlay_follow_duration', 99), 30, 'follow stored 99: the longest, 30');
+    assert.equal(seconds('overlay_follow_duration', 0), 1, 'follow stored 0: one second');
+    assert.equal(seconds('overlay_sub_duration', 8.5), 8, 'sub stored 8.5: whole seconds, 8');
+    assert.equal(seconds('overlay_sub_duration', null), 10, 'sub stored nothing: its own default, 10');
   });
 });
 
@@ -225,6 +233,14 @@ describe('Commands', () => {
     const rows = commands.map((c) => (c.command === 'setup' ? { ...c, enabled: 0 } : c));
     const card = build({ commands: rows }).commands;
     assert.deepEqual(card.commands.map((c) => [c.name, c.on]), [['discord', true], ['socials', true], ['setup', false], ['schedule', true], ['sim', true]]);
+  });
+
+  test('green only while something answers in chat: a command that is on or a built-in that is on', () => {
+    const off = commands.map((c) => ({ ...c, enabled: 0 }));
+    const none = { cmd_followage_enabled: 0 };
+    assert.deepEqual(build({ streamer: none, commands: off }).commands.status, { key: 'cards.commands.status', params: { commands: 5, builtins: 0 }, tone: 'off' }, 'every command off and no built-in on: grey, and the numbers still count the commands');
+    assert.equal(build({ commands: off }).commands.status.tone, 'ok', 'every command off but a built-in on');
+    assert.equal(build({ streamer: none, commands: off.map((c, i) => (i ? c : { ...c, enabled: 1 })) }).commands.status.tone, 'ok', 'one command on, no built-in');
   });
 
   test('no command and no built-in is grey', () => {
