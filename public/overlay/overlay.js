@@ -509,7 +509,9 @@ function getSideIcon(eventType) {
 
 function wrapWithSideIcons(icon, bodyHtml) {
   if (!icon) return bodyHtml;
-  return `<div class="cup-row"><span class="cup">${icon}</span><div class="card-inner">${bodyHtml}</div><span class="cup">${icon}</span></div>`;
+  // The icon comes from a saved design: it is text, never markup.
+  const safeIcon = esc(icon);
+  return `<div class="cup-row"><span class="cup">${safeIcon}</span><div class="card-inner">${bodyHtml}</div><span class="cup">${safeIcon}</span></div>`;
 }
 
 function buildBannerContent(event) {
@@ -622,7 +624,7 @@ function buildBannerContent(event) {
     case 'yt_giftmember': {
       const body = `<div class="event-label">Gift Alert</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">gifted <b>${event.data.amount} memberships</b>! 🎁</div>`;
+          <div class="detail">gifted <b>${esc(event.data.amount)} memberships</b>! 🎁</div>`;
       return `<div class="top-accent"></div>
         <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
@@ -1063,7 +1065,7 @@ function applyCustomDesign(card, eventType) {
   if (detailEl) {
     // Only override detail text for events without dynamic data (follow only)
     // Donations, subs, bits, raids have dynamic content that shouldn't be overwritten
-    if (design.detail_text && eventType === 'follow') detailEl.innerHTML = design.detail_text;
+    if (design.detail_text && eventType === 'follow') detailEl.textContent = design.detail_text;
     detailEl.style.color = design.detail_color || design.text_color || '#ffffff';
     if (design.detail_font_size) detailEl.style.fontSize = design.detail_font_size + 'px';
     if (design.detail_font_weight) detailEl.style.fontWeight = design.detail_font_weight;

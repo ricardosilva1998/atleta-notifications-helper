@@ -561,3 +561,58 @@ describe('the giveaway winner and the YouTube cards honour them too (M7)', () =>
     assert.equal(overlay.slots()[0].children[0].style.borderRadius, '24px');
   });
 });
+
+// ── N17: text from a saved design or an event is never markup ────────────
+
+describe('text is shown as text (N17)', () => {
+  const HOSTILE = '<img src=x onerror=alert(1)>';
+  const ESCAPED = '&lt;img src=x onerror=alert(1)&gt;';
+
+  test('a side icon from a saved design is escaped, on both sides of the card', () => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_side_icon: HOSTILE }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Steam key' } });
+    const card = overlay.slots()[0].children[0];
+    assert.ok(!card.innerHTML.includes('<img'), 'no markup from the icon');
+    assert.equal(card.innerHTML.split(ESCAPED).length - 1, 2, 'the icon is on both sides, as text');
+  });
+
+  test('an ordinary emoji icon is untouched', () => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_side_icon: '🏆' }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Steam key' } });
+    assert.equal(overlay.slots()[0].children[0].innerHTML.split('<span class="cup">🏆</span>').length - 1, 2);
+  });
+
+  test('the default icon of a card type is still there when the design sets none', () => {
+    const overlay = loadOverlay();
+    overlay.send({ type: 'yt_member', data: { username: 'RacerDan', level: 'Member' } });
+    assert.match(overlay.slots()[0].children[0].innerHTML, /<span class="cup">⭐<\/span>/);
+  });
+
+  test('the "none" icon removes the cups', () => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_side_icon: 'none' }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+    assert.ok(!overlay.slots()[0].children[0].innerHTML.includes('cup-row'));
+  });
+
+  test('a follow detail text from a saved design is set as text, not parsed', () => {
+    const overlay = loadOverlay({ objects: false, designs: { follow: design({ detail_text: '<b onmouseover=alert(1)>hi</b>' }) } });
+    const card = makeElement();
+    card.className = 'alert-card follow-card entering';
+    const detail = makeElement();
+    detail.className = 'detail';
+    card.appendChild(detail);
+    overlay.context.applyCustomDesign(card, 'follow');
+    assert.equal(detail.textContent, '<b onmouseover=alert(1)>hi</b>');
+    assert.ok(!detail.innerHTML.includes('<b '), 'the markup is escaped');
+  });
+
+  test('the usernames, prizes and amounts that come with an event are escaped as well', () => {
+    for (const type of ['giveaway_winner', 'yt_giftmember', 'yt_superchat', 'yt_member']) {
+      const overlay = loadOverlay();
+      overlay.send({ type, data: { username: HOSTILE, prize: HOSTILE, amount: HOSTILE, message: HOSTILE, level: HOSTILE } });
+      const markup = overlay.slots()[0].children[0].innerHTML;
+      assert.ok(!markup.includes('<img'), `${type}: no raw markup`);
+      assert.ok(markup.includes(ESCAPED), `${type}: shown as text`);
+    }
+  });
+});
