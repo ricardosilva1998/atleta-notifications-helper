@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<!-- Mockup for docs/superpowers/specs/2026-10-14-dashboard-cards-design.md: a static page with example data. The first <style> is the site's own CSS (header.ejs) as of 2026-10-14. -->
+<html lang="en" data-dashboard-tab="twitch">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+
+    :root {
+      --bg-base: #0c0d14;
+      --bg-surface: #141520;
+      --bg-elevated: #1a1b2e;
+      --bg-hover: #1f2037;
+      --border: rgba(255,255,255,0.06);
+      --border-focus: rgba(145,70,255,0.4);
+      --text-primary: #e8e6f0;
+      --text-secondary: #8b8a9e;
+      --text-muted: #5c5b6e;
+      --accent: #9146ff;
+      --accent-glow: rgba(145,70,255,0.15);
+      --accent-hover: #a56bff;
+      --discord: #5865F2;
+      --success: #3ecf8e;
+      --success-bg: rgba(62,207,142,0.1);
+      --danger: #f04438;
+      --danger-bg: rgba(240,68,56,0.1);
+      --warning: #f79009;
+      --warning-bg: rgba(247,144,9,0.1);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --font-display: 'Outfit', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
+      --shadow-elevated: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px var(--border);
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); letter-spacing: -0.02em; }
+
+    a { color: var(--accent); text-decoration: none; transition: color var(--transition); }
+    a:hover { color: var(--accent-hover); text-decoration: none; }
+    a.btn:hover { color: white; }
+    a.btn-secondary:hover { color: var(--text-primary); }
+    a.btn-success:hover { color: #0c0d14; }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
+
+    .animate-in { animation: fadeUp 0.4s ease-out both; }
+    .animate-in-delay-1 { animation-delay: 0.05s; }
+    .animate-in-delay-2 { animation-delay: 0.1s; }
+    .animate-in-delay-3 { animation-delay: 0.15s; }
+    .animate-in-delay-4 { animation-delay: 0.2s; }
+
+    /* Navigation */
+    .nav {
+      background: rgba(20,21,32,0.8);
+      backdrop-filter: blur(20px) saturate(1.2);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-left { display: flex; align-items: center; gap: 12px; }
+    .nav-brand {
+      font-family: var(--font-display);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.01em;
+    }
+    .nav-brand:hover { color: var(--text-primary); }
+    .nav-brand img { width: 26px; height: 26px; border-radius: 7px; }
+    .hamburger {
+      display: flex; flex-direction: column; justify-content: center; gap: 5px;
+      width: 36px; height: 36px; padding: 8px; border: none;
+      background: transparent; cursor: pointer; border-radius: var(--radius-sm);
+      transition: background var(--transition);
+    }
+    .hamburger:hover { background: var(--bg-hover); }
+    .hamburger span {
+      display: block; width: 100%; height: 1.5px;
+      background: var(--text-secondary); border-radius: 2px;
+      transition: background var(--transition);
+    }
+    .hamburger:hover span { background: var(--text-primary); }
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+    .nav-user { display: flex; align-items: center; gap: 10px; }
+    .nav-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 2px solid var(--border);
+      transition: border-color var(--transition);
+    }
+    .nav-avatar:hover { border-color: var(--accent); }
+    .nav-username {
+      font-family: var(--font-display);
+      font-size: 13px; color: var(--text-primary); font-weight: 500;
+    }
+    .nav-logout {
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: var(--radius-sm);
+      background: transparent; color: var(--text-muted); border: none;
+      cursor: pointer; font-size: 14px; text-decoration: none;
+      transition: all var(--transition);
+    }
+    .nav-logout:hover { background: var(--danger-bg); color: var(--danger); }
+    .nav-login {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 16px; border-radius: var(--radius-sm);
+      background: var(--discord); color: white;
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600;
+      transition: all var(--transition);
+    }
+    .nav-login:hover { opacity: 0.9; color: white; transform: translateY(-1px); }
+    .nav-login svg { width: 16px; height: 16px; fill: white; }
+    .nav-user-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      transition: background var(--transition); text-decoration: none; color: var(--text-primary);
+    }
+    .nav-user-link:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .nav-notif-btn {
+      position: relative; display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: var(--radius-sm); background: none;
+      border: none; cursor: pointer; color: var(--text-muted); transition: all var(--transition);
+    }
+    .nav-notif-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .nav-notif-badge {
+      position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px;
+      background: #f04438; color: #fff; font-size: 10px; font-weight: 700;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      padding: 0 4px; line-height: 1;
+    }
+    .nav-notif-dropdown {
+      display: none; position: absolute; top: 100%; right: 0; margin-top: 8px;
+      width: 320px; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); z-index: 200;
+      overflow: hidden;
+    }
+    .nav-notif-dropdown.open { display: block; }
+    .nav-notif-header {
+      padding: 12px 16px; font-size: 13px; font-weight: 700;
+      border-bottom: 1px solid var(--border); color: var(--text-primary);
+    }
+    .nav-notif-item {
+      padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    .nav-notif-item:hover { background: rgba(255,255,255,0.03); }
+    .nav-notif-empty {
+      padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 13px;
+    }
+
+    /* Sidebar */
+    .sidebar-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      z-index: 200; animation: fadeIn 0.2s ease;
+    }
+    .sidebar-overlay.active { display: block; }
+    .sidebar {
+      position: fixed; top: 0; left: 0; width: 280px; height: 100%;
+      background: var(--bg-surface); z-index: 300;
+      transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .sidebar.active { transform: translateX(0); }
+    .sidebar-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-display);
+      font-size: 17px; font-weight: 700; color: var(--text-primary);
+    }
+    .sidebar-header-brand img { width: 26px; height: 26px; border-radius: 7px; }
+    .sidebar-close {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 20px; cursor: pointer; padding: 4px; line-height: 1;
+      border-radius: var(--radius-sm); transition: all var(--transition);
+    }
+    .sidebar-close:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+    .sidebar-link {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 20px; color: var(--text-secondary);
+      font-family: var(--font-display);
+      font-size: 14px; font-weight: 500;
+      transition: all var(--transition); border-left: 2px solid transparent;
+    }
+    .sidebar-link:hover {
+      background: var(--bg-hover); color: var(--text-primary);
+      border-left-color: var(--accent);
+    }
+    /* Logout is a form (a POST), its button drawn like the links. */
+    .sidebar-logout { margin: 0; }
+    button.sidebar-link { width: 100%; background: none; border: 0; border-left: 2px solid transparent; line-height: inherit; text-align: left; cursor: pointer; }
+    .sidebar-link svg, .sidebar-link i[data-lucide] { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.7; }
+    .sidebar-link svg { fill: currentColor; }
+    .sidebar-link:hover svg { opacity: 1; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 8px 20px; }
+    .sidebar-section {
+      padding: 16px 20px 6px;
+      font-family: var(--font-display);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--text-muted); font-weight: 600;
+    }
+    .sidebar-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-muted);
+    }
+
+    /* Container */
+    .container {
+      max-width: 920px; margin: 0 auto; padding: 32px 24px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 20px; border-radius: var(--radius-sm);
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border: none; color: white;
+      transition: all var(--transition);
+      text-decoration: none;
+    }
+    .btn:hover { transform: translateY(-1px); text-decoration: none; }
+    .btn:active { transform: translateY(0); }
+    .btn-primary {
+      background: var(--accent);
+      box-shadow: 0 0 0 1px rgba(145,70,255,0.3), 0 2px 8px rgba(145,70,255,0.2);
+    }
+    .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 0 0 1px rgba(145,70,255,0.4), 0 4px 16px rgba(145,70,255,0.3); }
+    .btn-discord {
+      background: var(--discord);
+      box-shadow: 0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(88,101,242,0.2);
+    }
+    .btn-discord:hover { box-shadow: 0 0 0 1px rgba(88,101,242,0.4), 0 4px 16px rgba(88,101,242,0.3); }
+    .btn-success {
+      background: var(--success);
+      color: #0c0d14;
+      box-shadow: 0 0 0 1px rgba(62,207,142,0.3);
+    }
+    .btn-success:hover { box-shadow: 0 0 0 1px rgba(62,207,142,0.4), 0 4px 16px rgba(62,207,142,0.2); }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover { box-shadow: 0 4px 16px rgba(240,68,56,0.3); }
+    .btn-secondary {
+      background: var(--bg-elevated); color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.1); }
+
+    /* Cards */
+    .card {
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .card:hover { border-color: rgba(255,255,255,0.08); }
+    .card h3 {
+      margin-bottom: 12px; font-size: 16px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    /* Forms */
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block; margin-bottom: 8px;
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    }
+    .form-group select, .form-group input, .form-group textarea {
+      width: 100%; padding: 10px 14px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 14px;
+      transition: all var(--transition);
+      outline: none;
+    }
+    .form-group select:focus, .form-group input:focus, .form-group textarea:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-group textarea { min-height: 120px; resize: vertical; }
+    .form-group select { cursor: pointer; }
+
+    /* Toggle */
+    .toggle { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .toggle input[type="checkbox"] {
+      width: 18px; height: 18px; accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .toggle label { cursor: pointer; font-family: var(--font-display); font-weight: 500; }
+
+    /* Alerts */
+    .alert {
+      padding: 12px 16px; border-radius: var(--radius-sm);
+      margin-bottom: 16px; font-size: 14px;
+      animation: fadeUp 0.3s ease-out;
+    }
+    .alert-success {
+      background: var(--success-bg);
+      border: 1px solid rgba(62,207,142,0.2);
+      color: var(--success);
+    }
+    .alert-info {
+      background: var(--accent-glow);
+      border: 1px solid rgba(145,70,255,0.2);
+      color: var(--accent-hover);
+    }
+    .alert-warning {
+      background: var(--warning-bg);
+      border: 1px solid rgba(247,144,9,0.2);
+      color: var(--warning);
+    }
+    .alert-danger {
+      background: var(--danger-bg);
+      border: 1px solid rgba(240,68,56,0.2);
+      color: var(--danger);
+    }
+
+    /* Guild Cards */
+    .guild-list { display: grid; gap: 12px; }
+    .guild-card { display: flex; align-items: center; gap: 16px; }
+    .guild-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--bg-elevated);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-size: 18px; font-weight: 700; color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .guild-icon img { width: 44px; height: 44px; border-radius: 12px; }
+    .guild-info { flex: 1; min-width: 0; }
+    .guild-info h4 {
+      font-size: 14px; font-weight: 600; margin-bottom: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .guild-info p { font-size: 12px; color: var(--text-secondary); }
+
+    /* Status indicators */
+    .status-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      margin-right: 6px; position: relative;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.offline { background: var(--text-muted); }
+
+    /* Section */
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    /* Tutorial */
+    .step { margin-bottom: 32px; }
+    .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .step-number {
+      flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent); color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 700; font-size: 14px;
+    }
+    .step-content { max-width: 700px; margin: 0 auto; }
+    .step-content h3 { margin-bottom: 8px; font-size: 16px; }
+    .step-content p, .step-content li { color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
+    .step-content ul, .step-content ol { padding-left: 20px; margin-top: 6px; }
+    .step-content code {
+      background: var(--bg-elevated); padding: 2px 8px; border-radius: 4px;
+      font-size: 13px; color: var(--accent-hover);
+      border: 1px solid var(--border);
+    }
+    .tip {
+      background: var(--accent-glow);
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin: 12px 0; font-size: 14px; color: var(--text-secondary);
+    }
+
+    /* Features grid */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px; margin-bottom: 32px;
+    }
+
+    /* Screenshot */
+    .screenshot {
+      margin: 12px 0; border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--bg-surface);
+      padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px;
+    }
+    .screenshot .icon { font-size: 28px; margin-bottom: 8px; }
+    .screenshot .label { color: var(--text-secondary); font-weight: 600; margin-bottom: 4px; }
+    .screenshot img {
+      max-width: 100%; border-radius: var(--radius-sm);
+      display: block; margin: 0 auto;
+      cursor: pointer; transition: all var(--transition);
+    }
+    .screenshot img:hover { opacity: 0.85; transform: scale(1.01); }
+
+    /* Lightbox */
+    .lightbox {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92); z-index: 1000; cursor: pointer;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+    .lightbox.active { display: flex; }
+    .lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius-md); cursor: default; }
+    .lightbox-close {
+      position: fixed; top: 16px; right: 24px; color: white;
+      font-size: 28px; cursor: pointer; z-index: 1001;
+      font-weight: 300; line-height: 1;
+      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; transition: background var(--transition);
+    }
+    .lightbox-close:hover { background: rgba(255,255,255,0.1); }
+
+    /* Badge */
+    .badge {
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 3px 10px; border-radius: 20px;
+      text-transform: uppercase;
+    }
+    /* .badge-tier {
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: white;
+    } */
+    .badge-popular {
+      background: linear-gradient(135deg, var(--accent), #c026d3);
+      color: white;
+    }
+
+    /* Stat card with tooltip */
+    .stat-card {
+      background: var(--bg-base); border-radius: var(--radius-sm);
+      padding: 10px 12px; border: 1px solid var(--border);
+      position: relative; cursor: default;
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .stat-card:hover { border-color: rgba(255,255,255,0.12); background: var(--bg-elevated); }
+    .stat-value {
+      font-size: 18px; font-weight: 700; font-family: var(--font-display);
+    }
+    .stat-label {
+      font-size: 10px; color: var(--text-muted); margin-top: 2px;
+    }
+    .stat-tooltip {
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%); background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 14px; font-size: 12px; color: var(--text-secondary);
+      line-height: 1.5; white-space: nowrap; z-index: 50;
+      box-shadow: var(--shadow-elevated); pointer-events: none;
+    }
+    .stat-tooltip::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%); border: 5px solid transparent;
+      border-top-color: var(--border);
+    }
+    .stat-card:hover .stat-tooltip { display: block; }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex; gap: 4px; margin-bottom: 24px; padding: 4px;
+      background: var(--bg-surface); border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      flex: 1; padding: 10px 16px; border: none; background: transparent;
+      color: var(--text-secondary); font-family: var(--font-display);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border-radius: var(--radius-sm); transition: all var(--transition);
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .tab-btn svg { flex-shrink: 0; }
+    .tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .tab-btn.active { color: white; }
+    .tab-twitch.active { background: #9146ff; }
+    .tab-youtube.active { background: #ff0000; }
+    .tab-discord.active { background: #5865F2; }
+    .tab-instagram.active { background: #E1306C; }
+    .tab-tiktok.active { background: #010101; color: white; }
+    .tab-twitter.active { background: #1DA1F2; }
+    .tab-iracing.active { background: #1a1a2e; }
+    .tab-settings.active { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); }
+    .admin-tab-stats.active { background: #3498db; }
+    .admin-tab-users.active { background: #9146ff; }
+    .admin-tab-issues.active { background: #f79009; }
+    .admin-tab-feedback.active { background: #3ecf8e; color: #0c0d14; }
+    .admin-tab-discounts.active { background: #e74c3c; }
+    .admin-tab-testing.active { background: #8b5cf6; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeUp 0.3s ease-out; }
+
+    /* User dropdown */
+    .user-dropdown-wrapper { position: relative; }
+    .user-dropdown-trigger {
+      cursor: pointer; display: flex; align-items: center; gap: 10px;
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      transition: background var(--transition);
+    }
+    .user-dropdown-trigger:hover { background: var(--bg-hover); }
+    .user-dropdown-chevron { transition: transform var(--transition); }
+    .user-dropdown-trigger.open .user-dropdown-chevron { transform: rotate(180deg); }
+    .user-dropdown {
+      display: none; position: absolute; top: calc(100% + 8px); right: 0;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--radius-md); min-width: 220px; padding: 8px 0;
+      box-shadow: var(--shadow-elevated); z-index: 150;
+      animation: fadeUp 0.15s ease-out;
+    }
+    .user-dropdown.active { display: block; }
+    .user-dropdown-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+      color: var(--text-secondary); font-size: 13px; font-family: var(--font-display);
+      font-weight: 500; transition: all var(--transition); text-decoration: none; cursor: pointer;
+    }
+    .user-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .user-dropdown-item svg { width: 16px; height: 16px; fill: currentColor; opacity: 0.7; }
+    .user-dropdown-item:hover svg { opacity: 1; }
+    .user-dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .user-dropdown-label {
+      padding: 8px 16px 4px; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--text-muted); font-family: var(--font-display); font-weight: 600;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container { padding: 20px 16px; }
+      .nav { padding: 0 16px; }
+      .guild-card { flex-wrap: wrap; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .pricing-grid { }
+    @media (max-width: 900px) { .pricing-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+    @media (max-width: 520px) { .pricing-grid { grid-template-columns: 1fr !important; } }
+  
+/* ---- */
+
+  /* The open tab is the one <html data-dashboard-tab> names (set by the script above, and by switchTab() at the
+     end of the page); without that script (no JavaScript) the Twitch tab shows. */
+  html[data-dashboard-tab="twitch"] #tab-twitch,
+  html[data-dashboard-tab="discord"] #tab-discord,
+  html[data-dashboard-tab="youtube"] #tab-youtube,
+  html[data-dashboard-tab="kick"] #tab-kick,
+  html[data-dashboard-tab="experimental"] #tab-experimental,
+  html[data-dashboard-tab="admin"] #tab-admin,
+  html:not([data-dashboard-tab]) #tab-twitch { display: block; animation: fadeUp 0.3s ease-out; }
+  html[data-dashboard-tab="twitch"] .tab-btn.tab-twitch { background: #9146ff; color: white; }
+  html[data-dashboard-tab="discord"] .tab-btn.tab-discord { background: #5865F2; color: white; }
+  html[data-dashboard-tab="youtube"] .tab-btn.tab-youtube { background: #ff0000; color: white; }
+  html[data-dashboard-tab="kick"] .tab-btn.tab-kick { background: #53fc18; color: #000; }
+  html[data-dashboard-tab="experimental"] .tab-btn.tab-experimental { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+  html[data-dashboard-tab="admin"] .tab-btn.tab-admin { background: #e74c3c; color: white; }
+  /* On a narrow screen the tab bar scrolls sideways, not the page */
+  .dash-tabs { overflow-x: auto; }
+
+/* ---- */
+
+  .twitch-cards-grid .card { margin-bottom: 0; }
+  /* Discord notifications card */
+  .dn-lead { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5; }
+  .dn-servers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 14px; list-style: none; }
+  .dn-server { padding: 12px; border-radius: var(--radius-sm); background: var(--bg-base); border: 1px solid var(--border); }
+  .dn-server-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dn-server > .dn-server-head { margin-bottom: 10px; }
+  .dn-server-icon {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
+    display: flex; align-items: center; justify-content: center; background: var(--bg-elevated);
+    font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--text-muted);
+  }
+  .dn-server-icon img { width: 28px; height: 28px; }
+  .dn-server-name { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dn-offline { flex-shrink: 0; font-size: 11px; color: var(--text-secondary); }
+  .dn-server-link { flex-shrink: 0; font-family: var(--font-display); font-size: 12px; font-weight: 600; }
+  .dn-states { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; }
+  .dn-state {
+    display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 10px;
+    border: 1px solid transparent; border-radius: 999px; font-size: 12px; line-height: 1.5;
+  }
+  .dn-state svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .dn-on { background: var(--success-bg); border-color: rgba(62,207,142,0.2); color: var(--success); }
+  .dn-off { background: var(--bg-elevated); color: var(--text-secondary); }
+  .dn-wait { background: var(--warning-bg); border-color: rgba(247,144,9,0.25); color: var(--warning); }
+  .dn-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+  .dn-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .dn-note { margin-bottom: 12px; font-size: 12px; line-height: 1.5; color: var(--warning); }
+  .dn-note a { color: var(--warning); text-decoration: underline; }
+  @media (max-width: 640px) {
+    .stat-tooltip { display: none !important; }
+  }
+  @media (max-width: 520px) {
+    div[style*="grid-template-columns: repeat(4, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    div[style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    div[style*="grid-template-columns: repeat(2, 1fr)"] { grid-template-columns: minmax(0, 1fr) !important; }
+    .dash-week-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    /* A server of the Discord tab: its buttons on a line of their own, under the name; three count tiles in one row */
+    .dash-server-head { flex-wrap: wrap; }
+    .dash-server-actions { flex-basis: 100%; }
+    .dash-server-actions > * { flex: 1; justify-content: center; }
+    .dash-server-meta { flex-wrap: wrap; row-gap: 2px; }
+    .dash-summary[style*="repeat(3, 1fr)"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  }
+
+</style>
+<style>
+  html[data-dashboard-tab="twitch"] #tab-twitch { display: block; }
+  .container { max-width: 1760px; }
+  html[data-dashboard-tab="twitch"] .tab-btn.tab-twitch { background: #9146ff; color: white; }
+  .tab-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg.i.sm { width: 14px; height: 14px; }
+
+  /* the app's switch (chatbot settings page) */
+  .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .pill-toggle input { opacity: 0; width: 0; height: 0; }
+  .pill-toggle .slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg-elevated); border-radius: 24px; border: 1px solid var(--border); transition: 0.3s; }
+  .pill-toggle .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+  .pill-toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .pill-toggle input:checked + .slider:before { transform: translateX(20px); }
+  .pill-toggle input:focus-visible + .slider { box-shadow: 0 0 0 3px rgba(145,70,255,.35); }
+  .pill-toggle.mini { width: 34px; height: 19px; }
+  .pill-toggle.mini .slider:before { height: 13px; width: 13px; }
+  .pill-toggle.mini input:checked + .slider:before { transform: translateX(15px); }
+
+  /* page */
+  .dash-top { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .dash-top .stats-strip { align-self: stretch; }
+  .dash-acct { cursor: default; padding: 8px 16px; font-size: 13px; flex: none; }
+  .stats-strip { flex: 1; display: grid; grid-template-columns: auto repeat(6, 1fr); align-items: center; gap: 8px; padding: 12px 16px; margin: 0; }
+  .stats-strip .cap { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); padding-right: 8px; border-right: 1px solid var(--border); }
+  .stats-strip .s { text-align: center; }
+  .stats-strip .n { font: 800 18px var(--font-display); }
+  .stats-strip .l { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .wc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); column-gap: 12px; grid-auto-rows: 2px; grid-auto-flow: row dense; align-items: start; }
+  .wc-grid > .wc-card { margin-bottom: 12px; }
+
+  /* card anatomy: head (icon, title, status, main switch) · body (sections) · foot (links left, Saved right) */
+  .wc-card { padding: 20px 22px; margin: 0; display: flex; flex-direction: column; gap: 16px; position: relative; }
+  .wc-head { display: flex; align-items: center; gap: 12px; }
+  .wc-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .wc-title { font: 700 16px var(--font-display); margin: 0; line-height: 1.2; }
+  .wc-status { font-size: 12px; font-weight: 600; color: var(--success); }
+  .wc-status.off { color: var(--text-muted); }
+  .wc-status.warn { color: var(--warning); }
+  .wc-head .pill-toggle { margin-left: auto; }
+  .wc-body { display: flex; flex-direction: column; gap: 10px; transition: opacity .2s; }
+  .wc-sec { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-top: 2px; }
+  .wc-sec:first-child { margin-top: 0; }
+  .wc-label { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+  .wc-count { font-size: 12px; color: var(--text-muted); }
+  .wc-sec > .btn, .wc-sec > .wc-link-sm, .wc-sec > .wc-count:last-child { margin-left: auto; }
+  .wc-list { display: flex; flex-direction: column; gap: 6px; }
+  .wc-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 6px 0 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; min-width: 0; transition: opacity .2s; }
+  .wc-row.is-off .nm, .wc-row.is-off .txt { opacity: .45; }
+  .wc-row .nm { font-weight: 600; color: var(--text-primary); flex: 0 0 auto; min-width: 76px; }
+  .wc-row code.nm { font: 600 12.5px ui-monospace, Menlo, monospace; color: var(--accent-hover); min-width: 0; }
+  .wc-row .txt { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .wc-row .when { color: var(--text-muted); font-size: 12px; flex: none; padding-right: 6px; }
+  .wc-row .amt { font: 700 13px var(--font-display); color: var(--success); flex: none; }
+  .wc-row.hidden { display: none; }
+  .wc-ib { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; flex: none; background: none; border: none; }
+  .wc-ib:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .wc-ib.done { color: var(--success); }
+  .wc-more { background: none; border: none; color: var(--text-secondary); font: 600 12px var(--font-body); cursor: pointer; padding: 0; text-align: left; align-self: flex-start; }
+  .wc-more:hover { color: var(--text-primary); }
+  .wc-input, .wc-select { padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font: 500 13px var(--font-body); min-width: 0; }
+  .wc-select { font: 600 13px var(--font-display); cursor: pointer; }
+  .wc-select.sm { padding: 5px 8px; font-size: 12px; }
+  .wc-input:focus, .wc-select:focus, .wc-editor textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(145,70,255,.12); }
+  .wc-btn { padding: 8px 14px; font-size: 12px; }
+  .wc-btn.xs { padding: 5px 11px; font-size: 12px; gap: 5px; }
+  .wc-btn.block { width: 100%; padding: 10px 14px; }
+  .wc-setrow { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+  .wc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; padding-top: 12px; border-top: 1px solid var(--border); margin-top: auto; }
+  .wc-foot a, .wc-link-sm { color: var(--text-secondary); text-decoration: none; font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .wc-foot a:hover, .wc-link-sm:hover { color: var(--text-primary); }
+  .wc-saved { margin-left: auto; color: var(--success); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .25s; }
+  .wc-saved.show { opacity: 1; }
+
+  /* building blocks */
+  .wc-linkbox { display: flex; gap: 8px; align-items: center; }
+  .wc-link { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; font: 500 12px ui-monospace, Menlo, monospace; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wc-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .wc-sw { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-secondary); min-width: 0; }
+  .wc-sw.is-on { color: var(--text-primary); }
+  .wc-sw > span { display: flex; flex-direction: column; min-width: 0; }
+  .wc-sw small { font-size: 11px; font-weight: 500; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wc-server { display: flex; flex-direction: column; gap: 10px; }
+  .wc-server-name { display: flex; align-items: center; gap: 8px; font: 700 13px var(--font-display); }
+  .wc-server-name .av { width: 22px; height: 22px; border-radius: 6px; background: #5865F2; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .wc-server-name .wc-link-sm { margin-left: auto; }
+  .wc-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wc-pill { font: 600 12px ui-monospace, Menlo, monospace; color: var(--accent-hover); background: rgba(145,70,255,0.12); border: 1px solid rgba(145,70,255,0.3); padding: 3px 9px; border-radius: 999px; }
+  .wc-pill.none { font-family: var(--font-body); color: var(--text-muted); background: none; border-style: dashed; }
+  .wc-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .wc-chip { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-secondary); font: 600 12.5px ui-monospace, Menlo, monospace; cursor: pointer; user-select: none; min-width: 0; }
+  .wc-chip.on { background: rgba(145,70,255,0.14); border-color: rgba(145,70,255,0.45); color: var(--text-primary); }
+  .wc-chip .tick { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--text-muted); display: flex; align-items: center; justify-content: center; flex: none; color: #fff; }
+  .wc-chip.on .tick { background: var(--accent); border-color: var(--accent); }
+  .wc-chip .tick svg { opacity: 0; } .wc-chip.on .tick svg { opacity: 1; }
+  .wc-note { display: flex; align-items: center; gap: 10px; background: var(--warning-bg); border: 1px solid rgba(247,144,9,0.25); color: var(--text-secondary); border-radius: 10px; padding: 9px 10px 9px 12px; font-size: 12.5px; }
+  .wc-note b { color: var(--text-primary); }
+  .wc-note code { color: var(--text-primary); background: rgba(255,255,255,.06); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+  .wc-note .wc-btn { margin-left: auto; white-space: nowrap; }
+  .wc-hint { font-size: 12px; color: var(--text-muted); }
+  .wc-hint code { color: var(--text-secondary); }
+  .wc-alert select { margin-left: auto; }
+  .wc-volume { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px; padding: 2px 2px 0; }
+  .wc-volume input[type=range] { flex: 1; accent-color: var(--accent); }
+  .wc-volume .v { width: 38px; text-align: right; font: 600 12px var(--font-display); color: var(--text-primary); }
+  .wc-goal { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .wc-goal .top { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+  .wc-goal .top b { color: var(--text-primary); }
+  .wc-goal .top span { margin-left: auto; font: 700 13px var(--font-display); color: var(--text-primary); }
+  .wc-goal .top em { font-style: normal; color: var(--text-muted); font-weight: 500; }
+  .wc-progress { height: 8px; background: var(--bg-base); border-radius: 99px; overflow: hidden; }
+  .wc-progress > span { display: block; height: 100%; background: linear-gradient(90deg, #9146ff, #3ecf8e); border-radius: 99px; }
+  .wc-fields { display: flex; gap: 10px; align-items: flex-end; }
+  .wc-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .wc-field > span { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+  .wc-field.grow { flex: 1; }
+  .wc-field .pill-toggle { margin: 7px 0; }
+  .wc-empty { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px dashed var(--border); border-radius: 10px; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+  .wc-empty b { color: var(--text-primary); }
+  .wc-empty .big { width: 36px; height: 36px; border-radius: 10px; background: rgba(145,70,255,0.12); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; flex: none; }
+  .wc-needs { display: none; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-secondary); background: var(--bg-elevated); border: 1px dashed rgba(145,70,255,0.4); border-radius: 10px; padding: 8px 12px; }
+  .wc-card.needs-bot .wc-needs { display: flex; }
+  .wc-card.needs-bot .wc-body { opacity: .35; pointer-events: none; }
+  .wc-dim { opacity: .35; pointer-events: none; }
+  .wc-gw-live { display: none; flex-direction: column; gap: 10px; }
+  .wc-card.gw-running .wc-gw-live { display: flex; }
+  .wc-card.gw-running .wc-gw-form { display: none !important; }
+  .wc-gw-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .wc-gw-stats div { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 8px; text-align: center; }
+  .wc-gw-stats b { display: block; font: 800 18px var(--font-display); }
+  .wc-gw-stats span { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .wc-winner { display: none; align-items: center; gap: 8px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35); border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 13px; }
+  .wc-winner.show { display: flex; }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: none; animation: pulse-red 1.4s infinite; }
+  @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(240,68,56,.6); } 70% { box-shadow: 0 0 0 8px rgba(240,68,56,0); } 100% { box-shadow: 0 0 0 0 rgba(240,68,56,0); } }
+  .wc-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+  /* editor (pop-up by default, or inside the card) */
+  .wc-editor { background: var(--bg-base); border: 1px solid rgba(145,70,255,0.4); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .wc-editor h4 { margin: 0; font: 700 15px var(--font-display); }
+  .wc-editor textarea { width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font: 500 13px/1.5 var(--font-body); box-sizing: border-box; }
+  .wc-vars { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+  .wc-vars code { background: var(--bg-elevated); padding: 2px 7px; border-radius: 6px; cursor: pointer; color: var(--text-secondary); }
+  .wc-vars code:hover { color: var(--text-primary); }
+  .wc-back { position: fixed; inset: 0; background: rgba(5,5,10,.65); display: none; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .wc-back.open { display: flex; }
+  .wc-modal { width: min(540px, 100%); margin: 0; }
+  .wc-modal .wc-editor { border: none; padding: 0; background: none; }
+
+  /* the mockup's own controls (not part of the design) */
+  .mock-bar { position: fixed; bottom: 16px; right: 16px; z-index: 80; background: #fff7d6; color: #3b2f00; border: 1px dashed #c99700; border-radius: 12px; padding: 8px 12px; font: 600 12px system-ui, sans-serif; display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 30px rgba(0,0,0,.45); flex-wrap: wrap; max-width: calc(100vw - 32px); }
+  .mock-bar b { letter-spacing: .5px; }
+  .mock-bar button { border: 1px solid #c99700; background: transparent; color: #3b2f00; border-radius: 8px; padding: 4px 9px; font: 600 12px system-ui, sans-serif; cursor: pointer; }
+  .mock-bar button.on { background: #c99700; color: #fff; }
+  .mock-toast { position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%); background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; font-size: 13px; z-index: 90; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .mock-toast.show { opacity: 1; }
+
+  @media (max-width: 760px) {
+    .stats-strip { grid-template-columns: repeat(3, 1fr); row-gap: 10px; }
+    .stats-strip .cap { grid-column: 1 / -1; border-right: none; padding: 0; }
+  }
+  @media (max-width: 420px) {
+    .wc-switches { grid-template-columns: minmax(0, 1fr); }
+    .wc-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .wc-row .nm { min-width: 0; }
+    .wc-fields { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+  <symbol id="i-mega" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></symbol>
+  <symbol id="i-dollar" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></symbol>
+  <symbol id="i-twitch" viewBox="0 0 24 24"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></symbol>
+  <symbol id="i-discord" viewBox="0 0 24 24"><path d="M9 12h.01M15 12h.01M7.5 7.5c3-1 6-1 9 0M7 16.5c3.5 1 6.5 1 10 0"/><path d="M15.5 17c0 1 1.5 3 2 3 1.5 0 2.833-1.667 3.5-3 .667-1.667.5-5.833-1.5-11.5-1.457-1.015-3-1.34-4.5-1.5l-.972 1.923a11.913 11.913 0 0 0-4.053 0L9 4c-1.5.16-3.043.485-4.5 1.5-2 5.667-2.167 9.833-1.5 11.5.667 1.333 2 3 3.5 3 .5 0 2-2 2-3"/></symbol>
+</svg>
+
+<nav class="nav">
+  <div class="nav-left">
+    <button class="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+    <a class="nav-brand">Atleta</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-user-link">
+      <div class="nav-avatar" style="background: var(--accent); display: flex; align-items: center; justify-content: center; color: white; font-family: var(--font-display); font-weight: 700; font-size: 13px;">Y</div>
+      <span class="nav-username">your_channel</span>
+    </a>
+  </div>
+</nav>
+
+<div class="container">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px;">
+    <h2 style="font-size: 24px; font-weight: 700;">Dashboard</h2>
+  </div>
+  <div class="tab-bar dash-tabs">
+    <button class="tab-btn tab-twitch"><svg class="i sm"><use href="#i-twitch"/></svg>Twitch</button>
+    <button class="tab-btn tab-discord"><svg class="i sm"><use href="#i-discord"/></svg>Discord</button>
+  </div>
+
+  <div class="tab-content" id="tab-twitch">
+    <div class="dash-top">
+      <span class="btn btn-secondary dash-acct"><svg class="i sm" style="color: var(--success)"><use href="#i-check"/></svg>Twitch: your_channel</span>
+    <div class="card stats-strip">
+      <div class="cap">Last 7 days</div>
+      <div class="s"><div class="n" style="color:#9146ff">12</div><div class="l">Follows</div></div>
+      <div class="s"><div class="n" style="color:#00ff88">2</div><div class="l">Subs</div></div>
+      <div class="s"><div class="n" style="color:#ffd60a">0</div><div class="l">Bits</div></div>
+      <div class="s"><div class="n" style="color:#e040fb">1</div><div class="l">Donations</div></div>
+      <div class="s"><div class="n" style="color:#ff5c5c">2</div><div class="l">Raids</div></div>
+      <div class="s"><div class="n" style="color:#00ff88">0</div><div class="l">Gift subs</div></div>
+    </div>
+    </div>
+
+    <div class="wc-grid">
+
+      <!-- Chatbot -->
+      <div class="card wc-card" id="card-bot">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(145,71,255,0.15); color: #9146ff"><svg class="i"><use href="#i-chat"/></svg></div>
+          <div><h3 class="wc-title">Chatbot</h3><span class="wc-status" id="bot-status">● Online in #your_channel</span></div>
+          <label class="pill-toggle" title="Chatbot on or off"><input type="checkbox" checked data-role="bot"><span class="slider"></span></label>
+        </div>
+        <div class="wc-body" id="bot-body">
+          <div class="wc-sec"><span class="wc-label">Thank-you messages</span><span class="wc-count" id="ty-count">6 of 6 on</span></div>
+          <div class="wc-list" id="ty-list">
+            <div class="wc-row" data-ty="follow"><label class="pill-toggle mini"><input type="checkbox" checked data-role="ty"><span class="slider"></span></label><span class="nm">Follows</span><span class="txt">Welcome to the pit crew, {username}!</span><button class="wc-ib" data-edit="ty" title="Change the words"><svg class="i sm"><use href="#i-pen"/></svg></button></div>
+            <div class="wc-row" data-ty="sub"><label class="pill-toggle mini"><input type="checkbox" checked data-role="ty"><span class="slider"></span></label><span class="nm">Subs</span><span class="txt">{username} just joined the podium! Tier {tier} for {months} months!</span><button class="wc-ib" data-edit="ty" title="Change the words"><svg class="i sm"><use href="#i-pen"/></svg></button></div>
+            <div class="wc-row" data-ty="giftsub"><label class="pill-toggle mini"><input type="checkbox" checked data-role="ty"><span class="slider"></span></label><span class="nm">Gift subs</span><span class="txt">{username} gifted {amount} subs! What a sponsor!</span><button class="wc-ib" data-edit="ty" title="Change the words"><svg class="i sm"><use href="#i-pen"/></svg></button></div>
+            <div class="wc-row" data-ty="bits"><label class="pill-toggle mini"><input type="checkbox" checked data-role="ty"><span class="slider"></span></label><span class="nm">Bits</span><span class="txt">{username} fueled up {amount} bits!</span><button class="wc-ib" data-edit="ty" title="Change the words"><svg class="i sm"><use href="#i-pen"/></svg></button></div>
+            <div class="wc-row" data-ty="donation"><label class="pill-toggle mini"><input type="checkbox" checked data-role="ty"><span class="slider"></span></label><span class="nm">Donations</span><span class="txt">{username} donated {amount}! {message}</span><button class="wc-ib" data-edit="ty" title="Change the words"><svg class="i sm"><use href="#i-pen"/></svg></button></div>
+            <div class="wc-row" data-ty="raid"><label class="pill-toggle mini"><input type="checkbox" checked data-role="ty"><span class="slider"></span></label><span class="nm">Raids</span><span class="txt">{username} is raiding with {viewers} viewers! Welcome racers!</span><button class="wc-ib" data-edit="ty" title="Change the words"><svg class="i sm"><use href="#i-pen"/></svg></button></div>
+          </div>
+          <div class="wc-edit-slot"></div>
+        </div>
+        <div class="wc-foot"><a data-more>All chatbot settings <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Discord notifications -->
+      <div class="card wc-card" id="card-dn">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(88,101,242,0.15); color: #5865F2"><svg class="i"><use href="#i-bell"/></svg></div>
+          <div><h3 class="wc-title">Discord notifications</h3><span class="wc-status">● Your streams are announced</span></div>
+        </div>
+        <div class="wc-body">
+          <div class="wc-server">
+            <div class="wc-server-name"><span class="av">V</span>Your Discord server<a class="wc-link-sm" data-more>Channels <svg class="i sm"><use href="#i-right"/></svg></a></div>
+            <div class="wc-switches">
+              <div class="wc-sw is-on"><span>Go-live posts<small>in #go-live</small></span><label class="pill-toggle mini"><input type="checkbox" checked data-role="dn"><span class="slider"></span></label></div>
+              <div class="wc-sw is-on"><span>Clips<small>in #clips</small></span><label class="pill-toggle mini"><input type="checkbox" checked data-role="dn"><span class="slider"></span></label></div>
+              <div class="wc-sw"><span>Stream recaps<small>after each stream</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="dn"><span class="slider"></span></label></div>
+              <div class="wc-sw"><span>Milestones<small>follower and sub goals</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="dn"><span class="slider"></span></label></div>
+              <div class="wc-sw"><span>Weekly highlights<small>every Monday</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="dn"><span class="slider"></span></label></div>
+              <div class="wc-sw is-on"><span>Sub roles<small>a role for your subs</small></span><label class="pill-toggle mini"><input type="checkbox" checked data-role="dn"><span class="slider"></span></label></div>
+            </div>
+          </div>
+        </div>
+        <div class="wc-foot"><a data-more>Welcome message <svg class="i sm"><use href="#i-right"/></svg></a><a data-more>Add a server <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- OBS overlay -->
+      <div class="card wc-card" id="card-ov">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(224,64,251,0.13); color: #e040fb"><svg class="i"><use href="#i-monitor"/></svg></div>
+          <div><h3 class="wc-title">OBS overlay</h3><span class="wc-status" id="ov-status">● Alerts show on stream</span></div>
+          <label class="pill-toggle" title="Overlay on or off"><input type="checkbox" checked data-role="ov"><span class="slider"></span></label>
+        </div>
+        <div class="wc-body">
+          <div class="wc-sec"><span class="wc-label">Browser source for OBS</span></div>
+          <div class="wc-linkbox">
+            <span class="wc-link" id="ov-link">atletanotifications.com/overlay/••••••••••••</span>
+            <button class="btn btn-secondary wc-btn" id="ov-show" title="Show the link (keep it off stream)"><svg class="i sm"><use href="#i-eye"/></svg></button>
+            <button class="btn btn-secondary wc-btn" id="ov-copy"><svg class="i sm"><use href="#i-copy"/></svg>Copy</button>
+          </div>
+          <div class="wc-sec"><span class="wc-label">Alerts</span><span class="wc-count" id="al-count">6 of 6 on</span></div>
+          <div class="wc-list" id="al-list">
+            <div class="wc-row wc-alert"><label class="pill-toggle mini"><input type="checkbox" checked data-role="al"><span class="slider"></span></label><span class="nm">Follows</span><select class="wc-select sm"><option>5 s</option><option selected>8 s</option><option>10 s</option><option>12 s</option><option>15 s</option><option>20 s</option><option>30 s</option></select><button class="wc-ib" data-test title="Show a test alert in OBS"><svg class="i sm"><use href="#i-play"/></svg></button></div>
+            <div class="wc-row wc-alert"><label class="pill-toggle mini"><input type="checkbox" checked data-role="al"><span class="slider"></span></label><span class="nm">Subs</span><select class="wc-select sm"><option>5 s</option><option>8 s</option><option selected>10 s</option><option>12 s</option><option>15 s</option><option>20 s</option><option>30 s</option></select><button class="wc-ib" data-test title="Show a test alert in OBS"><svg class="i sm"><use href="#i-play"/></svg></button></div>
+            <div class="wc-row wc-alert"><label class="pill-toggle mini"><input type="checkbox" checked data-role="al"><span class="slider"></span></label><span class="nm">Bits</span><select class="wc-select sm"><option>5 s</option><option>8 s</option><option selected>10 s</option><option>12 s</option><option>15 s</option><option>20 s</option><option>30 s</option></select><button class="wc-ib" data-test title="Show a test alert in OBS"><svg class="i sm"><use href="#i-play"/></svg></button></div>
+            <div class="wc-row wc-alert"><label class="pill-toggle mini"><input type="checkbox" checked data-role="al"><span class="slider"></span></label><span class="nm">Donations</span><select class="wc-select sm"><option>5 s</option><option>8 s</option><option>10 s</option><option selected>12 s</option><option>15 s</option><option>20 s</option><option>30 s</option></select><button class="wc-ib" data-test title="Show a test alert in OBS"><svg class="i sm"><use href="#i-play"/></svg></button></div>
+            <div class="wc-row wc-alert"><label class="pill-toggle mini"><input type="checkbox" checked data-role="al"><span class="slider"></span></label><span class="nm">Raids</span><select class="wc-select sm"><option>5 s</option><option>8 s</option><option selected>10 s</option><option>12 s</option><option>15 s</option><option>20 s</option><option>30 s</option></select><button class="wc-ib" data-test title="Show a test alert in OBS"><svg class="i sm"><use href="#i-play"/></svg></button></div>
+            <div class="wc-row wc-alert"><label class="pill-toggle mini"><input type="checkbox" checked data-role="al"><span class="slider"></span></label><span class="nm">Giveaway winner</span><select class="wc-select sm"><option>5 s</option><option>8 s</option><option selected>10 s</option><option>12 s</option><option>15 s</option><option>20 s</option><option>30 s</option></select><button class="wc-ib" data-test title="Show a test alert in OBS"><svg class="i sm"><use href="#i-play"/></svg></button></div>
+          </div>
+          <div class="wc-volume"><svg class="i sm"><use href="#i-vol"/></svg>Volume<input type="range" min="0" max="100" value="70" id="ov-vol"><span class="v" id="ov-vol-v">70%</span></div>
+        </div>
+        <div class="wc-foot"><a data-more>Look and position (Overlay Builder) <svg class="i sm"><use href="#i-right"/></svg></a><a data-more>Sounds <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Commands -->
+      <div class="card wc-card bot-dep" id="card-cmd">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(0,200,180,0.13); color: #2dd4bf"><svg class="i"><use href="#i-term"/></svg></div>
+          <div><h3 class="wc-title">Commands</h3><span class="wc-status" id="cmd-status">7 commands · 1 built-in on</span></div>
+        </div>
+        <div class="wc-needs"><svg class="i sm"><use href="#i-chat"/></svg>Turn the chatbot on to use commands.</div>
+        <div class="wc-body">
+          <div class="wc-sec"><span class="wc-label">Your commands</span><span class="wc-count" id="cmd-count">7</span><button class="btn btn-primary wc-btn xs" id="add-cmd"><svg class="i sm"><use href="#i-plus"/></svg>Add</button></div>
+          <div class="wc-list" id="cmd-list">
+            <div class="wc-row"><code class="nm">!discord</code><span class="txt">Join our Discord: discord.gg/…</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row"><code class="nm">!socials</code><span class="txt">Instagram and TikTok: @…</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row"><code class="nm">!setup</code><span class="txt">Wheel, pedals and rig: …</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row"><code class="nm">!schedule</code><span class="txt">Live Monday, Wednesday and Friday at 21:00</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row hidden"><code class="nm">!sim</code><span class="txt">Racing on iRacing today</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row hidden"><code class="nm">!team</code><span class="txt">Racing for the team …</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row hidden"><code class="nm">!pc</code><span class="txt">PC specs: …</span><button class="wc-ib" data-edit="cmd" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+          </div>
+          <button class="wc-more" data-showall="cmd-list">Show all 7 ▾</button>
+          <div class="wc-sec"><span class="wc-label">Built-in commands</span><span class="wc-count" id="bi-count">1 of 13 on</span><button class="btn btn-secondary wc-btn xs" id="pick-bi">Choose</button></div>
+          <div class="wc-pills" id="bi-pills"><span class="wc-pill">!followage</span></div>
+          <div class="wc-edit-slot"></div>
+        </div>
+        <div class="wc-foot"><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Sponsor messages -->
+      <div class="card wc-card bot-dep" id="card-sp">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(255,152,0,0.13); color: #ff9800"><svg class="i"><use href="#i-mega"/></svg></div>
+          <div><h3 class="wc-title">Sponsor messages</h3><span class="wc-status" id="sp-status">Posting one every 15 min · 6 messages</span></div>
+          <label class="pill-toggle" title="Sponsor messages on or off"><input type="checkbox" checked data-role="sp"><span class="slider"></span></label>
+        </div>
+        <div class="wc-needs"><svg class="i sm"><use href="#i-chat"/></svg>Turn the chatbot on to post sponsor messages.</div>
+        <div class="wc-body">
+          <div class="wc-setrow">Post one in chat every
+            <select class="wc-select" id="sp-every"><option>5 min</option><option>10 min</option><option selected>15 min</option><option>30 min</option><option>60 min</option></select>
+          </div>
+          <div class="wc-sec"><span class="wc-label">Messages</span><span class="wc-count" id="sp-count">6</span><button class="btn btn-primary wc-btn xs" id="add-sp"><svg class="i sm"><use href="#i-plus"/></svg>Add</button></div>
+          <div class="wc-list" id="sp-list">
+            <div class="wc-row"><label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">Thanks to our partner! Use code ATLETA for 10% off</span><button class="wc-ib" data-edit="sp" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row"><label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">Join the Discord: type !discord</span><button class="wc-ib" data-edit="sp" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row"><label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">Enjoying the stream? You can tip at /tip/your_channel</span><button class="wc-ib" data-edit="sp" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row hidden"><label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">Follow on Instagram: @…</span><button class="wc-ib" data-edit="sp" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row hidden"><label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">New merch is out: link in !merch</span><button class="wc-ib" data-edit="sp" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+            <div class="wc-row hidden"><label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">Drink some water, racers!</span><button class="wc-ib" data-edit="sp" title="Edit"><svg class="i sm"><use href="#i-pen"/></svg></button><button class="wc-ib" data-del title="Delete"><svg class="i sm"><use href="#i-trash"/></svg></button></div>
+          </div>
+          <button class="wc-more" data-showall="sp-list">Show all 6 ▾</button>
+          <div class="wc-edit-slot"></div>
+        </div>
+        <div class="wc-foot"><a data-more>Sponsor images on stream <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Donations -->
+      <div class="card wc-card" id="card-tips">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(0,112,186,0.15); color: #3b9eff"><svg class="i"><use href="#i-dollar"/></svg></div>
+          <div><h3 class="wc-title">Donations</h3><span class="wc-status" id="tips-status">Tip page on · 5 tips in 90 days</span></div>
+          <label class="pill-toggle" title="Tip page on or off"><input type="checkbox" checked data-role="tips"><span class="slider"></span></label>
+        </div>
+        <div class="wc-body">
+          <div class="wc-linkbox">
+            <span class="wc-link">atletanotifications.com/tip/your_channel</span>
+            <button class="btn btn-secondary wc-btn" id="copy-tip"><svg class="i sm"><use href="#i-copy"/></svg>Copy</button>
+            <button class="btn btn-secondary wc-btn" title="Open the tip page"><svg class="i sm"><use href="#i-ext"/></svg></button>
+          </div>
+          <div class="wc-sec"><span class="wc-label">Tip goal</span><button class="btn btn-secondary wc-btn xs" id="goal-edit"><svg class="i sm"><use href="#i-pen"/></svg>Edit</button></div>
+          <div class="wc-goal">
+            <div class="top"><b id="goal-title">Your goal</b><em>on stream as a bar</em><span id="goal-amt">180 € of 500 €</span></div>
+            <div class="wc-progress"><span id="goal-bar" style="width: 36%"></span></div>
+          </div>
+          <div class="wc-sec"><span class="wc-label">Latest tips</span><a class="wc-link-sm" data-more>History <svg class="i sm"><use href="#i-right"/></svg></a></div>
+          <div class="wc-list">
+            <div class="wc-row"><span class="amt">5,00 €</span><span class="txt">RacerFan: "Great race today!"</span><span class="when">2 days ago</span></div>
+            <div class="wc-row"><span class="amt">10,00 €</span><span class="txt">Viewer123</span><span class="when">6 days ago</span></div>
+            <div class="wc-row"><span class="amt">2,50 €</span><span class="txt">pitcrew_joe: "for the new wheel"</span><span class="when">12 days ago</span></div>
+          </div>
+          <div class="wc-edit-slot"></div>
+        </div>
+        <div class="wc-foot"><a data-more>PayPal and currency <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Chat protection -->
+      <div class="card wc-card bot-dep" id="card-mod">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(240,68,56,0.13); color: #f04438"><svg class="i"><use href="#i-shield"/></svg></div>
+          <div><h3 class="wc-title">Chat protection</h3><span class="wc-status" id="mod-status">Link protection on</span></div>
+        </div>
+        <div class="wc-needs"><svg class="i sm"><use href="#i-chat"/></svg>Turn the chatbot on to protect your chat.</div>
+        <div class="wc-body">
+          <div class="wc-note" id="mod-note"><svg class="i sm" style="color: var(--warning)"><use href="#i-warn"/></svg><span>Make Atleta a moderator: type <code>/mod Atleta</code> in your chat.</span><button class="btn btn-secondary wc-btn xs" id="mod-copy"><svg class="i sm"><use href="#i-copy"/></svg>Copy</button></div>
+          <div class="wc-switches">
+            <div class="wc-sw is-on"><span>Link protection<small>no links without !permit</small></span><label class="pill-toggle mini"><input type="checkbox" checked data-role="mod" data-name="Link protection"><span class="slider"></span></label></div>
+            <div class="wc-sw"><span>Banned words<small>0 words</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="mod" data-name="Banned words"><span class="slider"></span></label></div>
+            <div class="wc-sw"><span>Caps<small>shouting in capitals</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="mod" data-name="Caps"><span class="slider"></span></label></div>
+            <div class="wc-sw"><span>Emote spam<small>too many emotes</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="mod" data-name="Emote spam"><span class="slider"></span></label></div>
+            <div class="wc-sw"><span>Repetition<small>same message twice</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="mod" data-name="Repetition"><span class="slider"></span></label></div>
+            <div class="wc-sw"><span>Symbol spam<small>rows of symbols</small></span><label class="pill-toggle mini"><input type="checkbox" data-role="mod" data-name="Symbol spam"><span class="slider"></span></label></div>
+          </div>
+        </div>
+        <div class="wc-foot"><a data-more>Moderation log · 0 this week <svg class="i sm"><use href="#i-right"/></svg></a><a data-more>Fine-tune <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Giveaways -->
+      <div class="card wc-card bot-dep" id="card-gw">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(245,158,11,0.15); color: #f59e0b"><svg class="i"><use href="#i-gift"/></svg></div>
+          <div><h3 class="wc-title">Giveaways</h3><span class="wc-status off" id="gw-status">No giveaway running</span></div>
+        </div>
+        <div class="wc-needs"><svg class="i sm"><use href="#i-chat"/></svg>Turn the chatbot on to run giveaways.</div>
+        <div class="wc-body">
+          <div class="wc-gw-form" style="display:flex; flex-direction:column; gap:12px">
+            <div class="wc-fields">
+              <label class="wc-field" style="width: 110px"><span>Keyword</span><input class="wc-input" id="gw-key" value="!gw"></label>
+              <label class="wc-field grow"><span>Prize <em style="text-transform:none; font-style:normal; font-weight:500">(optional)</em></span><input class="wc-input" id="gw-prize" placeholder="e.g. a Steam key"></label>
+            </div>
+            <div class="wc-fields">
+              <label class="wc-field grow"><span>Ends</span><select class="wc-select"><option>when I pick</option><option>after 1 min</option><option selected>after 5 min</option><option>after 10 min</option><option>after 30 min</option></select></label>
+              <label class="wc-field"><span>Winners</span><select class="wc-select"><option selected>1</option><option>2</option><option>3</option><option>5</option></select></label>
+              <label class="wc-field"><span>Subs only</span><span class="pill-toggle mini" style="display:inline-block"><input type="checkbox" id="gw-subs"><span class="slider"></span></span></label>
+            </div>
+            <button class="btn btn-primary wc-btn block" id="gw-start"><svg class="i sm"><use href="#i-play"/></svg>Start giveaway</button>
+          </div>
+          <div class="wc-gw-live">
+            <div class="wc-setrow" style="color: var(--text-primary); font-weight: 600;"><span class="pulse-dot"></span>Viewers type <code id="gw-live-key" style="color: var(--accent-hover)">!gw</code> in chat to enter</div>
+            <div class="wc-gw-stats"><div><b id="gw-entries">0</b><span>Entries</span></div><div><b id="gw-left">5:00</b><span>Left</span></div><div><b>1</b><span>Winner</span></div></div>
+            <div class="wc-winner" id="gw-winner">🎉 Winner: @RacerFan</div>
+            <button class="btn btn-primary wc-btn block" id="gw-pick">Pick a winner</button>
+            <button class="btn btn-secondary wc-btn block" id="gw-end">End without a winner</button>
+          </div>
+        </div>
+        <div class="wc-foot"><a data-more>Past giveaways <svg class="i sm"><use href="#i-right"/></svg></a></div>
+      </div>
+
+      <!-- Channel point rewards -->
+      <div class="card wc-card" id="card-cp">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(145,70,255,0.15); color: #b18cff"><svg class="i"><use href="#i-spark"/></svg></div>
+          <div><h3 class="wc-title">Channel point rewards</h3><span class="wc-status off" id="cp-status">On · no rewards yet</span></div>
+          <label class="pill-toggle" title="Rewards on or off"><input type="checkbox" checked data-role="cp"><span class="slider"></span></label>
+        </div>
+        <div class="wc-body">
+          <div class="wc-empty"><span class="big"><svg class="i"><use href="#i-spark"/></svg></span><div><b>Play a sound or a clip on stream</b> when a viewer spends channel points on one of your rewards.</div></div>
+          <button class="btn btn-primary wc-btn block" data-more><svg class="i sm"><use href="#i-plus"/></svg>Create a reward</button>
+        </div>
+        <div class="wc-foot"><a data-more>Redemption history <svg class="i sm"><use href="#i-right"/></svg></a><span class="wc-saved"><svg class="i sm"><use href="#i-check"/></svg>Saved</span></div>
+      </div>
+
+      <!-- Spotify -->
+      <div class="card wc-card" id="card-spotify">
+        <div class="wc-head">
+          <div class="wc-icon" style="background: rgba(29,185,84,0.13); color: #1db954"><svg class="i"><use href="#i-music"/></svg></div>
+          <div><h3 class="wc-title">Spotify</h3><span class="wc-status">● Connected</span></div>
+        </div>
+        <div class="wc-body">
+          <div class="wc-hint" style="font-size: 13px; color: var(--text-secondary)">Viewers type <code style="color: var(--text-primary)">!song</code> and the bot answers with the song you're playing.</div>
+        </div>
+        <div class="wc-foot"><a data-more>Disconnect Spotify</a></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="wc-back" id="wc-back"><div class="card wc-modal" id="wc-modal"></div></div>
+<div class="mock-toast" id="mock-toast"></div>
+<div class="mock-bar"><b>MOCKUP</b> example data · Editing opens: <button id="mode-pop" class="on">in a pop-up</button><button id="mode-card">inside the card</button></div>
+
+<script>
+(function () {
+  var mode = 'pop';
+  var TY = {
+    follow: ['Follow message', ['{username}']],
+    sub: ['Sub message', ['{username}', '{tier}', '{months}', '{message}']],
+    giftsub: ['Gift sub message', ['{username}', '{amount}', '{tier}']],
+    bits: ['Bits message', ['{username}', '{amount}', '{message}']],
+    donation: ['Donation message', ['{username}', '{amount}', '{currency}', '{message}']],
+    raid: ['Raid message', ['{username}', '{viewers}']]
+  };
+  var BUILTINS = ['!followage', '!uptime', '!subage', '!accountage', '!8ball', '!roll', '!hug', '!slap', '!love', '!rps', '!coinflip', '!quote', '!roast'];
+  var biOn = { '!followage': true };
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function toast(t) { var el = $('#mock-toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove('show'); }, 1900); }
+  function saved(card) { var s = card && $('.wc-saved', card); if (!s) return; s.classList.add('show'); clearTimeout(s._t); s._t = setTimeout(function () { s.classList.remove('show'); }, 1600); }
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var ICON = function (id) { return '<svg class="i sm"><use href="#i-' + id + '"/></svg>'; };
+
+  // editor: in a pop-up (default) or inside the card
+  var open = null;
+  function closeEditor() {
+    if (!open) return;
+    if (open.where === 'pop') { $('#wc-back').classList.remove('open'); $('#wc-modal').innerHTML = ''; } else open.el.remove();
+    open = null;
+  }
+  function openEditor(card, html, onSave, anchor, extraButtons) {
+    closeEditor();
+    var el = document.createElement('div'); el.className = 'wc-editor';
+    el.innerHTML = html + '<div class="wc-actions">' + (extraButtons || '') + '<button class="btn btn-secondary wc-btn" data-cancel>Cancel</button><button class="btn btn-primary wc-btn" data-save>Save</button></div>';
+    if (mode === 'pop') { $('#wc-modal').innerHTML = ''; $('#wc-modal').appendChild(el); $('#wc-back').classList.add('open'); open = { where: 'pop', el: el }; }
+    else { if (anchor) anchor.insertAdjacentElement('afterend', el); else $('.wc-edit-slot', card).appendChild(el); open = { where: 'card', el: el }; }
+    var f = $('textarea', el) || $('input', el); if (f) { f.focus(); var v = f.value; f.value = ''; f.value = v; }
+    $$('.wc-vars code', el).forEach(function (c) { c.onclick = function () { var t = $('textarea', el); t.value += c.textContent; t.focus(); }; });
+    var test = $('[data-test-chat]', el); if (test) test.onclick = function () { test.textContent = 'Sent to your chat ✓'; setTimeout(function () { test.textContent = 'Test in chat'; }, 1600); };
+    $$('[data-cancel]', el).forEach(function (b) { b.onclick = closeEditor; });
+    $('[data-save]', el).onclick = function () { if (onSave(el) === false) return; closeEditor(); saved(card); };
+    return el;
+  }
+  $('#wc-back').addEventListener('click', function (e) { if (e.target.id === 'wc-back') closeEditor(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeEditor(); });
+  $('#mode-pop').onclick = function () { mode = 'pop'; this.classList.add('on'); $('#mode-card').classList.remove('on'); closeEditor(); };
+  $('#mode-card').onclick = function () { mode = 'card'; this.classList.add('on'); $('#mode-pop').classList.remove('on'); closeEditor(); };
+
+  // counts and status lines
+  function tyCount() { $('#ty-count').textContent = $$('[data-role="ty"]').filter(function (i) { return i.checked; }).length + ' of 6 on'; }
+  function alCount() { $('#al-count').textContent = $$('[data-role="al"]').filter(function (i) { return i.checked; }).length + ' of 6 on · on screen for · test'; }
+  function cmdStatus() { var n = $$('#cmd-list .wc-row').length, bi = Object.keys(biOn).length; $('#cmd-count').textContent = n; $('#bi-count').textContent = bi + ' of 13 on'; $('#cmd-status').textContent = n + ' commands · ' + bi + ' built-in' + (bi === 1 ? '' : 's') + ' on'; var sa = $('[data-showall="cmd-list"]'); if (sa && $$('#cmd-list .wc-row.hidden').length) sa.textContent = 'Show all ' + n + ' ▾'; }
+  function spStatus() { var on = $('[data-role="sp"]').checked, n = $$('#sp-list .wc-row').length, every = $('#sp-every').value; $('#sp-count').textContent = n; var s = $('#sp-status'); s.textContent = on ? 'Posting one every ' + every + ' · ' + n + ' messages' : 'Off · ' + n + ' messages kept'; s.className = 'wc-status' + (on ? '' : ' off'); }
+  function pills() { var on = BUILTINS.filter(function (b) { return biOn[b]; }); $('#bi-pills').innerHTML = on.length ? on.map(function (b) { return '<span class="wc-pill">' + b + '</span>'; }).join('') : '<span class="wc-pill none">none on</span>'; }
+
+  // switches save the moment they move
+  document.addEventListener('change', function (e) {
+    var t = e.target, card = t.closest && t.closest('.wc-card'); if (!card) return;
+    var role = t.dataset.role;
+    if (role === 'bot') {
+      var s = $('#bot-status'); s.textContent = t.checked ? '● Online in #your_channel' : 'Off · the bot is not in your chat'; s.className = 'wc-status' + (t.checked ? '' : ' off');
+      $$('.bot-dep').forEach(function (c) { c.classList.toggle('needs-bot', !t.checked); }); $('#bot-body').classList.toggle('wc-dim', !t.checked);
+    } else if (role === 'ty' || role === 'al' || role === 'sp-item') { t.closest('.wc-row').classList.toggle('is-off', !t.checked); if (role === 'ty') tyCount(); if (role === 'al') alCount(); }
+    else if (role === 'ov') { var o = $('#ov-status'); o.textContent = t.checked ? '● Alerts show on stream' : 'Off · no alerts on stream'; o.className = 'wc-status' + (t.checked ? '' : ' off'); $('#al-list').classList.toggle('wc-dim', !t.checked); }
+    else if (role === 'sp') spStatus();
+    else if (role === 'tips') { var ts = $('#tips-status'); ts.textContent = t.checked ? 'Tip page on · 5 tips in 90 days' : 'Tip page off · the link says "not available"'; ts.className = 'wc-status' + (t.checked ? '' : ' off'); }
+    else if (role === 'cp') { var cs = $('#cp-status'); cs.textContent = t.checked ? 'On · no rewards yet' : 'Off · redemptions are refunded'; }
+    else if (role === 'mod' || role === 'dn') {
+      t.closest('.wc-sw').classList.toggle('is-on', t.checked);
+      if (role === 'mod') { var on = $$('[data-role="mod"]').filter(function (i) { return i.checked; }).map(function (i) { return i.dataset.name; }); var ms = $('#mod-status'); ms.textContent = on.length ? on.join(', ') + ' on' : 'All filters off'; ms.className = 'wc-status' + (on.length ? '' : ' off'); }
+    }
+    if (t.id === 'sp-every') spStatus();
+    saved(card);
+  });
+  var vol = $('#ov-vol'); vol.addEventListener('input', function () { $('#ov-vol-v').textContent = vol.value + '%'; }); vol.addEventListener('change', function () { saved($('#card-ov')); });
+
+  // clicks
+  document.addEventListener('click', function (e) {
+    var ed = e.target.closest('[data-edit]');
+    if (ed) {
+      var row = ed.closest('.wc-row'), card = ed.closest('.wc-card'), kind = ed.dataset.edit;
+      if (kind === 'ty') {
+        var d = TY[row.dataset.ty];
+        openEditor(card, '<h4>' + d[0] + '</h4><textarea>' + esc($('.txt', row).textContent) + '</textarea><div class="wc-vars">Insert: ' + d[1].map(function (v) { return '<code>' + v + '</code>'; }).join('') + '</div>',
+          function (el) { $('.txt', row).textContent = $('textarea', el).value; }, row, '<button class="btn btn-secondary wc-btn" data-test-chat style="margin-right:auto">Test in chat</button>');
+      } else if (kind === 'cmd') {
+        openEditor(card, '<h4>Edit ' + esc($('.nm', row).textContent) + '</h4>' + cmdFields($('.nm', row).textContent, $('.txt', row).textContent),
+          function (el) { $('.nm', row).textContent = '!' + $('input', el).value.replace(/^!+/, ''); $('.txt', row).textContent = $('textarea', el).value; }, row);
+      } else {
+        openEditor(card, '<h4>Edit sponsor message</h4><textarea>' + esc($('.txt', row).textContent) + '</textarea>', function (el) { $('.txt', row).textContent = $('textarea', el).value; }, row);
+      }
+      return;
+    }
+    var del = e.target.closest('[data-del]');
+    if (del) { var r = del.closest('.wc-row'), c = del.closest('.wc-card'), isCmd = !!r.closest('#cmd-list'); r.remove(); if (isCmd) cmdStatus(); else spStatus(); saved(c); toast((isCmd ? 'Command' : 'Message') + ' deleted · Undo'); return; }
+    var tst = e.target.closest('[data-test]');
+    if (tst) { tst.classList.add('done'); tst.innerHTML = ICON('check'); setTimeout(function () { tst.classList.remove('done'); tst.innerHTML = ICON('play'); }, 1500); toast('Test alert sent to your OBS overlay'); return; }
+    var sa = e.target.closest('[data-showall]');
+    if (sa) { var list = $('#' + sa.dataset.showall), hid = $$('.wc-row.hidden', list); if (hid.length) { hid.forEach(function (x) { x.classList.remove('hidden'); x.dataset.wasHidden = '1'; }); sa.textContent = 'Show fewer ▴'; } else { $$('[data-was-hidden]', list).forEach(function (x) { x.classList.add('hidden'); }); sa.textContent = 'Show all ' + $$('.wc-row', list).length + ' ▾'; } return; }
+    if (e.target.closest('[data-more]')) { toast('Opens the full page for the rarer settings'); }
+  });
+
+  function cmdFields(name, text) {
+    return '<div class="wc-fields"><label class="wc-field" style="width: 140px"><span>Command</span><input class="wc-input" value="' + esc(name || '!') + '" placeholder="!name"></label>' +
+      '<label class="wc-field"><span>Cooldown</span><select class="wc-select"><option>5 s</option><option selected>10 s</option><option>30 s</option><option>60 s</option></select></label></div>' +
+      '<label class="wc-field"><span>The bot answers</span><textarea placeholder="What the bot says">' + esc(text || '') + '</textarea></label>';
+  }
+  $('#add-cmd').onclick = function () {
+    var card = $('#card-cmd');
+    openEditor(card, '<h4>New command</h4>' + cmdFields('', ''), function (el) {
+      var n = '!' + $('input', el).value.trim().replace(/^!+/, ''), t = $('textarea', el).value.trim();
+      if (n === '!' || !t) { toast('Type a name and what the bot answers'); return false; }
+      var row = document.createElement('div'); row.className = 'wc-row';
+      row.innerHTML = '<code class="nm">' + esc(n) + '</code><span class="txt">' + esc(t) + '</span><button class="wc-ib" data-edit="cmd" title="Edit">' + ICON('pen') + '</button><button class="wc-ib" data-del title="Delete">' + ICON('trash') + '</button>';
+      $('#cmd-list').insertBefore(row, $('#cmd-list').firstChild); cmdStatus();
+    });
+  };
+  $('#pick-bi').onclick = function () {
+    var card = $('#card-cmd');
+    var el = openEditor(card, '<h4>Built-in commands</h4><div class="wc-hint">Pick the ones your chat can use.</div><div class="wc-chips">' + BUILTINS.map(function (b) { return '<div class="wc-chip' + (biOn[b] ? ' on' : '') + '" data-bi="' + b + '"><span class="tick"><svg class="i sm" style="width:11px;height:11px;stroke-width:3"><use href="#i-check"/></svg></span>' + b + '</div>'; }).join('') + '</div>',
+      function (ed) { biOn = {}; $$('.wc-chip.on', ed).forEach(function (c) { biOn[c.dataset.bi] = true; }); pills(); cmdStatus(); });
+    $$('.wc-chip', el).forEach(function (c) { c.onclick = function () { c.classList.toggle('on'); }; });
+  };
+  $('#add-sp').onclick = function () {
+    openEditor($('#card-sp'), '<h4>New sponsor message</h4><textarea placeholder="e.g. Thanks to our partner! Use code ATLETA"></textarea>', function (el) {
+      var t = $('textarea', el).value.trim(); if (!t) { toast('Type the message first'); return false; }
+      var row = document.createElement('div'); row.className = 'wc-row';
+      row.innerHTML = '<label class="pill-toggle mini"><input type="checkbox" checked data-role="sp-item"><span class="slider"></span></label><span class="txt">' + esc(t) + '</span><button class="wc-ib" data-edit="sp" title="Edit">' + ICON('pen') + '</button><button class="wc-ib" data-del title="Delete">' + ICON('trash') + '</button>';
+      $('#sp-list').insertBefore(row, $('#sp-list').firstChild); spStatus();
+    });
+  };
+  $('#goal-edit').onclick = function () {
+    openEditor($('#card-tips'), '<h4>Tip goal</h4><div class="wc-fields"><label class="wc-field grow"><span>Goal</span><input class="wc-input" value="' + esc($('#goal-title').textContent) + '"></label><label class="wc-field" style="width: 120px"><span>Target (€)</span><input class="wc-input" value="500"></label></div><div class="wc-hint">Raised so far: 180 €. Only tips in euros count.</div>',
+      function (el) { $('#goal-title').textContent = $('input', el).value || 'Your goal'; var target = parseFloat($$('input', el)[1].value) || 500; $('#goal-amt').textContent = '180 € of ' + target.toLocaleString('pt-PT') + ' €'; $('#goal-bar').style.width = Math.min(100, 180 / target * 100) + '%'; },
+      null, '<button class="btn btn-secondary wc-btn" style="margin-right:auto; color: var(--danger)" data-cancel>End the goal</button>');
+  };
+  $('#ov-show').onclick = function () { var l = $('#ov-link'); var shown = l.dataset.shown === '1'; l.textContent = shown ? 'atletanotifications.com/overlay/••••••••••••' : 'atletanotifications.com/overlay/3f9c1e7a52bd'; l.dataset.shown = shown ? '' : '1'; if (!shown) toast('Keep this link off stream: anyone with it can show alerts'); };
+  function copied(b, label) { b.innerHTML = ICON('check') + 'Copied'; setTimeout(function () { b.innerHTML = ICON('copy') + label; }, 1500); }
+  $('#ov-copy').onclick = function () { copied(this, 'Copy'); };
+  $('#copy-tip').onclick = function () { copied(this, 'Copy'); };
+  $('#mod-copy').onclick = function () { copied(this, 'Copy'); toast('Paste it in your Twitch chat. This note goes away by itself once Atleta is a moderator.'); };
+
+  // giveaways
+  var gwTimer = null;
+  $('#gw-start').onclick = function () {
+    var card = $('#card-gw'); card.classList.add('gw-running'); $('#gw-winner').classList.remove('show');
+    $('#gw-live-key').textContent = $('#gw-key').value || '!gw';
+    var s = $('#gw-status'); s.className = 'wc-status warn'; s.textContent = '● Giveaway running';
+    var left = 300, entries = 0; $('#gw-entries').textContent = '0'; clearInterval(gwTimer);
+    gwTimer = setInterval(function () { left--; if (Math.random() < 0.45) entries++; $('#gw-left').textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'); $('#gw-entries').textContent = entries; if (left <= 0) clearInterval(gwTimer); }, 1000);
+  };
+  $('#gw-pick').onclick = function () { clearInterval(gwTimer); $('#gw-winner').classList.add('show'); var s = $('#gw-status'); s.textContent = '● Winner picked'; s.className = 'wc-status'; this.textContent = 'Pick again'; $('#gw-end').textContent = 'Done'; };
+  $('#gw-end').onclick = function () { clearInterval(gwTimer); $('#card-gw').classList.remove('gw-running'); $('#gw-pick').textContent = 'Pick a winner'; this.textContent = 'End without a winner'; var s = $('#gw-status'); s.className = 'wc-status off'; s.textContent = 'No giveaway running'; };
+  // pack the cards into two columns with no gaps (each card spans as many 2px rows as it is tall)
+  function pack() { $$('.wc-grid > .wc-card').forEach(function (c) { c.style.gridRowEnd = 'span ' + Math.ceil((c.getBoundingClientRect().height + 12) / 2); }); }
+  if (window.ResizeObserver) { var ro = new ResizeObserver(pack); $$('.wc-grid > .wc-card').forEach(function (c) { ro.observe(c); }); }
+  window.addEventListener('load', pack); pack();
+})();
+</script>
+</body>
+</html>
