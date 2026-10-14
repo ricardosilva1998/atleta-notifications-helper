@@ -15,6 +15,20 @@ function overlayVolume() {
   return typeof volume === 'number' && Number.isFinite(volume) ? Math.min(Math.max(volume, 0), 1) : 0.8;
 }
 
+// A number from a saved design, or `fallback` when it is missing or not a number.
+// 0 is a real value (a border radius of 0 is a square corner).
+function finiteOr(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+// Puts an alert's slot where its saved design says: the grid position or the dragged
+// spot, and the width (see placement.js, which the builder preview reads the same way).
+function applyPlacement(slot, design) {
+  const placement = window.ATLETA_PLACEMENT;
+  if (!placement) return; // the script did not load: the slot keeps its default (top-centre)
+  Object.assign(slot.style, placement.slotStyle(placement.placementOf(design)));
+}
+
 // How long an alert of this type stays, in seconds (5 when the config has no usable number).
 function alertSeconds(type) {
   const seconds = overlayConfig[type] && overlayConfig[type].duration;
@@ -418,29 +432,35 @@ function showNotification(event) {
     playDefaultSound();
   }
 
-  // Build card
+  // Build the alert. Every alert sits in a slot (.alert-pos) that carries its saved
+  // position and width; what is inside animates on its own, so no entrance has to
+  // know where it is placed.
   const objectDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[event.type];
   const cardClass = getCardClass(event.type);
   const isSubLike = event.type === 'subscription' || event.type === 'yt_member';
-  const card = document.createElement('div');
+  const slot = document.createElement('div');
+  slot.className = 'alert-pos';
+  let card = slot; // the element that fades out at the end
 
   if (objectDef) {
-    // Objects position via .alert-pos and animate their own transform, so the
-    // legacy .alert-card/.entering classes (whose keyframes bake in
-    // translateX(-50%)) must not apply.
-    card.className = 'alert-pos';
-    card.innerHTML = buildBannerContent(event);
-    card.style.setProperty('--in', objectDef.anim.in);
-    card.style.setProperty('--dur', objectDef.anim.dur);
-    card.style.setProperty('--ease', objectDef.anim.ease);
-    card.classList.add('playing');
+    // Objects animate their own children (.playing / .exiting on the slot drive them).
+    slot.innerHTML = buildBannerContent(event);
+    slot.style.setProperty('--in', objectDef.anim.in);
+    slot.style.setProperty('--dur', objectDef.anim.dur);
+    slot.style.setProperty('--ease', objectDef.anim.ease);
+    slot.classList.add('playing');
   } else {
+    card = document.createElement('div');
     card.className = `alert-card ${cardClass}${isSubLike ? ' sub-shake' : ''} entering`;
     card.innerHTML = buildBannerContent(event);
+    slot.appendChild(card);
   }
-  container.appendChild(card);
+  container.appendChild(slot);
 
-  // Apply custom overlay design — phase 1 skips the object types entirely
+  // Saved position and width, for every alert type
+  applyPlacement(slot, overlayDesigns[event.type]);
+
+  // Saved colours and text for the legacy cards (the objects style themselves for now)
   if (!objectDef) applyCustomDesign(card, event.type);
 
   // Spawn full-screen effects — objects carry their own motion
@@ -455,19 +475,19 @@ function showNotification(event) {
       setTimeout(() => e.remove(), 100);
     });
 
-    // Fade out and remove card
+    // Fade out and remove the alert
     if (objectDef) {
-      card.style.setProperty('--out', objectDef.exit.out);
-      card.style.setProperty('--outdur', objectDef.exit.dur);
-      card.style.setProperty('--outease', objectDef.exit.ease);
-      card.classList.remove('playing');
-      card.classList.add('exiting');
+      slot.style.setProperty('--out', objectDef.exit.out);
+      slot.style.setProperty('--outdur', objectDef.exit.dur);
+      slot.style.setProperty('--outease', objectDef.exit.ease);
+      slot.classList.remove('playing');
+      slot.classList.add('exiting');
     } else {
       card.style.transition = 'opacity 0.3s ease-in';
       card.style.opacity = '0';
     }
     alertTimer(() => {
-      card.remove();
+      slot.remove();
       alertTimer(playNext, 500);
     }, 400);
   }, duration);
@@ -978,7 +998,8 @@ function buildBottomAnimation(track, type, speed, accent, card) {
 function applyCustomDesign(card, eventType) {
   const design = overlayDesigns[eventType];
   if (!design) return;
-  // Phase 1: the five object event types ignore saved styles entirely.
+  // The five object event types take only their position and width from a saved
+  // design (applyPlacement); their colours and animations are not styled yet.
   if (window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[eventType]) return;
 
   // Background (with advanced theme)
@@ -996,8 +1017,8 @@ function applyCustomDesign(card, eventType) {
   const borderThick = design.border_thickness != null ? design.border_thickness : 2;
   const borderOpacity = design.border_opacity != null ? design.border_opacity : 0.5;
   card.style.border = `${borderThick}px solid ${hexToRgba(design.border_color, borderOpacity)}`;
-  card.style.borderRadius = (design.border_radius || 16) + 'px';
-  card.style.width = (design.card_width || 420) + 'px';
+  const radius = finiteOr(design.border_radius, 16);
+  card.style.borderRadius = radius + 'px';
 
   // Shadow & glow (with advanced theme)
   const glowIntensity = design.glow_intensity != null ? design.glow_intensity : 0.25;
@@ -1010,52 +1031,14 @@ function applyCustomDesign(card, eventType) {
     card.style.boxShadow = `0 4px ${shadowBlur}px ${shadowSpread}px rgba(0,0,0,${shadowOpacity})`;
   }
 
-  // Position — use custom x/y if dragged, otherwise grid position
-  card.style.position = 'absolute';
-  if (design.card_custom_x != null && design.card_custom_y != null) {
-    card.style.left = (design.card_custom_x * 100) + '%';
-    card.style.top = (design.card_custom_y * 100) + '%';
-    card.style.right = '';
-    card.style.bottom = '';
-    // Remove default CSS entering animation since it uses translateX(-50%)
-    card.classList.remove('entering');
-    card.style.opacity = '0';
-    card.style.transform = 'none';
-    // Fade in instead
-    requestAnimationFrame(() => {
-      card.style.transition = 'opacity 0.4s ease-out';
-      card.style.opacity = '1';
-    });
-    // Override dismiss to use fade out
-    card._customPosition = true;
-  } else {
-    const pos = design.card_position || 'top-center';
-    const [vPos, hPos] = pos.split('-');
-    if (vPos === 'top') { card.style.top = '16px'; card.style.bottom = ''; }
-    else if (vPos === 'bot') { card.style.bottom = '16px'; card.style.top = ''; }
-    else { card.style.top = '50%'; card.style.bottom = ''; }
-
-    if (hPos === 'center' || !hPos) {
-      card.style.left = '50%';
-      card.style.right = '';
-      card.style.transform = vPos === 'mid' ? 'translate(-50%,-50%)' : 'translateX(-50%)';
-    } else if (hPos === 'left') {
-      card.style.left = '16px';
-      card.style.right = '';
-      card.style.transform = vPos === 'mid' ? 'translateY(-50%)' : 'none';
-    } else {
-      card.style.right = '16px';
-      card.style.left = '';
-      card.style.transform = vPos === 'mid' ? 'translateY(-50%)' : 'none';
-    }
-  }
+  // Position and width belong to the card's slot (applyPlacement), not to the card.
 
   // Top accent
   const accent = card.querySelector('.top-accent');
   if (accent) {
     const accentDark = darken(design.accent_color, 0.6);
     accent.style.background = `linear-gradient(90deg, ${accentDark}, ${design.accent_color}, ${accentDark})`;
-    accent.style.borderRadius = (design.border_radius || 16) + 'px ' + (design.border_radius || 16) + 'px 0 0';
+    accent.style.borderRadius = radius + 'px ' + radius + 'px 0 0';
   }
 
   // Text alignment
@@ -1120,8 +1103,8 @@ function applyCustomDesign(card, eventType) {
     }
   }
 
-  // Entrance animation
-  if (design.entrance_animation && design.entrance_animation !== 'slideDown' && !design.card_custom_x) {
+  // Entrance animation (the default, Slide Down, is the .entering class)
+  if (design.entrance_animation && design.entrance_animation !== 'slideDown') {
     card.classList.remove('entering');
     const speed = design.animation_speed || 1.0;
     card.style.animation = `${design.entrance_animation} ${0.4 / speed}s ease-out forwards`;
@@ -1329,7 +1312,7 @@ function showTimedNotification(data) {
   const bgColor = design ? design.bg_color : (data.bgColor || '#1a1a2e');
   const textColor = design ? design.text_color : (data.textColor || '#ffffff');
   const accentColor = design ? design.accent_color : '#f79009';
-  const borderRadius = design ? (design.border_radius || 12) : 12;
+  const borderRadius = design ? finiteOr(design.border_radius, 12) : 12;
   const cardWidth = design ? (design.card_width || 500) : 500;
 
   banner.style.background = `linear-gradient(160deg, ${darken(bgColor)}, ${bgColor} 40%, ${darken(bgColor)})`;

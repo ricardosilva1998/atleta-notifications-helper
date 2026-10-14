@@ -11,6 +11,8 @@
   --o-hex:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0l14 8v16l-14 8L0 24V8z' fill='none' stroke='%23ffffff' stroke-opacity='.07'/%3E%3C/svg%3E");
   --spd:1;
 }
+/* The slot every alert sits in. This is only the default (top-centre, 420px): overlay.js puts
+   the saved position and width on it (placement.js), and the object or card inside animates. */
 .alert-pos{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:min(420px,88%);z-index:10;pointer-events:none}
 .obj{position:relative;will-change:transform,opacity,clip-path;font-family:var(--o-disp)}
 
@@ -38,7 +40,7 @@
 /* ── 01 follow — iaido band ──────────────────────────────── */
 .o-follow{
   transform:skewX(-11deg);background:linear-gradient(100deg,var(--r-red-deep),var(--r-red) 58%,#F0343C);
-  width:min(408px,94%);margin:0 auto;overflow:hidden;
+  width:97%;margin:0 auto;overflow:hidden;
   display:flex;align-items:center;gap:14px;padding:13px 20px;
   box-shadow:0 14px 32px rgba(0,0,0,.58);
 }
@@ -129,7 +131,7 @@
 @keyframes boardFlash{0%,100%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3)}40%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(255,66,71,.9),0 0 34px rgba(216,30,38,.5)}}
 
 /* ── 04 donation — byobu folding screen (the big one) ────── */
-.o-don{height:178px;width:min(416px,96%);margin:0 auto}
+.o-don{height:178px;width:99%;margin:0 auto}
 .o-don .o-don-screen{position:absolute;inset:0;display:flex;perspective:1100px}
 .o-don .o-don-panel{
   position:relative;flex:1;transform-origin:left center;

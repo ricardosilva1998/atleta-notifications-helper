@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/overlay/objects/objects.css">
   <script src="/overlay/objects/index.js"></script>
+  <!-- Where an alert sits, read from a saved design: shared with the live OBS overlay -->
+  <script src="/overlay/placement.js"></script>
   <style>
     :root {
       --bg-base: #0c0d14;
@@ -1063,7 +1065,7 @@
             </div>
             <input type="range" id="ctrl-card-width" min="280" max="700" step="10" value="420">
           </div>
-          <div class="range-row" style="margin-bottom:10px;">
+          <div class="range-row" id="row-border-radius" style="margin-bottom:10px;">
             <div class="range-header">
               <span class="ctrl-label">Border Radius</span>
               <span class="range-val" id="val-border-radius">16px</span>
@@ -1217,6 +1219,8 @@ Object.keys(EVENT_DEFAULTS).forEach(t => {
 
 let currentType = 'follow';
 let unsavedChanges = false;
+// The object tab the preview has drawn (see updatePreview); null when a legacy tab is showing.
+let renderedObjectType = null;
 
 // ─── Sponsor data ─────────────────────────────────────────────────────────────
 let sponsorImages = <%- sponsors %>;
@@ -1318,8 +1322,10 @@ function setControlValues(d) {
   document.getElementById('ctrl-animation-speed').value = d.animation_speed || 1.0;
   document.getElementById('ctrl-card-width').value = d.card_width || 420;
   document.getElementById('val-card-width').textContent = d.card_width + 'px';
-  document.getElementById('ctrl-border-radius').value = d.border_radius || 16;
-  document.getElementById('val-border-radius').textContent = d.border_radius + 'px';
+  // 0 is a real radius (square corners): only a missing value gets the default 16
+  const radius = Number.isFinite(d.border_radius) ? d.border_radius : 16;
+  document.getElementById('ctrl-border-radius').value = radius;
+  document.getElementById('val-border-radius').textContent = radius + 'px';
   document.getElementById('ctrl-sponsor-animation').value = d.sponsor_animation || 'fade';
   document.getElementById('ctrl-effect-amount').value = d.effect_amount || 1.0;
   document.getElementById('ctrl-effect-size').value = d.effect_size || 1.0;
@@ -1393,24 +1399,22 @@ const PREVIEW_DATA = {
   raid:         { username: 'GridWalker', viewers: 42 },
 };
 
-// Phase 1: the five object event types ignore saved styles, so their controls
-// are hidden rather than left live and inert.
+// The five object event types take only their position and width from a saved
+// design for now (colours and animations are not styled yet), so their colour,
+// text, icon and animation controls are hidden rather than left live and inert.
+// Size & Position stays: the width, the nine-cell grid and dragging the alert
+// in the preview all apply to the real alert. Border radius does not (an object
+// has its own shape), so that one slider is hidden.
 function syncPhase1Controls() {
   const isObject = !!(window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType]);
   const notice = document.getElementById('phase1-notice');
   if (notice) notice.style.display = isObject ? '' : 'none';
-  ['section-theme', 'section-text', 'section-sideicon',
-   'section-animation', 'section-size'].forEach(id => {
+  ['section-theme', 'section-text', 'section-sideicon', 'section-animation'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isObject ? 'none' : '';
   });
-  // Fix round 1, Important: the resize handles are siblings of #preview-card
-  // inside #preview-card-container and only ever mutate that (now-hidden)
-  // legacy card, so dragging them does nothing visible on object tabs.
-  ['resize-se', 'resize-e'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isObject ? 'none' : '';
-  });
+  const radiusRow = document.getElementById('row-border-radius');
+  if (radiusRow) radiusRow.style.display = isObject ? 'none' : '';
 }
 
 function updatePreview() {
@@ -1419,51 +1423,35 @@ function updatePreview() {
   const objHost = document.getElementById('preview-object-host');
   const legacyCard = document.getElementById('preview-card');
   if (objDef) {
+    // An object takes its position and width from the saved design (the controls
+    // in Size & Position); its colours and animations are not styled yet.
+    const d = getControlValues();
+    workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], d);
     legacyCard.style.display = 'none';
     objHost.style.display = '';
-    objHost.innerHTML = objDef.render(PREVIEW_DATA[currentType] || {});
-    objHost.style.setProperty('--in', objDef.anim.in);
-    objHost.style.setProperty('--dur', objDef.anim.dur);
-    objHost.style.setProperty('--ease', objDef.anim.ease);
-    objHost.classList.remove('playing');
-    void objHost.offsetWidth;   // force reflow so the animation restarts
-    objHost.classList.add('playing');
-    // Ruling F: the legacy branch's tail (positionCard/updateOverlayGuide/
-    // renderScreenEffect) must still run before we bail, or the preview is left
-    // with a stale overlay guide, leftover .preview-fx from the previously
-    // selected event, and the container positioned for that previous event.
-    // Objects always self-position top-centre, so hardcode those two args.
-    // renderScreenEffect('none') is a clean clear: phase 1 skips spawnEffects()
-    // in the live overlay, so showing a saved screen effect here would
-    // misrepresent what the streamer actually gets. No loadGoogleFont() call —
-    // objects use Oxanium/Saira Condensed from the page's own <link>, not the
-    // per-design font path.
-    //
-    // Fix round 1, Critical 2: positionCard() has its own pre-existing
-    // custom-position branch that silently overrides 'top-center' whenever
-    // this type's workingDesigns has card_custom_x/y set (from a drag).
-    // Objects must never honor that — the live overlay never consults stored
-    // position for them either — but a dragged position must not be
-    // permanently erased: phase 2 will want it back. Blank the two fields
-    // just for this one call, then restore them immediately after
-    // (synchronous, so there is no gap where another reader could observe
-    // the blanked state).
-    const posDesign = workingDesigns[currentType];
-    const savedCustomX = posDesign ? posDesign.card_custom_x : undefined;
-    const savedCustomY = posDesign ? posDesign.card_custom_y : undefined;
-    if (posDesign) {
-      posDesign.card_custom_x = null;
-      posDesign.card_custom_y = null;
+    objHost.style.width = ATLETA_PLACEMENT.placementOf(d).width + 'px';
+    // The object is drawn (and its entrance played) when its tab opens; moving or
+    // resizing it afterwards must not replay the entrance on every slider step.
+    if (renderedObjectType !== currentType) {
+      objHost.innerHTML = objDef.render(PREVIEW_DATA[currentType] || {});
+      objHost.style.setProperty('--in', objDef.anim.in);
+      objHost.style.setProperty('--dur', objDef.anim.dur);
+      objHost.style.setProperty('--ease', objDef.anim.ease);
+      objHost.classList.remove('playing');
+      void objHost.offsetWidth;   // force reflow so the animation restarts
+      objHost.classList.add('playing');
+      renderedObjectType = currentType;
     }
-    positionCard('top-center', 420);
-    if (posDesign) {
-      posDesign.card_custom_x = savedCustomX;
-      posDesign.card_custom_y = savedCustomY;
-    }
+    // renderScreenEffect('none') is a clean clear: objects carry their own motion and
+    // the live overlay skips spawnEffects() for them, so a saved screen effect would
+    // misrepresent what the streamer gets. No loadGoogleFont() call: objects use
+    // Oxanium/Saira Condensed from the page's own <link>, not the per-design font path.
+    positionCard(d.card_position, d.card_width);
     updateOverlayGuide();
     renderScreenEffect('none');
     return;
   }
+  renderedObjectType = null;
   // Fix round 1, Critical 1: don't clobber the Sponsor/Timed tab. switchTab()
   // calls updateSponsorPreview() BEFORE updatePreview() when opening 'timed',
   // and that function sets #preview-card to display:none to show the sponsor
@@ -1615,7 +1603,9 @@ function updateOverlayGuide() {
   const guide = document.getElementById('overlay-guide');
   const card = document.getElementById('preview-card');
   const sponsorWrap = container.querySelector('.preview-sponsor-wrap');
-  const target = (sponsorWrap && sponsorWrap.style.display !== 'none') ? sponsorWrap : card;
+  const objHost = document.getElementById('preview-object-host');
+  const objectShowing = objHost.style.display !== 'none';
+  const target = (sponsorWrap && sponsorWrap.style.display !== 'none') ? sponsorWrap : (objectShowing ? objHost : card);
 
   // Wait a frame so layout is computed
   requestAnimationFrame(() => {
@@ -1625,7 +1615,8 @@ function updateOverlayGuide() {
     guide.style.height = h + 'px';
     guide.style.top = '0';
     guide.style.left = '0';
-    guide.style.borderRadius = (workingDesigns[currentType]?.border_radius || 16) + 'px';
+    const radius = workingDesigns[currentType]?.border_radius;
+    guide.style.borderRadius = objectShowing ? '4px' : (Number.isFinite(radius) ? radius : 16) + 'px';
   });
 }
 
@@ -1880,62 +1871,48 @@ function getDetailPreviewText(type) {
   return map[type] || '';
 }
 
-// Position card in screen based on card_position
+// Position the preview in the screen exactly where the live overlay puts the alert.
+// The preview screen is the 1920x1080 canvas scaled down, so the card keeps its real
+// size (scaled by `scale`), sits 16 canvas pixels from an edge for the grid cells, and
+// a dragged position is the card's top-left corner as a fraction of the screen. The
+// placement is read by the same module the overlay uses (placement.js), and the
+// card's real size is measured, so bottom and middle placements need no estimate.
 function positionCard(pos, cardWidth) {
   const container = document.getElementById('preview-card-container');
   const screen = document.getElementById('preview-screen');
   const screenW = screen.offsetWidth;
   const screenH = screen.offsetHeight;
-
-  // If custom x/y from drag, use those
-  const d = workingDesigns[currentType];
-  if (d && d.card_custom_x != null && d.card_custom_y != null) {
-    const scale = screenW / 1920;
-    container.style.transform = `scale(${scale})`;
-    container.style.transformOrigin = 'top left';
-    container.style.left = (d.card_custom_x * screenW) + 'px';
-    container.style.top = (d.card_custom_y * screenH) + 'px';
-    return;
-  }
-
-  // Scale the card to fit the preview screen (designed for 1920px)
   const scale = screenW / 1920;
+
+  const d = workingDesigns[currentType] || {};
+  const placement = ATLETA_PLACEMENT.placementOf({
+    card_position: pos, card_width: cardWidth, card_custom_x: d.card_custom_x, card_custom_y: d.card_custom_y,
+  });
+
   container.style.transform = `scale(${scale})`;
   container.style.transformOrigin = 'top left';
-
-  const [vPos, hPos] = pos.split('-');
-  const margin = 20;
-
-  // Reset
-  container.style.left = '';
-  container.style.top = '';
   container.style.right = '';
   container.style.bottom = '';
 
-  // Work in unscaled coordinates (since transform-origin is top-left and we set left/top)
-  // The container is positioned in screen pixels, then scaled
-
-  // Horizontal position
-  if (hPos === 'left') {
-    container.style.left = margin + 'px';
-    container.style.transformOrigin = 'top left';
-  } else if (hPos === 'right') {
-    container.style.left = (screenW - cardWidth * scale - margin) + 'px';
-    container.style.transformOrigin = 'top left';
-  } else {
-    container.style.left = (screenW / 2 - (cardWidth * scale) / 2) + 'px';
-    container.style.transformOrigin = 'top left';
+  // If custom x/y from drag, use those
+  if (placement.custom) {
+    container.style.left = (placement.custom.x * screenW) + 'px';
+    container.style.top = (placement.custom.y * screenH) + 'px';
+    return;
   }
 
-  // Vertical position (estimate card height ~140px unscaled)
-  const cardH = 140 * scale;
-  if (vPos === 'top') {
-    container.style.top = margin + 'px';
-  } else if (vPos === 'bot') {
-    container.style.top = (screenH - cardH - margin) + 'px';
-  } else {
-    container.style.top = (screenH / 2 - cardH / 2) + 'px';
-  }
+  // What is shown (an object, the card or the sponsor image) is the container's size, unscaled.
+  const boxW = (container.offsetWidth || placement.width) * scale;
+  const boxH = (container.offsetHeight || 140) * scale;
+  const margin = ATLETA_PLACEMENT.MARGIN * scale;
+
+  if (placement.horizontal === 'left') container.style.left = margin + 'px';
+  else if (placement.horizontal === 'right') container.style.left = (screenW - boxW - margin) + 'px';
+  else container.style.left = ((screenW - boxW) / 2) + 'px';
+
+  if (placement.vertical === 'top') container.style.top = margin + 'px';
+  else if (placement.vertical === 'bot') container.style.top = (screenH - boxH - margin) + 'px';
+  else container.style.top = ((screenH - boxH) / 2) + 'px';
 }
 
 // ─── Play animation ───────────────────────────────────────────────────────────
@@ -2348,7 +2325,7 @@ function showSponsorInPreview(sponsor) {
   const containerWidth = d.card_width || 500;
   wrap.style.width = containerWidth + 'px';
   wrap.style.height = '180px';
-  wrap.style.borderRadius = (d.border_radius || 12) + 'px';
+  wrap.style.borderRadius = (Number.isFinite(d.border_radius) ? d.border_radius : 12) + 'px';
   wrap.style.overflow = 'hidden';
   wrap.style.display = 'flex';
   wrap.style.alignItems = 'center';
@@ -2472,12 +2449,16 @@ document.addEventListener('mousemove', e => {
     document.getElementById('val-card-width').textContent = newWidth + 'px';
     workingDesigns[currentType].card_width = newWidth;
 
-    // Update visible element width
+    // Update visible element width: the card, the object, or the sponsor image
     const card = document.getElementById('preview-card');
+    const objHost = document.getElementById('preview-object-host');
     const sponsorWrap = dragTarget.querySelector('.preview-sponsor-wrap');
     card.style.width = newWidth + 'px';
+    objHost.style.width = newWidth + 'px';
     if (sponsorWrap) sponsorWrap.style.width = newWidth + 'px';
 
+    // A card anchored to the right, bottom or centre grows from there, as it does live
+    positionCard(workingDesigns[currentType].card_position, newWidth);
     updateOverlayGuide();
     return;
   }

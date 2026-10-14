@@ -300,6 +300,7 @@ router.get('/:token', (req, res) => {
   <audio id="redemption-audio" preload="auto"></audio>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
   <script src="/overlay/objects/index.js"></script>
+  <script src="/overlay/placement.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>
 </html>`);

@@ -14,6 +14,7 @@ const vm = require('node:vm');
 
 const OVERLAY_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
 const OBJECTS_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
+const PLACEMENT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'placement.js'), 'utf8');
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 
@@ -97,7 +98,7 @@ function makeClock() {
 }
 
 // Loads overlay.js (and, unless told not to, the object registry) into a fresh context.
-function loadOverlay({ objects = true } = {}) {
+function loadOverlay({ objects = true, designs = {} } = {}) {
   const clock = makeClock();
   const body = makeElement('body');
   const container = makeElement('div'); container.id = 'notification-container'; body.appendChild(container);
@@ -151,6 +152,7 @@ function loadOverlay({ objects = true } = {}) {
   sandbox.OVERLAY_TOKEN = 'test-token';
   const context = vm.createContext(sandbox);
   if (objects) vm.runInContext(OBJECTS_JS, context, { filename: 'objects/index.js' });
+  vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
   vm.runInContext(OVERLAY_JS, context, { filename: 'overlay.js' });
 
   const overlay = {
@@ -161,7 +163,7 @@ function loadOverlay({ objects = true } = {}) {
     run(code) { return vm.runInContext(code, context); },
     slots() { return container.children.filter((c) => c.classList.contains('alert-pos')); },
   };
-  overlay.send({ type: 'config', serverVersion: 'v1', designs: {}, config: baseConfig() });
+  overlay.send({ type: 'config', serverVersion: 'v1', designs, config: baseConfig() });
   return overlay;
 }
 
@@ -386,5 +388,176 @@ describe('Clear All', () => {
     assert.equal(seen.shown, 1, 'B waits for A\'s 5 s, its exit and the half-second gap');
     overlay.clock.advance(1);
     assert.equal(seen.shown, 2);
+  });
+});
+
+// ── N1 and M7: every alert sits where its saved design says ──────────────
+
+// What the stream sends for a saved design: the columns that matter here.
+// (A saved row always has its colours and effects too; the legacy cards read them all.)
+const design = (over = {}) => ({
+  bg_color: '#1c1200', accent_color: '#f59e0b', border_color: '#f59e0b', text_color: '#ffffff', font_family: 'System Default',
+  username_size: 24, event_label: 'Giveaway Winner!', detail_text: '', car_animation: 'zoomLR', screen_effect: 'none', animation_speed: 1,
+  card_position: 'top-center', card_custom_x: null, card_custom_y: null, card_width: 420, border_radius: 16, entrance_animation: 'slideDown',
+  bg_opacity: 1, gradient_direction: '160deg', border_thickness: 2, border_opacity: 0.5, glow_intensity: 0.25,
+  shadow_opacity: 0.6, shadow_blur: 32, shadow_spread: 0, text_align: 'center',
+  ...over,
+});
+const OBJECT_ALERTS = [
+  ['follow', { username: 'RacerDan' }], ['subscription', { username: 'RacerDan', tier: '1', months: 3 }],
+  ['bits', { username: 'RacerDan', amount: 500 }], ['donation', { username: 'RacerDan', amount: 25, currency: 'EUR' }],
+  ['raid', { username: 'RacerDan', viewers: 42 }],
+];
+const LEGACY_ALERTS = [
+  ['giveaway_winner', { username: 'RacerDan', prize: 'Steam key' }], ['yt_superchat', { username: 'RacerDan', amount: '$5.00', message: 'hi' }],
+  ['yt_member', { username: 'RacerDan', level: 'Member' }], ['yt_giftmember', { username: 'RacerDan', amount: 5 }],
+];
+const POSITION_STYLES = {
+  'top-left': { top: '16px', right: 'auto', bottom: 'auto', left: '16px', transform: 'none' },
+  'top-center': { top: '16px', right: 'auto', bottom: 'auto', left: '50%', transform: 'translate(-50%, 0)' },
+  'top-right': { top: '16px', right: '16px', bottom: 'auto', left: 'auto', transform: 'none' },
+  'mid-left': { top: '50%', right: 'auto', bottom: 'auto', left: '16px', transform: 'translate(0, -50%)' },
+  'mid-center': { top: '50%', right: 'auto', bottom: 'auto', left: '50%', transform: 'translate(-50%, -50%)' },
+  'mid-right': { top: '50%', right: '16px', bottom: 'auto', left: 'auto', transform: 'translate(0, -50%)' },
+  'bot-left': { top: 'auto', right: 'auto', bottom: '16px', left: '16px', transform: 'none' },
+  'bot-center': { top: 'auto', right: 'auto', bottom: '16px', left: '50%', transform: 'translate(-50%, 0)' },
+  'bot-right': { top: 'auto', right: '16px', bottom: '16px', left: 'auto', transform: 'none' },
+};
+const placed = (slot) => ({ top: slot.style.top, right: slot.style.right, bottom: slot.style.bottom, left: slot.style.left, transform: slot.style.transform });
+
+describe('the five Twitch alerts honour their saved position and width (N1)', () => {
+  for (const [type, data] of OBJECT_ALERTS) {
+    test(`${type}: every grid position`, () => {
+      for (const [position, expected] of Object.entries(POSITION_STYLES)) {
+        const overlay = loadOverlay({ designs: { [type]: design({ card_position: position, card_width: 560 }) } });
+        overlay.send({ type, data });
+        const [slot] = overlay.slots();
+        assert.deepEqual(placed(slot), expected, `${type} at ${position}`);
+        assert.equal(slot.style.width, '560px', `${type} width`);
+      }
+    });
+
+    test(`${type}: a dragged position is where it was dropped, and wins over the grid cell`, () => {
+      const overlay = loadOverlay({ designs: { [type]: design({ card_position: 'bot-right', card_custom_x: 0.3, card_custom_y: 0.6 }) } });
+      overlay.send({ type, data });
+      assert.deepEqual(placed(overlay.slots()[0]), { top: '60%', right: 'auto', bottom: 'auto', left: '30%', transform: 'none' });
+    });
+
+    test(`${type}: without a saved design it stays top-centre at 420px`, () => {
+      const overlay = loadOverlay();
+      overlay.send({ type, data });
+      const [slot] = overlay.slots();
+      assert.deepEqual(placed(slot), POSITION_STYLES['top-center']);
+      assert.equal(slot.style.width, '420px');
+    });
+  }
+
+  test('an alert is still an object: markup from the registry, played by .playing, and the slot is the only wrapper', () => {
+    const overlay = loadOverlay({ designs: { follow: design({ card_position: 'bot-left' }) } });
+    overlay.send(follow());
+    const [slot] = overlay.slots();
+    assert.ok(slot.classList.contains('playing'));
+    assert.match(slot.innerHTML, /class="obj o-follow"/);
+    assert.equal(slot.children.length, 0, 'the markup is the slot\'s own content');
+    assert.equal(slot.style.properties['--in'], 'cutWipe');
+  });
+
+  test('a design pushed while the overlay is open applies to the next alert, with no reload', () => {
+    const overlay = loadOverlay();
+    overlay.send(follow('A'));
+    assert.deepEqual(placed(overlay.slots()[0]), POSITION_STYLES['top-center']);
+    overlay.send({ type: 'clear' });
+    overlay.send({ type: 'config-update', designs: { follow: design({ card_position: 'mid-right', card_width: 300 }) } });
+    overlay.send(follow('B'));
+    assert.deepEqual(placed(overlay.slots()[0]), POSITION_STYLES['mid-right']);
+    assert.equal(overlay.slots()[0].style.width, '300px');
+    assert.equal(overlay.sandbox.reloaded, false);
+  });
+
+  test('the exit still runs on the slot, and the slot is gone afterwards', () => {
+    const overlay = loadOverlay({ designs: { follow: design({ card_position: 'bot-right' }) } });
+    overlay.send(follow());
+    const [slot] = overlay.slots();
+    overlay.clock.advance(5000);
+    assert.ok(slot.classList.contains('exiting'));
+    assert.ok(!slot.classList.contains('playing'));
+    assert.equal(slot.style.properties['--out'], 'exSheathe');
+    overlay.clock.advance(400);
+    assert.equal(overlay.slots().length, 0);
+  });
+});
+
+describe('the giveaway winner and the YouTube cards honour them too (M7)', () => {
+  for (const [type, data] of LEGACY_ALERTS) {
+    test(`${type}: every grid position puts the slot there and the card fills it`, () => {
+      for (const [position, expected] of Object.entries(POSITION_STYLES)) {
+        const overlay = loadOverlay({ designs: { [type]: design({ card_position: position, card_width: 500 }) } });
+        overlay.send({ type, data });
+        const [slot] = overlay.slots();
+        assert.deepEqual(placed(slot), expected, `${type} at ${position}`);
+        assert.equal(slot.style.width, '500px');
+        assert.equal(slot.children.length, 1);
+        assert.ok(slot.children[0].classList.contains('alert-card'), 'the card is inside the slot');
+        assert.equal(slot.children[0].style.top, '', 'the card itself carries no position');
+        assert.equal(slot.children[0].style.left, '');
+        assert.equal(slot.children[0].style.transform, '');
+      }
+    });
+
+    test(`${type}: a dragged position, 0 included`, () => {
+      const overlay = loadOverlay({ designs: { [type]: design({ card_position: 'bot-right', card_custom_x: 0, card_custom_y: 0.5 }) } });
+      overlay.send({ type, data });
+      assert.deepEqual(placed(overlay.slots()[0]), { top: '50%', right: 'auto', bottom: 'auto', left: '0%', transform: 'none' });
+    });
+  }
+
+  test('every entrance animation works at a position that is not top-centre', () => {
+    for (const entrance of ['slideUp', 'slideLeft', 'slideRight', 'zoomIn', 'fadeIn']) {
+      const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_position: 'bot-right', entrance_animation: entrance, animation_speed: 1 }) } });
+      overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+      const card = overlay.slots()[0].children[0];
+      assert.equal(card.style.animation, `${entrance} 0.4s ease-out forwards`, entrance);
+      assert.ok(!card.classList.contains('entering'), `${entrance} replaces the default entrance`);
+    }
+  });
+
+  test('a dragged card still gets its entrance animation (it used to be replaced by a fade)', () => {
+    const overlay = loadOverlay({ designs: { yt_member: design({ card_custom_x: 0.2, card_custom_y: 0.2, entrance_animation: 'zoomIn' }) } });
+    overlay.send({ type: 'yt_member', data: { username: 'RacerDan', level: 'Member' } });
+    assert.equal(overlay.slots()[0].children[0].style.animation, 'zoomIn 0.4s ease-out forwards');
+  });
+
+  test('the default entrance is the .entering class', () => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_position: 'mid-left' }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+    assert.ok(overlay.slots()[0].children[0].classList.contains('entering'));
+  });
+
+  test('the card fades out and the whole slot is removed', () => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ card_position: 'top-right' }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+    const [slot] = overlay.slots();
+    overlay.clock.advance(8000);
+    assert.equal(slot.children[0].style.opacity, '0');
+    overlay.clock.advance(400);
+    assert.equal(overlay.slots().length, 0);
+    assert.equal(overlay.container.children.length, 0);
+  });
+
+  test('a border radius of 0 is a square corner, not 16', () => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ border_radius: 0 }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+    assert.equal(overlay.slots()[0].children[0].style.borderRadius, '0px');
+  });
+
+  test('a missing or unusable radius is the default 16', () => {
+    for (const radius of [undefined, null, 'round', NaN]) {
+      const overlay = loadOverlay({ designs: { giveaway_winner: design({ border_radius: radius }) } });
+      overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+      assert.equal(overlay.slots()[0].children[0].style.borderRadius, '16px', String(radius));
+    }
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ border_radius: 24 }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+    assert.equal(overlay.slots()[0].children[0].style.borderRadius, '24px');
   });
 });
