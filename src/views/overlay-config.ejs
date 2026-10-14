@@ -226,7 +226,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="overlay_follow_duration" value="<%= streamer.overlay_follow_duration || 5 %>" min="1" max="30">
+          <input type="number" name="overlay_follow_duration" value="<%= streamer.overlay_follow_duration || durationDefaults.overlay_follow_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -267,7 +267,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="overlay_sub_duration" value="<%= streamer.overlay_sub_duration || 7 %>" min="1" max="30">
+          <input type="number" name="overlay_sub_duration" value="<%= streamer.overlay_sub_duration || durationDefaults.overlay_sub_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -308,7 +308,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="overlay_bits_duration" value="<%= streamer.overlay_bits_duration || 6 %>" min="1" max="30">
+          <input type="number" name="overlay_bits_duration" value="<%= streamer.overlay_bits_duration || durationDefaults.overlay_bits_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -349,7 +349,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="overlay_donation_duration" value="<%= streamer.overlay_donation_duration || 6 %>" min="1" max="30">
+          <input type="number" name="overlay_donation_duration" value="<%= streamer.overlay_donation_duration || durationDefaults.overlay_donation_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -390,7 +390,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="overlay_raid_duration" value="<%= streamer.overlay_raid_duration || 7 %>" min="1" max="30">
+          <input type="number" name="overlay_raid_duration" value="<%= streamer.overlay_raid_duration || durationDefaults.overlay_raid_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -477,7 +477,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="yt_overlay_superchat_duration" value="<%= streamer.yt_overlay_superchat_duration || 6 %>" min="1" max="30">
+          <input type="number" name="yt_overlay_superchat_duration" value="<%= streamer.yt_overlay_superchat_duration || durationDefaults.yt_overlay_superchat_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -518,7 +518,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="yt_overlay_member_duration" value="<%= streamer.yt_overlay_member_duration || 5 %>" min="1" max="30">
+          <input type="number" name="yt_overlay_member_duration" value="<%= streamer.yt_overlay_member_duration || durationDefaults.yt_overlay_member_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -559,7 +559,7 @@
       <div class="alert-card-controls">
         <div class="alert-ctrl">
           <span class="alert-ctrl-label"><%= t('overlay.duration') %></span>
-          <input type="number" name="yt_overlay_giftmember_duration" value="<%= streamer.yt_overlay_giftmember_duration || 6 %>" min="1" max="30">
+          <input type="number" name="yt_overlay_giftmember_duration" value="<%= streamer.yt_overlay_giftmember_duration || durationDefaults.yt_overlay_giftmember_duration %>" min="1" max="30">
           <span style="font-size: 12px; color: var(--text-muted);">s</span>
         </div>
         <div class="alert-ctrl">
@@ -681,6 +681,8 @@
     uploadFailed: t('overlay.js.uploadFailed', { error: '{{error}}' }), unknownError: t('overlay.js.unknownError'),
     fileTooLarge: t('overlay.js.fileTooLarge'), cleared: t('overlay.js.cleared'),
   }).replace(/</g, '\\u003c') %>;
+  // Each alert's default length in seconds, for a duration field left empty.
+  const DURATION_DEFAULTS = <%- JSON.stringify(durationDefaults).replace(/</g, '\\u003c') %>;
   const fill = (text, values) => text.replace(/\{\{(\w+)\}\}/g, (_, key) => (values[key] != null ? values[key] : ''));
 
   // ─── Alert platform tabs ───────────────────────────────────────────────────
@@ -880,19 +882,20 @@
     iframe.src = overlayUrlBase;
     modal.classList.add('open');
 
-    // Duration map for auto-close timing
+    // Duration map for auto-close timing: the page's values, or the defaults for an empty field
+    const durationOf = (name) => parseInt(document.querySelector('[name="' + name + '"]')?.value) || DURATION_DEFAULTS[name];
     const durationMap = {
-      follow: parseInt(document.querySelector('[name="overlay_follow_duration"]')?.value) || 5,
-      subscription: parseInt(document.querySelector('[name="overlay_sub_duration"]')?.value) || 7,
-      bits: parseInt(document.querySelector('[name="overlay_bits_duration"]')?.value) || 6,
-      donation: parseInt(document.querySelector('[name="overlay_donation_duration"]')?.value) || 6,
-      raid: 6,
-      giveaway_winner: parseInt(document.querySelector('[name="overlay_giveaway_duration"]')?.value) || 8,
-      yt_superchat: parseInt(document.querySelector('[name="yt_overlay_superchat_duration"]')?.value) || 6,
-      yt_member: parseInt(document.querySelector('[name="yt_overlay_member_duration"]')?.value) || 5,
-      yt_giftmember: parseInt(document.querySelector('[name="yt_overlay_giftmember_duration"]')?.value) || 6,
+      follow: durationOf('overlay_follow_duration'),
+      subscription: durationOf('overlay_sub_duration'),
+      bits: durationOf('overlay_bits_duration'),
+      donation: durationOf('overlay_donation_duration'),
+      raid: durationOf('overlay_raid_duration'),
+      giveaway_winner: durationOf('overlay_giveaway_duration'),
+      yt_superchat: durationOf('yt_overlay_superchat_duration'),
+      yt_member: durationOf('yt_overlay_member_duration'),
+      yt_giftmember: durationOf('yt_overlay_giftmember_duration'),
     };
-    const alertDuration = durationMap[type] || 6;
+    const alertDuration = durationMap[type] || DURATION_DEFAULTS.overlay_follow_duration;
 
     // Fire the test event after iframe has a moment to load and connect SSE
     setTimeout(() => {

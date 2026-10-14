@@ -214,7 +214,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
     }
     assert.deepEqual([...readers].sort(), [
       '_getAllStreamers', '_getAllStreamersAdmin', '_getStreamerByDiscordId', '_getStreamerById', '_getStreamerByTwitchId',
-      '_upsertStreamerDiscord', 'getChatbotEnabledStreamers', 'getOverlayEnabledStreamers', 'getStreamerByMultistreamToken',
+      'upsertStreamerDiscord', 'getChatbotEnabledStreamers', 'getOverlayEnabledStreamers', 'getStreamerByMultistreamToken',
       'getStreamerByOverlayToken', 'getStreamerByUsername', 'getStreamersWithActiveMultistreamBroadcast', 'getYoutubeChatbotEnabledStreamers',
     ].sort());
     assert.deepEqual([...writers].sort(), ['_updateStreamerBroadcasterTokens', 'updateBotTokens', 'updateSpotifyTokens', 'updateStreamerYoutubeAccessToken', 'updateStreamerYoutubeTokens'].sort());

@@ -16,17 +16,20 @@ const RealDatabase = require('better-sqlite3');
 const DB_FILE = path.join(__dirname, 'db.js');
 const SWITCH_MIGRATION = 'cp_rewards_enabled_for_existing_rewards';
 const SESSION_HASH_MIGRATION = 'hash_web_session_ids';
+const DURATIONS_MIGRATION = 'longer_alert_durations';
 
 let tmpDir;
 before(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-data-migrations-')); });
 after(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
 
 // One boot: loads src/db.js afresh on `file`, lets `inspect` look at it, closes
-// it. Returns the migration errors it printed.
-function boot(file, inspect) {
+// it. Returns the migration errors it printed. `stubs` replaces modules db.js
+// requires, by the name it requires them with.
+function boot(file, inspect, stubs = {}) {
   const origLoad = Module._load;
   Module._load = function (request, parent, isMain) {
     if (parent && parent.filename === DB_FILE) {
+      if (Object.hasOwn(stubs, request)) return stubs[request];
       if (request === 'better-sqlite3') return function FileDatabase(_file, opts) { return new RealDatabase(file, opts); };
       if (request === 'fs') return { ...fs, existsSync: () => true, mkdirSync: () => {} };
       // src/config.js exits when the real env vars are missing; db.js only reads the admin ids.
@@ -55,7 +58,7 @@ function boot(file, inspect) {
   return errors;
 }
 
-const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids/i.test(line));
+const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|longer_alert_durations/i.test(line));
 
 test('a fresh database boots twice: each data migration is recorded once, without errors', () => {
   const file = path.join(tmpDir, 'fresh.db');
@@ -64,7 +67,7 @@ test('a fresh database boots twice: each data migration is recorded once, withou
 
   const raw = new RealDatabase(file);
   try {
-    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION].sort());
+    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION].sort());
   } finally {
     raw.close();
   }
@@ -119,6 +122,70 @@ test('on an existing database the switch goes on once for every streamer with an
   boot(file, (db) => {
     assert.equal(db.getStreamerById(ids.enabledReward).cp_rewards_enabled, 0, 'a later boot does not switch it on again');
   });
+});
+
+test('alert durations still on the earlier defaults move to the longer ones once; a duration a streamer chose stays', () => {
+  const file = path.join(tmpDir, 'durations.db');
+  boot(file); // the schema production has
+  const { PREVIOUS_DEFAULT_SECONDS: earlier, DEFAULT_DURATION_SECONDS: now } = require('./services/overlaySettings');
+
+  // Production before this change: streamers on the earlier defaults, one of
+  // them with a 20 s follow alert and a 3 s YouTube member alert, and no
+  // record of this migration.
+  const raw = new RealDatabase(file);
+  let onDefaults;
+  let chose;
+  try {
+    let n = 0;
+    const add = (values) => {
+      const columns = ['discord_user_id', 'discord_username', ...Object.keys(values)];
+      return Number(raw.prepare(`INSERT INTO streamers (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`)
+        .run(`70000000000000000${++n}`, `streamer${n}`, ...Object.values(values)).lastInsertRowid);
+    };
+    onDefaults = add({ ...earlier });
+    chose = add({ ...earlier, overlay_follow_duration: 20, yt_overlay_member_duration: 3 });
+    raw.prepare('DELETE FROM data_migrations WHERE name = ?').run(DURATIONS_MIGRATION);
+  } finally {
+    raw.close();
+  }
+
+  const errors = boot(file, (db) => {
+    const row = db.getStreamerById(onDefaults);
+    for (const column of Object.keys(earlier)) assert.equal(row[column], now[column], column);
+    const theirs = db.getStreamerById(chose);
+    assert.equal(theirs.overlay_follow_duration, 20, 'a duration the streamer chose stays');
+    assert.equal(theirs.yt_overlay_member_duration, 3);
+    assert.equal(theirs.overlay_sub_duration, now.overlay_sub_duration, 'their other alerts were still on the defaults');
+
+    // Afterwards the streamer sets the follow alert back to 5 s.
+    db.db.prepare('UPDATE streamers SET overlay_follow_duration = 5 WHERE id = ?').run(onDefaults);
+  });
+  assert.deepEqual(ownErrors(errors), []);
+
+  boot(file, (db) => {
+    assert.equal(db.getStreamerById(onDefaults).overlay_follow_duration, 5, 'a later boot does not move it again');
+  });
+});
+
+test('a new streamer starts with the overlay settings\' defaults, written by the insert rather than left to the column DEFAULTs', () => {
+  const file = path.join(tmpDir, 'new-streamer.db');
+  const real = require('./services/overlaySettings');
+  // Values no column DEFAULT has, so the test tells the insert from the table's
+  // defaults (a table made before 2026-10-14 still gives the earlier ones).
+  const marked = Object.fromEntries(Object.keys(real.DEFAULT_DURATION_SECONDS).map((column, i) => [column, 21 + i]));
+
+  const errors = boot(file, (db) => {
+    const row = db.upsertStreamerDiscord('800000000000000001', 'newcomer', 'Newcomer', null);
+    for (const [column, seconds] of Object.entries(marked)) assert.equal(row[column], seconds, column);
+
+    // Signing in again changes only the Discord fields.
+    db.db.prepare('UPDATE streamers SET overlay_follow_duration = 9 WHERE id = ?').run(row.id);
+    const again = db.upsertStreamerDiscord('800000000000000001', 'newcomer_renamed', 'Newcomer', null);
+    assert.equal(again.id, row.id);
+    assert.equal(again.discord_username, 'newcomer_renamed');
+    assert.equal(again.overlay_follow_duration, 9);
+  }, { './services/overlaySettings': { ...real, DEFAULT_DURATION_SECONDS: marked } });
+  assert.deepEqual(ownErrors(errors), []);
 });
 
 test('a database from before the live poller kept a stream id gets the two columns on the next boot, keeping its rows', () => {

@@ -12,19 +12,41 @@ const TOGGLES = [
 ];
 
 // How long each alert stays on screen, in whole seconds: [column, default, longest].
-// Every duration column holds seconds, the giveaway one included (db.js adds it
-// with DEFAULT 8 and converts a stray 8000 back), and the overlay reads them
-// as seconds.
+// Every duration column holds seconds, the giveaway one included (db.js converts
+// a stray 8000 back), and the overlay reads them as seconds. The defaults leave
+// viewers time to read who followed, subscribed, cheered, donated or raided: a
+// new streamer starts with them (db.js writes them into the new row), and an
+// unreadable value falls back to them.
 const DURATIONS = [
-  ['overlay_follow_duration', 5, 30],
-  ['overlay_sub_duration', 7, 30],
-  ['overlay_bits_duration', 6, 30],
-  ['overlay_donation_duration', 6, 30],
-  ['overlay_raid_duration', 7, 30],
-  ['overlay_giveaway_duration', 8, 60],
+  ['overlay_follow_duration', 8, 30],
+  ['overlay_sub_duration', 10, 30],
+  ['overlay_bits_duration', 10, 30],
+  ['overlay_donation_duration', 12, 30],
+  ['overlay_raid_duration', 10, 30],
+  ['overlay_giveaway_duration', 10, 60],
+];
+// The YouTube alerts' durations, on the same page. Their fields are only there
+// while YouTube is shown, so a save without them keeps what is stored.
+const YOUTUBE_DURATIONS = [
+  ['yt_overlay_superchat_duration', 12, 30],
+  ['yt_overlay_member_duration', 8, 30],
+  ['yt_overlay_giftmember_duration', 10, 30],
 ];
 const MIN_DURATION_SECONDS = 1;
 const GIVEAWAY_DURATION = DURATIONS.find(([column]) => column === 'overlay_giveaway_duration');
+
+// { column: default seconds } for every alert duration.
+const DEFAULT_DURATION_SECONDS = Object.freeze(Object.fromEntries(
+  [...DURATIONS, ...YOUTUBE_DURATIONS].map(([column, fallback]) => [column, fallback])
+));
+// The defaults before 2026-10-14. Tables made before then still give a new row
+// these (SQLite cannot change a column's DEFAULT), and db.js moves every value
+// still on them to the defaults above, once.
+const PREVIOUS_DEFAULT_SECONDS = Object.freeze({
+  overlay_follow_duration: 5, overlay_sub_duration: 7, overlay_bits_duration: 6,
+  overlay_donation_duration: 6, overlay_raid_duration: 7, overlay_giveaway_duration: 8,
+  yt_overlay_superchat_duration: 6, yt_overlay_member_duration: 5, yt_overlay_giftmember_duration: 6,
+});
 
 const DEFAULT_VOLUME = 0.8;
 
@@ -73,6 +95,9 @@ function parseOverlaySettings(body, stored) {
   const columns = {};
   for (const name of TOGGLES) columns[name] = form[name] ? 1 : 0;
   for (const [name, fallback, longest] of DURATIONS) columns[name] = wholeSeconds(form[name], fallback, longest);
+  for (const [name, fallback, longest] of YOUTUBE_DURATIONS) {
+    if (form[name] !== undefined) columns[name] = wholeSeconds(form[name], fallback, longest);
+  }
   columns.overlay_volume = volumeOf(form.overlay_volume);
 
   const jwt = decideStreamElementsJwt({
@@ -87,6 +112,9 @@ function parseOverlaySettings(body, stored) {
 module.exports = {
   TOGGLES,
   DURATIONS,
+  YOUTUBE_DURATIONS,
+  DEFAULT_DURATION_SECONDS,
+  PREVIOUS_DEFAULT_SECONDS,
   STREAMELEMENTS_JWT_MAX,
   parseOverlaySettings,
   decideStreamElementsJwt,

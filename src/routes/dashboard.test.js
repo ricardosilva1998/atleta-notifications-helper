@@ -974,8 +974,28 @@ describe('the overlay settings page', () => {
     assert.equal(row.overlay_follow_duration, 30);
     assert.equal(row.overlay_sub_duration, 1);
     assert.equal(row.overlay_giveaway_duration, 60);
-    assert.equal(row.overlay_raid_duration, 7);
+    assert.equal(row.overlay_raid_duration, 10, 'an unreadable value gets the default');
     assert.equal(row.overlay_volume, 1);
+  });
+
+  test('saves the YouTube alerts\' durations the page shows (they never were), and keeps them when a save leaves them out', async () => {
+    await save({ overlay_enabled: '1', yt_overlay_superchat_duration: '20', yt_overlay_member_duration: '4', yt_overlay_giftmember_duration: '45' });
+    let row = db.getStreamerById(id);
+    assert.equal(row.yt_overlay_superchat_duration, 20);
+    assert.equal(row.yt_overlay_member_duration, 4);
+    assert.equal(row.yt_overlay_giftmember_duration, 30, 'held to 30 s like the Twitch alerts');
+
+    await save({ overlay_enabled: '1' });
+    row = db.getStreamerById(id);
+    assert.equal(row.yt_overlay_superchat_duration, 20, 'a save without the YouTube fields keeps them');
+  });
+
+  test('an alert with no stored duration shows its default on the page', async () => {
+    db.db.prepare('UPDATE streamers SET overlay_follow_duration = NULL, overlay_donation_duration = NULL, yt_overlay_superchat_duration = NULL WHERE id = ?').run(id);
+    const res = await request('GET', '/dashboard/overlay', { streamer: id });
+    assert.match(res.text, /name="overlay_follow_duration" value="8"/);
+    assert.match(res.text, /name="overlay_donation_duration" value="12"/);
+    assert.match(res.text, /name="yt_overlay_superchat_duration" value="12"/);
   });
 
   // Settings reach an open OBS source as they are saved, so a save does not reconnect

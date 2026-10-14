@@ -44,11 +44,17 @@ describe('subRoleEligibility', () => {
   });
 
   test('refuses a role carrying any moderator or admin permission', () => {
-    assert.equal(PRIVILEGED_ROLE_PERMISSIONS.length, 9);
+    assert.equal(PRIVILEGED_ROLE_PERMISSIONS.length, 8);
     for (const name of PRIVILEGED_ROLE_PERMISSIONS) {
       const perms = P.SendMessages | P[name];
       assert.deepEqual(subRoleEligibility(role({ permissions: perms }), 10), { ok: false, reason: 'privileged' }, name);
     }
+  });
+
+  test('accepts a role that may mention @everyone (the server owner gave it that on purpose)', () => {
+    assert.equal(PRIVILEGED_ROLE_PERMISSIONS.includes('MentionEveryone'), false);
+    assert.deepEqual(subRoleEligibility(role({ permissions: P.SendMessages | P.MentionEveryone }), 10), { ok: true });
+    assert.deepEqual(subRoleEligibility(role({ permissions: P.MentionEveryone | P.KickMembers }), 10), { ok: false, reason: 'privileged' }, 'with a moderator permission as well');
   });
 
   test('accepts the permissions bitfield as a decimal string', () => {

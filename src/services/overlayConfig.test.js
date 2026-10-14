@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 
 const { buildOverlayConfig, TWITCH_ALERTS, YOUTUBE_ALERTS } = require('./overlayConfig');
+const { DEFAULT_DURATION_SECONDS } = require('./overlaySettings');
 
 // A streamer row as the database returns it (the columns the config reads).
 function streamer(over = {}) {
@@ -91,10 +92,12 @@ describe('buildOverlayConfig: the giveaway duration is in seconds', () => {
 
   test('a missing or unreadable duration gets its default', () => {
     for (const bad of [null, undefined, 'abc', NaN]) {
-      assert.equal(build({ overlay_giveaway_duration: bad }).giveaway_winner.duration, 8, String(bad));
-      assert.equal(build({ overlay_follow_duration: bad }).follow.duration, 5, String(bad));
-      assert.equal(build({ overlay_raid_duration: bad }).raid.duration, 7, String(bad));
-      assert.equal(build({ yt_overlay_member_duration: bad }).yt_member.duration, 5, String(bad));
+      assert.equal(build({ overlay_giveaway_duration: bad }).giveaway_winner.duration, 10, String(bad));
+      assert.equal(build({ overlay_follow_duration: bad }).follow.duration, 8, String(bad));
+      assert.equal(build({ overlay_raid_duration: bad }).raid.duration, 10, String(bad));
+      assert.equal(build({ overlay_donation_duration: bad }).donation.duration, 12, String(bad));
+      assert.equal(build({ yt_overlay_member_duration: bad }).yt_member.duration, 8, String(bad));
+      assert.equal(build({ yt_overlay_superchat_duration: bad }).yt_superchat.duration, 12, String(bad));
     }
   });
 
@@ -181,12 +184,18 @@ describe('buildOverlayConfig: the result', () => {
     assert.equal(JSON.stringify(row), before);
   });
 
-  test('the YouTube duration defaults are the ones db.js gives the columns', () => {
+  test('a fresh database gives every alert duration column the settings\' default', () => {
     const db = fs.readFileSync(path.join(__dirname, '..', 'db.js'), 'utf8');
-    for (const [type, , column, fallback] of YOUTUBE_ALERTS) {
-      const m = new RegExp(`ADD COLUMN ${column} INTEGER DEFAULT (\\d+)`).exec(db);
-      assert.ok(m, `${column} is added with a default in db.js`);
-      assert.equal(Number(m[1]), fallback, `${type} default`);
+    for (const [column, seconds] of Object.entries(DEFAULT_DURATION_SECONDS)) {
+      const declared = [...db.matchAll(new RegExp(`\\b${column} INTEGER DEFAULT (\\d+)`, 'g'))].map((m) => Number(m[1]));
+      assert.ok(declared.length > 0, `${column} is declared with a default in db.js`);
+      for (const value of declared) assert.equal(value, seconds, column);
+    }
+  });
+
+  test('every alert the overlay gets has a duration default and limit', () => {
+    for (const [type, , column] of [...TWITCH_ALERTS, ...YOUTUBE_ALERTS]) {
+      assert.ok(Object.hasOwn(DEFAULT_DURATION_SECONDS, column), `${type}: ${column}`);
     }
   });
 });

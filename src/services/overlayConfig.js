@@ -6,7 +6,7 @@
 // builder (a new connection, and the push after each save), so an overlay that
 // has been open for hours and one that has just loaded always agree.
 
-const { DURATIONS, wholeSeconds, volumeOf } = require('./overlaySettings');
+const { DURATIONS, YOUTUBE_DURATIONS, wholeSeconds, volumeOf } = require('./overlaySettings');
 const customSounds = require('./customSounds');
 
 // [alert type the overlay receives, enabled column, duration column]. The
@@ -19,16 +19,15 @@ const TWITCH_ALERTS = [
   ['raid', 'overlay_raid_enabled', 'overlay_raid_duration'],
   ['giveaway_winner', 'overlay_giveaway_enabled', 'overlay_giveaway_duration'],
 ];
-const TWITCH_SECONDS = new Map(DURATIONS.map(([column, fallback, longest]) => [column, { fallback, longest }]));
 
-// The YouTube alerts: the toggles are saved on the YouTube chatbot page; the
-// durations keep the defaults db.js gives their columns.
+// The YouTube alerts: the toggles are saved on the YouTube chatbot page, the
+// durations on the overlay settings page.
 const YOUTUBE_ALERTS = [
-  ['yt_superchat', 'yt_overlay_superchat_enabled', 'yt_overlay_superchat_duration', 6],
-  ['yt_member', 'yt_overlay_member_enabled', 'yt_overlay_member_duration', 5],
-  ['yt_giftmember', 'yt_overlay_giftmember_enabled', 'yt_overlay_giftmember_duration', 6],
+  ['yt_superchat', 'yt_overlay_superchat_enabled', 'yt_overlay_superchat_duration'],
+  ['yt_member', 'yt_overlay_member_enabled', 'yt_overlay_member_duration'],
+  ['yt_giftmember', 'yt_overlay_giftmember_enabled', 'yt_overlay_giftmember_duration'],
 ];
-const YOUTUBE_LONGEST_SECONDS = 30;
+const SECONDS = new Map([...DURATIONS, ...YOUTUBE_DURATIONS].map(([column, fallback, longest]) => [column, { fallback, longest }]));
 
 // An alert is on unless its column holds an explicit 0 (the columns default to 1).
 function isOn(value) {
@@ -39,12 +38,9 @@ function isOn(value) {
 // `options.soundsRoot` only exists so tests can point at a temporary folder.
 function buildOverlayConfig(streamer, options = {}) {
   const config = {};
-  for (const [type, enabledColumn, durationColumn] of TWITCH_ALERTS) {
-    const { fallback, longest } = TWITCH_SECONDS.get(durationColumn);
+  for (const [type, enabledColumn, durationColumn] of [...TWITCH_ALERTS, ...YOUTUBE_ALERTS]) {
+    const { fallback, longest } = SECONDS.get(durationColumn);
     config[type] = { enabled: isOn(streamer[enabledColumn]), duration: wholeSeconds(streamer[durationColumn], fallback, longest) };
-  }
-  for (const [type, enabledColumn, durationColumn, fallback] of YOUTUBE_ALERTS) {
-    config[type] = { enabled: isOn(streamer[enabledColumn]), duration: wholeSeconds(streamer[durationColumn], fallback, YOUTUBE_LONGEST_SECONDS) };
   }
   // 0 is a real volume (silent); only a missing or unreadable value gets the default.
   config.volume = volumeOf(streamer.overlay_volume);

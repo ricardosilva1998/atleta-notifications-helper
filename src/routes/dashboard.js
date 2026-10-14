@@ -13,7 +13,7 @@ const { getUserProfile } = require('../services/twitch');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
 const { requireActiveStreamer, accountDisabledChannel } = require('../services/streamerAccess');
 const { normalizeTwitchLogin } = require('../services/twitchLogin');
-const { parseOverlaySettings, giveawayDurationSeconds } = require('../services/overlaySettings');
+const { parseOverlaySettings, giveawayDurationSeconds, DEFAULT_DURATION_SECONDS } = require('../services/overlaySettings');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
 const storageQuota = require('../services/storageQuota');
@@ -712,6 +712,7 @@ router.get('/overlay', (req, res) => {
     streamer: pageStreamer,
     hasStreamElementsJwt: !!savedJwt,
     giveawayDurationSeconds: giveawayDurationSeconds(streamer.overlay_giveaway_duration),
+    durationDefaults: DEFAULT_DURATION_SECONDS,
     overlayUrl,
     needsReauth,
     appUrl,

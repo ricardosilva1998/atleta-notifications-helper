@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const config = require('./config');
 const { isAdminStreamer } = require('./adminAccess');
 const { EVENT_DEFAULTS } = require('./services/overlayDesign');
+const { DEFAULT_DURATION_SECONDS, PREVIOUS_DEFAULT_SECONDS } = require('./services/overlaySettings');
 const secretBox = require('./services/secretBox');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'bot.db');
@@ -314,10 +315,10 @@ db.exec(`
     overlay_sub_enabled INTEGER DEFAULT 1,
     overlay_bits_enabled INTEGER DEFAULT 1,
     overlay_donation_enabled INTEGER DEFAULT 1,
-    overlay_follow_duration INTEGER DEFAULT 5,
-    overlay_sub_duration INTEGER DEFAULT 7,
-    overlay_bits_duration INTEGER DEFAULT 6,
-    overlay_donation_duration INTEGER DEFAULT 6,
+    overlay_follow_duration INTEGER DEFAULT 8,
+    overlay_sub_duration INTEGER DEFAULT 10,
+    overlay_bits_duration INTEGER DEFAULT 10,
+    overlay_donation_duration INTEGER DEFAULT 12,
     overlay_volume REAL DEFAULT 0.8,
     broadcaster_scopes TEXT,
     bot_access_token TEXT,
@@ -338,7 +339,7 @@ db.exec(`
     chat_donation_template TEXT DEFAULT '{username} donated {amount}! {message}',
     chat_raid_template TEXT DEFAULT '{username} is raiding with {viewers} viewers! Welcome racers!',
     overlay_raid_enabled INTEGER DEFAULT 1,
-    overlay_raid_duration INTEGER DEFAULT 7,
+    overlay_raid_duration INTEGER DEFAULT 10,
     spotify_access_token TEXT,
     spotify_refresh_token TEXT,
     spotify_token_expires_at INTEGER,
@@ -728,10 +729,10 @@ try {
       ALTER TABLE streamers ADD COLUMN overlay_sub_enabled INTEGER DEFAULT 1;
       ALTER TABLE streamers ADD COLUMN overlay_bits_enabled INTEGER DEFAULT 1;
       ALTER TABLE streamers ADD COLUMN overlay_donation_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_follow_duration INTEGER DEFAULT 5;
-      ALTER TABLE streamers ADD COLUMN overlay_sub_duration INTEGER DEFAULT 7;
-      ALTER TABLE streamers ADD COLUMN overlay_bits_duration INTEGER DEFAULT 6;
-      ALTER TABLE streamers ADD COLUMN overlay_donation_duration INTEGER DEFAULT 6;
+      ALTER TABLE streamers ADD COLUMN overlay_follow_duration INTEGER DEFAULT 8;
+      ALTER TABLE streamers ADD COLUMN overlay_sub_duration INTEGER DEFAULT 10;
+      ALTER TABLE streamers ADD COLUMN overlay_bits_duration INTEGER DEFAULT 10;
+      ALTER TABLE streamers ADD COLUMN overlay_donation_duration INTEGER DEFAULT 12;
       ALTER TABLE streamers ADD COLUMN overlay_volume REAL DEFAULT 0.8;
       ALTER TABLE streamers ADD COLUMN broadcaster_scopes TEXT;
     `);
@@ -790,7 +791,7 @@ try {
   if (!cols.includes('overlay_raid_enabled')) {
     db.exec(`
       ALTER TABLE streamers ADD COLUMN overlay_raid_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN overlay_raid_duration INTEGER DEFAULT 7;
+      ALTER TABLE streamers ADD COLUMN overlay_raid_duration INTEGER DEFAULT 10;
     `);
     console.log('[DB] Added overlay raid columns');
   }
@@ -811,9 +812,9 @@ try {
       ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_enabled INTEGER DEFAULT 1;
       ALTER TABLE streamers ADD COLUMN yt_overlay_member_enabled INTEGER DEFAULT 1;
       ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_enabled INTEGER DEFAULT 1;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_duration INTEGER DEFAULT 6;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_member_duration INTEGER DEFAULT 5;
-      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_duration INTEGER DEFAULT 6;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_superchat_duration INTEGER DEFAULT 12;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_member_duration INTEGER DEFAULT 8;
+      ALTER TABLE streamers ADD COLUMN yt_overlay_giftmember_duration INTEGER DEFAULT 10;
     `);
     console.log('[DB] Added YouTube chatbot/overlay columns to streamers');
   }
@@ -1341,15 +1342,12 @@ const _getStreamerByDiscordId = db.prepare('SELECT * FROM streamers WHERE discor
 const _getStreamerByTwitchId = db.prepare('SELECT * FROM streamers WHERE twitch_user_id = ?');
 const _getStreamerById = db.prepare('SELECT * FROM streamers WHERE id = ?');
 const _getAllStreamers = db.prepare('SELECT * FROM streamers WHERE twitch_user_id IS NOT NULL');
-const _upsertStreamerDiscord = db.prepare(`
-  INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, discord_avatar)
-  VALUES (?, ?, ?, ?)
-  ON CONFLICT(discord_user_id) DO UPDATE SET
-    discord_username = excluded.discord_username,
-    discord_display_name = excluded.discord_display_name,
-    discord_avatar = excluded.discord_avatar
-  RETURNING *
-`);
+// A new streamer's row gets the alert durations of overlaySettings, written
+// here because a table made before 2026-10-14 still gives the columns their
+// earlier DEFAULTs; signing in again only refreshes the Discord fields.
+// Prepared on first use, after the migrations below have added every column.
+const NEW_STREAMER_DURATION_COLUMNS = Object.keys(DEFAULT_DURATION_SECONDS);
+let _upsertStreamerDiscord;
 const _clearOldTwitchLink = db.prepare('UPDATE streamers SET twitch_user_id = NULL, twitch_username = NULL, twitch_display_name = NULL WHERE twitch_user_id = ?');
 const _linkTwitch = db.prepare(`
   UPDATE streamers SET
@@ -1386,7 +1384,19 @@ function getAllStreamers() {
 }
 
 function upsertStreamerDiscord(discordUserId, discordUsername, discordDisplayName, discordAvatar) {
-  return openTokens(_upsertStreamerDiscord.get(discordUserId, discordUsername, discordDisplayName, discordAvatar));
+  if (!_upsertStreamerDiscord) {
+    _upsertStreamerDiscord = db.prepare(`
+      INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, discord_avatar, ${NEW_STREAMER_DURATION_COLUMNS.join(', ')})
+      VALUES (?, ?, ?, ?, ${NEW_STREAMER_DURATION_COLUMNS.map(() => '?').join(', ')})
+      ON CONFLICT(discord_user_id) DO UPDATE SET
+        discord_username = excluded.discord_username,
+        discord_display_name = excluded.discord_display_name,
+        discord_avatar = excluded.discord_avatar
+      RETURNING *
+    `);
+  }
+  const durations = NEW_STREAMER_DURATION_COLUMNS.map((column) => DEFAULT_DURATION_SECONDS[column]);
+  return openTokens(_upsertStreamerDiscord.get(discordUserId, discordUsername, discordDisplayName, discordAvatar, ...durations));
 }
 
 // profile_picture prepared statements are initialized after migration (see below)
@@ -2987,6 +2997,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_raid_enabled', 'overlay_raid_duration',
   'cp_rewards_enabled',
   'overlay_giveaway_enabled', 'overlay_giveaway_duration',
+  'yt_overlay_superchat_duration', 'yt_overlay_member_duration', 'yt_overlay_giftmember_duration',
 ]);
 
 function updateOverlayConfig(streamerId, config) {
@@ -3786,12 +3797,27 @@ try {
 try {
   const cols = db.pragma('table_info(streamers)').map(c => c.name);
   if (!cols.includes('overlay_giveaway_duration')) {
-    db.exec('ALTER TABLE streamers ADD COLUMN overlay_giveaway_duration INTEGER DEFAULT 8');
+    db.exec('ALTER TABLE streamers ADD COLUMN overlay_giveaway_duration INTEGER DEFAULT 10');
     console.log('[DB] Added overlay_giveaway_duration column to streamers');
   }
-  // One-time fix for the 8000ms default that shipped briefly in dev — should be 8 seconds, matching other overlay_*_duration columns
-  try { db.exec('UPDATE streamers SET overlay_giveaway_duration = 8 WHERE overlay_giveaway_duration = 8000'); } catch (_) {}
+  // Fix for the 8000ms default that shipped briefly in dev: the column holds seconds, like the other overlay_*_duration columns
+  try { db.prepare('UPDATE streamers SET overlay_giveaway_duration = ? WHERE overlay_giveaway_duration = 8000').run(DEFAULT_DURATION_SECONDS.overlay_giveaway_duration); } catch (_) {}
 } catch (e) { _migrationLog('overlay_giveaway_duration', e); }
+
+// The alert durations' defaults went up on 2026-10-14 (overlaySettings) so that
+// viewers can read who followed, subscribed, cheered, donated or raided. Every
+// value still on its earlier default moves to the new one, once; a value a
+// streamer chose stays, and so does one they set later.
+_runOnce('longer_alert_durations', () => {
+  const have = new Set(db.pragma('table_info(streamers)').map((c) => c.name));
+  let moved = 0;
+  for (const [column, earlier] of Object.entries(PREVIOUS_DEFAULT_SECONDS)) {
+    if (!have.has(column)) continue;
+    moved += db.prepare(`UPDATE streamers SET ${column} = ? WHERE ${column} = ? OR ${column} IS NULL`)
+      .run(DEFAULT_DURATION_SECONDS[column], earlier).changes;
+  }
+  if (moved) console.log(`[DB] Moved ${moved} alert duration(s) from the earlier defaults to the longer ones`);
+});
 
 // Migration: Tip goals (donation progress bar overlay)
 try {

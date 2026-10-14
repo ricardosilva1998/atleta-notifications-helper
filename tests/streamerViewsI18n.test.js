@@ -23,6 +23,7 @@ const ejs = require('ejs');
 const { t, esc, richFor, SUPPORTED_LANGS } = require('../src/i18n');
 const en = require('../src/locales/en.json');
 const { EVENT_DEFAULTS } = require('../src/services/overlayDesign');
+const { DEFAULT_DURATION_SECONDS } = require('../src/services/overlaySettings');
 
 const VIEWS = path.join(__dirname, '..', 'src', 'views');
 const PAGES = [
@@ -171,8 +172,8 @@ const PAGE_LOCALS = {
     { ...guildPage, discordListsUnavailable: true, channels: [], roles: [] },
   ],
   'overlay-config': [
-    { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true } },
-    { streamer, hasStreamElementsJwt: false, giveawayDurationSeconds: 8, overlayUrl: null, needsReauth: false, appUrl: 'https://app.test', features: { youtube: false } },
+    { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true } },
+    { streamer, hasStreamElementsJwt: false, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: null, needsReauth: false, appUrl: 'https://app.test', features: { youtube: false } },
   ],
   'overlay-builder': [
     { streamer, designs: '[]', sponsors: JSON.stringify([{ id: 1, filename: 'a.png', display_name: 'SponsorName', display_duration: 30, enabled: 1, image_scale: 1 }]),

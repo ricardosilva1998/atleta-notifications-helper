@@ -4,7 +4,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  TOGGLES, DURATIONS, STREAMELEMENTS_JWT_MAX,
+  TOGGLES, DURATIONS, YOUTUBE_DURATIONS, DEFAULT_DURATION_SECONDS, PREVIOUS_DEFAULT_SECONDS, STREAMELEMENTS_JWT_MAX,
   parseOverlaySettings, decideStreamElementsJwt, giveawayDurationSeconds,
 } = require('./overlaySettings');
 
@@ -33,7 +33,7 @@ describe('parseOverlaySettings: toggles', () => {
   test('every toggle and duration written here is a whitelisted overlay column', () => {
     const db = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'db.js'), 'utf8');
     const whitelist = db.match(/const OVERLAY_COLUMNS = new Set\(\[([\s\S]*?)\]\)/)[1];
-    for (const name of [...TOGGLES, ...DURATIONS.map(([n]) => n), 'overlay_volume', 'streamelements_jwt']) {
+    for (const name of [...TOGGLES, ...DURATIONS.map(([n]) => n), ...YOUTUBE_DURATIONS.map(([n]) => n), 'overlay_volume', 'streamelements_jwt']) {
       assert.ok(whitelist.includes(`'${name}'`), name);
     }
   });
@@ -70,12 +70,42 @@ describe('parseOverlaySettings: durations', () => {
 
   test('a missing or unreadable duration gets the alert\'s default', () => {
     const { columns } = parseOverlaySettings({ overlay_follow_duration: '', overlay_sub_duration: 'abc', overlay_giveaway_duration: ['x'] }, {});
-    assert.equal(columns.overlay_follow_duration, 5);
-    assert.equal(columns.overlay_sub_duration, 7);
-    assert.equal(columns.overlay_bits_duration, 6);
-    assert.equal(columns.overlay_donation_duration, 6);
-    assert.equal(columns.overlay_raid_duration, 7);
-    assert.equal(columns.overlay_giveaway_duration, 8);
+    assert.equal(columns.overlay_follow_duration, 8);
+    assert.equal(columns.overlay_sub_duration, 10);
+    assert.equal(columns.overlay_bits_duration, 10);
+    assert.equal(columns.overlay_donation_duration, 12);
+    assert.equal(columns.overlay_raid_duration, 10);
+    assert.equal(columns.overlay_giveaway_duration, 10);
+  });
+
+  test('the defaults leave time to read who it was: 8 to 12 seconds by alert', () => {
+    assert.deepEqual(DEFAULT_DURATION_SECONDS, {
+      overlay_follow_duration: 8, overlay_sub_duration: 10, overlay_bits_duration: 10,
+      overlay_donation_duration: 12, overlay_raid_duration: 10, overlay_giveaway_duration: 10,
+      yt_overlay_superchat_duration: 12, yt_overlay_member_duration: 8, yt_overlay_giftmember_duration: 10,
+    });
+    // The earlier defaults, which db.js moves to these once (tables made before
+    // then still give a column its earlier DEFAULT).
+    assert.deepEqual(PREVIOUS_DEFAULT_SECONDS, {
+      overlay_follow_duration: 5, overlay_sub_duration: 7, overlay_bits_duration: 6,
+      overlay_donation_duration: 6, overlay_raid_duration: 7, overlay_giveaway_duration: 8,
+      yt_overlay_superchat_duration: 6, yt_overlay_member_duration: 5, yt_overlay_giftmember_duration: 6,
+    });
+  });
+
+  test('a YouTube alert duration is saved when the page sends it, held to 1-30 seconds', () => {
+    const { columns } = parseOverlaySettings({
+      yt_overlay_superchat_duration: '20', yt_overlay_member_duration: '0', yt_overlay_giftmember_duration: '99',
+    }, {});
+    assert.equal(columns.yt_overlay_superchat_duration, 20);
+    assert.equal(columns.yt_overlay_member_duration, 1);
+    assert.equal(columns.yt_overlay_giftmember_duration, 30);
+    assert.equal(parseOverlaySettings({ yt_overlay_member_duration: 'abc' }, {}).columns.yt_overlay_member_duration, 8);
+  });
+
+  test('a save without the YouTube fields (YouTube not shown on the page) keeps the stored YouTube durations', () => {
+    const { columns } = parseOverlaySettings({ overlay_follow_duration: '9' }, {});
+    for (const [name] of YOUTUBE_DURATIONS) assert.equal(Object.hasOwn(columns, name), false, name);
   });
 
   test('keeps whole seconds (the page sends whole seconds, a crafted request may not)', () => {
@@ -180,8 +210,8 @@ describe('giveawayDurationSeconds', () => {
 
   test('never shows 0 or an out-of-range value, which would block the form', () => {
     assert.equal(giveawayDurationSeconds(0), 1);
-    assert.equal(giveawayDurationSeconds(null), 8);
-    assert.equal(giveawayDurationSeconds(undefined), 8);
+    assert.equal(giveawayDurationSeconds(null), 10);
+    assert.equal(giveawayDurationSeconds(undefined), 10);
     assert.equal(giveawayDurationSeconds(500), 60);
   });
 });
