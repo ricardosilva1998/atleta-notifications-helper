@@ -16,7 +16,20 @@ function noteRefusedRole(streamer, guild, roleId, reason) {
   console.warn(`[SubSync] ${streamer.twitch_username}: sub role ${roleId} in ${guild.name} is not usable (${reason}) — skipping sync there`);
 }
 
+// A note about a server the streamer has since released would stay for good, and
+// would hide the first refusal if the server is claimed again. Pruned at the
+// start of each cycle, so no timer is needed.
+function forgetRefusedRolesOfUnclaimedServers(streamer) {
+  const claimed = new Set(db.getGuildsForStreamer(streamer.id).map((g) => String(g.guild_id)));
+  const prefix = `${streamer.id}:`;
+  for (const key of refusedRoles.keys()) {
+    if (key.startsWith(prefix) && !claimed.has(key.slice(prefix.length))) refusedRoles.delete(key);
+  }
+}
+
 async function checkStreamer(streamer) {
+  forgetRefusedRolesOfUnclaimedServers(streamer);
+
   if (!streamer.broadcaster_access_token) {
     return;
   }

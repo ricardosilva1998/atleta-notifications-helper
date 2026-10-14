@@ -12,6 +12,7 @@ const ROLE = '1485308351456870641';
 
 let linked = [];
 let guildConfigs = [];
+let claimsOf = {}; // streamer id -> the servers that streamer has; any other streamer has guildConfigs
 let subscribers = [];
 const guildCache = new Map();
 
@@ -21,7 +22,7 @@ const dbStub = {
   updateChannelState: () => {},
   clearStreamerBroadcasterScopes: () => {},
   getLinkedUsers: () => linked,
-  getGuildsForStreamer: () => guildConfigs,
+  getGuildsForStreamer: (id) => (id in claimsOf ? claimsOf[id] : guildConfigs),
 };
 const twitchStub = {
   getSubscribers: async () => subscribers,
@@ -75,17 +76,22 @@ function setGuild({ position = 3, permissions = EVERYDAY, managed = false, botTo
   });
 }
 
-async function run() {
+async function run(who = streamer) {
   const lines = [];
   const { log, error, warn } = console;
   console.log = (...a) => lines.push(a.join(' '));
   console.error = (...a) => lines.push(a.join(' '));
   console.warn = (...a) => lines.push(a.join(' '));
-  try { await subSync.checkStreamer(streamer); } finally { console.log = log; console.error = error; console.warn = warn; }
+  try { await subSync.checkStreamer(who); } finally { console.log = log; console.error = error; console.warn = warn; }
   return lines;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // The notes about refused roles are kept for the life of the process: a cycle
+  // of a streamer with no servers forgets this streamer's, so no test sees another's.
+  claimsOf = { [streamer.id]: [] };
+  await run();
+  claimsOf = {};
   guildCache.clear();
   subscribers = [{ user_id: 'tw-1001' }];
   linked = [
@@ -152,4 +158,39 @@ test('sync resumes once the role is usable again, and a new refusal is logged ag
   setGuild({ permissions: P.BanMembers });
   const lines = await run();
   assert.equal(lines.filter((l) => /not usable/.test(l)).length, 1);
+});
+
+test('the note about a refused role is forgotten once the server is no longer claimed, so a new claim is told about it again', async () => {
+  const refusedNotes = (lines) => lines.filter((l) => /not usable/.test(l)).length;
+  setGuild({ permissions: P.BanMembers });
+  assert.equal(refusedNotes(await run()), 1);
+  assert.equal(refusedNotes(await run()), 0, 'one note while the server stays claimed');
+
+  guildConfigs = []; // the streamer released the server
+  await run();
+
+  guildConfigs = [{ guild_id: GUILD, sub_sync_enabled: 1, sub_role_id: ROLE }]; // and claimed it again, with the same role
+  assert.equal(refusedNotes(await run()), 1, 'the first refusal of the new claim is logged');
+});
+
+test('a server the streamer still has keeps its note, even with sync switched off there', async () => {
+  const refusedNotes = (lines) => lines.filter((l) => /not usable/.test(l)).length;
+  setGuild({ permissions: P.BanMembers });
+  assert.equal(refusedNotes(await run()), 1);
+
+  guildConfigs = [{ guild_id: GUILD, sub_sync_enabled: 0, sub_role_id: ROLE }];
+  await run();
+  guildConfigs = [{ guild_id: GUILD, sub_sync_enabled: 1, sub_role_id: ROLE }];
+  assert.equal(refusedNotes(await run()), 0, 'still claimed throughout: no second note for the same refusal');
+});
+
+test('another streamer\'s cycle forgets nothing of this streamer\'s notes', async () => {
+  const refusedNotes = (lines) => lines.filter((l) => /not usable/.test(l)).length;
+  setGuild({ permissions: P.BanMembers });
+  assert.equal(refusedNotes(await run()), 1);
+
+  claimsOf[14] = []; // streamer 14 has no servers at all
+  await run({ ...streamer, id: 14, twitch_username: 'someone_else' });
+
+  assert.equal(refusedNotes(await run()), 0, 'streamer 13\'s note is still there');
 });
