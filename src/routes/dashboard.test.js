@@ -4058,3 +4058,21 @@ describe('with Kick switched off', () => {
     assert.ok((await request('GET', '/dashboard/overlay-builder', { streamer: id })).text.includes(esc(t('en', 'overlayBuilder.tab.kickSoon'))));
   });
 });
+
+// ── The giveaways page's times ───────────────────────────────────────────
+
+describe('the giveaways page countdown', () => {
+  test('reads the end time the giveaway stores (an ISO time) and the database\'s own times', async () => {
+    const id = addStreamer({ chatbot_enabled: 1 });
+    db.insertGiveaway({ streamer_id: id, keyword: 'gw', status: 'open', ends_at: '2026-10-14T18:05:00.000Z' });
+    const page = await request('GET', '/dashboard/giveaways', { streamer: id });
+    assert.equal(page.status, 200);
+    const source = page.text.match(/function utcMs\(value\) \{[\s\S]*?\n\}/);
+    assert.ok(source, 'the page has its time reader');
+    const utcMs = new Function(`${source[0]}; return utcMs;`)();
+    assert.equal(utcMs('2026-10-14T18:05:00.000Z'), Date.UTC(2026, 9, 14, 18, 5));
+    assert.equal(utcMs('2026-10-14 18:05:00'), Date.UTC(2026, 9, 14, 18, 5));
+    assert.ok(Number.isNaN(utcMs('not a time')));
+    assert.doesNotMatch(page.text, /(?:ACTIVE_ENDS_AT|dateStr) \+ 'Z'\)/, 'no time is read by adding a Z to it');
+  });
+});

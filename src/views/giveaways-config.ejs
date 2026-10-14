@@ -565,12 +565,20 @@ function pollEntries() {
     .catch(function() { /* network blip — keep polling */ });
 }
 
+// A time from the server in milliseconds: an ISO time (a giveaway's end, written with its zone) as it is,
+// and the database's own "YYYY-MM-DD HH:MM:SS" (UTC, written without a zone) as UTC.
+function utcMs(value) {
+  var s = String(value);
+  if (/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s)) return Date.parse(s);
+  return Date.parse(s.replace(' ', 'T') + 'Z');
+}
+
 // ── Countdown ─────────────────────────────────────────
 function updateCountdown() {
   if (!ACTIVE_ENDS_AT) return;
   var el = document.getElementById('gw-countdown');
   if (!el) return;
-  var endsMs = new Date(ACTIVE_ENDS_AT + 'Z').getTime();
+  var endsMs = utcMs(ACTIVE_ENDS_AT);
   var diff = Math.max(0, Math.floor((endsMs - Date.now()) / 1000));
   var m = Math.floor(diff / 60);
   var s = diff % 60;
@@ -769,7 +777,7 @@ document.querySelectorAll('.gw-history-table details').forEach(function(det) {
 
 // ── Relative timestamps ───────────────────────────────
 function relTime(dateStr) {
-  var diff = Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 1000);
+  var diff = Math.floor((Date.now() - utcMs(dateStr)) / 1000);
   if (diff < 60) return fmt(T.secondsAgo, { n: diff });
   if (diff < 3600) return fmt(T.minutesAgo, { n: Math.floor(diff / 60) });
   if (diff < 86400) return fmt(T.hoursAgo, { n: Math.floor(diff / 3600) });
