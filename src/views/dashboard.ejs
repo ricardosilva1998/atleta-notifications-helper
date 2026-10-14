@@ -18,6 +18,8 @@
 <% if (msg === 'guild_removed') { %><div class="alert alert-success"><%= t('dashboard.guildRemoved') %></div><% } %>
 <% if (msg === 'twitch_linked') { %><div class="alert alert-success"><%= t('dashboard.twitchLinked') %></div><% } %>
 <% if (msg === 'broadcaster_authorized') { %><div class="alert alert-success"><%= t('dashboard.broadcasterAuthorized') %></div><% } %>
+<%# The name comes from the streamer's own row, never from the URL. %>
+<% if (msg === 'broadcaster_wrong_account') { %><div class="alert alert-danger"><%= streamer.twitch_user_id ? t('dashboard.broadcasterWrongAccount', { name: streamer.twitch_display_name || streamer.twitch_username }) : t('dashboard.broadcasterNeedsTwitch') %></div><% } %>
 <% if (msg === 'youtube_saved') { %><div class="alert alert-success"><%= t('dashboard.youtubeSaved') %></div><% } %>
 <% if (msg === 'guild_limit') { %><div class="alert alert-warning"><%= t('dashboard.guildLimit') %></div><% } %>
 <% if (msg === 'already_claimed') { %><div class="alert alert-danger"><%= t('dashboard.alreadyClaimed') %></div><% } %>

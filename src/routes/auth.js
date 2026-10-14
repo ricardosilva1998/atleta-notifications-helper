@@ -3,8 +3,12 @@ const crypto = require('crypto');
 const config = require('../config');
 const db = require('../db');
 const { signLink, verifyLink, linkSecret, LINK_TTL_SECONDS } = require('../services/linkSignature');
+const { issueOAuthState, checkOAuthState } = require('../services/oauthState');
 
 const router = Router();
+
+// How long a call to Twitch, Google or Spotify while connecting an account may take.
+const OAUTH_TIMEOUT_MS = 10_000;
 
 // --- Discord OAuth Login ---
 
@@ -103,6 +107,11 @@ router.get('/logout', (req, res) => {
 
 // --- Twitch Account Linking ---
 
+// The four connections below (Twitch, broadcaster, YouTube, Spotify) carry a
+// random state that only this browser's cookie for that flow knows
+// (services/oauthState.js), and attach what comes back to the streamer who is
+// logged in, never to one named in the URL.
+
 router.get('/twitch', (req, res) => {
   if (!req.streamer) return res.redirect('/auth/login');
 
@@ -111,15 +120,17 @@ router.get('/twitch', (req, res) => {
     redirect_uri: `${config.app.url}/auth/twitch/callback`,
     response_type: 'code',
     scope: '',
-    state: String(req.streamer.id),
+    state: issueOAuthState(req, res, 'twitch'),
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
 });
 
 router.get('/twitch/callback', async (req, res) => {
-  const { code, state: streamerId } = req.query;
-  if (!code || !streamerId) return res.status(400).send('Missing parameters');
-  if (String(streamerId) !== String(req.streamer?.id)) return res.status(403).send('Invalid state');
+  const stateOk = checkOAuthState(req, res, 'twitch');
+  const { code, state } = req.query;
+  if (!code || !state) return res.status(400).send('Missing parameters');
+  if (!stateOk || !req.streamer) return res.status(403).send('Invalid state');
+  const streamerId = req.streamer.id;
 
   try {
     const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -131,6 +142,7 @@ router.get('/twitch/callback', async (req, res) => {
         grant_type: 'authorization_code',
         redirect_uri: `${config.app.url}/auth/twitch/callback`,
       }),
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!tokenRes.ok) throw new Error('Token exchange failed');
@@ -141,13 +153,14 @@ router.get('/twitch/callback', async (req, res) => {
         Authorization: `Bearer ${tokenData.access_token}`,
         'Client-Id': config.twitch.clientId,
       },
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!userRes.ok) throw new Error('Failed to get Twitch user info');
     const userData = await userRes.json();
     const twitchUser = userData.data[0];
 
-    db.linkTwitch(parseInt(streamerId), twitchUser.id, twitchUser.login, twitchUser.display_name);
+    db.linkTwitch(streamerId, twitchUser.id, twitchUser.login, twitchUser.display_name);
     console.log(`[Auth] Twitch linked: streamer ${streamerId} -> ${twitchUser.login}`);
 
     res.redirect('/dashboard?msg=twitch_linked');
@@ -159,6 +172,21 @@ router.get('/twitch/callback', async (req, res) => {
 
 // --- Broadcaster Auth (for sub sync) ---
 
+// Who a Twitch user token belongs to and what it may do, as Twitch reports it:
+// { user_id, login, scopes }. Throws when Twitch does not confirm the token.
+async function validateTwitchToken(accessToken) {
+  const res = await fetch('https://id.twitch.tv/oauth2/validate', {
+    headers: { Authorization: `OAuth ${accessToken}` },
+    signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Token validation failed: ${res.status}`);
+  const info = await res.json();
+  if (!info || info.user_id == null || !Array.isArray(info.scopes)) {
+    throw new Error('Token validation answered without a user or scopes');
+  }
+  return info;
+}
+
 router.get('/broadcaster', (req, res) => {
   if (!req.streamer) return res.redirect('/auth/login');
 
@@ -167,15 +195,17 @@ router.get('/broadcaster', (req, res) => {
     redirect_uri: `${config.app.url}/auth/broadcaster/callback`,
     response_type: 'code',
     scope: 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions channel:read:stream_key',
-    state: String(req.streamer.id),
+    state: issueOAuthState(req, res, 'broadcaster'),
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
 });
 
 router.get('/broadcaster/callback', async (req, res) => {
-  const { code, state: streamerId } = req.query;
-  if (!code || !streamerId) return res.status(400).send('Missing parameters');
-  if (String(streamerId) !== String(req.streamer?.id)) return res.status(403).send('Invalid state');
+  const stateOk = checkOAuthState(req, res, 'broadcaster');
+  const { code, state } = req.query;
+  if (!code || !state) return res.status(400).send('Missing parameters');
+  if (!stateOk || !req.streamer) return res.status(403).send('Invalid state');
+  const streamer = req.streamer;
 
   try {
     const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -187,30 +217,41 @@ router.get('/broadcaster/callback', async (req, res) => {
         grant_type: 'authorization_code',
         redirect_uri: `${config.app.url}/auth/broadcaster/callback`,
       }),
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!tokenRes.ok) throw new Error('Token exchange failed');
     const data = await tokenRes.json();
 
+    // The token must be the linked channel's own. With another Twitch account's
+    // token, Twitch answers for that account (no followers, no subscribers), so
+    // !followage, the alerts and sub sync would go quietly wrong.
+    const grant = await validateTwitchToken(data.access_token);
+    if (!streamer.twitch_user_id || String(grant.user_id) !== String(streamer.twitch_user_id)) {
+      console.warn(`[Auth] Broadcaster authorization refused for streamer ${streamer.id}: it was given by Twitch account ${grant.login || grant.user_id}, not the linked one (${streamer.twitch_username || 'none linked'})`);
+      return res.redirect('/dashboard?msg=broadcaster_wrong_account');
+    }
+
     db.updateStreamerBroadcasterTokens(
-      parseInt(streamerId),
+      streamer.id,
       data.access_token,
       data.refresh_token,
       Date.now() + data.expires_in * 1000 - 60_000
     );
 
-    db.updateBroadcasterScopes(parseInt(streamerId), 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions channel:read:stream_key');
+    // The scopes Twitch granted, not the ones asked for.
+    db.updateBroadcasterScopes(streamer.id, grant.scopes.join(' '));
 
     // Re-subscribe EventSub so the new scope's subscription type is picked up immediately.
     // startForStreamer is idempotent — it stops any running connection before reconnecting.
     try {
       const { eventSubManager } = require('../services/eventsub');
-      eventSubManager.startForStreamer(parseInt(streamerId));
+      eventSubManager.startForStreamer(streamer.id);
     } catch (e) {
       console.error('[Auth] EventSub restart after broadcaster auth failed:', e.message);
     }
 
-    console.log(`[Auth] Broadcaster ${streamerId} authorized for sub sync`);
+    console.log(`[Auth] Broadcaster ${streamer.id} authorized for sub sync`);
     res.redirect('/dashboard?msg=broadcaster_authorized');
   } catch (error) {
     console.error(`[Auth] Broadcaster callback error: ${error.message}`);
@@ -230,19 +271,20 @@ router.get('/youtube', (req, res) => {
     scope: 'https://www.googleapis.com/auth/youtube',
     access_type: 'offline',
     prompt: 'consent',
-    state: String(req.streamer.id),
+    state: issueOAuthState(req, res, 'youtube'),
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
 
 router.get('/youtube/callback', async (req, res) => {
-  const { code, state: streamerId, error } = req.query;
+  const stateOk = checkOAuthState(req, res, 'youtube');
+  const { code, error } = req.query;
   // The page shows only the codes it knows (YT_CHATBOT_ERRORS in dashboard.js), so
   // the URL carries a code: neither what Google sent nor our own error text.
   const back = (errorCode) => res.redirect(`/dashboard/youtube-chatbot?error=${errorCode}`);
   if (error) return back('oauth_denied');
-  if (!code || !streamerId) return back('oauth_state');
-  if (String(streamerId) !== String(req.streamer?.id)) return back('oauth_state');
+  if (!code || !stateOk || !req.streamer) return back('oauth_state');
+  const streamerId = req.streamer.id;
 
   try {
     const redirectUri = `${config.app.url}/auth/youtube/callback`;
@@ -256,6 +298,7 @@ router.get('/youtube/callback', async (req, res) => {
         grant_type: 'authorization_code',
         redirect_uri: redirectUri,
       }),
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
     if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status}`);
     const tokenData = await tokenRes.json();
@@ -263,6 +306,7 @@ router.get('/youtube/callback', async (req, res) => {
     // Get the user's YouTube channel info
     const channelRes = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
     let channelName = null;
     if (channelRes.ok) {
@@ -271,7 +315,7 @@ router.get('/youtube/callback', async (req, res) => {
     }
 
     db.updateStreamerYoutubeTokens(
-      parseInt(streamerId),
+      streamerId,
       tokenData.access_token,
       tokenData.refresh_token,
       Date.now() + tokenData.expires_in * 1000 - 60_000,
@@ -298,16 +342,17 @@ router.get('/spotify', (req, res) => {
     response_type: 'code',
     redirect_uri: redirectUri,
     scope: 'user-read-currently-playing user-modify-playback-state',
-    state: String(req.streamer.id),
+    state: issueOAuthState(req, res, 'spotify'),
   });
   res.redirect(`https://accounts.spotify.com/authorize?${params}`);
 });
 
 router.get('/spotify/callback', async (req, res) => {
-  const { code, state: streamerId, error } = req.query;
+  const stateOk = checkOAuthState(req, res, 'spotify');
+  const { code, error } = req.query;
   if (error) return res.redirect('/dashboard?msg=spotify_error');
-  if (!code || !streamerId) return res.redirect('/dashboard?msg=spotify_error');
-  if (String(streamerId) !== String(req.streamer?.id)) return res.redirect('/dashboard?msg=spotify_error');
+  if (!code || !stateOk || !req.streamer) return res.redirect('/dashboard?msg=spotify_error');
+  const streamerId = req.streamer.id;
 
   try {
     const { clientId, clientSecret } = config.spotify;
@@ -325,13 +370,14 @@ router.get('/spotify/callback', async (req, res) => {
         code,
         redirect_uri: redirectUri,
       }),
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status}`);
     const tokenData = await tokenRes.json();
 
     db.updateSpotifyTokens(
-      parseInt(streamerId),
+      streamerId,
       tokenData.access_token,
       tokenData.refresh_token,
       Date.now() + tokenData.expires_in * 1000 - 60000
@@ -373,6 +419,10 @@ router.get('/link', (req, res) => {
     response_type: 'code',
     scope: '',
     state: linkState,
+    // Twitch always shows its consent screen, naming the account being linked:
+    // a fresh /link URL passed to someone else's browser cannot link whichever
+    // Twitch account that browser happens to be logged in to without them seeing it.
+    force_verify: 'true',
   });
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
 });

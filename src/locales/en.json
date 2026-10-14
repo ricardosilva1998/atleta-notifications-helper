@@ -45,6 +45,8 @@
   "dashboard.guildRemoved": "Server removed from your account.",
   "dashboard.twitchLinked": "Twitch account linked successfully!",
   "dashboard.broadcasterAuthorized": "Broadcaster authorized! Sub sync is now available.",
+  "dashboard.broadcasterWrongAccount": "Not authorized: Twitch was signed in to a different account than the one linked here. Sign in to Twitch as {{name}}, then try again.",
+  "dashboard.broadcasterNeedsTwitch": "Not authorized: link your Twitch account first, then try again.",
   "dashboard.youtubeSaved": "YouTube settings saved.",
   "dashboard.guildLimit": "You've reached the server limit for your plan.",
   "dashboard.alreadyClaimed": "This server is already configured by another user.",

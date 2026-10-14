@@ -169,7 +169,7 @@ const saved = {};
 
 // `body` is sent as JSON; `contentType` overrides the type of a raw or form body
 // (the upload routes read the raw bytes, so those use application/octet-stream).
-function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false } = {}) {
+function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false, cookie } = {}) {
   return new Promise((resolve, reject) => {
     const body = rawBody
       || (jsonBody !== undefined ? JSON.stringify(jsonBody) : null)
@@ -178,6 +178,7 @@ function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, con
     const headers = body ? { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body) } : {};
     if (streamer) headers['x-test-streamer'] = String(streamer);
     if (json) headers['x-test-render'] = 'json';
+    if (cookie) headers.Cookie = cookie;
     const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, agent: false, headers }, (res) => {
       let text = '';
       res.setEncoding('utf8');
@@ -248,6 +249,9 @@ before(async () => {
   const app = express();
   app.set('view engine', 'ejs');
   app.set('views', path.join(SRC, 'views'));
+  // As server.js: cookies are read, and set through app.locals.secureCookie (the OAuth state).
+  app.locals.secureCookie = (res, name, value, opts = {}) => res.cookie(name, value, { httpOnly: true, sameSite: 'lax', ...opts });
+  app.use(require('cookie-parser')());
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json({ limit: '10mb' }));
   app.use((req, res, next) => {
@@ -860,6 +864,24 @@ describe('the dashboard home and Discord answering slowly', () => {
     assert.deepEqual(res.json().locals.unclaimedGuilds.map((g) => g.id), ['700000000000000010']);
     assert.ok(took >= 2000, `it waited for the slow server up to the limit (${took} ms)`);
     assert.ok(took < 5000, `and no longer than that (${took} ms)`);
+  });
+});
+
+// ── A broadcaster authorization refused for another Twitch account (N10) ─
+
+describe('the dashboard after a broadcaster authorization from another Twitch account', () => {
+  const html = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+
+  test('says which account to sign in with, naming the linked one from the account itself, never from the URL', async () => {
+    const linked = addStreamer({ twitch_user_id: 'tw-banner-1', twitch_username: 'synthetic_banner', twitch_display_name: 'Synthetic_Banner' });
+    const res = await request('GET', '/dashboard?msg=broadcaster_wrong_account&name=Someone%20Else', { streamer: linked });
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes(html(t('en', 'dashboard.broadcasterWrongAccount', { name: 'Synthetic_Banner' }))));
+    assert.ok(!res.text.includes('Someone Else'));
+
+    const unlinked = await request('GET', '/dashboard?msg=broadcaster_wrong_account', { streamer: addStreamer() });
+    assert.equal(unlinked.status, 200);
+    assert.ok(unlinked.text.includes(html(t('en', 'dashboard.broadcasterNeedsTwitch'))));
   });
 });
 
@@ -1481,12 +1503,16 @@ describe('the YouTube chatbot page errors', () => {
 
   test('a failed token exchange sends oauth_failed, and what went wrong stays in the server log', async () => {
     const owner = addStreamer();
+    // Started from the page, as a browser does: the state Google sends back, and its cookie.
+    const start = await request('GET', '/auth/youtube', { streamer: owner });
+    const state = new URL(start.headers.location).searchParams.get('state');
+    const cookie = start.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
     const guard = global.fetch;
     const calls = [];
     global.fetch = async (url) => { calls.push(String(url)); return { ok: false, status: 400, json: async () => ({}) }; };
     let res;
     try {
-      res = await request('GET', `/auth/youtube/callback?code=expired-code&state=${owner}`, { streamer: owner });
+      res = await request('GET', `/auth/youtube/callback?code=expired-code&state=${state}`, { streamer: owner, cookie });
     } finally {
       global.fetch = guard;
     }
