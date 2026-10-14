@@ -21,13 +21,15 @@ const { EVENT_DEFAULTS } = require('../src/services/overlayDesign');
 const VIEWS = path.join(__dirname, '..', 'src', 'views');
 const PAGES = [
   'guild-config', 'overlay-config', 'overlay-builder', 'chatbot-config', 'mod-log', 'youtube-chatbot-config', 'multistream',
+  // linked from the site's menus, or the pages a streamer meets before logging in
+  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats',
 ];
 
 // Words that are not the page's own wording: product names, the sample alert content the builder previews,
 // units, and the font names. A text node made only of these (or of command names and {variables}) is fine.
 const ALLOWED_WORDS = new Set([
   'Twitch', 'YouTube', 'Discord', 'Kick', 'iRacing', 'StreamElements', 'OBS', 'Atleta', 'PayPal', 'Spotify',
-  'px', 'kbps', 'AAC', 'NVENC', 'x264', 'min', 'sec', 'FPS',
+  'px', 'kbps', 'AAC', 'NVENC', 'x264', 'min', 'sec', 'FPS', 'EUR', // 'EUR' is the amount of a fixed PayPal.me link
   // font names in the builder's picker (the stored value is the name)
   'Outfit', 'Inter', 'Poppins', 'Roboto', 'Mono', 'Press', 'Start', 'Permanent', 'Marker', 'Bangers', 'System', 'Default',
   // the builder's sample alert content (what a streamer's own alert texts replace)
@@ -128,7 +130,25 @@ const multistreamPage = {
   ingestUrl: 'rtmp://relay.test/live', streamKey: 'key_123', twitchAuthorized: true, twitchHasStreamKeyScope: true, youtubeConnected: true, youtubeChannelName: 'ChannelName',
   isLive: true, liveUnknown: false, query: { saved: '1', reset: '1', regenerated: '1' },
 };
+const series = Array.from({ length: 14 }, (_, i) => ({ period: '2026-10-' + String(i + 1).padStart(2, '0'), count: i % 5 }));
+const accountPage = {
+  streamer: { ...streamer, created_at: '2026-01-02T10:00:00Z', profile_picture: 'a.png' }, tier: 'free', limits: {}, subscription: null, feedbackMsg: 'submitted',
+  stats: { total_notifications: 40, notifications_today: 2, notifications_week: 10, notifications_month: 30, total_guilds: 2, total_twitch_channels: 5, total_youtube_channels: 1 },
+  notificationsOverTime: series,
+  notificationsByType: ['twitch_live', 'twitch_clip', 'twitch_recap', 'youtube_video', 'youtube_live', 'weekly_digest', 'twitch_milestone', 'other_type'].map((type, i) => ({ type, count: i + 1 })),
+};
+const statsPage = { total: 20, success_count: 18, fail_count: 2, live_count: 5, clip_count: 4, recap_count: 3, milestone_count: 2, youtube_video_count: 3, youtube_live_count: 1, digest_count: 2 };
 const PAGE_LOCALS = {
+  account: [accountPage, { ...accountPage, streamer: { ...streamer, created_at: null, profile_picture: null, discord_avatar: null }, notificationsOverTime: [], notificationsByType: [], feedbackMsg: undefined }],
+  'report-issue': [{ streamer }],
+  tutorial: [{ streamer: null }],
+  donate: [{ streamer }],
+  'streamer-landing': [{ streamer: null }],
+  login: [{ streamer: null }],
+  'guild-stats': [
+    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: '7d', stats: statsPage, chartData: series, twitchCount: 1, youtubeCount: 2 },
+    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: 'lifetime', stats: statsPage, chartData: [], twitchCount: 0, youtubeCount: 1 },
+  ],
   'guild-config': [
     guildPage,
     { ...guildPage, msg: 'channel_limit', limits: { recaps: false, milestones: false, weeklyHighlights: false }, hasBroadcasterToken: true, features: { youtube: false }, watchedTwitchChannels: [], watchedYoutubeChannels: [],
@@ -211,7 +231,7 @@ describe('the rendered page has no text of its own', () => {
   }
 });
 // Words the stubs above put into the pages as data (names, values, sample content the page shows as it is).
-const STUB_DATA = new Set(['tester', 'Tester', 'tester_tv', 'Tester_TV', 'GuildName', 'shroud', 'ninja', 'ChannelOne', 'ChannelName', 'StreamTitle', 'TitleText', 'ErrorText', 'Boom',
+const STUB_DATA = new Set(['FREE', 'free', 'tester', 'Tester', 'tester_tv', 'Tester_TV', 'GuildName', 'shroud', 'ninja', 'ChannelOne', 'ChannelName', 'StreamTitle', 'TitleText', 'ErrorText', 'Boom',
   'SponsorName', 'BotName', 'badword', 'socials', 'rules', 'general', 'Subscriber', 'Hello', 'reason', 'user', 'other', 'weird', 'Response', 'Other', 'text', 'Thanks', 'username', 'key',
   'rtmp', 'relay', 'live', 'tok123', 'app', 'test', 'https', 'tok', 'img', 'com', 'Tier', 'months', 'Podium', 'Finish', 'Nitro', 'Boost', 'Welcome', 'raiders', 'Thank', 'you', 'for']);
 const isStubData = (word) => STUB_DATA.has(word) || /^(?:user|key)\d*$/.test(word);
@@ -220,14 +240,14 @@ const isStubData = (word) => STUB_DATA.has(word) || /^(?:user|key)\d*$/.test(wor
 
 describe('the texts a page hands its script are all there', () => {
   for (const page of PAGES) {
-    const hasScriptTexts = fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8').includes('const I18N = ');
+    const hasScriptTexts = fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8').includes('I18N = ');
     test(page + (hasScriptTexts ? '' : ' (no script texts)'), () => {
       for (const locals of PAGE_LOCALS[page]) {
         const html = render(page, locals);
         const scripts = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
         for (const script of scripts) assert.doesNotThrow(() => new Function(script), `${page}: an inline script does not parse`);
         const all = scripts.join('\n');
-        const declared = all.match(/const I18N = (\{.*\});/);
+        const declared = all.match(/(?:const|var|let) I18N = (\{.*\});/);
         const used = [...new Set([...all.matchAll(/\bI18N\.(\w+)/g)].map((m) => m[1]))];
         if (!used.length) { assert.equal(declared, null, `${page}: I18N is declared but never read`); continue; }
         assert.ok(declared, `${page}: the script reads I18N but the server does not render it`);
@@ -243,8 +263,8 @@ describe('the texts a page hands its script are all there', () => {
     for (const page of PAGES) {
       const source = fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8');
       for (const call of source.matchAll(/\b(?:alert|confirm)\(\s*(['"`])([^'"`]*[A-Za-z]{3,}[^'"`]*)\1/g)) offenders.push(`${page}: ${call[0].slice(0, 70)}`);
-      // markup ('<svg ...') and CSS text ('@keyframes ...') are not wording
-      for (const set of source.matchAll(/\.(?:textContent|innerText|innerHTML)\s*=\s*(['"`])(?![<\s@])([^'"`{]*[A-Za-z]{3,}[^'"`{]*)\1/g)) offenders.push(`${page}: ${set[0].slice(0, 70)}`);
+      // markup ('<svg ...'), an entity ('&times;') and CSS text ('@keyframes ...') are not wording
+      for (const set of source.matchAll(/\.(?:textContent|innerText|innerHTML)\s*=\s*(['"`])(?![<\s@&])([^'"`{]*[A-Za-z]{3,}[^'"`{]*)\1/g)) offenders.push(`${page}: ${set[0].slice(0, 70)}`);
     }
     assert.deepEqual(offenders, []);
   });

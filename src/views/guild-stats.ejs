@@ -1,58 +1,58 @@
-<%- include('header', { title: guildName + ' - Statistics', streamer: streamer }) %>
+<%- include('header', { title: guildName + ' - ' + t('guildStats.title'), streamer: streamer }) %>
 
 <a href="/dashboard/guild/<%= guildId %>" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Server
+  <%= t('guildStats.backToServer') %>
 </a>
-<h2 style="margin: 16px 0 24px; font-size: 24px; font-weight: 700;" class="animate-in"><%= guildName %> — Statistics</h2>
+<h2 style="margin: 16px 0 24px; font-size: 24px; font-weight: 700;" class="animate-in"><%= guildName %> — <%= t('guildStats.title') %></h2>
 
 <!-- Period Selector -->
 <div class="tab-bar animate-in animate-in-delay-1" style="max-width: 500px; margin-bottom: 28px;">
-  <a href="?period=24h" class="tab-btn <%= period === '24h' ? 'active' : '' %>" style="text-decoration: none; text-align: center;">24h</a>
-  <a href="?period=7d" class="tab-btn <%= period === '7d' ? 'active' : '' %>" style="text-decoration: none; text-align: center;">7 Days</a>
-  <a href="?period=30d" class="tab-btn <%= period === '30d' ? 'active' : '' %>" style="text-decoration: none; text-align: center;">30 Days</a>
-  <a href="?period=1y" class="tab-btn <%= period === '1y' ? 'active' : '' %>" style="text-decoration: none; text-align: center;">Year</a>
-  <a href="?period=lifetime" class="tab-btn <%= period === 'lifetime' ? 'active' : '' %>" style="text-decoration: none; text-align: center;">Lifetime</a>
+  <a href="?period=24h" class="tab-btn <%= period === '24h' ? 'active' : '' %>" style="text-decoration: none; text-align: center;"><%= t('guildStats.period24h') %></a>
+  <a href="?period=7d" class="tab-btn <%= period === '7d' ? 'active' : '' %>" style="text-decoration: none; text-align: center;"><%= t('guildStats.period7d') %></a>
+  <a href="?period=30d" class="tab-btn <%= period === '30d' ? 'active' : '' %>" style="text-decoration: none; text-align: center;"><%= t('guildStats.period30d') %></a>
+  <a href="?period=1y" class="tab-btn <%= period === '1y' ? 'active' : '' %>" style="text-decoration: none; text-align: center;"><%= t('guildStats.period1y') %></a>
+  <a href="?period=lifetime" class="tab-btn <%= period === 'lifetime' ? 'active' : '' %>" style="text-decoration: none; text-align: center;"><%= t('guildStats.periodLifetime') %></a>
 </div>
 
 <!-- Overview Cards -->
 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px;" class="animate-in animate-in-delay-1">
   <div class="card" style="text-align: center; padding: 20px 12px;">
     <div style="font-size: 32px; font-weight: 800; font-family: var(--font-display); color: var(--accent);"><%= stats.total %></div>
-    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Total Sent</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"><%= t('account.stats.total') %></div>
   </div>
   <div class="card" style="text-align: center; padding: 20px 12px;">
     <div style="font-size: 32px; font-weight: 800; font-family: var(--font-display); color: var(--success);"><%= stats.success_count %></div>
-    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Delivered</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"><%= t('guildStats.delivered') %></div>
   </div>
   <div class="card" style="text-align: center; padding: 20px 12px;">
     <div style="font-size: 32px; font-weight: 800; font-family: var(--font-display); color: var(--danger);"><%= stats.fail_count %></div>
-    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Failed</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"><%= t('guildStats.failed') %></div>
   </div>
   <div class="card" style="text-align: center; padding: 20px 12px;">
     <div style="font-size: 32px; font-weight: 800; font-family: var(--font-display); color: var(--text-primary);"><%= stats.total > 0 ? Math.round(stats.success_count / stats.total * 100) : 0 %>%</div>
-    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Success Rate</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"><%= t('guildStats.successRate') %></div>
   </div>
 </div>
 
 <!-- Chart -->
 <div class="card animate-in animate-in-delay-2" style="padding: 24px; margin-bottom: 24px;">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-    <h3 style="font-size: 15px; margin: 0;">Notifications Over Time</h3>
+    <h3 style="font-size: 15px; margin: 0;"><%= t('guildStats.chartTitle') %></h3>
   </div>
   <% if (chartData.length === 0) { %>
     <div style="text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 14px;">
-      No notifications in this period
+      <%= t('guildStats.chartEmpty') %>
     </div>
   <% } else { %>
     <% const maxCount = Math.max(...chartData.map(d => d.count), 1); %>
     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
       <span style="font-size: 9px; color: var(--text-muted);"><%= maxCount %></span>
-      <span style="font-size: 9px; color: var(--text-muted);">notifications</span>
+      <span style="font-size: 9px; color: var(--text-muted);"><%= t('account.chart.axis') %></span>
     </div>
     <div style="display: flex; align-items: flex-end; gap: <%= chartData.length > 30 ? '1' : '2' %>px; height: 160px; position: relative;">
       <% chartData.forEach(function(d) { %>
-        <div style="flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; cursor: default;" title="<%= d.period %>: <%= d.count %> notification<%= d.count !== 1 ? 's' : '' %>">
+        <div style="flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; cursor: default;" title="<%= t(d.count === 1 ? 'account.chart.tooltipOne' : 'account.chart.tooltipMany', { period: d.period, count: d.count }) %>">
           <div style="width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; height: <%= Math.round(Math.max((d.count / maxCount) * 160, d.count > 0 ? 3 : 1)) %>px; opacity: <%= d.count > 0 ? 1 : 0.12 %>;"></div>
         </div>
       <% }); %>
@@ -78,23 +78,23 @@
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 24px; font-weight: 700; font-family: var(--font-display); color: var(--accent);"><%= stats.live_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Live Alerts</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('guildStats.liveAlerts') %></div>
       </div>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 24px; font-weight: 700; font-family: var(--font-display); color: #bf94ff;"><%= stats.clip_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Clips</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('common.clips') %></div>
       </div>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 24px; font-weight: 700; font-family: var(--font-display); color: #6d28d9;"><%= stats.recap_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Recaps</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('account.type.twitchRecap') %></div>
       </div>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 24px; font-weight: 700; font-family: var(--font-display); color: #f1c40f;"><%= stats.milestone_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Milestones</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('account.type.twitchMilestone') %></div>
       </div>
     </div>
     <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
-      Watching <strong style="color: var(--text-primary);"><%= twitchCount %></strong> channel<%= twitchCount !== 1 ? 's' : '' %>
+      <%- t(twitchCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + twitchCount + '</strong>' }) %>
     </div>
   </div>
 
@@ -107,22 +107,22 @@
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 24px; font-weight: 700; font-family: var(--font-display); color: #f04438;"><%= stats.youtube_video_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Videos</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('common.videos') %></div>
       </div>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border);">
         <div style="font-size: 24px; font-weight: 700; font-family: var(--font-display); color: #ff6b6b;"><%= stats.youtube_live_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Live</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"><%= t('common.live') %></div>
       </div>
     </div>
     <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
-      Watching <strong style="color: var(--text-primary);"><%= youtubeCount %></strong> channel<%= youtubeCount !== 1 ? 's' : '' %>
+      <%- t(youtubeCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + youtubeCount + '</strong>' }) %>
     </div>
   </div>
 </div>
 
 <!-- Community Features -->
 <div class="card animate-in animate-in-delay-4" style="padding: 24px; margin-bottom: 24px;">
-  <h3 style="font-size: 15px; margin-bottom: 16px;">Community Features</h3>
+  <h3 style="font-size: 15px; margin-bottom: 16px;"><%= t('guildStats.community') %></h3>
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
     <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
       <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(52,152,219,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -130,7 +130,7 @@
       </div>
       <div>
         <div style="font-size: 20px; font-weight: 700; font-family: var(--font-display); color: #3498db;"><%= stats.digest_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted);">Weekly Digests</div>
+        <div style="font-size: 11px; color: var(--text-muted);"><%= t('guildStats.digests') %></div>
       </div>
     </div>
     <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
@@ -139,7 +139,7 @@
       </div>
       <div>
         <div style="font-size: 20px; font-weight: 700; font-family: var(--font-display); color: #f1c40f;"><%= stats.milestone_count %></div>
-        <div style="font-size: 11px; color: var(--text-muted);">Milestones</div>
+        <div style="font-size: 11px; color: var(--text-muted);"><%= t('account.type.twitchMilestone') %></div>
       </div>
     </div>
   </div>

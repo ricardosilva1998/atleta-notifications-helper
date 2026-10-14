@@ -213,12 +213,12 @@ router.get('/account', (req, res) => {
 router.post('/account/avatar', async (req, res) => {
   const allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   const ext = (req.query.ext || 'png').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  if (!allowed.includes(ext)) return res.status(400).json({ ok: false, error: 'Invalid file type' });
+  if (!allowed.includes(ext)) return res.status(400).json({ ok: false, error: res.locals.t('account.error.invalidType') });
 
   let buf;
   try { buf = await readBoundedBody(req, res, 2 * 1024 * 1024); }
   catch (e) { return; /* helper already responded */ }
-  if (buf.length === 0) return res.status(400).json({ ok: false, error: 'Empty file' });
+  if (buf.length === 0) return res.status(400).json({ ok: false, error: res.locals.t('account.error.empty') });
   if (refuseUpload(req, res, buf.length, { media: false })) return;
 
   const streamerId = req.streamer.id;
@@ -233,7 +233,7 @@ router.post('/account/avatar', async (req, res) => {
 
   const filename = `avatar_${Date.now()}.${ext}`;
   try { await fs.promises.writeFile(path.join(avatarDir, filename), buf); }
-  catch (e) { return res.status(500).json({ ok: false, error: 'Write failed' }); }
+  catch (e) { return res.status(500).json({ ok: false, error: res.locals.t('account.error.writeFailed') }); }
   db.updateProfilePicture(streamerId, filename);
   console.log(`[Dashboard] ${req.streamer.discord_username} uploaded profile picture: ${filename}`);
   res.json({ ok: true, url: `/avatars/${streamerId}/${filename}` });

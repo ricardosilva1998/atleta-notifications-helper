@@ -1,161 +1,162 @@
-<%- include('header', { title: 'Setup Guide', streamer: typeof streamer !== 'undefined' ? streamer : null }) %>
+<%- include('header', { title: t('nav.setupGuide'), streamer: typeof streamer !== 'undefined' ? streamer : null }) %>
+<% const rich = (key) => t(key, { b: '<strong>', bEnd: '</strong>', c: '<code>', cEnd: '</code>' }); %>
 
 <div style="max-width: 700px; margin: 0 auto;">
 
-<h2 style="margin-bottom: 8px; text-align: center;">Setup Guide</h2>
-<p style="color: #adadb8; margin-bottom: 24px; text-align: center;">Follow these steps to get the bot running on your Discord server. Takes about 5 minutes.</p>
+<h2 style="margin-bottom: 8px; text-align: center;"><%= t('nav.setupGuide') %></h2>
+<p style="color: #adadb8; margin-bottom: 24px; text-align: center;"><%= t('tutorial.intro') %></p>
 
 <div style="background: rgba(247,144,9,0.1); border: 1px solid rgba(247,144,9,0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  <span>This guide may not be fully up to date. <strong>Last updated: March 2026</strong></span>
+  <span><%- rich('tutorial.notice') %></span>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">1</div><h3>Log in with Discord</h3></div>
+  <div class="step-header"><div class="step-number">1</div><h3><%= t('tutorial.step1.title') %></h3></div>
   <div class="step-content">
-    <p>Click <strong>"Get Started with Discord"</strong> on the home page. This creates your account using your Discord identity.</p>
+    <p><%- rich('tutorial.step1.p1') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-1.png" alt="Atleta home page with Get Started with Discord button">
+      <img src="/screenshots/step-1.png" alt="<%= t('tutorial.step1.alt1') %>">
     </div>
-    <p>You'll be redirected to Discord to authorize. The bot only reads your username and avatar.</p>
+    <p><%- rich('tutorial.step1.p2') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-1.1.png" alt="Discord authorization page">
+      <img src="/screenshots/step-1.1.png" alt="<%= t('tutorial.step1.alt2') %>">
     </div>
-    <div class="tip">Click <strong>"Authorize"</strong> to continue. No special permissions are needed — the bot only reads your public profile.</div>
+    <div class="tip"><%- rich('tutorial.step1.tip1') %></div>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">2</div><h3>Link Your Twitch Account (Optional)</h3></div>
+  <div class="step-header"><div class="step-number">2</div><h3><%= t('tutorial.step2.title') %></h3></div>
   <div class="step-content">
-    <p>From the dashboard, click <strong>"Link Twitch Account"</strong> if you want to enable subscriber role sync for your own channel. This step is optional — you can watch any Twitch channel without linking.</p>
+    <p><%- rich('tutorial.step2.p1') %></p>
     <div class="screenshot">
       <div class="icon">📸</div>
-      <div class="label">Dashboard — "Link Twitch Account" button</div>
-      <div>Screenshot coming soon</div>
+      <div class="label"><%= t('tutorial.step2.shotLabel') %></div>
+      <div><%= t('tutorial.shotSoon') %></div>
     </div>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">3</div><h3>Add the Bot to Your Discord Server</h3></div>
+  <div class="step-header"><div class="step-number">3</div><h3><%= t('tutorial.step3.title') %></h3></div>
   <div class="step-content">
-    <p>Click <strong>"+ Add Bot to Server"</strong> from the dashboard. This opens Discord's authorization page in a new tab.</p>
+    <p><%- rich('tutorial.step3.p1') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-3.png" alt="Dashboard with Add Bot to Server button">
+      <img src="/screenshots/step-3.png" alt="<%= t('tutorial.step3.alt1') %>">
     </div>
-    <p>Select which server you want to add the bot to and click <strong>"Continue"</strong>.</p>
+    <p><%- rich('tutorial.step3.p2') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-3.1.png" alt="Discord — Select a server to add the bot">
+      <img src="/screenshots/step-3.1.png" alt="<%= t('tutorial.step3.alt2') %>">
     </div>
     <ul>
-      <li>You need <strong>Manage Server</strong> permission in the Discord server</li>
-      <li>The bot will request permissions to send messages, embed links, and manage roles</li>
-      <li>After authorizing, go back to the dashboard</li>
+      <li><%- rich('tutorial.step3.li1') %></li>
+      <li><%- rich('tutorial.step3.li2') %></li>
+      <li><%- rich('tutorial.step3.li3') %></li>
     </ul>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">4</div><h3>Claim Your Server</h3></div>
+  <div class="step-header"><div class="step-number">4</div><h3><%= t('tutorial.step4.title') %></h3></div>
   <div class="step-content">
-    <p>After adding the bot, your server will appear under <strong>"Available Servers"</strong> on the dashboard. Click <strong>"Claim"</strong> to link it to your account.</p>
+    <p><%- rich('tutorial.step4.p1') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-4.png" alt="Dashboard showing Available Servers with Claim button">
+      <img src="/screenshots/step-4.png" alt="<%= t('tutorial.step4.alt1') %>">
     </div>
-    <p>Once claimed, you'll see the server settings page where you can configure welcome messages, subscriber role sync, and more.</p>
+    <p><%- rich('tutorial.step4.p2') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-4.1.png" alt="Server settings page with Twitch Channels and YouTube Channels buttons">
+      <img src="/screenshots/step-4.1.png" alt="<%= t('tutorial.step4.alt2') %>">
     </div>
-    <div class="tip">Each server can only be claimed by one user. If someone else has already set up the bot on that server, you won't see it in the list.</div>
+    <div class="tip"><%- rich('tutorial.step4.tip1') %></div>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">5</div><h3>Add Twitch Channels to Watch</h3></div>
+  <div class="step-header"><div class="step-number">5</div><h3><%= t('tutorial.step5.title') %></h3></div>
   <div class="step-content">
-    <p>Click the <strong>"Twitch Channels"</strong> button on your server to manage which Twitch streamers you want notifications for.</p>
+    <p><%- rich('tutorial.step5.p1') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-5.png" alt="Server settings showing Twitch Channels and YouTube Channels buttons">
+      <img src="/screenshots/step-5.png" alt="<%= t('tutorial.step5.alt1') %>">
     </div>
-    <p>You'll see the Twitch Channels page. Enter any Twitch username and choose which Discord channels should receive live and clip notifications.</p>
+    <p><%- rich('tutorial.step5.p2') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-5.1.png" alt="Twitch Channels page — empty state with add form">
+      <img src="/screenshots/step-5.1.png" alt="<%= t('tutorial.step5.alt2') %>">
     </div>
-    <p>Fill in a Twitch username and select the notification channels. You can set different Discord channels for live alerts and clips, or leave one disabled.</p>
+    <p><%- rich('tutorial.step5.p3') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-5.2.png" alt="Filling in a Twitch username with notification channels selected">
+      <img src="/screenshots/step-5.2.png" alt="<%= t('tutorial.step5.alt3') %>">
     </div>
-    <p>Click <strong>"Add Channel"</strong> and you're done! The channel will appear in your watched list and notifications will start within a minute.</p>
+    <p><%- rich('tutorial.step5.p4') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-5.3.png" alt="Channel added successfully with watched channels list showing">
+      <img src="/screenshots/step-5.3.png" alt="<%= t('tutorial.step5.alt4') %>">
     </div>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">6</div><h3>Add YouTube Channels (Optional)</h3></div>
+  <div class="step-header"><div class="step-number">6</div><h3><%= t('tutorial.step6.title') %></h3></div>
   <div class="step-content">
-    <p>Click the <strong>"YouTube"</strong> tab on your server settings to add YouTube channels. You can enter a <strong>@username</strong> or <strong>Channel ID</strong> (starts with <code>UC</code>).</p>
+    <p><%- rich('tutorial.step6.p1') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-6.png" alt="YouTube tab — Add a YouTube channel form">
+      <img src="/screenshots/step-6.png" alt="<%= t('tutorial.step6.alt1') %>">
     </div>
-    <p>Choose which Discord channels should receive <strong>video/shorts notifications</strong> and <strong>live notifications</strong>, then click <strong>"Add Channel"</strong>.</p>
+    <p><%- rich('tutorial.step6.p2') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-6.1.png" alt="YouTube channel added to watched list">
+      <img src="/screenshots/step-6.1.png" alt="<%= t('tutorial.step6.alt2') %>">
     </div>
-    <div class="tip">Video/shorts notifications use the free YouTube RSS feed and don't need an API key. Live detection requires a YouTube Data API key.</div>
+    <div class="tip"><%- rich('tutorial.step6.tip1') %></div>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">7</div><h3>Configure Welcome Messages (Optional)</h3></div>
+  <div class="step-header"><div class="step-number">7</div><h3><%= t('tutorial.step7.title') %></h3></div>
   <div class="step-content">
-    <p>In your server <strong>"Settings"</strong> page, enable the welcome message feature:</p>
+    <p><%- rich('tutorial.step7.p1') %></p>
     <ul>
-      <li>Toggle on <strong>Welcome Messages</strong></li>
-      <li>Select which channel to send welcome messages to</li>
-      <li>Optionally write a custom welcome message</li>
+      <li><%- rich('tutorial.step7.li1') %></li>
+      <li><%- rich('tutorial.step7.li2') %></li>
+      <li><%- rich('tutorial.step7.li3') %></li>
     </ul>
     <div class="screenshot">
-      <img src="/screenshots/step-7.png" alt="Server Settings showing Welcome Message configuration">
+      <img src="/screenshots/step-7.png" alt="<%= t('tutorial.step7.alt1') %>">
     </div>
   </div>
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">8</div><h3>Enable Subscriber Role Sync (Optional)</h3></div>
+  <div class="step-header"><div class="step-number">8</div><h3><%= t('tutorial.step8.title') %></h3></div>
   <div class="step-content">
-    <p>This feature automatically gives a Discord role to your Twitch subscribers:</p>
+    <p><%- rich('tutorial.step8.p1') %></p>
 
-    <p><strong>1.</strong> First, link your Twitch account and click <strong>"Enable Sub Sync"</strong> from the dashboard — this authorizes the bot to read your subscriber list.</p>
+    <p><%- rich('tutorial.step8.p2') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-8.png" alt="Dashboard showing Enable Sub Sync button">
+      <img src="/screenshots/step-8.png" alt="<%= t('tutorial.step8.alt1') %>">
     </div>
 
-    <p><strong>2.</strong> In your Discord server, go to <strong>Server Settings &rarr; Roles &rarr; Atleta</strong> and make sure the <strong>Administrator</strong> permission is enabled.</p>
+    <p><%- rich('tutorial.step8.p3') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-8.1.png" alt="Atleta role with Administrator permission enabled">
+      <img src="/screenshots/step-8.1.png" alt="<%= t('tutorial.step8.alt2') %>">
     </div>
 
-    <p><strong>3.</strong> Make sure the <strong>Atleta role is above</strong> the subscriber role in the roles list. If it's not, drag it above — the bot can only assign roles lower than its own.</p>
+    <p><%- rich('tutorial.step8.p4') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-8.2.png" alt="Atleta role positioned above Sub Role in the roles list">
+      <img src="/screenshots/step-8.2.png" alt="<%= t('tutorial.step8.alt3') %>">
     </div>
 
-    <p><strong>4.</strong> In the Atleta dashboard, go to your server <strong>Settings</strong>, toggle on <strong>Subscriber Role Sync</strong> and select the role. Your community members type <code>/link</code> in Discord to connect their Twitch account.</p>
+    <p><%- rich('tutorial.step8.p5') %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-8.3.png" alt="Discord showing /link command in a channel">
+      <img src="/screenshots/step-8.3.png" alt="<%= t('tutorial.step8.alt4') %>">
     </div>
 
-    <div class="tip">The bot checks every 10 minutes and assigns or removes the role automatically. Subscribers need to use <code>/link</code> once to connect their Twitch and Discord accounts.</div>
+    <div class="tip"><%- rich('tutorial.step8.tip1') %></div>
   </div>
 </div>
 
 <div class="card" style="margin-top: 32px; text-align: center;">
-  <h3 style="margin-bottom: 8px;">Ready to get started?</h3>
-  <p style="color: #adadb8; margin-bottom: 16px;">The whole setup takes about 5 minutes.</p>
-  <a href="/auth/login" class="btn btn-discord" style="font-size: 16px; padding: 12px 24px;">Log in with Discord</a>
+  <h3 style="margin-bottom: 8px;"><%= t('tutorial.ready') %></h3>
+  <p style="color: #adadb8; margin-bottom: 16px;"><%= t('tutorial.readyHint') %></p>
+  <a href="/auth/login" class="btn btn-discord" style="font-size: 16px; padding: 12px 24px;"><%= t('tutorial.login') %></a>
 </div>
 
 </div>
