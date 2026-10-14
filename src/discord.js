@@ -5,8 +5,14 @@ const { isChannelInGuild, isTextChannel, DELIVERY_CHANNEL_UNAVAILABLE } = requir
 // Posted text (clip and video titles, creator names) comes from third parties,
 // so by default nothing the bot sends may ping @everyone, @here, roles or
 // users. A send that should ping someone opts in with its own allowedMentions.
+//
+// Intents: Guilds (servers, channels, roles), GuildMembers (the welcome message
+// and role sync), GuildVoiceStates (the Discord voice overlay). Nothing reads
+// the messages people write in a server, so GuildMessages is not asked for:
+// with it Discord sends the bot, and discord.js caches, every message in every
+// server it is in.
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates],
   allowedMentions: { parse: [] },
 });
 
@@ -65,6 +71,10 @@ async function sendToGuildChannel(guildId, streamerId, channelId, payload) {
   return true;
 }
 
+// Posts a notification. Returns whether it was posted: false when the channel is
+// not one the bot can reach in that server (logged, and kept for the server's
+// settings page). Rethrows what Discord rejects. A caller that records a post as
+// done, or counts it, must look at the result: a normal return alone is not a post.
 async function sendNotification(channelId, embed, meta) {
   const db = require('./db');
   const guildId = meta?.guildId;
@@ -73,6 +83,7 @@ async function sendNotification(channelId, embed, meta) {
     const sent = await sendToGuildChannel(guildId, meta?.streamerId, channelId, payload);
     if (!sent) console.error(`[Discord] Channel ${channelId} is not a channel of server ${guildId} the bot can reach`);
     if (meta) db.logNotification(meta.streamerId, guildId, meta.type, sent);
+    return sent;
   } catch (error) {
     console.error(`Discord send error: ${error.message} (code: ${error.code}, status: ${error.status})`);
     if (meta) db.logNotification(meta.streamerId, guildId, meta.type, false);
@@ -134,17 +145,25 @@ function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailU
   });
 }
 
+// A clip title goes inside [text](url): brackets in it would end the link early.
+const escapeLinkText = (text) => String(text).replace(/[\\[\]]/g, '\\$&');
+
+// topClip is a Twitch clip: { title, url, view_count }. Discord refuses the
+// whole message when an embed field has an empty value, so a field with nothing
+// to show is left out: a week with streams but no clips has no categories.
 function buildWeeklyDigestEmbed({ streamCount, totalHours, categories, topClip }) {
   const fields = [
     { name: 'Streams', value: String(streamCount), inline: true },
     { name: 'Total Hours', value: totalHours.toFixed(1), inline: true },
-    { name: 'Categories', value: categories.join(', ') },
   ];
+  const categoryList = (categories || []).filter(Boolean).join(', ');
+  if (categoryList) {
+    fields.push({ name: 'Categories', value: categoryList.slice(0, 1024) }); // 1024 is the limit of a field
+  }
   if (topClip) {
-    fields.push({
-      name: 'Top Clip',
-      value: `[${topClip.title}](${topClip.url}) (${topClip.viewCount} views)`,
-    });
+    const views = Number(topClip.view_count);
+    const link = `[${escapeLinkText(topClip.title)}](${topClip.url})`;
+    fields.push({ name: 'Top Clip', value: Number.isFinite(views) ? `${link} (${views} views)` : link });
   }
   return buildEmbed({
     color: 0x3498db,

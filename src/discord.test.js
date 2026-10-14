@@ -30,8 +30,9 @@ Module._load = function (request, parent, isMain) {
   }
   return origLoad(request, parent, isMain);
 };
+const { GatewayIntentBits } = require('discord.js');
 const discord = require('./discord');
-const { client, fetchGuildChannel, sendToGuildChannel, sendNotification, streamerGuildForChannel } = discord;
+const { client, fetchGuildChannel, sendToGuildChannel, sendNotification, streamerGuildForChannel, buildWeeklyDigestEmbed } = discord;
 
 const G1 = '100000000000000001';
 const G2 = '100000000000000002';
@@ -158,7 +159,7 @@ describe('sendNotification', () => {
   const meta = { streamerId: 7, guildId: G1, type: 'twitch_live' };
 
   test('posts an embed into the watcher\'s server and logs it', async () => {
-    await sendNotification(mine.id, { title: 'Live' }, meta);
+    assert.equal(await sendNotification(mine.id, { title: 'Live' }, meta), true);
     assert.deepEqual(mine.sent, [{ embeds: [{ title: 'Live' }] }]);
     assert.deepEqual(dbCalls.logged, [[7, G1, 'twitch_live', true]]);
   });
@@ -168,8 +169,8 @@ describe('sendNotification', () => {
     assert.deepEqual(mine.sent, ['https://clips.twitch.tv/x']);
   });
 
-  test('a channel id from another server is refused, logged as failed, and not thrown', async () => {
-    await quietly(() => sendNotification(theirs.id, { title: 'Live' }, meta));
+  test('a channel id from another server is refused, logged as failed, not thrown, and reported as not posted', async () => {
+    assert.equal(await quietly(() => sendNotification(theirs.id, { title: 'Live' }, meta)), false);
     assert.deepEqual(theirs.sent, []);
     assert.deepEqual(dbCalls.logged, [[7, G1, 'twitch_live', false]]);
     assert.deepEqual(dbCalls.errors, [[G1, 7, theirs.id, 'channel_unavailable']]);
@@ -180,9 +181,81 @@ describe('sendNotification', () => {
     assert.deepEqual(dbCalls.logged, [[7, G1, 'twitch_live', false]]);
   });
 
-  test('without a server id nothing is posted', async () => {
-    await quietly(() => sendNotification(mine.id, { title: 'Live' }));
+  test('without a server id nothing is posted, and it says so', async () => {
+    assert.equal(await quietly(() => sendNotification(mine.id, { title: 'Live' })), false);
     assert.deepEqual(mine.sent, []);
+  });
+});
+
+describe('the intents the bot asks Discord for', () => {
+  test('servers, members and voice states are asked for; messages are not, because nothing reads them', () => {
+    const intents = client.options.intents;
+    assert.equal(intents.has(GatewayIntentBits.Guilds), true);
+    assert.equal(intents.has(GatewayIntentBits.GuildMembers), true, 'the welcome message and role sync');
+    assert.equal(intents.has(GatewayIntentBits.GuildVoiceStates), true, 'the Discord voice overlay');
+    assert.equal(intents.has(GatewayIntentBits.GuildMessages), false, 'it made Discord send the bot every message in every server');
+    assert.equal(intents.has(GatewayIntentBits.MessageContent), false);
+  });
+
+  test('nothing the bot sends may ping anyone unless that send says so', () => {
+    assert.deepEqual(client.options.allowedMentions, { parse: [] });
+  });
+});
+
+describe('buildWeeklyDigestEmbed', () => {
+  const fieldsOf = (embed) => embed.toJSON().fields;
+  const clip = { title: 'Last-lap pass', url: 'https://clips.twitch.tv/LastLap', view_count: 1234 };
+
+  test('a week with streams but no clips has no empty Categories field (Discord rejects the whole message for one)', () => {
+    const embed = buildWeeklyDigestEmbed({ streamCount: 3, totalHours: 7.25, categories: [], topClip: null });
+    assert.deepEqual(fieldsOf(embed), [
+      { name: 'Streams', value: '3', inline: true },
+      { name: 'Total Hours', value: '7.3', inline: true },
+    ]);
+  });
+
+  test('no field is ever empty, and none is over the 1024 characters Discord allows', () => {
+    const cases = [
+      { categories: [], topClip: null },
+      { categories: [''], topClip: null },
+      { categories: [], topClip: clip },
+      { categories: ['iRacing', 'Just Chatting'], topClip: clip },
+      { categories: Array.from({ length: 200 }, (_, i) => `A fairly long game title number ${i}`), topClip: clip },
+    ];
+    for (const extra of cases) {
+      const embed = buildWeeklyDigestEmbed({ streamCount: 1, totalHours: 0.5, ...extra });
+      for (const field of fieldsOf(embed)) {
+        assert.ok(field.name.length > 0, JSON.stringify(extra));
+        assert.ok(field.value.length > 0 && field.value.length <= 1024, `${field.name}: ${field.value.length}`);
+      }
+    }
+  });
+
+  test('categories are listed when there are some, and blank ones are dropped', () => {
+    const embed = buildWeeklyDigestEmbed({ streamCount: 2, totalHours: 4, categories: ['iRacing', '', 'Just Chatting', null], topClip: null });
+    assert.deepEqual(fieldsOf(embed).find((f) => f.name === 'Categories'), { name: 'Categories', value: 'iRacing, Just Chatting' });
+  });
+
+  test('the top clip shows its real view count, not "undefined views"', () => {
+    const embed = buildWeeklyDigestEmbed({ streamCount: 2, totalHours: 4, categories: [], topClip: clip });
+    const top = fieldsOf(embed).find((f) => f.name === 'Top Clip');
+    assert.equal(top.value, '[Last-lap pass](https://clips.twitch.tv/LastLap) (1234 views)');
+    assert.ok(!JSON.stringify(fieldsOf(embed)).includes('undefined'));
+  });
+
+  test('a clip whose view count is unknown is shown without a count', () => {
+    for (const view_count of [undefined, null, 'x']) {
+      const embed = buildWeeklyDigestEmbed({ streamCount: 1, totalHours: 1, categories: [], topClip: { ...clip, view_count } });
+      const top = fieldsOf(embed).find((f) => f.name === 'Top Clip');
+      assert.ok(!/undefined|NaN|null/.test(top.value), `${view_count}: ${top.value}`);
+      assert.ok(top.value.startsWith('[Last-lap pass](https://clips.twitch.tv/LastLap)'));
+    }
+  });
+
+  test('brackets in a clip title cannot end the link early', () => {
+    const embed = buildWeeklyDigestEmbed({ streamCount: 1, totalHours: 1, categories: [], topClip: { ...clip, title: 'x](https://example.test/phish) [y' } });
+    const top = fieldsOf(embed).find((f) => f.name === 'Top Clip');
+    assert.equal(top.value, '[x\\](https://example.test/phish) \\[y](https://clips.twitch.tv/LastLap) (1234 views)');
   });
 });
 

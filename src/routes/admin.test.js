@@ -37,12 +37,54 @@ const managers = {
   },
 };
 
+// What the admin "Testing" buttons post through and read from. sendNotification
+// answers per streamer: true (posted), false (the channel was refused), or throws.
+const posting = { outcomeOf: {}, attempts: [] };
+const discordStub = {
+  sendNotification: async (_channelId, _embed, meta) => {
+    posting.attempts.push(meta.streamerId);
+    const outcome = posting.outcomeOf[meta.streamerId];
+    if (outcome === 'throws') throw new Error('Missing Permissions');
+    return outcome === true;
+  },
+  buildEmbed: (fields) => ({ built: fields }),
+  buildRecapEmbed: (data) => ({ recap: data }),
+  buildMilestoneEmbed: (data) => ({ milestone: data }),
+  buildWeeklyDigestEmbed: (data) => ({ digest: data }),
+  buildIracingResultEmbed: (data) => ({ iracing: data }),
+};
+const twitchStub = {
+  getUserId: async () => '123',
+  getStream: async () => null,
+  getVideos: async () => [],
+  getFollowerCount: async () => 10,
+  getClips: async () => [{ title: 'Clip', url: 'https://clips.test/c', view_count: 9, creator_name: 'someone', duration: 12 }],
+};
+const youtubeStub = {
+  resolveChannelId: async () => ({ channelId: 'UCprobe', channelName: 'Probe' }),
+  getLatestVideos: async () => [{ id: 'v1', title: 'Video', url: 'https://youtu.be/v1', author: 'Probe' }],
+};
+
 let db;
 let bus;
 let server;
 let port;
 const logs = [];
 const saved = {};
+
+function postForm(urlPath, fields, streamer) {
+  const body = new URLSearchParams(fields).toString();
+  return new Promise((resolve, reject) => {
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) };
+    if (streamer) headers['x-test-streamer'] = String(streamer);
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'POST', agent: false, headers }, (res) => {
+      res.resume();
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
 
 function post(urlPath, streamer) {
   return new Promise((resolve, reject) => {
@@ -69,9 +111,9 @@ before(async () => {
       if (request === 'fs') return { ...realFs, existsSync: () => true, mkdirSync: () => {} };
     }
     if (from === ADMIN_FILE) {
-      if (request === '../discord') return {};
-      if (request === '../services/twitch') return {};
-      if (request === '../services/youtube') return {};
+      if (request === '../discord') return discordStub;
+      if (request === '../services/twitch') return twitchStub;
+      if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/iracing') return { isConfigured: () => false };
     }
     if (from === LIFECYCLE_FILE && managers[request]) return managers[request];
@@ -285,5 +327,62 @@ describe('the issues panel', () => {
     assert.equal(res.status, 302);
     assert.equal(db.getIssueById(issueId).status, 'resolved');
     assert.equal(db.getIssueById(issueId).admin_reply, 'Fixed in the next release');
+  });
+});
+
+describe('the Testing buttons count only what was really posted', () => {
+  const GUILD = '900000000000000001';
+  let okStreamer;
+  let refusedStreamer;
+  let throwsStreamer;
+
+  // Three streamers watch the same channels in one server: one's post goes out,
+  // one's channel is refused (the bot cannot reach it), one's post is rejected by Discord.
+  beforeEach(() => {
+    for (const table of ['watched_channels', 'watched_youtube_channels', 'guilds']) db.db.prepare(`DELETE FROM ${table}`).run();
+    posting.attempts.length = 0;
+    [okStreamer, refusedStreamer, throwsStreamer] = [addStreamer(), addStreamer(), addStreamer()];
+    posting.outcomeOf = { [okStreamer]: true, [refusedStreamer]: false, [throwsStreamer]: 'throws' };
+    for (const id of [okStreamer, refusedStreamer, throwsStreamer]) {
+      db.upsertGuild(GUILD, id, 'Pit Lane');
+      db.db.prepare("UPDATE guilds SET welcome_enabled = 1, welcome_channel_id = 'WELCOME', welcome_message = 'Hello' WHERE guild_id = ? AND streamer_id = ?").run(GUILD, id);
+      db.addWatchedChannel(GUILD, id, 'some_channel', 'LIVE', 'CLIPS', true, true);
+      db.addWatchedYoutubeChannel(GUILD, id, 'UCprobe', 'Probe', 'VIDEOS', 'LIVE', null);
+    }
+  });
+
+  const BUTTONS = [
+    ['Stream Recap', '/admin/test/recap/some_channel'],
+    ['Milestone', '/admin/test/milestone/some_channel'],
+    ['Twitch Go-Live', '/admin/test/twitch-live/some_channel'],
+    ['Twitch Clip', '/admin/test/twitch-clip/some_channel'],
+    ['Weekly Digest', '/admin/test/weekly-digest/some_channel'],
+    ['YouTube Video', '/admin/test/youtube-video/UCprobe'],
+    ['YouTube Live', '/admin/test/youtube-live/UCprobe'],
+  ];
+
+  for (const [name, route] of BUTTONS) {
+    test(`${name}: a refused channel and a failed post are not counted as sent`, async () => {
+      const res = await post(route, admin);
+      assert.equal(res.status, 302);
+      assert.equal(messageOf(res), 'test_sent_1', 'one of the three posts went out');
+      assert.deepEqual([...posting.attempts].sort(), [okStreamer, refusedStreamer, throwsStreamer].sort(), 'all three were tried');
+    });
+  }
+
+  test('Welcome: the same', async () => {
+    const res = await postForm('/admin/test/welcome', { guild_id: GUILD }, admin);
+    assert.equal(res.status, 302);
+    assert.equal(messageOf(res), 'test_sent_1');
+    assert.equal(posting.attempts.length, 3);
+  });
+
+  test('when no channel can be reached the answer is 0 sent, not "sent"', async () => {
+    posting.outcomeOf = { [okStreamer]: false, [refusedStreamer]: false, [throwsStreamer]: false };
+    for (const [name, route] of BUTTONS) {
+      const res = await post(route, admin);
+      assert.equal(messageOf(res), 'test_sent_0', name);
+    }
+    assert.equal(messageOf(await postForm('/admin/test/welcome', { guild_id: GUILD }, admin)), 'test_sent_0');
   });
 });

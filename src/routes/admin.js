@@ -214,12 +214,12 @@ router.post('/test/recap/:username', requireAdmin, async (req, res) => {
           });
         }
         // Then send stats embed below
-        await sendNotification(w.live_channel_id, embed, {
+        const posted = await sendNotification(w.live_channel_id, embed, {
           streamerId: w.streamer_id,
           guildId: w.guild_id,
           type: 'twitch_recap',
         });
-        sent++;
+        if (posted) sent++;
       } catch (e) {
         console.error(`[TestRecap] Send failed: ${e.message}`);
       }
@@ -256,7 +256,7 @@ router.post('/test/milestone/:username', requireAdmin, async (req, res) => {
     const embed = buildMilestoneEmbed({ twitchUsername: username, milestoneType: 'follower', count: followerCount });
     let sent = 0;
     for (const w of watchers.filter(w => w.live_channel_id)) {
-      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_milestone' }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_milestone' })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -284,7 +284,7 @@ router.post('/test/twitch-live/:username', requireAdmin, async (req, res) => {
     const watchers = db.getWatchersForChannel(username).filter(w => w.live_channel_id);
     let sent = 0;
     for (const w of watchers) {
-      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_live' }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_live' })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -314,7 +314,7 @@ router.post('/test/twitch-clip/:username', requireAdmin, async (req, res) => {
     const watchers = db.getWatchersForChannel(username).filter(w => w.clips_channel_id);
     let sent = 0;
     for (const w of watchers) {
-      try { await sendNotification(w.clips_channel_id, null, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_clip', contentOnly: message }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.clips_channel_id, null, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'twitch_clip', contentOnly: message })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -340,7 +340,7 @@ router.post('/test/youtube-video/:input', requireAdmin, async (req, res) => {
     const ytWatchers = db.db.prepare('SELECT wyc.*, s.enabled AS streamer_enabled FROM watched_youtube_channels wyc JOIN streamers s ON wyc.streamer_id = s.id WHERE wyc.youtube_channel_id = ? AND wyc.enabled = 1 AND s.enabled = 1').all(channelId);
     let sent = 0;
     for (const w of ytWatchers.filter(w => w.videos_channel_id)) {
-      try { await sendNotification(w.videos_channel_id, null, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'youtube_video', contentOnly: message }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.videos_channel_id, null, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'youtube_video', contentOnly: message })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -368,7 +368,7 @@ router.post('/test/youtube-live/:input', requireAdmin, async (req, res) => {
     const ytWatchers = db.db.prepare('SELECT wyc.*, s.enabled AS streamer_enabled FROM watched_youtube_channels wyc JOIN streamers s ON wyc.streamer_id = s.id WHERE wyc.youtube_channel_id = ? AND wyc.enabled = 1 AND s.enabled = 1').all(resolved.channelId);
     let sent = 0;
     for (const w of ytWatchers.filter(w => w.live_channel_id)) {
-      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'youtube_live' }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'youtube_live' })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -414,7 +414,7 @@ router.post('/test/weekly-digest/:username', requireAdmin, async (req, res) => {
     const watchers = db.getWatchersForChannel(username).filter(w => w.live_channel_id);
     let sent = 0;
     for (const w of watchers) {
-      try { await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'weekly_digest' }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.live_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'weekly_digest' })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -434,7 +434,7 @@ router.post('/test/welcome', requireAdmin, async (req, res) => {
     for (const gc of guildConfigs) {
       if (!gc.welcome_channel_id) continue;
       const message = gc.welcome_message || 'Welcome to the server! 👋';
-      try { await sendNotification(gc.welcome_channel_id, null, { streamerId: gc.streamer_id, guildId, type: 'welcome', contentOnly: `**Test Welcome Message**\n${message}` }); sent++; } catch (e) {}
+      try { if (await sendNotification(gc.welcome_channel_id, null, { streamerId: gc.streamer_id, guildId, type: 'welcome', contentOnly: `**Test Welcome Message**\n${message}` })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
@@ -487,7 +487,7 @@ router.post('/test/iracing/:customerId', requireAdmin, async (req, res) => {
     const watchers = db.getIracingWatchersForDriver(customerId).filter(w => w.notify_channel_id);
     let sent = 0;
     for (const w of watchers) {
-      try { await sendNotification(w.notify_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'iracing_result' }); sent++; } catch (e) {}
+      try { if (await sendNotification(w.notify_channel_id, embed, { streamerId: w.streamer_id, guildId: w.guild_id, type: 'iracing_result' })) sent++; } catch (e) {}
     }
     res.redirect(`/admin/dashboard?tab=testing&msg=test_sent_${sent}`);
   } catch (e) {
