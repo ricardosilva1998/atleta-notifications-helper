@@ -54,7 +54,9 @@ describe('"Solid (no gradient)"', () => {
     const values = [...select.matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
     assert.ok(values.includes('solid'));
     assert.ok(!values.includes(''), 'an empty value is what the server could not keep');
-    assert.match(select, /<option value="solid">Solid \(no gradient\)<\/option>/);
+    // The label is a translation key now; the English text is what the key holds.
+    assert.match(select, /<option value="solid"><%= t\('overlayBuilder\.theme\.gradient\.solid'\) %><\/option>/);
+    assert.equal(require('../src/locales/en.json')['overlayBuilder.theme.gradient.solid'], 'Solid (no gradient)');
   });
 
   test('the card preview and the theme popup preview each tell solid from a gradient by that name', () => {
