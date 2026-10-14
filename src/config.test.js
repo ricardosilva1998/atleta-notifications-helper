@@ -44,9 +44,9 @@ function weeklyDigestIntervalWith(value) {
   }
 }
 
-test('the weekly digest poller ticks every 20 minutes unless WEEKLY_DIGEST_INTERVAL says otherwise, so a failed post is retried within its hour', () => {
-  assert.equal(weeklyDigestIntervalWith(undefined), 20 * 60 * 1000);
-  assert.equal(weeklyDigestIntervalWith(''), 20 * 60 * 1000);
-  assert.equal(weeklyDigestIntervalWith('abc'), 20 * 60 * 1000);
+test('the weekly digest poller ticks every 15 minutes unless WEEKLY_DIGEST_INTERVAL says otherwise, so a failed post is retried within its hour', () => {
+  assert.equal(weeklyDigestIntervalWith(undefined), 15 * 60 * 1000);
+  assert.equal(weeklyDigestIntervalWith(''), 15 * 60 * 1000);
+  assert.equal(weeklyDigestIntervalWith('abc'), 15 * 60 * 1000);
   assert.equal(weeklyDigestIntervalWith('3600000'), 3_600_000);
 });

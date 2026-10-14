@@ -5,12 +5,12 @@ const { getVideos, getClips, getUserId, getGameNames } = require('../services/tw
 
 // The digest is due on Mondays from 09:00 UTC, in the hour the poller looks at.
 // One that fails to go out (Discord rejects it, the channel is gone, Twitch does
-// not answer) is tried again: at most MAX_ATTEMPTS times for a server and week,
-// no sooner than RETRY_GAP_MS after the last try. The poller ticks every 20
-// minutes (config.intervals.weeklyDigest), so a failed first attempt gets two
-// more in the same hour. Only a post that went out is recorded as posted.
-const MAX_ATTEMPTS = 3;
-const RETRY_GAP_MS = 15 * 60 * 1000;
+// not answer) is tried again: the first try and up to three retries, for a
+// server and week, no sooner than RETRY_GAP_MS after the last try. The poller
+// ticks every 15 minutes (config.intervals.weeklyDigest), so the four ticks of
+// that hour are four tries. Only a post that went out is recorded as posted.
+const MAX_ATTEMPTS = 4;
+const RETRY_GAP_MS = 10 * 60 * 1000;
 
 // guild_id -> { date, count, lastAt }: this week's tries for a server that has
 // not been posted yet. One entry per server at most; each poll first drops the

@@ -2,7 +2,7 @@
 
 // The weekly digest poller (M19, R-a): a week with streams but no clips is
 // posted, a post that did not go out is not recorded as posted, and a failed
-// digest is tried again, at most three times in the hour. db, config, Discord
+// digest is tried again, the first try and three retries in the hour. db, config, Discord
 // and Twitch are stubs; nothing leaves the machine. All ids and names are synthetic.
 
 const { test, describe, beforeEach, afterEach } = require('node:test');
@@ -163,14 +163,14 @@ describe('a post that did not go out is not recorded, and is tried again', () =>
     world.sendOutcome = (_guild, n) => n > 1;
     await tick('09:05');
     assert.deepEqual(world.recorded, [], 'a normal return from a refused post is not a post');
-    assert.match(logs.join('\n'), /Attempt 1 of 3 failed for guild 400000000000000051: the channel is not one the bot can reach/);
+    assert.match(logs.join('\n'), /Attempt 1 of 4 failed for guild 400000000000000051: the channel is not one the bot can reach/);
 
-    await tick('09:25');
+    await tick('09:20');
     assert.equal(world.sends.length, 2);
     assert.deepEqual(world.recorded, [[G1, monday]]);
-    assert.match(logs.join('\n'), /Posted digest for guild 400000000000000051 \(attempt 2 of 3\)/);
+    assert.match(logs.join('\n'), /Posted digest for guild 400000000000000051 \(attempt 2 of 4\)/);
 
-    await tick('09:45');
+    await tick('09:35');
     assert.equal(world.sends.length, 2, 'once posted, no more tries');
   });
 
@@ -178,30 +178,36 @@ describe('a post that did not go out is not recorded, and is tried again', () =>
     world.sendOutcome = (_guild, n) => (n === 1 ? new Error('Invalid Form Body') : true);
     await tick('09:05');
     assert.deepEqual(world.recorded, []);
-    assert.match(logs.join('\n'), /Attempt 1 of 3 failed .*Invalid Form Body/);
-    await tick('09:25');
+    assert.match(logs.join('\n'), /Attempt 1 of 4 failed .*Invalid Form Body/);
+    await tick('09:20');
     assert.deepEqual(world.recorded, [[G1, monday]]);
   });
 
-  test('three tries and no more, 20 minutes apart; then it gives up until next week', async () => {
+  test('the first try and three retries, 15 minutes apart, fill the hour; then it gives up until next week', async () => {
     world.sendOutcome = () => false;
-    for (const minute of ['05', '25', '45']) await tick(`09:${minute}`);
-    assert.equal(MAX_ATTEMPTS, 3);
-    assert.equal(world.sends.length, 3);
-    assert.match(logs.join('\n'), /Attempt 3 of 3 failed .* - giving up until next week/);
+    for (const minute of ['00', '15', '30', '45']) await tick(`09:${minute}`);
+    assert.equal(MAX_ATTEMPTS, 4);
+    assert.equal(world.sends.length, 4);
+    assert.match(logs.join('\n'), /Attempt 4 of 4 failed .* - giving up until next week/);
 
     await tick('09:59'); // still in the hour, but the tries are used up
-    assert.equal(world.sends.length, 3);
+    assert.equal(world.sends.length, 4);
     assert.deepEqual(world.recorded, []);
   });
 
-  test('a tick soon after a failed attempt waits: tries are at least 15 minutes apart', async () => {
-    assert.equal(RETRY_GAP_MS, 15 * MINUTE);
+  test('whatever the minute the poller ticks at, the hour holds four ticks 15 minutes apart, and each is a try', async () => {
+    world.sendOutcome = () => false;
+    for (const minute of ['07', '22', '37', '52']) await tick(`09:${minute}`);
+    assert.equal(world.sends.length, 4);
+  });
+
+  test('a tick soon after a failed attempt waits: tries are at least 10 minutes apart', async () => {
+    assert.equal(RETRY_GAP_MS, 10 * MINUTE);
     world.sendOutcome = () => false;
     await tick('09:00');
-    await tick('09:10'); // 10 minutes later: too soon
+    await tick('09:05'); // 5 minutes later: too soon
     assert.equal(world.sends.length, 1);
-    await tick('09:15'); // exactly 15 minutes: allowed
+    await tick('09:10'); // exactly 10 minutes: allowed
     assert.equal(world.sends.length, 2);
   });
 
@@ -211,20 +217,20 @@ describe('a post that did not go out is not recorded, and is tried again', () =>
     await tick('09:05');
     assert.deepEqual(world.recorded, [[G2, monday]]);
 
-    await tick('09:25');
+    await tick('09:20');
     assert.deepEqual(world.sends.map((s) => s.meta.guildId), [G1, G2, G1], 'only G1 was tried again');
     assert.deepEqual(world.recorded, [[G2, monday], [G1, monday]]);
   });
 
   test('a new week starts with fresh tries', async () => {
     world.sendOutcome = () => false;
-    for (const minute of ['05', '25', '45']) await tick(`09:${minute}`);
-    assert.equal(world.sends.length, 3);
+    for (const minute of ['00', '15', '30', '45']) await tick(`09:${minute}`);
+    assert.equal(world.sends.length, 4);
 
     world.sendOutcome = () => true;
     const nextMonday = dayAfter(monday, 7);
     await tick('09:05', nextMonday);
-    assert.equal(world.sends.length, 4);
+    assert.equal(world.sends.length, 5);
     assert.deepEqual(world.recorded, [[G1, nextMonday]]);
   });
 });
@@ -235,10 +241,10 @@ describe('Twitch not answering', () => {
     await tick('09:05');
     assert.deepEqual(world.sends, [], 'not a digest built from half a week');
     assert.deepEqual(world.recorded, []);
-    assert.match(logs.join('\n'), /Attempt 1 of 3 failed .*Twitch API error: 500/);
+    assert.match(logs.join('\n'), /Attempt 1 of 4 failed .*Twitch API error: 500/);
 
     world.twitchDown = false;
-    await tick('09:25');
+    await tick('09:20');
     assert.equal(world.sends.length, 1);
     assert.deepEqual(world.recorded, [[G1, monday]]);
   });
