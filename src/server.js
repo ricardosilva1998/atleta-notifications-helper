@@ -2,12 +2,14 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');
-const { applyAccountStatus } = require('./services/streamerAccess');
+const { clientIp } = require('./clientIp');
+const { applyAccountStatus, isStreamerDisabled } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
 const { csrfProtection } = require('./csrf');
@@ -30,7 +32,11 @@ const multistreamRoutes = require('./routes/multistream');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
-app.set('trust proxy', 1); // Trust first proxy (Railway/Cloudflare)
+// Trust the first proxy (Railway's edge): req.ip is the address that connected
+// to it, and req.secure / req.protocol follow its X-Forwarded-Proto. Behind
+// Cloudflare that address is a Cloudflare edge; the rate limits count the
+// visitor's own address (clientIp.js).
+app.set('trust proxy', 1);
 
 // Every request is counted until it is answered, so a shutdown can wait for it
 // (httpDrain.js, stop() below).
@@ -63,13 +69,15 @@ app.use(helmet({
 
 // Rate limiters
 // The multistream relay (MediaMTX) asks /api/multistream/auth before every
-// publish, read and API login, all from its one address, and anyone can make it
-// ask (an RTMP connection to the ingest is enough): if those were counted, a
-// stranger could get every streamer refused. Requests that carry the relay's
-// secret (MEDIAMTX_WEBHOOK_SECRET) are not counted by either limit below.
+// publish, read and API login, all from its one address. Requests carrying
+// MEDIAMTX_WEBHOOK_SECRET come from the relay and are not counted by the rate
+// limits; a request without it gets 401 and is counted.
 const fromRelay = (req) => config.multistream.enabled && isRelayRequest(req, config.multistream.webhookSecret);
-const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false, skip: fromRelay });
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: 'Too many attempts, please try again later' });
+// Every limit below counts per visitor: their own address behind Cloudflare
+// (clientIp.js), and for IPv6 their /56 (the library's ipKeyGenerator).
+const byVisitor = (req) => ipKeyGenerator(clientIp(req));
+const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor, skip: fromRelay });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor, message: 'Too many attempts, please try again later' });
 // Every /api request, counted once per address. One Atleta Racing app polls
 // about 50 times a minute (Spotify every 4 s, Discord voice every 2 s, the live
 // session every 30 s, laps and logs), so 150 leaves room for two apps behind
@@ -81,10 +89,11 @@ const apiLimiter = rateLimit({
   max: 150,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: byVisitor,
   skip: (req) => fromRelay(req) || (req.method === 'GET' && req.path.startsWith('/track-map/')),
 });
 // The Discord voice overlay asks every 2 s (30 a minute); twice that per address.
-const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
+const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
 app.use(generalLimiter);
 // Every /api route (the multistream webhooks, the Atleta Racing app's endpoints,
 // the api router) is behind this one limiter. It is mounted ahead of the body
@@ -200,9 +209,19 @@ app.use((req, res, next) => {
   // i18n
   // The cookie the language switcher sets; without one, the browser's own language
   // (Accept-Language) when the site speaks it, else English.
-  const lang = SUPPORTED_LANGS.includes(req.cookies?.lang)
+  const langFromCookie = SUPPORTED_LANGS.includes(req.cookies?.lang);
+  const lang = langFromCookie
     ? req.cookies.lang
     : (fromAcceptLanguage(req.headers['accept-language']) || 'en');
+  // A page rendered in the browser's language differs by Accept-Language, so it
+  // says so to caches (Vary). Only rendered pages: JSON answers and files do not.
+  if (!langFromCookie) {
+    const render = res.render.bind(res);
+    res.render = (...args) => {
+      res.vary('Accept-Language');
+      return render(...args);
+    };
+  }
   req.lang = lang;
   res.locals.lang = lang;
   res.locals.SUPPORTED_LANGS = SUPPORTED_LANGS;
@@ -273,14 +292,20 @@ app.get('/streamer', (req, res) => {
   res.render('streamer-landing', { streamer: null, racingUser: null });
 });
 // Bridge feature-detect endpoint. The Bridge calls this without a session
-// cookie (raw https.get), so it must NOT require auth. The response is a
-// plain capability flag — no secrets — so the missing auth check is safe.
-// (Until v3.22.0 this endpoint returned process.env.OPENAI_API_KEY which IS
-// why it had auth in the first place; that has been moved server-side to
-// /api/bridge/whisper.)
+// cookie (raw https.get), so it needs no login. It answers only whether the
+// server-side Whisper proxy (/api/bridge/whisper) is available, never a key.
 app.get('/api/bridge/config', (req, res) => {
   res.json({ whisperProxyEnabled: !!process.env.OPENAI_API_KEY });
 });
+
+// The streamer a Racing account is linked to, or null. An account an admin
+// disabled counts as no linked streamer, as it does everywhere else
+// (services/streamerAccess.js).
+function linkedStreamer(racingUser) {
+  if (!racingUser || !racingUser.streamer_id) return null;
+  const streamer = db.getStreamerById(racingUser.streamer_id);
+  return streamer && !isStreamerDisabled(streamer) ? streamer : null;
+}
 
 // Bridge: full account info for the Atleta Racing Account tab. Authenticated
 // by session cookie OR by ?bridge_id= matching a known Racing user. The
@@ -297,16 +322,14 @@ app.get('/api/bridge/account', (req, res) => {
     let twitchUsername = null;
     let twitchConnected = false;
     let spotifyConnected = false;
-    if (user.streamer_id) {
-      try {
-        const streamer = db.getStreamerById(user.streamer_id);
-        if (streamer) {
-          twitchUsername = streamer.twitch_display_name || streamer.twitch_username || null;
-          twitchConnected = !!streamer.twitch_username;
-          spotifyConnected = !!streamer.spotify_refresh_token;
-        }
-      } catch (e) {}
-    }
+    try {
+      const streamer = linkedStreamer(user);
+      if (streamer) {
+        twitchUsername = streamer.twitch_display_name || streamer.twitch_username || null;
+        twitchConnected = !!streamer.twitch_username;
+        spotifyConnected = !!streamer.spotify_refresh_token;
+      }
+    } catch (e) {}
 
     res.json({
       id: user.id,
@@ -415,13 +438,10 @@ app.post('/api/bridge/whisper', (req, res) => {
 app.get('/api/bridge/spotify', async (req, res) => {
   try {
     // Find streamer: from session cookie, racingUser link, or bridge_id query param
-    let streamer = req.streamer;
-    if (!streamer && req.racingUser && req.racingUser.streamer_id) {
-      streamer = db.getStreamerById(req.racingUser.streamer_id);
-    }
+    // (req.streamer is never a disabled account: applyAccountStatus)
+    let streamer = req.streamer || linkedStreamer(req.racingUser);
     if (!streamer && req.query.bridge_id && /^[a-f0-9-]{20,}$/i.test(req.query.bridge_id)) {
-      const ru = db.getRacingUserByBridgeId(req.query.bridge_id);
-      if (ru && ru.streamer_id) streamer = db.getStreamerById(ru.streamer_id);
+      streamer = linkedStreamer(db.getRacingUserByBridgeId(req.query.bridge_id));
     }
     if (!streamer || !streamer.spotify_access_token) {
       return res.json({ status: 'not_connected' });
@@ -437,13 +457,9 @@ app.get('/api/bridge/spotify', async (req, res) => {
 // Spotify playback control — for Bridge overlay media controls
 app.post('/api/bridge/spotify/control', async (req, res) => {
   try {
-    let streamer = req.streamer;
-    if (!streamer && req.racingUser && req.racingUser.streamer_id) {
-      streamer = db.getStreamerById(req.racingUser.streamer_id);
-    }
+    let streamer = req.streamer || linkedStreamer(req.racingUser);
     if (!streamer && req.body.bridge_id && /^[a-f0-9-]{20,}$/i.test(req.body.bridge_id)) {
-      const ru = db.getRacingUserByBridgeId(req.body.bridge_id);
-      if (ru && ru.streamer_id) streamer = db.getStreamerById(ru.streamer_id);
+      streamer = linkedStreamer(db.getRacingUserByBridgeId(req.body.bridge_id));
     }
     if (!streamer || !streamer.spotify_access_token) return res.json({ ok: false });
 
@@ -479,6 +495,103 @@ app.post('/api/bridge/spotify/control', async (req, res) => {
 // own limit: routes/voice.js.
 app.use('/api/voice', voiceLimiter, require('./routes/voice'));
 
+// ── What the Atleta Racing app's routes store ──────────────────────────
+// The app (bridge/) calls the routes below without a login, so every value is
+// brought to what its column holds before it is stored: a number or nothing,
+// text cut to a length, a word of a known kind. Everything the app sends
+// (sessionRecorder.js, telemetry.js, main.js) passes unchanged.
+
+// A finite number (sent as a number or as text), else null.
+function finiteNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+  return null;
+}
+
+// Text cut to max characters (a number becomes its text), else null.
+function cappedText(value, max) {
+  if (typeof value === 'number' && Number.isFinite(value)) value = String(value);
+  return typeof value === 'string' ? value.slice(0, max) : null;
+}
+
+// A bridge id as the app makes it (crypto.randomUUID(), bridge/settings.js):
+// 8 to 64 letters, digits and dashes.
+const BRIDGE_ID = /^[A-Za-z0-9-]{8,64}$/;
+const isBridgeId = (value) => typeof value === 'string' && BRIDGE_ID.test(value);
+
+// The app sends practice, qualify or race; any other short word is kept too.
+const SESSION_TYPE = /^[A-Za-z ]{1,32}$/;
+
+// iRacing's TrackLength as the app sends it ("5.79 km"), and the categories
+// telemetry.js gives race statistics.
+const TRACK_LENGTH = /^\d{1,4}(\.\d{1,3})?\s?(km|mi)$/;
+const STATS_CATEGORIES = new Set(['road', 'formula', 'oval', 'dirt_oval', 'dirt_road']);
+
+// One lap as sessionRecorder.js sends it, as session_laps stores it; null
+// without a lap number or a lap time. 0 and missing values are stored as
+// nothing, as they always were.
+function lapRow(lap) {
+  if (!lap || typeof lap !== 'object') return null;
+  const lapNumber = finiteNumber(lap.lap_number);
+  const lapTime = finiteNumber(lap.lap_time);
+  if (lapNumber === null || lapTime === null) return null;
+  const sectors = lap.sector_times;
+  const sectorTimes = Array.isArray(sectors) && sectors.length <= 64 && sectors.every((s) => typeof s === 'number' && Number.isFinite(s));
+  return {
+    lap_number: lapNumber,
+    lap_time: lapTime,
+    sector_times: sectorTimes ? JSON.stringify(sectors) : null,
+    fuel_used: finiteNumber(lap.fuel_used) || null,
+    air_temp: finiteNumber(lap.air_temp) || null,
+    track_temp: finiteNumber(lap.track_temp) || null,
+    is_pit_lap: lap.is_pit_lap ? 1 : 0,
+    position: finiteNumber(lap.position) || null,
+    incidents: finiteNumber(lap.incidents) || null,
+    is_valid: lap.is_valid !== false ? 1 : 0,
+  };
+}
+
+// The weather the app records with a session (telemetry.js): four numbers and
+// the sky, in the order it sends them; JSON text, or null for anything else.
+function conditionsJson(conditions) {
+  if (!conditions || typeof conditions !== 'object' || Array.isArray(conditions)) return null;
+  const kept = {};
+  for (const key of ['airTemp', 'trackTemp', 'humidity', 'skies', 'windSpeed']) {
+    const value = conditions[key];
+    if (value === null) kept[key] = null;
+    else if (key === 'skies' && typeof value === 'string') kept[key] = value.slice(0, 40);
+    else if (key !== 'skies' && typeof value === 'number' && Number.isFinite(value)) kept[key] = value;
+  }
+  return JSON.stringify(kept);
+}
+
+// The telemetry of a whole-session upload: [{ lap_number, data }], data being
+// the app's gzip + base64 text; anything else is left out.
+function telemetryRows(telemetry) {
+  if (!Array.isArray(telemetry)) return [];
+  return telemetry
+    .filter((t) => t && typeof t.data === 'string' && t.data !== '')
+    .map((t) => ({ lap_number: finiteNumber(t.lap_number), data: t.data }));
+}
+
+// The live session the app reports every 30 s (telemetry.js): these fields only.
+function liveSessionOf(body) {
+  const sent = body && typeof body === 'object' ? body : {};
+  const drivers = finiteNumber(sent.driversCount);
+  return {
+    trackName: cappedText(sent.trackName, 200),
+    eventType: cappedText(sent.eventType, 40),
+    classes: Array.isArray(sent.classes) ? sent.classes.slice(0, 12).map((c) => cappedText(c, 40)).filter((c) => c !== null) : [],
+    driversCount: Number.isInteger(drivers) ? drivers : null,
+    totalMinutes: finiteNumber(sent.totalMinutes),
+    timeRemain: finiteNumber(sent.timeRemain),
+    raceType: cappedText(sent.raceType, 40),
+  };
+}
+
 // Track map API (public — must be before /api auth middleware)
 app.get('/api/track-maps', (req, res) => {
   try {
@@ -497,7 +610,7 @@ app.get('/api/track-map/:trackName', (req, res) => {
 
 app.post('/api/track-map', (req, res) => {
   try {
-    const { trackName, trackData, trackLength, trackTurns, trackCountry, trackCity } = req.body;
+    const { trackName, trackData, trackLength, trackTurns, trackCountry, trackCity } = req.body || {};
     if (!trackName || typeof trackName !== 'string' || trackName.length > 200) {
       return res.status(400).json({ error: 'Invalid track name' });
     }
@@ -517,18 +630,28 @@ app.post('/api/track-map', (req, res) => {
       return res.status(400).json({ error: 'Invalid track data format' });
     }
     const json = JSON.stringify(trackData);
-    const existing = db.db.prepare('SELECT point_count FROM track_maps WHERE track_name = ?').get(trackName);
+    // iRacing's details of the track. The app sends '' and 0 when it has none,
+    // which store nothing.
+    const turns = finiteNumber(trackTurns);
+    const meta = {
+      track_length: typeof trackLength === 'string' && TRACK_LENGTH.test(trackLength) ? trackLength : null,
+      track_turns: Number.isInteger(turns) && turns >= 1 && turns <= 200 ? turns : null,
+      track_country: cappedText(trackCountry, 80) || null,
+      track_city: cappedText(trackCity, 80) || null,
+    };
+    // A track already stored keeps the details it has: an upload only fills
+    // in the ones it is missing.
+    const existing = db.db.prepare('SELECT point_count, track_length, track_turns, track_country, track_city FROM track_maps WHERE track_name = ?').get(trackName);
     if (existing && existing.point_count >= trackData.length) {
-      // Still update metadata if provided
-      if (trackLength || trackTurns || trackCountry || trackCity) {
-        db.db.prepare(`UPDATE track_maps SET track_length = COALESCE(?, track_length), track_turns = COALESCE(?, track_turns), track_country = COALESCE(?, track_country), track_city = COALESCE(?, track_city), updated_at = datetime('now') WHERE track_name = ?`)
-          .run(trackLength || null, trackTurns || null, trackCountry || null, trackCity || null, trackName);
+      if (Object.keys(meta).some((column) => existing[column] == null && meta[column] != null)) {
+        db.db.prepare(`UPDATE track_maps SET track_length = COALESCE(track_length, ?), track_turns = COALESCE(track_turns, ?), track_country = COALESCE(track_country, ?), track_city = COALESCE(track_city, ?), updated_at = datetime('now') WHERE track_name = ?`)
+          .run(meta.track_length, meta.track_turns, meta.track_country, meta.track_city, trackName);
       }
       return res.json({ status: 'exists', message: 'Better or equal track already stored' });
     }
     db.db.prepare(`INSERT INTO track_maps (track_name, track_data, point_count, track_length, track_turns, track_country, track_city) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(track_name) DO UPDATE SET track_data = excluded.track_data, point_count = excluded.point_count, track_length = COALESCE(excluded.track_length, track_length), track_turns = COALESCE(excluded.track_turns, track_turns), track_country = COALESCE(excluded.track_country, track_country), track_city = COALESCE(excluded.track_city, track_city), updated_at = datetime('now')
-    `).run(trackName, json, trackData.length, trackLength || null, trackTurns || null, trackCountry || null, trackCity || null);
+      ON CONFLICT(track_name) DO UPDATE SET track_data = excluded.track_data, point_count = excluded.point_count, track_length = COALESCE(track_length, excluded.track_length), track_turns = COALESCE(track_turns, excluded.track_turns), track_country = COALESCE(track_country, excluded.track_country), track_city = COALESCE(track_city, excluded.track_city), updated_at = datetime('now')
+    `).run(trackName, json, trackData.length, meta.track_length, meta.track_turns, meta.track_country, meta.track_city);
     res.json({ status: 'ok', points: trackData.length });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -536,8 +659,12 @@ app.post('/api/track-map', (req, res) => {
 // Track stats API (public — must be before /api auth middleware)
 app.post('/api/track-stats', (req, res) => {
   try {
-    const { trackName, raceType, stats } = req.body;
+    const body = req.body || {};
+    const trackName = cappedText(body.trackName, 200);
+    const raceType = cappedText(body.raceType, 64);
+    const stats = body.stats;
     if (!trackName || !raceType || !stats) return res.status(400).json({ error: 'Missing fields' });
+    if (typeof stats !== 'object' || Array.isArray(stats)) return res.status(400).json({ error: 'Invalid stats' });
 
     const stmt = db.db.prepare(`
       INSERT INTO track_stats (track_name, car_class, race_type, avg_lap_time, avg_pit_time, avg_qualify_time, avg_sof, est_laps, avg_drivers, race_count, top_car, category, updated_at)
@@ -561,8 +688,13 @@ app.post('/api/track-stats', (req, res) => {
         updated_at = datetime('now')
     `);
 
+    // One row per car class: numbers (0 when there is none), the most used car,
+    // and the category telemetry.js gives the class (road when there is none).
+    const number = (value) => finiteNumber(value) || 0;
     Object.entries(stats).forEach(([cls, data]) => {
-      stmt.run(trackName, cls, raceType, data.avgLapTime || 0, data.avgPitTime || 0, data.avgQualifyTime || 0, data.avgSOF || 0, data.estLaps || 0, data.samples || 0, 1, data.topCar || null, data.category || 'road');
+      if (!data || typeof data !== 'object') return;
+      const category = STATS_CATEGORIES.has(data.category) ? data.category : 'road';
+      stmt.run(trackName, cls.slice(0, 64), raceType, number(data.avgLapTime), number(data.avgPitTime), number(data.avgQualifyTime), number(data.avgSOF), number(data.estLaps), number(data.samples), 1, cappedText(data.topCar, 100) || null, category);
     });
 
     res.json({ ok: true });
@@ -829,7 +961,7 @@ let liveSession = null;
 let liveSessionTime = 0;
 
 app.post('/api/live-session', (req, res) => {
-  liveSession = req.body;
+  liveSession = liveSessionOf(req.body);
   liveSessionTime = Date.now();
   res.json({ ok: true });
 });
@@ -856,14 +988,16 @@ app.delete('/api/track-stats/:trackName/:carClass/:raceType', (req, res) => {
 // Bridge remote logs (public — must be before /api auth middleware)
 app.post('/api/bridge-logs', (req, res) => {
   try {
-    const { bridgeId, lines, iracingName } = req.body;
+    const { bridgeId, lines, iracingName } = req.body || {};
     if (!bridgeId || typeof bridgeId !== 'string') return res.status(400).json({ error: 'bridgeId required' });
+    if (!isBridgeId(bridgeId)) return res.status(400).json({ error: 'Invalid bridgeId' });
     if (!lines || typeof lines !== 'string') return res.status(400).json({ error: 'lines required' });
     if (lines.length > 1024 * 1024) return res.status(400).json({ error: 'Payload too large (max 1MB)' });
     db.insertBridgeLogs(bridgeId, lines);
     // Store iRacing name if provided
-    if (iracingName && typeof iracingName === 'string') {
-      try { db.db.prepare('UPDATE bridge_logs SET iracing_name = ? WHERE bridge_id = ? AND iracing_name IS NULL').run(iracingName, bridgeId); } catch(e) {}
+    const name = typeof iracingName === 'string' ? iracingName.slice(0, 100) : '';
+    if (name) {
+      try { db.db.prepare('UPDATE bridge_logs SET iracing_name = ? WHERE bridge_id = ? AND iracing_name IS NULL').run(name, bridgeId); } catch(e) {}
     }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -894,9 +1028,13 @@ app.get('/api/bridge-logs/:bridgeId', (req, res) => {
 
 app.post('/api/bridge-bug-reports', (req, res) => {
   try {
-    const { bridgeId, errorPattern, explanation, suggestedFix } = req.body;
+    const { bridgeId, errorPattern, explanation, suggestedFix } = req.body || {};
     if (!bridgeId || !errorPattern || !explanation || !suggestedFix) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (!isBridgeId(bridgeId)) return res.status(400).json({ error: 'Invalid bridgeId' });
+    if ([errorPattern, explanation, suggestedFix].some((text) => typeof text !== 'string')) {
+      return res.status(400).json({ error: 'Invalid report' });
     }
     const id = db.insertBridgeBugReport(bridgeId, errorPattern, explanation, suggestedFix);
     res.json({ ok: true, id });
@@ -927,51 +1065,45 @@ app.patch('/api/bridge-bug-reports/:id', (req, res) => {
 // Session upload & query API (public — must be before /api auth middleware)
 app.post('/api/session', (req, res) => {
   try {
-    const { bridge_id, iracing_name, session, laps, telemetry } = req.body;
-    if (!bridge_id || !iracing_name || !session || !laps) {
+    const { bridge_id, iracing_name, session, laps, telemetry } = req.body || {};
+    const iracingName = cappedText(iracing_name, 100);
+    if (!bridge_id || !iracingName || !session || typeof session !== 'object' || !Array.isArray(laps)) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    if (!session.track_name || !session.car_class || !session.session_type) {
+    if (!isBridgeId(bridge_id)) return res.status(400).json({ error: 'Invalid bridge_id' });
+    const trackName = cappedText(session.track_name, 200);
+    const carClass = cappedText(session.car_class, 100);
+    const sessionType = typeof session.session_type === 'string' && SESSION_TYPE.test(session.session_type) ? session.session_type : null;
+    if (!trackName || !carClass || !sessionType) {
       return res.status(400).json({ error: 'Missing session fields' });
     }
+    const lapRows = laps.map(lapRow);
+    if (lapRows.includes(null)) return res.status(400).json({ error: 'Missing lap data' });
     // Look up racing user from bridge_id
     let racingUserId = null;
-    if (bridge_id) {
-      const ru = db.getRacingUserByBridgeId(bridge_id);
-      if (ru) racingUserId = ru.id;
-    }
+    const ru = db.getRacingUserByBridgeId(bridge_id);
+    if (ru) racingUserId = ru.id;
 
     const shareToken = crypto.randomBytes(9).toString('base64url');
     const sessionId = db.insertSession({
       bridge_id,
-      iracing_name,
-      track_name: session.track_name,
-      car_class: session.car_class,
-      car_name: session.car_name || '',
-      session_type: session.session_type,
-      race_type: session.race_type || null,
+      iracing_name: iracingName,
+      track_name: trackName,
+      car_class: carClass,
+      car_name: cappedText(session.car_name, 100) || '',
+      session_type: sessionType,
+      race_type: cappedText(session.race_type, 40) || null,
       is_public: 0,
       share_token: shareToken,
-      conditions: session.conditions ? JSON.stringify(session.conditions) : null,
-      sof: session.sof || null,
-      finish_position: session.finish_position || null,
-      irating_change: session.irating_change || null,
-      driver_count: session.driver_count || null,
-      best_lap_time: session.best_lap_time || null,
-      lap_count: session.lap_count || laps.length,
+      conditions: conditionsJson(session.conditions),
+      sof: finiteNumber(session.sof) || null,
+      finish_position: finiteNumber(session.finish_position) || null,
+      irating_change: finiteNumber(session.irating_change) || null,
+      driver_count: finiteNumber(session.driver_count) || null,
+      best_lap_time: finiteNumber(session.best_lap_time) || null,
+      lap_count: finiteNumber(session.lap_count) || laps.length,
       racing_user_id: racingUserId,
-    }, laps.map(l => ({
-      lap_number: l.lap_number,
-      lap_time: l.lap_time,
-      sector_times: l.sector_times ? JSON.stringify(l.sector_times) : null,
-      fuel_used: l.fuel_used || null,
-      air_temp: l.air_temp || null,
-      track_temp: l.track_temp || null,
-      is_pit_lap: l.is_pit_lap ? 1 : 0,
-      position: l.position || null,
-      incidents: l.incidents || null,
-      is_valid: l.is_valid !== false ? 1 : 0,
-    })), telemetry || []);
+    }, lapRows, telemetryRows(telemetry));
 
     res.json({ id: sessionId, share_token: shareToken });
   } catch(e) {
@@ -1041,14 +1173,9 @@ app.get('/api/session/:id/telemetry/:lapId', (req, res) => {
   }
 });
 
-// Ownership guard for the two progressive session-upload endpoints below.
-//
-// Session ids are sequential integers, so without this check anyone could
-// append laps to -- or rewrite the result of -- another driver's session.
-// Installed Bridges predate `bridge_id` on these payloads, so a MISSING id is
-// still accepted (and logged) rather than breaking an in-progress session; a
-// WRONG id is always rejected. Once updated Bridges are the floor, set
-// STRICT_SESSION_OWNERSHIP=1 to reject the unidentified ones too.
+// Ownership check for the two progressive session-upload endpoints below.
+// STRICT_SESSION_OWNERSHIP=1 — Atleta Racing: require bridge_id on
+// session-upload calls; leave unset until every installed app sends it.
 //
 // Returns the session row, or null after having already sent the error response.
 const SESSION_WRITE_WINDOW_MS = 48 * 60 * 60 * 1000; // 2x the longest real session (24h endurance)
@@ -1072,9 +1199,8 @@ function authorizeSessionWrite(req, res, sessionId) {
     console.warn('[Session Write] Unverified write to session ' + sessionId + ' (legacy Bridge, no bridge_id)');
   }
 
-  // Even when unverified, refuse writes to a long-stale session: a Bridge only
-  // appends to a session it created in the current run, so a legitimate write
-  // always lands within that session's own lifetime.
+  // A session takes writes for SESSION_WRITE_WINDOW_MS after it was created: the
+  // app only appends to a session it created in the current run.
   // SQLite stores 'YYYY-MM-DD HH:MM:SS' in UTC -- parse it as UTC, since V8
   // reads the bare space-separated form as LOCAL time. Unparseable: fail open.
   const createdMs = session.created_at
@@ -1095,24 +1221,14 @@ app.post('/api/session/:id/lap', (req, res) => {
     const sessionId = parseInt(req.params.id);
     const session = authorizeSessionWrite(req, res, sessionId);
     if (!session) return;
-    const { lap, telemetry } = req.body;
-    if (!lap || !lap.lap_number || !lap.lap_time) return res.status(400).json({ error: 'Missing lap data' });
+    const { lap, telemetry } = req.body || {};
+    const row = lapRow(lap);
+    if (!row || !row.lap_number || !row.lap_time) return res.status(400).json({ error: 'Missing lap data' });
 
-    const lapResult = db.insertSingleLap(sessionId, {
-      lap_number: lap.lap_number,
-      lap_time: lap.lap_time,
-      sector_times: lap.sector_times ? JSON.stringify(lap.sector_times) : null,
-      fuel_used: lap.fuel_used || null,
-      air_temp: lap.air_temp || null,
-      track_temp: lap.track_temp || null,
-      is_pit_lap: lap.is_pit_lap ? 1 : 0,
-      position: lap.position || null,
-      incidents: lap.incidents || null,
-      is_valid: lap.is_valid !== false ? 1 : 0,
-    }, telemetry || null);
+    const lapResult = db.insertSingleLap(sessionId, row, typeof telemetry === 'string' && telemetry ? telemetry : null);
 
     // Update session best lap and lap count
-    db.updateSessionLapStats(sessionId, lap.lap_time);
+    db.updateSessionLapStats(sessionId, row.lap_time);
 
     res.json({ ok: true, lap_id: lapResult });
   } catch(e) {
@@ -1127,8 +1243,10 @@ app.patch('/api/session/:id/finish', (req, res) => {
     const sessionId = parseInt(req.params.id);
     const session = authorizeSessionWrite(req, res, sessionId);
     if (!session) return;
-    const { finish_position, irating_change, best_lap_time } = req.body;
-    db.updateSessionFinish(sessionId, finish_position, irating_change, best_lap_time);
+    const body = req.body || {};
+    const finishPosition = finiteNumber(body.finish_position);
+    const iratingChange = finiteNumber(body.irating_change);
+    db.updateSessionFinish(sessionId, finishPosition, iratingChange, finiteNumber(body.best_lap_time));
 
     // Notifications for race results + iRating milestones
     // (reuses the row the guard already fetched; updateSessionFinish touches
@@ -1138,13 +1256,13 @@ app.patch('/api/session/:id/finish', (req, res) => {
         const user = session.bridge_id ? db.getRacingUserByBridgeId(session.bridge_id) : null;
         if (user) {
           // Race result notification
-          const pos = finish_position ? 'P' + finish_position : '';
-          const ir = irating_change ? (irating_change > 0 ? ' (+' + irating_change + ' iR)' : ' (' + irating_change + ' iR)') : '';
+          const pos = finishPosition ? 'P' + finishPosition : '';
+          const ir = iratingChange ? (iratingChange > 0 ? ' (+' + iratingChange + ' iR)' : ' (' + iratingChange + ' iR)') : '';
           const raceType = session.race_type ? ' — ' + session.race_type : '';
           db.createNotification(user.id, 'race_result', 'Race result', pos + ' at ' + session.track_name + raceType + ir, '/api/session/' + sessionId + '?bridge_id=' + session.bridge_id, null, null);
 
           // iRating milestone check
-          if (irating_change && irating_change > 0) {
+          if (iratingChange && iratingChange > 0) {
             const milestones = [1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000];
             // We don't have cumulative iRating stored, but we can check if the change crosses a threshold
             // The Bridge sends irating_change as the delta. We'd need current iRating to check milestones.
@@ -1165,13 +1283,14 @@ app.patch('/api/session/:id/finish', (req, res) => {
 
 app.patch('/api/session/:id', (req, res) => {
   try {
-    const bridgeId = req.query.bridge_id || req.body.bridge_id;
-    if (!bridgeId) return res.status(400).json({ error: 'bridge_id required' });
-    if (req.body.is_public !== undefined) {
-      db.updateSessionPublic(parseInt(req.params.id), bridgeId, req.body.is_public);
+    const body = req.body || {};
+    const bridgeId = req.query.bridge_id || body.bridge_id;
+    if (!bridgeId || typeof bridgeId !== 'string') return res.status(400).json({ error: 'bridge_id required' });
+    if (body.is_public !== undefined) {
+      db.updateSessionPublic(parseInt(req.params.id), bridgeId, body.is_public);
 
       // Notify teammates when session is shared
-      if (req.body.is_public) {
+      if (body.is_public) {
         try {
           const session = db.getRacingSessionById(parseInt(req.params.id));
           const user = bridgeId ? db.getRacingUserByBridgeId(bridgeId) : null;
