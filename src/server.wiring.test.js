@@ -101,3 +101,13 @@ test('a refused /api request is answered before its body is read', () => {
   assert.ok(limiter < at('mountBodyParsers(app);'), 'the limiter comes before the body parsers');
   assert.ok(limiter < at('app.use(cookieParser());'), 'and needs nothing but the address');
 });
+
+test('multistream is two routers, each mounted once: the page under /dashboard, the relay\'s routes under /api', () => {
+  // The same router used to be mounted at both paths, so the relay's webhooks
+  // were also reachable under /dashboard/multistream, outside the /api limit.
+  at("app.use('/dashboard/multistream', multistreamRoutes.dashboardRouter);");
+  const api = at("app.use('/api/multistream', multistreamRoutes.apiRouter);");
+  assert.ok(at("app.use('/api', apiLimiter);") < api, 'the relay\'s routes come after the /api limiter');
+  assert.equal(code.match(/app\.\w+\('[^']*multistream/g).length, 2, 'no other multistream mount');
+  assert.equal(code.match(/require\('\.\/routes\/multistream'\)/g).length, 1, 'loaded once');
+});

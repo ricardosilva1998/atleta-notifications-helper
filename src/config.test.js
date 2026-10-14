@@ -125,3 +125,25 @@ test('a TOKEN_ENCRYPTION_KEY that is set but is not 64 hex characters stops the 
     assert.ok(!errors.join('\n').includes(bad), 'the value is not logged');
   }
 });
+
+// Synthetic relay settings; MULTISTREAM_KEY_SECRET is no longer read.
+const RELAY = {
+  MEDIAMTX_API_URL: 'https://relay.example.test',
+  MEDIAMTX_INGEST_URL: 'rtmp://ingest.example.test/live',
+  MEDIAMTX_API_TOKEN: 'synthetic-api-token',
+  MEDIAMTX_WEBHOOK_SECRET: 'synthetic-webhook-secret',
+};
+
+test('multistream is offered only when all four relay settings are set', () => {
+  const on = loadWith({ ...RELAY, MULTISTREAM_KEY_SECRET: undefined }).config.multistream;
+  assert.equal(on.enabled, true);
+  assert.equal(on.ingestUrl, RELAY.MEDIAMTX_INGEST_URL);
+  for (const missing of Object.keys(RELAY)) {
+    const { config } = loadWith({ ...RELAY, [missing]: undefined, MULTISTREAM_KEY_SECRET: 'f'.repeat(64) });
+    assert.equal(config.multistream.enabled, false, `${missing} unset`);
+  }
+  const none = loadWith(Object.fromEntries(Object.keys(RELAY).map((key) => [key, undefined]))).config.multistream;
+  assert.equal(none.enabled, false);
+  assert.equal(none.ingestUrl, '', 'no made-up ingest address');
+  assert.equal('keySecret' in none, false);
+});

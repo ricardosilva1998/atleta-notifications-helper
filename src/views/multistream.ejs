@@ -17,12 +17,6 @@
   <div class="alert alert-success animate-in">YouTube stream reset. A fresh stream will be created next time you go live.</div>
 <% } %>
 
-<% if (!relayConfigured) { %>
-  <div class="alert alert-warning animate-in">
-    Multistream relay is not configured on the server yet. Set <code>MEDIAMTX_API_URL</code>, <code>MEDIAMTX_WEBHOOK_SECRET</code>, and <code>MULTISTREAM_KEY_SECRET</code> in env vars.
-  </div>
-<% } %>
-
 <%# A go-live that only reached some destinations. Without this the streamer sees
     "you're live" and assumes every platform got the feed. %>
 <% if (multistream.multistream_last_error) { %>

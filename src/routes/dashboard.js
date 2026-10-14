@@ -339,6 +339,8 @@ router.get('/', async (req, res) => {
     hasScope,
     needsReauth,
     activeGiveaway,
+    // The Multistream card is shown only once the relay is configured.
+    multistreamAvailable: !!config.multistream.enabled,
   });
 });
 

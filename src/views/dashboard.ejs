@@ -507,7 +507,8 @@
       </div>
     </div>
 
-    <!-- Multistream Card -->
+    <%# Multistream Card: only once the relay is configured (config.multistream.enabled). %>
+    <% if (typeof multistreamAvailable !== 'undefined' && multistreamAvailable) { %>
     <div class="card animate-in" style="padding: 24px; display: flex; flex-direction: column;">
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
         <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #9146ff, #ff0000); display: flex; align-items: center; justify-content: center;">
@@ -530,6 +531,7 @@
       <% } %>
       <a href="/dashboard/multistream" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;">Multistream Settings</a>
     </div>
+    <% } %>
 
     <!-- Channel Point Rewards Card -->
     <% {

@@ -23,6 +23,7 @@ const tipRoutes = require('./routes/tip');
 const overlayRoutes = require('./routes/overlay');
 const vtuberRoutes = require('./routes/vtuber');
 const syncRoutes = require('./routes/sync');
+const multistreamRoutes = require('./routes/multistream');
 // const customOverlayRoutes = require('./routes/customOverlays'); // DISABLED for now
 
 const app = express();
@@ -212,8 +213,9 @@ app.get('/pricing', (req, res) => {
 });
 
 app.use('/auth', authRoutes);
-app.use('/dashboard/multistream', require('./routes/multistream'));
-app.use('/api/multistream', require('./routes/multistream')); // behind apiLimiter, mounted above
+// Multistream: the settings page, and the routes the relay calls (behind apiLimiter, mounted above).
+app.use('/dashboard/multistream', multistreamRoutes.dashboardRouter);
+app.use('/api/multistream', multistreamRoutes.apiRouter);
 app.use('/dashboard', dashboardRoutes);
 // app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);

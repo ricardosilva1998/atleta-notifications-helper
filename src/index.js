@@ -67,10 +67,13 @@ function startWithoutDiscord() {
 
   require('./services/giveawayManager').init();
 
-  // Finish any multistream go-live a previous restart interrupted.
-  require('./services/youtubeBroadcast')
-    .reconcileActiveBroadcasts()
-    .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message));
+  // Multistream runs only once the relay is configured: then, finish any
+  // go-live a previous restart interrupted.
+  if (config.multistream.enabled) {
+    require('./services/youtubeBroadcast')
+      .reconcileActiveBroadcasts()
+      .catch((e) => console.error('[ytBroadcast] reconcile error:', e.message));
+  }
 
   console.log('[YT Chat] YouTube Live Chat manager ready (starts when streams go live)');
 

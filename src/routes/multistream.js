@@ -1,23 +1,37 @@
+'use strict';
+
+// Multistream: the streamer's settings page (/dashboard/multistream) and the
+// routes the relay (MediaMTX) calls (/api/multistream). They are two routers,
+// each mounted once in server.js; the relay's routes sit under /api, behind
+// its one rate limit.
+//
+// Until the relay is configured (config.multistream.enabled, see
+// docs/multistream-relay-setup.md) the page sends the streamer back to the
+// dashboard and the relay's routes answer 404. Saved settings are kept.
+
 const express = require('express');
 const crypto = require('crypto');
-const router = express.Router();
 const config = require('../config');
 const db = require('../db');
 const twitch = require('../services/twitch');
 const ytBroadcast = require('../services/youtubeBroadcast');
 const relay = require('../services/multistreamRelay');
+const { requireActiveStreamer } = require('../services/streamerAccess');
 
 const TWITCH_INGEST = 'rtmp://live.twitch.tv/app';
 const YOUTUBE_INGEST = 'rtmp://a.rtmp.youtube.com/live2';
 
-function requireStreamer(req, res, next) {
-  if (!req.streamer) return res.redirect('/streamer');
-  next();
-}
+const dashboardRouter = express.Router();
+const apiRouter = express.Router();
 
-// --- Dashboard pages ---
+// Read on every request (not once at load), so the gate follows the config.
+dashboardRouter.use((req, res, next) => (config.multistream.enabled ? next() : res.redirect('/dashboard')));
+dashboardRouter.use(requireActiveStreamer);
+apiRouter.use((req, res, next) => (config.multistream.enabled ? next() : res.status(404).json({ error: 'not found' })));
 
-router.get('/', requireStreamer, (req, res) => {
+// --- Dashboard page ---
+
+dashboardRouter.get('/', (req, res) => {
   const streamer = req.streamer;
   const cfg = db.getMultistreamConfig(streamer.id) || {};
   const token = db.ensureMultistreamToken(streamer.id);
@@ -28,7 +42,6 @@ router.get('/', requireStreamer, (req, res) => {
     multistream: cfg,
     ingestUrl: config.multistream.ingestUrl,
     streamKey: token,
-    relayConfigured: config.multistream.enabled,
     twitchAuthorized: !!fresh.broadcaster_access_token,
     twitchHasStreamKeyScope: twitch.hasStreamKeyScope(fresh),
     youtubeConnected: !!fresh.yt_access_token,
@@ -38,7 +51,7 @@ router.get('/', requireStreamer, (req, res) => {
   });
 });
 
-router.post('/save', requireStreamer, express.urlencoded({ extended: false }), (req, res) => {
+dashboardRouter.post('/save', (req, res) => {
   const { enabled, youtube_privacy, youtube_category_id, youtube_default_title } = req.body;
   db.setMultistreamConfig(req.streamer.id, {
     enabled: !!enabled,
@@ -49,7 +62,7 @@ router.post('/save', requireStreamer, express.urlencoded({ extended: false }), (
   res.redirect('/dashboard/multistream?saved=1');
 });
 
-router.post('/reset-youtube-stream', requireStreamer, (req, res) => {
+dashboardRouter.post('/reset-youtube-stream', (req, res) => {
   db.clearMultistreamYoutubeStream(req.streamer.id);
   res.redirect('/dashboard/multistream?reset=1');
 });
@@ -83,7 +96,7 @@ function tokenFromPath(path) {
   return TOKEN_RE.test(candidate) ? candidate : null;
 }
 
-router.post('/webhook/on-ready', express.json(), async (req, res) => {
+apiRouter.post('/webhook/on-ready', async (req, res) => {
   if (!authenticateWebhook(req, res)) return;
 
   const path = req.body?.path || '';
@@ -195,7 +208,7 @@ router.post('/webhook/on-ready', express.json(), async (req, res) => {
   res.json({ ok: true, forwarded: true, destinations: destinations.map((d) => d.name), failed: failures });
 });
 
-router.post('/webhook/on-not-ready', express.json(), async (req, res) => {
+apiRouter.post('/webhook/on-not-ready', async (req, res) => {
   if (!authenticateWebhook(req, res)) return;
 
   const path = req.body?.path || '';
@@ -232,4 +245,4 @@ router.post('/webhook/on-not-ready', express.json(), async (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = router;
+module.exports = { dashboardRouter, apiRouter };

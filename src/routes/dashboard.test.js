@@ -878,6 +878,29 @@ describe('the dashboard home before the Discord bot is ready', () => {
   });
 });
 
+// ── The Multistream card (MS6) ───────────────────────────────────────────
+
+describe('the Multistream card', () => {
+  const multistream = require('../config').multistream;
+  const saved = multistream.enabled;
+  afterEach(() => { multistream.enabled = saved; });
+
+  test('is not on the dashboard while the relay is not configured', async () => {
+    multistream.enabled = false;
+    const res = await request('GET', '/dashboard', { streamer: addStreamer({ multistream_enabled: 1 }) });
+    assert.equal(res.status, 200);
+    assert.ok(!res.text.includes('/dashboard/multistream'), 'no link to the page');
+    assert.ok(!res.text.includes('point OBS at your ingest URL'));
+  });
+
+  test('is shown once the relay is configured', async () => {
+    multistream.enabled = true;
+    const res = await request('GET', '/dashboard', { streamer: addStreamer() });
+    assert.equal(res.status, 200);
+    assert.ok(res.text.includes('href="/dashboard/multistream"'));
+  });
+});
+
 // ── A broadcaster authorization refused for another Twitch account (N10) ─
 
 describe('the dashboard after a broadcaster authorization from another Twitch account', () => {

@@ -81,13 +81,17 @@ module.exports = {
     // The model that analyses reported issues (services/agentTriage.js).
     triageModel: process.env.TRIAGE_MODEL || 'claude-sonnet-5-5',
   },
+  // Multistream relay (MediaMTX, docs/multistream-relay-setup.md). The feature
+  // is offered only when all four relay settings are set: until then its
+  // dashboard card and page are hidden and the relay's routes answer 404 (the
+  // settings streamers saved are kept).
   multistream: {
     apiUrl: process.env.MEDIAMTX_API_URL || '',
-    ingestUrl: process.env.MEDIAMTX_INGEST_URL || 'rtmp://ingest.atletanotifications.com/live',
+    ingestUrl: process.env.MEDIAMTX_INGEST_URL || '',
     apiToken: process.env.MEDIAMTX_API_TOKEN || '',
     webhookSecret: process.env.MEDIAMTX_WEBHOOK_SECRET || '',
-    keySecret: process.env.MULTISTREAM_KEY_SECRET || '',
-    enabled: !!(process.env.MEDIAMTX_API_URL && process.env.MULTISTREAM_KEY_SECRET),
+    enabled: !!(process.env.MEDIAMTX_API_URL && process.env.MEDIAMTX_INGEST_URL
+      && process.env.MEDIAMTX_API_TOKEN && process.env.MEDIAMTX_WEBHOOK_SECRET),
   },
   email: {
     user: process.env.EMAIL_USER || '',
