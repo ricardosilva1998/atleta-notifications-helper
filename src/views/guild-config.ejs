@@ -1,26 +1,27 @@
-<%- include('header', { title: guildName + ' - Settings', streamer: streamer }) %>
+<%- include('header', { title: guildName + ' - ' + t('guild.settings'), streamer: streamer }) %>
+<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
 <h2 style="margin: 16px 0 24px; font-size: 24px; font-weight: 700;" class="animate-in"><%= guildName %></h2>
 
 <!-- Alerts -->
 <% if (saved) { %>
-  <div class="alert alert-success">Settings saved!</div>
+  <div class="alert alert-success"><%= t('guild.settingsSaved') %></div>
 <% } %>
 <% if (msg === 'added') { %>
-  <div class="alert alert-success">Channel added! Notifications will start shortly.</div>
+  <div class="alert alert-success"><%= t('guild.channelAdded') %></div>
 <% } %>
 <% if (msg === 'updated') { %>
-  <div class="alert alert-success">Channel updated!</div>
+  <div class="alert alert-success"><%= t('guild.channelUpdated') %></div>
 <% } %>
 <% if (msg === 'removed') { %>
-  <div class="alert alert-success">Channel removed.</div>
+  <div class="alert alert-success"><%= t('guild.channelRemoved') %></div>
 <% } %>
 <% if (msg === 'missing_fields') { %>
-  <div class="alert alert-danger">Please fill in all required fields.</div>
+  <div class="alert alert-danger"><%= t('guild.missingFields') %></div>
 <% } %>
 <% if (msg === 'invalid_channel') { %>
   <div class="alert alert-danger"><%= t('guild.invalidChannel') %></div>
@@ -51,7 +52,7 @@
   <div class="alert alert-warning"><%= t('guild.channelCapReached', { max: maxTwitchChannels }) %></div>
 <% } %>
 <% if (msg === 'yt_not_found') { %>
-  <div class="alert alert-danger">YouTube channel not found. Please check the @username or channel ID and try again.</div>
+  <div class="alert alert-danger"><%= t('guild.ytNotFound') %></div>
 <% } %>
 
 <!-- Tab Bar -->
@@ -76,54 +77,54 @@
   </button>
   <button class="tab-btn tab-settings" data-tab="settings">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    Settings
+    <%= t('guild.settings') %>
   </button>
 </div>
 
 <!-- ==================== TWITCH TAB ==================== -->
 <div class="tab-content" id="tab-twitch">
   <div class="card animate-in">
-    <h3>Add a Twitch Channel</h3>
+    <h3><%= t('guild.addTwitchChannel') %></h3>
     <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-      Enter any Twitch username. Choose separate Discord channels for live alerts and clips, or leave one blank to disable it.
+      <%= t('guild.addTwitchDesc') %>
     </p>
     <form method="POST" action="/dashboard/guild/<%= guildId %>/channels">
       <div class="form-group">
-        <label>Twitch Username</label>
-        <input type="text" name="twitch_username" placeholder="e.g. shroud" required>
+        <label><%= t('guild.twitchUsername') %></label>
+        <input type="text" name="twitch_username" placeholder="<%= t('guild.twitchUsernamePlaceholder') %>" required>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
-          <label>Live Notifications Channel</label>
+          <label><%= t('guild.liveNotifications') %></label>
           <select name="live_channel_id">
-            <option value="">-- Disabled --</option>
+            <option value=""><%= t('common.disabled') %></option>
             <% for (const c of channels) { %>
               <option value="<%= c.id %>">#<%= c.name %></option>
             <% } %>
           </select>
         </div>
         <div class="form-group">
-          <label>Clip Notifications Channel</label>
+          <label><%= t('guild.clipNotifications') %></label>
           <select name="clips_channel_id">
-            <option value="">-- Disabled --</option>
+            <option value=""><%= t('common.disabled') %></option>
             <% for (const c of channels) { %>
               <option value="<%= c.id %>">#<%= c.name %></option>
             <% } %>
           </select>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary">Add Channel</button>
+      <button type="submit" class="btn btn-primary"><%= t('guild.addChannel') %></button>
     </form>
   </div>
 
-  <h3 class="section-title" style="margin-top: 24px;">Watched Channels (<%= watchedTwitchChannels.length %>)</h3>
+  <h3 class="section-title" style="margin-top: 24px;"><%= t('guild.watchedChannels') %> (<%= watchedTwitchChannels.length %>)</h3>
 
   <% if (watchedTwitchChannels.length === 0) { %>
     <div class="card" style="text-align: center; padding: 40px;">
       <div style="width: 48px; height: 48px; border-radius: 12px; background: var(--accent-glow); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
       </div>
-      <p style="color: var(--text-secondary); font-size: 14px;">No Twitch channels being watched yet.</p>
+      <p style="color: var(--text-secondary); font-size: 14px;"><%= t('guild.noTwitchChannels') %></p>
     </div>
   <% } else { %>
     <% for (const wc of watchedTwitchChannels) { %>
@@ -142,27 +143,27 @@
               <% if (wc.is_live) { %>
                 <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; background: rgba(240,68,56,0.15); font-size: 10px; font-weight: 700; color: #f04438; font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.5px;">
                   <span style="width: 6px; height: 6px; border-radius: 50%; background: #f04438; animation: pulse 1.5s infinite;"></span>
-                  LIVE
+                  <%= t('guild.liveBadge') %>
                 </span>
               <% } else { %>
-                <span style="font-size: 10px; color: var(--text-muted);">Offline</span>
+                <span style="font-size: 10px; color: var(--text-muted);"><%= t('guild.offline') %></span>
               <% } %>
             </div>
             <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
               <% if (wc.live_channel_id) { %>
-                Live: #<%= channels.find(c => c.id === wc.live_channel_id)?.name || 'unknown' %>
+                <%= t('common.live') %>: #<%= channels.find(c => c.id === wc.live_channel_id)?.name || t('guild.unknownChannel') %>
               <% } %>
               <% if (wc.live_channel_id && wc.clips_channel_id) { %> &middot; <% } %>
               <% if (wc.clips_channel_id) { %>
-                Clips: #<%= channels.find(c => c.id === wc.clips_channel_id)?.name || 'unknown' %>
+                <%= t('common.clips') %>: #<%= channels.find(c => c.id === wc.clips_channel_id)?.name || t('guild.unknownChannel') %>
               <% } %>
-              <% if (!wc.live_channel_id && !wc.clips_channel_id) { %>No notifications configured<% } %>
+              <% if (!wc.live_channel_id && !wc.clips_channel_id) { %><%= t('common.noNotifications') %><% } %>
             </div>
           </div>
           <div style="display: flex; gap: 6px;">
-            <button onclick="toggleEdit('twitch-<%= wc.id %>')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Edit</button>
+            <button onclick="toggleEdit('twitch-<%= wc.id %>')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;"><%= t('guild.edit') %></button>
             <form method="POST" action="/dashboard/guild/<%= guildId %>/channels/<%= wc.id %>/remove" style="margin: 0;">
-              <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Remove</button>
+              <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;"><%= t('common.remove') %></button>
             </form>
           </div>
         </div>
@@ -171,18 +172,18 @@
           <form method="POST" action="/dashboard/guild/<%= guildId %>/channels/<%= wc.id %>/edit">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
               <div class="form-group" style="margin-bottom: 12px;">
-                <label>Live Notifications Channel</label>
+                <label><%= t('guild.liveNotifications') %></label>
                 <select name="live_channel_id">
-                  <option value="">-- Disabled --</option>
+                  <option value=""><%= t('common.disabled') %></option>
                   <% for (const c of channels) { %>
                     <option value="<%= c.id %>" <%= wc.live_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
                   <% } %>
                 </select>
               </div>
               <div class="form-group" style="margin-bottom: 12px;">
-                <label>Clip Notifications Channel</label>
+                <label><%= t('guild.clipNotifications') %></label>
                 <select name="clips_channel_id">
-                  <option value="">-- Disabled --</option>
+                  <option value=""><%= t('common.disabled') %></option>
                   <% for (const c of channels) { %>
                     <option value="<%= c.id %>" <%= wc.clips_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
                   <% } %>
@@ -190,8 +191,8 @@
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
-              <button type="submit" class="btn btn-success" style="padding: 7px 16px; font-size: 12px;">Save Changes</button>
-              <button type="button" onclick="toggleEdit('twitch-<%= wc.id %>')" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;">Cancel</button>
+              <button type="submit" class="btn btn-success" style="padding: 7px 16px; font-size: 12px;"><%= t('guild.saveChanges') %></button>
+              <button type="button" onclick="toggleEdit('twitch-<%= wc.id %>')" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;"><%= t('guild.cancel') %></button>
             </div>
           </form>
         </div>
@@ -204,47 +205,47 @@
 <% if (features.youtube) { %>
 <div class="tab-content" id="tab-youtube">
   <div class="card animate-in">
-    <h3>Add a YouTube Channel</h3>
+    <h3><%= t('guild.addYoutubeChannel') %></h3>
     <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-      Enter a YouTube @username or channel ID to get notified about new videos, shorts, and live streams.
+      <%= t('guild.addYoutubeHandleDesc') %>
     </p>
     <form method="POST" action="/dashboard/guild/<%= guildId %>/youtube">
       <div class="form-group">
-        <label>YouTube Channel</label>
-        <input type="text" name="youtube_channel" placeholder="@username or UCxxxxxxxxxxxxxxxxxxxxxxxx" required>
+        <label><%= t('guild.youtubeChannel') %></label>
+        <input type="text" name="youtube_channel" placeholder="<%= t('guild.youtubeChannelPlaceholder') %>" required>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
-          <label>Videos/Shorts Notifications</label>
+          <label><%= t('guild.videosNotifications') %></label>
           <select name="videos_channel_id">
-            <option value="">-- Disabled --</option>
+            <option value=""><%= t('common.disabled') %></option>
             <% for (const c of channels) { %>
               <option value="<%= c.id %>">#<%= c.name %></option>
             <% } %>
           </select>
         </div>
         <div class="form-group">
-          <label>Live Notifications</label>
+          <label><%= t('guild.liveNotificationsYt') %></label>
           <select name="live_channel_id">
-            <option value="">-- Disabled --</option>
+            <option value=""><%= t('common.disabled') %></option>
             <% for (const c of channels) { %>
               <option value="<%= c.id %>">#<%= c.name %></option>
             <% } %>
           </select>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary">Add Channel</button>
+      <button type="submit" class="btn btn-primary"><%= t('guild.addChannel') %></button>
     </form>
   </div>
 
-  <h3 class="section-title" style="margin-top: 24px;">Watched YouTube Channels (<%= watchedYoutubeChannels.length %>)</h3>
+  <h3 class="section-title" style="margin-top: 24px;"><%= t('guild.watchedYoutubeChannels') %> (<%= watchedYoutubeChannels.length %>)</h3>
 
   <% if (watchedYoutubeChannels.length === 0) { %>
     <div class="card" style="text-align: center; padding: 40px;">
       <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(240,68,56,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f04438" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="#f04438"/></svg>
       </div>
-      <p style="color: var(--text-secondary); font-size: 14px;">No YouTube channels being watched yet.</p>
+      <p style="color: var(--text-secondary); font-size: 14px;"><%= t('guild.noYoutubeChannels') %></p>
     </div>
   <% } else { %>
     <% for (const wc of watchedYoutubeChannels) { %>
@@ -263,27 +264,27 @@
               <% if (wc.is_live) { %>
                 <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; background: rgba(240,68,56,0.15); font-size: 10px; font-weight: 700; color: #f04438; font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.5px;">
                   <span style="width: 6px; height: 6px; border-radius: 50%; background: #f04438; animation: pulse 1.5s infinite;"></span>
-                  LIVE
+                  <%= t('guild.liveBadge') %>
                 </span>
               <% } else { %>
-                <span style="font-size: 10px; color: var(--text-muted);">Offline</span>
+                <span style="font-size: 10px; color: var(--text-muted);"><%= t('guild.offline') %></span>
               <% } %>
             </div>
             <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
               <% if (wc.videos_channel_id) { %>
-                Videos: #<%= channels.find(c => c.id === wc.videos_channel_id)?.name || 'unknown' %>
+                <%= t('common.videos') %>: #<%= channels.find(c => c.id === wc.videos_channel_id)?.name || t('guild.unknownChannel') %>
               <% } %>
               <% if (wc.videos_channel_id && wc.live_channel_id) { %> &middot; <% } %>
               <% if (wc.live_channel_id) { %>
-                Live: #<%= channels.find(c => c.id === wc.live_channel_id)?.name || 'unknown' %>
+                <%= t('common.live') %>: #<%= channels.find(c => c.id === wc.live_channel_id)?.name || t('guild.unknownChannel') %>
               <% } %>
-              <% if (!wc.videos_channel_id && !wc.live_channel_id) { %>No notifications configured<% } %>
+              <% if (!wc.videos_channel_id && !wc.live_channel_id) { %><%= t('common.noNotifications') %><% } %>
             </div>
           </div>
           <div style="display: flex; gap: 6px;">
-            <button onclick="toggleEdit('youtube-<%= wc.id %>')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Edit</button>
+            <button onclick="toggleEdit('youtube-<%= wc.id %>')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;"><%= t('guild.edit') %></button>
             <form method="POST" action="/dashboard/guild/<%= guildId %>/youtube/<%= wc.id %>/remove" style="margin: 0;">
-              <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Remove</button>
+              <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;"><%= t('common.remove') %></button>
             </form>
           </div>
         </div>
@@ -292,18 +293,18 @@
           <form method="POST" action="/dashboard/guild/<%= guildId %>/youtube/<%= wc.id %>/edit">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
               <div class="form-group" style="margin-bottom: 12px;">
-                <label>Videos/Shorts Notifications</label>
+                <label><%= t('guild.videosNotifications') %></label>
                 <select name="videos_channel_id">
-                  <option value="">-- Disabled --</option>
+                  <option value=""><%= t('common.disabled') %></option>
                   <% for (const c of channels) { %>
                     <option value="<%= c.id %>" <%= wc.videos_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
                   <% } %>
                 </select>
               </div>
               <div class="form-group" style="margin-bottom: 12px;">
-                <label>Live Notifications</label>
+                <label><%= t('guild.liveNotificationsYt') %></label>
                 <select name="live_channel_id">
-                  <option value="">-- Disabled --</option>
+                  <option value=""><%= t('common.disabled') %></option>
                   <% for (const c of channels) { %>
                     <option value="<%= c.id %>" <%= wc.live_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
                   <% } %>
@@ -311,8 +312,8 @@
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
-              <button type="submit" class="btn btn-success" style="padding: 7px 16px; font-size: 12px;">Save Changes</button>
-              <button type="button" onclick="toggleEdit('youtube-<%= wc.id %>')" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;">Cancel</button>
+              <button type="submit" class="btn btn-success" style="padding: 7px 16px; font-size: 12px;"><%= t('guild.saveChanges') %></button>
+              <button type="button" onclick="toggleEdit('youtube-<%= wc.id %>')" class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;"><%= t('guild.cancel') %></button>
             </div>
           </form>
         </div>
@@ -335,40 +336,40 @@
     <input type="hidden" name="youtube_enabled" value="on">
 
     <div class="card animate-in">
-      <h3>Welcome Message</h3>
+      <h3><%= t('guild.welcomeMessage') %></h3>
       <div class="toggle">
         <input type="checkbox" name="welcome_enabled" id="welcome_enabled" <%= guild.welcome_enabled ? 'checked' : '' %>>
-        <label for="welcome_enabled">Enable welcome messages</label>
+        <label for="welcome_enabled"><%= t('guild.enableWelcome') %></label>
       </div>
       <div class="form-group">
-        <label>Send to channel</label>
+        <label><%= t('guild.sendToChannel') %></label>
         <select name="welcome_channel_id">
-          <option value="">-- Select channel --</option>
+          <option value=""><%= t('common.selectChannel') %></option>
           <% for (const c of channels) { %>
             <option value="<%= c.id %>" <%= guild.welcome_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
           <% } %>
         </select>
       </div>
       <div class="form-group">
-        <label>Custom message (leave blank for default)</label>
-        <textarea name="welcome_message" maxlength="<%= welcomeMessageMax %>" placeholder="Welcome to the server!"><%= guild.welcome_message || '' %></textarea>
+        <label><%= t('guild.customMessage') %></label>
+        <textarea name="welcome_message" maxlength="<%= welcomeMessageMax %>" placeholder="<%= t('guild.welcomePlaceholder') %>"><%= guild.welcome_message || '' %></textarea>
         <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;"><%= t('guild.welcomeMessageHint', { max: welcomeMessageMax }) %></p>
       </div>
     </div>
 
     <div class="card">
-      <h3>Subscriber Role Sync</h3>
+      <h3><%= t('guild.subRoleSync') %></h3>
       <div class="toggle">
         <input type="checkbox" name="sub_sync_enabled" id="sub_sync_enabled" <%= guild.sub_sync_enabled ? 'checked' : '' %>>
-        <label for="sub_sync_enabled">Enable subscriber role sync</label>
+        <label for="sub_sync_enabled"><%= t('guild.enableSubSync') %></label>
       </div>
       <% if (subRoleProblem) { %>
         <div class="alert alert-warning"><%= t('guild.subRoleProblem.' + subRoleProblem) %></div>
       <% } %>
       <div class="form-group">
-        <label>Subscriber Role</label>
+        <label><%= t('guild.subscriberRole') %></label>
         <select name="sub_role_id">
-          <option value="">-- Select role --</option>
+          <option value=""><%= t('common.selectRole') %></option>
           <% for (const r of roles) { %>
             <option value="<%= r.id %>" <%= guild.sub_role_id === r.id ? 'selected' : '' %>><%= r.name %></option>
           <% } %>
@@ -376,45 +377,45 @@
         <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;"><%= t('guild.subRoleHint') %></p>
       </div>
       <% if (!hasBroadcasterToken) { %>
-        <p style="color: var(--text-secondary); font-size: 13px;">You need to <a href="<%= broadcasterAuthUrl %>">authorize broadcaster access</a> for sub sync to work.</p>
+        <p style="color: var(--text-secondary); font-size: 13px;"><%- t('guild.broadcasterRequiredLink', { a: '<a href="' + esc(broadcasterAuthUrl) + '">', aEnd: '</a>' }) %></p>
       <% } %>
     </div>
 
     <div class="card">
-      <h3>Activity Feed</h3>
-      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">Automatic posts that keep your server active around stream activity.</p>
+      <h3><%= t('guild.activityFeed') %></h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;"><%= t('guild.activityFeedDesc') %></p>
 
       <div class="toggle">
         <input type="checkbox" name="recap_enabled" id="recap_enabled" <%= guild.recap_enabled ? 'checked' : '' %> <% if (!limits.recaps) { %>disabled<% } %>>
-        <label for="recap_enabled">Stream Recaps</label>
+        <label for="recap_enabled"><%= t('guild.streamRecaps') %></label>
       </div>
-      <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;">Post a summary when a stream ends — duration, category, and top clips.</p>
+      <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;"><%= t('guild.streamRecapsDesc') %></p>
       <% if (!limits.recaps) { %>
-        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing">Upgrade</a> to enable this feature.</p>
+        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing"><%= t('guild.upgradeToEnable') %></a></p>
       <% } %>
 
       <div class="toggle">
         <input type="checkbox" name="milestones_enabled" id="milestones_enabled" <%= guild.milestones_enabled ? 'checked' : '' %> <% if (!limits.milestones) { %>disabled<% } %>>
-        <label for="milestones_enabled">Milestone Celebrations</label>
+        <label for="milestones_enabled"><%= t('guild.milestones') %></label>
       </div>
-      <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;">Announce when a channel hits follower or subscriber milestones.</p>
+      <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;"><%= t('guild.milestonesDesc') %></p>
       <% if (!limits.milestones) { %>
-        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing">Upgrade</a> to enable this feature.</p>
+        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing"><%= t('guild.upgradeToEnable') %></a></p>
       <% } else if (!hasBroadcasterToken) { %>
-        <p style="color: var(--warning); font-size: 12px; margin: -4px 0 12px 28px;">Requires <a href="<%= broadcasterAuthUrl %>">broadcaster authorization</a> to access follower/sub counts.</p>
+        <p style="color: var(--warning); font-size: 12px; margin: -4px 0 12px 28px;"><%- t('guild.milestonesTokenRequiredLink', { a: '<a href="' + esc(broadcasterAuthUrl) + '">', aEnd: '</a>' }) %></p>
       <% } %>
 
       <div class="toggle">
         <input type="checkbox" name="weekly_highlights_enabled" id="weekly_highlights_enabled" <%= guild.weekly_highlights_enabled ? 'checked' : '' %> <% if (!limits.weeklyHighlights) { %>disabled<% } %>>
-        <label for="weekly_highlights_enabled">Weekly Highlights</label>
+        <label for="weekly_highlights_enabled"><%= t('guild.weeklyHighlights') %></label>
       </div>
-      <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;">Post a weekly digest every Monday with stream stats and top clips.</p>
+      <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;"><%= t('guild.weeklyHighlightsDesc') %></p>
       <% if (!limits.weeklyHighlights) { %>
-        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing">Upgrade</a> to enable this feature.</p>
+        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing"><%= t('guild.upgradeToEnable') %></a></p>
       <% } %>
     </div>
 
-    <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px; font-size: 15px;">Save Discord Settings</button>
+    <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px; font-size: 15px;"><%= t('guild.saveDiscordSettings') %></button>
   </form>
 </div>
 
@@ -422,9 +423,9 @@
 <div class="tab-content" id="tab-iracing">
   <!-- Coming Soon -->
   <div class="card animate-in" style="text-align: center; padding: 32px 24px;">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">Race Notifications — Coming Soon</h3>
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;"><%= t('guild.iracingTitle') %></h3>
     <p style="color: var(--text-muted); font-size: 13px; max-width: 400px; margin: 0 auto;">
-      Automatic race result notifications, qualifying leaderboards, and driver stats. Waiting for iRacing API access to be re-enabled.
+      <%= t('guild.iracingDesc') %>
     </p>
   </div>
 </div>
@@ -432,24 +433,24 @@
 <!-- ==================== SETTINGS TAB ==================== -->
 <div class="tab-content" id="tab-settings">
   <div class="card animate-in">
-    <h3>Server Summary</h3>
+    <h3><%= t('guild.serverSummary') %></h3>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border);">
         <div style="font-size: 28px; font-weight: 800; font-family: var(--font-display); color: var(--accent);"><%= watchedTwitchChannels.length %></div>
-        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">Twitch Channels</div>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;"><%= t('guild.twitchChannels') %></div>
       </div>
       <div style="background: var(--bg-base); border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border);">
         <div style="font-size: 28px; font-weight: 800; font-family: var(--font-display); color: #f04438;"><%= watchedYoutubeChannels.length %></div>
-        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">YouTube Channels</div>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;"><%= t('guild.youtubeChannels') %></div>
       </div>
     </div>
   </div>
 
   <div class="card" style="border-color: rgba(240,68,56,0.2); margin-top: 8px;">
-    <h3 style="color: var(--danger);">Remove Bot from Server</h3>
-    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">This will remove all notification settings and make the bot leave this Discord server.</p>
-    <form method="POST" action="/dashboard/guild/<%= guildId %>/remove" onsubmit="return confirm('Are you sure? The bot will leave this server and all notification settings will be deleted.')">
-      <button type="submit" class="btn btn-danger">Remove Server</button>
+    <h3 style="color: var(--danger);"><%= t('guild.removeBot') %></h3>
+    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;"><%= t('guild.removeBotDesc') %></p>
+    <form method="POST" action="/dashboard/guild/<%= guildId %>/remove" data-confirm="<%= t('guild.removeConfirm') %>" onsubmit="return confirm(this.dataset.confirm)">
+      <button type="submit" class="btn btn-danger"><%= t('guild.removeServer') %></button>
     </form>
   </div>
 </div>

@@ -746,7 +746,7 @@ router.post('/overlay/test/:eventType', limitTests, (req, res) => {
   };
 
   const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: 'Invalid event type' });
+  if (!event) return res.status(400).json({ error: res.locals.t('overlay.test.invalidType') });
 
   // Fire overlay alert
   bus.emit(`overlay:${req.streamer.id}`, event);
@@ -1202,7 +1202,7 @@ router.post('/chatbot/test/:eventType', limitTests, (req, res) => {
   };
 
   const test = testData[type];
-  if (!test) return res.status(400).json({ error: 'Invalid event type' });
+  if (!test) return res.status(400).json({ error: res.locals.t('chatbot.test.invalidType') });
 
   try {
     const { chatManager } = require('../services/twitchChat');
@@ -1340,7 +1340,7 @@ router.post('/youtube-chatbot/test/:eventType', limitTests, async (req, res) => 
     yt_giftmember: { type: 'yt_giftmember', data: { username: 'GenerousViewer', amount: 5, level: 'Member' } },
   };
   const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: 'Invalid event type' });
+  if (!event) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
   // Send to overlay
   bus.emit(`overlay:${req.streamer.id}`, event);
@@ -1388,7 +1388,7 @@ router.post('/youtube-chatbot/test-chat/:eventType', limitTests, async (req, res
   };
 
   const data = testData[type];
-  if (!data) return res.status(400).json({ error: 'Invalid event type' });
+  if (!data) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
   try {
     const { youtubeChatManager } = require('../services/youtubeLiveChat');
