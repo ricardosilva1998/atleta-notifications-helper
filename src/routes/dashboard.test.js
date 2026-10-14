@@ -907,6 +907,41 @@ describe('the overlay settings page', () => {
     assert.equal(row.overlay_follow_duration, 30);
     assert.equal(row.overlay_sub_duration, 1);
     assert.equal(row.overlay_giveaway_duration, 60);
+  // The page's <div>s, in document order, with the attributes of the ones still open at `needle`.
+  // Scripts, styles and comments are blanked out first (their text has "<div" in it).
+  function openDivsAt(html, needle) {
+    const blank = (m) => m.replace(/[^\n]/g, ' ');
+    const clean = html.replace(/<script\b[\s\S]*?<\/script>/gi, blank).replace(/<style\b[\s\S]*?<\/style>/gi, blank).replace(/<!--[\s\S]*?-->/g, blank);
+    const at = needle ? clean.indexOf(needle) : clean.length;
+    assert.ok(at >= 0, `${needle} is on the page`);
+    const open = [];
+    let depthLow = 0;
+    for (const tag of clean.matchAll(/<(\/?)div\b([^>]*)>/gi)) {
+      if (tag.index >= at) break;
+      if (!tag[1]) open.push(tag[2]);
+      else if (open.length) open.pop();
+      else depthLow++;
+    }
+    return { open, closedMoreThanOpened: depthLow };
+  }
+
+  test('every <div> the page opens is closed, so the Kick tab and the StreamElements card are where they belong', async () => {
+    const page = (await request('GET', '/dashboard/overlay', { streamer: id })).text;
+    const whole = openDivsAt(page);
+    assert.equal(whole.closedMoreThanOpened, 0, 'no </div> without a <div>');
+    assert.deepEqual(whole.open, [], 'no <div> left open at the end of the page');
+
+    // The Kick tab is a tab of the alerts section, not part of the YouTube one.
+    const kick = openDivsAt(page, 'id="alert-tab-kick"').open.slice(0, -1); // minus the tab's own <div>
+    assert.ok(kick.some((attributes) => attributes.includes('animate-in-delay-2')), 'the Kick tab is inside the alerts section');
+    assert.ok(!kick.some((attributes) => attributes.includes('alert-tab-content')), 'but not inside another tab');
+
+    // The StreamElements card follows the alerts section; it is not inside it.
+    const streamElements = openDivsAt(page, 'id="streamelements_jwt"').open;
+    assert.ok(!streamElements.some((attributes) => attributes.includes('animate-in-delay-2') || attributes.includes('alert-tab-content')),
+      'the StreamElements card is outside the alerts section');
+  });
+
     assert.equal(row.overlay_raid_duration, 7);
     assert.equal(row.overlay_volume, 1);
   });
