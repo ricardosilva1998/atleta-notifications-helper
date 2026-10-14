@@ -1,4 +1,4 @@
-<%- include('header', { title: 'Atleta — Personal Helper', streamer: null }) %>
+<%- include('header', { title: t('landing.pageTitle'), streamer: null }) %>
 
 <div style="text-align: center; padding: 48px 0 32px;" class="animate-in">
   <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: var(--accent-glow); border: 1px solid rgba(145,70,255,0.15); font-size: 12px; color: var(--accent-hover); font-family: var(--font-display); font-weight: 600; margin-bottom: 20px;">
@@ -22,28 +22,28 @@
         <i data-lucide="tv" style="width:22px;height:22px;color:var(--accent);"></i>
       </div>
       <div>
-        <h3 style="font-size: 17px; margin-bottom: 2px; font-weight: 700;">Streamer</h3>
-        <p style="color: var(--text-muted); font-size: 11px;">Twitch, YouTube & Discord tools</p>
+        <h3 style="font-size: 17px; margin-bottom: 2px; font-weight: 700;"><%= t('landing.streamer') %></h3>
+        <p style="color: var(--text-muted); font-size: 11px;"><%= t('landing.streamerTagline') %></p>
       </div>
     </div>
     <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--text-secondary); line-height: 1.4;">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> Live alerts & go-live notifications
+        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> <%= t('landing.streamer.feature1') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> Clips, recaps & weekly highlights
+        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> <%= t('landing.streamer.feature2') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> OBS overlay alerts with animations
+        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> <%= t('landing.streamer.feature3') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> Twitch & YouTube chatbot
+        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> <%= t('landing.streamer.feature4') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> PayPal donations & sponsor rotation
+        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> <%= t('landing.streamer.feature5') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> Visual overlay builder
+        <span style="color: var(--accent); font-size: 10px;">&#9679;</span> <%= t('landing.streamer.feature6') %>
       </div>
     </div>
   </a>
@@ -56,28 +56,28 @@
         <i data-lucide="car" style="width:22px;height:22px;color:#3ecf8e;"></i>
       </div>
       <div>
-        <h3 style="font-size: 17px; margin-bottom: 2px; font-weight: 700;">Racing</h3>
-        <p style="color: var(--text-muted); font-size: 11px;">iRacing telemetry & analysis</p>
+        <h3 style="font-size: 17px; margin-bottom: 2px; font-weight: 700;"><%= t('landing.racing') %></h3>
+        <p style="color: var(--text-muted); font-size: 11px;"><%= t('landing.racingTagline') %></p>
       </div>
     </div>
     <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--text-secondary); line-height: 1.4;">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> Real-time telemetry overlays
+        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> <%= t('landing.racing.feature1') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> Standings, relative & fuel calculator
+        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> <%= t('landing.racing.feature2') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> Session history & lap recording
+        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> <%= t('landing.racing.feature3') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> Telemetry comparison tool
+        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> <%= t('landing.racing.feature4') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> Track database with statistics
+        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> <%= t('landing.racing.feature5') %>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> Voice chat & driver inputs overlay
+        <span style="color: #3ecf8e; font-size: 10px;">&#9679;</span> <%= t('landing.racing.feature6') %>
       </div>
     </div>
   </a>

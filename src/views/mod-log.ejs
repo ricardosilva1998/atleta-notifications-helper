@@ -1,4 +1,4 @@
-<%- include('header', { title: 'Moderation Log', streamer: streamer }) %>
+<%- include('header', { title: t('modLog.title'), streamer: streamer }) %>
 
 <style>
   .mod-log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -17,32 +17,32 @@
 
 <a href="/dashboard/chatbot?tab=moderation" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Moderation
+  <%= t('modLog.back') %>
 </a>
 
-<h2 style="font-size: 22px; font-weight: 700; margin-bottom: 4px;">Moderation Log</h2>
-<p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">Actions taken in the last 7 days. Logs are automatically cleaned up weekly.</p>
+<h2 style="font-size: 22px; font-weight: 700; margin-bottom: 4px;"><%= t('modLog.title') %></h2>
+<p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;"><%= t('modLog.subtitle') %></p>
 
 <div class="card">
   <% if (modLog.length === 0) { %>
-    <div class="mod-log-empty">No moderation actions recorded yet.</div>
+    <div class="mod-log-empty"><%= t('modLog.empty') %></div>
   <% } else { %>
     <table class="mod-log-table">
       <thead>
         <tr>
-          <th>Time</th>
-          <th>User</th>
-          <th>Action</th>
-          <th>Reason</th>
+          <th><%= t('modLog.col.time') %></th>
+          <th><%= t('modLog.col.user') %></th>
+          <th><%= t('modLog.col.action') %></th>
+          <th><%= t('modLog.col.reason') %></th>
         </tr>
       </thead>
       <tbody>
         <% modLog.forEach(entry => { %>
           <tr>
-            <td class="mod-log-time"><%= new Date(entry.created_at + 'Z').toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) %></td>
+            <td class="mod-log-time"><%= new Date(entry.created_at + 'Z').toLocaleString(typeof lang !== 'undefined' && lang !== 'en' ? lang : 'en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) %></td>
             <td class="mod-log-username"><%= entry.username %></td>
             <td>
-              <% const actionLabels = { warn: 'Warning', delete: 'Deleted', timeout_10: 'Timeout 10s', timeout_60: 'Timeout 1m', timeout_600: 'Timeout 10m', timeout_1800: 'Timeout 30m' }; %>
+              <% const actionLabels = { warn: t('modLog.action.warn'), delete: t('modLog.action.delete'), timeout_10: t('modLog.action.timeout_10'), timeout_60: t('modLog.action.timeout_60'), timeout_600: t('modLog.action.timeout_600'), timeout_1800: t('modLog.action.timeout_1800') }; %>
               <% const actionClass = entry.action === 'warn' ? 'action-warn' : entry.action === 'delete' ? 'action-delete' : 'action-timeout'; %>
               <span class="action-badge <%= actionClass %>"><%= actionLabels[entry.action] || entry.action %></span>
             </td>

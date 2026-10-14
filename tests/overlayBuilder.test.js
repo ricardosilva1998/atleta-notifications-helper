@@ -54,7 +54,9 @@ describe('"Solid (no gradient)"', () => {
     const values = [...select.matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
     assert.ok(values.includes('solid'));
     assert.ok(!values.includes(''), 'an empty value is what the server could not keep');
-    assert.match(select, /<option value="solid">Solid \(no gradient\)<\/option>/);
+    // The label is a translation key now; the English text is what the key holds.
+    assert.match(select, /<option value="solid"><%= t\('overlayBuilder\.theme\.gradient\.solid'\) %><\/option>/);
+    assert.equal(require('../src/locales/en.json')['overlayBuilder.theme.gradient.solid'], 'Solid (no gradient)');
   });
 
   test('the card preview and the theme popup preview each tell solid from a gradient by that name', () => {
@@ -67,5 +69,28 @@ describe('"Solid (no gradient)"', () => {
     assert.match(overlayJs, /if \(gradDir !== 'solid'\) \{/);
     assert.ok(!/if \(gradDir\) \{/.test(overlayJs));
     assert.match(builder, /const gradDir = d\.gradient_direction \|\| '160deg';/, 'the preview falls back the same way');
+  });
+});
+
+describe('the card width slider', () => {
+  const { FIELD_SPECS } = require('../src/services/overlayDesign');
+  const slider = builder.match(/<input type="range" id="ctrl-card-width"[^>]*>/)[0];
+  const bound = (name) => Number(new RegExp(`${name}="(\\d+)"`).exec(slider)[1]);
+
+  // It used to stop at 700 while the server, the drag handle and placement.js allow 900, so a
+  // card saved wider than 700 was set back to 700 the next time the page set the slider.
+  test('reaches the widest card the server keeps, so a saved width is never cut by the slider', () => {
+    assert.equal(bound('max'), FIELD_SPECS.card_width.max);
+  });
+
+  test('starts inside the range the server keeps', () => {
+    assert.ok(bound('min') >= FIELD_SPECS.card_width.min);
+    assert.ok(bound('min') <= bound('max'));
+  });
+
+  test('is set from a saved width by setControlValues, which has no clamp of its own', () => {
+    const set = functionSource('setControlValues');
+    assert.match(set, /getElementById\('ctrl-card-width'\)\.value = d\.card_width \|\| 420;/);
+    assert.ok(!/Math\.min\(\s*700/.test(builder), 'no 700 cap is left in the page');
   });
 });

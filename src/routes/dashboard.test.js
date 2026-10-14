@@ -1363,6 +1363,78 @@ describe('the test buttons', () => {
     assert.deepEqual((await post(`/dashboard/sponsor-messages/${messageId}/test`, other)).json(), { ok: true });
     assert.deepEqual(chatCalls[1], ['say', other, 'Thanks to our sponsors https://example.com', { priority: 'low' }]);
   });
+
+  // The answers a test button's script shows are words from the language files, not text of the route's own.
+  test('an event type that cannot be tested is answered with the translated message', async () => {
+    const routes = [
+      ['/dashboard/overlay/test/nope', 'overlay.test.invalidType'],
+      ['/dashboard/chatbot/test/nope', 'chatbot.test.invalidType'],
+      ['/dashboard/youtube-chatbot/test/nope', 'ytChatbot.error.invalidType'],
+      ['/dashboard/youtube-chatbot/test-chat/nope', 'ytChatbot.error.invalidType'],
+    ];
+    for (const [route, key] of routes) {
+      // one streamer per route: a second test within the cooldown would be held instead
+      const res = await post(route, addStreamer({ twitch_username: 'somechannel' }));
+      assert.equal(res.status, 400, route);
+      assert.equal(res.json().error, t('en', key), route);
+    }
+  });
+});
+
+// The pages are rendered with stub locals in tests/streamerViewsI18n.test.js; this renders them with what their routes really pass
+// (the account page is left out: it reads the language list server.js puts on every page, which this test app does not).
+describe('the translated streamer pages render through their routes', () => {
+  const html = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+
+  test('each answers with its translated heading', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    const pages = [
+      ['/dashboard/report', 'report.desc'],
+      ['/dashboard/chatbot', 'chatbot.heading'],
+      ['/dashboard/chatbot/mod-log', 'modLog.subtitle'],
+      ['/dashboard/overlay', 'overlay.heading'],
+      ['/dashboard/overlay-builder', 'overlayBuilder.heading'],
+      ['/dashboard/youtube-chatbot', 'ytChatbot.heading'],
+    ];
+    for (const [route, key] of pages) {
+      const res = await request('GET', route, { streamer: id });
+      assert.equal(res.status, 200, route);
+      assert.ok(res.text.includes(html(t('en', key))), `${route} shows ${key}`);
+    }
+  });
+
+  test('the server pages (settings and statistics) too', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel' });
+    db.upsertGuild('800000000000000001', id, 'Test Server');
+    const settings = await request('GET', '/dashboard/guild/800000000000000001', { streamer: id });
+    assert.equal(settings.status, 200);
+    assert.ok(settings.text.includes(html(t('en', 'guild.addTwitchChannel'))));
+    const stats = await request('GET', '/dashboard/guild/800000000000000001/stats', { streamer: id });
+    assert.equal(stats.status, 200);
+    assert.ok(stats.text.includes(html(t('en', 'guildStats.chartTitle'))));
+  });
+});
+
+describe('the sponsor image upload', () => {
+  test('a file type that is not an image is refused with the translated message', async () => {
+    const res = await request('POST', '/dashboard/sponsors/upload?name=Acme&ext=exe', { streamer: addStreamer(), rawBody: 'x', contentType: 'application/octet-stream' });
+    assert.equal(res.status, 400);
+    assert.equal(res.json().error, t('en', 'upload.error.imageType'));
+  });
+});
+
+describe('the profile picture upload', () => {
+  const upload = (streamer, query, rawBody) => request('POST', `/dashboard/account/avatar${query}`, { streamer, rawBody, contentType: 'application/octet-stream' });
+
+  test('a refused upload says why, with the translated message', async () => {
+    const id = addStreamer();
+    const wrongType = await upload(id, '?ext=exe', 'not a picture');
+    assert.equal(wrongType.status, 400);
+    assert.equal(wrongType.json().error, t('en', 'account.error.invalidType'));
+    const empty = await upload(id, '?ext=png', '');
+    assert.equal(empty.status, 400);
+    assert.equal(empty.json().error, t('en', 'account.error.empty'));
+  });
 });
 
 // ── Overlay builder: what may be saved (N17) ─────────────────────────────
@@ -1687,6 +1759,24 @@ describe('the YouTube chatbot page errors', () => {
     assert.ok(logs.some(([level, line]) => level === 'error' && line.includes('Token exchange failed: 400')), 'it is logged on the server');
     const page = await request('GET', res.headers.location, { streamer: owner });
     assert.ok(page.text.includes(html(t('en', 'ytChatbot.error.oauthFailed'))));
+  });
+
+  // The Google sign-in ends with ?connected_yt=1 (the account is connected); ?connected=1 is
+  // the other success: the bot joined the live chat. The page tells them apart.
+  test('the page confirms a connected YouTube account for ?connected_yt=1, in words that differ from ?connected=1', async () => {
+    const owner = addStreamer();
+    const account = await request('GET', '/dashboard/youtube-chatbot?connected_yt=1', { streamer: owner });
+    assert.equal(account.status, 200);
+    assert.ok(account.text.includes('id="yt-account-connected"'), 'the notice is there');
+    assert.ok(account.text.includes(html(t('en', 'ytChatbot.accountLinked', { button: t('en', 'ytChatbot.connectLive') }))));
+    assert.ok(!account.text.includes(html(t('en', 'ytChatbot.connected'))), 'it is not the live-chat message');
+
+    const live = await request('GET', '/dashboard/youtube-chatbot?connected=1', { streamer: owner });
+    assert.ok(live.text.includes(html(t('en', 'ytChatbot.connected'))));
+    assert.ok(!live.text.includes('id="yt-account-connected"'));
+
+    const plain = await request('GET', '/dashboard/youtube-chatbot', { streamer: owner });
+    assert.ok(!plain.text.includes('id="yt-account-connected"'), 'no notice without the query');
   });
 
   test('the chat-only test answers with translated messages', async () => {

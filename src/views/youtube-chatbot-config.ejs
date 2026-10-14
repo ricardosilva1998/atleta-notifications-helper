@@ -1,4 +1,7 @@
-<%- include('header', { title: 'YouTube Chatbot Config', streamer: streamer }) %>
+<%- include('header', { title: t('ytChatbot.title'), streamer: streamer }) %>
+<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <style>
 .yt-accent { color: #ff0000; }
@@ -6,20 +9,26 @@
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
-<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in">YouTube Chatbot Configuration</h2>
-<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">Set up your YouTube live chat bot to respond to Super Chats, new Members, and Gift events.</p>
+<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('ytChatbot.heading') %></h2>
+<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;"><%= t('ytChatbot.intro') %></p>
 
 <% if (connected) { %>
   <div style="background: rgba(62,207,142,0.1); border: 1px solid rgba(62,207,142,0.2); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 20px; font-size: 14px; color: var(--success); display: flex; align-items: center; gap: 8px;">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-    Connected to YouTube live chat! Bot is now polling for events.
+    <%= t('ytChatbot.connected') %>
+  </div>
+<% } %>
+<% if (typeof connectedYt !== 'undefined' && connectedYt) { %>
+  <div id="yt-account-connected" style="background: rgba(62,207,142,0.1); border: 1px solid rgba(62,207,142,0.2); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 20px; font-size: 14px; color: var(--success); display: flex; align-items: center; gap: 8px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    <%= t('ytChatbot.accountLinked', { button: t('ytChatbot.connectLive') }) %>
   </div>
 <% } %>
 <% if (disconnected) { %>
   <div style="background: rgba(247,144,9,0.1); border: 1px solid rgba(247,144,9,0.2); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 20px; font-size: 14px; color: var(--warning);">
-    Disconnected from YouTube live chat.
+    <%= t('ytChatbot.disconnected') %>
   </div>
 <% } %>
 <% if (error) { %>
@@ -32,23 +41,23 @@
 <div class="card animate-in" style="margin-bottom: 16px;">
   <h3 style="margin-bottom: 16px;">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-    Live Stream Connection
+    <%= t('ytChatbot.liveConnection') %>
   </h3>
   <% if (streamer.yt_access_token) { %>
     <p style="color: var(--success); font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      YouTube account connected<%= streamer.yt_channel_name ? ': <strong>' + streamer.yt_channel_name + '</strong>' : '' %>
+      <% if (streamer.yt_channel_name) { %><%- rich('ytChatbot.accountConnectedAs', { name: '<strong>' + esc(streamer.yt_channel_name) + '</strong>' }) %><% } else { %><%= t('ytChatbot.accountConnected') %><% } %>
     </p>
     <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px;">
-      <a href="/auth/youtube" style="color: var(--accent);">Reconnect with a different account</a>
+      <a href="/auth/youtube" style="color: var(--accent);"><%= t('ytChatbot.reconnect') %></a>
     </p>
   <% } else { %>
     <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-      Connect your YouTube account so we can detect your live streams and join your chat.
+      <%= t('ytChatbot.connectPrompt') %>
     </p>
     <a href="/auth/youtube" class="btn btn-primary" style="font-size: 13px; padding: 10px 20px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 12px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 7.7a2.8 2.8 0 0 0-2-2C18.9 5 12 5 12 5s-6.9 0-8.5.7a2.8 2.8 0 0 0-2 2A29 29 0 0 0 1 12a29 29 0 0 0 .5 4.3 2.8 2.8 0 0 0 2 2c1.6.7 8.5.7 8.5.7s6.9 0 8.5-.7a2.8 2.8 0 0 0 2-2A29 29 0 0 0 23 12a29 29 0 0 0-.5-4.3z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>
-      Connect YouTube Account
+      <%= t('ytChatbot.connectAccount') %>
     </a>
   <% } %>
 
@@ -57,14 +66,14 @@
       <% if (ytLive) { %>background: rgba(255,0,0,0.08); border: 1px solid rgba(255,0,0,0.2);<% } else { %>background: var(--bg-surface); border: 1px solid var(--border);<% } %>">
       <% if (ytLive) { %>
         <span style="width: 10px; height: 10px; border-radius: 50%; background: #ff0000; display: inline-block; animation: pulse 1.5s ease-in-out infinite;"></span>
-        <span style="color: #ff4444; font-size: 13px; font-weight: 600;">LIVE</span>
-        <span style="color: var(--text-secondary); font-size: 13px;"><%= ytLiveTitle || 'Streaming now' %></span>
+        <span style="color: #ff4444; font-size: 13px; font-weight: 600;"><%= t('ytChatbot.liveBadge') %></span>
+        <span style="color: var(--text-secondary); font-size: 13px;"><%= ytLiveTitle || t('ytChatbot.streamingNow') %></span>
       <% } else if (ytLiveUnknown) { %>
         <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
         <span id="yt-live-unknown" style="color: var(--text-muted); font-size: 13px;"><%= t('ytChatbot.liveStatusUnknown') %></span>
       <% } else { %>
         <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
-        <span style="color: var(--text-muted); font-size: 13px;">Offline</span>
+        <span style="color: var(--text-muted); font-size: 13px;"><%= t('ytChatbot.offline') %></span>
       <% } %>
     </div>
     <style>@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }</style>
@@ -72,16 +81,16 @@
 
   <% if (ytPolling) { %>
     <div style="margin-top: 12px; padding: 12px 16px; background: rgba(62,207,142,0.08); border: 1px solid rgba(62,207,142,0.2); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: space-between;">
-      <span style="color: var(--success); font-size: 13px; font-weight: 600;">● Bot is polling live chat</span>
+      <span style="color: var(--success); font-size: 13px; font-weight: 600;"><%= t('ytChatbot.botPolling') %></span>
       <form method="POST" action="/dashboard/youtube-chatbot/disconnect" style="margin: 0;">
-        <button type="submit" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px;">Disconnect</button>
+        <button type="submit" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px;"><%= t('ytChatbot.disconnect') %></button>
       </form>
     </div>
   <% } else if (streamer.yt_access_token) { %>
     <form method="POST" action="/dashboard/youtube-chatbot/connect" style="margin-top: 12px;">
       <button type="submit" class="btn btn-primary" style="font-size: 13px; padding: 10px 20px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        Connect to My Live Stream
+        <%= t('ytChatbot.connectLive') %>
       </button>
     </form>
   <% } %>
@@ -93,14 +102,14 @@
   <div class="card animate-in" style="margin-bottom: 16px;">
     <h3 style="margin-bottom: 16px;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Bot Settings
+      <%= t('ytChatbot.botSettings') %>
     </h3>
     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
       <input type="checkbox" id="yt_chatbot_enabled" name="yt_chatbot_enabled" value="1" <%= streamer.yt_chatbot_enabled ? 'checked' : '' %> style="width: 18px; height: 18px; accent-color: #ff0000;">
-      <label for="yt_chatbot_enabled" style="font-weight: 600; font-size: 15px;">Enable YouTube chatbot on my channel</label>
+      <label for="yt_chatbot_enabled" style="font-weight: 600; font-size: 15px;"><%= t('ytChatbot.enable') %></label>
     </div>
     <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">
-      The chatbot will automatically respond to Super Chats, new Members, and Gift Memberships during your live streams.
+      <%= t('ytChatbot.enableHint') %>
     </p>
   </div>
 
@@ -108,10 +117,10 @@
   <div class="card animate-in animate-in-delay-1" style="margin-bottom: 16px;">
     <h3 style="margin-bottom: 4px;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-      Event Messages &amp; Overlay
+      <%= t('ytChatbot.events') %>
     </h3>
     <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
-      Configure chat responses and overlay notifications for each YouTube live event type.
+      <%= t('ytChatbot.eventsHint') %>
     </p>
 
     <!-- Super Chat -->
@@ -120,35 +129,35 @@
         <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(255,0,0,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         </div>
-        <h4 style="font-size: 15px; font-weight: 700; color: #ff4444;">Super Chat</h4>
+        <h4 style="font-size: 15px; font-weight: 700; color: #ff4444;"><%= t('ytChatbot.superChat') %></h4>
       </div>
 
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_chat_superchat_enabled" name="yt_chat_superchat_enabled" value="1" <%= streamer.yt_chat_superchat_enabled ? 'checked' : '' %>>
-          <label for="yt_chat_superchat_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Send chat message</label>
+          <label for="yt_chat_superchat_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.sendChat') %></label>
         </div>
       </div>
       <div class="form-group" style="margin-bottom: 4px;">
         <textarea name="yt_chat_superchat_template" rows="2"
-          placeholder="{username} sent a Super Chat of {amount}! {message}"
+          placeholder="<%= t('ytChatbot.placeholder.superchat') %>"
           style="width: 100%; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-body); font-size: 13px; outline: none; resize: vertical; transition: border-color var(--transition);"
           onfocus="this.style.borderColor='var(--border-focus)'" onblur="this.style.borderColor='var(--border)'"
         ><%= streamer.yt_chat_superchat_template || '' %></textarea>
       </div>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{message}</code></p>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;"><%= t('ytChatbot.variables') %> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{message}</code></p>
 
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_overlay_superchat_enabled" name="yt_overlay_superchat_enabled" value="1" <%= streamer.yt_overlay_superchat_enabled ? 'checked' : '' %>>
-          <label for="yt_overlay_superchat_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Show overlay banner</label>
+          <label for="yt_overlay_superchat_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.showOverlay') %></label>
         </div>
       </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_superchat', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Overlay</button>
-        <button type="button" onclick="testChatOnly('superchat', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Test in Chat</button>
-        <button type="button" onclick="previewMessage('superchat')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Preview</button>
+        <button type="button" onclick="testEvent('yt_superchat', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button>
+        <button type="button" onclick="testChatOnly('superchat', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testChat') %></button>
+        <button type="button" onclick="previewMessage('superchat')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;"><%= t('ytChatbot.preview') %></button>
       </div>
     </div>
 
@@ -158,35 +167,35 @@
         <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(15,157,88,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f9d58" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </div>
-        <h4 style="font-size: 15px; font-weight: 700; color: #0f9d58;">New Member</h4>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f9d58;"><%= t('ytChatbot.newMember') %></h4>
       </div>
 
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_chat_member_enabled" name="yt_chat_member_enabled" value="1" <%= streamer.yt_chat_member_enabled ? 'checked' : '' %>>
-          <label for="yt_chat_member_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Send chat message</label>
+          <label for="yt_chat_member_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.sendChat') %></label>
         </div>
       </div>
       <div class="form-group" style="margin-bottom: 4px;">
         <textarea name="yt_chat_member_template" rows="2"
-          placeholder="Welcome to the team, {username}! Thanks for becoming a member!"
+          placeholder="<%= t('ytChatbot.placeholder.member') %>"
           style="width: 100%; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-body); font-size: 13px; outline: none; resize: vertical; transition: border-color var(--transition);"
           onfocus="this.style.borderColor='var(--border-focus)'" onblur="this.style.borderColor='var(--border)'"
         ><%= streamer.yt_chat_member_template || '' %></textarea>
       </div>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{level}</code></p>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;"><%= t('ytChatbot.variables') %> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{level}</code></p>
 
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_overlay_member_enabled" name="yt_overlay_member_enabled" value="1" <%= streamer.yt_overlay_member_enabled ? 'checked' : '' %>>
-          <label for="yt_overlay_member_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Show overlay banner</label>
+          <label for="yt_overlay_member_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.showOverlay') %></label>
         </div>
       </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_member', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Overlay</button>
-        <button type="button" onclick="testChatOnly('member', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Test in Chat</button>
-        <button type="button" onclick="previewMessage('member')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Preview</button>
+        <button type="button" onclick="testEvent('yt_member', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button>
+        <button type="button" onclick="testChatOnly('member', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testChat') %></button>
+        <button type="button" onclick="previewMessage('member')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;"><%= t('ytChatbot.preview') %></button>
       </div>
     </div>
 
@@ -196,35 +205,35 @@
         <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(66,133,244,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
         </div>
-        <h4 style="font-size: 15px; font-weight: 700; color: #4285f4;">Gifted Memberships</h4>
+        <h4 style="font-size: 15px; font-weight: 700; color: #4285f4;"><%= t('ytChatbot.giftedMemberships') %></h4>
       </div>
 
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_chat_giftmember_enabled" name="yt_chat_giftmember_enabled" value="1" <%= streamer.yt_chat_giftmember_enabled ? 'checked' : '' %>>
-          <label for="yt_chat_giftmember_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Send chat message</label>
+          <label for="yt_chat_giftmember_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.sendChat') %></label>
         </div>
       </div>
       <div class="form-group" style="margin-bottom: 4px;">
         <textarea name="yt_chat_giftmember_template" rows="2"
-          placeholder="{username} gifted {amount} memberships! What a legend!"
+          placeholder="<%= t('ytChatbot.placeholder.giftmember') %>"
           style="width: 100%; padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-body); font-size: 13px; outline: none; resize: vertical; transition: border-color var(--transition);"
           onfocus="this.style.borderColor='var(--border-focus)'" onblur="this.style.borderColor='var(--border)'"
         ><%= streamer.yt_chat_giftmember_template || '' %></textarea>
       </div>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Variables: <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{level}</code></p>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;"><%= t('ytChatbot.variables') %> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{username}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{amount}</code> <code style="background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;">{level}</code></p>
 
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
         <div class="toggle" style="margin-bottom: 0;">
           <input type="checkbox" id="yt_overlay_giftmember_enabled" name="yt_overlay_giftmember_enabled" value="1" <%= streamer.yt_overlay_giftmember_enabled ? 'checked' : '' %>>
-          <label for="yt_overlay_giftmember_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Show overlay banner</label>
+          <label for="yt_overlay_giftmember_enabled" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"><%= t('ytChatbot.showOverlay') %></label>
         </div>
       </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="testEvent('yt_giftmember', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;">Test Overlay</button>
-        <button type="button" onclick="testChatOnly('giftmember', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">Test in Chat</button>
-        <button type="button" onclick="previewMessage('giftmember')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Preview</button>
+        <button type="button" onclick="testEvent('yt_giftmember', this)" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testOverlay') %></button>
+        <button type="button" onclick="testChatOnly('giftmember', this)" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;"><%= t('ytChatbot.testChat') %></button>
+        <button type="button" onclick="previewMessage('giftmember')" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;"><%= t('ytChatbot.preview') %></button>
       </div>
     </div>
 
@@ -234,15 +243,10 @@
   <div class="card" style="padding: 18px 20px; margin-bottom: 16px;">
     <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-      Built-in Commands
+      <%= t('ytChatbot.builtin') %>
     </h3>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-      These fun commands are available in YouTube chat. Toggles are shared with Twitch — manage them in
-      <% if (guilds && guilds.length > 0) { %>
-        <a href="/dashboard/guild/<%= guilds[0].guild_id %>/chatbot" style="color: var(--accent);">Chatbot Config</a>.
-      <% } else { %>
-        Chatbot Config.
-      <% } %>
+      <%- rich('ytChatbot.builtinHint', { a: '<a href="/dashboard/chatbot" style="color: var(--accent);">', aEnd: '</a>' }) %>
     </p>
     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
       <% const ytCommands = [
@@ -277,12 +281,12 @@
   <div class="card" style="padding: 18px 20px; margin-bottom: 16px;">
     <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Chat Moderation
+      <%= t('ytChatbot.moderation') %>
     </h3>
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
       <div>
-        <span style="font-size: 14px; font-weight: 500;">Enable Moderation</span>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Moderate YouTube chat messages using your filter settings</p>
+        <span style="font-size: 14px; font-weight: 500;"><%= t('ytChatbot.enableMod') %></span>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;"><%= t('ytChatbot.enableModHint') %></p>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" name="yt_mod_enabled" value="1" <%= streamer.yt_mod_enabled ? 'checked' : '' %>>
@@ -291,15 +295,10 @@
     </div>
     <div style="font-size: 13px; color: var(--text-muted); padding: 10px 14px; background: var(--bg-surface); border-radius: var(--radius-sm); border: 1px solid var(--border);">
       <p style="margin-bottom: 6px;">
-        <strong>Filter settings are shared with Twitch</strong> — banned words, link protection, caps filter, etc. are configured in
-        <% if (guilds && guilds.length > 0) { %>
-          <a href="/dashboard/guild/<%= guilds[0].guild_id %>/chatbot" style="color: var(--accent);">Chatbot Config → Moderation</a>.
-        <% } else { %>
-          Chatbot Config → Moderation.
-        <% } %>
+        <%- rich('ytChatbot.modShared', { b: '<strong>', bEnd: '</strong>', a: '<a href="/dashboard/chatbot?tab=moderation" style="color: var(--accent);">', aEnd: '</a>' }) %>
       </p>
       <p style="color: var(--warning, #f59e0b);">
-        ⚠️ The YouTube bot account must be added as a <strong>moderator</strong> on your YouTube channel for message deletion and timeouts to work.
+        <%- rich('ytChatbot.modWarning', { b: '<strong>', bEnd: '</strong>' }) %>
       </p>
     </div>
   </div>
@@ -308,49 +307,55 @@
   <div style="display: flex; justify-content: flex-end; margin-bottom: 24px;">
     <button type="submit" class="btn btn-primary" style="padding: 12px 32px; font-size: 14px; background: #ff0000; border-color: #ff0000;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Save Settings
+      <%= t('ytChatbot.save') %>
     </button>
   </div>
 
 </form>
 
 <script>
+const I18N = <%- JSON.stringify({
+  sending: t('ytChatbot.js.sending'), overlayChatSent: t('ytChatbot.js.overlayChatSent'), overlaySent: t('ytChatbot.js.overlaySent'),
+  error: t('ytChatbot.js.error'), sentToChat: t('ytChatbot.js.sentToChat'), failed: t('ytChatbot.js.failed'),
+  emptyTemplate: t('ytChatbot.js.emptyTemplate'), previewLabel: t('ytChatbot.js.previewLabel'),
+}).replace(/</g, '\\u003c') %>;
+
 async function testEvent(eventType, btn) {
   const orig = btn.textContent;
-  btn.textContent = 'Sending...';
+  btn.textContent = I18N.sending;
   btn.disabled = true;
   try {
     const res = await fetch(`/dashboard/youtube-chatbot/test/${eventType}`, { method: 'POST' });
     const data = await res.json();
     if (data.ok && data.chatSent) {
-      btn.textContent = 'Overlay + Chat sent!';
+      btn.textContent = I18N.overlayChatSent;
     } else if (data.ok) {
-      btn.textContent = 'Overlay sent!';
+      btn.textContent = I18N.overlaySent;
     } else {
-      btn.textContent = 'Error';
+      btn.textContent = I18N.error;
       if (data.error) alert(data.error);
     }
   } catch (e) {
-    btn.textContent = 'Error';
+    btn.textContent = I18N.error;
   }
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
 }
 
 async function testChatOnly(type, btn) {
   const orig = btn.textContent;
-  btn.textContent = 'Sending...';
+  btn.textContent = I18N.sending;
   btn.disabled = true;
   try {
     const res = await fetch(`/dashboard/youtube-chatbot/test-chat/${type}`, { method: 'POST' });
     const data = await res.json();
     if (data.ok) {
-      btn.textContent = 'Sent to chat!';
+      btn.textContent = I18N.sentToChat;
     } else {
-      btn.textContent = data.error ? 'Error' : 'Failed';
+      btn.textContent = data.error ? I18N.error : I18N.failed;
       if (data.error) alert(data.error);
     }
   } catch (e) {
-    btn.textContent = 'Error';
+    btn.textContent = I18N.error;
   }
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
 }
@@ -365,7 +370,7 @@ function previewMessage(type) {
   const textarea = document.querySelector(`textarea[name="yt_chat_${type}_template"]`);
   if (!textarea) return;
 
-  let message = textarea.value || '(empty template)';
+  let message = textarea.value || I18N.emptyTemplate;
   const data = sampleData[type];
   for (const [key, value] of Object.entries(data)) {
     message = message.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
@@ -378,7 +383,7 @@ function previewMessage(type) {
   const preview = document.createElement('div');
   preview.className = 'chat-preview';
   preview.style.cssText = 'margin-top: 10px; padding: 10px 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-primary); display: flex; align-items: flex-start; gap: 8px;';
-  preview.innerHTML = `<span style="color: var(--text-muted); font-size: 12px; flex-shrink: 0;">Preview:</span><span>${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
+  preview.innerHTML = `<span style="color: var(--text-muted); font-size: 12px; flex-shrink: 0;">${I18N.previewLabel.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span><span>${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
 
   // Insert after the test buttons row
   const buttonsRow = textarea.closest('[style*="padding: 18px"]') || textarea.closest('.card');

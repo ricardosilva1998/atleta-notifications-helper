@@ -1,20 +1,23 @@
-<%- include('header', { title: 'Multistream', streamer: streamer }) %>
+<%- include('header', { title: t('multistream.title'), streamer: streamer }) %>
+<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  Back to Dashboard
+  <%= t('guild.backToDashboard') %>
 </a>
 
-<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in">Multistream</h2>
+<h2 style="margin: 16px 0 8px; font-size: 24px; font-weight: 700;" class="animate-in"><%= t('multistream.title') %></h2>
 <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">
-  Stream once from OBS — we relay it to Twitch and YouTube at the same time. No extra CPU or upload bandwidth on your PC.
+  <%= t('multistream.intro') %>
 </p>
 
 <% if (typeof query !== 'undefined' && query && query.saved) { %>
-  <div class="alert alert-success animate-in">Settings saved.</div>
+  <div class="alert alert-success animate-in"><%= t('multistream.saved') %></div>
 <% } %>
 <% if (typeof query !== 'undefined' && query && query.reset) { %>
-  <div class="alert alert-success animate-in">YouTube stream reset. A fresh stream will be created next time you go live.</div>
+  <div class="alert alert-success animate-in"><%= t('multistream.resetDone') %></div>
 <% } %>
 <% if (typeof query !== 'undefined' && query && query.regenerated) { %>
   <div class="alert alert-success animate-in"><%= t('multistream.regenerate.done') %></div>
@@ -29,7 +32,7 @@
     "you're live" and assumes every platform got the feed. %>
 <% if (multistream.multistream_last_error) { %>
   <div class="alert alert-warning animate-in">
-    <strong>Last go-live didn't reach every platform.</strong>
+    <strong><%= t('multistream.lastErrorTitle') %></strong>
     <div style="margin-top: 6px; font-family: monospace; font-size: 13px;"><%= multistream.multistream_last_error %></div>
     <% if (multistream.multistream_last_error_at) { %>
       <div style="margin-top: 6px; font-size: 12px; opacity: 0.8;">
@@ -43,7 +46,7 @@
 <% if (isLive) { %>
   <div class="alert alert-success animate-in" style="display: flex; align-items: center; gap: 10px;">
     <span class="status-dot online"></span>
-    <span><strong>You're live</strong> — multistream is active and forwarding to your connected platforms.</span>
+    <span><strong><%= t('multistream.liveTitle') %></strong> <%= t('multistream.liveBody') %></span>
   </div>
 <% } else if (typeof liveUnknown !== 'undefined' && liveUnknown) { %>
   <div class="alert alert-warning animate-in"><%= t('multistream.liveUnknown') %></div>
@@ -56,9 +59,9 @@
       <div>
         <h3 style="margin-bottom: 0;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
-          Enable Multistream
+          <%= t('multistream.enable') %>
         </h3>
-        <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">When on, every stream you push to the ingest URL below is forwarded to your connected platforms.</p>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;"><%= t('multistream.enableHint') %></p>
       </div>
       <label class="pill-toggle">
         <input type="checkbox" name="enabled" value="1" <%= multistream.multistream_enabled ? 'checked' : '' %>>
@@ -70,9 +73,9 @@
   <div class="card animate-in animate-in-delay-2">
     <h3>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
-      Destinations
+      <%= t('multistream.destinations') %>
     </h3>
-    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">We fetch your stream keys via OAuth — you never have to copy or paste them.</p>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;"><%= t('multistream.destinationsHint') %></p>
 
     <div class="dest-card">
       <div class="dest-head">
@@ -82,20 +85,20 @@
             <div class="dest-name">Twitch</div>
             <div class="dest-status">
               <% if (twitchAuthorized && twitchHasStreamKeyScope) { %>
-                <span style="color: var(--success);">● Connected as <strong><%= streamer.twitch_display_name || streamer.twitch_username %></strong></span>
+                <span style="color: var(--success);">● <%- rich('multistream.connectedAs', { name: '<strong>' + esc(streamer.twitch_display_name || streamer.twitch_username) + '</strong>' }) %></span>
               <% } else if (twitchAuthorized) { %>
-                <span style="color: var(--warning);">● Authorized, but missing the stream-key permission. Re-authorize to enable multistream.</span>
+                <span style="color: var(--warning);">● <%= t('multistream.twitchMissingScope') %></span>
               <% } else { %>
-                <span style="color: var(--text-muted);">Not connected</span>
+                <span style="color: var(--text-muted);"><%= t('multistream.notConnected') %></span>
               <% } %>
             </div>
           </div>
         </div>
         <div>
           <% if (twitchAuthorized && twitchHasStreamKeyScope) { %>
-            <a href="/auth/broadcaster" class="btn btn-secondary btn-small">Re-authorize</a>
+            <a href="/auth/broadcaster" class="btn btn-secondary btn-small"><%= t('multistream.reauthorize') %></a>
           <% } else { %>
-            <a href="/auth/broadcaster" class="btn btn-primary btn-small" style="background: #9146ff;">Connect Twitch</a>
+            <a href="/auth/broadcaster" class="btn btn-primary btn-small" style="background: #9146ff;"><%= t('multistream.connectTwitch') %></a>
           <% } %>
         </div>
       </div>
@@ -109,59 +112,58 @@
             <div class="dest-name">YouTube</div>
             <div class="dest-status">
               <% if (youtubeConnected) { %>
-                <span style="color: var(--success);">● Connected as <strong><%= youtubeChannelName || 'YouTube account' %></strong></span>
+                <span style="color: var(--success);">● <%- rich('multistream.connectedAs', { name: '<strong>' + esc(youtubeChannelName || t('multistream.youtubeAccount')) + '</strong>' }) %></span>
               <% } else { %>
-                <span style="color: var(--text-muted);">Not connected</span>
+                <span style="color: var(--text-muted);"><%= t('multistream.notConnected') %></span>
               <% } %>
             </div>
           </div>
         </div>
         <div>
           <% if (youtubeConnected) { %>
-            <a href="/auth/youtube" class="btn btn-secondary btn-small">Re-authorize</a>
+            <a href="/auth/youtube" class="btn btn-secondary btn-small"><%= t('multistream.reauthorize') %></a>
           <% } else { %>
-            <a href="/auth/youtube" class="btn btn-primary btn-small" style="background: #ff0000;">Connect YouTube</a>
+            <a href="/auth/youtube" class="btn btn-primary btn-small" style="background: #ff0000;"><%= t('multistream.connectYoutube') %></a>
           <% } %>
         </div>
       </div>
 
       <% if (youtubeConnected) { %>
         <div style="border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px;">
-          <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px;">YouTube broadcast defaults — used every time you go live:</p>
+          <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px;"><%= t('multistream.ytDefaults') %></p>
 
           <div class="form-group" style="margin-bottom: 12px;">
-            <label>Default title (optional)</label>
-            <input type="text" name="youtube_default_title" value="<%= multistream.multistream_youtube_default_title || '' %>" placeholder="Leave empty to use your current Twitch stream title" maxlength="100" style="width: 100%;">
+            <label><%= t('multistream.defaultTitle') %></label>
+            <input type="text" name="youtube_default_title" value="<%= multistream.multistream_youtube_default_title || '' %>" placeholder="<%= t('multistream.defaultTitlePlaceholder') %>" maxlength="100" style="width: 100%;">
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label>Privacy</label>
+              <label><%= t('multistream.privacy') %></label>
               <select name="youtube_privacy" style="width: 100%;">
                 <% const priv = multistream.multistream_youtube_privacy || 'public'; %>
-                <option value="public" <%= priv === 'public' ? 'selected' : '' %>>Public</option>
-                <option value="unlisted" <%= priv === 'unlisted' ? 'selected' : '' %>>Unlisted</option>
-                <option value="private" <%= priv === 'private' ? 'selected' : '' %>>Private</option>
+                <option value="public" <%= priv === 'public' ? 'selected' : '' %>><%= t('multistream.privacyPublic') %></option>
+                <option value="unlisted" <%= priv === 'unlisted' ? 'selected' : '' %>><%= t('multistream.privacyUnlisted') %></option>
+                <option value="private" <%= priv === 'private' ? 'selected' : '' %>><%= t('multistream.privacyPrivate') %></option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label>Category</label>
+              <label><%= t('multistream.category') %></label>
               <select name="youtube_category_id" style="width: 100%;">
                 <% const cat = multistream.multistream_youtube_category_id || '20'; %>
-                <option value="20" <%= cat === '20' ? 'selected' : '' %>>Gaming</option>
-                <option value="22" <%= cat === '22' ? 'selected' : '' %>>People & Blogs</option>
-                <option value="24" <%= cat === '24' ? 'selected' : '' %>>Entertainment</option>
-                <option value="17" <%= cat === '17' ? 'selected' : '' %>>Sports</option>
-                <option value="28" <%= cat === '28' ? 'selected' : '' %>>Science & Tech</option>
-                <option value="10" <%= cat === '10' ? 'selected' : '' %>>Music</option>
+                <option value="20" <%= cat === '20' ? 'selected' : '' %>><%= t('multistream.categoryGaming') %></option>
+                <option value="22" <%= cat === '22' ? 'selected' : '' %>><%= t('multistream.categoryPeople') %></option>
+                <option value="24" <%= cat === '24' ? 'selected' : '' %>><%= t('multistream.categoryEntertainment') %></option>
+                <option value="17" <%= cat === '17' ? 'selected' : '' %>><%= t('multistream.categorySports') %></option>
+                <option value="28" <%= cat === '28' ? 'selected' : '' %>><%= t('multistream.categoryScience') %></option>
+                <option value="10" <%= cat === '10' ? 'selected' : '' %>><%= t('multistream.categoryMusic') %></option>
               </select>
             </div>
           </div>
 
           <% if (multistream.multistream_youtube_stream_id) { %>
             <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px;">
-              YouTube stream linked.
-              <a href="#" onclick="event.preventDefault(); document.getElementById('reset-yt-form').submit();">Reset stream binding</a> if YouTube returns errors.
+              <%- rich('multistream.streamLinked', { a: "<a href=\"#\" onclick=\"event.preventDefault(); document.getElementById('reset-yt-form').submit();\">", aEnd: '</a>' }) %>
             </p>
           <% } %>
         </div>
@@ -172,28 +174,28 @@
   <div class="card animate-in animate-in-delay-3">
     <h3>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-      Your OBS Settings
+      <%= t('multistream.obsTitle') %>
     </h3>
     <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
-      Open OBS → Settings → Stream → Service: <strong>Custom</strong>. Paste these two values:
+      <%- rich('multistream.obsSteps', { b: '<strong>', bEnd: '</strong>' }) %>
     </p>
 
     <div class="form-group">
-      <label>Server</label>
+      <label><%= t('multistream.server') %></label>
       <div style="display: flex; gap: 8px;">
         <input id="ms-server" type="text" value="<%= ingestUrl %>" readonly style="flex: 1; font-family: ui-monospace, monospace; font-size: 13px;">
-        <button type="button" class="btn btn-secondary" onclick="copyVal('ms-server', this)">Copy</button>
+        <button type="button" class="btn btn-secondary" onclick="copyVal('ms-server', this)"><%= t('multistream.copy') %></button>
       </div>
     </div>
 
     <div class="form-group" style="margin-bottom: 0;">
-      <label>Stream Key</label>
+      <label><%= t('multistream.streamKey') %></label>
       <div style="display: flex; gap: 8px;">
         <input id="ms-key" type="password" value="<%= streamKey %>" readonly style="flex: 1; font-family: ui-monospace, monospace; font-size: 13px;">
-        <button type="button" class="btn btn-secondary" onclick="toggleReveal('ms-key', this)">Show</button>
-        <button type="button" class="btn btn-secondary" onclick="copyVal('ms-key', this)">Copy</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleReveal('ms-key', this)"><%= t('multistream.show') %></button>
+        <button type="button" class="btn btn-secondary" onclick="copyVal('ms-key', this)"><%= t('multistream.copy') %></button>
       </div>
-      <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Treat this like a password — anyone with it can stream as you.</p>
+      <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;"><%= t('multistream.keyWarning') %></p>
       <%# Submits regenerate-key-form below: a form cannot sit inside this settings form. %>
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px;">
         <button type="submit" form="regenerate-key-form" class="btn btn-secondary" style="flex-shrink: 0;">
@@ -205,13 +207,13 @@
     </div>
 
     <div style="background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
-      <strong style="color: var(--text-primary); font-family: var(--font-display);">Recommended OBS settings for 1080p60</strong><br>
-      Resolution: <code>1920×1080</code> · FPS: <code>60</code> · Encoder: <code>NVENC H.264</code> (or <code>x264</code>) · Bitrate: <code>6000 kbps</code> · Keyframe: <code>2 sec</code> · Audio: <code>160 kbps AAC</code>
+      <strong style="color: var(--text-primary); font-family: var(--font-display);"><%= t('multistream.rec.title') %></strong><br>
+      <%= t('multistream.rec.resolution') %>: <code>1920×1080</code> · <%= t('multistream.rec.fps') %>: <code>60</code> · <%= t('multistream.rec.encoder') %>: <code>NVENC H.264</code> (<%= t('multistream.rec.or') %> <code>x264</code>) · <%= t('multistream.rec.bitrate') %>: <code>6000 kbps</code> · <%= t('multistream.rec.keyframe') %>: <code><%= t('multistream.rec.keyframeValue') %></code> · <%= t('multistream.rec.audio') %>: <code>160 kbps AAC</code>
     </div>
   </div>
 
   <div style="display: flex; justify-content: flex-end; margin: 24px 0;">
-    <button type="submit" class="btn btn-primary" style="padding: 12px 32px; font-size: 14px;">Save Settings</button>
+    <button type="submit" class="btn btn-primary" style="padding: 12px 32px; font-size: 14px;"><%= t('multistream.saveSettings') %></button>
   </div>
 </form>
 
@@ -239,17 +241,18 @@
 </style>
 
 <script>
+  const I18N = <%- JSON.stringify({ copied: t('multistream.copied'), show: t('multistream.show'), hide: t('multistream.hide') }).replace(/</g, '\\u003c') %>;
   function copyVal(id, btn) {
     const el = document.getElementById(id);
     navigator.clipboard.writeText(el.value);
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = I18N.copied;
     setTimeout(() => btn.textContent = orig, 1500);
   }
   function toggleReveal(id, btn) {
     const el = document.getElementById(id);
-    if (el.type === 'password') { el.type = 'text'; btn.textContent = 'Hide'; }
-    else { el.type = 'password'; btn.textContent = 'Show'; }
+    if (el.type === 'password') { el.type = 'text'; btn.textContent = I18N.hide; }
+    else { el.type = 'password'; btn.textContent = I18N.show; }
   }
 </script>
 

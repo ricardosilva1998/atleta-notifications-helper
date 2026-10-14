@@ -213,12 +213,12 @@ router.get('/account', (req, res) => {
 router.post('/account/avatar', async (req, res) => {
   const allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   const ext = (req.query.ext || 'png').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  if (!allowed.includes(ext)) return res.status(400).json({ ok: false, error: 'Invalid file type' });
+  if (!allowed.includes(ext)) return res.status(400).json({ ok: false, error: res.locals.t('account.error.invalidType') });
 
   let buf;
   try { buf = await readBoundedBody(req, res, 2 * 1024 * 1024); }
   catch (e) { return; /* helper already responded */ }
-  if (buf.length === 0) return res.status(400).json({ ok: false, error: 'Empty file' });
+  if (buf.length === 0) return res.status(400).json({ ok: false, error: res.locals.t('account.error.empty') });
   if (refuseUpload(req, res, buf.length, { media: false })) return;
 
   const streamerId = req.streamer.id;
@@ -233,7 +233,7 @@ router.post('/account/avatar', async (req, res) => {
 
   const filename = `avatar_${Date.now()}.${ext}`;
   try { await fs.promises.writeFile(path.join(avatarDir, filename), buf); }
-  catch (e) { return res.status(500).json({ ok: false, error: 'Write failed' }); }
+  catch (e) { return res.status(500).json({ ok: false, error: res.locals.t('account.error.writeFailed') }); }
   db.updateProfilePicture(streamerId, filename);
   console.log(`[Dashboard] ${req.streamer.discord_username} uploaded profile picture: ${filename}`);
   res.json({ ok: true, url: `/avatars/${streamerId}/${filename}` });
@@ -746,7 +746,7 @@ router.post('/overlay/test/:eventType', limitTests, (req, res) => {
   };
 
   const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: 'Invalid event type' });
+  if (!event) return res.status(400).json({ error: res.locals.t('overlay.test.invalidType') });
 
   // Fire overlay alert
   bus.emit(`overlay:${req.streamer.id}`, event);
@@ -1207,7 +1207,7 @@ router.post('/chatbot/test/:eventType', limitTests, (req, res) => {
   };
 
   const test = testData[type];
-  if (!test) return res.status(400).json({ error: 'Invalid event type' });
+  if (!test) return res.status(400).json({ error: res.locals.t('chatbot.test.invalidType') });
 
   try {
     const { chatManager } = require('../services/twitchChat');
@@ -1308,6 +1308,8 @@ router.get('/youtube-chatbot', async (req, res) => {
     ytLiveTitle: liveStatus.title,
     ytLiveUnknown: liveStatus.unknown,
     connected: req.query.connected,
+    // The Google sign-in (routes/auth.js) lands here with ?connected_yt=1: the account is connected.
+    connectedYt: req.query.connected_yt,
     disconnected: req.query.disconnected,
     error: errorMessage(YT_CHATBOT_ERRORS, req.query.error, res.locals.t),
   });
@@ -1343,7 +1345,7 @@ router.post('/youtube-chatbot/test/:eventType', limitTests, async (req, res) => 
     yt_giftmember: { type: 'yt_giftmember', data: { username: 'GenerousViewer', amount: 5, level: 'Member' } },
   };
   const event = testEvents[type];
-  if (!event) return res.status(400).json({ error: 'Invalid event type' });
+  if (!event) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
   // Send to overlay
   bus.emit(`overlay:${req.streamer.id}`, event);
@@ -1391,7 +1393,7 @@ router.post('/youtube-chatbot/test-chat/:eventType', limitTests, async (req, res
   };
 
   const data = testData[type];
-  if (!data) return res.status(400).json({ error: 'Invalid event type' });
+  if (!data) return res.status(400).json({ error: res.locals.t('ytChatbot.error.invalidType') });
 
   try {
     const { youtubeChatManager } = require('../services/youtubeLiveChat');
@@ -1591,7 +1593,7 @@ router.get('/sponsors/list', (req, res) => {
 router.post('/sponsors/upload', async (req, res) => {
   const ext = (req.query.ext || 'png').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'png';
   if (!['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
-    return res.status(400).json({ error: 'Invalid file type. Allowed: png, jpg, gif, webp' });
+    return res.status(400).json({ error: res.locals.t('upload.error.imageType') });
   }
 
   let buf;
@@ -1605,7 +1607,7 @@ router.post('/sponsors/upload', async (req, res) => {
 
   const filename = `sponsor_${Date.now()}.${ext}`;
   try { await fs.promises.writeFile(path.join(sponsorDir, filename), buf); }
-  catch (e) { return res.status(500).json({ error: 'Write failed' }); }
+  catch (e) { return res.status(500).json({ error: res.locals.t('upload.error.writeFailed') }); }
 
   const displayName = req.query.name || 'Sponsor';
   const displayDuration = sponsorDurationSeconds(req.query.dur);

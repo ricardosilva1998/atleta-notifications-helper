@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<%= typeof lang !== 'undefined' ? lang : 'en' %>">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <%- include('csrf') %>
-  <title>Overlay Builder — Atleta</title>
+  <title><%= t('overlayBuilder.pageTitle') %></title>
   <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -802,29 +802,29 @@
 <nav class="top-nav">
   <a href="/dashboard" class="back-link">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    Dashboard
+    <%= t('nav.dashboard') %>
   </a>
   <span class="sep">/</span>
-  <h1>Overlay Builder</h1>
+  <h1><%= t('overlayBuilder.heading') %></h1>
   <span class="sep">/</span>
-  <a id="sounds-link" href="/dashboard/overlay" style="font-size:13px;color:var(--text-secondary);font-family:var(--font-display);font-weight:500;">Settings &amp; Sounds</a>
+  <a id="sounds-link" href="/dashboard/overlay" style="font-size:13px;color:var(--text-secondary);font-family:var(--font-display);font-weight:500;"><%= t('overlayBuilder.settingsLink') %></a>
   <div class="spacer"></div>
   <% if (overlayUrl) { %>
   <div style="position:relative;">
     <button class="overlay-urls-btn" onclick="document.getElementById('urls-dd').classList.toggle('open')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-      OBS URLs
+      <%= t('overlayBuilder.obsUrls') %>
     </button>
     <div class="urls-dropdown" id="urls-dd">
-      <label>Alerts Overlay</label>
+      <label><%= t('overlayBuilder.alertsOverlay') %></label>
       <div class="url-row">
         <input type="text" value="<%= overlayUrl %>" readonly id="alerts-url">
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('alerts-url').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500);">Copy</button>
+        <button class="copy-btn" onclick="copyBuilderUrl('alerts-url', this)"><%= t('overlayBuilder.copy') %></button>
       </div>
-      <label>Sponsors Overlay</label>
+      <label><%= t('overlayBuilder.sponsorsOverlay') %></label>
       <div class="url-row">
         <input type="text" value="<%= overlayUrl.replace('/overlay/', '/overlay/sponsors/') %>" readonly id="sponsors-url">
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('sponsors-url').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500);">Copy</button>
+        <button class="copy-btn" onclick="copyBuilderUrl('sponsors-url', this)"><%= t('overlayBuilder.copy') %></button>
       </div>
       <!-- Custom overlay URLs — DISABLED for now
       <label>Scenes:</label>
@@ -858,25 +858,25 @@
       <div class="event-tabs-section">
         <div class="event-tabs-label">Twitch</div>
         <div class="event-tabs-row">
-          <div class="event-tab active" data-type="follow"><span style="font-size:16px;">🏁</span><span style="font-size:10px;">Follow</span></div>
-          <div class="event-tab" data-type="subscription"><span style="font-size:16px;">🏆</span><span style="font-size:10px;">Sub</span></div>
-          <div class="event-tab" data-type="bits"><span style="font-size:16px;">⛽</span><span style="font-size:10px;">Bits</span></div>
-          <div class="event-tab" data-type="donation"><span style="font-size:16px;">💰</span><span style="font-size:10px;">Donation</span></div>
-          <div class="event-tab" data-type="raid"><span style="font-size:16px;">🤖</span><span style="font-size:10px;">Raid</span></div>
-          <div class="event-tab" data-type="giveaway_winner"><span style="font-size:16px;">🎁</span><span style="font-size:10px;">Giveaway</span></div>
+          <div class="event-tab active" data-type="follow"><span style="font-size:16px;">🏁</span><span style="font-size:10px;"><%= t('overlayBuilder.event.follow') %></span></div>
+          <div class="event-tab" data-type="subscription"><span style="font-size:16px;">🏆</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.sub') %></span></div>
+          <div class="event-tab" data-type="bits"><span style="font-size:16px;">⛽</span><span style="font-size:10px;"><%= t('overlayBuilder.event.bits') %></span></div>
+          <div class="event-tab" data-type="donation"><span style="font-size:16px;">💰</span><span style="font-size:10px;"><%= t('overlayBuilder.event.donation') %></span></div>
+          <div class="event-tab" data-type="raid"><span style="font-size:16px;">🤖</span><span style="font-size:10px;"><%= t('overlayBuilder.event.raid') %></span></div>
+          <div class="event-tab" data-type="giveaway_winner"><span style="font-size:16px;">🎁</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.giveaway') %></span></div>
         </div>
         <% if (features.youtube) { %>
         <div class="event-tabs-label">YouTube</div>
         <div class="event-tabs-row">
-          <div class="event-tab" data-type="yt_superchat"><span style="font-size:16px;">💬</span><span style="font-size:10px;">Super Chat</span></div>
-          <div class="event-tab" data-type="yt_member"><span style="font-size:16px;">⭐</span><span style="font-size:10px;">Member</span></div>
-          <div class="event-tab" data-type="yt_giftmember"><span style="font-size:16px;">🎁</span><span style="font-size:10px;">Gift</span></div>
+          <div class="event-tab" data-type="yt_superchat"><span style="font-size:16px;">💬</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.superchat') %></span></div>
+          <div class="event-tab" data-type="yt_member"><span style="font-size:16px;">⭐</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.member') %></span></div>
+          <div class="event-tab" data-type="yt_giftmember"><span style="font-size:16px;">🎁</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.gift') %></span></div>
         </div>
         <% } %>
-        <div class="event-tabs-label" style="color: #555;">Kick (coming soon)</div>
-        <div class="event-tabs-label">General</div>
+        <div class="event-tabs-label" style="color: #555;"><%= t('overlayBuilder.tab.kickSoon') %></div>
+        <div class="event-tabs-label"><%= t('overlayBuilder.tab.general') %></div>
         <div class="event-tabs-row">
-          <div class="event-tab" data-type="timed"><span style="font-size:16px;">⏰</span><span style="font-size:10px;">Timed</span></div>
+          <div class="event-tab" data-type="timed"><span style="font-size:16px;">⏰</span><span style="font-size:10px;"><%= t('overlayBuilder.event.timed') %></span></div>
         </div>
       </div>
     </div>
@@ -887,12 +887,12 @@
       <div class="sponsor-section" id="sponsor-section">
         <div class="section" id="section-sponsors">
           <div class="section-header" onclick="toggleSection('sponsors')">
-            <span class="section-title">🖼️ Sponsors</span>
+            <span class="section-title">🖼️ <%= t('overlayBuilder.sponsors.title') %></span>
             <span class="section-chevron">▼</span>
           </div>
           <div class="section-body">
             <div class="sponsor-toggle-row">
-              <span class="sponsor-toggle-label">Enable Rotation</span>
+              <span class="sponsor-toggle-label"><%= t('overlayBuilder.sponsors.enableRotation') %></span>
               <label class="sp-toggle">
                 <input type="checkbox" id="sp-rotation-toggle" onchange="toggleSponsorRotation(this.checked)">
                 <span class="sp-toggle-slider"></span>
@@ -900,15 +900,15 @@
             </div>
 
             <div class="sp-anim-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">Animation</span>
+              <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;"><%= t('overlayBuilder.sponsors.animation') %></span>
               <select id="ctrl-sponsor-animation" style="flex:1;padding:4px 8px;font-size:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);" onchange="updatePreview(); replaySponsorAnimation();">
-                <option value="fade">Fade</option>
-                <option value="slide-left">Slide Left</option>
-                <option value="slide-right">Slide Right</option>
-                <option value="slide-up">Slide Up</option>
-                <option value="drop-down">Drop Down</option>
-                <option value="zoom">Zoom In</option>
-                <option value="none">None</option>
+                <option value="fade"><%= t('overlayBuilder.sponsors.fade') %></option>
+                <option value="slide-left"><%= t('overlayBuilder.anim.slideLeft') %></option>
+                <option value="slide-right"><%= t('overlayBuilder.anim.slideRight') %></option>
+                <option value="slide-up"><%= t('overlayBuilder.anim.slideUp') %></option>
+                <option value="drop-down"><%= t('overlayBuilder.sponsors.dropDown') %></option>
+                <option value="zoom"><%= t('overlayBuilder.anim.zoomIn') %></option>
+                <option value="none"><%= t('overlayBuilder.none') %></option>
               </select>
             </div>
 
@@ -918,13 +918,13 @@
 
             <div class="sp-upload-zone" id="sp-upload-zone">
               <input type="file" id="sp-file-input" accept="image/png,image/jpeg,image/gif,image/webp">
-              <div class="sp-upload-text">Drop image or click to browse</div>
+              <div class="sp-upload-text"><%= t('overlayBuilder.sponsors.drop') %></div>
             </div>
             <div class="sp-upload-row">
-              <input type="text" id="sp-upload-name" class="sp-upload-input" placeholder="Sponsor name" value="Sponsor">
-              <input type="number" id="sp-upload-dur" class="sp-dur" value="30" min="5" max="300" step="5" title="Duration (seconds)">
+              <input type="text" id="sp-upload-name" class="sp-upload-input" placeholder="<%= t('overlayBuilder.sponsors.namePlaceholder') %>" value="Sponsor">
+              <input type="number" id="sp-upload-dur" class="sp-dur" value="30" min="5" max="300" step="5" title="<%= t('overlayBuilder.sponsors.durationTitle') %>">
               <span class="sp-dur-label">s</span>
-              <button type="button" id="sp-upload-btn" class="sp-upload-btn" disabled onclick="uploadSponsor()">Upload</button>
+              <button type="button" id="sp-upload-btn" class="sp-upload-btn" disabled onclick="uploadSponsor()"><%= t('overlayBuilder.sponsors.upload') %></button>
             </div>
           </div>
         </div>
@@ -933,14 +933,13 @@
       <div id="phase1-notice" style="display:none; padding:12px 14px; margin-bottom:12px;
            border-left:3px solid #D81E26; background:rgba(216,30,38,0.08);
            font-size:13px; line-height:1.5;">
-        This alert now uses a fixed design with its own built-in animation.
-        Colour and animation controls will return in a future update.
+        <%= t('overlayBuilder.fixedNotice') %>
       </div>
 
       <!-- Theme Section -->
       <div class="section collapsed" id="section-theme">
         <div class="section-header" onclick="toggleSection('theme')">
-          <span class="section-title">🎨 Theme</span>
+          <span class="section-title">🎨 <%= t('overlayBuilder.theme.sectionTitle') %></span>
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
@@ -949,7 +948,7 @@
               <span id="swatch-bg" style="width:16px;height:16px;border-radius:4px;background:#1a1a3e;border:1px solid rgba(255,255,255,0.1);"></span>
               <span id="swatch-accent" style="width:16px;height:16px;border-radius:4px;background:#8888cc;border:1px solid rgba(255,255,255,0.1);"></span>
             </span>
-            Change Theme
+            <%= t('overlayBuilder.theme.change') %>
           </button>
           <!-- Hidden color inputs (still used by getControlValues) -->
           <div style="display:none;">
@@ -964,7 +963,7 @@
       <!-- Text Section -->
       <div class="section collapsed" id="section-text">
         <div class="section-header" onclick="toggleSection('text')">
-          <span class="section-title">✏️ Text &amp; Font</span>
+          <span class="section-title">✏️ <%= t('overlayBuilder.text.sectionTitle') %></span>
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
@@ -975,11 +974,11 @@
             <div id="tsp-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race 🏁</div>
           </div>
           <button type="button" class="popup-trigger-btn" onclick="openTextPopup()">
-            Customize Text &amp; Font
+            <%= t('overlayBuilder.text.customize') %>
           </button>
           <!-- Hidden inputs (still used by getControlValues) -->
           <div style="display:none;">
-            <input type="text" id="ctrl-event-label" maxlength="100" placeholder="e.g. New Pit Crew Member">
+            <input type="text" id="ctrl-event-label" maxlength="100" placeholder="<%= t('overlayBuilder.text.labelPlaceholder', { example: 'New Pit Crew Member' }) %>">
             <input type="text" id="ctrl-detail-text" maxlength="300" placeholder="just joined the race 🏁">
             <div class="font-picker" id="font-picker">
               <div class="font-picker-selected" id="font-picker-selected">
@@ -996,54 +995,54 @@
       <!-- Side Icons Section -->
       <div class="section collapsed" id="section-sideicon">
         <div class="section-header" onclick="toggleSection('sideicon')">
-          <span class="section-title">🏆 Side Icons</span>
+          <span class="section-title">🏆 <%= t('overlayBuilder.icons.sectionTitle') %></span>
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
-          <div class="ctrl-label" style="margin-bottom:6px;">Icon displayed on each side of the card</div>
+          <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.icons.hint') %></div>
           <div class="side-icon-grid" id="side-icon-grid">
-            <button type="button" class="side-icon-btn" data-icon="none" onclick="setSideIcon('none')" title="None">✕</button>
-            <button type="button" class="side-icon-btn" data-icon="🏆" onclick="setSideIcon('🏆')" title="Trophy">🏆</button>
-            <button type="button" class="side-icon-btn" data-icon="⭐" onclick="setSideIcon('⭐')" title="Star">⭐</button>
-            <button type="button" class="side-icon-btn" data-icon="🔥" onclick="setSideIcon('🔥')" title="Fire">🔥</button>
-            <button type="button" class="side-icon-btn" data-icon="💎" onclick="setSideIcon('💎')" title="Diamond">💎</button>
-            <button type="button" class="side-icon-btn" data-icon="🎉" onclick="setSideIcon('🎉')" title="Party">🎉</button>
-            <button type="button" class="side-icon-btn" data-icon="❤️" onclick="setSideIcon('❤️')" title="Heart">❤️</button>
-            <button type="button" class="side-icon-btn" data-icon="🏁" onclick="setSideIcon('🏁')" title="Checkered Flag">🏁</button>
-            <button type="button" class="side-icon-btn" data-icon="👑" onclick="setSideIcon('👑')" title="Crown">👑</button>
-            <button type="button" class="side-icon-btn" data-icon="🎁" onclick="setSideIcon('🎁')" title="Gift">🎁</button>
-            <button type="button" class="side-icon-btn" data-icon="💰" onclick="setSideIcon('💰')" title="Money">💰</button>
-            <button type="button" class="side-icon-btn" data-icon="🏎️" onclick="setSideIcon('🏎️')" title="Race Car">🏎️</button>
+            <button type="button" class="side-icon-btn" data-icon="none" onclick="setSideIcon('none')" title="<%= t('overlayBuilder.none') %>">✕</button>
+            <button type="button" class="side-icon-btn" data-icon="🏆" onclick="setSideIcon('🏆')" title="<%= t('overlayBuilder.icons.trophy') %>">🏆</button>
+            <button type="button" class="side-icon-btn" data-icon="⭐" onclick="setSideIcon('⭐')" title="<%= t('overlayBuilder.icons.star') %>">⭐</button>
+            <button type="button" class="side-icon-btn" data-icon="🔥" onclick="setSideIcon('🔥')" title="<%= t('overlayBuilder.icons.fire') %>">🔥</button>
+            <button type="button" class="side-icon-btn" data-icon="💎" onclick="setSideIcon('💎')" title="<%= t('overlayBuilder.icons.diamond') %>">💎</button>
+            <button type="button" class="side-icon-btn" data-icon="🎉" onclick="setSideIcon('🎉')" title="<%= t('overlayBuilder.icons.party') %>">🎉</button>
+            <button type="button" class="side-icon-btn" data-icon="❤️" onclick="setSideIcon('❤️')" title="<%= t('overlayBuilder.icons.heart') %>">❤️</button>
+            <button type="button" class="side-icon-btn" data-icon="🏁" onclick="setSideIcon('🏁')" title="<%= t('overlayBuilder.icons.checkeredFlag') %>">🏁</button>
+            <button type="button" class="side-icon-btn" data-icon="👑" onclick="setSideIcon('👑')" title="<%= t('overlayBuilder.icons.crown') %>">👑</button>
+            <button type="button" class="side-icon-btn" data-icon="🎁" onclick="setSideIcon('🎁')" title="<%= t('overlayBuilder.icons.gift') %>">🎁</button>
+            <button type="button" class="side-icon-btn" data-icon="💰" onclick="setSideIcon('💰')" title="<%= t('overlayBuilder.icons.money') %>">💰</button>
+            <button type="button" class="side-icon-btn" data-icon="🏎️" onclick="setSideIcon('🏎️')" title="<%= t('overlayBuilder.icons.raceCar') %>">🏎️</button>
           </div>
-          <div class="ctrl-label" style="margin-top:8px;font-size:11px;color:var(--text-muted);" id="side-icon-hint">Default: based on event type</div>
+          <div class="ctrl-label" style="margin-top:8px;font-size:11px;color:var(--text-muted);" id="side-icon-hint"><%= t('overlayBuilder.icons.defaultHint') %></div>
         </div>
       </div>
 
       <!-- Animation Section -->
       <div class="section collapsed" id="section-animation">
         <div class="section-header" onclick="toggleSection('animation')">
-          <span class="section-title">⚡ Animation</span>
+          <span class="section-title">⚡ <%= t('overlayBuilder.anim.sectionTitle') %></span>
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
           <!-- Inline preview -->
           <div id="anim-section-preview" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;font-size:12px;color:var(--text-secondary);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
-            <div><span style="color:var(--text-muted);">Entrance:</span> <span id="asp-entrance">Slide Down</span></div>
-            <div><span style="color:var(--text-muted);">Bottom:</span> <span id="asp-car">L→R</span></div>
-            <div><span style="color:var(--text-muted);">Effect:</span> <span id="asp-effect">Default</span></div>
-            <div><span style="color:var(--text-muted);">Speed:</span> <span id="asp-speed">1.0×</span></div>
-            <div><span style="color:var(--text-muted);">Amount:</span> <span id="asp-amount">1.0×</span></div>
-            <div><span style="color:var(--text-muted);">Size:</span> <span id="asp-size">1.0×</span></div>
-            <div><span style="color:var(--text-muted);">Direction:</span> <span id="asp-direction">Down</span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.entranceLabel') %></span> <span id="asp-entrance"><%= t('overlayBuilder.anim.slideDown') %></span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.bottomLabel') %></span> <span id="asp-car"><%= t('overlayBuilder.anim.summary.carFallback') %></span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.effectLabel') %></span> <span id="asp-effect"><%= t('overlayBuilder.anim.summary.effectDefault') %></span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.speedLabel') %></span> <span id="asp-speed">1.0×</span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.amountLabel') %></span> <span id="asp-amount">1.0×</span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.sizeLabel') %></span> <span id="asp-size">1.0×</span></div>
+            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.directionLabel') %></span> <span id="asp-direction"><%= t('overlayBuilder.anim.summary.down') %></span></div>
           </div>
           <button type="button" class="popup-trigger-btn" onclick="openAnimPopup()">
-            Customize Animation
+            <%= t('overlayBuilder.anim.customize') %>
           </button>
           <!-- Hidden inputs still used by getControlValues -->
           <div style="display:none;">
-            <select id="ctrl-entrance-animation"><option value="slideDown">Slide Down</option><option value="slideUp">Slide Up</option><option value="slideLeft">Slide Left</option><option value="slideRight">Slide Right</option><option value="zoomIn">Zoom In</option><option value="fadeIn">Fade In</option></select>
-            <select id="ctrl-car-animation"><option value="zoomLR">Car L→R</option><option value="zoomRL">Car R→L</option><option value="checkered">Checkered Flag</option><option value="flames">Flames</option><option value="sparkles">Sparkles</option><option value="lightning">Lightning</option><option value="neonSweep">Neon Sweep</option><option value="equalizer">Equalizer</option><option value="pulse">Pulse Wave</option><option value="none">None</option></select>
-            <select id="ctrl-screen-effect"><option value="default">Default (per event)</option><option value="none">None</option><option value="confetti">Confetti</option><option value="gold">Gold Rain</option><option value="money">Money Rain</option><option value="robots">Robots</option><option value="tiremarks">Tire Marks</option></select>
+            <select id="ctrl-entrance-animation"><option value="slideDown"><%= t('overlayBuilder.anim.slideDown') %></option><option value="slideUp"><%= t('overlayBuilder.anim.slideUp') %></option><option value="slideLeft"><%= t('overlayBuilder.anim.slideLeft') %></option><option value="slideRight"><%= t('overlayBuilder.anim.slideRight') %></option><option value="zoomIn"><%= t('overlayBuilder.anim.zoomIn') %></option><option value="fadeIn"><%= t('overlayBuilder.anim.fadeIn') %></option></select>
+            <select id="ctrl-car-animation"><option value="zoomLR"><%= t('overlayBuilder.anim.car.zoomLR') %></option><option value="zoomRL"><%= t('overlayBuilder.anim.car.zoomRL') %></option><option value="checkered"><%= t('overlayBuilder.anim.car.checkered') %></option><option value="flames"><%= t('overlayBuilder.anim.car.flames') %></option><option value="sparkles"><%= t('overlayBuilder.anim.car.sparkles') %></option><option value="lightning"><%= t('overlayBuilder.anim.car.lightning') %></option><option value="neonSweep"><%= t('overlayBuilder.anim.car.neonSweep') %></option><option value="equalizer"><%= t('overlayBuilder.anim.car.equalizer') %></option><option value="pulse"><%= t('overlayBuilder.anim.car.pulse') %></option><option value="none"><%= t('overlayBuilder.none') %></option></select>
+            <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option></select>
             <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
             <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0">
             <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0">
@@ -1055,25 +1054,25 @@
       <!-- Size &amp; Position Section -->
       <div class="section collapsed" id="section-size">
         <div class="section-header" onclick="toggleSection('size')">
-          <span class="section-title">📐 Size &amp; Position</span>
+          <span class="section-title">📐 <%= t('overlayBuilder.size.sectionTitle') %></span>
           <span class="section-chevron">▼</span>
         </div>
         <div class="section-body">
           <div class="range-row">
             <div class="range-header">
-              <span class="ctrl-label">Card Width</span>
+              <span class="ctrl-label"><%= t('overlayBuilder.size.cardWidth') %></span>
               <span class="range-val" id="val-card-width">420px</span>
             </div>
-            <input type="range" id="ctrl-card-width" min="280" max="700" step="10" value="420">
+            <input type="range" id="ctrl-card-width" min="280" max="900" step="10" value="420">
           </div>
           <div class="range-row" id="row-border-radius" style="margin-bottom:10px;">
             <div class="range-header">
-              <span class="ctrl-label">Border Radius</span>
+              <span class="ctrl-label"><%= t('overlayBuilder.size.borderRadius') %></span>
               <span class="range-val" id="val-border-radius">16px</span>
             </div>
             <input type="range" id="ctrl-border-radius" min="0" max="32" step="2" value="16">
           </div>
-          <div class="ctrl-label" style="margin-bottom:6px;">Position</div>
+          <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.size.position') %></div>
           <div class="position-grid" id="position-grid">
             <div class="pos-cell" data-pos="top-left"><span class="pos-dot"></span></div>
             <div class="pos-cell active" data-pos="top-center"><span class="pos-dot"></span></div>
@@ -1096,14 +1095,14 @@
 
     <!-- Save bar (above canvas) -->
     <div class="save-bar">
-      <span class="event-badge" id="save-event-badge-top">Follow</span>
+      <span class="event-badge" id="save-event-badge-top"><%= t('overlayBuilder.event.follow') %></span>
       <div class="spacer"></div>
-      <span class="save-status" id="save-status">Saved!</span>
-      <button class="btn btn-danger" onclick="resetCurrentDesign()">Reset to Default</button>
-      <button class="btn btn-secondary" onclick="discardChanges()">Discard</button>
+      <span class="save-status" id="save-status"><%= t('overlayBuilder.saved') %></span>
+      <button class="btn btn-danger" onclick="resetCurrentDesign()"><%= t('overlayBuilder.reset') %></button>
+      <button class="btn btn-secondary" onclick="discardChanges()"><%= t('overlayBuilder.discard') %></button>
       <button class="btn btn-primary" onclick="saveCurrentDesign()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save
+        <%= t('overlayBuilder.save') %>
       </button>
     </div>
 
@@ -1114,14 +1113,14 @@
         <div class="fake-game-bg stream-bg" <% if (streamThumbnail) { %>style="background-image: url('<%= streamThumbnail %>'); background-size: cover; background-position: center;"<% } %>></div>
 
         <!-- Live badge -->
-        <div class="fake-live-badge">● LIVE</div>
+        <div class="fake-live-badge"><%= t('overlayBuilder.preview.live') %></div>
 
         <!-- Stream label -->
-        <div class="fake-stream-label">Stream preview — alerts will appear here</div>
+        <div class="fake-stream-label"><%= t('overlayBuilder.preview.label') %></div>
 
         <% if (streamThumbnail) { %>
           <div style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 9px; color: rgba(255,255,255,0.3); z-index: 1; pointer-events: none;">
-            Stream screenshot from your last broadcast
+            <%= t('overlayBuilder.preview.thumbnailNote') %>
           </div>
         <% } %>
 
@@ -1166,6 +1165,49 @@
 </div><!-- end builder-layout -->
 
 <script>
+// ─── Texts (rendered by the server; a {{field}} is filled in by fill()) ──────────────
+const I18N = <%- JSON.stringify({
+  eventNames: {
+    follow: t('overlayBuilder.event.follow'), subscription: t('overlayBuilder.event.subscription'), bits: t('overlayBuilder.event.bits'),
+    donation: t('overlayBuilder.event.donation'), raid: t('overlayBuilder.event.raid'), yt_superchat: t('overlayBuilder.event.ytSuperchat'),
+    yt_member: t('overlayBuilder.event.ytMember'), yt_giftmember: t('overlayBuilder.event.ytGiftmember'), timed: t('overlayBuilder.event.timed'),
+    giveaway_winner: t('overlayBuilder.event.giveawayWinner'),
+  },
+  copy: t('overlayBuilder.copy'), copied: t('overlayBuilder.copied'), upload: t('overlayBuilder.sponsors.upload'),
+  saved: t('overlayBuilder.saved'), saveFailed: t('overlayBuilder.saveFailed'), saveFailedWith: t('overlayBuilder.saveFailedWith', { error: '{{error}}' }),
+  resetConfirm: t('overlayBuilder.resetConfirm', { name: '{{name}}' }), resetDone: t('overlayBuilder.resetDone'),
+  iconNone: t('overlayBuilder.icons.noneSelected'), iconCustom: t('overlayBuilder.icons.custom', { icon: '{{icon}}' }),
+  iconDefault: t('overlayBuilder.icons.defaultIcon', { icon: '{{icon}}' }), iconDefaultNone: t('overlayBuilder.icons.defaultNone'),
+  noSponsors: t('overlayBuilder.sponsors.none'), durationTitle: t('overlayBuilder.sponsors.displayDurationTitle'), deleteTitle: t('overlayBuilder.sponsors.deleteTitle'),
+  scale: t('overlayBuilder.sponsors.scale'), deleteSponsorConfirm: t('overlayBuilder.sponsors.deleteConfirm'),
+  systemDefault: t('overlayBuilder.text.systemDefault'),
+  entrance: {
+    slideDown: t('overlayBuilder.anim.slideDown'), slideUp: t('overlayBuilder.anim.slideUp'), slideLeft: t('overlayBuilder.anim.slideLeft'),
+    slideRight: t('overlayBuilder.anim.slideRight'), zoomIn: t('overlayBuilder.anim.zoomIn'), fadeIn: t('overlayBuilder.anim.fadeIn'),
+  },
+  car: {
+    zoomLR: t('overlayBuilder.anim.car.zoomLR'), zoomRL: t('overlayBuilder.anim.car.zoomRL'), checkered: t('overlayBuilder.anim.summary.checkered'), flames: t('overlayBuilder.anim.car.flames'),
+    sparkles: t('overlayBuilder.anim.car.sparkles'), lightning: t('overlayBuilder.anim.car.lightning'), neonSweep: t('overlayBuilder.anim.car.neonSweep'), equalizer: t('overlayBuilder.anim.summary.equalizer'),
+    pulse: t('overlayBuilder.anim.summary.pulse'), none: t('overlayBuilder.none'), fallback: t('overlayBuilder.anim.summary.carFallback'),
+  },
+  effect: {
+    default: t('overlayBuilder.anim.summary.effectDefault'), none: t('overlayBuilder.none'), confetti: t('overlayBuilder.anim.effect.confetti'),
+    gold: t('overlayBuilder.anim.effect.gold'), money: t('overlayBuilder.anim.effect.money'), robots: t('overlayBuilder.anim.effect.robots'),
+    tiremarks: t('overlayBuilder.anim.effect.tiremarks'),
+  },
+  direction: {
+    down: t('overlayBuilder.anim.summary.down'), up: t('overlayBuilder.anim.summary.up'), left: t('overlayBuilder.anim.summary.left'), right: t('overlayBuilder.anim.summary.right'),
+  },
+}).replace(/</g, '\\u003c') %>;
+const fill = (text, values) => text.replace(/\{\{(\w+)\}\}/g, (_, key) => (values[key] != null ? values[key] : ''));
+
+// The copy buttons of the "OBS URLs" menu
+function copyBuilderUrl(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).value);
+  btn.textContent = I18N.copied;
+  setTimeout(() => { btn.textContent = I18N.copy; }, 1500);
+}
+
 // ─── Data setup ───────────────────────────────────────────────────────────────
 const SAVED_DESIGNS = {};
 const SERVER_DESIGNS = <%- designs %>;
@@ -1183,11 +1225,7 @@ const DEFAULT_SIDE_ICONS = {
 // the builder and the server's handling of a value it cannot keep use the same defaults.
 const EVENT_DEFAULTS = <%- eventDefaults %>;
 
-const EVENT_NAMES = {
-  follow:'Follow', subscription:'Subscription', bits:'Bits', donation:'Donation',
-  raid:'Raid', yt_superchat:'YT Super Chat', yt_member:'YT Member', yt_giftmember:'YT Gift Member',
-  timed:'Timed', giveaway_winner:'Giveaway Winner',
-};
+const EVENT_NAMES = I18N.eventNames;
 
 const PREVIEW_USERNAMES = {
   follow:'StreamerFan99', subscription:'ProRacer_24', bits:'NitroQueen',
@@ -1355,9 +1393,9 @@ function updateSideIconGrid(d) {
   });
   if (hint) {
     if (activeIcon != null) {
-      hint.textContent = activeIcon === 'none' ? 'No side icons' : `Custom: ${activeIcon}`;
+      hint.textContent = activeIcon === 'none' ? I18N.iconNone : fill(I18N.iconCustom, { icon: activeIcon });
     } else {
-      hint.textContent = defaultIcon ? `Default: ${defaultIcon} (from event type)` : 'Default: no icons';
+      hint.textContent = defaultIcon ? fill(I18N.iconDefault, { icon: defaultIcon }) : I18N.iconDefaultNone;
     }
   }
 }
@@ -2030,14 +2068,14 @@ async function saveCurrentDesign() {
     if (data.ok) {
       SAVED_DESIGNS[currentType] = Object.assign({}, design);
       const status = document.getElementById('save-status');
-      status.textContent = 'Saved!';
+      status.textContent = I18N.saved;
       status.classList.add('visible');
       setTimeout(() => status.classList.remove('visible'), 2000);
     } else {
-      alert(data.error || 'Save failed');
+      alert(data.error || I18N.saveFailed);
     }
   } catch(e) {
-    alert('Save failed: ' + e.message);
+    alert(fill(I18N.saveFailedWith, { error: e.message }));
   }
 }
 
@@ -2051,7 +2089,7 @@ function discardChanges() {
 
 // ─── Reset to default ─────────────────────────────────────────────────────────
 async function resetCurrentDesign() {
-  if (!confirm('Reset "' + EVENT_NAMES[currentType] + '" to default settings?')) return;
+  if (!confirm(fill(I18N.resetConfirm, { name: EVENT_NAMES[currentType] }))) return;
   try {
     await fetch('/dashboard/overlay-builder/reset', {
       method: 'POST',
@@ -2066,7 +2104,7 @@ async function resetCurrentDesign() {
   updatePreview();
 
   const status = document.getElementById('save-status');
-  status.textContent = 'Reset to default';
+  status.textContent = I18N.resetDone;
   status.classList.add('visible');
   setTimeout(() => status.classList.remove('visible'), 2000);
 }
@@ -2089,7 +2127,7 @@ document.querySelectorAll('.theme-preset').forEach(btn => {
 function renderSponsorList() {
   const list = document.getElementById('sponsor-list');
   if (sponsorImages.length === 0) {
-    list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px;">No sponsors yet</div>';
+    list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px;">' + I18N.noSponsors.replace(/</g, '&lt;') + '</div>';
     return;
   }
   // Sponsor display_name + filename are stored from upload — escape both
@@ -2111,18 +2149,18 @@ function renderSponsorList() {
       </div>
       <span class="sp-name" title="${safeName}">${safeName}</span>
       <input type="number" class="sp-dur" value="${s.display_duration || 30}" min="5" max="300" step="5"
-             title="Display duration (seconds)"
+             title="${esc(I18N.durationTitle)}"
              onchange="updateSponsorDuration(${s.id}, this.value)">
       <span class="sp-dur-label">s</span>
       <label class="sp-toggle sp-enable">
         <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="updateSponsorEnabled(${s.id}, this.checked)">
         <span class="sp-toggle-slider"></span>
       </label>
-      <button class="sp-del" onclick="deleteSponsor(${s.id})" title="Delete">
+      <button class="sp-del" onclick="deleteSponsor(${s.id})" title="${esc(I18N.deleteTitle)}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <div class="sp-scale-row" onmousedown="event.stopPropagation()" ondragstart="event.preventDefault(); event.stopPropagation();">
-        <span>Scale</span>
+        <span>${esc(I18N.scale)}</span>
         <input type="range" min="0.3" max="1" step="0.05" value="${scale}"
                draggable="false"
                oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'; previewSponsorScale(${s.id}, this.value)"
@@ -2227,7 +2265,7 @@ async function saveSponsorScale(id, scale) {
 }
 
 async function deleteSponsor(id) {
-  if (!confirm('Delete this sponsor image?')) return;
+  if (!confirm(I18N.deleteSponsorConfirm)) return;
   await fetch(`/dashboard/sponsors/${id}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
   sponsorImages = sponsorImages.filter(s => s.id !== id);
   renderSponsorList();
@@ -2275,7 +2313,7 @@ async function uploadSponsor() {
   } catch(e) {}
   spSelectedFile = null;
   spFileInput.value = '';
-  spUploadBtn.textContent = 'Upload';
+  spUploadBtn.textContent = I18N.upload;
   spUploadBtn.disabled = true;
   document.getElementById('sp-upload-name').value = 'Sponsor';
   document.getElementById('sp-upload-dur').value = '30';
@@ -2515,55 +2553,55 @@ document.addEventListener('mouseup', e => {
 <!-- Theme Popup Modal -->
 <div class="modal-overlay" id="theme-modal" onclick="if(event.target===this)closeThemePopup()">
   <div class="modal-box" style="max-width:580px;max-height:90vh;overflow-y:auto;">
-    <h3>🎨 Change Theme</h3>
+    <h3>🎨 <%= t('overlayBuilder.theme.popupTitle') %></h3>
 
     <!-- Presets -->
     <div style="margin-bottom:16px;">
-      <div class="ctrl-label" style="margin-bottom:8px;">Presets</div>
+      <div class="ctrl-label" style="margin-bottom:8px;"><%= t('overlayBuilder.theme.presets') %></div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
-        <button type="button" class="theme-preset" data-bg="#1a1a3e" data-accent="#8888cc" data-border="#8888cc" data-text="#ffffff" title="Default Blue" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a3e,#8888cc);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#061a10" data-accent="#00ff88" data-border="#00ff88" data-text="#ffffff" title="Racing Green" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#061a10,#00ff88);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1c1200" data-accent="#f7c948" data-border="#f7c948" data-text="#ffffff" title="Gold" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c1200,#f7c948);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#110022" data-accent="#bf00ff" data-border="#bf00ff" data-text="#ffffff" title="Purple" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#110022,#bf00ff);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1c0505" data-accent="#ff4444" data-border="#ff4444" data-text="#ffffff" title="Red" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c0505,#ff4444);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#0a1520" data-accent="#00b4d8" data-border="#00b4d8" data-text="#ffffff" title="Cyan" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0a1520,#00b4d8);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1a0a00" data-accent="#ff6b35" data-border="#ff6b35" data-text="#ffffff" title="Orange" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0a00,#ff6b35);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#0d0d0d" data-accent="#00ff41" data-border="#00ff41" data-text="#00ff41" title="Neon Matrix" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0d0d0d,#003311);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1a1a2e" data-accent="#e94560" data-border="#e94560" data-text="#ffffff" title="Synthwave" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a2e,#e94560);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#f5f0e8" data-accent="#2d2d2d" data-border="#c8b89a" data-text="#2d2d2d" title="Light Classic" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(0,0,0,0.1);background:linear-gradient(135deg,#f5f0e8,#c8b89a);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#2b1055" data-accent="#d946ef" data-border="#d946ef" data-text="#ffffff" title="Vaporwave" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#2b1055,#d946ef);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1e293b" data-accent="#38bdf8" data-border="#38bdf8" data-text="#f1f5f9" title="Frost" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1e293b,#38bdf8);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#0f0f0f" data-accent="#ffffff" data-border="#333333" data-text="#ffffff" title="Minimal Dark" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0f0f0f,#333333);cursor:pointer;"></button>
-        <button type="button" class="theme-preset" data-bg="#1a0000" data-accent="#ff0055" data-border="#ff0055" data-text="#ffffff" title="Hot Pink" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0000,#ff0055);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a1a3e" data-accent="#8888cc" data-border="#8888cc" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.defaultBlue') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a3e,#8888cc);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#061a10" data-accent="#00ff88" data-border="#00ff88" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.racingGreen') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#061a10,#00ff88);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1c1200" data-accent="#f7c948" data-border="#f7c948" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.gold') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c1200,#f7c948);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#110022" data-accent="#bf00ff" data-border="#bf00ff" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.purple') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#110022,#bf00ff);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1c0505" data-accent="#ff4444" data-border="#ff4444" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.red') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1c0505,#ff4444);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#0a1520" data-accent="#00b4d8" data-border="#00b4d8" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.cyan') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0a1520,#00b4d8);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a0a00" data-accent="#ff6b35" data-border="#ff6b35" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.orange') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0a00,#ff6b35);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#0d0d0d" data-accent="#00ff41" data-border="#00ff41" data-text="#00ff41" title="<%= t('overlayBuilder.theme.preset.neonMatrix') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0d0d0d,#003311);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a1a2e" data-accent="#e94560" data-border="#e94560" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.synthwave') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a1a2e,#e94560);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#f5f0e8" data-accent="#2d2d2d" data-border="#c8b89a" data-text="#2d2d2d" title="<%= t('overlayBuilder.theme.preset.lightClassic') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(0,0,0,0.1);background:linear-gradient(135deg,#f5f0e8,#c8b89a);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#2b1055" data-accent="#d946ef" data-border="#d946ef" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.vaporwave') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#2b1055,#d946ef);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1e293b" data-accent="#38bdf8" data-border="#38bdf8" data-text="#f1f5f9" title="<%= t('overlayBuilder.theme.preset.frost') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1e293b,#38bdf8);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#0f0f0f" data-accent="#ffffff" data-border="#333333" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.minimalDark') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#0f0f0f,#333333);cursor:pointer;"></button>
+        <button type="button" class="theme-preset" data-bg="#1a0000" data-accent="#ff0055" data-border="#ff0055" data-text="#ffffff" title="<%= t('overlayBuilder.theme.preset.hotPink') %>" style="width:100%;aspect-ratio:1;border-radius:8px;border:2px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#1a0000,#ff0055);cursor:pointer;"></button>
       </div>
     </div>
 
     <!-- Colors -->
-    <div class="ctrl-label" style="margin-bottom:8px;">Colors</div>
+    <div class="ctrl-label" style="margin-bottom:8px;"><%= t('overlayBuilder.theme.colors') %></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Background</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;"><%= t('overlayBuilder.theme.background') %></div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="color" id="modal-bg-color" value="#1a1a3e" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
           <input type="text" id="modal-bg-hex" value="#1a1a3e" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-bg-color').value=this.value;updateThemePreview();">
         </div>
       </div>
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Accent</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;"><%= t('overlayBuilder.theme.accent') %></div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="color" id="modal-accent-color" value="#8888cc" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
           <input type="text" id="modal-accent-hex" value="#8888cc" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-accent-color').value=this.value;updateThemePreview();">
         </div>
       </div>
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Border</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;"><%= t('overlayBuilder.theme.border') %></div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="color" id="modal-border-color" value="#8888cc" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
           <input type="text" id="modal-border-hex" value="#8888cc" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-border-color').value=this.value;updateThemePreview();">
         </div>
       </div>
       <div>
-        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;">Text</div>
+        <div class="ctrl-label" style="margin-bottom:6px;font-size:10px;"><%= t('overlayBuilder.theme.text') %></div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="color" id="modal-text-color" value="#ffffff" style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;">
           <input type="text" id="modal-text-hex" value="#ffffff" style="flex:1;padding:6px 8px;font-size:12px;font-family:monospace;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" oninput="document.getElementById('modal-text-color').value=this.value;updateThemePreview();">
@@ -2572,63 +2610,63 @@ document.addEventListener('mouseup', e => {
     </div>
 
     <!-- Background & Gradient -->
-    <div class="ctrl-label" style="margin-bottom:8px;">Background & Gradient</div>
+    <div class="ctrl-label" style="margin-bottom:8px;"><%= t('overlayBuilder.theme.backgroundGradient') %></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Opacity <span id="modal-val-bg-opacity" style="float:right;color:var(--text-muted);">100%</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.opacity') %> <span id="modal-val-bg-opacity" style="float:right;color:var(--text-muted);">100%</span></div>
         <input type="range" id="modal-bg-opacity" min="0" max="1" step="0.05" value="1" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-bg-opacity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
       </div>
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Gradient Direction</div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.gradientDirection') %></div>
         <select id="modal-gradient-direction" style="width:100%;padding:6px 8px;font-size:12px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);" onchange="updateThemePreview();">
-          <option value="160deg">Diagonal (default)</option>
-          <option value="180deg">Top to Bottom</option>
-          <option value="0deg">Bottom to Top</option>
-          <option value="90deg">Left to Right</option>
-          <option value="270deg">Right to Left</option>
-          <option value="135deg">Top-Left to Bottom-Right</option>
-          <option value="45deg">Bottom-Left to Top-Right</option>
-          <option value="solid">Solid (no gradient)</option>
+          <option value="160deg"><%= t('overlayBuilder.theme.gradient.diagonal') %></option>
+          <option value="180deg"><%= t('overlayBuilder.theme.gradient.topBottom') %></option>
+          <option value="0deg"><%= t('overlayBuilder.theme.gradient.bottomTop') %></option>
+          <option value="90deg"><%= t('overlayBuilder.theme.gradient.leftRight') %></option>
+          <option value="270deg"><%= t('overlayBuilder.theme.gradient.rightLeft') %></option>
+          <option value="135deg"><%= t('overlayBuilder.theme.gradient.topLeftBottomRight') %></option>
+          <option value="45deg"><%= t('overlayBuilder.theme.gradient.bottomLeftTopRight') %></option>
+          <option value="solid"><%= t('overlayBuilder.theme.gradient.solid') %></option>
         </select>
       </div>
     </div>
 
     <!-- Border -->
-    <div class="ctrl-label" style="margin-bottom:8px;">Border</div>
+    <div class="ctrl-label" style="margin-bottom:8px;"><%= t('overlayBuilder.theme.border') %></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Thickness <span id="modal-val-border-thickness" style="float:right;color:var(--text-muted);">2px</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.thickness') %> <span id="modal-val-border-thickness" style="float:right;color:var(--text-muted);">2px</span></div>
         <input type="range" id="modal-border-thickness" min="0" max="6" step="1" value="2" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-border-thickness').textContent=this.value+'px';updateThemePreview();">
       </div>
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Opacity <span id="modal-val-border-opacity" style="float:right;color:var(--text-muted);">50%</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.opacity') %> <span id="modal-val-border-opacity" style="float:right;color:var(--text-muted);">50%</span></div>
         <input type="range" id="modal-border-opacity" min="0" max="1" step="0.05" value="0.5" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-border-opacity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
       </div>
     </div>
 
     <!-- Glow & Shadow -->
-    <div class="ctrl-label" style="margin-bottom:8px;">Glow & Shadow</div>
+    <div class="ctrl-label" style="margin-bottom:8px;"><%= t('overlayBuilder.theme.glowShadow') %></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Glow Intensity <span id="modal-val-glow-intensity" style="float:right;color:var(--text-muted);">25%</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.glowIntensity') %> <span id="modal-val-glow-intensity" style="float:right;color:var(--text-muted);">25%</span></div>
         <input type="range" id="modal-glow-intensity" min="0" max="1" step="0.05" value="0.25" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-glow-intensity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
       </div>
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Shadow Opacity <span id="modal-val-shadow-opacity" style="float:right;color:var(--text-muted);">60%</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.shadowOpacity') %> <span id="modal-val-shadow-opacity" style="float:right;color:var(--text-muted);">60%</span></div>
         <input type="range" id="modal-shadow-opacity" min="0" max="1" step="0.05" value="0.6" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-shadow-opacity').textContent=Math.round(this.value*100)+'%';updateThemePreview();">
       </div>
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Shadow Blur <span id="modal-val-shadow-blur" style="float:right;color:var(--text-muted);">32px</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.shadowBlur') %> <span id="modal-val-shadow-blur" style="float:right;color:var(--text-muted);">32px</span></div>
         <input type="range" id="modal-shadow-blur" min="0" max="80" step="2" value="32" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-shadow-blur').textContent=this.value+'px';updateThemePreview();">
       </div>
       <div>
-        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;">Shadow Spread <span id="modal-val-shadow-spread" style="float:right;color:var(--text-muted);">0px</span></div>
+        <div class="ctrl-label" style="font-size:10px;margin-bottom:4px;"><%= t('overlayBuilder.theme.shadowSpread') %> <span id="modal-val-shadow-spread" style="float:right;color:var(--text-muted);">0px</span></div>
         <input type="range" id="modal-shadow-spread" min="-20" max="20" step="1" value="0" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('modal-val-shadow-spread').textContent=this.value+'px';updateThemePreview();">
       </div>
     </div>
 
     <!-- Preview -->
-    <div class="ctrl-label" style="margin-bottom:8px;">Preview</div>
+    <div class="ctrl-label" style="margin-bottom:8px;"><%= t('overlayBuilder.previewLabel') %></div>
     <div style="background:#0a0a0a;border-radius:10px;padding:20px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;min-height:80px;">
       <div id="theme-preview-card" style="padding:16px 20px;border-radius:12px;border:2px solid #8888cc;background:#1a1a3e;width:100%;max-width:320px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8888cc;margin-bottom:4px;">New Follower</div>
@@ -2637,8 +2675,8 @@ document.addEventListener('mouseup', e => {
       </div>
     </div>
     <div class="modal-actions">
-      <button type="button" class="btn-cancel" onclick="closeThemePopup()">Cancel</button>
-      <button type="button" class="btn-apply" onclick="applyTheme()">Apply</button>
+      <button type="button" class="btn-cancel" onclick="closeThemePopup()"><%= t('overlayBuilder.theme.cancel') %></button>
+      <button type="button" class="btn-apply" onclick="applyTheme()"><%= t('overlayBuilder.theme.apply') %></button>
     </div>
   </div>
 </div>
@@ -2646,19 +2684,19 @@ document.addEventListener('mouseup', e => {
 <!-- Text & Font Popup Modal (Tabbed: Label / Username / Detail) -->
 <div class="modal-overlay" id="text-modal" onclick="if(event.target===this)closeTextPopup()">
   <div class="modal-box" style="max-width:520px;">
-    <h3>✏️ Customize Text</h3>
+    <h3>✏️ <%= t('overlayBuilder.text.popupTitle') %></h3>
 
     <!-- Text Alignment -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-      <span class="ctrl-label" style="margin:0;">Alignment</span>
+      <span class="ctrl-label" style="margin:0;"><%= t('overlayBuilder.text.alignment') %></span>
       <div style="display:flex;gap:4px;">
-        <button type="button" class="text-align-btn" data-align="left" onclick="setTextAlign('left')" title="Left">
+        <button type="button" class="text-align-btn" data-align="left" onclick="setTextAlign('left')" title="<%= t('overlayBuilder.text.alignLeft') %>">
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 3h12M2 6h8M2 9h10M2 12h6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </button>
-        <button type="button" class="text-align-btn active" data-align="center" onclick="setTextAlign('center')" title="Center">
+        <button type="button" class="text-align-btn active" data-align="center" onclick="setTextAlign('center')" title="<%= t('overlayBuilder.text.alignCenter') %>">
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 3h12M4 6h8M3 9h10M5 12h6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </button>
-        <button type="button" class="text-align-btn" data-align="right" onclick="setTextAlign('right')" title="Right">
+        <button type="button" class="text-align-btn" data-align="right" onclick="setTextAlign('right')" title="<%= t('overlayBuilder.text.alignRight') %>">
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 3h12M6 6h8M4 9h10M8 12h6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </button>
       </div>
@@ -2666,112 +2704,112 @@ document.addEventListener('mouseup', e => {
 
     <!-- 3 Tabs -->
     <div class="text-tabs" style="display:flex;gap:4px;margin-bottom:14px;">
-      <button type="button" class="text-tab active" data-tab="label" onclick="switchTextTab('label')">Top Text</button>
-      <button type="button" class="text-tab" data-tab="username" onclick="switchTextTab('username')">Username</button>
-      <button type="button" class="text-tab" data-tab="detail" onclick="switchTextTab('detail')">Bottom Text</button>
+      <button type="button" class="text-tab active" data-tab="label" onclick="switchTextTab('label')"><%= t('overlayBuilder.text.tabTop') %></button>
+      <button type="button" class="text-tab" data-tab="username" onclick="switchTextTab('username')"><%= t('overlayBuilder.text.tabUsername') %></button>
+      <button type="button" class="text-tab" data-tab="detail" onclick="switchTextTab('detail')"><%= t('overlayBuilder.text.tabBottom') %></button>
     </div>
 
     <!-- Label Tab -->
     <div class="text-tab-panel" id="tab-label">
-      <div class="ctrl-label" style="margin-bottom:6px;">Text Content</div>
-      <input type="text" id="modal-event-label" maxlength="100" placeholder="e.g. New Pit Crew Member" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.text.content') %></div>
+      <input type="text" id="modal-event-label" maxlength="100" placeholder="<%= t('overlayBuilder.text.labelPlaceholder', { example: 'New Pit Crew Member' }) %>" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.text.color') %></div>
           <div style="display:flex;align-items:center;gap:6px;">
             <input type="color" id="modal-label-color" value="#8888cc" style="width:32px;height:28px;padding:0;border:none;background:none;cursor:pointer;" oninput="updateTextPreview()">
-            <span class="ctrl-label" style="font-size:11px;opacity:0.6;" id="modal-label-color-hint">accent</span>
+            <span class="ctrl-label" style="font-size:11px;opacity:0.6;" id="modal-label-color-hint"><%= t('overlayBuilder.text.accentHint') %></span>
           </div>
         </div>
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Weight</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.text.weight') %></div>
           <select id="modal-label-weight" style="width:100%;" onchange="updateTextPreview()">
-            <option value="400">Regular (400)</option>
-            <option value="500">Medium (500)</option>
-            <option value="600">Semibold (600)</option>
-            <option value="700" selected>Bold (700)</option>
-            <option value="800">Extra Bold (800)</option>
+            <option value="400"><%= t('overlayBuilder.text.weightRegular') %></option>
+            <option value="500"><%= t('overlayBuilder.text.weightMedium') %></option>
+            <option value="600"><%= t('overlayBuilder.text.weightSemibold') %></option>
+            <option value="700" selected><%= t('overlayBuilder.text.weightBold') %></option>
+            <option value="800"><%= t('overlayBuilder.text.weightExtraBold') %></option>
           </select>
         </div>
       </div>
       <div class="range-row" style="margin-bottom:12px;">
         <div class="range-header">
-          <span class="ctrl-label">Size</span>
+          <span class="ctrl-label"><%= t('overlayBuilder.text.size') %></span>
           <span class="range-val" id="modal-val-label-size">10px</span>
         </div>
         <input type="range" id="modal-label-size" min="8" max="24" step="1" value="10" oninput="document.getElementById('modal-val-label-size').textContent=this.value+'px';updateTextPreview();">
       </div>
-      <div class="ctrl-label" style="margin-bottom:6px;">Font Family</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.text.fontFamily') %></div>
       <div class="font-gallery font-gallery-sm" id="font-gallery-label"></div>
     </div>
 
     <!-- Username Tab -->
     <div class="text-tab-panel" id="tab-username" style="display:none;">
-      <div class="ctrl-label" style="margin-bottom:6px;opacity:0.5;">Username is set automatically from the event</div>
+      <div class="ctrl-label" style="margin-bottom:6px;opacity:0.5;"><%= t('overlayBuilder.text.usernameAuto') %></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.text.color') %></div>
           <div style="display:flex;align-items:center;gap:6px;">
             <input type="color" id="modal-username-color" value="#ffffff" style="width:32px;height:28px;padding:0;border:none;background:none;cursor:pointer;" oninput="updateTextPreview()">
           </div>
         </div>
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Weight</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.text.weight') %></div>
           <select id="modal-username-weight" style="width:100%;" onchange="updateTextPreview()">
-            <option value="400">Regular (400)</option>
-            <option value="500">Medium (500)</option>
-            <option value="600">Semibold (600)</option>
-            <option value="700">Bold (700)</option>
-            <option value="800" selected>Extra Bold (800)</option>
+            <option value="400"><%= t('overlayBuilder.text.weightRegular') %></option>
+            <option value="500"><%= t('overlayBuilder.text.weightMedium') %></option>
+            <option value="600"><%= t('overlayBuilder.text.weightSemibold') %></option>
+            <option value="700"><%= t('overlayBuilder.text.weightBold') %></option>
+            <option value="800" selected><%= t('overlayBuilder.text.weightExtraBold') %></option>
           </select>
         </div>
       </div>
       <div class="range-row" style="margin-bottom:12px;">
         <div class="range-header">
-          <span class="ctrl-label">Size</span>
+          <span class="ctrl-label"><%= t('overlayBuilder.text.size') %></span>
           <span class="range-val" id="modal-val-username-size">24px</span>
         </div>
         <input type="range" id="modal-username-size" min="14" max="52" step="1" value="24" oninput="document.getElementById('modal-val-username-size').textContent=this.value+'px';updateTextPreview();">
       </div>
-      <div class="ctrl-label" style="margin-bottom:6px;">Font Family</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.text.fontFamily') %></div>
       <div class="font-gallery font-gallery-sm" id="font-gallery-username"></div>
     </div>
 
     <!-- Detail Tab -->
     <div class="text-tab-panel" id="tab-detail" style="display:none;">
-      <div class="ctrl-label" style="margin-bottom:6px;">Text Content</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.text.content') %></div>
       <input type="text" id="modal-detail-text" maxlength="300" placeholder="just joined the race 🏁" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.text.color') %></div>
           <div style="display:flex;align-items:center;gap:6px;">
             <input type="color" id="modal-detail-color" value="#ffffff" style="width:32px;height:28px;padding:0;border:none;background:none;cursor:pointer;" oninput="updateTextPreview()">
           </div>
         </div>
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Weight</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.text.weight') %></div>
           <select id="modal-detail-weight" style="width:100%;" onchange="updateTextPreview()">
-            <option value="400" selected>Regular (400)</option>
-            <option value="500">Medium (500)</option>
-            <option value="600">Semibold (600)</option>
-            <option value="700">Bold (700)</option>
-            <option value="800">Extra Bold (800)</option>
+            <option value="400" selected><%= t('overlayBuilder.text.weightRegular') %></option>
+            <option value="500"><%= t('overlayBuilder.text.weightMedium') %></option>
+            <option value="600"><%= t('overlayBuilder.text.weightSemibold') %></option>
+            <option value="700"><%= t('overlayBuilder.text.weightBold') %></option>
+            <option value="800"><%= t('overlayBuilder.text.weightExtraBold') %></option>
           </select>
         </div>
       </div>
       <div class="range-row" style="margin-bottom:12px;">
         <div class="range-header">
-          <span class="ctrl-label">Size</span>
+          <span class="ctrl-label"><%= t('overlayBuilder.text.size') %></span>
           <span class="range-val" id="modal-val-detail-size">13px</span>
         </div>
         <input type="range" id="modal-detail-size" min="8" max="32" step="1" value="13" oninput="document.getElementById('modal-val-detail-size').textContent=this.value+'px';updateTextPreview();">
       </div>
-      <div class="ctrl-label" style="margin-bottom:6px;">Font Family</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.text.fontFamily') %></div>
       <div class="font-gallery font-gallery-sm" id="font-gallery-detail"></div>
     </div>
 
     <!-- Live Preview -->
-    <div class="ctrl-label" style="margin-bottom:8px;margin-top:14px;">Preview</div>
+    <div class="ctrl-label" style="margin-bottom:8px;margin-top:14px;"><%= t('overlayBuilder.previewLabel') %></div>
     <div id="text-preview-card" style="padding:16px;border-radius:12px;border:2px solid #8888cc;background:#1a1a3e;margin-bottom:8px;">
       <div id="text-preview-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:4px;">New Follower</div>
       <div id="text-preview-username" style="font-size:24px;font-weight:800;color:#ffffff;">RacerName</div>
@@ -2779,8 +2817,8 @@ document.addEventListener('mouseup', e => {
     </div>
 
     <div class="modal-actions">
-      <button type="button" class="btn-cancel" onclick="closeTextPopup()">Cancel</button>
-      <button type="button" class="btn-apply" onclick="applyText()">Apply</button>
+      <button type="button" class="btn-cancel" onclick="closeTextPopup()"><%= t('overlayBuilder.theme.cancel') %></button>
+      <button type="button" class="btn-apply" onclick="applyText()"><%= t('overlayBuilder.theme.apply') %></button>
     </div>
   </div>
 </div>
@@ -2788,52 +2826,52 @@ document.addEventListener('mouseup', e => {
 <!-- Animation Popup Modal -->
 <div class="modal-overlay" id="anim-modal" onclick="if(event.target===this)closeAnimPopup()">
   <div class="modal-box" style="max-width:560px;">
-    <h3>⚡ Customize Animation</h3>
+    <h3>⚡ <%= t('overlayBuilder.anim.popupTitle') %></h3>
 
     <!-- Tabs -->
     <div style="display:flex;gap:4px;margin-bottom:16px;background:var(--bg-base);padding:3px;border-radius:8px;">
-      <button type="button" class="anim-tab active" data-anim-tab="card" onclick="switchAnimTab('card')" style="flex:1;padding:8px;font-size:12px;font-weight:600;font-family:var(--font-display);border:none;border-radius:6px;cursor:pointer;transition:all 0.15s;background:var(--accent);color:#fff;">Card Animation</button>
-      <button type="button" class="anim-tab" data-anim-tab="canvas" onclick="switchAnimTab('canvas')" style="flex:1;padding:8px;font-size:12px;font-weight:600;font-family:var(--font-display);border:none;border-radius:6px;cursor:pointer;transition:all 0.15s;background:transparent;color:var(--text-secondary);">Canvas Animation</button>
+      <button type="button" class="anim-tab active" data-anim-tab="card" onclick="switchAnimTab('card')" style="flex:1;padding:8px;font-size:12px;font-weight:600;font-family:var(--font-display);border:none;border-radius:6px;cursor:pointer;transition:all 0.15s;background:var(--accent);color:#fff;"><%= t('overlayBuilder.anim.tabCard') %></button>
+      <button type="button" class="anim-tab" data-anim-tab="canvas" onclick="switchAnimTab('canvas')" style="flex:1;padding:8px;font-size:12px;font-weight:600;font-family:var(--font-display);border:none;border-radius:6px;cursor:pointer;transition:all 0.15s;background:transparent;color:var(--text-secondary);"><%= t('overlayBuilder.anim.tabCanvas') %></button>
     </div>
 
     <!-- CARD ANIMATION TAB -->
     <div class="anim-tab-content" id="anim-tab-card">
 
       <!-- Entrance -->
-      <div class="ctrl-label" style="margin-bottom:6px;">Entrance</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.anim.entrance') %></div>
       <div style="margin-bottom:14px;">
         <select id="modal-entrance-animation" style="width:100%;" onchange="playAnimPreviewEntrance();updateAnimPreview()">
-          <option value="slideDown">Slide Down</option>
-          <option value="slideUp">Slide Up</option>
-          <option value="slideLeft">Slide Left</option>
-          <option value="slideRight">Slide Right</option>
-          <option value="zoomIn">Zoom In</option>
-          <option value="fadeIn">Fade In</option>
+          <option value="slideDown"><%= t('overlayBuilder.anim.slideDown') %></option>
+          <option value="slideUp"><%= t('overlayBuilder.anim.slideUp') %></option>
+          <option value="slideLeft"><%= t('overlayBuilder.anim.slideLeft') %></option>
+          <option value="slideRight"><%= t('overlayBuilder.anim.slideRight') %></option>
+          <option value="zoomIn"><%= t('overlayBuilder.anim.zoomIn') %></option>
+          <option value="fadeIn"><%= t('overlayBuilder.anim.fadeIn') %></option>
         </select>
       </div>
 
       <!-- Bottom Bar Animation -->
-      <div class="ctrl-label" style="margin-bottom:6px;">Bottom Bar</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.anim.bottomBar') %></div>
       <div style="margin-bottom:14px;">
         <select id="modal-car-animation" style="width:100%;" onchange="updateAnimPreview();updateAnimPopupBottomPreview();">
-          <optgroup label="Racing">
-            <option value="zoomLR">🏎️ Car L→R</option>
-            <option value="zoomRL">🏎️ Car R→L</option>
+          <optgroup label="<%= t('overlayBuilder.anim.groupRacing') %>">
+            <option value="zoomLR"><%= t('overlayBuilder.anim.car.zoomLR') %></option>
+            <option value="zoomRL"><%= t('overlayBuilder.anim.car.zoomRL') %></option>
             <!-- removed bounce -->
-            <option value="checkered">🏁 Checkered Flag</option>
+            <option value="checkered"><%= t('overlayBuilder.anim.car.checkered') %></option>
           </optgroup>
-          <optgroup label="Effects">
-            <option value="flames">🔥 Flames</option>
-            <option value="sparkles">✨ Sparkles</option>
-            <option value="lightning">⚡ Lightning</option>
-            <option value="neonSweep">💡 Neon Sweep</option>
+          <optgroup label="<%= t('overlayBuilder.anim.groupEffects') %>">
+            <option value="flames"><%= t('overlayBuilder.anim.car.flames') %></option>
+            <option value="sparkles"><%= t('overlayBuilder.anim.car.sparkles') %></option>
+            <option value="lightning"><%= t('overlayBuilder.anim.car.lightning') %></option>
+            <option value="neonSweep"><%= t('overlayBuilder.anim.car.neonSweep') %></option>
           </optgroup>
-          <optgroup label="Music">
-            <option value="equalizer">🎵 Equalizer Bars</option>
-            <option value="pulse">💓 Pulse Wave</option>
+          <optgroup label="<%= t('overlayBuilder.anim.groupMusic') %>">
+            <option value="equalizer"><%= t('overlayBuilder.anim.car.equalizer') %></option>
+            <option value="pulse"><%= t('overlayBuilder.anim.car.pulse') %></option>
           </optgroup>
-          <optgroup label="Other">
-            <option value="none">None (hide bottom bar)</option>
+          <optgroup label="<%= t('overlayBuilder.anim.groupOther') %>">
+            <option value="none"><%= t('overlayBuilder.anim.car.none') %></option>
           </optgroup>
         </select>
       </div>
@@ -2841,14 +2879,14 @@ document.addEventListener('mouseup', e => {
       <!-- Speed (shared) -->
       <div class="range-row" style="margin-bottom:14px;">
         <div class="range-header">
-          <span class="ctrl-label">Animation Speed</span>
+          <span class="ctrl-label"><%= t('overlayBuilder.anim.speed') %></span>
           <span class="range-val" id="modal-val-speed">1.0×</span>
         </div>
         <input type="range" id="modal-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('modal-val-speed').textContent=parseFloat(this.value).toFixed(1)+'×';updateAnimPreview();updateAnimPopupBottomPreview();">
       </div>
 
       <!-- Card preview -->
-      <div class="ctrl-label" style="margin-bottom:6px;">Preview</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.previewLabel') %></div>
       <div style="background:#080a10;border-radius:10px;padding:16px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
         <div id="anim-preview-card" style="position:relative;border-radius:12px;border:1px solid rgba(136,136,204,0.5);background:linear-gradient(160deg,rgb(9,9,22),#1a1a3e 40%,rgb(9,9,22));text-align:center;width:200px;overflow:hidden;">
           <div style="height:2px;background:linear-gradient(90deg,rgba(50,50,80,0.6),#8888cc,rgba(50,50,80,0.6));border-radius:12px 12px 0 0;"></div>
@@ -2871,31 +2909,31 @@ document.addEventListener('mouseup', e => {
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Screen Effect</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.anim.screenEffect') %></div>
           <select id="modal-screen-effect" style="width:100%;" onchange="updateAnimPreview()">
-            <option value="default">Default (per event)</option>
-            <option value="none">None</option>
-            <option value="confetti">Confetti</option>
-            <option value="gold">Gold Rain</option>
-            <option value="money">Money Rain</option>
-            <option value="robots">Robots</option>
-            <option value="tiremarks">Tire Marks</option>
+            <option value="default"><%= t('overlayBuilder.anim.effect.default') %></option>
+            <option value="none"><%= t('overlayBuilder.none') %></option>
+            <option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option>
+            <option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option>
+            <option value="money"><%= t('overlayBuilder.anim.effect.money') %></option>
+            <option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option>
+            <option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option>
           </select>
         </div>
         <div>
-          <div class="ctrl-label" style="margin-bottom:4px;">Direction</div>
+          <div class="ctrl-label" style="margin-bottom:4px;"><%= t('overlayBuilder.anim.direction') %></div>
           <select id="modal-effect-direction" style="width:100%;" onchange="updateAnimPreview()">
-            <option value="down">Top → Down</option>
-            <option value="up">Bottom → Up</option>
-            <option value="left">Right → Left</option>
-            <option value="right">Left → Right</option>
+            <option value="down"><%= t('overlayBuilder.anim.dir.down') %></option>
+            <option value="up"><%= t('overlayBuilder.anim.dir.up') %></option>
+            <option value="left"><%= t('overlayBuilder.anim.dir.left') %></option>
+            <option value="right"><%= t('overlayBuilder.anim.dir.right') %></option>
           </select>
         </div>
       </div>
 
       <div class="range-row" style="margin-bottom:12px;">
         <div class="range-header">
-          <span class="ctrl-label">Effect Amount</span>
+          <span class="ctrl-label"><%= t('overlayBuilder.anim.effectAmount') %></span>
           <span class="range-val" id="modal-val-amount">1.0×</span>
         </div>
         <input type="range" id="modal-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('modal-val-amount').textContent=parseFloat(this.value).toFixed(1)+'×';updateAnimPreview();">
@@ -2903,25 +2941,25 @@ document.addEventListener('mouseup', e => {
 
       <div class="range-row" style="margin-bottom:14px;">
         <div class="range-header">
-          <span class="ctrl-label">Effect Size</span>
+          <span class="ctrl-label"><%= t('overlayBuilder.anim.effectSize') %></span>
           <span class="range-val" id="modal-val-size">1.0×</span>
         </div>
         <input type="range" id="modal-effect-size" min="0.5" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('modal-val-size').textContent=parseFloat(this.value).toFixed(1)+'×';updateAnimPreview();">
       </div>
 
       <!-- Canvas preview -->
-      <div class="ctrl-label" style="margin-bottom:6px;">Preview</div>
+      <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.previewLabel') %></div>
       <div id="anim-preview-box" style="position:relative;aspect-ratio:16/9;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:#080a10;overflow:hidden;margin-bottom:12px;">
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
-          <div style="border-radius:10px;border:1px solid rgba(136,136,204,0.3);background:rgba(26,26,62,0.5);text-align:center;width:140px;padding:10px;font-size:10px;color:rgba(255,255,255,0.4);">Alert Card</div>
+          <div style="border-radius:10px;border:1px solid rgba(136,136,204,0.3);background:rgba(26,26,62,0.5);text-align:center;width:140px;padding:10px;font-size:10px;color:rgba(255,255,255,0.4);"><%= t('overlayBuilder.anim.alertCard') %></div>
         </div>
       </div>
 
     </div><!-- end canvas tab -->
 
     <div class="modal-actions">
-      <button type="button" class="btn-cancel" onclick="closeAnimPopup()">Cancel</button>
-      <button type="button" class="btn-apply" onclick="applyAnim()">Apply</button>
+      <button type="button" class="btn-cancel" onclick="closeAnimPopup()"><%= t('overlayBuilder.theme.cancel') %></button>
+      <button type="button" class="btn-apply" onclick="applyAnim()"><%= t('overlayBuilder.theme.apply') %></button>
     </div>
   </div>
 </div>
@@ -3064,7 +3102,7 @@ document.querySelectorAll('#theme-modal .theme-preset').forEach(btn => {
 // ─── Text & Font Popup (Tabbed) ──────────────────────────────
 let textBackup = {};
 const FONT_LIST = [
-  { name: 'System Default', family: '-apple-system, BlinkMacSystemFont, sans-serif' },
+  { name: 'System Default', label: I18N.systemDefault, family: '-apple-system, BlinkMacSystemFont, sans-serif' },
   { name: 'Outfit', family: "'Outfit', sans-serif" },
   { name: 'Inter', family: "'Inter', sans-serif" },
   { name: 'Poppins', family: "'Poppins', sans-serif" },
@@ -3084,7 +3122,7 @@ function buildFontGallery(containerId, tabKey) {
     const div = document.createElement('div');
     div.className = 'font-gallery-item' + (modalFonts[tabKey] === f.name ? ' selected' : '');
     div.dataset.font = f.name;
-    div.innerHTML = `<div class="font-name">${f.name}</div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}">The quick brown fox</div>`;
+    div.innerHTML = `<div class="font-name">${f.label || f.name}</div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}">The quick brown fox</div>`;
     div.addEventListener('click', () => {
       container.querySelectorAll('.font-gallery-item').forEach(i => i.classList.remove('selected'));
       div.classList.add('selected');
@@ -3272,9 +3310,9 @@ function updateTextSectionPreview(d) {
 updateTextSectionPreview(workingDesigns[currentType]);
 
 // ─── Animation Popup ─────────────────────────────────────────
-const ENTRANCE_LABELS = { slideDown:'Slide Down', slideUp:'Slide Up', slideLeft:'Slide Left', slideRight:'Slide Right', zoomIn:'Zoom In', fadeIn:'Fade In' };
-const CAR_LABELS = { zoomLR:'🏎️ Car L→R', zoomRL:'🏎️ Car R→L', checkered:'🏁 Checkered', flames:'🔥 Flames', sparkles:'✨ Sparkles', lightning:'⚡ Lightning', neonSweep:'💡 Neon Sweep', equalizer:'🎵 Equalizer', pulse:'💓 Pulse', none:'None' };
-const EFFECT_LABELS = { default:'Default', none:'None', confetti:'Confetti', gold:'Gold Rain', money:'Money Rain', robots:'Robots', tiremarks:'Tire Marks' };
+const ENTRANCE_LABELS = I18N.entrance;
+const CAR_LABELS = I18N.car;
+const EFFECT_LABELS = I18N.effect;
 
 let animBackup = {};
 
@@ -3473,16 +3511,16 @@ function applyAnim() {
   closeAnimPopup();
 }
 
-const DIR_LABELS = { down:'Down', up:'Up', left:'Left', right:'Right' };
+const DIR_LABELS = I18N.direction;
 
 function updateAnimSectionPreview(d) {
-  document.getElementById('asp-entrance').textContent = ENTRANCE_LABELS[d.entrance_animation] || 'Slide Down';
-  document.getElementById('asp-car').textContent = CAR_LABELS[d.car_animation] || 'L→R';
-  document.getElementById('asp-effect').textContent = EFFECT_LABELS[d.screen_effect] || 'Default';
+  document.getElementById('asp-entrance').textContent = ENTRANCE_LABELS[d.entrance_animation] || ENTRANCE_LABELS.slideDown;
+  document.getElementById('asp-car').textContent = CAR_LABELS[d.car_animation] || CAR_LABELS.fallback;
+  document.getElementById('asp-effect').textContent = EFFECT_LABELS[d.screen_effect] || EFFECT_LABELS.default;
   document.getElementById('asp-speed').textContent = parseFloat(d.animation_speed || 1.0).toFixed(1) + '×';
   document.getElementById('asp-amount').textContent = parseFloat(d.effect_amount || 1.0).toFixed(1) + '×';
   document.getElementById('asp-size').textContent = parseFloat(d.effect_size || 1.0).toFixed(1) + '×';
-  document.getElementById('asp-direction').textContent = DIR_LABELS[d.effect_direction] || 'Down';
+  document.getElementById('asp-direction').textContent = DIR_LABELS[d.effect_direction] || DIR_LABELS.down;
 }
 
 // Initial animation section preview
