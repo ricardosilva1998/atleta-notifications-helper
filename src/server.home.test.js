@@ -325,6 +325,29 @@ describe('GET /: YouTube', () => {
     assert.ok(readable(html).includes(english('home.hero.leadNoYoutube')));
     assert.deepEqual(wideCards(html), [true, false, false, false, false, true], 'six cards: the last one, alone in its row, is wide too');
   });
+
+  test('with YouTube switched off nothing in the document names it: not the link preview in its head either', async () => {
+    config.features.youtube = false;
+    const whole = (await get('/')).text;
+    assert.doesNotMatch(readable(whole), /youtube|super chat|shorts/i);
+    assert.ok(whole.includes(`content="${t('en', 'common.siteDescriptionNoYoutube').replace(/&/g, '&amp;')}"`));
+    config.features.youtube = true;
+    assert.ok((await get('/')).text.includes(`content="${t('en', 'common.siteDescription').replace(/&/g, '&amp;')}"`), 'switched on, the preview is as it was');
+  });
+
+  test('the Setup Guide leaves out its YouTube step and numbers the others on; switched on, it has all eight', async () => {
+    const steps = (html) => [...html.matchAll(/<div class="step-number">(\d+)<\/div>/g)].map((m) => Number(m[1]));
+    config.features.youtube = false;
+    const off = await get('/tutorial');
+    assert.equal(off.status, 200);
+    assert.doesNotMatch(readable(off.text), /youtube/i);
+    assert.deepEqual(steps(off.text), [1, 2, 3, 4, 5, 6, 7]);
+    assert.ok(readable(off.text).includes(english('tutorial.step7.title')), 'the welcome step is still there');
+    config.features.youtube = true;
+    const on = await get('/tutorial');
+    assert.deepEqual(steps(on.text), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.ok(readable(on.text).includes(english('tutorial.step6.title')));
+  });
 });
 
 // ── The page as a document ───────────────────────────────────────────────

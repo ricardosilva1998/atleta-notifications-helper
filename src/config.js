@@ -117,7 +117,14 @@ module.exports = {
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@atletanotifications.com',
   },
   features: {
-    youtube: true,
+    // YouTube, for streamers: the dashboard's YouTube tab, the YouTube chatbot page, the YouTube parts of the
+    // server, account, statistics and overlay pages, the Setup Guide's YouTube step and what the home page says
+    // about YouTube. Off hides them (routes/dashboard.js and the views; the multistream page and card too, as it
+    // streams to YouTube); nothing else changes: watched YouTube channels keep posting to Discord, the pollers
+    // keep running and a save keeps the stored YouTube settings. Set it to true to bring everything back.
+    youtube: false,
+    // Kick (still "coming soon"): the dashboard's Kick tab and the Kick parts of the overlay pages. Off hides them.
+    kick: false,
     // The OBS overlay features: the alert overlay and its settings page, the Overlay Builder,
     // sponsor images and the tip-goal bar on stream, Channel Point Rewards, the VTuber source
     // and the giveaway winner card. Off hides every page, card and link that leads to them

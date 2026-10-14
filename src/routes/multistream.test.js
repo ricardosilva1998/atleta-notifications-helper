@@ -130,6 +130,10 @@ before(async () => {
   db = require(DB_FILE);
   config = require('../config');
   saved.multistream = { ...config.multistream };
+  // The page is hidden while YouTube is (config.features.youtube, off by default): on for these tests; one test
+  // below turns it off.
+  saved.youtube = config.features.youtube;
+  config.features.youtube = true;
   const { t, esc, richFor } = require('../i18n');
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');
@@ -164,6 +168,7 @@ before(async () => {
 
 after(async () => {
   Object.assign(config.multistream, saved.multistream);
+  config.features.youtube = saved.youtube;
   global.fetch = saved.fetch;
   for (const level of ['log', 'warn', 'error']) console[level] = saved[level];
   Module._load = saved.load;
@@ -268,6 +273,24 @@ describe('once the relay is configured', () => {
     const disabled = await request('GET', '/dashboard/multistream', { streamer: addStreamer({ enabled: 0 }) });
     assert.equal(disabled.status, 403);
     assert.match(disabled.text, /Account disabled/);
+  });
+
+  test('while YouTube is hidden (config.features.youtube off) the page sends the streamer back to the dashboard, and the relay keeps being answered', async () => {
+    const token = 'tok-gate-youtube-off-0000';
+    const id = addStreamer({ multistream_enabled: 1, multistream_token: token });
+    config.features.youtube = false;
+    try {
+      const res = await request('GET', '/dashboard/multistream', { streamer: id });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/dashboard');
+      const save = await request('POST', '/dashboard/multistream/save', { streamer: id, form: { youtube_privacy: 'private' } });
+      assert.equal(save.headers.location, '/dashboard');
+      assert.equal(db.getMultistreamConfig(id).multistream_enabled, 1, 'the saved settings are kept');
+      const auth = await relayAuth({ action: 'publish', path: `live/${token}`, ip: '203.0.113.7' });
+      assert.ok(auth.status >= 200 && auth.status < 300, `the relay's own routes are not hidden (${auth.status})`);
+    } finally {
+      config.features.youtube = true;
+    }
   });
 
   test('the relay\'s webhooks are not served under /dashboard/multistream', async () => {

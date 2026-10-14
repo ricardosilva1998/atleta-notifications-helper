@@ -68,7 +68,7 @@
 </div>
 
 <!-- Breakdown by Feature -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;" class="animate-in animate-in-delay-3">
+<div style="display: grid; grid-template-columns: <%= features.youtube ? '1fr 1fr' : '1fr' %>; gap: 16px; margin-bottom: 24px;" class="animate-in animate-in-delay-3">
   <!-- Twitch Stats -->
   <div class="card" style="padding: 24px;">
     <h3 style="font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
@@ -98,6 +98,8 @@
     </div>
   </div>
 
+  <%# While YouTube is hidden (features.youtube) its section is left out. %>
+  <% if (features.youtube) { %>
   <!-- YouTube Stats -->
   <div class="card" style="padding: 24px;">
     <h3 style="font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
@@ -118,6 +120,7 @@
       <%- rich(youtubeCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + esc(youtubeCount) + '</strong>' }) %>
     </div>
   </div>
+  <% } %>
 </div>
 
 <!-- Community Features -->

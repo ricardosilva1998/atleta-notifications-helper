@@ -159,7 +159,8 @@ const PAGE_LOCALS = {
   account: [accountPage, { ...accountPage, streamer: { ...streamer, created_at: null, profile_picture: null, discord_avatar: null }, notificationsOverTime: [], notificationsByType: [], feedbackMsg: undefined }],
   'report-issue': [{ streamer }],
   'link-result': [{ success: true, twitchName: 'TwitchName', streamer: null }, { success: false, twitchName: null, streamer: null }, { success: false, expired: true, linkMinutes: 15, twitchName: null, streamer: null }],
-  tutorial: [{ streamer: null }],
+  // the YouTube step is shown only while YouTube is (features.youtube)
+  tutorial: [{ streamer: null, features: { youtube: true } }, { streamer: null, features: { youtube: false } }],
   donate: [{ streamer }],
   'streamer-landing': [{ streamer: null }],
   login: [{ streamer: null }],
@@ -170,8 +171,9 @@ const PAGE_LOCALS = {
     { streamer: null, racingUser: null, hideRacingNav: true, youtubeLive: false, features: { youtube: false } },
   ],
   'guild-stats': [
-    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: '7d', stats: statsPage, chartData: series, twitchCount: 1, youtubeCount: 2 },
-    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: 'lifetime', stats: statsPage, chartData: [], twitchCount: 0, youtubeCount: 1 },
+    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: '7d', stats: statsPage, chartData: series, twitchCount: 1, youtubeCount: 2, features: { youtube: true } },
+    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: 'lifetime', stats: statsPage, chartData: [], twitchCount: 0, youtubeCount: 1, features: { youtube: true } },
+    { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: '30d', stats: statsPage, chartData: series, twitchCount: 1, youtubeCount: 2, features: { youtube: false } },
   ],
   'guild-config': [
     guildPage,
@@ -181,12 +183,12 @@ const PAGE_LOCALS = {
     { ...guildPage, discordListsUnavailable: true, channels: [], roles: [] },
   ],
   'overlay-config': [
-    { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true } },
+    { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true, kick: true } },
     { streamer, hasStreamElementsJwt: false, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: null, needsReauth: false, appUrl: 'https://app.test', features: { youtube: false } },
   ],
   'overlay-builder': [
     { streamer, designs: '[]', sponsors: JSON.stringify([{ id: 1, filename: 'a.png', display_name: 'SponsorName', display_duration: 30, enabled: 1, image_scale: 1 }]),
-      eventDefaults: JSON.stringify(EVENT_DEFAULTS), overlayUrl: 'https://app.test/overlay/tok123', streamThumbnail: 'https://img.test/t.jpg', features: { youtube: true } },
+      eventDefaults: JSON.stringify(EVENT_DEFAULTS), overlayUrl: 'https://app.test/overlay/tok123', streamThumbnail: 'https://img.test/t.jpg', features: { youtube: true, kick: true } },
     { streamer, designs: '[]', sponsors: '[]', eventDefaults: JSON.stringify(EVENT_DEFAULTS), overlayUrl: null, streamThumbnail: null, features: { youtube: false } },
   ],
   'chatbot-config': [
@@ -212,6 +214,8 @@ const PAGE_LOCALS = {
   ],
 };
 PAGE_LOCALS['account-disabled'] = [{ streamer: null }];
+// The account page shows YouTube's channels and posts only while YouTube is (features.youtube): each sample both ways.
+PAGE_LOCALS.account = PAGE_LOCALS.account.flatMap((locals) => [true, false].map((youtube) => ({ ...locals, features: { youtube } })));
 // These pages show less while the overlay features are off (features.overlays, off by default): each of their samples is rendered both ways.
 for (const page of ['youtube-chatbot-config', 'account-disabled']) {
   PAGE_LOCALS[page] = PAGE_LOCALS[page].flatMap((locals) => [true, false].map((overlays) => ({ ...locals, features: { youtube: true, overlays } })));
@@ -353,6 +357,51 @@ describe('while the overlay features are off, the YouTube chatbot and the disabl
       for (const locals of samples(page, true)) for (const key of keysAsked(page, locals)) asked.add(key);
       assert.deepEqual(keys.filter((key) => !asked.has(key)), [], `${page} no longer asks for a text it asked for before`);
     }
+  });
+});
+
+// ── YouTube and Kick switched off (features.youtube, features.kick) ──────
+
+describe('while YouTube and Kick are switched off, the streamer pages say nothing about them', () => {
+  // What a person reads: the text and the attributes a tooltip or a screen reader reads (scripts and styles left out:
+  // an overlay script names its YouTube alert types in code).
+  const readable = (html) => {
+    const plain = html.replace(/<script\b[\s\S]*?<\/script>/gi, ' ').replace(/<style\b[\s\S]*?<\/style>/gi, ' ');
+    return [...plain.matchAll(/>([^<]+)</g)].map((m) => m[1]).concat([...plain.matchAll(/\s(?:alt|title|aria-label|placeholder|content)="([^"]*)"/g)].map((m) => m[1])).join('\n');
+  };
+  const keysAsked = (page, locals) => {
+    const keys = new Set();
+    render(page, locals, (key, params) => { keys.add(key); return t('en', key, params); });
+    return keys;
+  };
+  const CASES = {
+    youtube: { about: /youtube|super ?chats?|\bshorts\b/i, pages: ['guild-config', 'account', 'tutorial', 'guild-stats', 'home', 'overlay-config', 'overlay-builder'] },
+    kick: { about: /\bkick\b/i, pages: ['overlay-config', 'overlay-builder'] },
+  };
+  // The Overlay Builder's script keeps a name for every alert type (it is data: without the YouTube tabs no YouTube
+  // alert can be picked), so for that page only what it shows is checked.
+  const SCRIPT_KEEPS_NAMES = new Set(['overlay-builder']);
+  for (const [flag, { about, pages }] of Object.entries(CASES)) {
+    for (const page of pages) {
+      test(`${flag} off: ${page} asks for no text about it and shows none; on, it does again`, () => {
+        const off = PAGE_LOCALS[page].filter((locals) => !(locals.features || {})[flag]);
+        const on = PAGE_LOCALS[page].filter((locals) => (locals.features || {})[flag]);
+        assert.ok(off.length > 0 && on.length > 0, `${page} has samples with ${flag} on and off`);
+        for (const locals of off) {
+          if (!SCRIPT_KEEPS_NAMES.has(page)) assert.deepEqual([...keysAsked(page, locals)].filter((key) => about.test(en[key])), [], `${page} asks for texts about ${flag}`);
+          const shown = readable(render(page, locals, (key, params) => t('en', key, params))).match(about);
+          assert.ok(!shown, `${page} shows ${shown && shown[0]}`);
+        }
+        const again = on.some((locals) => readable(render(page, locals, (key, params) => t('en', key, params))).match(about));
+        assert.ok(again, `${page} talks about ${flag} again while it is on`);
+      });
+    }
+  }
+
+  test('the Setup Guide numbers its steps on without the YouTube one', () => {
+    const steps = (locals) => [...render('tutorial', locals, (key, params) => t('en', key, params)).matchAll(/<div class="step-number">(\d+)<\/div>/g)].map((m) => Number(m[1]));
+    assert.deepEqual(steps(PAGE_LOCALS.tutorial[0]), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(steps(PAGE_LOCALS.tutorial[1]), [1, 2, 3, 4, 5, 6, 7]);
   });
 });
 

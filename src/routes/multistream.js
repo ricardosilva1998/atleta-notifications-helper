@@ -7,7 +7,10 @@
 //
 // Until the relay is configured (config.multistream.enabled, see
 // docs/multistream-relay-setup.md) the page sends the streamer back to the
-// dashboard and the relay's routes answer 404. Saved settings are kept.
+// dashboard and the relay's routes answer 404. The page does the same while
+// YouTube is hidden from streamers (config.features.youtube: the feature
+// streams to YouTube); the relay's routes keep answering then. Saved settings
+// are kept.
 
 const express = require('express');
 const config = require('../config');
@@ -30,7 +33,7 @@ const dashboardRouter = express.Router();
 const apiRouter = express.Router();
 
 // Read on every request (not once at load), so the gate follows the config.
-dashboardRouter.use((req, res, next) => (config.multistream.enabled ? next() : res.redirect('/dashboard')));
+dashboardRouter.use((req, res, next) => (config.multistream.enabled && config.features.youtube ? next() : res.redirect('/dashboard')));
 dashboardRouter.use(requireActiveStreamer);
 apiRouter.use((req, res, next) => (config.multistream.enabled ? next() : res.status(404).json({ error: 'not found' })));
 

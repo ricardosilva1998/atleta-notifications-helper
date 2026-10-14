@@ -8,7 +8,8 @@
   <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
   <script src="https://unpkg.com/lucide@1.57.0/dist/umd/lucide.min.js" integrity="sha384-Qp5jsYqEgOGiWD8YMQ6yXIycASOePxr9mmbt+Ua0Wu1IScYxo0Pxf7o3Kx6NWJID" crossorigin="anonymous"></script>
   <meta property="og:title" content="Atleta — Personal Helper">
-  <meta property="og:description" content="<%= t('common.siteDescription') %>">
+  <%# The link preview names YouTube only while it is shown to streamers (features.youtube). %>
+  <meta property="og:description" content="<%= t(typeof features !== 'undefined' && features && features.youtube === false ? 'common.siteDescriptionNoYoutube' : 'common.siteDescription') %>">
   <meta property="og:image" content="/app-icon/honest_graphic-running-athlete-9715727.png">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">

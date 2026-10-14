@@ -1,6 +1,8 @@
 <%- include('header', { title: t('nav.setupGuide'), streamer: typeof streamer !== 'undefined' ? streamer : null }) %>
 <%# Every sentence on this page may have bold words and code in it: {{b}}..{{bEnd}} and {{c}}..{{cEnd}} in the text. %>
 <% const MARKUP = { b: '<strong>', bEnd: '</strong>', c: '<code>', cEnd: '</code>' }; %>
+<%# The YouTube step (6) is shown only while YouTube is (features.youtube); the steps after it are numbered on. %>
+<% const youtube = typeof features !== 'undefined' && !!features && !!features.youtube; %>
 
 <div style="max-width: 700px; margin: 0 auto;">
 
@@ -67,7 +69,7 @@
     </div>
     <p><%- rich('tutorial.step4.p2', MARKUP) %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-4.1.png" alt="<%= t('tutorial.step4.alt2') %>">
+      <img src="/screenshots/step-4.1.png" alt="<%= t(youtube ? 'tutorial.step4.alt2' : 'tutorial.step4.alt2NoYoutube') %>">
     </div>
     <div class="tip"><%- rich('tutorial.step4.tip1', MARKUP) %></div>
   </div>
@@ -78,7 +80,7 @@
   <div class="step-content">
     <p><%- rich('tutorial.step5.p1', MARKUP) %></p>
     <div class="screenshot">
-      <img src="/screenshots/step-5.png" alt="<%= t('tutorial.step5.alt1') %>">
+      <img src="/screenshots/step-5.png" alt="<%= t(youtube ? 'tutorial.step5.alt1' : 'tutorial.step5.alt1NoYoutube') %>">
     </div>
     <p><%- rich('tutorial.step5.p2', MARKUP) %></p>
     <div class="screenshot">
@@ -95,6 +97,7 @@
   </div>
 </div>
 
+<% if (youtube) { %>
 <div class="step">
   <div class="step-header"><div class="step-number">6</div><h3><%= t('tutorial.step6.title') %></h3></div>
   <div class="step-content">
@@ -109,9 +112,10 @@
     <div class="tip"><%- rich('tutorial.step6.tip1', MARKUP) %></div>
   </div>
 </div>
+<% } %>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">7</div><h3><%= t('tutorial.step7.title') %></h3></div>
+  <div class="step-header"><div class="step-number"><%= youtube ? 7 : 6 %></div><h3><%= t('tutorial.step7.title') %></h3></div>
   <div class="step-content">
     <p><%- rich('tutorial.step7.p1', MARKUP) %></p>
     <ul>
@@ -126,7 +130,7 @@
 </div>
 
 <div class="step">
-  <div class="step-header"><div class="step-number">8</div><h3><%= t('tutorial.step8.title') %></h3></div>
+  <div class="step-header"><div class="step-number"><%= youtube ? 8 : 7 %></div><h3><%= t('tutorial.step8.title') %></h3></div>
   <div class="step-content">
     <p><%- rich('tutorial.step8.p1', MARKUP) %></p>
 

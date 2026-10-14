@@ -133,6 +133,15 @@ const streamerRow = (over = {}) => ({
 });
 const stats = { live_count: 1, clip_count: 2, recap_count: 3, milestone_count: 4, youtube_video_count: 5, youtube_live_count: 6, digest_count: 7, week_total: 8, total: 9 };
 const guild = { guild_id: '1', name: 'zzserver', icon: null, botPresent: true, twitchCount: 1, youtubeCount: 2, stats, chartData: [{ period: '2026-10-01', twitch_live: 2, youtube_live: 1 }] };
+// The Discord notifications card (discordNotificationsCard() in routes/dashboard.js): servers in every state.
+const notifyServer = (over = {}) => ({
+  guildId: '1', name: 'zzserver', icon: null, botPresent: true, url: '/dashboard/guild/1',
+  goLive: { state: 'on', where: '#zzlive' }, clips: { state: 'off', where: null }, recaps: 'on', milestones: 'wait', highlights: 'off', subRoles: 'wait', ...over,
+});
+const discordNotifications = {
+  twitchLinked: true, announcing: 1, needsAuth: true, authAction: 'reconnect',
+  servers: [notifyServer(), notifyServer({ guildId: '2', name: 'zzquiet', botPresent: false, url: '/dashboard/guild/2?tab=twitch', goLive: { state: 'off', where: null }, milestones: 'off', subRoles: 'on', recaps: 'off' })],
+};
 const months = (total) => Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, total: total(i), count: i % 3 }));
 
 // Each page with data that shows its branches: [name, locals]
@@ -146,16 +155,30 @@ const SAMPLES = {
       streamer: streamerRow({ yt_chatbot_enabled: 1 }), guilds: [guild, { ...guild, guild_id: '2', botPresent: false, twitchCount: 0, youtubeCount: 0, chartData: [] }],
       unclaimedGuilds: [{ id: '3', name: 'zzother', icon: null }], botInviteUrl: 'https://example.test/invite', msg: 'spotify_error', botConnected: true, botUsername: 'zzbot',
       overlayUrl: 'https://example.test/overlay/zztoken', overlayStats: { total: 3, follows: 1, subs: 1, bits_events: 1, donations: 0, raids: 0, giftsubs: 0 },
-      vtuberUrl: null, hasScope: false, needsReauth: true, activeGiveaway: { keyword: 'zzword' }, multistreamAvailable: true, isAdmin: true, features: { youtube: true },
+      vtuberUrl: null, hasScope: false, needsReauth: true, activeGiveaway: { keyword: 'zzword' }, multistreamAvailable: true, isAdmin: true, features: { youtube: true, kick: true },
+      discordNotifications,
     }],
     ['nothing set up', {
       streamer: streamerRow({ twitch_user_id: null, broadcaster_access_token: null, overlay_enabled: 0, chatbot_enabled: 0, spotify_access_token: null, paypal_email: null, donation_page_enabled: 0, cp_affiliate_status: 'not_affiliate', multistream_enabled: 0 }),
       guilds: [], unclaimedGuilds: [], botInviteUrl: 'https://example.test/invite', msg: 'spotify_connected', botConnected: false, botUsername: '',
       overlayUrl: null, overlayStats: null, vtuberUrl: null, hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: false, isAdmin: false, features: { youtube: false },
+      discordNotifications: { twitchLinked: false, servers: [], announcing: 0, needsAuth: false, authAction: 'enable' },
     }],
     ['connected, bot ready but off', {
       streamer: streamerRow({ chatbot_enabled: 0, cp_rewards_enabled: 1 }), guilds: [], unclaimedGuilds: [], botInviteUrl: 'https://example.test/invite', msg: undefined, botConnected: true, botUsername: '',
       overlayUrl: 'https://example.test/overlay/zztoken', overlayStats: null, vtuberUrl: 'https://example.test/vtuber/zztoken', hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: true, isAdmin: false, features: { youtube: true },
+      discordNotifications: { twitchLinked: true, servers: [], announcing: 0, needsAuth: false, authAction: 'enable' },
+    }],
+    ['Twitch linked, one server announcing, another to claim, YouTube and Kick off', {
+      streamer: streamerRow({ broadcaster_access_token: null }), guilds: [guild], unclaimedGuilds: [{ id: '3', name: 'zzother', icon: null }], botInviteUrl: 'https://example.test/invite', msg: 'youtube_saved',
+      botConnected: true, botUsername: 'zzbot', overlayUrl: null, overlayStats: null, vtuberUrl: null, hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: false, isAdmin: false,
+      features: { youtube: false, kick: false },
+      discordNotifications: { twitchLinked: true, announcing: 1, needsAuth: false, authAction: 'enable', servers: [notifyServer({ clips: { state: 'on', where: '#zzclips' }, milestones: 'on', subRoles: 'off' })] },
+    }],
+    ['Twitch linked, no server yet, one to claim', {
+      streamer: streamerRow(), guilds: [], unclaimedGuilds: [{ id: '3', name: 'zzother', icon: null }], botInviteUrl: 'https://example.test/invite', msg: undefined, botConnected: false, botUsername: '',
+      overlayUrl: null, overlayStats: null, vtuberUrl: null, hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: false, isAdmin: false, features: { youtube: false },
+      discordNotifications: { twitchLinked: true, servers: [], announcing: 0, needsAuth: false, authAction: 'enable' },
     }],
   ],
   'donation-settings': [
@@ -341,7 +364,7 @@ describe('while the overlay features are off, the pages say nothing about the ov
   // The texts that replace them (src/locales): none of them says overlay, in any language.
   const REPLACEMENTS = [
     'dashboard.cards.giveaways.descChat', 'dashboard.cards.sponsors.descChat', 'dashboard.cards.donations.setupChat', 'donations.settings.introChat', 'sponsors.introChat',
-    'ytChatbot.eventsChat', 'ytChatbot.eventsHintChat', 'dashboard.youtube.comingSoonChat', 'dashboard.kick.comingSoonChat', 'account.disabled.bodyChat',
+    'ytChatbot.eventsChat', 'ytChatbot.eventsHintChat', 'dashboard.kick.comingSoonChat', 'account.disabled.bodyChat',
   ];
   const OVERLAY_IN_ANY_LANGUAGE = /overlay|\bOBS\b|browser|navegador|navigateur|叠加|オーバーレイ|ブラウザ/i;
   for (const lang of SUPPORTED_LANGS) {
@@ -351,6 +374,33 @@ describe('while the overlay features are off, the pages say nothing about the ov
         assert.ok(typeof texts[key] === 'string' && texts[key].trim() !== '', `${lang}: ${key} is a text`);
         assert.ok(!OVERLAY_IN_ANY_LANGUAGE.test(texts[key]), `${lang}: ${key} mentions the overlays: ${texts[key]}`);
       }
+    });
+  }
+});
+
+// ── YouTube and Kick switched off (features.youtube, features.kick) ──────
+
+describe('while YouTube and Kick are switched off, the dashboard asks for no text about them', () => {
+  async function keysAsked(data) {
+    const keys = new Set();
+    const record = (key, params) => { keys.add(key); return t('en', key, params); };
+    await ejs.renderFile(path.join(VIEWS, 'dashboard.ejs'), { ...layout('en', record), ...data }, { views: [VIEWS] });
+    return keys;
+  }
+  const off = (flag) => SAMPLES.dashboard.filter(([, data]) => !data.features[flag]);
+  const on = (flag) => SAMPLES.dashboard.filter(([, data]) => data.features[flag]);
+  const CASES = { youtube: /youtube|super ?chat/i, kick: /\bkick\b/i };
+
+  for (const [flag, about] of Object.entries(CASES)) {
+    test(`${flag}: no text about it while it is off, the texts about it again while it is on`, async () => {
+      assert.ok(off(flag).length > 0 && on(flag).length > 0);
+      for (const [name, data] of off(flag)) {
+        const asked = [...await keysAsked(data)].filter((key) => about.test(en[key]));
+        assert.deepEqual(asked, [], `${name} asks for texts about ${flag}`);
+      }
+      const askedOn = new Set();
+      for (const [, data] of on(flag)) for (const key of await keysAsked(data)) if (about.test(en[key])) askedOn.add(key);
+      assert.ok(askedOn.size > 0, `switched on, the dashboard talks about ${flag} again`);
     });
   }
 });

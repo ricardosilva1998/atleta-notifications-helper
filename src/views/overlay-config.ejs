@@ -199,10 +199,12 @@
         YouTube
       </button>
       <% } %>
+      <% if (features.kick) { %>
       <button type="button" class="tab-btn tab-kick" data-alert-tab="kick" onclick="switchAlertTab('kick')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h4v6l4-6h4l-5 7.5L18 18h-4l-4-6v6H6V3z"/></svg>
         Kick
       </button>
+      <% } %>
     </div>
 
     <!-- TWITCH ALERTS -->
@@ -584,6 +586,7 @@
     </div><!-- end alert-tab-youtube -->
     <% } %>
 
+    <% if (features.kick) { %>
     <!-- KICK ALERTS -->
     <div class="alert-tab-content" id="alert-tab-kick">
       <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
@@ -592,6 +595,7 @@
         <p style="font-size: 13px;"><%= t('overlay.kickDesc') %></p>
       </div>
     </div><!-- end alert-tab-kick -->
+    <% } %>
 
   </div>
 
@@ -691,8 +695,10 @@
     document.querySelectorAll('.alert-tab-content').forEach(c => c.classList.toggle('active', c.id === 'alert-tab-' + tab));
     localStorage.setItem('overlayconfig_alert_tab', tab);
   }
-  const savedAlertTab = localStorage.getItem('overlayconfig_alert_tab');
-  if (savedAlertTab) switchAlertTab(savedAlertTab);
+  // A remembered tab this page does not show keeps the Twitch one.
+  let savedAlertTab = null;
+  try { savedAlertTab = localStorage.getItem('overlayconfig_alert_tab'); } catch (e) { /* storage refused: Twitch */ }
+  if (Array.from(document.querySelectorAll('.alert-platform-tabs .tab-btn')).some(b => b.dataset.alertTab === savedAlertTab)) switchAlertTab(savedAlertTab);
 
   // ─── Audio synth (default sound previews) ───────────────────────────────────
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();

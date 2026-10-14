@@ -873,7 +873,9 @@
           <div class="event-tab" data-type="yt_giftmember"><span style="font-size:16px;">🎁</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.gift') %></span></div>
         </div>
         <% } %>
+        <% if (features.kick) { %>
         <div class="event-tabs-label" style="color: #555;"><%= t('overlayBuilder.tab.kickSoon') %></div>
+        <% } %>
         <div class="event-tabs-label"><%= t('overlayBuilder.tab.general') %></div>
         <div class="event-tabs-row">
           <div class="event-tab" data-type="timed"><span style="font-size:16px;">⏰</span><span style="font-size:10px;"><%= t('overlayBuilder.event.timed') %></span></div>
