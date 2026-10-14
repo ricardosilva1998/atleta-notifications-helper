@@ -95,7 +95,7 @@ const FIELD_SPECS = Object.freeze({
   car_animation: { kind: 'enum', values: ['zoomLR', 'zoomRL', 'checkered', 'flames', 'sparkles', 'lightning', 'neonSweep', 'equalizer', 'pulse', 'none'] },
   screen_effect: { kind: 'enum', values: ['default', 'none', 'confetti', 'gold', 'money', 'robots', 'tiremarks'] },
   animation_speed: { kind: 'number', min: 0.5, max: 2 },
-  // The width slider runs 280-700; dragging the card's resize handle allows 200-900.
+  // The width slider runs 280-900; dragging the card's resize handle allows 200-900.
   card_width: { kind: 'int', min: 200, max: 900 },
   card_position: { kind: 'enum', values: POSITIONS },
   // Where the card was dragged to, as a fraction of the screen.
