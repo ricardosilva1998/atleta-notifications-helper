@@ -1,5 +1,5 @@
 const { getClips, getUserId } = require('../services/twitch');
-const { buildEmbed } = require('../discord');
+const { buildEmbed, escapeLinkText } = require('../discord');
 
 // Twitch caps /clips at a one-week window when ended_at is omitted. A channel
 // that goes a week without a clip then deadlocks: the only clip the query can
@@ -54,7 +54,8 @@ async function check(twitchUsername, channelState, nowMs = Date.now()) {
 
   const clipData = newClips.map((clip) => {
     const duration = `${Math.round(clip.duration)}s`;
-    const message = `**New clip by ${clip.creator_name}** — ${clip.title}\n📊 ${clip.view_count} views · ⏱️ ${duration}\n${clip.url}`;
+    // The title is the clip maker's own text: its brackets must not turn into a link.
+    const message = `**New clip by ${clip.creator_name}** — ${escapeLinkText(clip.title)}\n📊 ${clip.view_count} views · ⏱️ ${duration}\n${clip.url}`;
     return { message };
   });
 

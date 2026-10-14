@@ -112,6 +112,12 @@ function formatDuration(seconds) {
   return `${minutes}m`;
 }
 
+// A clip title is third-party text. Inside [text](url) its brackets would end the
+// link early or start another one, and in a plain message they would make a link
+// of their own (a masked link), so a backslash goes before each bracket and each
+// backslash (a title ending in one would otherwise hide the closing bracket).
+const escapeLinkText = (text) => String(text).replace(/[\\[\]]/g, '\\$&');
+
 function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailUrl, clips, peakViewers, followerCount, vodUrl }) {
   const fields = [
     { name: 'Category', value: category || 'Unknown', inline: true },
@@ -128,7 +134,7 @@ function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailU
 
   if (clips && clips.length > 0) {
     const clipList = clips
-      .map((clip, i) => `${i + 1}. [${clip.title}](${clip.url}) (${clip.view_count || 0} views)`)
+      .map((clip, i) => `${i + 1}. [${escapeLinkText(clip.title)}](${clip.url}) (${clip.view_count || 0} views)`)
       .join('\n');
     fields.push({ name: 'Top Clips', value: clipList });
   }
@@ -144,9 +150,6 @@ function buildRecapEmbed({ twitchUsername, title, category, duration, thumbnailU
     timestamp: new Date(),
   });
 }
-
-// A clip title goes inside [text](url): brackets in it would end the link early.
-const escapeLinkText = (text) => String(text).replace(/[\\[\]]/g, '\\$&');
 
 // topClip is a Twitch clip: { title, url, view_count }. Discord refuses the
 // whole message when an embed field has an empty value, so a field with nothing
@@ -269,4 +272,4 @@ function buildIracingResultEmbed(raceData) {
   });
 }
 
-module.exports = { client, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendNotification, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };
+module.exports = { client, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };

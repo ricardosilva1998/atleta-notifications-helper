@@ -23,7 +23,8 @@ function loadPoller(clipsByCall) {
     },
     getUserId: async () => '632557806',
   });
-  stub(discordPath, { buildEmbed: () => ({}) });
+  // escapeLinkText is the real helper's job (src/discord.test.js); a marker here shows the poller uses it.
+  stub(discordPath, { buildEmbed: () => ({}), escapeLinkText: (text) => `«${text}»` });
 
   delete require.cache[clipsPath];
   return { poller: require('../src/pollers/twitchClips'), calls };
@@ -139,4 +140,21 @@ test('resolves the broadcaster id first when it is missing', async () => {
 
   assert.strictEqual(calls.length, 0, 'must not query clips before the id is known');
   assert.deepStrictEqual(result, { notify: false, stateUpdate: { twitch_broadcaster_id: '632557806' } });
+});
+
+// A clip title is third-party text that goes into a Discord message: its brackets
+// must not become a link, so it passes through the same escape the digest uses.
+test('the clip title in the message is escaped, the creator, numbers and URL are not', async (t) => {
+  t.mock.method(console, 'log', () => {}); // the poller logs what it found
+  const created = new Date(NOW - 1 * HOUR).toISOString();
+  const { poller } = loadPoller([clip(created, { title: 'x](https://example.test/phish) [y', creator_name: 'someone', view_count: 12, duration: 29.6 })]);
+
+  const result = await poller.check('andre_vilela_', {
+    twitch_broadcaster_id: '632557806',
+    last_clip_created_at: new Date(NOW - 5 * HOUR).toISOString(),
+  }, NOW);
+
+  assert.deepStrictEqual(result.clipData, [{
+    message: `**New clip by someone** — «x](https://example.test/phish) [y»\n📊 12 views · ⏱️ 30s\nhttps://clips.twitch.tv/${created}`,
+  }]);
 });
