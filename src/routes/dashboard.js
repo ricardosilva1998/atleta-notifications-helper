@@ -26,7 +26,7 @@ const {
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
-const { isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
+const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
@@ -2163,6 +2163,8 @@ router.get('/overlay-builder', async (req, res) => {
     // user-controlled text (event_label, detail_text, sponsor names).
     designs: JSON.stringify(designs).replace(/</g, '\\u003c'),
     sponsors: JSON.stringify(sponsors).replace(/</g, '\\u003c'),
+    // What each alert starts from (the server's own table, see services/overlayDesign.js)
+    eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
     overlayUrl,
     streamThumbnail
   });
@@ -2176,7 +2178,7 @@ router.post('/overlay-builder/save', (req, res) => {
   if (!isBuilderEventType(eventType)) {
     return res.status(400).json({ ok: false, error: t('overlayBuilder.error.eventType') });
   }
-  const checked = validateOverlayDesign(design);
+  const checked = validateOverlayDesign(design, eventType);
   if (!checked.ok) {
     return res.status(400).json({ ok: false, field: checked.field, error: t('overlayBuilder.error.invalidField', { field: checked.field }) });
   }

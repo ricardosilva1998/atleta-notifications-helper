@@ -34,6 +34,45 @@ const POSITIONS = [
   'top-left', 'top-center', 'top-right', 'mid-left', 'mid-center', 'mid-right', 'bot-left', 'bot-center', 'bot-right',
 ];
 
+// The design each alert starts from in the builder before anything is saved for it.
+// This is the one copy: the builder page is handed this table (routes/dashboard.js),
+// and a value that has to be replaced on save falls back to the entry for its own
+// event (so a raid's missing animation becomes the raid's "none", not a global one).
+const TEXT_STYLE_DEFAULTS = Object.freeze({
+  label_font_family: null, label_font_size: 10, label_font_weight: 700, label_color: null,
+  username_font_family: null, username_font_weight: 800, username_color: null,
+  detail_font_family: null, detail_font_size: 13, detail_font_weight: 400, detail_color: null,
+  text_align: 'center', card_side_icon: null, effect_amount: 1.0, effect_size: 1.0, effect_direction: 'down',
+});
+
+const SHARED_DEFAULTS = Object.freeze({
+  text_color: '#ffffff', font_family: 'System Default', username_size: 24, entrance_animation: 'slideDown',
+  car_animation: 'zoomLR', screen_effect: 'default', animation_speed: 1.0,
+  card_width: 420, card_position: 'top-center', border_radius: 16,
+});
+
+function eventDefaults(colour, accent, event_label, detail_text, over = {}) {
+  return Object.freeze({
+    ...TEXT_STYLE_DEFAULTS, ...SHARED_DEFAULTS,
+    bg_color: colour, accent_color: accent, border_color: accent, event_label, detail_text, ...over,
+  });
+}
+
+const EVENT_DEFAULTS = Object.freeze({
+  follow: eventDefaults('#1a1a3e', '#8888cc', 'New Pit Crew Member', 'just joined the race 🏁'),
+  subscription: eventDefaults('#061a10', '#00ff88', 'Podium Finish', ''),
+  bits: eventDefaults('#1c1200', '#f7c948', 'Nitro Boost', ''),
+  donation: eventDefaults('#110022', '#bf00ff', 'Sponsor Alert', ''),
+  raid: eventDefaults('#1c0505', '#ff4444', 'Incoming Raid', '', { car_animation: 'none' }),
+  yt_superchat: eventDefaults('#200808', '#ff4444', 'Super Chat', ''),
+  yt_member: eventDefaults('#041a0c', '#0f9d58', 'New Member', '', { car_animation: 'none' }),
+  yt_giftmember: eventDefaults('#060e20', '#4285f4', 'Gift Alert', ''),
+  timed: eventDefaults('#1a1a2e', '#f79009', '', '', {
+    username_size: 18, car_animation: 'none', screen_effect: 'none', card_width: 500, card_position: 'bot-center', border_radius: 12,
+  }),
+  giveaway_winner: eventDefaults('#1c1200', '#f59e0b', 'Giveaway Winner!', ''),
+});
+
 const hex = { kind: 'hex' };
 const hexOrNull = { kind: 'hex', nullable: true };
 const font = { kind: 'font' };
@@ -79,8 +118,9 @@ const FIELD_SPECS = Object.freeze({
   effect_size: { kind: 'number', min: 0.5, max: 3 },
   effect_direction: { kind: 'enum', values: ['down', 'up', 'left', 'right'] },
   bg_opacity: { kind: 'number', min: 0, max: 1 },
-  // '' is the "Solid (no gradient)" choice.
-  gradient_direction: { kind: 'enum', values: ['160deg', '180deg', '0deg', '90deg', '270deg', '135deg', '45deg', ''] },
+  // 'solid' is the "Solid (no gradient)" choice: a real value, so nothing that treats an
+  // empty value as "not set" (a `||` fallback, the database default) can lose it.
+  gradient_direction: { kind: 'enum', values: ['160deg', '180deg', '0deg', '90deg', '270deg', '135deg', '45deg', 'solid'] },
   border_thickness: { kind: 'int', min: 0, max: 6 },
   border_opacity: { kind: 'number', min: 0, max: 1 },
   glow_intensity: { kind: 'number', min: 0, max: 1 },
@@ -141,15 +181,26 @@ function normalise(spec, value) {
 // applies. Text is different: an empty label is what the streamer typed.
 function isUnset(spec, value) {
   if (value === undefined || value === null) return true;
-  return value === '' && spec.kind !== 'text' && !(spec.kind === 'enum' && spec.values.includes(''));
+  return value === '' && spec.kind !== 'text';
 }
 
-// The design the builder posted (an object, or JSON text of one): { ok: true,
-// design } with only the known fields, each brought into what is allowed (see the
-// top of this file), or { ok: false, field } naming the first value that cannot
-// have come from a builder. Fields left out, null or empty are left out of the
-// result, and so are values replaced by their default, so the database defaults apply.
-function validateOverlayDesign(input) {
+// What a value that is replaced becomes: the entry of its own event in
+// EVENT_DEFAULTS, or nothing (left out, so the database default applies) when the
+// event is not known or its default is "not set" (null).
+function eventFallback(eventType, field) {
+  if (typeof eventType !== 'string' || !Object.prototype.hasOwnProperty.call(EVENT_DEFAULTS, eventType)) return undefined;
+  const value = EVENT_DEFAULTS[eventType][field];
+  return value === null ? undefined : value;
+}
+
+// The design the builder posted (an object, or JSON text of one) for `eventType`:
+// { ok: true, design } with only the known fields, each brought into what is allowed
+// (see the top of this file), or { ok: false, field } naming the first value that
+// cannot have come from a builder. Fields left out, null or empty are left out of
+// the result, so the database defaults apply. A value that is replaced (a font, a
+// choice or an icon that is not allowed) becomes the default of its own event, or is
+// left out when there is none or no event type was given.
+function validateOverlayDesign(input, eventType) {
   let source = input;
   if (typeof source === 'string') {
     try { source = JSON.parse(source); } catch { return { ok: false, field: 'design' }; }
@@ -163,6 +214,10 @@ function validateOverlayDesign(input) {
     const result = normalise(spec, value);
     if (result.invalid) return { ok: false, field };
     if (!result.unset) design[field] = result.value;
+    else {
+      const fallback = eventFallback(eventType, field);
+      if (fallback !== undefined) design[field] = fallback;
+    }
   }
   return { ok: true, design };
 }
@@ -170,6 +225,7 @@ function validateOverlayDesign(input) {
 module.exports = {
   BUILDER_EVENT_TYPES,
   OVERLAY_FONTS,
+  EVENT_DEFAULTS,
   FIELD_SPECS,
   ICON_MAX_CHARACTERS,
   isBuilderEventType,

@@ -1006,10 +1006,10 @@ function applyCustomDesign(card, eventType) {
 
   // Background (with advanced theme)
   const bgOpacity = design.bg_opacity != null ? design.bg_opacity : 1.0;
-  const gradDir = design.gradient_direction || '160deg';
+  const gradDir = design.gradient_direction || '160deg'; // 'solid' = no gradient
   const [bgR,bgG,bgB] = hexToRgb(design.bg_color);
   const darkR = Math.round(bgR * 0.35), darkG = Math.round(bgG * 0.35), darkB = Math.round(bgB * 0.35);
-  if (gradDir) {
+  if (gradDir !== 'solid') {
     card.style.background = `linear-gradient(${gradDir}, rgba(${darkR},${darkG},${darkB},${bgOpacity}), rgba(${bgR},${bgG},${bgB},${bgOpacity}) 40%, rgba(${darkR},${darkG},${darkB},${bgOpacity}))`;
   } else {
     card.style.background = `rgba(${bgR},${bgG},${bgB},${bgOpacity})`;

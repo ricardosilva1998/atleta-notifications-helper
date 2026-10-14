@@ -978,8 +978,8 @@
           </button>
           <!-- Hidden inputs (still used by getControlValues) -->
           <div style="display:none;">
-            <input type="text" id="ctrl-event-label" placeholder="e.g. New Pit Crew Member">
-            <input type="text" id="ctrl-detail-text" placeholder="just joined the race 🏁">
+            <input type="text" id="ctrl-event-label" maxlength="100" placeholder="e.g. New Pit Crew Member">
+            <input type="text" id="ctrl-detail-text" maxlength="300" placeholder="just joined the race 🏁">
             <div class="font-picker" id="font-picker">
               <div class="font-picker-selected" id="font-picker-selected">
                 <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif;">System Default</span>
@@ -1170,14 +1170,6 @@ const SAVED_DESIGNS = {};
 const SERVER_DESIGNS = <%- designs %>;
 SERVER_DESIGNS.forEach(d => { SAVED_DESIGNS[d.event_type] = d; });
 
-// Per-text defaults shared across all events
-const TEXT_STYLE_DEFAULTS = {
-  label_font_family: null, label_font_size: 10, label_font_weight: 700, label_color: null,
-  username_font_family: null, username_font_weight: 800, username_color: null,
-  detail_font_family: null, detail_font_size: 13, detail_font_weight: 400, detail_color: null,
-  text_align: 'center', card_side_icon: null, effect_amount: 1.0, effect_size: 1.0, effect_direction: 'down',
-};
-
 // Default side icons per event type (null = no icon)
 const DEFAULT_SIDE_ICONS = {
   follow: null, subscription: '🏆', bits: null, donation: null, raid: null,
@@ -1185,18 +1177,10 @@ const DEFAULT_SIDE_ICONS = {
   giveaway_winner: '🎉',
 };
 
-const EVENT_DEFAULTS = {
-  follow:        { ...TEXT_STYLE_DEFAULTS, bg_color:'#1a1a3e', accent_color:'#8888cc', border_color:'#8888cc', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Pit Crew Member', detail_text:'just joined the race 🏁', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  subscription:  { ...TEXT_STYLE_DEFAULTS, bg_color:'#061a10', accent_color:'#00ff88', border_color:'#00ff88', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Podium Finish',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  bits:          { ...TEXT_STYLE_DEFAULTS, bg_color:'#1c1200', accent_color:'#f7c948', border_color:'#f7c948', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Nitro Boost',          detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  donation:      { ...TEXT_STYLE_DEFAULTS, bg_color:'#110022', accent_color:'#bf00ff', border_color:'#bf00ff', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Sponsor Alert',        detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  raid:          { ...TEXT_STYLE_DEFAULTS, bg_color:'#1c0505', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Incoming Raid',        detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  yt_superchat:  { ...TEXT_STYLE_DEFAULTS, bg_color:'#200808', accent_color:'#ff4444', border_color:'#ff4444', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Super Chat',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  yt_member:     { ...TEXT_STYLE_DEFAULTS, bg_color:'#041a0c', accent_color:'#0f9d58', border_color:'#0f9d58', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'New Member',           detail_text:'', entrance_animation:'slideDown', car_animation:'none',   screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  yt_giftmember: { ...TEXT_STYLE_DEFAULTS, bg_color:'#060e20', accent_color:'#4285f4', border_color:'#4285f4', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Gift Alert',           detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-  timed:          { ...TEXT_STYLE_DEFAULTS, bg_color:'#1a1a2e', accent_color:'#f79009', border_color:'#f79009', text_color:'#ffffff', font_family:'System Default', username_size:18, event_label:'', detail_text:'', entrance_animation:'slideDown', car_animation:'none', screen_effect:'none', animation_speed:1.0, card_width:500, card_position:'bot-center', border_radius:12 },
-  giveaway_winner:{ ...TEXT_STYLE_DEFAULTS, bg_color:'#1c1200', accent_color:'#f59e0b', border_color:'#f59e0b', text_color:'#ffffff', font_family:'System Default', username_size:24, event_label:'Giveaway Winner!', detail_text:'', entrance_animation:'slideDown', car_animation:'zoomLR', screen_effect:'default', animation_speed:1.0, card_width:420, card_position:'top-center', border_radius:16 },
-};
+// What each alert starts from before anything is saved for it. The server owns this
+// table (EVENT_DEFAULTS in src/services/overlayDesign.js) and the page is handed it, so
+// the builder and the server's handling of a value it cannot keep use the same defaults.
+const EVENT_DEFAULTS = <%- eventDefaults %>;
 
 const EVENT_NAMES = {
   follow:'Follow', subscription:'Subscription', bits:'Bits', donation:'Donation',
@@ -1499,7 +1483,7 @@ function updatePreview() {
   const gradDir = d.gradient_direction || '160deg';
   const [bgR,bgG,bgB] = hexToRgb(d.bg_color);
   const darkR = Math.round(bgR * 0.35), darkG = Math.round(bgG * 0.35), darkB = Math.round(bgB * 0.35);
-  if (gradDir) {
+  if (gradDir !== 'solid') {
     card.style.background = `linear-gradient(${gradDir}, rgba(${darkR},${darkG},${darkB},${bgOpacity}), rgba(${bgR},${bgG},${bgB},${bgOpacity}) 40%, rgba(${darkR},${darkG},${darkB},${bgOpacity}))`;
   } else {
     card.style.background = `rgba(${bgR},${bgG},${bgB},${bgOpacity})`;
@@ -2601,7 +2585,7 @@ document.addEventListener('mouseup', e => {
           <option value="270deg">Right to Left</option>
           <option value="135deg">Top-Left to Bottom-Right</option>
           <option value="45deg">Bottom-Left to Top-Right</option>
-          <option value="">Solid (no gradient)</option>
+          <option value="solid">Solid (no gradient)</option>
         </select>
       </div>
     </div>
@@ -2687,7 +2671,7 @@ document.addEventListener('mouseup', e => {
     <!-- Label Tab -->
     <div class="text-tab-panel" id="tab-label">
       <div class="ctrl-label" style="margin-bottom:6px;">Text Content</div>
-      <input type="text" id="modal-event-label" placeholder="e.g. New Pit Crew Member" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
+      <input type="text" id="modal-event-label" maxlength="100" placeholder="e.g. New Pit Crew Member" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
           <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
@@ -2753,7 +2737,7 @@ document.addEventListener('mouseup', e => {
     <!-- Detail Tab -->
     <div class="text-tab-panel" id="tab-detail" style="display:none;">
       <div class="ctrl-label" style="margin-bottom:6px;">Text Content</div>
-      <input type="text" id="modal-detail-text" placeholder="just joined the race 🏁" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
+      <input type="text" id="modal-detail-text" maxlength="300" placeholder="just joined the race 🏁" style="width:100%;margin-bottom:12px;" oninput="updateTextPreview()">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
           <div class="ctrl-label" style="margin-bottom:4px;">Color</div>
@@ -2994,7 +2978,7 @@ function updateThemePreview() {
   const border = document.getElementById('modal-border-color').value;
   const text = document.getElementById('modal-text-color').value;
   const bgOpacity = parseFloat(document.getElementById('modal-bg-opacity').value);
-  const gradDir = document.getElementById('modal-gradient-direction').value;
+  const gradDir = document.getElementById('modal-gradient-direction').value; // 'solid' = no gradient
   const borderThick = parseInt(document.getElementById('modal-border-thickness').value);
   const borderOpacity = parseFloat(document.getElementById('modal-border-opacity').value);
   const glowIntensity = parseFloat(document.getElementById('modal-glow-intensity').value);
@@ -3007,7 +2991,7 @@ function updateThemePreview() {
   const [r,g,b] = hexToRgb(bg);
 
   // Background
-  if (gradDir) {
+  if (gradDir !== 'solid') {
     card.style.background = `linear-gradient(${gradDir}, rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},${bgOpacity}), rgba(${r},${g},${b},${bgOpacity}) 40%, rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},${bgOpacity}))`;
   } else {
     card.style.background = `rgba(${r},${g},${b},${bgOpacity})`;

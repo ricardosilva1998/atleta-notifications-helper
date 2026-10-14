@@ -616,3 +616,27 @@ describe('text is shown as text (N17)', () => {
     }
   });
 });
+
+// ── C-a: "Solid (no gradient)" ───────────────────────────────────────────
+
+describe('"Solid (no gradient)" on a card', () => {
+  const backgroundFor = (gradient_direction) => {
+    const overlay = loadOverlay({ designs: { giveaway_winner: design({ gradient_direction, bg_color: '#112233', bg_opacity: 0.8 }) } });
+    overlay.send({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'x' } });
+    return overlay.slots()[0].children[0].style.background;
+  };
+
+  test('is one flat colour at the saved opacity, with no gradient in it', () => {
+    assert.equal(backgroundFor('solid'), 'rgba(17,34,51,0.8)');
+  });
+
+  test('every other direction is a gradient in that direction', () => {
+    for (const direction of ['160deg', '180deg', '0deg', '90deg', '270deg', '135deg', '45deg']) {
+      assert.match(backgroundFor(direction), new RegExp(`^linear-gradient\\(${direction}, rgba\\(`), direction);
+    }
+  });
+
+  test('a missing direction is the default diagonal', () => {
+    for (const missing of [undefined, null, '']) assert.match(backgroundFor(missing), /^linear-gradient\(160deg, /, String(missing));
+  });
+});

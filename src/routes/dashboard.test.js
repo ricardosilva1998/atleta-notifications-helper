@@ -1322,6 +1322,48 @@ describe('saving an overlay design', () => {
     assert.equal(stored()[0].bg_color, '#bbbbbb');
   });
 
+  test('a value that is replaced takes its own alert\'s default, not the global one', async () => {
+    assert.equal((await save('raid', design({ car_animation: 'bounce' }))).status, 200);
+    assert.equal(stored().find((d) => d.event_type === 'raid').car_animation, 'none', 'the raid has no car');
+
+    assert.equal((await save('timed', design({ car_animation: 'bounce', screen_effect: 'goldRain', card_position: 'nowhere' }))).status, 200);
+    const timed = stored().find((d) => d.event_type === 'timed');
+    assert.deepEqual([timed.car_animation, timed.screen_effect, timed.card_position], ['none', 'none', 'bot-center']);
+
+    assert.equal((await save('bits', design({ car_animation: 'bounce', screen_effect: 'goldRain' }))).status, 200);
+    const bits = stored().find((d) => d.event_type === 'bits');
+    assert.deepEqual([bits.car_animation, bits.screen_effect], ['zoomLR', 'default'], 'the others keep the usual ones');
+  });
+
+  test('"Solid (no gradient)" is stored as "solid" and kept when the design is read back and saved again', async () => {
+    assert.equal((await save('follow', design({ gradient_direction: 'solid' }))).status, 200);
+    assert.equal(stored()[0].gradient_direction, 'solid');
+    // the builder posts back what the page was given: the stored row's value
+    assert.equal((await save('follow', design({ gradient_direction: stored()[0].gradient_direction, bg_color: '#223344' }))).status, 200);
+    assert.equal(stored()[0].gradient_direction, 'solid');
+    assert.equal(stored()[0].bg_color, '#223344');
+    // the page that edits it is given the row with "solid" in it
+    const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });
+    assert.match(page.text, /"gradient_direction":"solid"/);
+  });
+
+  test('an older builder page that sent an empty direction for solid still saves, as the diagonal it always became', async () => {
+    assert.equal((await save('follow', design({ gradient_direction: '' }))).status, 200);
+    assert.equal(stored()[0].gradient_direction, '160deg');
+  });
+
+  test('every gradient direction the builder offers is stored as chosen', async () => {
+    for (const direction of ['160deg', '180deg', '0deg', '90deg', '270deg', '135deg', '45deg', 'solid']) {
+      assert.equal((await save('follow', design({ gradient_direction: direction }))).status, 200, direction);
+      assert.equal(stored()[0].gradient_direction, direction, direction);
+    }
+  });
+
+  test('a label the server must cut is cut at what the builder lets a streamer type', async () => {
+    assert.equal((await save('follow', design({ event_label: 'x'.repeat(100), detail_text: 'y'.repeat(300) }))).status, 200);
+    assert.deepEqual([stored()[0].event_label.length, stored()[0].detail_text.length], [100, 300], 'what fits is kept whole');
+  });
+
   test('reset needs one of the builder\'s alert types, and removes only that design', async () => {
     await save('follow', design());
     await save('raid', design());
@@ -1548,6 +1590,24 @@ describe('the overlay builder page and a slow Twitch', () => {
     const res = await request('GET', '/dashboard/overlay-builder', { streamer: id });
     assert.equal(res.status, 200);
     assert.ok(res.text.includes('https://img.test/live-1280x720.jpg'));
+  });
+
+  test('hands the page the server\'s default design for every alert, which is the table the save falls back to', async () => {
+    const { EVENT_DEFAULTS } = require('../services/overlayDesign');
+    const { locals } = (await builder()).json();
+    assert.deepEqual(JSON.parse(locals.eventDefaults), JSON.parse(JSON.stringify(EVENT_DEFAULTS)));
+    const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });
+    assert.match(page.text, /const EVENT_DEFAULTS = \{"follow":\{/);
+    for (const type of ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember', 'timed']) {
+      assert.ok(page.text.includes(`"${type}":{`), type);
+    }
+  });
+
+  test('a "</script>" in nothing the page is given can end its inline script (the default table is escaped like the rest)', async () => {
+    const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });
+    const defaultsLine = page.text.split('\n').find((line) => line.startsWith('const EVENT_DEFAULTS = '));
+    assert.ok(defaultsLine, 'found the injected table');
+    assert.ok(!defaultsLine.includes('<'), 'no "<" in the injected table');
   });
 });
 

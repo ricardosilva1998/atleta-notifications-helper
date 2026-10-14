@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('./config');
 const { isAdminStreamer } = require('./adminAccess');
+const { EVENT_DEFAULTS } = require('./services/overlayDesign');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'bot.db');
 
@@ -3056,16 +3057,10 @@ function updateSpotifyTokens(streamerId, accessToken, refreshToken, expiresAt) {
 
 // ─── Overlay Designs ────────────────────────────────────────────
 
-const DEFAULT_OVERLAY_LABELS = {
-  follow:        { event_label: 'New Pit Crew Member', detail_text: 'just joined the race 🏁' },
-  subscription:  { event_label: 'Podium Finish',       detail_text: '' },
-  bits:          { event_label: 'Nitro Boost',         detail_text: '' },
-  donation:      { event_label: 'Sponsor Alert',       detail_text: '' },
-  raid:          { event_label: 'Incoming Raid',       detail_text: '' },
-  yt_superchat:  { event_label: 'Super Chat',          detail_text: '' },
-  yt_member:     { event_label: 'New Member',          detail_text: '' },
-  yt_giftmember: { event_label: 'Gift Alert',          detail_text: '' },
-};
+// The label and detail an alert gets when a save does not carry them: the builder's own
+// defaults (services/overlayDesign.js), so there is one copy of them.
+const DEFAULT_OVERLAY_LABELS = Object.fromEntries(Object.entries(EVENT_DEFAULTS)
+  .map(([type, defaults]) => [type, { event_label: defaults.event_label, detail_text: defaults.detail_text }]));
 
 // Hot path: called per overlay alert render.
 const _stmtGetOverlayDesign = db.prepare('SELECT * FROM overlay_designs WHERE streamer_id = ? AND event_type = ?');

@@ -45,3 +45,27 @@ describe('the sponsor Scale slider', () => {
     assert.ok(!builder.includes('updateSponsorScale('), 'no caller or definition is left');
   });
 });
+
+describe('"Solid (no gradient)"', () => {
+  const overlayJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
+
+  test('is the theme popup option named "solid", and no option has an empty value', () => {
+    const select = builder.match(/<select id="modal-gradient-direction"[\s\S]*?<\/select>/)[0];
+    const values = [...select.matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
+    assert.ok(values.includes('solid'));
+    assert.ok(!values.includes(''), 'an empty value is what the server could not keep');
+    assert.match(select, /<option value="solid">Solid \(no gradient\)<\/option>/);
+  });
+
+  test('the card preview and the theme popup preview each tell solid from a gradient by that name', () => {
+    assert.equal(builder.split("gradDir !== 'solid'").length - 1, 2);
+    assert.ok(!/if \(gradDir\) \{/.test(builder), 'no truthiness test is left in the builder');
+  });
+
+  test('so does the OBS overlay, with the same fallback for a missing direction', () => {
+    assert.match(overlayJs, /const gradDir = design\.gradient_direction \|\| '160deg';/);
+    assert.match(overlayJs, /if \(gradDir !== 'solid'\) \{/);
+    assert.ok(!/if \(gradDir\) \{/.test(overlayJs));
+    assert.match(builder, /const gradDir = d\.gradient_direction \|\| '160deg';/, 'the preview falls back the same way');
+  });
+});
