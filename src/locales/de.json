@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "Du brauchst die Berechtigung „Server verwalten“ auf diesem Discord-Server, um ihn zu beanspruchen.",
   "guild.invalidChannel": "Dieser Kanal gehört nicht zu diesem Discord-Server. Wähle einen Kanal aus der Liste.",
   "guild.invalidRole": "Diese Rolle kann nicht für Sub Sync verwendet werden. Wähle eine Rolle aus der Liste.",
+  "guild.listsUnavailable": "Die Kanal- und Rollenlisten von Discord können gerade nicht geladen werden, daher lassen sich Kanäle und Rollen auf dieser Seite jetzt nicht ändern. Alles, was du gespeichert hast, bleibt unverändert. Bitte versuche es in einer Minute noch einmal.",
   "guild.subRoleHint": "Es werden nur einfache Rollen unterhalb der Rolle des Bots aufgelistet: ohne Admin- oder Moderatorrechte und nicht von einer Integration verwaltet.",
   "guild.subRoleProblem.missing": "Sub Sync ist hier pausiert: Die gespeicherte Abonnenten-Rolle existiert nicht mehr. Wähle eine andere Rolle und speichere.",
   "guild.subRoleProblem.everyone": "Sub Sync ist hier pausiert: @everyone kann nicht die Abonnenten-Rolle sein. Wähle eine andere Rolle und speichere.",

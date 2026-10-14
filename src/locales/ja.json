@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "このサーバーを取得するには、その Discord サーバーでの「サーバー管理」権限が必要です。",
   "guild.invalidChannel": "そのチャンネルはこの Discord サーバーにありません。一覧からチャンネルを選択してください。",
   "guild.invalidRole": "そのロールは Sub Sync には使用できません。一覧からロールを選択してください。",
+  "guild.listsUnavailable": "現在 Discord のチャンネルとロールの一覧を読み込めないため、このページではチャンネルとロールを変更できません。保存済みの内容はそのまま残ります。しばらくしてからもう一度お試しください。",
   "guild.subRoleHint": "Botのロールより下にある通常のロールのみ表示されます。管理者権限やモデレーター権限を持つロール、連携によって管理されているロールは表示されません。",
   "guild.subRoleProblem.missing": "このサーバーでは Sub Sync が一時停止中です：保存されているサブスクライバーロールが存在しません。別のロールを選択して保存してください。",
   "guild.subRoleProblem.everyone": "このサーバーでは Sub Sync が一時停止中です：@everyone をサブスクライバーロールにすることはできません。別のロールを選択して保存してください。",

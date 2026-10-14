@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "You need the Manage Server permission in that Discord server to claim it.",
   "guild.invalidChannel": "That channel is not in this Discord server. Pick a channel from the list.",
   "guild.invalidRole": "That role cannot be used for sub sync. Pick a role from the list.",
+  "guild.listsUnavailable": "Discord's channel and role lists can't be loaded right now, so channels and roles can't be changed on this page. Everything you saved stays as it is. Try again in a minute.",
   "guild.subRoleHint": "Only plain roles below the bot's role are listed: no admin or moderator permissions, and not managed by an integration.",
   "guild.subRoleProblem.missing": "Sub sync is paused here: the saved subscriber role no longer exists. Pick another role and save.",
   "guild.subRoleProblem.everyone": "Sub sync is paused here: @everyone cannot be the subscriber role. Pick another role and save.",

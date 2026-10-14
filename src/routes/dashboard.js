@@ -7,6 +7,7 @@ const { client, fetchGuildChannel, streamerGuildForChannel } = require('../disco
 const {
   canManageGuild, botInviteUrl: inviteUrlFor, subRoleEligibility, roleFacts, botTopRolePosition,
   clampWelcomeMessage, WELCOME_MESSAGE_MAX, DELIVERY_CHANNEL_UNAVAILABLE,
+  guildListsAvailable, serverPagePicks,
 } = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
@@ -378,6 +379,10 @@ router.get('/guild/:guildId', async (req, res) => {
 
   const discordGuild = client.guilds.cache.get(guildId);
   const channels = getDiscordChannels(guildId);
+  // Before the bot is ready (the first seconds after a deploy), during a Discord
+  // outage or after its login was refused, the cache holds no channels or roles:
+  // the page says so, and a save keeps the stored welcome channel and role.
+  const discordListsUnavailable = !guildListsAvailable(discordGuild);
   // Only roles sub sync may give and take; a saved role that no longer
   // qualifies is reported (sub sync skips it) instead of silently dropped.
   let roles = [];
@@ -433,6 +438,7 @@ router.get('/guild/:guildId', async (req, res) => {
     channels,
     roles,
     subRoleProblem,
+    discordListsUnavailable,
     welcomeMessageMax: WELCOME_MESSAGE_MAX,
     deliveryError: lastDeliveryError(guildConfig, channels, watchedTwitchChannels, watchedYoutubeChannels, req.streamer),
     watchedTwitchChannels,
@@ -454,13 +460,19 @@ router.post('/guild/:guildId', async (req, res) => {
   const guildConfig = db.getGuildConfig(guildId, req.streamer.id);
   if (!guildConfig) return res.redirect('/dashboard');
 
-  const welcomeChannelId = req.body.welcome_channel_id || null;
-  if (!(await channelsInGuild(guildId, [welcomeChannelId]))) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_channel`);
-  }
-  const subRoleId = req.body.sub_role_id || null;
-  if (subRoleId && !(await subRoleUsable(guildId, subRoleId))) {
-    return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_role`);
+  // The page's channel and role pickers come from Discord's cache. When the bot
+  // cannot see the server they were empty, so what the form sent says nothing:
+  // the stored welcome channel and sub role stay, and the other fields are saved.
+  const { welcomeChannelId, subRoleId, kept } = serverPagePicks(
+    guildListsAvailable(client.guilds.cache.get(guildId)), guildConfig, req.body,
+  );
+  if (!kept) {
+    if (!(await channelsInGuild(guildId, [welcomeChannelId]))) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_channel`);
+    }
+    if (subRoleId && !(await subRoleUsable(guildId, subRoleId))) {
+      return res.redirect(`/dashboard/guild/${guildId}?tab=discord&msg=invalid_role`);
+    }
   }
 
   db.updateGuildConfig(guildId, req.streamer.id, {
@@ -560,6 +572,10 @@ router.post('/guild/:guildId/channels/:channelId/remove', (req, res) => {
 router.post('/guild/:guildId/channels/:channelId/edit', async (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  // The form's channel lists come from Discord's cache: when the bot cannot see
+  // the server they are empty and a save would switch both channels off. The
+  // page says why nothing changed.
+  if (!guildListsAvailable(client.guilds.cache.get(guildId))) return res.redirect(`/dashboard/guild/${guildId}?tab=twitch`);
   const liveChannelId = req.body.live_channel_id || null;
   const clipsChannelId = req.body.clips_channel_id || null;
   if (!(await channelsInGuild(guildId, [liveChannelId, clipsChannelId]))) {
@@ -642,6 +658,7 @@ router.post('/guild/:guildId/youtube/:channelId/remove', (req, res) => {
 router.post('/guild/:guildId/youtube/:channelId/edit', async (req, res) => {
   const { guildId, channelId } = req.params;
   if (!db.getGuildConfig(guildId, req.streamer.id)) return res.redirect('/dashboard');
+  if (!guildListsAvailable(client.guilds.cache.get(guildId))) return res.redirect(`/dashboard/guild/${guildId}?tab=youtube`); // as the Twitch edit above
   const videosChannelId = req.body.videos_channel_id || null;
   const liveChannelId = req.body.live_channel_id || null;
   if (!(await channelsInGuild(guildId, [videosChannelId, liveChannelId]))) {

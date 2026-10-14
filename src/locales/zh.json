@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "你需要在该 Discord 服务器中拥有“管理服务器”权限才能认领它。",
   "guild.invalidChannel": "该频道不在此 Discord 服务器中。请从列表中选择一个频道。",
   "guild.invalidRole": "该角色不能用于 Sub Sync。请从列表中选择一个角色。",
+  "guild.listsUnavailable": "目前无法加载 Discord 的频道和角色列表，因此无法在此页面更改频道和角色。你已保存的内容保持不变。请稍后重试。",
   "guild.subRoleHint": "只列出位于机器人角色之下的普通角色：没有管理员或管理类权限，且不由集成管理。",
   "guild.subRoleProblem.missing": "此处的 Sub Sync 已暂停：已保存的订阅者角色已不存在。请选择其他角色并保存。",
   "guild.subRoleProblem.everyone": "此处的 Sub Sync 已暂停：@everyone 不能作为订阅者角色。请选择其他角色并保存。",

@@ -28,6 +28,9 @@
 <% if (msg === 'invalid_role') { %>
   <div class="alert alert-danger"><%= t('guild.invalidRole') %></div>
 <% } %>
+<% if (discordListsUnavailable) { %>
+  <div class="alert alert-warning"><%= t('guild.listsUnavailable') %></div>
+<% } %>
 <% if (deliveryError) { %>
   <div class="alert alert-warning">
     <strong><%= t('guild.deliveryError.title') %></strong> —
@@ -344,6 +347,9 @@
         <label><%= t('guild.sendToChannel') %></label>
         <select name="welcome_channel_id">
           <option value=""><%= t('common.selectChannel') %></option>
+          <% if (discordListsUnavailable && guild.welcome_channel_id) { %>
+            <option value="<%= guild.welcome_channel_id %>" selected>#<%= guild.welcome_channel_id %></option>
+          <% } %>
           <% for (const c of channels) { %>
             <option value="<%= c.id %>" <%= guild.welcome_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
           <% } %>
@@ -369,6 +375,9 @@
         <label><%= t('guild.subscriberRole') %></label>
         <select name="sub_role_id">
           <option value=""><%= t('common.selectRole') %></option>
+          <% if (discordListsUnavailable && guild.sub_role_id) { %>
+            <option value="<%= guild.sub_role_id %>" selected><%= guild.sub_role_id %></option>
+          <% } %>
           <% for (const r of roles) { %>
             <option value="<%= r.id %>" <%= guild.sub_role_id === r.id ? 'selected' : '' %>><%= r.name %></option>
           <% } %>

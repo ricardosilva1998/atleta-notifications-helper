@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "Vous avez besoin de la permission Gérer le serveur sur ce serveur Discord pour le revendiquer.",
   "guild.invalidChannel": "Ce salon ne fait pas partie de ce serveur Discord. Choisissez un salon dans la liste.",
   "guild.invalidRole": "Ce rôle ne peut pas être utilisé pour Sub Sync. Choisissez un rôle dans la liste.",
+  "guild.listsUnavailable": "Les listes de salons et de rôles de Discord ne peuvent pas être chargées pour le moment : les salons et les rôles ne peuvent donc pas être modifiés sur cette page. Tout ce que vous avez enregistré reste tel quel. Veuillez réessayer dans un instant.",
   "guild.subRoleHint": "Seuls les rôles simples situés sous le rôle du bot sont listés : sans permissions d'administrateur ou de modérateur, et non gérés par une intégration.",
   "guild.subRoleProblem.missing": "Sub Sync est en pause ici : le rôle d'abonné enregistré n'existe plus. Choisissez un autre rôle et enregistrez.",
   "guild.subRoleProblem.everyone": "Sub Sync est en pause ici : @everyone ne peut pas être le rôle d'abonné. Choisissez un autre rôle et enregistrez.",

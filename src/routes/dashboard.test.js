@@ -480,6 +480,7 @@ describe('adding a Twitch channel', () => {
   beforeEach(() => {
     id = addStreamer();
     db.upsertGuild(G, id, 'Server');
+    guilds.set(G, fakeGuild(G)); // the bot sees the server (a channel edit needs it to)
   });
   const add = (name, over = {}) => request('POST', `/dashboard/guild/${G}/channels`, {
     streamer: id, form: { twitch_username: name, live_channel_id: CH_LIVE, clips_channel_id: '', ...over },
@@ -650,6 +651,151 @@ describe('the server page says what happened when a channel is added', () => {
 
   test('the channel limit message names the configured limit', async () => {
     assert.match((await page('channel_limit')).text, /up to 25 Twitch channels/);
+  });
+});
+
+// ── Saving the server page while Discord cannot be read ──────────────────
+
+describe('the server page while the bot cannot see the server', () => {
+  const G = '600000000000000030';
+  const ROLE = '700000000000000005';
+  const OTHER_ROLE = '700000000000000006';
+  const fakeRole = (roleId, name) => ({ id: roleId, name, guild: { id: G }, managed: false, position: 3, permissions: { bitfield: 0n } });
+  let id;
+
+  beforeEach(() => {
+    id = addStreamer();
+    db.upsertGuild(G, id, 'Server');
+    db.updateGuildConfig(G, id, {
+      welcome_channel_id: CH_LIVE, sub_role_id: ROLE, welcome_message: 'Hello', welcome_enabled: true, sub_sync_enabled: true,
+    });
+  });
+  // The bot can see the server: its channels and two plain roles are in the cache.
+  const seeServer = () => {
+    const guild = fakeGuild(G);
+    guild.roles.cache.set(ROLE, fakeRole(ROLE, 'Subscribers'));
+    guild.roles.cache.set(OTHER_ROLE, fakeRole(OTHER_ROLE, 'Supporters'));
+    guilds.set(G, guild);
+    return guild;
+  };
+  const stored = () => db.getGuildConfig(G, id);
+  // The form as a page with empty pickers sends it.
+  const save = (form = {}) => request('POST', `/dashboard/guild/${G}`, {
+    streamer: id, form: { welcome_enabled: 'on', sub_sync_enabled: 'on', welcome_channel_id: '', sub_role_id: '', ...form },
+  });
+  const notice = (text) => text.includes(t('en', 'guild.listsUnavailable').replace(/'/g, '&#39;'));
+
+  test('a save keeps the welcome channel and the sub role, and saves the other fields', async () => {
+    const res = await save({ welcome_message: 'Changed text', recap_enabled: 'on', weekly_highlights_enabled: 'on' });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, `/dashboard/guild/${G}?tab=discord&saved=1`);
+    const row = stored();
+    assert.equal(row.welcome_channel_id, CH_LIVE, 'the welcome channel stays');
+    assert.equal(row.sub_role_id, ROLE, 'the sub role stays');
+    assert.equal(row.welcome_message, 'Changed text');
+    assert.equal(row.recap_enabled, 1);
+    assert.equal(row.weekly_highlights_enabled, 1);
+    assert.equal(row.milestones_enabled, 0, 'a switch left off is saved off');
+    assert.equal(row.welcome_enabled, 1);
+    assert.equal(row.sub_sync_enabled, 1);
+  });
+
+  test('a channel or role the form names is not taken either: nothing can be checked against Discord', async () => {
+    await save({ welcome_channel_id: CH_CLIPS, sub_role_id: OTHER_ROLE });
+    assert.equal(stored().welcome_channel_id, CH_LIVE);
+    assert.equal(stored().sub_role_id, ROLE);
+  });
+
+  test('a server with no welcome channel or role saved stays without', async () => {
+    db.updateGuildConfig(G, id, { welcome_enabled: true });
+    await save({ welcome_channel_id: CH_CLIPS, sub_role_id: OTHER_ROLE });
+    assert.equal(stored().welcome_channel_id, null);
+    assert.equal(stored().sub_role_id, null);
+  });
+
+  test('a server Discord has marked unavailable counts the same', async () => {
+    seeServer().available = false;
+    await save({ welcome_message: 'During an outage' });
+    assert.equal(stored().welcome_channel_id, CH_LIVE);
+    assert.equal(stored().sub_role_id, ROLE);
+    assert.equal(stored().welcome_message, 'During an outage');
+  });
+
+  test('once the bot sees the server the form decides again: an empty choice switches the setting off', async () => {
+    seeServer();
+    const res = await save();
+    assert.equal(res.headers.location, `/dashboard/guild/${G}?tab=discord&saved=1`);
+    assert.equal(stored().welcome_channel_id, null);
+    assert.equal(stored().sub_role_id, null);
+  });
+
+  test('once the bot sees the server a new choice is saved, and one that is not the server\'s is still refused', async () => {
+    seeServer();
+    const ok = await save({ welcome_channel_id: CH_CLIPS, sub_role_id: OTHER_ROLE });
+    assert.equal(ok.headers.location, `/dashboard/guild/${G}?tab=discord&saved=1`);
+    assert.equal(stored().welcome_channel_id, CH_CLIPS);
+    assert.equal(stored().sub_role_id, OTHER_ROLE);
+
+    const wrongChannel = await save({ welcome_channel_id: '999999999999999999', sub_role_id: ROLE });
+    assert.equal(messageOf(wrongChannel), 'invalid_channel');
+    const wrongRole = await save({ welcome_channel_id: CH_LIVE, sub_role_id: '999999999999999999' });
+    assert.equal(messageOf(wrongRole), 'invalid_role');
+    assert.equal(stored().welcome_channel_id, CH_CLIPS, 'a refused save changes nothing');
+    assert.equal(stored().sub_role_id, OTHER_ROLE);
+  });
+
+  test('the page says the lists cannot be loaded, and its pickers still show the saved channel and role', async () => {
+    const res = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(notice(res.text), 'the notice is on the page');
+    assert.ok(res.text.includes(`<option value="${CH_LIVE}" selected>#${CH_LIVE}</option>`), 'the welcome channel picker');
+    assert.ok(res.text.includes(`<option value="${ROLE}" selected>${ROLE}</option>`), 'the sub role picker');
+    assert.equal((await request('GET', `/dashboard/guild/${G}`, { streamer: id, json: true })).json().locals.discordListsUnavailable, true);
+  });
+
+  test('with the bot in the server the page has no notice and the pickers list the server', async () => {
+    seeServer();
+    const res = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(!notice(res.text));
+    assert.ok(res.text.includes(`<option value="${CH_LIVE}" selected>#live</option>`));
+    assert.ok(!res.text.includes(`>#${CH_LIVE}<`));
+    assert.equal((await request('GET', `/dashboard/guild/${G}`, { streamer: id, json: true })).json().locals.discordListsUnavailable, false);
+  });
+
+  describe('the edit forms of a watched channel', () => {
+    const YT = 'UC0000000000000000000001';
+    let twitchRow;
+    let youtubeRow;
+    beforeEach(() => {
+      db.addWatchedChannel(G, id, 'some_channel', CH_LIVE, CH_CLIPS, true, true, null);
+      twitchRow = db.getWatchedChannelsForGuild(G, id)[0];
+      db.addWatchedYoutubeChannel(G, id, YT, 'Some Channel', CH_LIVE, CH_CLIPS, null);
+      youtubeRow = db.getWatchedYoutubeChannelsForGuild(G, id)[0];
+    });
+    const twitchEdit = (form) => request('POST', `/dashboard/guild/${G}/channels/${twitchRow.id}/edit`, { streamer: id, form });
+    const youtubeEdit = (form) => request('POST', `/dashboard/guild/${G}/youtube/${youtubeRow.id}/edit`, { streamer: id, form });
+
+    test('a save from empty pickers does not switch the channels off', async () => {
+      const twitch = await twitchEdit({ live_channel_id: '', clips_channel_id: '' });
+      assert.equal(twitch.headers.location, `/dashboard/guild/${G}?tab=twitch`);
+      const youtube = await youtubeEdit({ videos_channel_id: '', live_channel_id: '' });
+      assert.equal(youtube.headers.location, `/dashboard/guild/${G}?tab=youtube`);
+      const twitchAfter = db.getWatchedChannelsForGuild(G, id)[0];
+      assert.equal(twitchAfter.live_channel_id, CH_LIVE);
+      assert.equal(twitchAfter.clips_channel_id, CH_CLIPS);
+      const youtubeAfter = db.getWatchedYoutubeChannelsForGuild(G, id)[0];
+      assert.equal(youtubeAfter.videos_channel_id, CH_LIVE);
+      assert.equal(youtubeAfter.live_channel_id, CH_CLIPS);
+    });
+
+    test('with the bot in the server the same save does switch them off', async () => {
+      seeServer();
+      assert.equal(messageOf(await twitchEdit({ live_channel_id: '', clips_channel_id: '' })), 'updated');
+      assert.equal(messageOf(await youtubeEdit({ videos_channel_id: '', live_channel_id: '' })), 'updated');
+      assert.equal(db.getWatchedChannelsForGuild(G, id)[0].live_channel_id, null);
+      assert.equal(db.getWatchedYoutubeChannelsForGuild(G, id)[0].videos_channel_id, null);
+    });
   });
 });
 

@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "Necesitas el permiso Administrar servidor en ese servidor de Discord para reclamarlo.",
   "guild.invalidChannel": "Ese canal no está en este servidor de Discord. Elige un canal de la lista.",
   "guild.invalidRole": "Ese rol no se puede usar para Sub Sync. Elige un rol de la lista.",
+  "guild.listsUnavailable": "No se pueden cargar ahora las listas de canales y roles de Discord, así que no se pueden cambiar canales ni roles en esta página. Todo lo que guardaste se queda como está. Inténtalo de nuevo en un momento.",
   "guild.subRoleHint": "Solo se muestran roles simples por debajo del rol del bot: sin permisos de administrador ni de moderador, y que no estén administrados por una integración.",
   "guild.subRoleProblem.missing": "Sub Sync está en pausa aquí: el rol de suscriptor guardado ya no existe. Elige otro rol y guarda.",
   "guild.subRoleProblem.everyone": "Sub Sync está en pausa aquí: @everyone no puede ser el rol de suscriptor. Elige otro rol y guarda.",

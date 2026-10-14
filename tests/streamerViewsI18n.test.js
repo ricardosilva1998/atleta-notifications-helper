@@ -120,7 +120,7 @@ const channels = [{ id: '111', name: 'general' }];
 const limits = { recaps: true, milestones: true, weeklyHighlights: true };
 const guildPage = {
   streamer, guild: { welcome_enabled: 1, welcome_channel_id: '111', welcome_message: 'Hello', sub_sync_enabled: 1, sub_role_id: 'r1' },
-  guildName: 'GuildName', guildId: 'g1', channels, roles: [{ id: 'r1', name: 'Subscriber' }], subRoleProblem: null, welcomeMessageMax: 500, deliveryError: null,
+  guildName: 'GuildName', guildId: 'g1', channels, roles: [{ id: 'r1', name: 'Subscriber' }], subRoleProblem: null, discordListsUnavailable: false, welcomeMessageMax: 500, deliveryError: null,
   watchedTwitchChannels: [
     { id: 1, twitch_username: 'shroud', live_channel_id: '111', clips_channel_id: '111', is_live: true, profile_image_url: null },
     { id: 2, twitch_username: 'ninja', live_channel_id: null, clips_channel_id: null, is_live: false, profile_image_url: null },
@@ -167,6 +167,8 @@ const PAGE_LOCALS = {
     guildPage,
     { ...guildPage, msg: 'channel_limit', limits: { recaps: false, milestones: false, weeklyHighlights: false }, hasBroadcasterToken: true, features: { youtube: false }, watchedTwitchChannels: [], watchedYoutubeChannels: [],
       deliveryError: { channel: '#general', when: '2026-10-13 UTC', unavailable: false, error: 'Boom' }, subRoleProblem: 'missing' },
+    // the bot cannot see the server: no lists, a notice, and the pickers show what is saved
+    { ...guildPage, discordListsUnavailable: true, channels: [], roles: [] },
   ],
   'overlay-config': [
     { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true } },

@@ -677,6 +677,7 @@
   "dashboard.claimNotAllowed": "Você precisa da permissão Gerenciar Servidor nesse servidor do Discord para reivindicá-lo.",
   "guild.invalidChannel": "Esse canal não está neste servidor do Discord. Escolha um canal da lista.",
   "guild.invalidRole": "Esse cargo não pode ser usado no Sub Sync. Escolha um cargo da lista.",
+  "guild.listsUnavailable": "Não foi possível carregar agora as listas de canais e cargos do Discord, então não dá para alterar canais e cargos nesta página. Tudo o que você salvou continua como está. Tente novamente em instantes.",
   "guild.subRoleHint": "Só aparecem cargos simples abaixo do cargo do bot: sem permissões de administrador ou moderador e que não sejam gerenciados por uma integração.",
   "guild.subRoleProblem.missing": "O Sub Sync está pausado aqui: o cargo de inscrito salvo não existe mais. Escolha outro cargo e salve.",
   "guild.subRoleProblem.everyone": "O Sub Sync está pausado aqui: @everyone não pode ser o cargo de inscrito. Escolha outro cargo e salve.",
