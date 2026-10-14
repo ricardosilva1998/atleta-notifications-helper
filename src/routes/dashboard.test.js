@@ -742,6 +742,52 @@ describe('a save is pushed to the overlays that are open', () => {
     const seen = await overlayMessagesDuring(() => request('POST', '/dashboard/overlay', { streamer: disabled, form: { overlay_enabled: '1' } }), disabled);
     assert.deepEqual(seen, []);
   });
+
+  describe('regenerating the overlay link', () => {
+    test('gives the streamer a new token, and the streams that are open on the old link are ended', async () => {
+      const before = db.getStreamerById(id).overlay_token;
+      let ended = 0;
+      const onEnd = () => { ended++; };
+      bus.on(accountDisabledChannel(id), onEnd);
+      let res;
+      try { res = await request('POST', '/dashboard/overlay/generate-token', { streamer: id }); } finally { bus.off(accountDisabledChannel(id), onEnd); }
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/dashboard/overlay');
+      const after = db.getStreamerById(id).overlay_token;
+      assert.ok(after && after !== before, 'a new token');
+      assert.equal(db.getStreamerByOverlayToken(before), undefined, 'the old link no longer finds the streamer');
+      assert.equal(db.getStreamerByOverlayToken(after).id, id, 'the new link does');
+      assert.equal(ended, 1, 'the open streams were told to end');
+    });
+
+    test('another streamer\'s streams are left alone', async () => {
+      const other = addStreamer({ overlay_enabled: 1, overlay_token: 'tok-bystander-regen' });
+      let ended = 0;
+      const onEnd = () => { ended++; };
+      bus.on(accountDisabledChannel(other), onEnd);
+      try { await request('POST', '/dashboard/overlay/generate-token', { streamer: id }); } finally { bus.off(accountDisabledChannel(other), onEnd); }
+      assert.equal(ended, 0);
+      assert.equal(db.getStreamerById(other).overlay_token, 'tok-bystander-regen');
+    });
+
+    test('a visitor who is not logged in cannot regenerate anything', async () => {
+      const before = db.getStreamerById(id).overlay_token;
+      const res = await request('POST', '/dashboard/overlay/generate-token', {});
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/auth/login');
+      assert.equal(db.getStreamerById(id).overlay_token, before);
+    });
+
+    test('the settings page offers a button that asks first, and says OBS must be updated', async () => {
+      const res = await request('GET', '/dashboard/overlay', { streamer: id });
+      assert.equal(res.status, 200);
+      const form = res.text.match(/<form[^>]*action="\/dashboard\/overlay\/generate-token"[^>]*>[\s\S]*?<\/form>/);
+      assert.ok(form, 'a form posting to generate-token is on the page while a link exists');
+      assert.match(form[0], /data-confirm="[^"]*OBS[^"]*"/, 'the confirmation names OBS');
+      assert.match(form[0], /onsubmit="return confirm\(this\.dataset\.confirm\)"/);
+      assert.match(form[0], /<button type="submit"/);
+    });
+  });
 });
 
 // ── Claiming a server (C-a) and the server list (C-c) ────────────────────

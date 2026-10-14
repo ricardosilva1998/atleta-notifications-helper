@@ -10,7 +10,7 @@ const {
 } = require('../services/discordGuards');
 const { getUserProfile } = require('../services/twitch');
 const { resolveChannelId, getLatestVideos, getChannelInfo } = require('../services/youtube');
-const { requireActiveStreamer } = require('../services/streamerAccess');
+const { requireActiveStreamer, accountDisabledChannel } = require('../services/streamerAccess');
 const { normalizeTwitchLogin } = require('../services/twitchLogin');
 const { parseOverlaySettings, giveawayDurationSeconds } = require('../services/overlaySettings');
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
@@ -702,6 +702,10 @@ router.post('/overlay', (req, res) => {
 // Generate overlay token
 router.post('/overlay/generate-token', (req, res) => {
   db.generateOverlayToken(req.streamer.id);
+  // The old link stops working: a source that is already open on it is ended
+  // too (the streamer updates OBS with the new link), instead of carrying on
+  // with a link that is no longer theirs to use. Same channel as a disabled account.
+  require('../services/overlayBus').emit(accountDisabledChannel(req.streamer.id));
   res.redirect('/dashboard/overlay');
 });
 
