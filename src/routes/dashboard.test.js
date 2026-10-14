@@ -911,22 +911,67 @@ describe('the overlay settings page', () => {
     assert.equal(row.overlay_volume, 1);
   });
 
-  test('a blank token field keeps the saved token, and EventSub and StreamElements keep running', async () => {
+  // Settings reach an open OBS source as they are saved, so a save does not reconnect
+  // Twitch (a restart drops events for a second or two): the connections are started
+  // when the overlay is switched on, and StreamElements' when its token changes.
+  test('a save while the overlay is on leaves the connections running', async () => {
+    await save({ overlay_enabled: '1', overlay_follow_duration: '9', streamelements_jwt: '' });
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 9, 'the settings are saved');
+    assert.deepEqual(managerCalls, []);
+  });
+
+  test('a blank token field keeps the saved token', async () => {
     await save({ overlay_enabled: '1', streamelements_jwt: '' });
     assert.equal(db.getStreamerById(id).streamelements_jwt, JWT);
-    assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.start', id]]);
+    assert.deepEqual(managerCalls, []);
   });
 
-  test('a typed token replaces the saved one', async () => {
+  test('a typed token replaces the saved one and reconnects StreamElements only', async () => {
     await save({ overlay_enabled: '1', streamelements_jwt: ' other.token.value ' });
     assert.equal(db.getStreamerById(id).streamelements_jwt, 'other.token.value');
+    assert.deepEqual(managerCalls, [['se.start', id]]);
+  });
+
+  test('typing the token that is already saved changes nothing', async () => {
+    await save({ overlay_enabled: '1', streamelements_jwt: JWT });
+    assert.deepEqual(managerCalls, []);
+  });
+
+  test('the remove box clears the token and stops the StreamElements connection only', async () => {
+    await save({ overlay_enabled: '1', streamelements_jwt: '', streamelements_jwt_remove: '1' });
+    assert.equal(db.getStreamerById(id).streamelements_jwt, null);
+    assert.deepEqual(managerCalls, [['se.stop', id]]);
+  });
+
+  test('switching the overlay on connects EventSub, and StreamElements when a token is saved', async () => {
+    db.db.prepare('UPDATE streamers SET overlay_enabled = 0 WHERE id = ?').run(id);
+    await save({ overlay_enabled: '1', streamelements_jwt: '' });
+    assert.equal(db.getStreamerById(id).overlay_enabled, 1);
     assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.start', id]]);
   });
 
-  test('the remove box clears the token and stops the StreamElements connection', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: '', streamelements_jwt_remove: '1' });
-    assert.equal(db.getStreamerById(id).streamelements_jwt, null);
-    assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.stop', id]]);
+  test('switching the overlay on without a StreamElements token connects EventSub only', async () => {
+    const noToken = addStreamer({ overlay_enabled: 0, broadcaster_access_token: 'tok' });
+    await request('POST', '/dashboard/overlay', { streamer: noToken, form: { overlay_enabled: '1' } });
+    assert.ok(managerCalls.some(([name, who]) => name === 'eventsub.start' && who === noToken));
+    assert.ok(!managerCalls.some(([name]) => name === 'se.start'), 'there is no token to connect with');
+  });
+
+  test('on, saved again, token changed, off, on again: the connections follow the switch', async () => {
+    db.db.prepare('UPDATE streamers SET overlay_enabled = 0 WHERE id = ?').run(id);
+    const steps = [
+      [{ overlay_enabled: '1' }, [['eventsub.start', id], ['se.start', id]]],
+      [{ overlay_enabled: '1', overlay_sub_duration: '10' }, []],
+      [{ overlay_enabled: '1', streamelements_jwt: 'new.token.value' }, [['se.start', id]]],
+      [{ overlay_enabled: '1', overlay_bits_duration: '12' }, []],
+      [{}, [['eventsub.stop', id], ['se.stop', id]]],
+      [{ overlay_enabled: '1' }, [['eventsub.start', id], ['se.start', id]]],
+    ];
+    for (const [form, expected] of steps) {
+      managerCalls.length = 0;
+      await save(form);
+      assert.deepEqual(managerCalls, expected, JSON.stringify(form));
+    }
   });
 
   test('turning the overlay off stops both connections and keeps the token', async () => {

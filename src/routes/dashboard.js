@@ -718,6 +718,9 @@ router.get('/overlay', (req, res) => {
 // parseOverlaySettings; a blank StreamElements field keeps the stored token.
 router.post('/overlay', (req, res) => {
   const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
+  // Whether the overlay was on before this save: the connections below were
+  // started then (at boot, or by the save that switched it on).
+  const wasEnabled = !!req.streamer.overlay_enabled;
   db.updateOverlayConfig(req.streamer.id, columns);
   pushOverlayConfig(req.streamer.id);
 
@@ -725,9 +728,15 @@ router.post('/overlay', (req, res) => {
     const { eventSubManager } = require('../services/eventsub');
     const { streamElementsManager } = require('../services/streamelements');
     if (columns.overlay_enabled) {
-      eventSubManager.startForStreamer(req.streamer.id);
-      if (streamElementsJwt) streamElementsManager.startForStreamer(req.streamer.id);
-      else streamElementsManager.stopForStreamer(req.streamer.id); // token removed (or never set)
+      // Settings reach an open OBS source as they are saved, so a save must not
+      // reconnect Twitch (a restart drops events for a second or two): the
+      // connections are started when the overlay is switched on, and the
+      // StreamElements one also when its token is added, replaced or removed.
+      if (!wasEnabled) eventSubManager.startForStreamer(req.streamer.id);
+      if (!wasEnabled || 'streamelements_jwt' in columns) {
+        if (streamElementsJwt) streamElementsManager.startForStreamer(req.streamer.id);
+        else streamElementsManager.stopForStreamer(req.streamer.id); // token removed (or never set)
+      }
     } else {
       eventSubManager.stopForStreamer(req.streamer.id);
       streamElementsManager.stopForStreamer(req.streamer.id);
