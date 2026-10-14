@@ -78,9 +78,14 @@ after(async () => {
   Object.assign(console, realConsole);
 });
 
+// A new private address for each request that does not name one, so tests
+// never share a rate-limit counter by accident.
+let peers = 0;
+const nextPeer = () => { peers++; return `10.0.${Math.floor(peers / 250)}.${(peers % 250) + 1}`; };
+
 // One request. peer: the address Railway's edge saw (X-Forwarded-For); cf: a
 // CF-Connecting-IP header; json: a JSON body.
-function send(method, urlPath, { peer = '192.0.2.1', cf, headers = {}, json } = {}) {
+function send(method, urlPath, { peer = nextPeer(), cf, headers = {}, json } = {}) {
   return new Promise((resolve, reject) => {
     const body = json === undefined ? null : Buffer.from(JSON.stringify(json));
     const sent = { 'X-Forwarded-For': peer, ...headers };
@@ -183,5 +188,353 @@ describe('the Racing sign-in log records the visitor\'s address', () => {
     const res = await send('POST', '/racing/auth/login-api', { peer: '203.0.113.60', cf: '198.51.100.41', json: { username: 'nobody-direct', password: 'wrong-password' } });
     assert.equal(res.status, 401);
     assert.equal(loggedIp('nobody-direct'), '203.0.113.60');
+  });
+});
+
+// ── What the Atleta Racing app uploads ───────────────────────────────────
+// Payloads shaped exactly as bridge/sessionRecorder.js, bridge/telemetry.js and
+// bridge/main.js send them; the hostile values stand for anyone else posting
+// to these public routes.
+
+const zlib = require('node:zlib');
+
+const BRIDGE_ID = '3f1c2a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f'; // crypto.randomUUID(), bridge/settings.js
+const HOSTILE = ['<img src=x onerror=alert(1)>', '"><svg onload=alert(1)>', "'><script>alert(1)</script>"];
+// Telemetry as sessionRecorder.js compresses it: gzip of the samples, base64.
+const TELEMETRY = zlib.gzipSync(JSON.stringify([[0.5, 0, 120.5, 4, 0.01, 0.1234]])).toString('base64');
+
+const row = (sql, ...params) => db.db.prepare(sql).get(...params);
+const rows = (sql, ...params) => db.db.prepare(sql).all(...params);
+
+// A track outline as telemetry.js builds it: 500 slots of {x, y}.
+const outline = (points = 500) => Array.from({ length: points }, (_, i) => ({ x: Math.cos(i / 80) * 300, y: Math.sin(i / 80) * 200 }));
+// The metadata telemetry.js sends from iRacing's WeekendInfo.
+const weekend = { trackLength: '5.79 km', trackTurns: 21, trackCountry: 'Germany', trackCity: 'Nürburg' };
+const trackMeta = (name) => row('SELECT track_length, track_turns, track_country, track_city FROM track_maps WHERE track_name = ?', name);
+
+describe('POST /api/track-map (telemetry.js uploadTrackToServer)', () => {
+  test('the app\'s upload is stored as it was sent', async () => {
+    const res = await send('POST', '/api/track-map', { json: { trackName: 'Nurburgring Combined', trackData: outline(), ...weekend } });
+    assert.deepEqual(res.json, { status: 'ok', points: 500 });
+    assert.deepEqual(trackMeta('Nurburgring Combined'), { track_length: '5.79 km', track_turns: 21, track_country: 'Germany', track_city: 'Nürburg' });
+  });
+
+  test('a length in miles, and the app\'s "unknown" values (empty text, 0 turns) store nothing, as before', async () => {
+    await send('POST', '/api/track-map', { json: { trackName: 'Oval A', trackData: outline(), trackLength: '0.53 mi', trackTurns: 4, trackCountry: 'USA', trackCity: 'Bristol' } });
+    assert.deepEqual(trackMeta('Oval A'), { track_length: '0.53 mi', track_turns: 4, track_country: 'USA', track_city: 'Bristol' });
+    await send('POST', '/api/track-map', { json: { trackName: 'Unknown B', trackData: outline(), trackLength: '', trackTurns: 0, trackCountry: '', trackCity: '' } });
+    assert.deepEqual(trackMeta('Unknown B'), { track_length: null, track_turns: null, track_country: null, track_city: null });
+  });
+
+  test('anything else is not stored: a length that is not "<number> km|mi", turns outside 0-200, places cut to 80 characters', async () => {
+    for (const [i, bad] of HOSTILE.entries()) {
+      const name = `Hostile track ${i}`;
+      const res = await send('POST', '/api/track-map', { json: { trackName: name, trackData: outline(), trackLength: bad, trackTurns: bad, trackCountry: bad, trackCity: bad } });
+      assert.equal(res.status, 200);
+      const meta = trackMeta(name);
+      assert.equal(meta.track_length, null);
+      assert.equal(meta.track_turns, null);
+      assert.equal(meta.track_country, bad, 'a place name is text (the pages escape it)');
+    }
+    for (const turns of [201, -1, 12.5, 'twelve', true, [12], { n: 12 }]) {
+      await send('POST', '/api/track-map', { json: { trackName: `Turns ${JSON.stringify(turns)}`, trackData: outline(), trackTurns: turns } });
+      assert.equal(trackMeta(`Turns ${JSON.stringify(turns)}`).track_turns, null, JSON.stringify(turns));
+    }
+    await send('POST', '/api/track-map', { json: { trackName: 'Turns as text', trackData: outline(), trackTurns: '12' } });
+    assert.equal(trackMeta('Turns as text').track_turns, 12, 'a number sent as text is a number');
+    for (const length of ['5.79', '5.79 km extra', '12345 km', '5.7912 km', 579, ['5.79 km']]) {
+      await send('POST', '/api/track-map', { json: { trackName: `Length ${JSON.stringify(length)}`, trackData: outline(), trackLength: length } });
+      assert.equal(trackMeta(`Length ${JSON.stringify(length)}`).track_length, null, JSON.stringify(length));
+    }
+    await send('POST', '/api/track-map', { json: { trackName: 'Long places', trackData: outline(), trackCountry: 'C'.repeat(300), trackCity: { city: 'x' } } });
+    assert.deepEqual(trackMeta('Long places'), { track_length: null, track_turns: null, track_country: 'C'.repeat(80), track_city: null });
+  });
+
+  test('a track already stored keeps its details: an upload only fills the ones it does not have yet', async () => {
+    const name = 'Spa Kept';
+    await send('POST', '/api/track-map', { json: { trackName: name, trackData: outline(400), trackLength: '7.00 km' } });
+    // A smaller or equal outline: the stored one stays; empty details are filled in.
+    let res = await send('POST', '/api/track-map', { json: { trackName: name, trackData: outline(300), trackLength: '1.00 km', trackTurns: 19, trackCountry: 'Belgium', trackCity: 'Stavelot' } });
+    assert.equal(res.json.status, 'exists');
+    assert.deepEqual(trackMeta(name), { track_length: '7.00 km', track_turns: 19, track_country: 'Belgium', track_city: 'Stavelot' });
+    // A better outline replaces the stored one, and still changes no detail it already has.
+    res = await send('POST', '/api/track-map', { json: { trackName: name, trackData: outline(500), trackLength: '2.00 km', trackTurns: 3, trackCountry: 'Elsewhere', trackCity: 'Elsewhere' } });
+    assert.equal(res.json.status, 'ok');
+    assert.equal(row('SELECT point_count FROM track_maps WHERE track_name = ?', name).point_count, 500);
+    assert.deepEqual(trackMeta(name), { track_length: '7.00 km', track_turns: 19, track_country: 'Belgium', track_city: 'Stavelot' });
+  });
+});
+
+// The first upload of a session, as sessionRecorder.js createSessionOnServer() builds it.
+function bridgeLap(lapNumber, lapTime, extra = {}) {
+  return { lap_number: lapNumber, lap_time: lapTime, sector_times: null, fuel_used: null, air_temp: 21.5, track_temp: 30.25, is_pit_lap: false, position: 4, incidents: 2, is_valid: false, ...extra };
+}
+function bridgeSession(trackName, { session = {}, laps, ...rest } = {}) {
+  const firstLap = bridgeLap(1, 95.123);
+  return {
+    bridge_id: BRIDGE_ID,
+    iracing_name: 'Synthetic Driver',
+    session: {
+      track_name: trackName,
+      car_class: 'GT3 Class',
+      car_name: 'BMW M4 GT3',
+      session_type: 'race',
+      race_type: null,
+      conditions: { airTemp: 21.5, trackTemp: 30.25, humidity: 55, skies: 'Partly Cloudy', windSpeed: 3.2 },
+      sof: 2150,
+      finish_position: null,
+      irating_change: null,
+      driver_count: 24,
+      best_lap_time: 95.123,
+      lap_count: 1,
+      ...session,
+    },
+    laps: laps || [firstLap],
+    telemetry: [{ lap_number: 1, data: TELEMETRY }],
+    ...rest,
+  };
+}
+const SESSION_COLUMNS = 'bridge_id, iracing_name, track_name, car_class, car_name, session_type, race_type, is_public, conditions, sof, finish_position, irating_change, driver_count, best_lap_time, lap_count';
+const LAP_COLUMNS = 'lap_number, lap_time, sector_times, fuel_used, air_temp, track_temp, is_pit_lap, position, incidents, is_valid';
+const storedSession = (id) => row(`SELECT ${SESSION_COLUMNS} FROM racing_sessions WHERE id = ?`, id);
+const storedLaps = (id) => rows(`SELECT ${LAP_COLUMNS} FROM session_laps WHERE session_id = ? ORDER BY id`, id);
+const storedTelemetry = (id) => rows('SELECT t.data FROM lap_telemetry t JOIN session_laps l ON l.id = t.lap_id WHERE l.session_id = ? ORDER BY l.id', id).map((r) => r.data);
+
+describe('POST /api/session (sessionRecorder.js createSessionOnServer)', () => {
+  test('the app\'s first upload is stored as it was sent', async () => {
+    const res = await send('POST', '/api/session', { json: bridgeSession('Track S1') });
+    assert.equal(res.status, 200);
+    assert.ok(Number.isInteger(res.json.id) && typeof res.json.share_token === 'string');
+    assert.deepEqual(storedSession(res.json.id), {
+      bridge_id: BRIDGE_ID, iracing_name: 'Synthetic Driver', track_name: 'Track S1', car_class: 'GT3 Class', car_name: 'BMW M4 GT3',
+      session_type: 'race', race_type: null, is_public: 0,
+      conditions: JSON.stringify({ airTemp: 21.5, trackTemp: 30.25, humidity: 55, skies: 'Partly Cloudy', windSpeed: 3.2 }),
+      sof: 2150, finish_position: null, irating_change: null, driver_count: 24, best_lap_time: 95.123, lap_count: 1,
+    });
+    assert.deepEqual(storedLaps(res.json.id), [{ lap_number: 1, lap_time: 95.123, sector_times: null, fuel_used: null, air_temp: 21.5, track_temp: 30.25, is_pit_lap: 0, position: 4, incidents: 2, is_valid: 0 }]);
+    assert.deepEqual(storedTelemetry(res.json.id), [TELEMETRY]);
+  });
+
+  test('an older app\'s whole-session upload (every lap at the end) and every session type it names', async () => {
+    const laps = [bridgeLap(1, 101.5), bridgeLap(2, 96.25, { fuel_used: 2.41, is_valid: true }), bridgeLap(3, 97.75, { fuel_used: 2.38, is_valid: true, is_pit_lap: true })];
+    for (const type of ['practice', 'qualify', 'race']) {
+      const payload = bridgeSession(`Track S2 ${type}`, { session: { session_type: type, race_type: 'sprint', lap_count: 3, finish_position: 7, irating_change: -23 }, laps });
+      payload.telemetry = laps.map((l) => ({ lap_number: l.lap_number, data: TELEMETRY }));
+      const res = await send('POST', '/api/session', { json: payload });
+      assert.equal(res.status, 200, type);
+      const stored = storedSession(res.json.id);
+      assert.equal(stored.session_type, type);
+      assert.deepEqual([stored.race_type, stored.lap_count, stored.finish_position, stored.irating_change], ['sprint', 3, 7, -23]);
+      assert.deepEqual(storedLaps(res.json.id).map((l) => [l.lap_number, l.lap_time, l.fuel_used, l.is_valid, l.is_pit_lap]), [[1, 101.5, null, 0, 0], [2, 96.25, 2.41, 1, 0], [3, 97.75, 2.38, 1, 1]]);
+      assert.equal(storedTelemetry(res.json.id).length, 3);
+    }
+  });
+
+  test('numbers that are not numbers are stored as nothing; text is cut to its length', async () => {
+    for (const [i, bad] of HOSTILE.entries()) {
+      const payload = bridgeSession(`Track S3 ${i}`, {
+        iracing_name: bad + 'N'.repeat(200),
+        session: { car_name: bad, race_type: bad + 'R'.repeat(100), sof: bad, finish_position: bad, irating_change: bad, driver_count: bad, best_lap_time: bad, lap_count: bad },
+      });
+      const res = await send('POST', '/api/session', { json: payload });
+      assert.equal(res.status, 200);
+      const stored = storedSession(res.json.id);
+      assert.deepEqual([stored.sof, stored.finish_position, stored.irating_change, stored.driver_count, stored.best_lap_time], [null, null, null, null, null]);
+      assert.equal(stored.lap_count, 1, 'the number of laps sent');
+      assert.equal(stored.iracing_name, (bad + 'N'.repeat(200)).slice(0, 100));
+      assert.equal(stored.car_name, bad, 'text stays text (the pages escape it)');
+      assert.equal(stored.race_type, (bad + 'R'.repeat(100)).slice(0, 40));
+    }
+  });
+
+  test('lap values that are not numbers are stored as nothing', async () => {
+    const res = await send('POST', '/api/session', { json: bridgeSession('Track S4', { laps: [bridgeLap(1, 95.5, { fuel_used: HOSTILE[0], air_temp: HOSTILE[1], track_temp: {}, position: HOSTILE[2], incidents: [3], sector_times: [HOSTILE[0]] })] }) });
+    assert.equal(res.status, 200);
+    assert.deepEqual(storedLaps(res.json.id), [{ lap_number: 1, lap_time: 95.5, sector_times: null, fuel_used: null, air_temp: null, track_temp: null, is_pit_lap: 0, position: null, incidents: null, is_valid: 0 }]);
+    const sectors = await send('POST', '/api/session', { json: bridgeSession('Track S4b', { laps: [bridgeLap(1, 95.5, { sector_times: [31.2, 33.4, 30.9] })] }) });
+    assert.equal(storedLaps(sectors.json.id)[0].sector_times, '[31.2,33.4,30.9]');
+  });
+
+  test('conditions keep the five values the app sends, as numbers and a short sky text', async () => {
+    const conditions = { airTemp: HOSTILE[0], trackTemp: 30, humidity: null, skies: HOSTILE[1] + 'S'.repeat(50), windSpeed: 2, extra: 'dropped', nested: { deep: true } };
+    const res = await send('POST', '/api/session', { json: bridgeSession('Track S5', { session: { conditions } }) });
+    assert.equal(storedSession(res.json.id).conditions, JSON.stringify({ trackTemp: 30, humidity: null, skies: (HOSTILE[1] + 'S'.repeat(50)).slice(0, 40), windSpeed: 2 }));
+    const none = await send('POST', '/api/session', { json: bridgeSession('Track S5b', { session: { conditions: 'sunny' } }) });
+    assert.equal(storedSession(none.json.id).conditions, null);
+  });
+
+  test('refused, as before when a field was missing: a session type that is not a word, a lap without a number or time, a bridge id the app could not have made', async () => {
+    for (const type of [HOSTILE[0], 'race2', 'x'.repeat(33), '', 42, null]) {
+      const res = await send('POST', '/api/session', { json: bridgeSession('Track S6', { session: { session_type: type } }) });
+      assert.equal(res.status, 400, JSON.stringify(type));
+    }
+    assert.equal((await send('POST', '/api/session', { json: bridgeSession('Track S6', { session: { session_type: 'Offline Testing' } }) })).status, 200, 'a word is kept');
+    for (const lap of [bridgeLap(HOSTILE[0], 95), bridgeLap(1, HOSTILE[1]), bridgeLap(null, 95), 'lap']) {
+      assert.equal((await send('POST', '/api/session', { json: bridgeSession('Track S6', { laps: [lap] }) })).status, 400, JSON.stringify(lap));
+    }
+    assert.equal((await send('POST', '/api/session', { json: bridgeSession('Track S6', { laps: { 0: bridgeLap(1, 95) } }) })).status, 400, 'laps is a list');
+    for (const id of [HOSTILE[0], 'short', 'a'.repeat(65), 12345678]) {
+      assert.equal((await send('POST', '/api/session', { json: bridgeSession('Track S6', { bridge_id: id }) })).status, 400, JSON.stringify(id));
+    }
+    const count = row("SELECT COUNT(*) AS n FROM racing_sessions WHERE track_name = 'Track S6'").n;
+    assert.equal(count, 1, 'only the valid one was stored');
+  });
+
+  test('telemetry that is not the app\'s text is left out, the session is kept', async () => {
+    const res = await send('POST', '/api/session', { json: bridgeSession('Track S7', { telemetry: [{ lap_number: 1, data: { not: 'text' } }] }) });
+    assert.equal(res.status, 200);
+    assert.deepEqual(storedTelemetry(res.json.id), []);
+    const notList = await send('POST', '/api/session', { json: bridgeSession('Track S7b', { telemetry: 'x' }) });
+    assert.equal(notList.status, 200);
+  });
+});
+
+describe('POST /api/session/:id/lap and PATCH /api/session/:id/finish (sessionRecorder.js)', () => {
+  async function newSession(trackName) {
+    return (await send('POST', '/api/session', { json: bridgeSession(trackName) })).json.id;
+  }
+
+  test('the app\'s next lap is stored as it was sent', async () => {
+    const id = await newSession('Track L1');
+    const lap = bridgeLap(2, 94.875, { fuel_used: 2.45, is_valid: true });
+    const res = await send('POST', `/api/session/${id}/lap`, { json: { bridge_id: BRIDGE_ID, lap, telemetry: TELEMETRY } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(storedLaps(id)[1], { lap_number: 2, lap_time: 94.875, sector_times: null, fuel_used: 2.45, air_temp: 21.5, track_temp: 30.25, is_pit_lap: 0, position: 4, incidents: 2, is_valid: 1 });
+    assert.deepEqual(storedTelemetry(id), [TELEMETRY, TELEMETRY]);
+    assert.deepEqual([storedSession(id).lap_count, storedSession(id).best_lap_time], [2, 94.875]);
+  });
+
+  test('a lap without a number or time is refused; other values that are not numbers are stored as nothing', async () => {
+    const id = await newSession('Track L2');
+    for (const lap of [bridgeLap(HOSTILE[0], 95), bridgeLap(2, HOSTILE[1]), bridgeLap(0, 95), 'lap']) {
+      assert.equal((await send('POST', `/api/session/${id}/lap`, { json: { bridge_id: BRIDGE_ID, lap } })).status, 400, JSON.stringify(lap));
+    }
+    const res = await send('POST', `/api/session/${id}/lap`, { json: { bridge_id: BRIDGE_ID, lap: bridgeLap(2, 96, { fuel_used: HOSTILE[0], position: HOSTILE[1], incidents: HOSTILE[2], sector_times: HOSTILE[0] }), telemetry: { not: 'text' } } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(storedLaps(id)[1], { lap_number: 2, lap_time: 96, sector_times: null, fuel_used: null, air_temp: 21.5, track_temp: 30.25, is_pit_lap: 0, position: null, incidents: null, is_valid: 0 });
+    assert.equal(storedTelemetry(id).length, 1, 'the telemetry that was not text was left out');
+  });
+
+  test('the app\'s result is stored; a result that is not a number changes nothing', async () => {
+    const id = await newSession('Track F1');
+    let res = await send('PATCH', `/api/session/${id}/finish`, { json: { bridge_id: BRIDGE_ID, finish_position: 3, irating_change: -12, best_lap_time: 94.5 } });
+    assert.equal(res.status, 200);
+    assert.deepEqual([storedSession(id).finish_position, storedSession(id).irating_change, storedSession(id).best_lap_time], [3, -12, 94.5]);
+    res = await send('PATCH', `/api/session/${id}/finish`, { json: { bridge_id: BRIDGE_ID, finish_position: HOSTILE[0], irating_change: HOSTILE[1], best_lap_time: HOSTILE[2] } });
+    assert.equal(res.status, 200);
+    assert.deepEqual([storedSession(id).finish_position, storedSession(id).irating_change, storedSession(id).best_lap_time], [3, -12, 94.5]);
+  });
+
+  test('the race-result notification is written from the stored numbers', async () => {
+    db.createRacingUser('notified-racer', 'x', 'Synthetic Driver', BRIDGE_ID);
+    const user = db.getRacingUserByBridgeId(BRIDGE_ID);
+    const id = await newSession('Track F2');
+    await send('PATCH', `/api/session/${id}/finish`, { json: { bridge_id: BRIDGE_ID, finish_position: HOSTILE[0], irating_change: 17 } });
+    const note = row("SELECT message FROM notifications WHERE user_id = ? AND type = 'race_result' ORDER BY id DESC LIMIT 1", user.id);
+    assert.equal(note.message, ' at Track F2 (+17 iR)');
+  });
+
+  test('PATCH /api/session/:id without a body is a 400, not an error', async () => {
+    const id = await newSession('Track P1');
+    assert.equal((await send('PATCH', `/api/session/${id}`)).status, 400);
+    assert.equal((await send('PATCH', `/api/session/${id}`, { json: { bridge_id: BRIDGE_ID, is_public: true } })).status, 200);
+    assert.equal(storedSession(id).is_public, 1);
+  });
+});
+
+describe('POST /api/live-session (telemetry.js heartbeat)', () => {
+  const heartbeat = { trackName: 'Daytona International Speedway', eventType: 'Race', classes: ['GTP', 'LMP2', 'GT3 Class'], driversCount: 48, totalMinutes: 165, timeRemain: 5412, raceType: 'IMSA Endurance' };
+
+  test('the app\'s heartbeat is shown as it was sent', async () => {
+    assert.deepEqual((await send('POST', '/api/live-session', { json: heartbeat })).json, { ok: true });
+    assert.deepEqual((await send('GET', '/api/live-session')).json, heartbeat);
+    await send('POST', '/api/live-session', { json: { ...heartbeat, eventType: 'Practice', classes: [], raceType: null } });
+    assert.deepEqual((await send('GET', '/api/live-session')).json, { ...heartbeat, eventType: 'Practice', classes: [], raceType: null });
+  });
+
+  test('only those fields are kept, with their types and lengths', async () => {
+    await send('POST', '/api/live-session', { json: {
+      trackName: HOSTILE[0], eventType: HOSTILE[1] + 'E'.repeat(60), raceType: { html: HOSTILE[2] },
+      classes: [HOSTILE[0], 42, 'C'.repeat(60), ...Array.from({ length: 20 }, (_, i) => `Class ${i}`)],
+      driversCount: HOSTILE[0], totalMinutes: '12', timeRemain: 'soon', extra: HOSTILE[0],
+    } });
+    const shown = (await send('GET', '/api/live-session')).json;
+    assert.deepEqual(Object.keys(shown).sort(), ['classes', 'driversCount', 'eventType', 'raceType', 'timeRemain', 'totalMinutes', 'trackName']);
+    assert.equal(shown.trackName, HOSTILE[0], 'text (the page shows it as text)');
+    assert.equal(shown.eventType, (HOSTILE[1] + 'E'.repeat(60)).slice(0, 40));
+    assert.equal(shown.raceType, null);
+    assert.equal(shown.classes.length, 12);
+    assert.deepEqual(shown.classes.slice(0, 3), [HOSTILE[0], '42', 'C'.repeat(40)]);
+    assert.deepEqual([shown.driversCount, shown.totalMinutes, shown.timeRemain], [null, 12, null]);
+    await send('POST', '/api/live-session', { json: { trackName: 'X', classes: 'GT3' } });
+    assert.deepEqual((await send('GET', '/api/live-session')).json.classes, []);
+  });
+});
+
+describe('POST /api/track-stats (telemetry.js collectAndUploadTrackStats)', () => {
+  const stored = (track) => rows('SELECT car_class, race_type, avg_lap_time, avg_pit_time, avg_qualify_time, avg_sof, est_laps, avg_drivers, race_count, top_car, category FROM track_stats WHERE track_name = ? ORDER BY car_class', track);
+
+  test('the app\'s statistics are stored as they were sent', async () => {
+    const stats = {
+      GT3: { avgLapTime: 98.512, avgPitTime: 31.4, avgQualifyTime: 97.9, avgSOF: 2210, estLaps: 24.35, samples: 18, topCar: 'Porsche 911 GT3 R (992)', category: 'road' },
+      LMP2: { avgLapTime: 92.004, avgPitTime: 0, avgQualifyTime: 0, avgSOF: 1980, estLaps: 26.1, samples: 9, topCar: null, category: 'road' },
+    };
+    assert.deepEqual((await send('POST', '/api/track-stats', { json: { trackName: 'Stats T1', raceType: 'IMSA Sprint', stats } })).json, { ok: true });
+    assert.deepEqual(stored('Stats T1'), [
+      { car_class: 'GT3', race_type: 'IMSA Sprint', avg_lap_time: 98.512, avg_pit_time: 31.4, avg_qualify_time: 97.9, avg_sof: 2210, est_laps: 24.35, avg_drivers: 18, race_count: 1, top_car: 'Porsche 911 GT3 R (992)', category: 'road' },
+      { car_class: 'LMP2', race_type: 'IMSA Sprint', avg_lap_time: 92.004, avg_pit_time: 0, avg_qualify_time: 0, avg_sof: 1980, est_laps: 26.1, avg_drivers: 9, race_count: 1, top_car: null, category: 'road' },
+    ]);
+  });
+
+  test('numbers that are not numbers count as 0; text is cut to its length', async () => {
+    const bad = HOSTILE[0];
+    const stats = { [bad + 'K'.repeat(80)]: { avgLapTime: bad, avgPitTime: bad, avgQualifyTime: '97.5', avgSOF: {}, estLaps: [3], samples: bad, topCar: bad + 'T'.repeat(200), category: bad } };
+    const res = await send('POST', '/api/track-stats', { json: { trackName: 'Stats T2', raceType: bad + 'R'.repeat(80), stats } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(stored('Stats T2'), [{
+      car_class: (bad + 'K'.repeat(80)).slice(0, 64), race_type: (bad + 'R'.repeat(80)).slice(0, 64),
+      avg_lap_time: 0, avg_pit_time: 0, avg_qualify_time: 97.5, avg_sof: 0, est_laps: 0, avg_drivers: 0, race_count: 1,
+      top_car: (bad + 'T'.repeat(200)).slice(0, 100), category: 'road',
+    }]);
+  });
+
+  test('statistics that are not a list of classes are refused', async () => {
+    for (const stats of ['GT3', [1, 2], 12]) {
+      assert.equal((await send('POST', '/api/track-stats', { json: { trackName: 'Stats T3', raceType: 'Sprint', stats } })).status, 400, JSON.stringify(stats));
+    }
+    assert.equal((await send('POST', '/api/track-stats', { json: { trackName: { x: 1 }, raceType: 'Sprint', stats: {} } })).status, 400);
+  });
+});
+
+describe('POST /api/bridge-logs and /api/bridge-bug-reports: the bridge id', () => {
+  test('the app\'s log upload is stored with its iRacing name', async () => {
+    const res = await send('POST', '/api/bridge-logs', { json: { bridgeId: BRIDGE_ID, lines: '[Telemetry] Connected\n', iracingName: 'Synthetic Driver' } });
+    assert.deepEqual(res.json, { ok: true });
+    assert.deepEqual(row('SELECT bridge_id, lines, iracing_name FROM bridge_logs WHERE bridge_id = ? ORDER BY id DESC LIMIT 1', BRIDGE_ID), { bridge_id: BRIDGE_ID, lines: '[Telemetry] Connected\n', iracing_name: 'Synthetic Driver' });
+  });
+
+  test('a bridge id the app could not have made is refused', async () => {
+    for (const bridgeId of [...HOSTILE, 'short', 'a'.repeat(65), 'with space-12345', 12345678, ['3f1c2a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f']]) {
+      assert.equal((await send('POST', '/api/bridge-logs', { json: { bridgeId, lines: 'x\n' } })).status, 400, JSON.stringify(bridgeId));
+      assert.equal((await send('POST', '/api/bridge-bug-reports', { json: { bridgeId, errorPattern: 'e', explanation: 'x', suggestedFix: 'y' } })).status, 400, JSON.stringify(bridgeId));
+    }
+    assert.equal(row('SELECT COUNT(*) AS n FROM bridge_logs WHERE bridge_id NOT IN (?)', BRIDGE_ID).n, 0);
+    assert.equal(row('SELECT COUNT(*) AS n FROM bridge_bug_reports').n, 0);
+  });
+
+  test('the iRacing name is text cut to 100 characters', async () => {
+    const id = 'aaaaaaaa-1111-4222-8333-444444444444';
+    await send('POST', '/api/bridge-logs', { json: { bridgeId: id, lines: 'x\n', iracingName: HOSTILE[1] + 'N'.repeat(200) } });
+    assert.equal(row('SELECT iracing_name FROM bridge_logs WHERE bridge_id = ?', id).iracing_name, (HOSTILE[1] + 'N'.repeat(200)).slice(0, 100));
+    const other = 'bbbbbbbb-1111-4222-8333-444444444444';
+    await send('POST', '/api/bridge-logs', { json: { bridgeId: other, lines: 'x\n', iracingName: { name: 'x' } } });
+    assert.equal(row('SELECT iracing_name FROM bridge_logs WHERE bridge_id = ?', other).iracing_name, null);
+  });
+
+  test('a bug report with the app\'s bridge id is stored; one whose texts are not text is refused', async () => {
+    const res = await send('POST', '/api/bridge-bug-reports', { json: { bridgeId: BRIDGE_ID, errorPattern: '[ERR] x', explanation: 'why', suggestedFix: 'fix' } });
+    assert.equal(res.status, 200);
+    assert.ok(Number.isInteger(res.json.id));
+    assert.equal((await send('POST', '/api/bridge-bug-reports', { json: { bridgeId: BRIDGE_ID, errorPattern: { a: 1 }, explanation: 'why', suggestedFix: 'fix' } })).status, 400);
   });
 });
