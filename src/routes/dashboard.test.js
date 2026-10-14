@@ -2516,6 +2516,21 @@ describe('the messages and names those routes show', () => {
     assert.equal(deleting.json().error, t('en', 'giveaways.error.closeFirst'));
   });
 
+  test('a pick that finds the giveaway gone is answered in words, never with the code', async () => {
+    const giveaway = db.insertGiveaway({ streamer_id: id, keyword: 'gone', status: 'closed' });
+    const manager = require('../services/giveawayManager');
+    const original = manager.pickWinners;
+    manager.pickWinners = () => ({ winners: [], error: 'not_found' }); // deleted between the lookup and the draw
+    try {
+      const res = await request('POST', `/dashboard/giveaways/${giveaway.id}/pick`, { streamer: id, body: {} });
+      assert.equal(res.status, 404);
+      assert.deepEqual(res.json(), { error: t('en', 'giveaways.error.notFound') });
+      assert.ok(!res.text.includes('not_found'));
+    } finally {
+      manager.pickWinners = original;
+    }
+  });
+
   test('a sponsor message with no text, and a test of one that is gone, are refused in words', async () => {
     const add = await request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body: { message_text: '' } });
     assert.equal(add.status, 400);

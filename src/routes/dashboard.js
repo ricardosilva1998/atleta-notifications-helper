@@ -2212,7 +2212,8 @@ router.post('/giveaways/:id/pick', (req, res) => {
   const redraw = !!(req.body && req.body.redraw);
   const giveawayMgr = require('../services/giveawayManager');
   const result = giveawayMgr.pickWinners(id, streamerId, { redraw });
-  if (result.error) return res.status(404).json({ error: result.error });
+  // pickWinners reports the giveaway being gone by a code; the page shows words
+  if (result.error) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   if (result.winners.length === 0) return res.json({ winners: [], message: res.locals.t('giveaways.error.noEligible') });
   res.json({ winners: result.winners });
 });
