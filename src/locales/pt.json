@@ -353,6 +353,7 @@
   "dashboard.reconnect.body": "Sua autorização de streamer expirou ou foi revogada, então os alertas de seguidor, inscrição, bits e raid — e a sincronização de cargo de inscrito do Discord — estão pausados no momento.",
   "dashboard.reconnect.cta": "Reconectar agora →",
   "dashboard.settings.error.invalid": "Isso não pode ser salvo. Recarregue a página e tente novamente.",
+  "dashboard.settings.error.overlayOff": "O overlay do OBS está desligado. Ligue-o para mostrar um alerta de teste.",
   "dashboard.tab.experimental": "Experimental",
   "dashboard.tab.admin": "Admin",
   "dashboard.stats": "Estatísticas",

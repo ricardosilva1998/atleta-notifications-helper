@@ -1805,7 +1805,7 @@ describe('the test buttons', () => {
   ];
 
   test('the first test goes through; every other test button is then held for the cooldown', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
     const first = await customTest(id, 'hello chat');
     assert.equal(first.status, 200);
     assert.deepEqual(first.json(), { ok: true });
@@ -1833,7 +1833,7 @@ describe('the test buttons', () => {
 
   test('every test button starts the cooldown, not only the custom one', async () => {
     for (const route of testRoutes.filter((r) => !r.includes('sponsor-messages'))) {
-      const id = addStreamer({ twitch_username: 'somechannel' });
+      const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
       const first = await post(route, id);
       assert.notEqual(first.status, 429, `${route} should go through the first time`);
       assert.equal((await customTest(id, 'right after')).status, 429, `${route} should start the shared cooldown`);
@@ -1894,7 +1894,7 @@ describe('the test buttons', () => {
   });
 
   test('the overlay test still sends the alert and the matching chat message', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
     const res = await post('/dashboard/overlay/test/follow', id);
     assert.deepEqual(res.json(), { ok: true });
     assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]], 'a test is never merged with real thank-yous');
@@ -1922,7 +1922,7 @@ describe('the test buttons', () => {
 
     test('every button is answered with that alert on the overlay (the four that used to be refused included)', async () => {
       for (const type of buttonTypes) {
-        const id = addStreamer({ twitch_username: 'somechannel' }); // one streamer per button: the cooldown is per streamer
+        const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 }); // one streamer per button: the cooldown is per streamer
         let res;
         const events = await overlayDuring(id, async () => { res = await preview(id, type); });
         assert.equal(res.status, 200, type);
@@ -1934,7 +1934,7 @@ describe('the test buttons', () => {
     });
 
     test('the giveaway winner is the card giveawayManager sends: a name, the prize and the keyword', async () => {
-      const id = addStreamer();
+      const id = addStreamer({ overlay_enabled: 1 });
       const [event] = await overlayDuring(id, () => preview(id, 'giveaway_winner'));
       assert.deepEqual(Object.keys(event.data).sort(), ['keyword', 'prize', 'username']);
       assert.deepEqual(Object.keys(event).sort(), ['data', 'type']);
@@ -1942,7 +1942,7 @@ describe('the test buttons', () => {
 
     test('the YouTube alerts are the same samples the YouTube chatbot page plays', async () => {
       for (const type of ['yt_superchat', 'yt_member', 'yt_giftmember']) {
-        const a = addStreamer();
+        const a = addStreamer({ overlay_enabled: 1 });
         const b = addStreamer();
         const [fromSettings] = await overlayDuring(a, () => preview(a, type));
         const [fromChatbot] = await overlayDuring(b, () => post(`/dashboard/youtube-chatbot/test/${type}`, b));
@@ -1953,7 +1953,7 @@ describe('the test buttons', () => {
     test('only the five Twitch alerts post a thank-you in Twitch chat, and as a test', async () => {
       for (const type of buttonTypes) {
         chatCalls.length = 0;
-        const id = addStreamer({ twitch_username: 'somechannel' });
+        const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
         const res = await preview(id, type);
         assert.equal(res.status, 200, type);
         if (TWITCH_TYPES.includes(type)) {
@@ -1967,8 +1967,8 @@ describe('the test buttons', () => {
     });
 
     test('a sample is not changed by being sent: the next test sends the same alert', async () => {
-      const a = addStreamer();
-      const b = addStreamer();
+      const a = addStreamer({ overlay_enabled: 1 });
+      const b = addStreamer({ overlay_enabled: 1 });
       const [first] = await overlayDuring(a, () => preview(a, 'giveaway_winner'));
       first.data.username = 'changed on the way';
       const [second] = await overlayDuring(b, () => preview(b, 'giveaway_winner'));
@@ -1976,7 +1976,7 @@ describe('the test buttons', () => {
     });
 
     test('a type the overlay does not have is refused before the cooldown starts', async () => {
-      const id = addStreamer({ twitch_username: 'somechannel' });
+      const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
       const seen = await overlayDuring(id, async () => {
         const refused = await preview(id, 'nope');
         assert.equal(refused.status, 400);
@@ -4164,5 +4164,29 @@ describe('with the VTuber tab switched off', () => {
     features.vtuber = true;
     const page = (await request('GET', '/dashboard', { streamer: addStreamer() })).text;
     assert.ok(page.includes('data-tab="experimental"') && page.includes('id="tab-experimental"'));
+  });
+});
+
+// ── A test alert while the overlay switch is off ─────────────────────────
+
+describe('a test alert while the overlay switch is off', () => {
+  test('says the overlay is off and sends nothing; switched on, the alert goes out', async () => {
+    const bus = require('../services/overlayBus');
+    const id = addStreamer({ overlay_enabled: 0 });
+    const seen = [];
+    const listener = (event) => seen.push(event.type);
+    bus.on(`overlay:${id}`, listener);
+    try {
+      const off = await request('POST', '/dashboard/overlay/test/follow', { streamer: id });
+      assert.equal(off.status, 409);
+      assert.deepEqual(off.json(), { ok: false, code: 'overlay_off', error: t('en', 'dashboard.settings.error.overlayOff') });
+      assert.deepEqual(seen, []);
+      db.updateOverlayConfig(id, { overlay_enabled: 1 });
+      const on = await request('POST', '/dashboard/overlay/test/follow', { streamer: id });
+      assert.equal(on.status, 200);
+      assert.deepEqual(seen, ['follow']);
+    } finally {
+      bus.off(`overlay:${id}`, listener);
+    }
   });
 });

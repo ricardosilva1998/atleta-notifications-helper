@@ -270,3 +270,59 @@ describe('the config an overlay receives when it connects', () => {
     }
   });
 });
+
+// ── The overlay switch, and whether the overlay is open in OBS ───────────
+
+describe('the overlay switch (overlay_enabled) decides whether alerts reach the alert overlay', () => {
+  const ALERTS = ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember'];
+  const OTHERS = ['sponsor', 'redemption', 'config-update', 'clear'];
+  const setOverlay = (id, on) => db.db.prepare('UPDATE streamers SET overlay_enabled = ? WHERE id = ?').run(on ? 1 : 0, id);
+
+  test('off: no alert reaches the stream; sponsor images, redemption clips, config updates and clears still do', async () => {
+    const { id, token } = addStreamer();
+    setOverlay(id, 0);
+    const stream = await openStream(`/overlay/events/${token}?source=alerts`);
+    for (const type of ALERTS) bus.emit(`overlay:${id}`, { type, data: { username: 'synthetic' } });
+    for (const type of OTHERS) bus.emit(`overlay:${id}`, { type });
+    await until(() => stream.chunks.join('').includes('"type":"clear"'), 'the clear arrived');
+    const text = stream.chunks.join('');
+    for (const type of OTHERS) assert.ok(text.includes(`"type":"${type}"`), type);
+    for (const type of ALERTS) assert.ok(!text.includes(`"type":"${type}"`), type);
+  });
+
+  test('switched on, the next alert gets through at once, with no reconnect', async () => {
+    const { id, token } = addStreamer();
+    setOverlay(id, 0);
+    const stream = await openStream(`/overlay/events/${token}?source=alerts`);
+    bus.emit(`overlay:${id}`, { type: 'follow', data: { username: 'beforeSwitch' } });
+    setOverlay(id, 1);
+    bus.emit(`overlay:${id}`, { type: 'follow', data: { username: 'afterSwitch' } });
+    await until(() => stream.chunks.join('').includes('afterSwitch'), 'the alert after the switch arrived');
+    assert.ok(!stream.chunks.join('').includes('beforeSwitch'));
+  });
+});
+
+describe('whether the alert overlay is open in OBS', () => {
+  const presence = require('../services/overlayPresence');
+
+  test('counts the streams the alert overlay opens (?source=alerts), not the chat overlay\'s', async () => {
+    const { id, token } = addStreamer();
+    assert.equal(presence.isOpen(id), false);
+    const chat = await openStream(`/overlay/events/${token}`);
+    assert.equal(presence.isOpen(id), false, 'the iRacing chat overlay reads the same stream without the marker');
+    const alerts = await openStream(`/overlay/events/${token}?source=alerts`);
+    assert.equal(presence.isOpen(id), true);
+    alerts.request.destroy();
+    await until(() => !presence.isOpen(id), 'closing the alert overlay counts it out');
+    chat.request.destroy();
+  });
+
+  test('a stream the server ends (the account is disabled, the link regenerated) is counted out too', async () => {
+    const { id, token } = addStreamer();
+    const alerts = await openStream(`/overlay/events/${token}?source=alerts`);
+    assert.equal(presence.isOpen(id), true);
+    disable(id);
+    await until(() => alerts.ended, 'the stream was ended');
+    await until(() => !presence.isOpen(id), 'a stream the server ended no longer counts as open');
+  });
+});

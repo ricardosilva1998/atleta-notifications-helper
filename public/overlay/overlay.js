@@ -248,7 +248,7 @@ function connectSSE() {
     evtSource = null;
   }
 
-  const sseUrl = `/overlay/events/${window.OVERLAY_TOKEN}`;
+  const sseUrl = `/overlay/events/${window.OVERLAY_TOKEN}?source=alerts`;
   console.log('[Overlay] Connecting SSE to:', sseUrl);
   evtSource = new EventSource(sseUrl);
 

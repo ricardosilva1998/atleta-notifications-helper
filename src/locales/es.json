@@ -353,6 +353,7 @@
   "dashboard.reconnect.body": "Tu autorización de streamer ha caducado o fue revocada, por lo que las alertas de seguidores, suscripciones, bits y raids — y la sincronización del rol de suscriptor en Discord — están en pausa.",
   "dashboard.reconnect.cta": "Reconectar ahora →",
   "dashboard.settings.error.invalid": "No se puede guardar. Recarga la página e inténtalo de nuevo.",
+  "dashboard.settings.error.overlayOff": "El overlay de OBS está apagado. Enciéndelo para mostrar una alerta de prueba.",
   "dashboard.tab.experimental": "Experimental",
   "dashboard.tab.admin": "Admin",
   "dashboard.stats": "Estadísticas",

@@ -353,6 +353,7 @@
   "dashboard.reconnect.body": "Your broadcaster authorization has expired or was revoked, so follow, subscription, bits and raid alerts — and Discord sub-role sync — are currently paused.",
   "dashboard.reconnect.cta": "Reconnect now →",
   "dashboard.settings.error.invalid": "That can't be saved. Reload the page and try again.",
+  "dashboard.settings.error.overlayOff": "The OBS overlay is off. Switch it on to show a test alert.",
   "dashboard.tab.experimental": "Experimental",
   "dashboard.tab.admin": "Admin",
   "dashboard.stats": "Stats",

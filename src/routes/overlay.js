@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const db = require('../db');
 const bus = require('../services/overlayBus');
+const overlayPresence = require('../services/overlayPresence');
 const customSounds = require('../services/customSounds');
 const { buildOverlayConfig } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
@@ -24,6 +25,12 @@ function endStreamWhenAccountDisabled(streamerId, req, res) {
   bus.once(channel, end);
   req.on('close', () => bus.off(channel, end));
 }
+
+// The event types the alert overlay draws as an alert. While the streamer's overlay switch is off none of
+// them reaches the stream; everything else on it still does (config updates, clears, sponsor images,
+// redemption clips, and the chat lines the iRacing chat overlay reads, which twitchChat.js already sends only
+// while the switch is on).
+const ALERT_TYPES = new Set(['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember']);
 
 // SSE endpoint — MUST be before /:token to avoid being caught by the wildcard
 router.get('/events/:token', (req, res) => {
@@ -62,6 +69,7 @@ router.get('/events/:token', (req, res) => {
 
   // Listen for events on the bus
   const listener = (event) => {
+    if (event && ALERT_TYPES.has(event.type) && !db.isOverlayEnabled(streamer.id)) return;
     try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) { /* connection closed */ }
   };
 
@@ -69,9 +77,14 @@ router.get('/events/:token', (req, res) => {
   endStreamWhenAccountDisabled(streamer.id, req, res);
   holdStream(res);
 
+  // The alert overlay names itself (?source=alerts): the dashboard says whether it is open in OBS.
+  const isAlertOverlay = req.query.source === 'alerts';
+  if (isAlertOverlay) overlayPresence.opened(streamer.id);
+
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.off(`overlay:${streamer.id}`, listener);
+    if (isAlertOverlay) overlayPresence.closed(streamer.id);
   });
 });
 

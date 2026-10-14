@@ -925,8 +925,14 @@ function knownOverlayTestType(req, res, next) {
   next();
 }
 
+// A test alert while the overlay switch is off would not reach the stream (routes/overlay.js): say so instead.
+function overlayOn(req, res, next) {
+  if (req.streamer.overlay_enabled) return next();
+  res.status(409).json({ ok: false, code: 'overlay_off', error: res.locals.t('dashboard.settings.error.overlayOff') });
+}
+
 // Test notification
-router.post('/overlay/test/:eventType', knownOverlayTestType, limitTests, (req, res) => {
+router.post('/overlay/test/:eventType', knownOverlayTestType, overlayOn, limitTests, (req, res) => {
   const bus = require('../services/overlayBus');
   const type = req.params.eventType;
   const event = OVERLAY_TEST_EVENTS[type];

@@ -353,6 +353,7 @@
   "dashboard.reconnect.body": "配信者の認証が期限切れになったか取り消されたため、フォロー、サブスクリプション、Bits、レイドのアラートと、Discord のサブスクライバーロール同期は現在停止しています。",
   "dashboard.reconnect.cta": "今すぐ再接続 →",
   "dashboard.settings.error.invalid": "この内容は保存できません。ページを再読み込みして、もう一度お試しください。",
+  "dashboard.settings.error.overlayOff": "OBS オーバーレイがオフになっています。テストアラートを表示するには、オンにしてください。",
   "dashboard.tab.experimental": "実験的",
   "dashboard.tab.admin": "管理",
   "dashboard.stats": "統計",

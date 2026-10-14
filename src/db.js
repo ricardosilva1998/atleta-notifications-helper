@@ -3021,6 +3021,13 @@ function updateOverlayConfig(streamerId, config) {
   db.prepare(`UPDATE streamers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
+// Whether the streamer's alert overlay switch is on. Read for each alert the overlay stream passes, so a
+// switch takes effect at once on an open OBS source.
+function isOverlayEnabled(streamerId) {
+  const row = db.prepare('SELECT overlay_enabled FROM streamers WHERE id = ?').get(streamerId);
+  return !!(row && row.overlay_enabled);
+}
+
 function generateOverlayToken(streamerId) {
   const token = require('crypto').randomUUID();
   db.prepare('UPDATE streamers SET overlay_token = ? WHERE id = ?').run(token, streamerId);
@@ -5618,6 +5625,7 @@ module.exports = {
   getOverlayEnabledStreamers,
   getOverlayOrChatbotStreamers,
   updateOverlayConfig,
+  isOverlayEnabled,
   generateOverlayToken,
   updateBroadcasterScopes,
   updateBotTokens,
