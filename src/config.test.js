@@ -30,3 +30,23 @@ test('the shared Twitch bot may post 20 messages per 30 s, or what BOT_CHAT_RATE
   assert.equal(chatRateLimitWith('50'), 50);
   assert.equal(chatRateLimitWith('5000'), 100);
 });
+
+function weeklyDigestIntervalWith(value) {
+  const saved = process.env.WEEKLY_DIGEST_INTERVAL;
+  if (value === undefined) delete process.env.WEEKLY_DIGEST_INTERVAL;
+  else process.env.WEEKLY_DIGEST_INTERVAL = value;
+  delete require.cache[require.resolve('./config')];
+  try {
+    return require('./config').intervals.weeklyDigest;
+  } finally {
+    if (saved === undefined) delete process.env.WEEKLY_DIGEST_INTERVAL;
+    else process.env.WEEKLY_DIGEST_INTERVAL = saved;
+  }
+}
+
+test('the weekly digest poller ticks every 20 minutes unless WEEKLY_DIGEST_INTERVAL says otherwise, so a failed post is retried within its hour', () => {
+  assert.equal(weeklyDigestIntervalWith(undefined), 20 * 60 * 1000);
+  assert.equal(weeklyDigestIntervalWith(''), 20 * 60 * 1000);
+  assert.equal(weeklyDigestIntervalWith('abc'), 20 * 60 * 1000);
+  assert.equal(weeklyDigestIntervalWith('3600000'), 3_600_000);
+});
