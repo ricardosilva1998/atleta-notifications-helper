@@ -1689,6 +1689,24 @@ describe('the YouTube chatbot page errors', () => {
     assert.ok(page.text.includes(html(t('en', 'ytChatbot.error.oauthFailed'))));
   });
 
+  // The Google sign-in ends with ?connected_yt=1 (the account is connected); ?connected=1 is
+  // the other success: the bot joined the live chat. The page tells them apart.
+  test('the page confirms a connected YouTube account for ?connected_yt=1, in words that differ from ?connected=1', async () => {
+    const owner = addStreamer();
+    const account = await request('GET', '/dashboard/youtube-chatbot?connected_yt=1', { streamer: owner });
+    assert.equal(account.status, 200);
+    assert.ok(account.text.includes('id="yt-account-connected"'), 'the notice is there');
+    assert.ok(account.text.includes(html(t('en', 'ytChatbot.accountLinked', { button: t('en', 'ytChatbot.connectLive') }))));
+    assert.ok(!account.text.includes(html(t('en', 'ytChatbot.connected'))), 'it is not the live-chat message');
+
+    const live = await request('GET', '/dashboard/youtube-chatbot?connected=1', { streamer: owner });
+    assert.ok(live.text.includes(html(t('en', 'ytChatbot.connected'))));
+    assert.ok(!live.text.includes('id="yt-account-connected"'));
+
+    const plain = await request('GET', '/dashboard/youtube-chatbot', { streamer: owner });
+    assert.ok(!plain.text.includes('id="yt-account-connected"'), 'no notice without the query');
+  });
+
   test('the chat-only test answers with translated messages', async () => {
     const test = () => request('POST', '/dashboard/youtube-chatbot/test-chat/member', { streamer: addStreamer({ yt_chat_member_template: '' }) });
     // not polling

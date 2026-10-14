@@ -1303,6 +1303,8 @@ router.get('/youtube-chatbot', async (req, res) => {
     ytLiveTitle: liveStatus.title,
     ytLiveUnknown: liveStatus.unknown,
     connected: req.query.connected,
+    // The Google sign-in (routes/auth.js) lands here with ?connected_yt=1: the account is connected.
+    connectedYt: req.query.connected_yt,
     disconnected: req.query.disconnected,
     error: errorMessage(YT_CHATBOT_ERRORS, req.query.error, res.locals.t),
   });
