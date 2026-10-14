@@ -47,10 +47,11 @@ const managers = {
 
 // What the admin "Testing" buttons post through and read from. sendNotification
 // answers per streamer: true (posted), false (the channel was refused), or throws.
-const posting = { outcomeOf: {}, attempts: [] };
+const posting = { outcomeOf: {}, attempts: [], contents: [] };
 const discordStub = {
   sendNotification: async (_channelId, _embed, meta) => {
     posting.attempts.push(meta.streamerId);
+    posting.contents.push(meta.contentOnly);
     const outcome = posting.outcomeOf[meta.streamerId];
     if (outcome === 'throws') throw new Error('Missing Permissions');
     return outcome === true;
@@ -60,6 +61,8 @@ const discordStub = {
   buildMilestoneEmbed: (data) => ({ milestone: data }),
   buildWeeklyDigestEmbed: (data) => ({ digest: data }),
   buildIracingResultEmbed: (data) => ({ iracing: data }),
+  // escapeLinkText is the real helper's job (src/discord.test.js); a marker here shows the route uses it.
+  escapeLinkText: (text) => `«${text}»`,
 };
 const twitchStub = {
   getUserId: async () => '123',
@@ -378,6 +381,7 @@ describe('the Testing buttons count only what was really posted', () => {
   beforeEach(() => {
     for (const table of ['watched_channels', 'watched_youtube_channels', 'guilds']) db.db.prepare(`DELETE FROM ${table}`).run();
     posting.attempts.length = 0;
+    posting.contents.length = 0;
     [okStreamer, refusedStreamer, throwsStreamer] = [addStreamer(), addStreamer(), addStreamer()];
     posting.outcomeOf = { [okStreamer]: true, [refusedStreamer]: false, [throwsStreamer]: 'throws' };
     for (const id of [okStreamer, refusedStreamer, throwsStreamer]) {
@@ -406,6 +410,17 @@ describe('the Testing buttons count only what was really posted', () => {
       assert.deepEqual([...posting.attempts].sort(), [okStreamer, refusedStreamer, throwsStreamer].sort(), 'all three were tried');
     });
   }
+
+  test('Twitch Clip and YouTube Video print the title and channel name as text, as the real posts do', async () => {
+    await post('/admin/test/twitch-clip/some_channel', admin);
+    assert.ok(posting.contents.length > 0, 'the clip test posted');
+    for (const text of posting.contents) assert.match(text, /— «Clip»\n/);
+
+    posting.contents.length = 0;
+    await post('/admin/test/youtube-video/UCprobe', admin);
+    assert.ok(posting.contents.length > 0, 'the video test posted');
+    for (const text of posting.contents) assert.match(text, /\*\*«Probe» uploaded a new video!\*\* — «Video»\n/);
+  });
 
   test('Welcome: the same', async () => {
     const res = await postForm('/admin/test/welcome', { guild_id: GUILD }, admin);

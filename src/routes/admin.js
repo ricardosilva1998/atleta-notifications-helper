@@ -137,7 +137,7 @@ router.post('/issues/:id', requireAdmin, (req, res) => {
 // --- Testing Tools ---
 
 const { getUserId, getClips, getVideos, getFollowerCount, getStream } = require('../services/twitch');
-const { buildRecapEmbed, buildMilestoneEmbed, buildWeeklyDigestEmbed, buildIracingResultEmbed, buildEmbed, sendNotification } = require('../discord');
+const { buildRecapEmbed, buildMilestoneEmbed, buildWeeklyDigestEmbed, buildIracingResultEmbed, buildEmbed, sendNotification, escapeLinkText } = require('../discord');
 const iracing = require('../services/iracing');
 const { getLatestVideos, resolveChannelId } = require('../services/youtube');
 
@@ -313,7 +313,7 @@ router.post('/test/twitch-clip/:username', requireAdmin, async (req, res) => {
     if (clips.length === 0) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
 
     const clip = clips.sort((a, b) => b.view_count - a.view_count)[0];
-    const message = `**New clip by ${clip.creator_name}** — ${clip.title}\n📊 ${clip.view_count} views · ⏱️ ${Math.round(clip.duration)}s\n${clip.url}`;
+    const message = `**New clip by ${clip.creator_name}** — ${escapeLinkText(clip.title)}\n📊 ${clip.view_count} views · ⏱️ ${Math.round(clip.duration)}s\n${clip.url}`;
 
     const watchers = db.getWatchersForChannel(username).filter(w => w.clips_channel_id);
     let sent = 0;
@@ -339,7 +339,8 @@ router.post('/test/youtube-video/:input', requireAdmin, async (req, res) => {
     if (videos.length === 0) return res.redirect(`/admin/dashboard?tab=testing&msg=test_no_data`);
 
     const video = videos[0];
-    const message = `🎬 **${video.author || resolved.channelName || 'New'} uploaded a new video!** — ${video.title}\n${video.url}`;
+    const author = video.author || resolved.channelName;
+    const message = `🎬 **${author ? escapeLinkText(author) : 'New'} uploaded a new video!** — ${escapeLinkText(video.title)}\n${video.url}`;
 
     const ytWatchers = db.db.prepare('SELECT wyc.*, s.enabled AS streamer_enabled FROM watched_youtube_channels wyc JOIN streamers s ON wyc.streamer_id = s.id WHERE wyc.youtube_channel_id = ? AND wyc.enabled = 1 AND s.enabled = 1').all(channelId);
     let sent = 0;
