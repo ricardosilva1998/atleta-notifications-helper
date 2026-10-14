@@ -107,6 +107,8 @@ First boot of the 2026-10 release (each appears once):
 - `[DB] Removing orphaned watcher: ...` and `[DB] Removed N watchers of servers their streamer no
   longer has`: notifications of servers a streamer no longer has. Irreversible, hence the backup.
 - `[DB] Switched Channel Point Rewards on for N streamer(s) with an enabled reward`
+- `[DB] Moved N alert duration(s) from the earlier defaults to the longer ones`: on the boot of the
+  follow-up that made alerts stay longer (once); a duration a streamer had changed is not counted.
 - No `[DB migration]` line at all (CI fails on one on a fresh database).
 
 Trouble:
@@ -207,4 +209,7 @@ role (and says so); a timed giveaway that ended while the app was down is drawn 
 alert that was in flight when Twitch moved the connection is no longer lost, a connection that never gets its
 welcome is replaced within about 15 s, and chat lines wait (up to a minute) while the bot reconnects; Gift Subs on
 the dashboard counts every sub in a gift (the Subs tile can still include per-recipient rows logged before the
-earlier gift fix, for up to 7 days).
+earlier gift fix, for up to 7 days); alerts stay on screen longer by default (follow 8 s; sub, bits, raid and
+giveaway winner 10 s; donation 12 s; YouTube Super Chat 12 s, member 8 s, gift member 10 s; a duration a streamer
+had changed stays), and the YouTube alerts' durations and switches on the overlay settings page are saved; a
+Discord sub role that may mention @everyone syncs again.

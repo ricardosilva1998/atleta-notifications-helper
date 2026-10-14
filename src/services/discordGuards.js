@@ -24,8 +24,9 @@ function botInviteUrl(clientId) {
 // ─── Sub-sync role ────────────────────────────────────────────────────────────
 // Sub sync gives its role to every linked subscriber and takes it from every
 // linked non-subscriber, so the role must be one the bot may manage, without
-// admin or moderator powers. Mentioning @everyone is left to the server owner:
-// a subscriber role often has it on purpose.
+// admin or moderator powers. Mentioning @everyone is allowed: whoever picks the
+// role on the server page (Manage Server) decides, and a subscriber role often
+// has it on purpose.
 const PRIVILEGED_ROLE_PERMISSIONS = [
   'Administrator', 'ManageGuild', 'ManageRoles', 'ManageChannels', 'ManageWebhooks',
   'KickMembers', 'BanMembers', 'ModerateMembers',

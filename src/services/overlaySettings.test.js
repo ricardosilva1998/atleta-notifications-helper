@@ -4,7 +4,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  TOGGLES, DURATIONS, YOUTUBE_DURATIONS, DEFAULT_DURATION_SECONDS, PREVIOUS_DEFAULT_SECONDS, STREAMELEMENTS_JWT_MAX,
+  TOGGLES, YOUTUBE_TOGGLES, DURATIONS, YOUTUBE_DURATIONS, DEFAULT_DURATION_SECONDS, PREVIOUS_DEFAULT_SECONDS, STREAMELEMENTS_JWT_MAX,
   parseOverlaySettings, decideStreamElementsJwt, giveawayDurationSeconds,
 } = require('./overlaySettings');
 
@@ -33,7 +33,7 @@ describe('parseOverlaySettings: toggles', () => {
   test('every toggle and duration written here is a whitelisted overlay column', () => {
     const db = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'db.js'), 'utf8');
     const whitelist = db.match(/const OVERLAY_COLUMNS = new Set\(\[([\s\S]*?)\]\)/)[1];
-    for (const name of [...TOGGLES, ...DURATIONS.map(([n]) => n), ...YOUTUBE_DURATIONS.map(([n]) => n), 'overlay_volume', 'streamelements_jwt']) {
+    for (const name of [...TOGGLES, ...YOUTUBE_TOGGLES, ...DURATIONS.map(([n]) => n), ...YOUTUBE_DURATIONS.map(([n]) => n), 'overlay_volume', 'streamelements_jwt']) {
       assert.ok(whitelist.includes(`'${name}'`), name);
     }
   });
@@ -103,9 +103,18 @@ describe('parseOverlaySettings: durations', () => {
     assert.equal(parseOverlaySettings({ yt_overlay_member_duration: 'abc' }, {}).columns.yt_overlay_member_duration, 8);
   });
 
-  test('a save without the YouTube fields (YouTube not shown on the page) keeps the stored YouTube durations', () => {
-    const { columns } = parseOverlaySettings({ overlay_follow_duration: '9' }, {});
+  test('a save without the YouTube fields (YouTube not shown on the page) keeps the stored YouTube durations and switches', () => {
+    const { columns } = parseOverlaySettings({ overlay_follow_duration: '9', yt_overlay_member_enabled: '1' }, {});
     for (const [name] of YOUTUBE_DURATIONS) assert.equal(Object.hasOwn(columns, name), false, name);
+    for (const name of YOUTUBE_TOGGLES) assert.equal(Object.hasOwn(columns, name), false, name);
+  });
+
+  test('the YouTube alert switches are saved with their durations: a checked box stores 1, an absent one 0', () => {
+    const shown = { yt_overlay_superchat_duration: '12', yt_overlay_member_duration: '8', yt_overlay_giftmember_duration: '10' };
+    const { columns } = parseOverlaySettings({ ...shown, yt_overlay_superchat_enabled: '1' }, {});
+    assert.equal(columns.yt_overlay_superchat_enabled, 1);
+    assert.equal(columns.yt_overlay_member_enabled, 0, 'an unchecked box is not sent');
+    assert.equal(columns.yt_overlay_giftmember_enabled, 0);
   });
 
   test('keeps whole seconds (the page sends whole seconds, a crafted request may not)', () => {

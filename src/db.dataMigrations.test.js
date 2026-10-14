@@ -135,6 +135,7 @@ test('alert durations still on the earlier defaults move to the longer ones once
   const raw = new RealDatabase(file);
   let onDefaults;
   let chose;
+  let empty;
   try {
     let n = 0;
     const add = (values) => {
@@ -144,6 +145,7 @@ test('alert durations still on the earlier defaults move to the longer ones once
     };
     onDefaults = add({ ...earlier });
     chose = add({ ...earlier, overlay_follow_duration: 20, yt_overlay_member_duration: 3 });
+    empty = add({ ...earlier, overlay_bits_duration: null, yt_overlay_giftmember_duration: null });
     raw.prepare('DELETE FROM data_migrations WHERE name = ?').run(DURATIONS_MIGRATION);
   } finally {
     raw.close();
@@ -156,6 +158,9 @@ test('alert durations still on the earlier defaults move to the longer ones once
     assert.equal(theirs.overlay_follow_duration, 20, 'a duration the streamer chose stays');
     assert.equal(theirs.yt_overlay_member_duration, 3);
     assert.equal(theirs.overlay_sub_duration, now.overlay_sub_duration, 'their other alerts were still on the defaults');
+    const blank = db.getStreamerById(empty);
+    assert.equal(blank.overlay_bits_duration, now.overlay_bits_duration, 'an empty duration gets the new default');
+    assert.equal(blank.yt_overlay_giftmember_duration, now.yt_overlay_giftmember_duration);
 
     // Afterwards the streamer sets the follow alert back to 5 s.
     db.db.prepare('UPDATE streamers SET overlay_follow_duration = 5 WHERE id = ?').run(onDefaults);

@@ -14,6 +14,7 @@ const express = require('express');
 const { Collection, PermissionFlagsBits } = require('discord.js');
 const RealDatabase = require('better-sqlite3');
 const realFs = require('fs');
+const { DEFAULT_DURATION_SECONDS } = require('../services/overlaySettings');
 
 // src/config.js exits without these; the values are never used.
 for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) {
@@ -978,24 +979,33 @@ describe('the overlay settings page', () => {
     assert.equal(row.overlay_volume, 1);
   });
 
-  test('saves the YouTube alerts\' durations the page shows (they never were), and keeps them when a save leaves them out', async () => {
-    await save({ overlay_enabled: '1', yt_overlay_superchat_duration: '20', yt_overlay_member_duration: '4', yt_overlay_giftmember_duration: '45' });
+  test('saves the YouTube alerts\' durations and switches the page shows (they never were), and keeps them when a save leaves them out', async () => {
+    await save({
+      overlay_enabled: '1', yt_overlay_superchat_duration: '20', yt_overlay_member_duration: '4', yt_overlay_giftmember_duration: '45',
+      yt_overlay_superchat_enabled: '1', // member and gift member switched off: their boxes are not sent
+    });
     let row = db.getStreamerById(id);
     assert.equal(row.yt_overlay_superchat_duration, 20);
     assert.equal(row.yt_overlay_member_duration, 4);
     assert.equal(row.yt_overlay_giftmember_duration, 30, 'held to 30 s like the Twitch alerts');
+    assert.equal(row.yt_overlay_superchat_enabled, 1);
+    assert.equal(row.yt_overlay_member_enabled, 0);
+    assert.equal(row.yt_overlay_giftmember_enabled, 0);
 
     await save({ overlay_enabled: '1' });
     row = db.getStreamerById(id);
     assert.equal(row.yt_overlay_superchat_duration, 20, 'a save without the YouTube fields keeps them');
+    assert.equal(row.yt_overlay_superchat_enabled, 1);
+    assert.equal(row.yt_overlay_member_enabled, 0);
   });
 
   test('an alert with no stored duration shows its default on the page', async () => {
-    db.db.prepare('UPDATE streamers SET overlay_follow_duration = NULL, overlay_donation_duration = NULL, yt_overlay_superchat_duration = NULL WHERE id = ?').run(id);
+    const columns = Object.keys(DEFAULT_DURATION_SECONDS);
+    db.db.prepare(`UPDATE streamers SET ${columns.map((c) => `${c} = NULL`).join(', ')} WHERE id = ?`).run(id);
     const res = await request('GET', '/dashboard/overlay', { streamer: id });
-    assert.match(res.text, /name="overlay_follow_duration" value="8"/);
-    assert.match(res.text, /name="overlay_donation_duration" value="12"/);
-    assert.match(res.text, /name="yt_overlay_superchat_duration" value="12"/);
+    for (const [column, seconds] of Object.entries(DEFAULT_DURATION_SECONDS)) {
+      assert.match(res.text, new RegExp(`name="${column}" value="${seconds}"`), column);
+    }
   });
 
   // Settings reach an open OBS source as they are saved, so a save does not reconnect

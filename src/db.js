@@ -1345,9 +1345,9 @@ const _getAllStreamers = db.prepare('SELECT * FROM streamers WHERE twitch_user_i
 // A new streamer's row gets the alert durations of overlaySettings, written
 // here because a table made before 2026-10-14 still gives the columns their
 // earlier DEFAULTs; signing in again only refreshes the Discord fields.
-// Prepared on first use, after the migrations below have added every column.
+// The statement, _upsertStreamerDiscord, is prepared further down, once the
+// migrations have added every column (upsertStreamerDiscord runs after boot).
 const NEW_STREAMER_DURATION_COLUMNS = Object.keys(DEFAULT_DURATION_SECONDS);
-let _upsertStreamerDiscord;
 const _clearOldTwitchLink = db.prepare('UPDATE streamers SET twitch_user_id = NULL, twitch_username = NULL, twitch_display_name = NULL WHERE twitch_user_id = ?');
 const _linkTwitch = db.prepare(`
   UPDATE streamers SET
@@ -1384,17 +1384,6 @@ function getAllStreamers() {
 }
 
 function upsertStreamerDiscord(discordUserId, discordUsername, discordDisplayName, discordAvatar) {
-  if (!_upsertStreamerDiscord) {
-    _upsertStreamerDiscord = db.prepare(`
-      INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, discord_avatar, ${NEW_STREAMER_DURATION_COLUMNS.join(', ')})
-      VALUES (?, ?, ?, ?, ${NEW_STREAMER_DURATION_COLUMNS.map(() => '?').join(', ')})
-      ON CONFLICT(discord_user_id) DO UPDATE SET
-        discord_username = excluded.discord_username,
-        discord_display_name = excluded.discord_display_name,
-        discord_avatar = excluded.discord_avatar
-      RETURNING *
-    `);
-  }
   const durations = NEW_STREAMER_DURATION_COLUMNS.map((column) => DEFAULT_DURATION_SECONDS[column]);
   return openTokens(_upsertStreamerDiscord.get(discordUserId, discordUsername, discordDisplayName, discordAvatar, ...durations));
 }
@@ -2997,6 +2986,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_raid_enabled', 'overlay_raid_duration',
   'cp_rewards_enabled',
   'overlay_giveaway_enabled', 'overlay_giveaway_duration',
+  'yt_overlay_superchat_enabled', 'yt_overlay_member_enabled', 'yt_overlay_giftmember_enabled',
   'yt_overlay_superchat_duration', 'yt_overlay_member_duration', 'yt_overlay_giftmember_duration',
 ]);
 
@@ -3818,6 +3808,18 @@ _runOnce('longer_alert_durations', () => {
   }
   if (moved) console.log(`[DB] Moved ${moved} alert duration(s) from the earlier defaults to the longer ones`);
 });
+
+// The new-streamer upsert (see NEW_STREAMER_DURATION_COLUMNS), prepared now that
+// every duration column exists: a missing one stops the boot, not every Discord login.
+const _upsertStreamerDiscord = db.prepare(`
+  INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, discord_avatar, ${NEW_STREAMER_DURATION_COLUMNS.join(', ')})
+  VALUES (?, ?, ?, ?, ${NEW_STREAMER_DURATION_COLUMNS.map(() => '?').join(', ')})
+  ON CONFLICT(discord_user_id) DO UPDATE SET
+    discord_username = excluded.discord_username,
+    discord_display_name = excluded.discord_display_name,
+    discord_avatar = excluded.discord_avatar
+  RETURNING *
+`);
 
 // Migration: Tip goals (donation progress bar overlay)
 try {

@@ -25,8 +25,11 @@ const DURATIONS = [
   ['overlay_raid_duration', 10, 30],
   ['overlay_giveaway_duration', 10, 60],
 ];
-// The YouTube alerts' durations, on the same page. Their fields are only there
-// while YouTube is shown, so a save without them keeps what is stored.
+// The YouTube alerts' switches and durations, on the same page (the switches are
+// also on the YouTube chatbot page). Their fields are only there while YouTube
+// is shown, and a switched-off box is not sent at all, so the switches are saved
+// only when the section's durations are, and a save without them keeps both.
+const YOUTUBE_TOGGLES = ['yt_overlay_superchat_enabled', 'yt_overlay_member_enabled', 'yt_overlay_giftmember_enabled'];
 const YOUTUBE_DURATIONS = [
   ['yt_overlay_superchat_duration', 12, 30],
   ['yt_overlay_member_duration', 8, 30],
@@ -98,6 +101,9 @@ function parseOverlaySettings(body, stored) {
   for (const [name, fallback, longest] of YOUTUBE_DURATIONS) {
     if (form[name] !== undefined) columns[name] = wholeSeconds(form[name], fallback, longest);
   }
+  if (YOUTUBE_DURATIONS.some(([name]) => form[name] !== undefined)) {
+    for (const name of YOUTUBE_TOGGLES) columns[name] = form[name] ? 1 : 0;
+  }
   columns.overlay_volume = volumeOf(form.overlay_volume);
 
   const jwt = decideStreamElementsJwt({
@@ -111,6 +117,7 @@ function parseOverlaySettings(body, stored) {
 
 module.exports = {
   TOGGLES,
+  YOUTUBE_TOGGLES,
   DURATIONS,
   YOUTUBE_DURATIONS,
   DEFAULT_DURATION_SECONDS,
