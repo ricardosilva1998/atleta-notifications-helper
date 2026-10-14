@@ -25,7 +25,7 @@ const {
 const {
   validateBannedPattern, bannedWordLimitReason, MAX_PATTERN_LENGTH, MAX_BANNED_WORDS, MAX_BANNED_PATTERNS,
 } = require('../services/safePattern');
-const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction } = require('../services/inputLimits');
+const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction, parseSwitch } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
 const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
@@ -430,6 +430,13 @@ router.get('/', async (req, res) => {
     // to Twitch and YouTube).
     multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
   });
+});
+
+// Disconnect Spotify (the Spotify card): the stored tokens are cleared, so !song gets no answer until the
+// streamer connects again.
+router.post('/spotify/disconnect', (req, res) => {
+  db.updateSpotifyTokens(req.streamer.id, null, null, null);
+  res.redirect('/dashboard?msg=spotify_disconnected');
 });
 
 // Guild stats page
@@ -2307,8 +2314,10 @@ router.post('/redemptions/reorder', (req, res) => {
 });
 
 router.post('/redemptions/settings', (req, res) => {
-  const enabled = req.body.cp_rewards_enabled !== undefined ? (req.body.cp_rewards_enabled ? 1 : 0) : undefined;
-  if (enabled === undefined) return res.status(400).json({ error: 'cp_rewards_enabled required' });
+  const enabled = parseSwitch((req.body || {}).cp_rewards_enabled);
+  if (enabled === null) {
+    return res.status(400).json({ ok: false, code: 'invalid', error: res.locals.t('dashboard.settings.error.invalid') });
+  }
   db.updateOverlayConfig(req.streamer.id, { cp_rewards_enabled: enabled });
   res.json({ ok: true });
 });

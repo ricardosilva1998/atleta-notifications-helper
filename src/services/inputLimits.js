@@ -72,6 +72,14 @@ function moderationAction(value) {
   return MODERATION_ACTIONS.includes(value) ? value : 'delete';
 }
 
+// A switch's value as a form or a JSON body sends it: 1 (true, 1, "1", "true", "on"), 0 (false, 0, "0",
+// "false", "off", "") or null for anything else, which is not a switch value.
+function parseSwitch(value) {
+  if (value === true || value === 1 || value === '1' || value === 'true' || value === 'on') return 1;
+  if (value === false || value === 0 || value === '0' || value === 'false' || value === 'off' || value === '') return 0;
+  return null;
+}
+
 module.exports = {
   clampNumber,
   clampInt,
@@ -85,4 +93,5 @@ module.exports = {
   moderationNumber,
   MODERATION_ACTIONS,
   moderationAction,
+  parseSwitch,
 };

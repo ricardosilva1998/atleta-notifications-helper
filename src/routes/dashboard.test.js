@@ -4097,3 +4097,42 @@ describe('the moderation save keeps its settings in the page\'s ranges', () => {
     assert.equal(row.mod_action_response, 'delete');
   });
 });
+
+// ── Spotify disconnect, and the rewards switch ───────────────────────────
+
+describe('disconnecting Spotify', () => {
+  test('clears the stored Spotify tokens and says so on the dashboard', async () => {
+    const id = addStreamer();
+    db.updateSpotifyTokens(id, 'synthetic-access', 'synthetic-refresh', Date.now() + 3600e3);
+    const res = await request('POST', '/dashboard/spotify/disconnect', { streamer: id, form: { go: '1' } });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard?msg=spotify_disconnected');
+    const row = db.getStreamerById(id);
+    assert.equal(row.spotify_access_token, null);
+    assert.equal(row.spotify_refresh_token, null);
+    const page = (await request('GET', '/dashboard?msg=spotify_disconnected', { streamer: id })).text;
+    assert.ok(page.includes(t('en', 'dashboard.spotifyDisconnected')));
+  });
+
+  test('a connected Spotify card has a Disconnect button posting to that route', async () => {
+    const id = addStreamer();
+    db.updateSpotifyTokens(id, 'synthetic-access', 'synthetic-refresh', Date.now() + 3600e3);
+    const page = (await request('GET', '/dashboard', { streamer: id })).text;
+    assert.match(page, /<form method="POST" action="\/dashboard\/spotify\/disconnect"/);
+  });
+});
+
+describe('the channel point rewards switch reads its value strictly', () => {
+  test('"0" is off, 1 is on, anything else is refused and changes nothing', async () => {
+    const id = addStreamer({ cp_rewards_enabled: 1 });
+    const set = (value) => request('POST', '/dashboard/redemptions/settings', { streamer: id, body: { cp_rewards_enabled: value } });
+    assert.equal((await set('0')).status, 200);
+    assert.equal(db.getStreamerById(id).cp_rewards_enabled, 0);
+    assert.equal((await set(1)).status, 200);
+    assert.equal(db.getStreamerById(id).cp_rewards_enabled, 1);
+    const bad = await set('yes');
+    assert.equal(bad.status, 400);
+    assert.deepEqual(bad.json(), { ok: false, code: 'invalid', error: t('en', 'dashboard.settings.error.invalid') });
+    assert.equal(db.getStreamerById(id).cp_rewards_enabled, 1);
+  });
+});

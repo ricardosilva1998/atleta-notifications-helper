@@ -136,3 +136,12 @@ describe('moderation numbers and actions', () => {
     assert.equal(moderationAction(undefined), 'delete');
   });
 });
+
+describe('parseSwitch', () => {
+  const { parseSwitch } = require('./inputLimits');
+  test('on and off as forms and JSON send them; anything else is not a switch', () => {
+    for (const on of [true, 1, '1', 'true', 'on']) assert.equal(parseSwitch(on), 1, JSON.stringify(on));
+    for (const off of [false, 0, '0', 'false', 'off', '']) assert.equal(parseSwitch(off), 0, JSON.stringify(off));
+    for (const bad of ['yes', 2, -1, [], {}, null, undefined, 'ON ', '01']) assert.equal(parseSwitch(bad), null, JSON.stringify(bad));
+  });
+});

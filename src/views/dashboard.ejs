@@ -62,6 +62,7 @@
 <% if (msg === 'claim_not_allowed') { %><div class="alert alert-danger"><%= t('dashboard.claimNotAllowed') %></div><% } %>
 <% if (msg === 'spotify_connected') { %><div class="alert alert-success"><%= t('dashboard.spotifyConnected') %></div><% } %>
 <% if (msg === 'spotify_error') { %><div class="alert alert-danger"><%= t('dashboard.spotifyError') %></div><% } %>
+<% if (msg === 'spotify_disconnected') { %><div class="alert alert-success"><%= t('dashboard.spotifyDisconnected') %></div><% } %>
 
 <%# Shown when broadcaster auth was completed at some point but the grant no longer works —
     either scopes were never granted, or the refresh token died and EventSub/SubSync cleared
@@ -625,6 +626,9 @@
           <% const _spotify = _around('dashboard.cards.spotify.connectedDesc', 'command'); %><%= _spotify[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotify[1] %>
         </p>
         <a href="/auth/spotify" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; text-decoration: none; margin-top: auto;"><%= t('dashboard.cards.spotify.reconnect') %></a>
+        <form method="POST" action="/dashboard/spotify/disconnect" style="margin-top: 8px;">
+          <button type="submit" class="btn btn-secondary" style="font-size: 13px; padding: 8px 16px; width: 100%;"><%= t('dashboard.cards.spotify.disconnect') %></button>
+        </form>
       <% } else { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
           <% const _spotifyConnect = _around('dashboard.cards.spotify.connectDesc', 'command'); %><%= _spotifyConnect[0] %><code style="background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;">!song</code><%= _spotifyConnect[1] %>
