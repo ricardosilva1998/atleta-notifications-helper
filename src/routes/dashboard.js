@@ -33,6 +33,7 @@ const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLook
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
 const { SYNC_DELETE_FAILED } = require('../services/twitchRewards');
+const dashboardSettings = require('../services/dashboardSettings');
 
 const router = Router();
 
@@ -962,6 +963,48 @@ function pushOverlayConfig(streamerId) {
     config: buildOverlayConfig(streamer),
   });
 }
+
+// What follows a working card's save (POST /dashboard/settings), once per save: the chat bot joins or leaves
+// the channel, the Twitch event connections start or stop (needed while the overlay or the chatbot is on),
+// an open OBS overlay gets the new settings, the sponsor chat rotation restarts.
+function runSettingFollowUps({ before, after, steps }) {
+  const id = after.id;
+  if (steps.has('connections')) {
+    if (!!before.chatbot_enabled !== !!after.chatbot_enabled) {
+      try {
+        const { chatManager } = require('../services/twitchChat');
+        if (after.chatbot_enabled) chatManager.startForStreamer(id);
+        else chatManager.stopForStreamer(id);
+      } catch (e) {
+        console.error('[Dashboard] Chatbot start/stop error:', e.message);
+      }
+    }
+    const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled);
+    const needed = !!(after.overlay_enabled || after.chatbot_enabled);
+    if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed, streamElementsJwt: after.streamelements_jwt });
+  }
+  if (steps.has('overlay')) pushOverlayConfig(id);
+  if (steps.has('sponsorChat')) {
+    try {
+      const { timedNotificationManager } = require('../services/timedNotifications');
+      timedNotificationManager.restartChatForStreamer(id);
+    } catch (e) {
+      console.error('[Dashboard] Sponsor chat restart failed:', e.message);
+    }
+  }
+}
+
+// A working card's switch, number or short text, saved as it changes: one setting, or a few at once
+// ({ changes }). services/dashboardSettings.js lists what may be saved and checks it.
+router.post('/settings', (req, res) => {
+  const result = dashboardSettings.save(req.streamer, req.body, { db, followUps: { run: runSettingFollowUps } });
+  if (!result.ok) {
+    return res.status(result.status).json({ ok: false, code: result.code, error: res.locals.t(dashboardSettings.ERRORS[result.code].text) });
+  }
+  if (Array.isArray((req.body || {}).changes)) return res.json({ ok: true, values: result.values });
+  const [value] = Object.values(result.values);
+  res.json({ ok: true, value });
+});
 
 // Custom alert sounds live in the logged-in streamer's own folder
 // (data/sounds/<streamerId>/), never in a folder shared with other streamers.

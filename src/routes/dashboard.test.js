@@ -4206,3 +4206,200 @@ describe('checking again whether the bot is a moderator', () => {
     assert.deepEqual(chatCalls, [['recheck', id]]);
   });
 });
+
+// ── POST /dashboard/settings (the working cards' switches) ───────────────
+
+describe('a working card\'s switch (POST /dashboard/settings)', () => {
+  const save = (id, body) => request('POST', '/dashboard/settings', { streamer: id, body });
+
+  test('saves one column at once and answers what it saved; the other settings stay', async () => {
+    const id = addStreamer({ chat_follow_enabled: 1, chat_follow_template: 'Keep me, {username}' });
+    const res = await save(id, { key: 'chat_follow_enabled', value: false });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true, value: 0 });
+    const row = db.getStreamerById(id);
+    assert.equal(row.chat_follow_enabled, 0);
+    assert.equal(row.chat_follow_template, 'Keep me, {username}');
+  });
+
+  test('switching the chatbot off and on leaves and joins chat and stops and starts the connections', async () => {
+    const id = addStreamer({ chatbot_enabled: 1, overlay_enabled: 0, twitch_username: 'synthetic_card_bot', broadcaster_access_token: 'tok' });
+    await save(id, { key: 'chatbot_enabled', value: 0 });
+    assert.deepEqual(managerCalls, [['chat.stop', id], ['eventsub.stop', id], ['se.stop', id]]);
+    assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
+    managerCalls.length = 0;
+    sponsorCalls.length = 0;
+    await save(id, { key: 'chatbot_enabled', value: 1 });
+    assert.deepEqual(managerCalls, [['chat.start', id], ['eventsub.start', id]]);
+    assert.deepEqual(sponsorCalls, [['sponsors.restart', id], ['sponsors.restartChat', id]]);
+  });
+
+  test('an overlay setting reaches an open overlay at once', async () => {
+    const bus = require('../services/overlayBus');
+    const id = addStreamer({ overlay_enabled: 1 });
+    const seen = [];
+    const listener = (event) => seen.push(event);
+    bus.on(`overlay:${id}`, listener);
+    try {
+      await save(id, { key: 'overlay_follow_duration', value: 15 });
+    } finally {
+      bus.off(`overlay:${id}`, listener);
+    }
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].type, 'config-update');
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 15);
+  });
+
+  test('a key that is not on the list, or a value it cannot have, is refused with the reason and nothing changes', async () => {
+    const id = addStreamer({ paypal_email: 'kept@example.test' });
+    for (const body of [{ key: 'paypal_email', value: 'x@example.test' }, { key: 'overlay_follow_duration', value: 99 }, { key: 'mod_caps_enabled', value: 'maybe' }]) {
+      const res = await save(id, body);
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.deepEqual(res.json(), { ok: false, code: 'invalid', error: t('en', 'dashboard.settings.error.invalid') });
+    }
+    assert.equal(db.getStreamerById(id).paypal_email, 'kept@example.test');
+  });
+
+  test('the tip page needs a PayPal email to switch on', async () => {
+    const id = addStreamer({ paypal_email: null, donation_page_enabled: 0 });
+    const res = await save(id, { key: 'donation_page_enabled', value: 1 });
+    assert.equal(res.status, 409);
+    assert.deepEqual(res.json(), { ok: false, code: 'no_email', error: t('en', 'dashboard.settings.error.noEmail') });
+    assert.equal(db.getStreamerById(id).donation_page_enabled, 0);
+  });
+
+  test('a server switch changes the streamer\'s own server; another streamer\'s answers 404', async () => {
+    const id = addStreamer();
+    const other = addStreamer();
+    db.upsertGuild('600000000000000401', id, 'Mine');
+    db.upsertGuild('600000000000000402', other, 'Theirs');
+    assert.equal((await save(id, { key: 'recap_enabled', guildId: '600000000000000401', value: 1 })).status, 200);
+    assert.equal(db.getGuildConfig('600000000000000401', id).recap_enabled, 1);
+    const theirs = await save(id, { key: 'recap_enabled', guildId: '600000000000000402', value: 1 });
+    assert.equal(theirs.status, 404);
+    assert.equal(db.getGuildConfig('600000000000000402', other).recap_enabled, 0);
+  });
+
+  test('go-live in one server leaves the same channel\'s row in the streamer\'s other server alone', async () => {
+    const id = addStreamer({ twitch_username: 'synthetic_two_servers' });
+    for (const [guildId, channelId] of [['600000000000000501', '700000000000000501'], ['600000000000000502', '700000000000000502']]) {
+      db.upsertGuild(guildId, id, 'Server');
+      db.addWatchedChannel(guildId, id, 'synthetic_two_servers', channelId, null, 1, 0);
+    }
+    assert.equal((await save(id, { key: 'notify_live', guildId: '600000000000000501', value: 0 })).status, 200);
+    assert.equal(db.getOwnWatcher('600000000000000501', id, 'synthetic_two_servers').notify_live, 0);
+    assert.equal(db.getOwnWatcher('600000000000000502', id, 'synthetic_two_servers').notify_live, 1);
+    const clips = await save(id, { key: 'notify_clips', guildId: '600000000000000501', value: 1 });
+    assert.equal(clips.status, 409);
+    assert.equal(clips.json().code, 'no_channel');
+  });
+
+  test('a batch is all or nothing and answers every value', async () => {
+    const id = addStreamer({ cmd_uptime_enabled: 0, cmd_roll_enabled: 1 });
+    const bad = await save(id, { changes: [{ key: 'cmd_uptime_enabled', value: 1 }, { key: 'cmd_roll_enabled', value: 'nope' }] });
+    assert.equal(bad.status, 400);
+    assert.equal(db.getStreamerById(id).cmd_uptime_enabled, 0, 'nothing was written');
+    const good = await save(id, { changes: [{ key: 'cmd_uptime_enabled', value: 1 }, { key: 'cmd_roll_enabled', value: 0 }] });
+    assert.deepEqual(good.json(), { ok: true, values: { cmd_uptime_enabled: 1, cmd_roll_enabled: 0 } });
+  });
+
+  test('a sponsor message switch changes the streamer\'s own message and restarts the rotation', async () => {
+    const id = addStreamer();
+    const other = addStreamer();
+    const mine = Number(db.addSponsorMessage(id, 'Mine', null).lastInsertRowid);
+    const theirs = Number(db.addSponsorMessage(other, 'Theirs', null).lastInsertRowid);
+    assert.equal((await save(id, { key: 'sponsor_message_enabled', id: theirs, value: 0 })).status, 404);
+    assert.equal((await save(id, { key: 'sponsor_message_enabled', id: mine, value: 0 })).status, 200);
+    assert.equal(db.getSponsorMessages(id)[0].enabled, 0);
+    assert.deepEqual(sponsorCalls, [['sponsors.restartChat', id]]);
+  });
+
+  test('a logged-out request changes nothing', async () => {
+    const id = addStreamer({ chat_follow_enabled: 1 });
+    const res = await request('POST', '/dashboard/settings', { body: { key: 'chat_follow_enabled', value: 0 } });
+    assert.notEqual(res.status, 200);
+    assert.equal(db.getStreamerById(id).chat_follow_enabled, 1);
+  });
+
+  test('a disabled account changes nothing', async () => {
+    const id = addStreamer({ enabled: 0, chat_follow_enabled: 1 });
+    const res = await save(id, { key: 'chat_follow_enabled', value: 0 });
+    assert.equal(res.status, 403);
+    assert.equal(db.getStreamerById(id).chat_follow_enabled, 1);
+  });
+
+  test('with a real session, a save without the page\'s CSRF token is refused; with it, it saves', async () => {
+    const id = addStreamer({ chat_follow_enabled: 1 });
+    const sid = `synthetic-session-settings-${id}`;
+    db.createSession(sid, id, Date.now() + 60_000);
+    const cookie = `session=${sid}`;
+    const page = await request('GET', '/dashboard/chatbot', { cookie });
+    const token = page.text.match(/<script src="\/js\/csrf\.js" data-csrf-token="([A-Za-z0-9_-]+)"><\/script>/)[1];
+    const refused = await request('POST', '/dashboard/settings', { cookie, fetchMode: 'cors', body: { key: 'chat_follow_enabled', value: 0 } });
+    assert.equal(refused.status, 403);
+    assert.equal(db.getStreamerById(id).chat_follow_enabled, 1);
+    const saved = await request('POST', '/dashboard/settings', { cookie, csrf: token, body: { key: 'chat_follow_enabled', value: 0 } });
+    assert.equal(saved.status, 200);
+    assert.equal(db.getStreamerById(id).chat_follow_enabled, 0);
+  });
+
+  test('the overlay switch starts and stops the connections unless the chatbot still needs them, and tells an open overlay either way', async () => {
+    const bus = require('../services/overlayBus');
+    const id = addStreamer({ overlay_enabled: 0, chatbot_enabled: 0, twitch_username: 'synthetic_overlay_switch' });
+    const seen = [];
+    const listener = (event) => seen.push(event.type);
+    bus.on(`overlay:${id}`, listener);
+    try {
+      await save(id, { key: 'overlay_enabled', value: 1 });
+      assert.deepEqual(managerCalls, [['eventsub.start', id]]);
+      assert.deepEqual(sponsorCalls, [['sponsors.restart', id], ['sponsors.restartChat', id]]);
+      managerCalls.length = 0;
+      sponsorCalls.length = 0;
+      await save(id, { key: 'overlay_enabled', value: 0 });
+      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+      assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
+      // With the chatbot on, the overlay switch leaves the connections (and the chat) alone.
+      db.updateChatbotConfig(id, { chatbot_enabled: 1 });
+      managerCalls.length = 0;
+      sponsorCalls.length = 0;
+      await save(id, { key: 'overlay_enabled', value: 1 });
+      await save(id, { key: 'overlay_enabled', value: 0 });
+      assert.deepEqual(managerCalls, []);
+      assert.deepEqual(sponsorCalls, []);
+    } finally {
+      bus.off(`overlay:${id}`, listener);
+    }
+    assert.deepEqual(seen, ['config-update', 'config-update', 'config-update', 'config-update']);
+  });
+
+  test('a switch that is already as asked does not leave or join chat or touch the connections', async () => {
+    const chatbotOn = addStreamer({ chatbot_enabled: 1, twitch_username: 'synthetic_same_switch_on' });
+    const everythingOff = addStreamer({ overlay_enabled: 0, chatbot_enabled: 0, twitch_username: 'synthetic_same_switch_off' });
+    assert.equal((await save(chatbotOn, { key: 'chatbot_enabled', value: 1 })).status, 200);
+    assert.equal((await save(everythingOff, { key: 'overlay_enabled', value: 0 })).status, 200);
+    assert.deepEqual(managerCalls, []);
+    assert.deepEqual(sponsorCalls, []);
+  });
+
+  test('a follow-up that fails is logged; the save still answers ok and the other follow-ups still run', async () => {
+    const id = addStreamer({ chatbot_enabled: 1, overlay_enabled: 0, twitch_username: 'synthetic_failing_steps' });
+    const chat = chatStub.chatManager;
+    const sponsors = timedNotificationsStub.timedNotificationManager;
+    const original = { stop: chat.stopForStreamer, restartChat: sponsors.restartChatForStreamer };
+    chat.stopForStreamer = () => { throw new Error('synthetic chat failure'); };
+    sponsors.restartChatForStreamer = () => { throw new Error('synthetic sponsor failure'); };
+    try {
+      const off = await save(id, { key: 'chatbot_enabled', value: 0 });
+      assert.equal(off.status, 200);
+      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]], 'the connections were still stopped');
+      const sponsor = await save(id, { key: 'sponsor_send_chat', value: 1 });
+      assert.equal(sponsor.status, 200);
+      assert.equal(db.getStreamerById(id).sponsor_send_chat, 1);
+    } finally {
+      chat.stopForStreamer = original.stop;
+      sponsors.restartChatForStreamer = original.restartChat;
+    }
+    assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Chatbot start/stop error: synthetic chat failure'));
+    assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Sponsor chat restart failed: synthetic sponsor failure'));
+  });
+});
