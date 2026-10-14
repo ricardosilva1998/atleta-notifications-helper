@@ -70,6 +70,12 @@ describe('fillChatTemplate', () => {
     assert.equal(fillChatTemplate('!so {username}', { username: '!commands' }), '!so commands', 'the value is still cleaned');
   });
 
+  test('a command word the template leaves to a value is not kept', () => {
+    assert.equal(fillChatTemplate('!{message}', { message: 'commands edit !x hi' }), 'commands edit !x hi');
+    assert.equal(fillChatTemplate('/{username} hi', { username: 'ban' }), 'ban hi');
+    assert.equal(fillChatTemplate('  !so   {username}', { username: 'A' }), '!so   A', 'spaces before the command are fine');
+  });
+
   test('line breaks and other control characters become spaces', () => {
     assert.equal(
       fillChatTemplate(DONATION, { username: 'A\r\nPRIVMSG #other :spam', amount: 'USD 5', message: 'two\nlines\u0000' }),

@@ -8,8 +8,9 @@
 //    repeated the message), and a value that contains "{message}" is not filled
 //    in again;
 //  - a value never starts with ! / . or \, and neither does the line unless the
-//    streamer's own template starts that way: the bot is a moderator, so a line
-//    it posts that starts with another bot's command could run that command;
+//    streamer wrote that command word in the template ("!so {username}",
+//    "/me ..."): the bot is a moderator, so a line it posts that starts with
+//    another bot's command could run that command;
 //  - line breaks and other control characters become spaces;
 //  - names are cut to 50 characters, messages to 300, any other value to 50,
 //    and the line to 500;
@@ -25,11 +26,19 @@ const VALUE_MAX = Object.freeze({ username: NAME_MAX, message: MESSAGE_MAX });
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 const LEADING_COMMAND = /^[\s!/.\\]+/;
-const STARTS_WITH_COMMAND = /^\s*[!/.\\]/;
+const COMMAND_CHARACTER = /^[!/.\\]/;
+const HAS_PLACEHOLDER = /\{\w+\}/;
 
 // "!so @someone" -> "so @someone". Only the start changes.
 function stripCommandPrefix(text) {
   return String(text ?? '').replace(LEADING_COMMAND, '');
+}
+
+// True when the template's first word is a command the streamer wrote out in
+// full ("!so {username}"); not when a value would complete it ("!{message}").
+function startsWithOwnCommand(template) {
+  const firstWord = template.trimStart().split(/\s/, 1)[0];
+  return COMMAND_CHARACTER.test(firstWord) && !HAS_PLACEHOLDER.test(firstWord);
 }
 
 // The first `max` characters (code points), so an emoji is never cut in two.
@@ -60,7 +69,7 @@ function fillChatTemplate(template, values = {}) {
     return cleanValue(value, max);
   });
   let line = singleLine(filled);
-  if (!STARTS_WITH_COMMAND.test(template)) line = stripCommandPrefix(line);
+  if (!startsWithOwnCommand(template)) line = stripCommandPrefix(line);
   return limitCharacters(line, RESULT_MAX).trim();
 }
 
