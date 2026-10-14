@@ -165,7 +165,7 @@ function pickWinners(giveawayId, streamerId, opts) {
   }
 
   let alreadyDrawn = [];
-  const selected = db.transaction(() => {
+  const selected = db.db.transaction(() => {
     if (!redraw) {
       alreadyDrawn = currentWinners(giveawayId);
       if (alreadyDrawn.length > 0) return [];
