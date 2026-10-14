@@ -25,18 +25,24 @@ const PAGES = [
   'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
 ];
 
-// Words that are not the page's own wording: product names, the sample alert content the builder previews,
-// units, and the font names. A text node made only of these (or of command names and {variables}) is fine.
+// Words that are not the page's own wording and may stay in every page: product names and units.
+// A text node made only of these (or of command names and {variables}) is fine.
 const ALLOWED_WORDS = new Set([
   'Twitch', 'YouTube', 'Discord', 'Kick', 'iRacing', 'StreamElements', 'OBS', 'Atleta', 'PayPal', 'Spotify',
   'px', 'kbps', 'AAC', 'NVENC', 'x264', 'min', 'sec', 'FPS', 'EUR', // 'EUR' is the amount of a fixed PayPal.me link
-  // font names in the builder's picker (the stored value is the name)
-  'Outfit', 'Inter', 'Poppins', 'Roboto', 'Mono', 'Press', 'Start', 'Permanent', 'Marker', 'Bangers', 'System', 'Default',
-  // the builder's sample alert content (what a streamer's own alert texts replace)
-  'New', 'Pit', 'Crew', 'Member', 'RacerName', 'just', 'joined', 'the', 'race', 'Follower', 'StreamerFan99',
-  'up', 'down', 'left', 'right', // values of the builder's hidden direction control
-  'socials', 'eyJhbGciOi', // the examples in the command-name and StreamElements-token placeholders
 ]);
+// What one page may keep besides that, and why.
+const PAGE_WORDS = {
+  'overlay-builder': [
+    // the font names in the picker (the stored value is the name)
+    'Outfit', 'Inter', 'Poppins', 'Roboto', 'Mono', 'Press', 'Start', 'Permanent', 'Marker', 'Bangers', 'System', 'Default',
+    // the sample alert content the previews show (what a streamer's own alert texts replace)
+    'New', 'Pit', 'Crew', 'Member', 'RacerName', 'just', 'joined', 'the', 'race', 'Follower',
+    'up', 'down', 'left', 'right', // the values of the hidden direction control
+  ],
+  'chatbot-config': ['socials'], // the example in the command-name placeholder
+  'overlay-config': ['eyJhbGciOi'], // the example in the StreamElements token placeholder
+};
 
 // ── 1. The page source ───────────────────────────────────────────────────
 
@@ -51,10 +57,11 @@ function mask(source) {
 const decode = (s) => s.replace(/&(nbsp|amp|lt|gt|quot|bull|middot|rarr|larr|times|mdash|ndash|hellip);|&#\d+;/g, ' ');
 
 // Words of two or more letters in a piece of plain page text that are not allowed to stay.
-function strayWords(text) {
+function strayWords(text, page) {
+  const allowed = new Set(PAGE_WORDS[page] || []);
   const plain = decode(text).replace(/\u0001/g, ' ');
   if (/^\s*[!{#/@][\w{}.:#-]*\s*$/.test(plain)) return []; // a command name or a {variable}
-  return (plain.match(/[A-Za-z][A-Za-z0-9_']+/g) || []).filter((w) => !ALLOWED_WORDS.has(w) && !/[_0-9]/.test(w));
+  return (plain.match(/[A-Za-z][A-Za-z0-9_']+/g) || []).filter((w) => !ALLOWED_WORDS.has(w) && !allowed.has(w) && !/[_0-9]/.test(w));
 }
 
 describe('the page source has no text of its own', () => {
@@ -65,11 +72,11 @@ describe('the page source has no text of its own', () => {
       const line = (i) => source.slice(0, i).split('\n').length;
       const found = [];
       for (const m of masked.matchAll(/>([^<>]*)</g)) {
-        const words = strayWords(m[1]);
+        const words = strayWords(m[1], page);
         if (words.length) found.push(`line ${line(m.index + 1)}: ${m[1].replace(/\s+/g, ' ').trim().slice(0, 80)}`);
       }
       for (const m of masked.matchAll(/\s(placeholder|title|alt|aria-label|label)="([^"]*)"/g)) {
-        const words = strayWords(m[2]);
+        const words = strayWords(m[2], page);
         if (words.length) found.push(`line ${line(m.index)}: ${m[1]}="${m[2].slice(0, 60)}"`);
       }
       assert.deepEqual(found, [], `${page}.ejs has text outside t():\n  ${found.join('\n  ')}`);
@@ -224,23 +231,22 @@ describe('the rendered page has no text of its own', () => {
         // text between tags that is outside « »; a time or a date is data
         for (const m of html.matchAll(/>([^<>]+)</g)) {
           if (/\d{1,2}[:/]\d{2}/.test(m[1])) continue;
-          if (strayWords(m[1]).some((w) => !isStubData(w))) found.add(m[1].replace(/\s+/g, ' ').trim().slice(0, 80));
+          if (strayWords(m[1], page).some((w) => !isStubData(w))) found.add(m[1].replace(/\s+/g, ' ').trim().slice(0, 80));
         }
         for (const m of html.matchAll(/\s(placeholder|title|alt|aria-label|label)="([^"]*)"/g)) {
-          if (strayWords(m[2]).some((w) => !isStubData(w))) found.add(`${m[1]}="${m[2].slice(0, 60)}"`);
+          if (strayWords(m[2], page).some((w) => !isStubData(w))) found.add(`${m[1]}="${m[2].slice(0, 60)}"`);
         }
         // the page's <title> is wording too (it may hold a name next to the wording)
         const title = withoutMarked(rendered).match(/<title>([^<]*)<\/title>/);
-        if (title && strayWords(title[1]).some((w) => !isStubData(w))) found.add(`<title>${title[1]}`);
+        if (title && strayWords(title[1], page).some((w) => !isStubData(w))) found.add(`<title>${title[1]}`);
       }
       assert.deepEqual([...found], [], `${page} renders text that does not come from t():\n  ${[...found].join('\n  ')}`);
     });
   }
 });
-// Words the stubs above put into the pages as data (names, values, sample content the page shows as it is).
-const STUB_DATA = new Set(['FREE', 'free', 'tester', 'Tester', 'tester_tv', 'Tester_TV', 'GuildName', 'shroud', 'ninja', 'ChannelOne', 'ChannelName', 'StreamTitle', 'TitleText', 'ErrorText', 'Boom',
-  'SponsorName', 'BotName', 'badword', 'socials', 'rules', 'general', 'Subscriber', 'Hello', 'reason', 'user', 'other', 'weird', 'Response', 'Other', 'text', 'Thanks', 'username', 'key',
-  'rtmp', 'relay', 'live', 'tok123', 'app', 'test', 'https', 'tok', 'img', 'com', 'Tier', 'months', 'Podium', 'Finish', 'Nitro', 'Boost', 'Welcome', 'raiders', 'Thank', 'you', 'for']);
+// Words the stubs above put into the pages as data (names, values) that the pages show as they are.
+const STUB_DATA = new Set(['FREE', 'free', 'tester', 'Tester', 'tester_tv', 'Tester_TV', 'GuildName', 'shroud', 'ninja', 'ChannelOne', 'ChannelName', 'StreamTitle', 'TitleText',
+  'ErrorText', 'SponsorName', 'BotName', 'badword', 'socials', 'rules', 'general', 'Subscriber', 'Hello', 'reason', 'other', 'username', 'tok123']);
 const isStubData = (word) => STUB_DATA.has(word) || /^(?:user|key)\d*$/.test(word);
 
 // ── 3. The texts handed to the scripts ───────────────────────────────────
