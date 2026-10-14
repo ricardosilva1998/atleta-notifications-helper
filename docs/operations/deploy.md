@@ -86,9 +86,12 @@ would have to connect Twitch, YouTube, Spotify and StreamElements again.
 
 **Do not roll back to a release from before this one once the key is set.** Older code would send
 the `enc:v1:` text to Twitch as if it were a token, the refresh would fail and the streamers' scopes
-would be cleared, and the hashed session ids would log everyone out. There is no decrypt script: the
-only way back is the database copy from step 2 together with the old release (everything written
-since is lost). Roll forward instead. Copies made before the key was set hold plaintext tokens until
+would be cleared, and the hashed session ids would log everyone out. Roll forward instead. If you
+must go back: in the running container (`railway ssh`, from `/app`) run
+`TOKEN_ENCRYPTION_KEY=<the key> node scripts/decrypt-tokens.js`, which turns the tokens back into
+plain text and prints how many, then redeploy the older release straight away (everyone logs in
+again). The other way back is the database copy from step 2 together with the old release
+(everything written since is lost). Copies made before the key was set hold plaintext tokens until
 they age out.
 
 ## Log lines worth knowing
