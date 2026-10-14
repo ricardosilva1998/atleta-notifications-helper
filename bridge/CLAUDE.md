@@ -137,6 +137,10 @@ Key: uses `exp()` not `pow(10)`, divisor is `1600/ln(2)` not `1600`. The `-0.5` 
 - Pitwall overlay iframes: loaded with `?pitwall=1&driver=ID`. Overlays detect `PITWALL_MODE` and use `window.addEventListener('message')` instead of WebSocket. Parent page forwards relay data via `postMessage`. All `require()` calls in overlays wrapped in try/catch for browser compatibility.
 - Control panel is a renderer process — communicates with main via IPC, NOT `require('./module')` (renderer gets separate module instances). Team broadcast uses `get-pitwall-teams` / `set-pitwall-broadcast` / `pitwall-teams` IPC channels.
 - Logout: IPC `logout` handler clears credentials from settings, calls `app.relaunch()` + `app.quit()`.
+- **Calls to the server (`atletanotifications.com`) and what it enforces** (details in the root `CLAUDE.md`):
+  - A POST/PUT/PATCH/DELETE must come from one of the site's own pages, or be listed in `CSRF_EXEMPT` (`src/csrf.js`). The Bridge's Node `https` calls carry no `Origin` and no cookie, so every one of them is listed there; **a new Bridge call with an unsafe method must be added to that list** (otherwise it gets 403 and the server logs `[CSRF] Refused ...`).
+  - Every `/api` route shares one limit of 150 requests a minute per address (one Bridge makes about 50: Spotify every 4 s, Discord voice every 2 s, live session every 30 s, laps, logs); `/api/voice/:discordUserId` has its own 60 a minute.
+  - Request bodies are 100 kb unless the route is in `LARGE_BODY_ROUTES` (`src/bodyParsers.js`: session 10 MB, lap 5 MB, track map 5 MB, logs 3 MB, bug reports 1 MB). A new upload route that needs more has to be added there.
 
 ## Testing
 
