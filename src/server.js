@@ -10,6 +10,7 @@ const { t, SUPPORTED_LANGS } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
+const { csrfProtection } = require('./csrf');
 const { healthHandler } = require('./health');
 const httpDrain = require('./httpDrain');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
@@ -51,6 +52,12 @@ app.use((req, res, next) => {
 app.use(helmet({
   contentSecurityPolicy: false, // app uses inline scripts/styles extensively
   crossOriginEmbedderPolicy: false, // overlay pages are embedded in OBS
+  // Pages tell this site, and only this site, which page a request comes
+  // from. Under helmet's default (no-referrer) a browser sends a form post
+  // with "Origin: null" and no Referer, which the CSRF check (csrf.js) must
+  // refuse. Other sites still get no referrer: overlay and share links carry
+  // a token in the address.
+  referrerPolicy: { policy: 'same-origin' },
 }));
 
 // Rate limiters
@@ -143,6 +150,9 @@ app.use((req, res, next) => {
   if (sid) {
     const session = db.getSession(sid);
     if (session) {
+      // The stored hash of the session id, from which the CSRF check derives
+      // this session's token (csrf.js).
+      req.sessionHash = session.sid;
       if (session.streamer_id) {
         req.streamer = db.getStreamerById(session.streamer_id);
       }
@@ -189,6 +199,14 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// CSRF (csrf.js): a request that changes something must come from one of this
+// site's pages and, from a logged-in visitor, carry the session's token. After
+// the session middleware (the token comes from the session) and the body
+// parsers (it reads the _csrf form field), ahead of every route. The routes it
+// leaves alone (the Atleta Racing app's, the multistream relay's, the
+// development sync, the public tip form) are listed in csrf.js.
+app.use(csrfProtection({ appUrl: config.app.url }));
 
 // Routes
 app.get('/', (req, res) => {

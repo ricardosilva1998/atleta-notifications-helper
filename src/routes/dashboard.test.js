@@ -166,10 +166,14 @@ let port;
 let t;
 const logs = [];
 const saved = {};
+const CSRF_SECRET = 'synthetic-csrf-secret';
 
 // `body` is sent as JSON; `contentType` overrides the type of a raw or form body
 // (the upload routes read the raw bytes, so those use application/octet-stream).
-function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false, cookie } = {}) {
+// A POST, PUT, PATCH or DELETE says it comes from this site's own page, as a
+// browser's does (`origin` names another one, or false sends none); `csrf` is
+// sent as the X-CSRF-Token header and `fetchMode` as Sec-Fetch-Mode.
+function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, contentType, json = false, cookie, origin = 'self', csrf, fetchMode } = {}) {
   return new Promise((resolve, reject) => {
     const body = rawBody
       || (jsonBody !== undefined ? JSON.stringify(jsonBody) : null)
@@ -179,6 +183,9 @@ function request(method, urlPath, { streamer, form, rawBody, body: jsonBody, con
     if (streamer) headers['x-test-streamer'] = String(streamer);
     if (json) headers['x-test-render'] = 'json';
     if (cookie) headers.Cookie = cookie;
+    if (origin && !['GET', 'HEAD'].includes(method)) headers.Origin = origin === 'self' ? `http://127.0.0.1:${port}` : origin;
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    if (fetchMode) headers['Sec-Fetch-Mode'] = fetchMode;
     const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, agent: false, headers }, (res) => {
       let text = '';
       res.setEncoding('utf8');
@@ -241,9 +248,15 @@ before(async () => {
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json({ limit: '10mb' }));
   app.use((req, res, next) => {
-    // What server.js's session middleware does for these tests: log the header's streamer in.
+    // What server.js's session middleware does for these tests: log the header's
+    // streamer in, or the streamer of a real session cookie (the CSRF tests).
     const id = Number(req.get('x-test-streamer'));
     req.streamer = id ? db.getStreamerById(id) : undefined;
+    const session = req.cookies.session ? db.getSession(req.cookies.session) : null;
+    if (session) {
+      req.sessionHash = session.sid;
+      req.streamer = db.getStreamerById(session.streamer_id);
+    }
     applyAccountStatus(req);
     res.locals.t = (key, params) => t('en', key, params);
     res.locals.features = { youtube: true };
@@ -251,8 +264,11 @@ before(async () => {
     if (req.get('x-test-render') === 'json') res.render = (view, locals) => res.json({ view, locals });
     next();
   });
+  // The real CSRF check, where server.js mounts it: after the session, before the routes.
+  app.use(require('../csrf').csrfProtection({ appUrl: 'https://atleta.example', secret: CSRF_SECRET }));
   app.use('/dashboard', require('./dashboard'));
   app.use('/auth', require('./auth'));
+  app.use('/racing/auth', require('./racing-auth'));
   app.use(errorHandler);
 
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -314,7 +330,7 @@ describe('the dashboard guard', () => {
       const res = await request('GET', route, { streamer: id });
       assert.equal(res.status, 403, route);
       assert.match(res.text, /Account disabled/, route);
-      assert.match(res.text, /href="\/auth\/logout"/, route);
+      assert.match(res.text, /<form method="POST" action="\/auth\/logout"[^>]*><button type="submit"/, route);
     }
   });
 
@@ -335,6 +351,120 @@ describe('the dashboard guard', () => {
     const res = await request('GET', '/dashboard/overlay', { streamer: id, json: true });
     assert.equal(res.status, 200);
     assert.equal(res.json().view, 'overlay-config');
+  });
+});
+
+// ── CSRF, with a real logged-in session (M1) ─────────────────────────────
+
+describe('a logged-in streamer\'s changes carry the session\'s CSRF token', () => {
+  const html = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+  let id;
+  let sid;
+  let cookie;
+  beforeEach(() => {
+    id = addStreamer({ overlay_enabled: 1, overlay_follow_duration: 5 });
+    sid = `synthetic-session-${id}`;
+    db.createSession(sid, id, Date.now() + 60_000);
+    cookie = `session=${sid}`;
+  });
+
+  // The token as a browser gets it: from the page, for public/js/csrf.js.
+  async function pageToken(as = cookie) {
+    const page = await request('GET', '/dashboard/overlay', { cookie: as });
+    assert.equal(page.status, 200);
+    return page.text.match(/<script src="\/js\/csrf\.js" data-csrf-token="([A-Za-z0-9_-]+)"><\/script>/)[1];
+  }
+  const upload = (options) => request('POST', '/dashboard/sponsors/upload?name=Acme&ext=png&dur=30', {
+    cookie, rawBody: 'not-really-a-png', contentType: 'application/octet-stream', fetchMode: 'cors', ...options,
+  });
+
+  test('the page carries the token HMAC-SHA256(CSRF_SECRET, the stored hash of the session id)', async () => {
+    const expected = require('crypto').createHmac('sha256', CSRF_SECRET).update(db.hashSessionId(sid)).digest('base64url');
+    assert.equal(await pageToken(), expected);
+  });
+
+  test('a settings form sent without it is refused with a page that says to reload, and nothing is saved', async () => {
+    const res = await request('POST', '/dashboard/overlay', { cookie, fetchMode: 'navigate', form: { overlay_enabled: '1', overlay_follow_duration: '20' } });
+    assert.equal(res.status, 403);
+    assert.match(res.headers['content-type'], /text\/html/);
+    assert.ok(res.text.includes(html(t('en', 'csrf.refused'))));
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 5);
+    assert.deepEqual(managerCalls, []);
+    assert.ok(logs.some(([level, line]) => level === 'warn' && line === '[CSRF] Refused POST /dashboard/overlay: no token'));
+  });
+
+  test('with the page\'s token in its _csrf field it is saved', async () => {
+    const res = await request('POST', '/dashboard/overlay', { cookie, form: { overlay_enabled: '1', overlay_follow_duration: '20', _csrf: await pageToken() } });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard/overlay');
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 20);
+  });
+
+  test('the token is never stored by a route that saves every field it is sent (iRacing overlay settings)', async () => {
+    const res = await request('POST', '/dashboard/iracing/overlays/standings', { cookie, form: { enabled: '1', rows: '12', _csrf: await pageToken() } });
+    assert.equal(res.status, 302);
+    assert.deepEqual(JSON.parse(db.getIracingOverlaySetting(id, 'standings').settings), { rows: '12' });
+  });
+
+  test('a raw-body upload without the X-CSRF-Token header is refused with JSON, before anything is written', async () => {
+    const res = await upload();
+    assert.equal(res.status, 403);
+    assert.deepEqual(res.json(), { ok: false, error: t('en', 'csrf.refused') });
+    assert.equal(fileWrites.length, 0);
+    assert.equal(db.getSponsorImages(id).length, 0);
+  });
+
+  test('with the header, the upload is stored', async () => {
+    const res = await upload({ csrf: await pageToken() });
+    assert.equal(res.status, 200);
+    assert.equal(fileWrites.length, 1);
+    assert.equal(db.getSponsorImages(id).length, 1);
+  });
+
+  test('another session\'s token is refused', async () => {
+    const other = addStreamer();
+    db.createSession('synthetic-session-other', other, Date.now() + 60_000);
+    const theirs = await pageToken('session=synthetic-session-other');
+    assert.notEqual(theirs, await pageToken());
+    assert.equal((await upload({ csrf: theirs })).status, 403);
+    assert.equal(fileWrites.length, 0);
+  });
+
+  test('the right token sent from another site is refused', async () => {
+    const res = await request('POST', '/dashboard/overlay', { cookie, origin: 'https://elsewhere.example', form: { overlay_enabled: '1', overlay_follow_duration: '20', _csrf: await pageToken() } });
+    assert.equal(res.status, 403);
+    assert.equal(db.getStreamerById(id).overlay_follow_duration, 5);
+  });
+
+  test('logging out takes a POST with the token; a GET logs nobody out', async () => {
+    const token = await pageToken();
+    const get = await request('GET', '/auth/logout', { cookie });
+    assert.equal(get.status, 302);
+    assert.equal(get.headers.location, '/');
+    assert.ok(db.getSession(sid), 'a GET leaves the session');
+    assert.equal((await request('POST', '/auth/logout', { cookie })).status, 403);
+    assert.ok(db.getSession(sid), 'a POST without the token leaves it too');
+
+    const res = await request('POST', '/auth/logout', { cookie, form: { _csrf: token } });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/');
+    assert.equal(db.getSession(sid), undefined);
+    assert.match(res.headers['set-cookie'].join('\n'), /^session=;/m);
+  });
+
+  test('the racing logout too; and the password pages its route writes out carry the token', async () => {
+    const token = await pageToken();
+    const forgot = await request('GET', '/racing/auth/forgot', { cookie });
+    assert.ok(forgot.text.includes(`<script src="/js/csrf.js" data-csrf-token="${token}"></script>`));
+
+    const get = await request('GET', '/racing/auth/logout', { cookie });
+    assert.equal(get.headers.location, '/racing');
+    assert.ok(db.getSession(sid), 'a GET leaves the session');
+    assert.equal((await request('POST', '/racing/auth/logout', { cookie })).status, 403);
+    const res = await request('POST', '/racing/auth/logout', { cookie, form: { _csrf: token } });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/racing');
+    assert.equal(db.getSession(sid), undefined);
   });
 });
 

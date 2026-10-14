@@ -8,6 +8,9 @@ const router = express.Router();
 
 const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => HTML_ESCAPE_MAP[c]);
+// The CSRF token script (src/csrf.js) for the two pages below, which are not
+// EJS views; views/csrf.ejs is the same tag for the views.
+const csrfScript = (res) => `<script src="/js/csrf.js" data-csrf-token="${escapeHtml(res.locals.csrfToken || '')}"></script>`;
 
 // Email transporter (lazy init)
 let _transporter = null;
@@ -168,8 +171,9 @@ router.post('/login-api', express.json(), async (req, res) => {
   }
 });
 
-// GET /racing/auth/logout
-router.get('/logout', (req, res) => {
+// POST /racing/auth/logout. A GET changes nothing and goes back to /racing, so
+// a link or an image elsewhere cannot log anyone out.
+router.post('/logout', (req, res) => {
   const sid = req.cookies?.session;
   if (sid) {
     try { db.deleteSession(sid); } catch(e) {}
@@ -178,12 +182,15 @@ router.get('/logout', (req, res) => {
   res.redirect('/racing');
 });
 
+router.get('/logout', (req, res) => res.redirect('/racing'));
+
 // GET /racing/auth/forgot — show forgot password form
 router.get('/forgot', (req, res) => {
   const message = escapeHtml(req.query.message || '');
   const error = escapeHtml(req.query.error || '');
   res.send(`
     <!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+    ${csrfScript(res)}
     <title>Reset Password — Atleta Racing</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
     <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:#0c0d14;color:#e8e6f0;min-height:100vh;display:flex;align-items:center;justify-content:center}
@@ -273,6 +280,7 @@ router.get('/reset', (req, res) => {
 
   res.send(`
     <!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+    ${csrfScript(res)}
     <title>New Password — Atleta Racing</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
     <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:#0c0d14;color:#e8e6f0;min-height:100vh;display:flex;align-items:center;justify-content:center}

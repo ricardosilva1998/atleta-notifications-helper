@@ -8,7 +8,9 @@
 //      anything they throw ends there (later tasks add parsers and routes:
 //      they must go above it);
 //   3. request tracking and /health come first, the body parsers come from
-//      bodyParsers.js only, and every /api route sits behind one apiLimiter.
+//      bodyParsers.js only, and every /api route sits behind one apiLimiter;
+//   4. the CSRF check (csrf.js) runs after the session and the body parsers
+//      and before every route, and pages name their origin to this site.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -110,4 +112,26 @@ test('multistream is two routers, each mounted once: the page under /dashboard, 
   assert.ok(at("app.use('/api', apiLimiter);") < api, 'the relay\'s routes come after the /api limiter');
   assert.equal(code.match(/app\.\w+\('[^']*multistream/g).length, 2, 'no other multistream mount');
   assert.equal(code.match(/require\('\.\/routes\/multistream'\)/g).length, 1, 'loaded once');
+});
+
+test('the CSRF check runs once, after the session and the body parsers, before every route', () => {
+  const csrf = at('app.use(csrfProtection({ appUrl: config.app.url }));');
+  assert.equal(code.match(/csrfProtection\(/g).length, 1, 'mounted once');
+  assert.ok(at('mountBodyParsers(app);') < csrf, 'after the body parsers (it reads the _csrf field)');
+  assert.ok(at('req.sessionHash = session.sid;') < csrf, 'after the session middleware (the token comes from the session)');
+  assert.ok(at('res.locals.currentPath = req.path;') < csrf, 'after the whole session middleware');
+  // Between the parsers and the check, only files are served (GET and HEAD).
+  const between = source.slice(at('mountBodyParsers(app);'), csrf).replace(/^\s*\/\/.*$/gm, '');
+  const mounted = [...between.matchAll(/app\.(use|get|post|put|patch|delete|all)\('([^']*)'/g)].map((m) => m[2]);
+  assert.deepEqual(mounted, ['/pitwall/overlays', '/sponsors', '/redemptions', '/avatars', '/issues-files', '/vtuber-models']);
+  for (const route of ["app.get('/', (req, res)", "app.use('/auth', authRoutes);", "app.use('/dashboard', dashboardRoutes);",
+    "app.use('/racing/auth', authLimiter, racingAuthRoutes);", "app.use('/tip', tipRoutes);", "app.use('/overlay', overlayRoutes);",
+    "app.post('/api/session', (req, res)", "app.post('/set-language'", 'app.use(errorHandler);']) {
+    assert.ok(csrf < at(route), `before ${route}`);
+  }
+});
+
+test('pages tell this site which page a request comes from (the CSRF check reads it), and no other site', () => {
+  // Under helmet's default (no-referrer) a form post arrives with "Origin: null".
+  at("referrerPolicy: { policy: 'same-origin' },");
 });

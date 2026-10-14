@@ -336,6 +336,8 @@
   "error.title": "Something went wrong",
   "error.body": "The page could not be loaded. Please try again in a moment.",
   "error.home": "Go to the home page",
+  "csrf.title": "Please reload the page",
+  "csrf.refused": "Nothing was saved: this page is out of date (it was opened before you logged in or out, or before an update). Reload the page and try again.",
   "guild.channelNotFound": "Twitch could not find that channel. Check the name and try again.",
   "guild.twitchError": "Twitch did not answer. Please try again in a moment.",
   "guild.channelDuplicate": "That channel is already on this server's list.",

@@ -1,0 +1,2 @@
+<%# This page's CSRF token (src/csrf.js), sent with its forms and requests by public/js/csrf.js. Include it in <head>, before any script that sends a request: header.ejs does, and so must every page with a form, fetch() or XMLHttpRequest that does not include the header. -%>
+<script src="/js/csrf.js" data-csrf-token="<%= locals.csrfToken || '' %>"></script>

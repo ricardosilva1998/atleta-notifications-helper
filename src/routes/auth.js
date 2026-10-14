@@ -98,12 +98,17 @@ router.get('/login/callback', async (req, res) => {
   }
 });
 
-router.get('/logout', (req, res) => {
+// Logging out is a POST, sent by the logout forms (header.ejs, account.ejs,
+// account-disabled.ejs) with the CSRF token. A GET changes nothing and goes
+// home, so a link or an image elsewhere cannot log anyone out.
+router.post('/logout', (req, res) => {
   const sid = req.cookies?.session;
   if (sid) db.deleteSession(sid);
   res.clearCookie('session');
   res.redirect('/');
 });
+
+router.get('/logout', (req, res) => res.redirect('/'));
 
 // --- Twitch Account Linking ---
 

@@ -160,3 +160,8 @@ test('the relay API login is MEDIAMTX_API_USER (admin when unset) with MEDIAMTX_
   assert.equal(full.accessClientSecret, 'cf-secret');
   assert.equal(full.enabled, true, 'neither is needed to switch the feature on');
 });
+
+test('CSRF_SECRET is the CSRF token secret; unset it is empty (csrf.js then makes one per boot)', () => {
+  assert.equal(loadWith({ CSRF_SECRET: undefined }).config.csrf.secret, '');
+  assert.equal(loadWith({ CSRF_SECRET: 'synthetic-csrf-secret' }).config.csrf.secret, 'synthetic-csrf-secret');
+});

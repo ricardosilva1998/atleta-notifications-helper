@@ -122,6 +122,12 @@ module.exports = {
   tokenEncryption: {
     key: tokenEncryptionKey,
   },
+  // Derives each web session's CSRF token (src/csrf.js); make one with
+  // `openssl rand -hex 32`. Unset: a per-boot secret is used, and pages opened
+  // before a restart must be reloaded before they can save.
+  csrf: {
+    secret: process.env.CSRF_SECRET || '',
+  },
   // Discord user ids with admin access: the built-in admin plus any
   // comma-separated ids in ADMIN_DISCORD_IDS. Names never grant admin.
   adminDiscordIds: parseAdminDiscordIds(process.env.ADMIN_DISCORD_IDS),

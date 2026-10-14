@@ -66,4 +66,6 @@ function errorHandler(err, req, res, next) {
   });
 }
 
-module.exports = { errorHandler };
+// wantsJson and loggedPath are shared with the CSRF check (csrf.js), which
+// answers its refusals the same way.
+module.exports = { errorHandler, wantsJson, loggedPath };

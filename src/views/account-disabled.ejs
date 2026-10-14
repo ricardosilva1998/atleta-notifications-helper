@@ -7,7 +7,7 @@
   <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;"><%= t('account.disabled.title') %></h2>
   <p style="color: var(--text-secondary); font-size: 16px;"><%= t('account.disabled.body') %></p>
   <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;"><%= t('account.disabled.hint') %></p>
-  <p style="margin-top: 20px;"><a href="/auth/logout" class="btn btn-secondary"><%= t('account.disabled.logout') %></a></p>
+  <form method="POST" action="/auth/logout" style="margin-top: 20px;"><button type="submit" class="btn btn-secondary"><%= t('account.disabled.logout') %></button></form>
 </div>
 
 <%- include('footer') %>

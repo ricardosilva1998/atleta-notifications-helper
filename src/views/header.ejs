@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%- include('csrf') %>
   <title><%= typeof title !== 'undefined' ? title : 'Atleta' %></title>
   <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -244,6 +245,9 @@
       background: var(--bg-hover); color: var(--text-primary);
       border-left-color: var(--accent);
     }
+    /* Logout is a form (a POST), its button drawn like the links. */
+    .sidebar-logout { margin: 0; }
+    button.sidebar-link { width: 100%; background: none; border: 0; border-left: 2px solid transparent; line-height: inherit; text-align: left; cursor: pointer; }
     .sidebar-link svg, .sidebar-link i[data-lucide] { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.7; }
     .sidebar-link svg { fill: currentColor; }
     .sidebar-link:hover svg { opacity: 1; }
@@ -665,10 +669,12 @@
       <% if ((typeof streamer !== 'undefined' && streamer) || (typeof racingUser !== 'undefined' && racingUser)) { %>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section"><%= t('nav.account') %></div>
-        <a href="/auth/logout" class="sidebar-link">
-          <i data-lucide="log-out"></i>
-          <%= t('nav.logout') %>
-        </a>
+        <form method="POST" action="/auth/logout" class="sidebar-logout">
+          <button type="submit" class="sidebar-link">
+            <i data-lucide="log-out"></i>
+            <%= t('nav.logout') %>
+          </button>
+        </form>
       <% } %>
     </div>
     <div class="sidebar-footer">

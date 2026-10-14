@@ -1,11 +1,12 @@
-<%- include('header', { title: t('error.title'), streamer: locals.streamer || null }) %>
+<%# heading and message are optional: the CSRF check (src/csrf.js) passes its own. -%>
+<%- include('header', { title: locals.heading || t('error.title'), streamer: locals.streamer || null }) %>
 
 <div style="text-align: center; padding: 60px 0;">
   <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(240,68,56,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f04438" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
   </div>
-  <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;"><%= t('error.title') %></h2>
-  <p style="color: var(--text-secondary); font-size: 16px;"><%= t('error.body') %></p>
+  <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;"><%= locals.heading || t('error.title') %></h2>
+  <p style="color: var(--text-secondary); font-size: 16px;"><%= locals.message || t('error.body') %></p>
   <p style="margin-top: 20px;"><a href="/" class="btn btn-secondary"><%= t('error.home') %></a></p>
 </div>
 
