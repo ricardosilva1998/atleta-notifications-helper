@@ -5,6 +5,7 @@ const nodemailer = require('nodemailer');
 const db = require('../db');
 const config = require('../config');
 const { clientIp } = require('../clientIp');
+const { isBridgeId } = require('../bridgeId');
 const router = express.Router();
 
 const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -31,7 +32,8 @@ router.post('/signup', express.json(), express.urlencoded({ extended: true }), a
     const username = req.body.username;
     const password = req.body.password;
     const iracing_name = req.body.iracing_name;
-    const bridge_id = req.body.bridge_id;
+    // Only an id shaped like the app's is linked; anything else signs up without one.
+    const bridge_id = isBridgeId(req.body.bridge_id) ? req.body.bridge_id : null;
 
     if (!username || !password) {
       if (req.is('json')) return res.status(400).json({ error: 'Username and password required' });
@@ -153,8 +155,8 @@ router.post('/login-api', express.json(), async (req, res) => {
 
     db.resetLoginAttempts(user.id);
     db.logAuthAttempt('login-api', username, clientIp(req), true, null, req.headers['user-agent']);
-    // Link bridge_id if provided and not already linked
-    if (bridge_id && !user.bridge_id) {
+    // Link the app's bridge id if it sent one shaped like the app's and none is linked yet
+    if (isBridgeId(bridge_id) && !user.bridge_id) {
       try { db.db.prepare('UPDATE racing_users SET bridge_id = ? WHERE id = ?').run(bridge_id, user.id); } catch(e) {}
     }
 
@@ -270,8 +272,8 @@ router.get('/reset', (req, res) => {
   const token = req.query.token || '';
   const error = escapeHtml(req.query.error || '');
 
-  // Token must look like a hex token before we even hit the DB; this also
-  // closes the XSS hole from interpolating it into the form below.
+  // Only a hex token is looked up in the DB, and only such a token is put
+  // into the form below.
   if (!token || !/^[a-f0-9]{32,128}$/.test(token)) {
     return res.redirect('/racing/auth/forgot?error=' + encodeURIComponent('Invalid reset link'));
   }

@@ -9,6 +9,7 @@ const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');
 const { clientIp } = require('./clientIp');
+const { isBridgeId } = require('./bridgeId');
 const { applyAccountStatus, isStreamerDisabled } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
@@ -516,11 +517,6 @@ function cappedText(value, max) {
   if (typeof value === 'number' && Number.isFinite(value)) value = String(value);
   return typeof value === 'string' ? value.slice(0, max) : null;
 }
-
-// A bridge id as the app makes it (crypto.randomUUID(), bridge/settings.js):
-// 8 to 64 letters, digits and dashes.
-const BRIDGE_ID = /^[A-Za-z0-9-]{8,64}$/;
-const isBridgeId = (value) => typeof value === 'string' && BRIDGE_ID.test(value);
 
 // The app sends practice, qualify or race; any other short word is kept too.
 const SESSION_TYPE = /^[A-Za-z ]{1,32}$/;

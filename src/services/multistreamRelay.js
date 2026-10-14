@@ -89,9 +89,9 @@ async function relayRequest(settings, method, apiPath, { body, signal } = {}) {
   }
 }
 
-// What the relay answered, for an error message: never a stream key (they are
-// in the path names), which would let anyone who reads the log publish as the
-// streamer. Without the key to cut out, only the status is kept.
+// What the relay answered, for an error message. Stream keys are part of the
+// path names and stay out of messages and logs: the key is cut out of the text,
+// and without the key to cut out, only the status is kept.
 async function failure(what, res, sourceToken) {
   const text = sourceToken ? await res.text().catch(() => '') : '';
   const detail = sourceToken ? text.split(sourceToken).join('<key>') : '';

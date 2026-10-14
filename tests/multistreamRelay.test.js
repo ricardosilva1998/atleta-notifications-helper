@@ -183,7 +183,7 @@ describe('the minute check\'s lists', () => {
   });
 });
 
-describe('failures never carry a stream key (it would let anyone who reads the log publish as the streamer)', () => {
+describe('failures never carry a stream key (keys stay out of messages and logs)', () => {
   const KEY = 'SecretStreamKey0000000000000000Z';
 
   test('fetch\'s own error, which quotes the address (and the forwarder name in it), is replaced', async () => {
