@@ -200,7 +200,7 @@ Need to do something:
 Will notice, nothing to do: the Multistream card is hidden until the relay exists; follow and new-sub
 thank-yous arrive about five seconds after the alert and merge when several come at once; one alert and
 one thank-you per gift sub; giveaways draw winners again; a test button works once every five seconds;
-uploads stop at 250 MB per streamer; logout is a button; pages follow the browser's language until a
+uploads stop at 250 MB per streamer; logout is a button; pages are in English until a
 language is chosen; new Discord invites ask for six permissions instead of Administrator; Preview Alert works
 for the giveaway winner and the three YouTube alerts; YouTube and giveaway cards fade out instead of vanishing,
 and the giveaway card shows its party popper on both sides; saving the overlay settings mid-stream no longer

@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
-const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');
+const { t, SUPPORTED_LANGS, esc, richFor } = require('./i18n');
 const { clientIp } = require('./clientIp');
 const { isBridgeId } = require('./bridgeId');
 const { applyAccountStatus, isStreamerDisabled } = require('./services/streamerAccess');
@@ -208,21 +208,9 @@ app.use((req, res, next) => {
   }
 
   // i18n
-  // The cookie the language switcher sets; without one, the browser's own language
-  // (Accept-Language) when the site speaks it, else English.
-  const langFromCookie = SUPPORTED_LANGS.includes(req.cookies?.lang);
-  const lang = langFromCookie
-    ? req.cookies.lang
-    : (fromAcceptLanguage(req.headers['accept-language']) || 'en');
-  // A page rendered in the browser's language differs by Accept-Language, so it
-  // says so to caches (Vary). Only rendered pages: JSON answers and files do not.
-  if (!langFromCookie) {
-    const render = res.render.bind(res);
-    res.render = (...args) => {
-      res.vary('Accept-Language');
-      return render(...args);
-    };
-  }
+  // English, unless the visitor picked a language with the switcher (the lang
+  // cookie). The browser's own language is not used.
+  const lang = SUPPORTED_LANGS.includes(req.cookies?.lang) ? req.cookies.lang : 'en';
   req.lang = lang;
   res.locals.lang = lang;
   res.locals.SUPPORTED_LANGS = SUPPORTED_LANGS;

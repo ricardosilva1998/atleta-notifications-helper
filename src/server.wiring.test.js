@@ -139,7 +139,7 @@ test('the views get esc() and rich() next to t(), with rich() built on the reque
   assert.ok(shown < esc && esc < rich, 'esc and rich are set right after t, in that order');
   assert.equal(code.match(/res\.locals\.(esc|rich) =/g).length, 2, 'each is set once');
   assert.ok(rich < at('res.locals.currentPath = req.path;'), 'inside the middleware that also sets the language');
-  assert.ok(at("const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');") < shown, 'both come from i18n.js');
+  assert.ok(at("const { t, SUPPORTED_LANGS, esc, richFor } = require('./i18n');") < shown, 'both come from i18n.js');
 });
 
 test('pages tell this site which page a request comes from (the CSRF check reads it), and no other site', () => {
