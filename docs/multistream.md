@@ -14,10 +14,9 @@ All code, tests, and docs are in the repo. Specifically:
 - Route: `src/routes/multistream.js` — a dashboard router at `/dashboard/multistream` and an API router at `/api/multistream` (relay auth + webhooks)
 - New view: `src/views/multistream.ejs`
 - DB migration applied: 9 new columns on `streamers` (`multistream_*`)
-- Twitch broadcaster OAuth scope expanded with `channel:read:stream_key`
-- Dashboard card added (Twitch tab) linking to the multistream page
+- Twitch broadcaster OAuth (`/auth/broadcaster`) asks for `channel:read:stream_key` only once the relay variables (step 6) are set, so streamers are not asked for the permission of a feature they cannot see; the first time after that they re-authorize (step 7)
+- Dashboard card added (Twitch tab) linking to the multistream page (hidden until the relay variables are set)
 - Unit tests: `node --test tests/multistreamRelay.test.js src/services/multistream*.test.js src/services/youtubeBroadcast.test.js src/routes/multistream.test.js`
-- Visual mockup: `docs/multistream-mockup.html` (open in browser to see the UI)
 - Detailed operator runbook: `docs/multistream-relay-setup.md`
 - Implementation plan (historical): `docs/superpowers/plans/2026-05-10-multistream-relay.md`
 - CLAUDE.md updated with architecture + env vars
@@ -149,7 +148,6 @@ If something fails:
 | Code: services | `src/services/{multistreamRelay,multistreamSessions,multistreamAuth,youtubeBroadcast}.js` |
 | Code: routes + view | `src/routes/multistream.js`, `src/views/multistream.ejs` |
 | DB schema | `src/db.js` (search for "Add multistream relay columns") |
-| Visual mockup | `docs/multistream-mockup.html` (open in browser) |
 | Original implementation plan | `docs/superpowers/plans/2026-05-10-multistream-relay.md` |
 | Run unit tests | `node --test tests/multistreamRelay.test.js src/services/multistream*.test.js src/services/youtubeBroadcast.test.js src/routes/multistream.test.js` |
 

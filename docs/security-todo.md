@@ -1,14 +1,12 @@
 # Security TODO — Remaining Vulnerabilities
 
-Last audited: 2026-04-11
+Last audited: 2026-04-11. Items marked "fixed" were closed afterwards; `CLAUDE.md` describes the current
+security-relevant behaviour (admin, CSRF, secrets at rest, rate limits, uploads).
 
 ## High Priority
 
-### 1. OpenAI API Key Exposed via API
-- **File:** `src/server.js` (GET `/api/bridge/config`)
-- **Issue:** Returns `process.env.OPENAI_API_KEY` to any authenticated user. Bridge voice chat uses it client-side for Whisper API calls.
-- **Fix:** Build a server-side Whisper transcription proxy (`POST /api/bridge/transcribe` accepting audio, calling OpenAI server-side, returning text). Then remove the key from the config endpoint. Requires updating `bridge/voiceInput.js` to use the proxy instead of direct OpenAI calls.
-- **Complexity:** High — voice chat pipeline refactor
+### 1. OpenAI API Key Exposed via API — fixed
+- **Fix:** the Whisper proxy (`POST /api/bridge/whisper`, see `docs/features/voice-chat.md`) calls OpenAI server-side, and `GET /api/bridge/config` returns only `{ whisperProxyEnabled }`. The key is never sent to a client.
 
 ### 2. Electron nodeIntegration:true + contextIsolation:false
 - **Files:** `bridge/main.js` (lines 139, 397, 463 — all BrowserWindow creations)
@@ -89,3 +87,10 @@ Last audited: 2026-04-11
 - ✅ Electron: permissions restricted to media/microphone/clipboard
 - ✅ Dependencies: 5 CVEs fixed via npm audit fix
 - ✅ Global `_esc()` HTML escape function in overlay-utils.js
+- ✅ Admin access is decided by Discord user id (`ADMIN_DISCORD_IDS`), never by a name
+- ✅ OAuth tokens and the StreamElements token are encrypted at rest (`TOKEN_ENCRYPTION_KEY`); web session ids are stored as hashes
+- ✅ Each OAuth connection uses a random state in a short-lived cookie; `/link` URLs are signed and expire after 15 minutes
+- ✅ Request bodies are limited (100 kb by default), dashboard uploads count against a per-streamer quota (report screenshots and sounds are also checked by their first bytes), and uploaded files are served with sandbox headers
+- ✅ PayPal tips are accepted only for a capture PayPal confirms for the streamer's own account, from a donor record kept on the server
+- ✅ Discord servers are claimed only by someone with Manage Server there; every channel a notification goes to is checked against its server
+- ✅ Regex banned words are checked before they are saved and are cost-limited per streamer
