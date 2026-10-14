@@ -14,12 +14,16 @@ function stopRotation(streamerId) {
     clearTimeout(existing.handle);
     activeRotations.delete(streamerId);
   }
+  // A stopped rotation shows nothing: an overlay that connects later must not be
+  // handed the last image it showed. (A restart sets it again with its first image.)
+  currentSponsorEvent.delete(streamerId);
 }
 
 function scheduleNextImage(streamerId) {
   const imgs = db.getEnabledSponsorImages(streamerId);
   if (imgs.length === 0) {
     activeRotations.delete(streamerId);
+    currentSponsorEvent.delete(streamerId);
     return;
   }
 
@@ -163,14 +167,22 @@ const timedNotificationManager = {
       clearTimeout(rotation.handle);
     }
     activeRotations.clear();
+    currentSponsorEvent.clear();
     for (const [, rotation] of activeChatRotations) {
       clearInterval(rotation.handle);
     }
     activeChatRotations.clear();
   },
 
+  // The image an overlay that connects now should be shown, or null. Only one that
+  // is still enabled: a sponsor that was switched off or removed while it was on
+  // screen is not shown again to a connection that opens afterwards.
   getCurrentSponsor(streamerId) {
-    return currentSponsorEvent.get(streamerId) || null;
+    const event = currentSponsorEvent.get(streamerId);
+    if (!event) return null;
+    const stillEnabled = db.getEnabledSponsorImages(streamerId)
+      .some((img) => event.data.imageUrl === `/sponsors/${streamerId}/${img.filename}`);
+    return stillEnabled ? event : null;
   },
 };
 

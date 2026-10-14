@@ -119,6 +119,75 @@ describe('sponsor images', () => {
   });
 });
 
+describe('the sponsor a new connection is shown', () => {
+  const urlOf = (n) => `/sponsors/${STREAMER_ID}/sponsor_${n}.png`;
+
+  test('an overlay that connects while a sponsor is showing is handed that sponsor', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1), image(2)];
+    manager.restartForStreamer(STREAMER_ID);
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID).data.imageUrl, urlOf(1));
+    t.mock.timers.tick(30000);
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID).data.imageUrl, urlOf(2), 'the next one once the rotation moved on');
+  });
+
+  test('a sponsor that was switched off while it was showing is not replayed', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1), image(2)];
+    manager.restartForStreamer(STREAMER_ID);
+    dbStub.images = [image(2)]; // image 1 is disabled or deleted; the rotation has not ticked yet
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID), null);
+  });
+
+  test('with every sponsor switched off nothing is replayed, even after the rotation noticed', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    manager.restartForStreamer(STREAMER_ID);
+    assert.ok(manager.getCurrentSponsor(STREAMER_ID));
+    dbStub.images = [];
+    manager.restartForStreamer(STREAMER_ID);
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID), null);
+  });
+
+  test('the rotation running out of images at its next turn forgets the last one', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    manager.restartForStreamer(STREAMER_ID);
+    dbStub.images = [];
+    t.mock.timers.tick(30000); // the timer for the next image finds none
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID), null);
+  });
+
+  test('switching the rotation off stops the replay', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    manager.restartForStreamer(STREAMER_ID);
+    dbStub.streamer = { ...dbStub.streamer, sponsor_rotation_enabled: 0 };
+    manager.restartForStreamer(STREAMER_ID);
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID), null);
+  });
+
+  test('stopping the streamer\'s rotations (a disabled account) stops it too', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    manager.restartForStreamer(STREAMER_ID);
+    manager.stopForStreamer(STREAMER_ID);
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID), null);
+  });
+
+  test('a streamer that never had a rotation has nothing to replay', () => {
+    assert.equal(manager.getCurrentSponsor(9999), null);
+  });
+
+  test('stopping every rotation forgets what each was showing', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dbStub.images = [image(1)];
+    manager.restartForStreamer(STREAMER_ID);
+    manager.stopAll();
+    assert.equal(manager.getCurrentSponsor(STREAMER_ID), null);
+  });
+});
+
 describe('sponsor chat messages', () => {
   const message = { message_text: 'Thanks to our sponsors', url: null };
 
