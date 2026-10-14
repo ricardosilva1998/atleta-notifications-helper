@@ -408,3 +408,183 @@ describe('channel_state: what the live poller remembers about a broadcast', () =
     assert.equal(state.last_stream_id, '40000000002', 'kept: it is how the same broadcast is recognised if it comes back');
   });
 });
+
+describe('getOverlayStats7d: the dashboard\'s 7-day tiles', () => {
+  // What eventsub.js stores for a gift: the whole normalized event.
+  const giftData = (amount) => ({ username: 'Gifter', tier: '1', amount, message: `Gifted ${amount} sub${amount > 1 ? 's' : ''}!` });
+
+  // A row as stored: data is the JSON text (or anything a column can hold).
+  function addEvent(streamerId, type, data, createdAt = null) {
+    db.db.prepare("INSERT INTO overlay_events (streamer_id, event_type, username, data, created_at) VALUES (?, ?, 'Someone', ?, COALESCE(?, datetime('now')))")
+      .run(streamerId, type, data === null || typeof data === 'string' ? data : JSON.stringify(data), createdAt);
+  }
+
+  test('a gift counts every sub in it, not one per gift event', () => {
+    addEvent(streamerA, 'giftsub', giftData(50));
+    addEvent(streamerA, 'giftsub', giftData(1));
+    addEvent(streamerA, 'giftsub', null); // a row with nothing stored about its size
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 52);
+  });
+
+  test('a row whose data cannot be read counts as one gift, and never breaks the query', () => {
+    for (const data of [null, '', 'not json at all', '{"truncated":', '5', '"text"', '[1,2]', '{"username":"NoAmount"}', '{"amount":null}']) {
+      addEvent(streamerA, 'giftsub', data);
+    }
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 9);
+  });
+
+  test('an amount that is zero, negative or not a number still counts as one gift', () => {
+    for (const amount of [0, -4, 'abc', '']) addEvent(streamerA, 'giftsub', { amount });
+    addEvent(streamerA, 'giftsub', { amount: '7' }); // a number stored as text is read as a number
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 4 + 7);
+  });
+
+  test('the other tiles still count events, and the gift amounts are not added to Subs', () => {
+    addEvent(streamerA, 'subscription', { username: 'NewSub', tier: '1', months: 1 });
+    addEvent(streamerA, 'subscription', { username: 'Resub', tier: '1', months: 6 });
+    addEvent(streamerA, 'giftsub', giftData(50));
+    addEvent(streamerA, 'follow', { username: 'Follower' });
+    addEvent(streamerA, 'bits', { username: 'Cheerer', amount: 500 });
+    addEvent(streamerA, 'donation', { amount: 25, currency: 'USD' });
+    addEvent(streamerA, 'raid', { username: 'Raider', viewers: 42 });
+    assert.deepEqual(db.getOverlayStats7d(streamerA), {
+      follows: 1, subs: 2, bits_events: 1, donations: 1, raids: 1, giftsubs: 50, total: 7,
+    });
+  });
+
+  test('only this streamer\'s last seven days are counted', () => {
+    const daysAgo = (days) => new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    addEvent(streamerA, 'giftsub', giftData(10), daysAgo(6));
+    addEvent(streamerA, 'giftsub', giftData(20), daysAgo(8));
+    addEvent(streamerB, 'giftsub', giftData(30));
+    assert.equal(db.getOverlayStats7d(streamerA).giftsubs, 10);
+    assert.equal(db.getOverlayStats7d(streamerB).giftsubs, 30);
+  });
+
+  test('a streamer with no events has all zeros', () => {
+    assert.deepEqual(db.getOverlayStats7d(streamerA), { follows: 0, subs: 0, bits_events: 0, donations: 0, raids: 0, giftsubs: 0, total: 0 });
+  });
+});
+
+describe('a disabled account is left out of the lookups the bot uses', () => {
+  const GUILD = '400000000000000041';
+  const disable = (id) => db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(id);
+
+  test('the server lookup behind welcome messages and /link skips a disabled streamer\'s claim, and brings it back when enabled', () => {
+    db.upsertGuild(GUILD, streamerA, 'Shared server');
+    db.upsertGuild(GUILD, streamerB, 'Shared server');
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD).map((g) => g.streamer_id).sort(), [streamerA, streamerB].sort());
+
+    disable(streamerA);
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD).map((g) => g.streamer_id), [streamerB]);
+    assert.equal(db.getGuildConfigsByGuildId(GUILD)[0].twitch_username, 'streamer_b', 'and still names the Twitch channel');
+
+    disable(streamerB);
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD), []);
+
+    db.enableStreamer(streamerA);
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD).map((g) => g.streamer_id), [streamerA]);
+  });
+
+  test('an account with no enabled flag at all (an old row) still counts as enabled', () => {
+    db.upsertGuild(GUILD, streamerA, 'Shared server');
+    db.db.prepare('UPDATE streamers SET enabled = NULL WHERE id = ?').run(streamerA);
+    assert.equal(db.getGuildConfigsByGuildId(GUILD).length, 1);
+  });
+
+  test('the YouTube chat bot\'s streamers leave out a disabled account', () => {
+    db.db.prepare("UPDATE streamers SET yt_chatbot_enabled = 1, youtube_channel_id = 'UCsynthetic' WHERE id IN (?, ?)").run(streamerA, streamerB);
+    assert.deepEqual(db.getYoutubeChatbotEnabledStreamers().map((s) => s.id).sort(), [streamerA, streamerB].sort());
+
+    disable(streamerA);
+    assert.deepEqual(db.getYoutubeChatbotEnabledStreamers().map((s) => s.id), [streamerB]);
+
+    db.enableStreamer(streamerA);
+    assert.equal(db.getYoutubeChatbotEnabledStreamers().length, 2);
+  });
+});
+
+describe('linkTwitch: the broadcaster authorization belongs to the Twitch account that gave it', () => {
+  const authorize = (id, over = {}) => {
+    db.updateStreamerBroadcasterTokens(id, `access-of-${id}`, `refresh-of-${id}`, Date.now() + 3_600_000);
+    db.updateBroadcasterScopes(id, over.scopes || 'moderator:read:followers bits:read channel:manage:redemptions');
+  };
+  const tokensOf = (id) => {
+    const s = db.getStreamerById(id);
+    return { access: s.broadcaster_access_token, refresh: s.broadcaster_refresh_token, expires: s.broadcaster_token_expires_at, scopes: s.broadcaster_scopes };
+  };
+  const NOTHING = { access: null, refresh: null, expires: 0, scopes: null };
+
+  test('linking another Twitch account clears the old account\'s tokens and scopes, and says which channel the bot was in', () => {
+    db.linkTwitch(streamerA, '9001', 'old_channel', 'Old_Channel');
+    authorize(streamerA);
+
+    const result = db.linkTwitch(streamerA, '9002', 'new_channel', 'New_Channel');
+
+    assert.deepEqual(result, { accountChanged: true, previousUsername: 'old_channel', displaced: [] });
+    const row = db.getStreamerById(streamerA);
+    assert.equal(row.twitch_user_id, '9002');
+    assert.equal(row.twitch_username, 'new_channel');
+    assert.equal(row.twitch_display_name, 'New_Channel');
+    assert.deepEqual(tokensOf(streamerA), NOTHING);
+  });
+
+  test('linking the same account again changes only its names: the authorization, scopes and everything else stay', () => {
+    db.linkTwitch(streamerA, '9001', 'old_name', 'Old_Name');
+    authorize(streamerA);
+    const before = tokensOf(streamerA);
+
+    const result = db.linkTwitch(streamerA, '9001', 'renamed', 'Renamed');
+
+    assert.deepEqual(result, { accountChanged: false, previousUsername: 'old_name', displaced: [] });
+    assert.deepEqual(tokensOf(streamerA), before);
+    assert.equal(db.getStreamerById(streamerA).twitch_username, 'renamed');
+    assert.equal(db.getStreamerById(streamerA).twitch_display_name, 'Renamed');
+  });
+
+  test('the account is compared as an id, not as a string of the right type', () => {
+    db.linkTwitch(streamerA, '9001', 'channel', 'Channel');
+    authorize(streamerA);
+    assert.equal(db.linkTwitch(streamerA, 9001, 'channel', 'Channel').accountChanged, false);
+    assert.notDeepEqual(tokensOf(streamerA), NOTHING);
+  });
+
+  test('a first link has no previous channel, and clears any authorization left behind from before', () => {
+    authorize(streamerA, { scopes: 'bits:read' }); // a token with no account linked: whose it is, nobody knows
+    const result = db.linkTwitch(streamerA, '9003', 'first_channel', 'First_Channel');
+    assert.deepEqual(result, { accountChanged: true, previousUsername: null, displaced: [] });
+    assert.deepEqual(tokensOf(streamerA), NOTHING);
+    assert.equal(db.getStreamerById(streamerA).twitch_user_id, '9003');
+  });
+
+  test('another streamer who had the account linked loses the link and its authorization, and is named', () => {
+    db.linkTwitch(streamerA, '9001', 'shared_channel', 'Shared_Channel');
+    authorize(streamerA);
+
+    const result = db.linkTwitch(streamerB, '9001', 'shared_channel', 'Shared_Channel');
+
+    assert.deepEqual(result, { accountChanged: true, previousUsername: null, displaced: [{ id: streamerA, username: 'shared_channel' }] });
+    const a = db.getStreamerById(streamerA);
+    assert.equal(a.twitch_user_id, null);
+    assert.equal(a.twitch_username, null);
+    assert.deepEqual(tokensOf(streamerA), NOTHING, 'A can no longer act as that Twitch account');
+    assert.equal(db.getStreamerById(streamerB).twitch_user_id, '9001');
+  });
+
+  test('other streamers are not touched', () => {
+    db.linkTwitch(streamerA, '9001', 'a_channel', 'A_Channel');
+    db.linkTwitch(streamerB, '9002', 'b_channel', 'B_Channel');
+    authorize(streamerB);
+    const before = tokensOf(streamerB);
+    db.linkTwitch(streamerA, '9003', 'a_new_channel', 'A_New_Channel');
+    assert.deepEqual(tokensOf(streamerB), before);
+    assert.equal(db.getStreamerById(streamerB).twitch_user_id, '9002');
+  });
+
+  test('the account a streamer drops can be linked by another streamer afterwards', () => {
+    db.linkTwitch(streamerA, '9001', 'first_channel', 'First_Channel');
+    db.linkTwitch(streamerA, '9002', 'second_channel', 'Second_Channel');
+    assert.deepEqual(db.linkTwitch(streamerB, '9001', 'first_channel', 'First_Channel').displaced, [], 'nobody has it linked any more');
+    assert.equal(db.getStreamerByTwitchId('9001').id, streamerB);
+  });
+});

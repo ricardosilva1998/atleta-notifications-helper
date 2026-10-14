@@ -170,6 +170,10 @@ const chatManager = {
     if (dispatcher) dispatcher.clear();
     dispatcher = createChatDispatcher({
       send: (channel, line) => (client ? client.say(channel, line) : Promise.reject(new Error('Not connected'))),
+      // While tmi.js is connecting or reconnecting a line cannot be sent: it would
+      // be lost and still use up the rate limit, so the dispatcher holds it (up to
+      // a minute) until the socket is open. This is the check say() makes itself.
+      isReady: () => Boolean(client) && client.readyState() === 'OPEN',
       maxMessages: config.bot.chatMessagesPer30s,
     });
 

@@ -1400,9 +1400,42 @@ function clearProfilePicture(streamerId) {
   _clearProfilePicture.run(streamerId);
 }
 
+// The broadcaster authorization (tokens and scopes) was given by one Twitch
+// account and is only good for that account's channel, so it goes when the
+// streamer's link to that account does. The streamer then sees "Enable Sub Sync"
+// and authorizes again, as one who never did.
+function clearBroadcasterAuth(streamerId) {
+  _updateStreamerBroadcasterTokens.run(null, null, 0, streamerId);
+  clearStreamerBroadcasterScopes(streamerId);
+}
+
+// Links a Twitch account to a streamer. Another streamer who had that account
+// linked loses it. A streamer whose linked account is not the one it was (another
+// account, or the first one) loses the broadcaster authorization they had: it was
+// the previous account's, and left in place it would have EventSub, the follow
+// checks and sub sync act on the new channel with the old account's token.
+// Linking the same account again only updates its names.
+// Returns what the caller must stop or move: { accountChanged, previousUsername
+// (the Twitch login that was linked before, or null), displaced: [{ id, username }]
+// (streamers who lost the account to this link) }.
 function linkTwitch(streamerId, twitchUserId, twitchUsername, twitchDisplayName) {
-  _clearOldTwitchLink.run(twitchUserId); // clear if another streamer had this Twitch linked
-  _linkTwitch.run(twitchUserId, twitchUsername, twitchDisplayName, streamerId);
+  return db.transaction(() => {
+    const before = _getStreamerById.get(streamerId);
+    const holder = _getStreamerByTwitchId.get(twitchUserId);
+    const displaced = holder && Number(holder.id) !== Number(streamerId) ? [{ id: holder.id, username: holder.twitch_username }] : [];
+
+    _clearOldTwitchLink.run(twitchUserId); // clear if another streamer had this Twitch linked
+    for (const other of displaced) clearBroadcasterAuth(other.id);
+    _linkTwitch.run(twitchUserId, twitchUsername, twitchDisplayName, streamerId);
+
+    const sameAccount = !!before && before.twitch_user_id != null && String(before.twitch_user_id) === String(twitchUserId);
+    if (!sameAccount) clearBroadcasterAuth(streamerId);
+    return {
+      accountChanged: !sameAccount,
+      previousUsername: before && before.twitch_user_id != null ? before.twitch_username : null,
+      displaced,
+    };
+  })();
 }
 
 function updateStreamerBroadcasterTokens(streamerId, accessToken, refreshToken, expiresAt) {
@@ -1417,7 +1450,9 @@ function updateStreamerYoutube(streamerId, youtubeChannelId, youtubeApiKey) {
 
 const _getGuildsForStreamer = db.prepare('SELECT * FROM guilds WHERE streamer_id = ?');
 const _getGuildConfig = db.prepare('SELECT * FROM guilds WHERE guild_id = ? AND streamer_id = ?');
-const _getGuildConfigsByGuildId = db.prepare('SELECT guilds.*, streamers.twitch_username FROM guilds JOIN streamers ON guilds.streamer_id = streamers.id WHERE guild_id = ?');
+// Behind welcome messages and /link. A disabled account's claim of a server is left
+// out, so the bot does nothing for it there until it is enabled again.
+const _getGuildConfigsByGuildId = db.prepare('SELECT guilds.*, streamers.twitch_username FROM guilds JOIN streamers ON guilds.streamer_id = streamers.id WHERE guild_id = ? AND COALESCE(streamers.enabled, 1) = 1');
 const _upsertGuild = db.prepare(`
   INSERT INTO guilds (guild_id, streamer_id, guild_name)
   VALUES (?, ?, ?)
@@ -3151,10 +3186,12 @@ function updateStreamerYoutubeAccessToken(streamerId, accessToken, refreshToken,
   `).run(sealToken(accessToken), sealToken(refreshToken), expiresAt, streamerId);
 }
 
+// Disabled accounts are left out, like in getChatbotEnabledStreamers.
 function getYoutubeChatbotEnabledStreamers() {
   return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
     WHERE yt_chatbot_enabled = 1
+    AND COALESCE(enabled, 1) = 1
     AND youtube_channel_id IS NOT NULL
     AND youtube_channel_id != ''
   `).all());
@@ -4133,6 +4170,12 @@ function logOverlayEvent(streamerId, eventType, username, data) {
   _stmtLogOverlayEvent.run(streamerId, eventType, username, data ? JSON.stringify(data) : null);
 }
 
+// The 7-day tiles of the Twitch tab. One gift event is stored per gift (its
+// recipients are not logged one by one), with the size of the gift as `amount`
+// in its JSON data, so Gift Subs adds those up. A row whose data is missing,
+// is not JSON or has no usable amount counts as one gift, which is what each
+// gift counted as before. Gift amounts are not added to Subs: rows logged before
+// recipients were left out hold a subscription row for each of them.
 function getOverlayStats7d(streamerId) {
   return db.prepare(`
     SELECT
@@ -4141,7 +4184,9 @@ function getOverlayStats7d(streamerId) {
       COALESCE(SUM(CASE WHEN event_type = 'bits' THEN 1 ELSE 0 END), 0) AS bits_events,
       COALESCE(SUM(CASE WHEN event_type = 'donation' THEN 1 ELSE 0 END), 0) AS donations,
       COALESCE(SUM(CASE WHEN event_type = 'raid' THEN 1 ELSE 0 END), 0) AS raids,
-      COALESCE(SUM(CASE WHEN event_type = 'giftsub' THEN 1 ELSE 0 END), 0) AS giftsubs,
+      COALESCE(SUM(CASE WHEN event_type = 'giftsub' THEN
+        CASE WHEN json_valid(data) THEN MAX(1, COALESCE(CAST(json_extract(data, '$.amount') AS INTEGER), 1)) ELSE 1 END
+      ELSE 0 END), 0) AS giftsubs,
       COUNT(*) AS total
     FROM overlay_events
     WHERE streamer_id = ? AND created_at >= datetime('now', '-7 days')

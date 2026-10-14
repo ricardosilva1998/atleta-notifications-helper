@@ -1,8 +1,9 @@
 'use strict';
 
 // What a YouTube live poll means for a channel (M22): given the live video found
-// among the channel's latest videos, the post to make and the state to store.
-// Discord is a stub; nothing leaves the machine. All ids and names are synthetic.
+// among the channel's latest videos, the post to make and the state to store. The
+// description, text the broadcaster wrote, goes into the post through the shared
+// escape. Discord is a stub; nothing leaves the machine. All ids and names are synthetic.
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,9 +12,16 @@ const Module = require('module');
 
 const POLLER_FILE = path.join(__dirname, 'youtubeLive.js');
 const built = [];
+// The real escape is src/discord.js's (src/discord.test.js tests it). Here it leaves
+// text as it is, or, while a test sets `marking`, marks what the poller passes through it.
+let marking = false;
+const discordStub = {
+  buildEmbed: (fields) => { built.push(fields); return { embed: fields }; },
+  escapeLinkText: (text) => (marking ? `«${text}»` : String(text)),
+};
 const origLoad = Module._load;
 Module._load = function (request, parent, isMain) {
-  if (parent && parent.filename === POLLER_FILE && request === '../discord') return { buildEmbed: (fields) => { built.push(fields); return { embed: fields }; } };
+  if (parent && parent.filename === POLLER_FILE && request === '../discord') return discordStub;
   return origLoad.call(this, request, parent, isMain);
 };
 const { decide, LIVE_CHECK_VIDEOS } = require('./youtubeLive');
@@ -40,6 +48,31 @@ describe('decide', () => {
     decide({ is_live: 0 }, liveVideo({ description: 'x'.repeat(500) }));
     decide({ is_live: 0 }, liveVideo({ description: '' }));
     assert.equal(built[0].description.length, 200);
+    assert.equal(built[1].description, undefined);
+  });
+
+  test('the description goes through the shared escape after it is cut to 200 characters; the title, which an embed shows without links, is left as it is', () => {
+    built.length = 0;
+    marking = true;
+    try {
+      decide({ is_live: 0 }, liveVideo({ title: 'Race [night]', description: `${'x'.repeat(199)}[tail](https://example.test/phish)` }));
+    } finally {
+      marking = false;
+    }
+    assert.equal(built[0].title, 'Race [night]');
+    assert.equal(built[0].description, `«${'x'.repeat(199)}[»`);
+  });
+
+  test('a missing description is still left out, not escaped into a mark', () => {
+    built.length = 0;
+    marking = true;
+    try {
+      decide({ is_live: 0 }, liveVideo({ description: '' }));
+      decide({ is_live: 0 }, liveVideo({ description: undefined }));
+    } finally {
+      marking = false;
+    }
+    assert.equal(built[0].description, undefined);
     assert.equal(built[1].description, undefined);
   });
 

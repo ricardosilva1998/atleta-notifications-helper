@@ -2,8 +2,9 @@
 
 // EventSub with fake sockets, a fake Helix and a mocked clock: nothing connects
 // to Twitch. A streamer must only ever have one live session (otherwise every
-// alert, thank-you and redemption happens twice), and each notification is
-// acted on once. All ids and names are synthetic.
+// alert, thank-you and redemption happens twice), each notification is acted on
+// once, and none is lost when Twitch moves the session or a socket never gets its
+// welcome. All ids and names are synthetic.
 
 const { test, describe, before, after, beforeEach, afterEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,22 +12,28 @@ const path = require('path');
 const Module = require('module');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
+const SUBSCRIPTION_TYPES = [
+  'channel.follow', 'channel.subscribe', 'channel.subscription.gift', 'channel.subscription.message',
+  'channel.cheer', 'channel.raid', 'channel.channel_points_custom_reward_redemption.add',
+];
 
 // ── Fakes ────────────────────────────────────────────────────────────────
 
 const sockets = []; // every socket the code opened, in order
 
 class FakeWebSocket {
-  constructor(url) {
+  constructor(url, opts) {
     this.url = url;
+    this.opts = opts;
     this.handlers = {};
     this.closedWith = undefined; // the code given to close(), or 'terminated'
+    this.closeCalls = 0; // how many times the client closed or terminated it
     sockets.push(this);
   }
   on(event, fn) { (this.handlers[event] = this.handlers[event] || []).push(fn); return this; }
   emit(event, ...args) { for (const fn of this.handlers[event] || []) fn(...args); }
-  close(code) { if (this.closedWith === undefined) this.closedWith = code; }
-  terminate() { if (this.closedWith === undefined) this.closedWith = 'terminated'; }
+  close(code) { this.closeCalls += 1; if (this.closedWith === undefined) this.closedWith = code; }
+  terminate() { this.closeCalls += 1; if (this.closedWith === undefined) this.closedWith = 'terminated'; }
   // What Twitch does on this socket.
   receive(message) { this.emit('message', Buffer.from(JSON.stringify(message))); }
   closeFromTwitch(code) { this.emit('close', code); }
@@ -38,6 +45,7 @@ let subscribeCalls;
 
 const dbStub = {
   getStreamerById: (id) => streamers[id] || null,
+  getOverlayEnabledStreamers: () => Object.values(streamers),
   logOverlayEvent: (streamerId, type, username) => effects.overlayLog.push({ streamerId, type, username }),
   clearStreamerBroadcasterScopes: () => {},
 };
@@ -155,7 +163,7 @@ async function connected() {
 describe('a reconnect requested by Twitch (session_reconnect)', () => {
   const RECONNECT_URL = 'wss://eventsub.wss.twitch.tv/ws?challenge=synthetic-reconnect';
 
-  test('moves the session to the reconnect URL after its welcome, without subscribing again, then closes the old socket', async () => {
+  test('moves the session to the reconnect URL after its welcome, without subscribing again; the old socket keeps delivering what it was sent before the move until Twitch closes it', async () => {
     const first = await connected();
     assert.equal(first.url, EVENTSUB_URL);
     assert.equal(subscribeCalls.length, 7, 'one subscription per event type');
@@ -173,17 +181,117 @@ describe('a reconnect requested by Twitch (session_reconnect)', () => {
     second.receive(welcome('session-1'));
     await flush();
     assert.equal(subscribeCalls.length, 7, 'Twitch moved the subscriptions: none are created again');
-    assert.equal(first.closedWith, 1000, 'the old socket is closed once the new one is welcomed');
+    assert.equal(first.closedWith, undefined, 'the old socket may still deliver what it was sent before the switch');
 
-    // From now on only the new socket counts.
-    first.receive(follow('FromTheOldSocket'));
+    // A notification still in flight on the old socket counts; the new socket is the session.
+    first.receive(follow('InFlightOnTheOldSocket'));
     second.receive(follow('FromTheNewSocket'));
-    assert.deepEqual(followAlerts(), ['BeforeTheSwitch', 'FromTheNewSocket']);
+    assert.deepEqual(followAlerts(), ['BeforeTheSwitch', 'InFlightOnTheOldSocket', 'FromTheNewSocket']);
 
-    // Twitch closing the old socket does not start another session.
+    // Twitch closing the old socket does not start another session, and nothing it sends later counts.
     first.closeFromTwitch(4004);
+    first.receive(follow('AfterItClosed'));
     mock.timers.tick(5000);
     assert.equal(sockets.length, 2);
+    assert.deepEqual(followAlerts(), ['BeforeTheSwitch', 'InFlightOnTheOldSocket', 'FromTheNewSocket']);
+  });
+
+  test('an old socket Twitch never closes still counts for 30 s after the move, then the client closes it', async () => {
+    const first = await connected();
+    first.receive(reconnect('session-1', RECONNECT_URL));
+    const second = sockets[1];
+    second.receive(welcome('session-1'));
+    await flush();
+
+    mock.timers.tick(10_000);
+    second.receive(keepalive()); // the live session keeps talking; the old socket may go quiet
+    mock.timers.tick(10_000);
+    second.receive(keepalive());
+    mock.timers.tick(9_999);
+    first.receive(follow('InTime'));
+    assert.equal(first.closedWith, undefined, 'still draining 29.999 s after the move');
+    assert.deepEqual(followAlerts(), ['InTime']);
+
+    mock.timers.tick(1);
+    assert.equal(first.closedWith, 1000, 'closed politely once the window is over');
+    first.receive(follow('TooLate'));
+    assert.deepEqual(followAlerts(), ['InTime']);
+    assert.equal(second.closedWith, undefined, 'the live session is untouched');
+    assert.equal(sockets.length, 2);
+  });
+
+  test('the old socket delivers notifications only: what else it sends neither keeps the session alive nor starts anything', async () => {
+    const first = await connected();
+    first.receive(reconnect('session-1', RECONNECT_URL));
+    const second = sockets[1];
+    second.receive(welcome('session-1'));
+    await flush();
+
+    mock.timers.tick(10_000);
+    first.receive(keepalive());
+    first.receive(welcome('session-9'));
+    first.receive(reconnect('session-9', 'wss://eventsub.wss.twitch.tv/ws?challenge=from-the-old-socket'));
+    await flush();
+    assert.equal(sockets.length, 2, 'no reconnect socket is opened for the old socket');
+    assert.equal(subscribeCalls.length, 7, 'and nothing is subscribed again');
+
+    // The new socket has been silent for 15 s: the session is lost, whatever the old socket says.
+    mock.timers.tick(5_000);
+    assert.equal(second.closedWith, 'terminated');
+    assert.equal(first.closedWith, 'terminated', 'the draining socket goes with the lost session');
+  });
+
+  test('a second move within the window closes the first old socket at once; the latest one drains', async () => {
+    const first = await connected();
+    first.receive(reconnect('session-1', RECONNECT_URL));
+    const second = sockets[1];
+    second.receive(welcome('session-1'));
+    await flush();
+    second.receive(reconnect('session-1', `${RECONNECT_URL}-again`));
+    const third = sockets[2];
+    third.receive(welcome('session-1'));
+    await flush();
+
+    assert.equal(first.closedWith, 1000);
+    assert.equal(second.closedWith, undefined);
+    first.receive(follow('FromTheFirst'));
+    second.receive(follow('FromTheSecond'));
+    third.receive(follow('FromTheThird'));
+    assert.deepEqual(followAlerts(), ['FromTheSecond', 'FromTheThird']);
+    assert.equal(subscribeCalls.length, 7);
+
+    // Only the latest old socket is on the clock: the first one's window ended with its closing.
+    for (let i = 0; i < 3; i++) {
+      mock.timers.tick(10_000);
+      third.receive(keepalive()); // the live session keeps talking
+    }
+    assert.equal(first.closeCalls, 1);
+    assert.equal(second.closeCalls, 1);
+    assert.equal(third.closeCalls, 0);
+  });
+
+  test('the timer that ends the window is cleared when the old socket closes first, and never keeps the process alive', async () => {
+    const unreffed = [];
+    const mocked = global.setTimeout;
+    global.setTimeout = (fn, ms, ...args) => {
+      const timer = mocked(fn, ms, ...args);
+      const unref = timer.unref.bind(timer);
+      timer.unref = () => { unreffed.push(ms); return unref(); };
+      return timer;
+    };
+    try {
+      const first = await connected();
+      first.receive(reconnect('session-1', RECONNECT_URL));
+      sockets[1].receive(welcome('session-1'));
+      await flush();
+      assert.deepEqual(unreffed, [30_000]);
+
+      first.closeFromTwitch(4004);
+      mock.timers.tick(30_000);
+      assert.equal(first.closeCalls, 0, 'Twitch closed it: the client has nothing left to close');
+    } finally {
+      global.setTimeout = mocked;
+    }
   });
 
   test('the same notification on the old and the new socket is acted on once', async () => {
@@ -234,6 +342,24 @@ describe('a reconnect requested by Twitch (session_reconnect)', () => {
     await flush();
     assert.equal(subscribeCalls.length, 7, 'every event type is subscribed once');
     assert.ok(subscribeCalls.every((c) => c.body.transport.session_id === 'session-1'));
+  });
+
+  test('a reconnect that names the session differently while the subscriptions are being made: the rest go to the id it has now', async () => {
+    const gate = holdHelixAfter(3);
+    eventSubManager.startForStreamer(1);
+    const first = sockets[0];
+    first.receive(welcome('session-1'));
+    await flush();
+    assert.equal(subscribeCalls.length, 3, 'Helix is answering slowly');
+
+    first.receive(reconnect('session-1', RECONNECT_URL));
+    sockets[1].receive(welcome('session-2'));
+    gate.open();
+    await flush();
+    assert.deepEqual(subscribeCalls.map((c) => c.body.type), SUBSCRIPTION_TYPES, 'every event type is subscribed once, in order');
+    // The request on its way when the session moved still names the old id; the rest name the new one.
+    assert.deepEqual(subscribeCalls.map((c) => c.body.transport.session_id), [...Array(4).fill('session-1'), ...Array(3).fill('session-2')]);
+    assert.equal(sockets.length, 2, 'and no new session was started');
   });
 
   test('a later message on a reconnect socket that was not welcomed yet is not an event', async () => {
@@ -361,6 +487,76 @@ describe('a lost connection', () => {
     assert.deepEqual(followAlerts(), []);
     assert.equal(subscribeCalls.length, 14, 'the new session subscribes again');
   });
+
+  test('a socket that opens but never gets its welcome is replaced', async () => {
+    eventSubManager.startForStreamer(1);
+    const first = sockets[0];
+    assert.equal(first.opts && first.opts.handshakeTimeout, 10_000, 'an upgrade Twitch never answers times out');
+    first.emit('open');
+    mock.timers.tick(14_999);
+    assert.equal(sockets.length, 1);
+    mock.timers.tick(1);
+    assert.equal(first.closedWith, 'terminated');
+    mock.timers.tick(1000);
+    assert.equal(sockets.length, 2, 'a new session is started');
+    assert.equal(sockets[1].url, EVENTSUB_URL);
+    assert.equal(sockets[1].opts.handshakeTimeout, 10_000);
+
+    first.receive(welcome('session-from-the-dead-socket'));
+    await flush();
+    assert.equal(subscribeCalls.length, 0, 'the replaced socket can no longer start a session');
+  });
+
+  test('a socket that never even opens is replaced too (no welcome can come)', async () => {
+    eventSubManager.startForStreamer(1);
+    const first = sockets[0];
+    mock.timers.tick(14_999);
+    assert.equal(sockets.length, 1);
+    mock.timers.tick(1);
+    assert.equal(first.closedWith, 'terminated');
+    mock.timers.tick(1000);
+    assert.equal(sockets.length, 2);
+  });
+
+  test('a connection attempt that fails is retried with the usual delay, and its welcome timer is gone', async () => {
+    eventSubManager.startForStreamer(1);
+    const first = sockets[0];
+    first.emit('error', new Error('connect ECONNREFUSED'));
+    first.closeFromTwitch(1006);
+    mock.timers.tick(999);
+    assert.equal(sockets.length, 1);
+    mock.timers.tick(1);
+    assert.equal(sockets.length, 2);
+    mock.timers.tick(14_000);
+    assert.equal(first.closeCalls, 1, 'the dead attempt is not cut a second time by its old timer');
+  });
+
+  test('sockets that keep getting no welcome are replaced with the usual growing delay, not in a tight loop', async () => {
+    eventSubManager.startForStreamer(1);
+    mock.timers.tick(15_000); // the first is cut
+    mock.timers.tick(999);
+    assert.equal(sockets.length, 1);
+    mock.timers.tick(1);
+    assert.equal(sockets.length, 2);
+    mock.timers.tick(15_000); // the second is cut
+    mock.timers.tick(1_999);
+    assert.equal(sockets.length, 2, 'the second delay is 2 s');
+    mock.timers.tick(1);
+    assert.equal(sockets.length, 3);
+  });
+
+  test('the welcome replaces that first timer with the session\'s own keepalive', async () => {
+    eventSubManager.startForStreamer(1);
+    const first = sockets[0];
+    first.emit('open');
+    mock.timers.tick(10_000);
+    first.receive(welcome('session-1', 30)); // a session that may stay silent for 30 s (plus the grace)
+    await flush();
+    mock.timers.tick(34_999);
+    assert.equal(first.closedWith, undefined);
+    mock.timers.tick(1);
+    assert.equal(first.closedWith, 'terminated');
+  });
 });
 
 describe('a stopped client', () => {
@@ -389,6 +585,63 @@ describe('a stopped client', () => {
     mock.timers.tick(120_000);
     assert.deepEqual(followAlerts(), []);
     assert.equal(sockets.length, 2);
+  });
+
+  test('stopping while the old socket of a move still drains closes it with the others, once, and nothing it delivers counts', async () => {
+    const first = await connected();
+    first.receive(reconnect('session-1', 'wss://eventsub.wss.twitch.tv/ws?challenge=synthetic'));
+    const second = sockets[1];
+    second.receive(welcome('session-1'));
+    await flush();
+    first.receive(follow('WhileDraining'));
+    eventSubManager.stopForStreamer(1);
+    assert.equal(first.closedWith, 1000);
+    assert.equal(second.closedWith, 1000);
+
+    first.receive(follow('AfterStop'));
+    second.receive(follow('AfterStop'));
+    mock.timers.tick(120_000);
+    assert.deepEqual(followAlerts(), ['WhileDraining']);
+    assert.equal(first.closeCalls, 1, 'the end-of-window timer does not close it again');
+    assert.equal(second.closeCalls, 1);
+    assert.equal(sockets.length, 2);
+  });
+});
+
+// ── The boot ─────────────────────────────────────────────────────────────
+
+describe('starting every streamer at boot', () => {
+  const logged = [];
+  beforeEach(() => {
+    logged.length = 0;
+    console.log = (...args) => logged.push(args.join(' '));
+  });
+
+  test('the log counts the streamers that got a connection, not the ones that were skipped', () => {
+    streamers = {
+      1: { ...streamers[1] },
+      2: { ...streamers[1], id: 2, twitch_user_id: null }, // a broadcaster token but no linked Twitch account
+      3: { ...streamers[1], id: 3, broadcaster_access_token: null },
+      4: { ...streamers[1], id: 4, enabled: 0 }, // disabled since the list was read
+    };
+    eventSubManager.startAll();
+    assert.equal(sockets.length, 1);
+    assert.ok(logged.includes('[EventSub] Started 1 connections (3 skipped: not set up for EventSub)'), logged.join('\n'));
+  });
+
+  test('without skipped streamers the line is the plain count', () => {
+    streamers[2] = { ...streamers[1], id: 2 };
+    eventSubManager.startAll();
+    assert.equal(sockets.length, 2);
+    assert.ok(logged.includes('[EventSub] Started 2 connections'), logged.join('\n'));
+  });
+
+  test('startForStreamer says whether the streamer got a connection', () => {
+    streamers[2] = { ...streamers[1], id: 2, twitch_user_id: null };
+    assert.equal(eventSubManager.startForStreamer(1), true);
+    assert.equal(eventSubManager.startForStreamer(2), false);
+    assert.equal(eventSubManager.startForStreamer(99), false, 'a streamer that does not exist');
+    assert.equal(sockets.length, 1);
   });
 });
 

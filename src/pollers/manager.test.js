@@ -95,6 +95,7 @@ const discordStub = {
     return true;
   },
   buildEmbed: (fields) => ({ built: fields }),
+  escapeLinkText: (text) => String(text), // the real feed and live pollers use it on the channel's own text
   buildRecapEmbed: (data) => ({ recap: data }),
   buildMilestoneEmbed: (data) => ({ milestone: data }),
   buildInstagramEmbed: () => ({}),

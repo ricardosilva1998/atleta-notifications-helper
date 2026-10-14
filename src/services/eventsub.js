@@ -19,6 +19,14 @@ const SUBSCRIBE_TIMEOUT_MS = 10_000;
 const DEFAULT_KEEPALIVE_SECONDS = 10;
 const KEEPALIVE_GRACE_SECONDS = 5;
 
+// A connection attempt Twitch never answers is given up on after this long.
+const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+// After Twitch moves a session to a reconnect socket, the old socket may still
+// deliver notifications written before the move. It is kept for them until
+// Twitch closes it, and at most this long.
+const DRAIN_MS = 30_000;
+
 // Twitch can deliver a notification more than once (same message_id), for
 // example around a reconnect. Each one is acted on once.
 const NOTIFICATION_DEDUPE_TTL_MS = 10 * 60 * 1000;
@@ -46,18 +54,24 @@ const SUBSCRIPTION_TYPES = [
   { type: 'channel.channel_points_custom_reward_redemption.add', version: '1' },
 ];
 
-// One streamer's EventSub connection. Only the session's own socket (`ws`)
-// counts. `pendingWs` is a socket opened on Twitch's reconnect_url, waiting for
-// its welcome. Whatever a socket the client has let go of still delivers is
-// ignored, so a streamer never has two live sessions (which made every alert,
-// thank-you and redemption happen twice). A client is used once: after
-// disconnect() it never connects again, and a restart builds a new client.
+// One streamer's EventSub connection. The session lives on one socket (`ws`).
+// `pendingWs` is a socket opened on Twitch's reconnect_url, waiting for its
+// welcome. Once it is welcomed it becomes the session's socket and the old one
+// drains (`drainingWs`): only its notifications still count, because Twitch may
+// have written some just before the move. Whatever any other socket the client
+// has let go of still delivers is ignored, so a streamer never has two live
+// sessions (which made every alert, thank-you and redemption happen twice). A
+// client is used once: after disconnect() it never connects again, and a restart
+// builds a new client.
 class EventSubClient {
   constructor(streamerId) {
     this.streamerId = streamerId;
     this.ws = null;
     this.pendingWs = null;
-    this.sessionId = null; // the live session; it survives a move to a reconnect socket
+    this.drainingWs = null; // the socket a reconnect replaced: its notifications still count until it closes
+    this.drainTimer = null;
+    this.sessionId = null; // the live session's id; the session survives a move to a reconnect socket
+    this.sessionRun = 0; // counts the sessions started, so a subscribe loop knows if its session is still the live one
     this.keepaliveTimer = null;
     this.keepaliveSeconds = DEFAULT_KEEPALIVE_SECONDS;
     this.reconnectTimer = null;
@@ -85,12 +99,17 @@ class EventSubClient {
 
     console.log(`[EventSub] Connecting for streamer ${streamer.twitch_display_name || this.streamerId}...`);
     this.ws = this.openSocket(EVENTSUB_URL);
+    // The silence timer runs from the start, with Twitch's default keepalive until
+    // the welcome says otherwise: a socket that opens but never gets its welcome
+    // is replaced like any silent one, instead of being kept for good.
+    this.keepaliveSeconds = DEFAULT_KEEPALIVE_SECONDS;
+    this.resetKeepalive();
   }
 
   // Each handler checks which role the socket has when its event arrives, so a
   // socket that was replaced or dropped can no longer do anything.
   openSocket(url) {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, { handshakeTimeout: HANDSHAKE_TIMEOUT_MS });
 
     ws.on('open', () => {
       if (ws === this.ws) console.log(`[EventSub] Connected for streamer ${this.streamerId}`);
@@ -115,6 +134,11 @@ class EventSubClient {
   }
 
   handleClose(ws, code) {
+    if (ws === this.drainingWs) {
+      // Twitch closed the old socket after the move: nothing more to wait for.
+      this.stopDraining();
+      return;
+    }
     if (ws === this.pendingWs) {
       // The reconnect socket went away before its welcome. The session stays on
       // its own socket until Twitch closes that one; then it starts over.
@@ -129,15 +153,27 @@ class EventSubClient {
     this.scheduleReconnect();
   }
 
-  // Lets go of the session's socket and of a reconnect socket still waiting for
-  // its welcome: the session is over, and nothing either socket delivers counts.
+  // Lets go of the session's socket, of a reconnect socket still waiting for its
+  // welcome and of the socket a reconnect replaced: the session is over, and
+  // nothing any of them delivers counts.
   releaseSockets({ terminate = false } = {}) {
-    const sockets = [this.ws, this.pendingWs].filter(Boolean);
+    const sockets = [this.ws, this.pendingWs, this.drainingWs].filter(Boolean);
     this.ws = null;
     this.pendingWs = null;
+    this.stopDraining();
     this.sessionId = null;
     this.clearKeepalive();
     for (const ws of sockets) closeSocket(ws, { terminate });
+  }
+
+  // Ends the draining of the socket a reconnect replaced (it closed, or its time
+  // is up) and returns it, or null when there was none. It does not close it.
+  stopDraining() {
+    if (this.drainTimer) clearTimeout(this.drainTimer);
+    this.drainTimer = null;
+    const ws = this.drainingWs;
+    this.drainingWs = null;
+    return ws;
   }
 
   // At most one reconnect is ever waiting, and disconnect() cancels it.
@@ -179,7 +215,8 @@ class EventSubClient {
     if (this.stopped) return;
     const fromSession = ws === this.ws;
     const fromReconnect = ws === this.pendingWs;
-    if (!fromSession && !fromReconnect) return; // a socket this client already let go of
+    const fromDraining = ws === this.drainingWs;
+    if (!fromSession && !fromReconnect && !fromDraining) return; // a socket this client already let go of
 
     let msg;
     try {
@@ -194,6 +231,12 @@ class EventSubClient {
       // The reconnect socket only matters once Twitch welcomes it; until then the
       // session's own socket still delivers the events.
       if (messageType === 'session_welcome') this.switchToReconnectSocket(ws, msg.payload && msg.payload.session);
+      return;
+    }
+    if (fromDraining) {
+      // Written on the old socket before Twitch moved the session, read after the
+      // new socket's welcome: still acted on (once, thanks to the message_id dedupe).
+      if (messageType === 'notification') this.handleNotification(msg);
       return;
     }
 
@@ -237,14 +280,17 @@ class EventSubClient {
   // A new session starts with no subscriptions: create one per event type.
   async subscribeAll(sessionId) {
     this.sessionId = sessionId;
+    const run = ++this.sessionRun;
     console.log(`[EventSub] Session ${sessionId} for streamer ${this.streamerId} (keepalive: ${this.keepaliveSeconds}s)`);
 
     let subscribed = 0;
     for (const subType of SUBSCRIPTION_TYPES) {
-      // Stop once this session is over (stopped, lost, or the token died). A
-      // session Twitch moved to a reconnect socket is the same session: go on.
-      if (this.needsReauth || this.stopped || this.sessionId !== sessionId) break;
-      if (await this.createSubscription(sessionId, subType)) subscribed++;
+      // Stop once this session is over (stopped, lost, replaced by a newer one,
+      // or the token died). A session Twitch moved to a reconnect socket is the
+      // same session, even if Twitch names it differently there: go on with the
+      // id it has now.
+      if (this.needsReauth || this.stopped || this.sessionRun !== run || !this.sessionId) break;
+      if (await this.createSubscription(this.sessionId, subType)) subscribed++;
     }
 
     // Only a session that actually subscribed to something earns a backoff
@@ -305,8 +351,12 @@ class EventSubClient {
   }
 
   // The reconnect socket is welcomed: it carries the session's subscriptions
-  // (Twitch moves them), so nothing is subscribed again. Only now is the old
-  // socket closed; from here on only the new one counts.
+  // (Twitch moves them), so nothing is subscribed again, and it is now the
+  // session's socket. The old socket is not closed at once: Twitch may have
+  // written notifications to it just before the move, and they would be lost.
+  // It drains (handleMessage acts on its notifications only) until Twitch closes
+  // it or DRAIN_MS pass, whichever comes first; a notification that reaches both
+  // sockets is acted on once (the message_id dedupe).
   switchToReconnectSocket(ws, session) {
     const old = this.ws;
     this.ws = ws;
@@ -314,7 +364,16 @@ class EventSubClient {
     if (session && session.id) this.sessionId = session.id;
     this.setKeepaliveSeconds(session && session.keepalive_timeout_seconds);
     this.resetKeepalive();
-    if (old) closeSocket(old);
+    if (old) {
+      const earlier = this.stopDraining(); // a socket from a move not long ago
+      if (earlier) closeSocket(earlier);
+      this.drainingWs = old;
+      this.drainTimer = setTimeout(() => {
+        const expired = this.stopDraining();
+        if (expired) closeSocket(expired);
+      }, DRAIN_MS);
+      this.drainTimer.unref?.();
+    }
     console.log(`[EventSub] Streamer ${this.streamerId} moved to the reconnect socket (session ${session && session.id})`);
   }
 
@@ -516,17 +575,24 @@ const clients = new Map();
 const eventSubManager = {
   startAll() {
     const streamers = db.getOverlayEnabledStreamers();
+    let started = 0;
     for (const s of streamers) {
-      this.startForStreamer(s.id);
+      if (this.startForStreamer(s.id)) started++;
     }
-    console.log(`[EventSub] Started ${streamers.length} connections`);
+    const skipped = streamers.length - started;
+    console.log(`[EventSub] Started ${started} connections${skipped ? ` (${skipped} skipped: not set up for EventSub)` : ''}`);
   },
 
+  // Returns whether the streamer got a connection: false when there is nothing to
+  // connect with (no linked Twitch account or broadcaster token) or the account is
+  // disabled. connect() opens the socket before it first yields, so this is known
+  // as it returns.
   startForStreamer(streamerId) {
     this.stopForStreamer(streamerId);
     const client = new EventSubClient(streamerId);
     clients.set(streamerId, client);
     client.connect();
+    return client.ws !== null;
   },
 
   stopForStreamer(streamerId) {

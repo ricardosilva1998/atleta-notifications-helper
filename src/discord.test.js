@@ -32,7 +32,7 @@ Module._load = function (request, parent, isMain) {
 };
 const { GatewayIntentBits } = require('discord.js');
 const discord = require('./discord');
-const { client, fetchGuildChannel, sendToGuildChannel, sendNotification, streamerGuildForChannel, buildWeeklyDigestEmbed } = discord;
+const { client, fetchGuildChannel, sendToGuildChannel, sendNotification, streamerGuildForChannel, buildWeeklyDigestEmbed, buildRecapEmbed, escapeLinkText } = discord;
 
 const G1 = '100000000000000001';
 const G2 = '100000000000000002';
@@ -256,6 +256,47 @@ describe('buildWeeklyDigestEmbed', () => {
     const embed = buildWeeklyDigestEmbed({ streamCount: 1, totalHours: 1, categories: [], topClip: { ...clip, title: 'x](https://example.test/phish) [y' } });
     const top = fieldsOf(embed).find((f) => f.name === 'Top Clip');
     assert.equal(top.value, '[x\\](https://example.test/phish) \\[y](https://clips.twitch.tv/LastLap) (1234 views)');
+  });
+});
+
+describe('escapeLinkText', () => {
+  test('puts a backslash before each bracket and backslash, and leaves everything else as it is', () => {
+    assert.equal(escapeLinkText('Last-lap pass (1:23.4) !!'), 'Last-lap pass (1:23.4) !!');
+    assert.equal(escapeLinkText('x](https://example.test/phish) [y'), 'x\\](https://example.test/phish) \\[y');
+    assert.equal(escapeLinkText('ends with a backslash \\'), 'ends with a backslash \\\\');
+  });
+
+  test('takes anything a title could be', () => {
+    assert.equal(escapeLinkText(12345), '12345');
+    assert.equal(escapeLinkText(''), '');
+  });
+});
+
+describe('buildRecapEmbed', () => {
+  const recap = (clips) => buildRecapEmbed({
+    twitchUsername: 'some_streamer', title: 'Race night', category: 'iRacing', duration: 7200,
+    peakViewers: 10, followerCount: 5, clips,
+  });
+  const topClips = (embed) => embed.toJSON().fields.find((f) => f.name === 'Top Clips').value;
+  const clip = { title: 'Last-lap pass', url: 'https://clips.twitch.tv/LastLap', view_count: 1234 };
+
+  test('lists the top clips as links with their view counts', () => {
+    assert.equal(topClips(recap([clip, { ...clip, title: 'Second', url: 'https://clips.twitch.tv/Second', view_count: 5 }])),
+      '1. [Last-lap pass](https://clips.twitch.tv/LastLap) (1234 views)\n2. [Second](https://clips.twitch.tv/Second) (5 views)');
+  });
+
+  test('brackets in a clip title cannot end the link early or start another', () => {
+    const value = topClips(recap([{ ...clip, title: 'x](https://example.test/phish) [y' }]));
+    assert.equal(value, '1. [x\\](https://example.test/phish) \\[y](https://clips.twitch.tv/LastLap) (1234 views)');
+  });
+
+  test('a backslash at the end of a title cannot hide the link\'s closing bracket', () => {
+    const value = topClips(recap([{ ...clip, title: 'ends with a backslash \\' }]));
+    assert.equal(value, '1. [ends with a backslash \\\\](https://clips.twitch.tv/LastLap) (1234 views)');
+  });
+
+  test('a recap without clips has no Top Clips field', () => {
+    assert.equal(recap([]).toJSON().fields.some((f) => f.name === 'Top Clips'), false);
   });
 });
 

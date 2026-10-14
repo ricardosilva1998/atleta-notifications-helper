@@ -26,6 +26,7 @@ process.env.LINK_SIGNING_SECRET = 'synthetic-link-signing-secret';
 const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
 const AUTH_FILE = path.join(__dirname, 'auth.js');
+const LIFECYCLE_FILE = path.join(SRC, 'services', 'accountLifecycle.js');
 const TOKEN_KEY = '0123456789abcdef'.repeat(4);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const { t, esc, richFor } = require('../i18n'); // the texts the pages print, and what server.js puts on res.locals for them
@@ -36,6 +37,8 @@ let port;
 const saved = {};
 const logs = [];
 const eventSubStarts = [];
+const twitchEvents = []; // what a change of Twitch account stopped, left and joined, in order
+let failingManager = null; // a name from twitchEvents that throws instead, to see the redirect survive it
 
 // ── Outbound calls ───────────────────────────────────────────────────────
 // Each answer is { status, body }; a URL nobody set an answer for fails the test.
@@ -95,6 +98,13 @@ before(async () => {
     if (from === AUTH_FILE && request === '../services/eventsub') {
       return { eventSubManager: { startForStreamer: (id) => eventSubStarts.push(id) } };
     }
+    // The real accountLifecycle.js runs; only the connection managers it calls are recorded.
+    if (from === LIFECYCLE_FILE && request === './eventsub') {
+      return { eventSubManager: { stopForStreamer: (id) => manager('eventsub.stop', id) } };
+    }
+    if (from === LIFECYCLE_FILE && request === './twitchChat') {
+      return { chatManager: { partChannel: (name) => manager('chat.part', name), startForStreamer: (id) => manager('chat.start', id) } };
+    }
     return saved.load(request, parent, isMain);
   };
   for (const level of ['log', 'warn', 'error']) {
@@ -143,6 +153,11 @@ after(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
+function manager(name, argument) {
+  twitchEvents.push([name, argument]);
+  if (failingManager === name) throw new Error(`${name} exploded`);
+}
+
 let counter = 0;
 function addStreamer(over = {}) {
   const n = ++counter;
@@ -157,6 +172,8 @@ beforeEach(() => {
   logs.length = 0;
   calls.length = 0;
   eventSubStarts.length = 0;
+  twitchEvents.length = 0;
+  failingManager = null;
   answers = {};
 });
 
@@ -339,6 +356,107 @@ describe('connecting an account', () => {
     assert.equal(timeoutOf.get(calls[0].init.signal), 10_000);
     assert.equal(db.getStreamerById(id).spotify_refresh_token, 'spotify-refresh');
     assert.match(rawRow(id).spotify_refresh_token, /^enc:v1:/);
+  });
+});
+
+// ── Linking another Twitch account ───────────────────────────────────────
+
+describe('linking a Twitch account to a streamer', () => {
+  let twitchId = 7500;
+  const authorize = (id) => {
+    db.updateStreamerBroadcasterTokens(id, `access-of-${id}`, `refresh-of-${id}`, Date.now() + 3_600_000);
+    db.updateBroadcasterScopes(id, 'moderator:read:followers bits:read channel:manage:redemptions');
+  };
+  // A streamer whose channel is linked and authorized, with the chat bot on unless said otherwise.
+  const linkedStreamer = (over = {}) => {
+    twitchId += 1;
+    const id = addStreamer({ twitch_user_id: String(twitchId), twitch_username: `old_channel_${twitchId}`, twitch_display_name: `Old_Channel_${twitchId}`, chatbot_enabled: 1, ...over });
+    authorize(id);
+    return { id, twitchId: String(twitchId), login: `old_channel_${twitchId}` };
+  };
+  const link = async (id, twitchUser) => {
+    answers[TWITCH_TOKEN] = tokenAnswer('twitch-link');
+    answers[TWITCH_USERS] = { status: 200, body: { data: [twitchUser] } };
+    const { state, cookie } = await start('twitch', id);
+    return request(`/auth/twitch/callback?code=synthetic-code&state=${state}`, { streamer: id, cookie });
+  };
+  const authorization = (id) => {
+    const row = rawRow(id);
+    return [row.broadcaster_access_token, row.broadcaster_refresh_token, row.broadcaster_token_expires_at, row.broadcaster_scopes];
+  };
+  const NOTHING = [null, null, 0, null];
+
+  test('another account: the old account\'s authorization is cleared, EventSub stops, the bot leaves the old chat and joins the new one', async () => {
+    const old = linkedStreamer();
+    const res = await link(old.id, { id: '7599', login: 'new_channel', display_name: 'New_Channel' });
+
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard?msg=twitch_linked');
+    const row = db.getStreamerById(old.id);
+    assert.equal(row.twitch_user_id, '7599');
+    assert.equal(row.twitch_username, 'new_channel');
+    assert.deepEqual(authorization(old.id), NOTHING, 'tokens and scopes are gone, so the dashboard asks for a new authorization');
+    assert.deepEqual(twitchEvents, [['eventsub.stop', old.id], ['chat.part', old.login], ['chat.start', old.id]]);
+    assert.deepEqual(eventSubStarts, [], 'EventSub is not started with nothing to connect with');
+  });
+
+  test('another account, chat bot off: the old chat is left and no new one joined', async () => {
+    const old = linkedStreamer({ chatbot_enabled: 0 });
+    await link(old.id, { id: '7598', login: 'new_channel', display_name: 'New_Channel' });
+    assert.deepEqual(twitchEvents, [['eventsub.stop', old.id], ['chat.part', old.login]]);
+  });
+
+  test('the same account again: the names are updated and nothing else happens (authorization kept, EventSub and chat left alone)', async () => {
+    const same = linkedStreamer();
+    const before = authorization(same.id);
+    const res = await link(same.id, { id: same.twitchId, login: 'renamed_channel', display_name: 'Renamed_Channel' });
+
+    assert.equal(res.headers.location, '/dashboard?msg=twitch_linked');
+    assert.equal(db.getStreamerById(same.id).twitch_username, 'renamed_channel');
+    assert.deepEqual(authorization(same.id), before);
+    assert.notDeepEqual(before, NOTHING);
+    assert.deepEqual(twitchEvents, []);
+    assert.deepEqual(eventSubStarts, []);
+  });
+
+  test('a first link: nothing to leave, and the chat bot joins the new channel if it is on', async () => {
+    const id = addStreamer({ chatbot_enabled: 1 });
+    await link(id, { id: '7597', login: 'first_channel', display_name: 'First_Channel' });
+    assert.deepEqual(twitchEvents, [['eventsub.stop', id], ['chat.start', id]]);
+  });
+
+  test('taking over an account another streamer had linked: that streamer stops and leaves first, then the new owner joins', async () => {
+    const holder = linkedStreamer();
+    const taker = addStreamer({ chatbot_enabled: 1 });
+    await link(taker, { id: holder.twitchId, login: holder.login, display_name: 'Same_Channel' });
+
+    assert.equal(db.getStreamerById(holder.id).twitch_user_id, null);
+    assert.deepEqual(authorization(holder.id), NOTHING, 'the one who lost the account cannot act as it any more');
+    assert.equal(db.getStreamerById(taker).twitch_user_id, holder.twitchId);
+    assert.deepEqual(twitchEvents, [
+      ['eventsub.stop', holder.id], ['chat.part', holder.login],
+      ['eventsub.stop', taker], ['chat.start', taker],
+    ], 'the old owner leaves before the new one joins, or leaving would undo the join');
+  });
+
+  test('a manager that fails does not stop the others, or the redirect', async () => {
+    const old = linkedStreamer();
+    failingManager = 'eventsub.stop';
+    const res = await link(old.id, { id: '7596', login: 'new_channel', display_name: 'New_Channel' });
+
+    assert.equal(res.headers.location, '/dashboard?msg=twitch_linked');
+    assert.deepEqual(twitchEvents.map(([name]) => name), ['eventsub.stop', 'chat.part', 'chat.start']);
+    assert.equal(db.getStreamerById(old.id).twitch_user_id, '7596');
+    assert.ok(logs.some(([level, line]) => level === 'error' && /EventSub stop failed for streamer/.test(line)));
+  });
+
+  test('the log says the authorization was cleared and why, without any token', async () => {
+    const old = linkedStreamer();
+    await link(old.id, { id: '7595', login: 'new_channel', display_name: 'New_Channel' });
+    const line = logs.find(([, text]) => text.includes('Twitch account changed'));
+    assert.ok(line, JSON.stringify(logs));
+    assert.match(line[1], new RegExp(`streamer ${old.id}`));
+    assert.ok(!line[1].includes(`access-of-${old.id}`) && !line[1].includes(`refresh-of-${old.id}`));
   });
 });
 

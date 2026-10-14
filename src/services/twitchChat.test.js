@@ -33,6 +33,7 @@ class FakeTmiClient {
   constructor() {
     this.handlers = {};
     this.said = [];
+    this.state = 'OPEN'; // what tmi.js reports; a test sets another while the bot is (re)connecting
     tmiClient = this;
   }
   on(event, handler) { this.handlers[event] = handler; }
@@ -40,7 +41,7 @@ class FakeTmiClient {
   join() { return Promise.resolve(); }
   part() { return Promise.resolve(); }
   say(channel, text) { this.said.push({ channel, text }); return Promise.resolve(); }
-  readyState() { return 'OPEN'; }
+  readyState() { return this.state; }
   disconnect() { return Promise.resolve(); }
 }
 
@@ -330,6 +331,66 @@ describe('event thank-yous', () => {
     streamer = streamerRow({ chat_donation_enabled: 1, chat_donation_template: '{username} donated {amount}! {message}' });
     chatManager.sendEventMessage(1, 'donation', { username: '!somecommand $&', amount: 'USD 5', message: "$'$'\r\nPRIVMSG #other :hi" });
     assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: "somecommand $& donated USD 5! $'$' PRIVMSG #other :hi" }]);
+  });
+});
+
+// ── Lines while the bot reconnects to Twitch ─────────────────────────
+
+describe('while the bot has no connection to Twitch', () => {
+  test('the dispatcher is told to hold lines whenever tmi.js is not open, and once the bot is stopped', () => {
+    const { isReady } = dispatcherStub.created;
+    assert.equal(isReady(), true);
+    for (const state of ['CONNECTING', 'CLOSING', 'CLOSED']) {
+      tmiClient.state = state;
+      assert.equal(isReady(), false, state);
+    }
+    tmiClient.state = 'OPEN';
+    assert.equal(isReady(), true);
+    chatManager.disconnect();
+    assert.equal(isReady(), false);
+  });
+
+  test('a reply, an announcement and a thank-you wait for the connection and go out when it is back, most important first', async () => {
+    chatCommands = { socials: { id: 1, command: 'socials', response: 'Follow us!', cooldown: 5, enabled: 1 } };
+    tmiClient.state = 'CLOSED'; // the connection dropped; tmi.js is reconnecting
+    chatManager.sendMessage(1, 'Giveaway is open!');
+    chatManager.sendEventMessage(1, 'raid', { username: 'RaidLeader', viewers: 42 });
+    await chat('!socials', tags());
+    chatClock.advance(10_000);
+    assert.deepEqual(tmiClient.said, [], 'nothing was sent into the void');
+
+    tmiClient.state = 'OPEN';
+    chatClock.advance(1_000); // it looks again every second
+    chatClock.advance(5_000);
+    assert.deepEqual(tmiClient.said, [
+      { channel: '#somestreamer', text: 'Follow us!' },
+      { channel: 'somestreamer', text: 'Giveaway is open!' },
+      { channel: 'somestreamer', text: 'Welcome raiders from RaidLeader!' },
+    ]);
+  });
+
+  test('a line is not held when the connection is up', () => {
+    chatManager.sendMessage(1, 'right away');
+    assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: 'right away' }]);
+  });
+
+  test('lines that waited more than a minute for the connection are not sent late', () => {
+    tmiClient.state = 'CLOSED';
+    chatManager.sendMessage(1, 'too old by then');
+    chatClock.advance(70_000);
+    tmiClient.state = 'OPEN';
+    chatManager.sendMessage(1, 'fresh');
+    chatClock.advance(5_000);
+    assert.deepEqual(tmiClient.said, [{ channel: 'somestreamer', text: 'fresh' }]);
+  });
+
+  test('leaving the channel while the connection is down drops what was held for it', () => {
+    tmiClient.state = 'CLOSED';
+    chatManager.sendMessage(1, 'held for a chat the bot then leaves');
+    chatManager.stopForStreamer(1);
+    tmiClient.state = 'OPEN';
+    chatClock.advance(5_000);
+    assert.deepEqual(tmiClient.said, []);
   });
 });
 

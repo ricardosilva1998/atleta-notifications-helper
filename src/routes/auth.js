@@ -136,6 +136,30 @@ router.get('/twitch', (req, res) => {
   res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
 });
 
+// db.linkTwitch has already dropped the broadcaster authorization of a streamer
+// whose linked Twitch account changed, and of one who lost its account to this
+// link. What ran for that account stops here (services/accountLifecycle.js:
+// EventSub, the chat bot's seat in the old channel). The streamer who lost the
+// account goes first: its leaving the chat would otherwise undo the new owner
+// joining the same channel.
+function releasePreviousTwitchAccounts(streamerId, link, newLogin) {
+  try {
+    const { twitchAccountChanged } = require('../services/accountLifecycle');
+    for (const other of link.displaced) {
+      console.warn(`[Auth] Streamer ${other.id} lost the Twitch account ${other.username} to streamer ${streamerId}: its broadcaster authorization was cleared`);
+      twitchAccountChanged(other.id, other.username);
+    }
+    if (link.accountChanged) {
+      if (link.previousUsername) {
+        console.log(`[Auth] Twitch account changed for streamer ${streamerId} (${link.previousUsername} -> ${newLogin}): its broadcaster authorization was cleared and must be given again`);
+      }
+      twitchAccountChanged(streamerId, link.previousUsername);
+    }
+  } catch (e) {
+    console.error(`[Auth] Could not stop what ran for the previous Twitch account of streamer ${streamerId}: ${e.message}`);
+  }
+}
+
 router.get('/twitch/callback', async (req, res) => {
   const stateOk = checkOAuthState(req, res, 'twitch');
   const { code, state } = req.query;
@@ -171,8 +195,9 @@ router.get('/twitch/callback', async (req, res) => {
     const userData = await userRes.json();
     const twitchUser = userData.data[0];
 
-    db.linkTwitch(streamerId, twitchUser.id, twitchUser.login, twitchUser.display_name);
+    const link = db.linkTwitch(streamerId, twitchUser.id, twitchUser.login, twitchUser.display_name);
     console.log(`[Auth] Twitch linked: streamer ${streamerId} -> ${twitchUser.login}`);
+    releasePreviousTwitchAccounts(streamerId, link, twitchUser.login);
 
     res.redirect('/dashboard?msg=twitch_linked');
   } catch (error) {

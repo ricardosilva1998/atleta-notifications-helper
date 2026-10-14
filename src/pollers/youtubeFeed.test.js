@@ -3,8 +3,9 @@
 // The YouTube feed poller (L6, R-e): an upload is announced as a video or a
 // Short, a live or upcoming broadcast is left to the live poller, and a video
 // the feed reports without any duration information is announced as a normal
-// video, whatever the reason. YouTube is a stub; nothing leaves the machine.
-// All ids and names are synthetic.
+// video, whatever the reason. The channel's own text (its name and the video's
+// title) goes into the post through the shared escape, the URL does not.
+// YouTube is a stub; nothing leaves the machine. All ids and names are synthetic.
 
 const { test, describe, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -23,12 +24,20 @@ const youtubeStub = {
   },
 };
 
+// The real escape is src/discord.js's (src/discord.test.js tests it). Here it leaves
+// text as it is, or, when a test sets world.escape, marks what the poller passes
+// through it.
+const discordStub = { escapeLinkText: (text) => (world.escape ? world.escape(text) : String(text)) };
+
 const origLoad = Module._load;
 let check;
 
 before(() => {
   Module._load = function (request, parent, isMain) {
-    if (parent && parent.filename === POLLER_FILE && request === '../services/youtube') return youtubeStub;
+    if (parent && parent.filename === POLLER_FILE) {
+      if (request === '../services/youtube') return youtubeStub;
+      if (request === '../discord') return discordStub;
+    }
     return origLoad.call(this, request, parent, isMain);
   };
 });
@@ -106,6 +115,35 @@ describe('what is announced', () => {
     const result = await check('UCchannel', state({ known_video_ids: '["known1"]', live_video_id: 'onair1' }), 'api-key');
     assert.equal(result.notify, false, 'nothing new');
     assert.equal(world.detailCalls.length, 0, 'and YouTube is not asked about anything');
+  });
+});
+
+describe('the channel\'s own text in a post', () => {
+  const message = (result, index = 0) => result.videoData[index].message;
+
+  test('the video title and the channel name go through the shared escape; the URL, on its own line for the auto-preview, does not', async () => {
+    world.escape = (text) => `«${text}»`;
+    world.feed = [video('up1', 'x](https://example.test/phish) [y'), { ...video('short1', 'Quick pass'), author: 'Some [Channel]' }];
+    world.details = { up1: detail(), short1: detail({ duration: 45, isShort: true }) };
+    const result = await check('UCchannel', state(), 'api-key');
+    assert.deepEqual(result.videoData.map((v) => v.message), [
+      '🎬 **«Some Channel» uploaded a new video!** — «x](https://example.test/phish) [y»\nhttps://www.youtube.com/watch?v=up1',
+      '📱 **«Some [Channel]» posted a Short!** — «Quick pass»\nhttps://www.youtube.com/watch?v=short1',
+    ]);
+    assert.ok(result.videoData.every((v) => v.message.endsWith('\nhttps://www.youtube.com/watch?v=' + (v.isShort ? 'short1' : 'up1'))), 'the URL is the last line, as typed');
+  });
+
+  test('a feed entry without a channel name says "New", which is not passed through the escape', async () => {
+    world.escape = (text) => `«${text}»`;
+    world.feed = [{ ...video('up1', 'Race recap'), author: undefined }];
+    const result = await check('UCchannel', state(), '');
+    assert.equal(message(result), '🎬 **New uploaded a new video!** — «Race recap»\nhttps://www.youtube.com/watch?v=up1');
+  });
+
+  test('a title the feed parser turned into a number is still text', async () => {
+    world.feed = [video('up1', 2026)];
+    const result = await check('UCchannel', state(), '');
+    assert.equal(message(result), '🎬 **Some Channel uploaded a new video!** — 2026\nhttps://www.youtube.com/watch?v=up1');
   });
 });
 

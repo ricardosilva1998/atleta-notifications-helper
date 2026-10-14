@@ -514,3 +514,130 @@ describe('regex banned word guards', () => {
     assert.deepEqual(budgetLogs.map(([level]) => level), ['warn', 'log']);
   });
 });
+
+// ── The moderation requests to Twitch have a deadline ────────────────
+
+describe('the Twitch moderation requests give up after 10 seconds', () => {
+  const slowOn = () => streamerRow({ mod_slow_mode_cmd_enabled: 1 });
+  const modAction = (fresh, action) => fresh.executeAction(fakeClient(), '#chan', viewerTags(), action, 'a reason', streamerRow());
+
+  // The bot's user id is looked up once and kept, so each test gets a copy of the
+  // module that has not looked it up yet.
+  function freshModeration() {
+    const file = require.resolve('./chatModeration');
+    const outer = Module._load;
+    Module._load = function (request, parent, isMain) {
+      if (parent && parent.filename.endsWith(`${path.sep}chatModeration.js`)) {
+        if (request === '../db') return dbStub;
+        if (request === '../config') return configStub;
+        if (request === './regexBudget') return budgetStub;
+      }
+      return outer.call(this, request, parent, isMain);
+    };
+    delete require.cache[file];
+    try {
+      return require('./chatModeration');
+    } finally {
+      Module._load = outer;
+      delete require.cache[file];
+    }
+  }
+
+  // Every AbortSignal.timeout(ms) the code makes is kept, and fired by hand with expire(i).
+  let timeouts;
+  const realTimeout = AbortSignal.timeout;
+  beforeEach(() => {
+    timeouts = [];
+    AbortSignal.timeout = (ms) => {
+      const controller = new AbortController();
+      timeouts.push({ ms, controller });
+      return controller.signal;
+    };
+  });
+  afterEach(() => { AbortSignal.timeout = realTimeout; });
+  const expire = (i) => timeouts[i].controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+
+  // A Twitch that takes the request and never answers it, until its signal fires.
+  const neverAnswers = (signal) => new Promise((_, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+
+  // fetch that answers like stubTwitch(200), except for the requests `hangs(url)` picks, which
+  // never get an answer; `started` resolves once such a request has been made.
+  function twitchHangingOn(hangs) {
+    stubTwitch(200);
+    const answer = global.fetch;
+    const requests = [];
+    let begun;
+    const started = new Promise((resolve) => { begun = resolve; });
+    global.fetch = (url, opts = {}) => {
+      requests.push({ url: String(url).split('?')[0], signal: opts.signal });
+      if (!hangs(String(url))) return answer(url, opts);
+      begun();
+      return neverAnswers(opts.signal);
+    };
+    return { requests, started };
+  }
+
+  test('looking up the bot, deleting a message and timing out a viewer each have the 10 s limit', async () => {
+    const fresh = freshModeration();
+    const { requests } = twitchHangingOn(() => false);
+    await modAction(fresh, 'delete');
+    await modAction(fresh, 'timeout_10');
+
+    assert.deepEqual(requests.map((r) => r.url), [
+      'https://id.twitch.tv/oauth2/validate',
+      'https://api.twitch.tv/helix/moderation/chat',
+      'https://api.twitch.tv/helix/moderation/bans',
+    ]);
+    assert.deepEqual(timeouts.map((t) => t.ms), [10_000, 10_000, 10_000]);
+    requests.forEach((request, i) => assert.equal(request.signal, timeouts[i].controller.signal, request.url));
+  });
+
+  test('a bot lookup Twitch never answers is given up on; !slow says nothing, and works on the next try', async () => {
+    const fresh = freshModeration();
+    const twitch = twitchHangingOn((url) => url === 'https://id.twitch.tv/oauth2/validate');
+    const client = fakeClient();
+
+    const attempt = fresh.handleModCommand(client, '#chan', modTags(), '!slow 10', slowOn());
+    await twitch.started;
+    expire(0);
+    assert.equal(await attempt, true);
+    assert.deepEqual(client.said, []);
+    assert.ok(logs.some((l) => l.level === 'error' && l.text.includes('Failed to get bot user ID: The operation was aborted due to timeout')), JSON.stringify(logs));
+    assert.deepEqual(twitch.requests.map((r) => r.url), ['https://id.twitch.tv/oauth2/validate'], 'no settings request without the bot\'s id');
+
+    // The failure was not kept: the next try asks again.
+    twitchHangingOn(() => false);
+    await fresh.handleModCommand(client, '#chan', modTags(), '!slow 10', slowOn());
+    assert.deepEqual(client.said, [{ channel: '#chan', text: 'Slow mode enabled (10s).' }]);
+  });
+
+  test('a message delete Twitch never answers is given up on, and the action still finishes', async () => {
+    const fresh = freshModeration();
+    const twitch = twitchHangingOn((url) => url.startsWith('https://api.twitch.tv/helix/moderation/chat'));
+    const before = state.modLog.length;
+
+    const action = modAction(fresh, 'delete');
+    await twitch.started;
+    expire(1); // 0 was the bot lookup
+    await action;
+
+    assert.ok(logs.some((l) => l.level === 'error' && l.text === '[Mod] The operation was aborted due to timeout'), JSON.stringify(logs));
+    assert.equal(state.modLog.length, before + 1, 'and it is still recorded');
+  });
+
+  test('a timeout or ban Twitch never answers is given up on, and the action still finishes', async () => {
+    const fresh = freshModeration();
+    const twitch = twitchHangingOn((url) => url.startsWith('https://api.twitch.tv/helix/moderation/bans'));
+    const before = state.modLog.length;
+
+    const action = modAction(fresh, 'timeout_600');
+    await twitch.started;
+    expire(1);
+    await action;
+
+    assert.ok(logs.some((l) => l.level === 'error' && l.text === '[Mod] The operation was aborted due to timeout'), JSON.stringify(logs));
+    assert.equal(state.modLog.length, before + 1);
+  });
+});
