@@ -15,7 +15,9 @@
 //   - a number past its range is moved to the nearest end of the range (a
 //     whole-number field is rounded first), and text that is too long is cut
 //   - a font, a choice or an icon that is not one of the known ones is replaced by
-//     the default: it is left out of the design, so the database default applies
+//     the default of its own alert (EVENT_DEFAULTS, below, which is also what the
+//     builder shows for it); where that alert has none (a per-text font, the icon)
+//     it is left out of the design, so the database default applies
 // Only a design that cannot have come from a builder is refused, and the result
 // then names the field: not an object, a value of the wrong kind (text where a
 // number goes), or a colour that is not #rrggbb.
