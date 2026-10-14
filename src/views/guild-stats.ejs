@@ -1,4 +1,7 @@
 <%- include('header', { title: guildName + ' - ' + t('guildStats.title'), streamer: streamer }) %>
+<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <a href="/dashboard/guild/<%= guildId %>" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -94,7 +97,7 @@
       </div>
     </div>
     <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
-      <%- t(twitchCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + twitchCount + '</strong>' }) %>
+      <%- rich(twitchCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + twitchCount + '</strong>' }) %>
     </div>
   </div>
 
@@ -115,7 +118,7 @@
       </div>
     </div>
     <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
-      <%- t(youtubeCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + youtubeCount + '</strong>' }) %>
+      <%- rich(youtubeCount === 1 ? 'guildStats.watchingOne' : 'guildStats.watchingMany', { count: '<strong style="color: var(--text-primary);">' + youtubeCount + '</strong>' }) %>
     </div>
   </div>
 </div>

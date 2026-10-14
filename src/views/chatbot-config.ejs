@@ -1,5 +1,7 @@
 <%- include('header', { title: t('chatbot.title'), streamer: streamer }) %>
 <% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <style>
 .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
@@ -125,7 +127,7 @@
     <% if (botConnected && botUsername) { %>
       <p style="color: var(--success); font-size: 14px; display: flex; align-items: center; gap: 8px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        <%- t('chatbot.conn.online', { name: '<strong>' + esc(botUsername) + '</strong>' }) %>
+        <%- rich('chatbot.conn.online', { name: '<strong>' + esc(botUsername) + '</strong>' }) %>
       </p>
       <% if (streamer.twitch_username) { %>
         <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">
@@ -134,16 +136,16 @@
       <% } %>
     <% } else if (botUsername) { %>
       <p style="color: var(--warning, #f7c948); font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <%- t('chatbot.conn.notConnected', { name: '<strong>' + esc(botUsername) + '</strong>' }) %>
+        <%- rich('chatbot.conn.notConnected', { name: '<strong>' + esc(botUsername) + '</strong>' }) %>
       </p>
     <% } else { %>
       <p style="color: var(--text-muted); font-size: 14px;">
-        <%- t('chatbot.conn.notConfigured', { usernameVar: '<code>BOT_TWITCH_USERNAME</code>', tokenVar: '<code>BOT_TWITCH_TOKEN</code>' }) %>
+        <%- rich('chatbot.conn.notConfigured', { usernameVar: '<code>BOT_TWITCH_USERNAME</code>', tokenVar: '<code>BOT_TWITCH_TOKEN</code>' }) %>
       </p>
     <% } %>
     <% if (!streamer.twitch_username) { %>
       <p style="color: var(--warning, #f7c948); font-size: 13px; margin-top: 12px;">
-        <%- t('chatbot.conn.noTwitch', { a: '<a href="/auth/twitch" style="color: var(--accent);">', aEnd: '</a>' }) %>
+        <%- rich('chatbot.conn.noTwitch', { a: '<a href="/auth/twitch" style="color: var(--accent);">', aEnd: '</a>' }) %>
       </p>
     <% } %>
   </div>
@@ -579,7 +581,7 @@
 <div class="tab-content" id="tab-moderation">
   <form method="POST" action="/dashboard/chatbot/moderation">
     <div class="mod-note">
-      <%- t('chatbot.mod.note', { b: '<strong>', bEnd: '</strong>', code: '<code>/mod Atleta</code>' }) %>
+      <%- rich('chatbot.mod.note', { b: '<strong>', bEnd: '</strong>', code: '<code>/mod Atleta</code>' }) %>
     </div>
 
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px;">
@@ -647,7 +649,7 @@
           <div class="mod-card-icon" style="background:rgba(66,133,244,0.12);"><span>🔗</span></div>
           <div>
             <div class="mod-card-title"><%= t('chatbot.mod.links') %></div>
-            <div class="mod-card-desc"><%- t('chatbot.mod.linksDesc', { code: '<code>!permit username</code>' }) %></div>
+            <div class="mod-card-desc"><%- rich('chatbot.mod.linksDesc', { code: '<code>!permit username</code>' }) %></div>
           </div>
         </div>
         <label class="pill-toggle">
@@ -775,7 +777,7 @@
           <div class="mod-card-icon" style="background:rgba(66,133,244,0.12);"><span>🐢</span></div>
           <div>
             <div class="mod-card-title"><%= t('chatbot.mod.slow') %></div>
-            <div class="mod-card-desc"><%- t('chatbot.mod.slowDesc', { slow: '<code>!slow &lt;seconds&gt;</code>', slowoff: '<code>!slowoff</code>' }) %></div>
+            <div class="mod-card-desc"><%- rich('chatbot.mod.slowDesc', { slow: '<code>!slow &lt;seconds&gt;</code>', slowoff: '<code>!slowoff</code>' }) %></div>
           </div>
         </div>
         <label class="pill-toggle">

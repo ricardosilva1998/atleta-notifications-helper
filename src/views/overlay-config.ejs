@@ -1,4 +1,7 @@
 <%- include('header', { title: t('overlay.title'), streamer: streamer }) %>
+<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <style>
   /* Pill toggle */
@@ -88,7 +91,7 @@
 <% if (needsReauth) { %>
   <div class="alert alert-warning">
     <strong><%= t('overlay.reauth.title') %></strong>
-    <%- t('overlay.reauth.body', { scopes: '<code>moderator:read:followers</code>, <code>bits:read</code>' }) %>
+    <%- rich('overlay.reauth.body', { scopes: '<code>moderator:read:followers</code>, <code>bits:read</code>' }) %>
     <a href="/auth/broadcaster" style="color: var(--warning); text-decoration: underline; margin-left: 6px;"><%= t('overlay.reauth.link') %></a>
   </div>
 <% } %>
@@ -101,7 +104,7 @@
   </h3>
   <% if (overlayUrl) { %>
     <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 12px;">
-      <%- t('overlay.urlHelp', { size: '<strong>1920 &times; 1080</strong>' }) %>
+      <%- rich('overlay.urlHelp', { size: '<strong>1920 &times; 1080</strong>' }) %>
     </p>
     <div style="margin-bottom: 10px;">
       <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;"><%= t('overlay.alertsUrlLabel') %></label>
@@ -601,7 +604,7 @@
       <%= t('overlay.seTitle') %>
     </h3>
     <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-      <%- t('overlay.seHelp', { b: '<strong>', bEnd: '</strong>' }) %>
+      <%- rich('overlay.seHelp', { b: '<strong>', bEnd: '</strong>' }) %>
     </p>
     <div class="form-group" style="margin-bottom: 0;">
       <label for="streamelements_jwt"><%= t('overlay.seToken') %></label>

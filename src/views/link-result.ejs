@@ -1,5 +1,7 @@
 <% const linkExpired = !success && !!locals.expired; %>
 <% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 <%- include('header', { title: success ? t('link.success.title') : (linkExpired ? t('link.expired.title') : t('link.failed.title')), streamer: null }) %>
 
 <div style="text-align: center; padding: 60px 0;">
@@ -16,7 +18,7 @@
     </div>
     <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;"><%= t('link.success.title') %></h2>
     <p style="color: var(--text-secondary); font-size: 16px; margin-bottom: 8px;">
-      <%- t('link.success.body', { name: '<strong style="color: var(--accent);">' + esc(twitchName) + '</strong>' }) %>
+      <%- rich('link.success.body', { name: '<strong style="color: var(--accent);">' + esc(twitchName) + '</strong>' }) %>
     </p>
     <p style="color: var(--text-muted); font-size: 14px;"><%= t('link.success.hint') %></p>
   <% } else { %>

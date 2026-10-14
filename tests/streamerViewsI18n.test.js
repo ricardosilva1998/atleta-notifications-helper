@@ -202,10 +202,10 @@ const marked = (key, params) => {
   assert.deepEqual(missing, [], `t('${key}') is called without ${missing.join(', ')}`);
   return '«' + t('en', key, params) + '»';
 };
-function render(page, locals) {
+function render(page, locals, translate = marked) {
   return ejs.render(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'), {
     racingUser: null, isAdmin: false, features: { youtube: false }, lang: 'en', csrfToken: 'token', currentPath: '/x', notifications: [], unreadNotifCount: 0, streamerTier: 'free',
-    SUPPORTED_LANGS: ['en'], t: marked, ...locals,
+    SUPPORTED_LANGS: ['en'], t: translate, ...locals,
   }, { filename: path.join(VIEWS, page + '.ejs'), views: [VIEWS] });
 }
 // The page's own part: a header page starts at the container the shared header opens (its sidebar is not the page's).
@@ -283,27 +283,25 @@ describe('the texts a page hands its script are all there', () => {
   });
 });
 
-// ── 4. Texts printed into the page as HTML ───────────────────────────────
+// ── 4. A translation can not add markup ─────────────────────────────────
 
-describe('texts printed into the page as HTML', () => {
-  // <%- t('key', ...) %> and <%- rich('key') %> print the translation as it is (the markup of a link or a bold word
-  // is put in through its {{fields}}), so none of these texts may hold a "<" or ">" of its own in any language:
-  // it would break the page. Languages that do not have a key yet are skipped.
-  const rawKeys = new Set();
+describe('a translation can not add markup to a page', () => {
+  // Texts from the language files are printed escaped everywhere. The links, bold words and code of a sentence are built by the
+  // page and put in through the {{fields}} of the text (rich() in the view escapes the text first), so whatever a language file holds
+  // stays text.
+  const evil = (key, params) => t('en', key, params) + '<img src=x onerror=alert(1)>';
+
   for (const page of PAGES) {
-    const source = fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8');
-    for (const m of source.matchAll(/<%-\s*(?:t|rich)\(\s*'([A-Za-z0-9_.]+)'/g)) rawKeys.add(m[1]);
-  }
-
-  test('the pages print a number of them', () => {
-    assert.ok(rawKeys.size >= 35, `found ${rawKeys.size}`);
-  });
-
-  for (const lang of ['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja']) {
-    test(lang, () => {
-      const locale = require(`../src/locales/${lang}.json`);
-      const bad = [...rawKeys].filter((key) => key in locale && /[<>]/.test(locale[key]));
-      assert.deepEqual(bad, [], `${lang}.json has markup of its own in texts that are printed as HTML`);
+    test(page, () => {
+      for (const locals of PAGE_LOCALS[page]) {
+        const html = render(page, locals, evil);
+        assert.ok(!html.includes('<img src=x onerror'), `${page}: a translation was printed as markup`);
+      }
     });
   }
+
+  test('no view prints t() unescaped', () => {
+    const offenders = PAGES.filter((page) => /<%-\s*t\(/.test(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8')));
+    assert.deepEqual(offenders, []);
+  });
 });

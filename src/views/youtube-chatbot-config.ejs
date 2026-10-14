@@ -1,5 +1,7 @@
 <%- include('header', { title: t('ytChatbot.title'), streamer: streamer }) %>
 <% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <style>
 .yt-accent { color: #ff0000; }
@@ -44,7 +46,7 @@
   <% if (streamer.yt_access_token) { %>
     <p style="color: var(--success); font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      <% if (streamer.yt_channel_name) { %><%- t('ytChatbot.accountConnectedAs', { name: '<strong>' + esc(streamer.yt_channel_name) + '</strong>' }) %><% } else { %><%= t('ytChatbot.accountConnected') %><% } %>
+      <% if (streamer.yt_channel_name) { %><%- rich('ytChatbot.accountConnectedAs', { name: '<strong>' + esc(streamer.yt_channel_name) + '</strong>' }) %><% } else { %><%= t('ytChatbot.accountConnected') %><% } %>
     </p>
     <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px;">
       <a href="/auth/youtube" style="color: var(--accent);"><%= t('ytChatbot.reconnect') %></a>
@@ -244,7 +246,7 @@
       <%= t('ytChatbot.builtin') %>
     </h3>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-      <%- t('ytChatbot.builtinHint', { a: '<a href="/dashboard/chatbot" style="color: var(--accent);">', aEnd: '</a>' }) %>
+      <%- rich('ytChatbot.builtinHint', { a: '<a href="/dashboard/chatbot" style="color: var(--accent);">', aEnd: '</a>' }) %>
     </p>
     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
       <% const ytCommands = [
@@ -293,10 +295,10 @@
     </div>
     <div style="font-size: 13px; color: var(--text-muted); padding: 10px 14px; background: var(--bg-surface); border-radius: var(--radius-sm); border: 1px solid var(--border);">
       <p style="margin-bottom: 6px;">
-        <%- t('ytChatbot.modShared', { b: '<strong>', bEnd: '</strong>', a: '<a href="/dashboard/chatbot?tab=moderation" style="color: var(--accent);">', aEnd: '</a>' }) %>
+        <%- rich('ytChatbot.modShared', { b: '<strong>', bEnd: '</strong>', a: '<a href="/dashboard/chatbot?tab=moderation" style="color: var(--accent);">', aEnd: '</a>' }) %>
       </p>
       <p style="color: var(--warning, #f59e0b);">
-        <%- t('ytChatbot.modWarning', { b: '<strong>', bEnd: '</strong>' }) %>
+        <%- rich('ytChatbot.modWarning', { b: '<strong>', bEnd: '</strong>' }) %>
       </p>
     </div>
   </div>

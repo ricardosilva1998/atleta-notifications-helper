@@ -1,5 +1,7 @@
 <%- include('header', { title: t('multistream.title'), streamer: streamer }) %>
 <% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
+<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -83,7 +85,7 @@
             <div class="dest-name">Twitch</div>
             <div class="dest-status">
               <% if (twitchAuthorized && twitchHasStreamKeyScope) { %>
-                <span style="color: var(--success);">● <%- t('multistream.connectedAs', { name: '<strong>' + esc(streamer.twitch_display_name || streamer.twitch_username) + '</strong>' }) %></span>
+                <span style="color: var(--success);">● <%- rich('multistream.connectedAs', { name: '<strong>' + esc(streamer.twitch_display_name || streamer.twitch_username) + '</strong>' }) %></span>
               <% } else if (twitchAuthorized) { %>
                 <span style="color: var(--warning);">● <%= t('multistream.twitchMissingScope') %></span>
               <% } else { %>
@@ -110,7 +112,7 @@
             <div class="dest-name">YouTube</div>
             <div class="dest-status">
               <% if (youtubeConnected) { %>
-                <span style="color: var(--success);">● <%- t('multistream.connectedAs', { name: '<strong>' + esc(youtubeChannelName || t('multistream.youtubeAccount')) + '</strong>' }) %></span>
+                <span style="color: var(--success);">● <%- rich('multistream.connectedAs', { name: '<strong>' + esc(youtubeChannelName || t('multistream.youtubeAccount')) + '</strong>' }) %></span>
               <% } else { %>
                 <span style="color: var(--text-muted);"><%= t('multistream.notConnected') %></span>
               <% } %>
@@ -161,7 +163,7 @@
 
           <% if (multistream.multistream_youtube_stream_id) { %>
             <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px;">
-              <%- t('multistream.streamLinked', { a: "<a href=\"#\" onclick=\"event.preventDefault(); document.getElementById('reset-yt-form').submit();\">", aEnd: '</a>' }) %>
+              <%- rich('multistream.streamLinked', { a: "<a href=\"#\" onclick=\"event.preventDefault(); document.getElementById('reset-yt-form').submit();\">", aEnd: '</a>' }) %>
             </p>
           <% } %>
         </div>
@@ -175,7 +177,7 @@
       <%= t('multistream.obsTitle') %>
     </h3>
     <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
-      <%- t('multistream.obsSteps', { b: '<strong>', bEnd: '</strong>' }) %>
+      <%- rich('multistream.obsSteps', { b: '<strong>', bEnd: '</strong>' }) %>
     </p>
 
     <div class="form-group">
