@@ -636,3 +636,48 @@ describe('a disabled streamer, through the Atleta Racing app\'s account and Spot
     assert.deepEqual(outbound, []);
   });
 });
+
+// ── Pages in the visitor's browser language ─────────────────────────────
+// Without a lang cookie the page language comes from Accept-Language, so a
+// cache must keep one copy per language: such HTML pages say Vary:
+// Accept-Language. JSON answers and files do not depend on it.
+
+describe('a page in the browser\'s language says Vary: Accept-Language', () => {
+  const varies = (res) => (res.headers.vary || '').split(',').map((v) => v.trim().toLowerCase()).includes('accept-language');
+
+  test('a page rendered from Accept-Language', async () => {
+    const res = await send('GET', '/', { headers: { 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.5' } });
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /^text\/html/);
+    assert.match(res.text, /<html lang="pt">/);
+    assert.ok(varies(res), `Vary: ${res.headers.vary}`);
+  });
+
+  test('also when there is no Accept-Language (the page is English because there is none)', async () => {
+    const res = await send('GET', '/');
+    assert.match(res.text, /<html lang="en">/);
+    assert.ok(varies(res));
+  });
+
+  test('not a page whose language comes from the lang cookie', async () => {
+    const res = await send('GET', '/', { headers: { Cookie: 'lang=de', 'Accept-Language': 'pt' } });
+    assert.match(res.text, /<html lang="de">/);
+    assert.ok(!varies(res), `Vary: ${res.headers.vary}`);
+  });
+
+  test('the translated error page too', async () => {
+    // A form post from another site: the CSRF check answers with the error page.
+    const res = await send('POST', '/set-language', { headers: { 'Accept-Language': 'fr', Origin: 'https://elsewhere.example', 'Sec-Fetch-Mode': 'navigate' }, json: { lang: 'en' } });
+    assert.equal(res.status, 403);
+    assert.match(res.headers['content-type'], /^text\/html/);
+    assert.ok(varies(res));
+  });
+
+  test('not JSON answers, nor files', async () => {
+    for (const urlPath of ['/api/track-maps', '/api/bridge/config', '/js/csrf.js']) {
+      const res = await send('GET', urlPath, { headers: { 'Accept-Language': 'pt' } });
+      assert.equal(res.status, 200, urlPath);
+      assert.ok(!varies(res), `${urlPath}: Vary: ${res.headers.vary}`);
+    }
+  });
+});

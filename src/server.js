@@ -210,9 +210,19 @@ app.use((req, res, next) => {
   // i18n
   // The cookie the language switcher sets; without one, the browser's own language
   // (Accept-Language) when the site speaks it, else English.
-  const lang = SUPPORTED_LANGS.includes(req.cookies?.lang)
+  const langFromCookie = SUPPORTED_LANGS.includes(req.cookies?.lang);
+  const lang = langFromCookie
     ? req.cookies.lang
     : (fromAcceptLanguage(req.headers['accept-language']) || 'en');
+  // A page rendered in the browser's language differs by Accept-Language, so it
+  // says so to caches (Vary). Only rendered pages: JSON answers and files do not.
+  if (!langFromCookie) {
+    const render = res.render.bind(res);
+    res.render = (...args) => {
+      res.vary('Accept-Language');
+      return render(...args);
+    };
+  }
   req.lang = lang;
   res.locals.lang = lang;
   res.locals.SUPPORTED_LANGS = SUPPORTED_LANGS;
