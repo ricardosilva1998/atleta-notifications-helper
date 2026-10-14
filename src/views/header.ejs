@@ -619,10 +619,12 @@
     <div class="sidebar-nav">
       <div class="sidebar-section"><%= t('nav.navigation') %></div>
 
-      <a href="<%= (typeof streamer !== 'undefined' && streamer) ? '/dashboard' : '/streamer' %>" class="sidebar-link">
+      <a href="<%= (typeof streamer !== 'undefined' && streamer) ? '/dashboard' : '/' %>" class="sidebar-link">
         <i data-lucide="tv"></i>
         <%= t('nav.streamer') %>
       </a>
+      <%# hideRacingNav: a page that names no Racing (the home page) leaves out the Racing link and its sub-links. %>
+      <% if (!(typeof hideRacingNav !== 'undefined' && hideRacingNav)) { %>
       <a href="/racing" class="sidebar-link">
         <i data-lucide="car"></i>
         <%= t('nav.racing') %>
@@ -646,6 +648,7 @@
           <%= t('nav.racingAdmin') %>
         </a>
         <% } %>
+      <% } %>
       <% } %>
 
       <a href="/tutorial" class="sidebar-link">
