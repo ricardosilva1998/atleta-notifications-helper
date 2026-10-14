@@ -349,6 +349,16 @@ describe('a stream that ends', () => {
     assert.deepEqual(named('yt.transition'), [['yt.transition', 'yt-broadcast-1', 'complete']]);
   });
 
+  test('a replaced key is cleared at once (not a minute after its stream ended), so the stop cannot end a session on the new key', async () => {
+    sessions.streamEnded(KEY);
+    await sessions.keyReplaced(KEY, 1);
+    assert.equal(sessions.pendingStopCount(), 0);
+    assert.ok(timers.find((t) => t.ms === STOP_GRACE_MS).cleared, 'the minute\'s wait was cancelled');
+    assert.deepEqual(named('relay.remove'), [['relay.remove', KEY, ['twitch', 'youtube']]]);
+    assert.deepEqual(named('yt.transition'), [['yt.transition', 'yt-broadcast-1', 'complete']]);
+    assert.equal(rows[1].multistream_active_broadcast_id, null);
+  });
+
   test('stopAll on shutdown cancels the waits', () => {
     sessions.streamEnded(KEY);
     sessions.stopAll();

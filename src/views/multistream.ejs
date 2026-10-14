@@ -16,6 +16,14 @@
 <% if (typeof query !== 'undefined' && query && query.reset) { %>
   <div class="alert alert-success animate-in">YouTube stream reset. A fresh stream will be created next time you go live.</div>
 <% } %>
+<% if (typeof query !== 'undefined' && query && query.regenerated) { %>
+  <div class="alert alert-success animate-in"><%= t('multistream.regenerate.done') %></div>
+<% } %>
+<% if (typeof query !== 'undefined' && query && query.error === 'live') { %>
+  <div class="alert alert-warning animate-in"><%= t('multistream.regenerate.refusedLive') %></div>
+<% } else if (typeof query !== 'undefined' && query && query.error === 'relay') { %>
+  <div class="alert alert-warning animate-in"><%= t('multistream.regenerate.refusedUnknown') %></div>
+<% } %>
 
 <%# A go-live that only reached some destinations. Without this the streamer sees
     "you're live" and assumes every platform got the feed. %>
@@ -31,11 +39,14 @@
   </div>
 <% } %>
 
+<%# Live as the relay sees it (routes/multistream.js liveState). %>
 <% if (isLive) { %>
   <div class="alert alert-success animate-in" style="display: flex; align-items: center; gap: 10px;">
     <span class="status-dot online"></span>
     <span><strong>You're live</strong> — multistream is active and forwarding to your connected platforms.</span>
   </div>
+<% } else if (typeof liveUnknown !== 'undefined' && liveUnknown) { %>
+  <div class="alert alert-warning animate-in"><%= t('multistream.liveUnknown') %></div>
 <% } %>
 
 <form method="POST" action="/dashboard/multistream/save">
@@ -183,6 +194,14 @@
         <button type="button" class="btn btn-secondary" onclick="copyVal('ms-key', this)">Copy</button>
       </div>
       <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Treat this like a password — anyone with it can stream as you.</p>
+      <%# Submits regenerate-key-form below: a form cannot sit inside this settings form. %>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px;">
+        <button type="submit" form="regenerate-key-form" class="btn btn-secondary" style="flex-shrink: 0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <%= t('multistream.regenerate.button') %>
+        </button>
+        <span style="color: var(--text-muted); font-size: 12px;"><%= t('multistream.regenerate.hint') %></span>
+      </div>
     </div>
 
     <div style="background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
@@ -197,6 +216,8 @@
 </form>
 
 <form id="reset-yt-form" method="POST" action="/dashboard/multistream/reset-youtube-stream" style="display: none;"></form>
+<form id="regenerate-key-form" method="POST" action="/dashboard/multistream/regenerate-key"
+      data-confirm="<%= t('multistream.regenerate.confirm') %>" onsubmit="return confirm(this.dataset.confirm)" style="display: none;"></form>
 
 <style>
   .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }

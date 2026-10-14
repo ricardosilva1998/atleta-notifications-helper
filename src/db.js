@@ -4959,7 +4959,12 @@ function setMultistreamConfig(streamerId, fields) {
 function ensureMultistreamToken(streamerId) {
   const row = db.prepare('SELECT multistream_token FROM streamers WHERE id = ?').get(streamerId);
   if (row && row.multistream_token) return row.multistream_token;
-  const crypto = require('crypto');
+  return rotateMultistreamToken(streamerId);
+}
+
+// A new multistream stream key for the streamer; the previous one stops
+// working at once (it no longer finds anybody).
+function rotateMultistreamToken(streamerId) {
   const token = crypto.randomBytes(24).toString('base64url');
   db.prepare('UPDATE streamers SET multistream_token = ? WHERE id = ?').run(token, streamerId);
   return token;
@@ -5686,6 +5691,7 @@ module.exports = {
   getMultistreamConfig,
   setMultistreamConfig,
   ensureMultistreamToken,
+  rotateMultistreamToken,
   getStreamerByMultistreamToken,
   setMultistreamYoutubeStream,
   clearMultistreamYoutubeStream,

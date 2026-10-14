@@ -350,6 +350,13 @@
   "admin.msg.enabled": "Account enabled: its live connections were restarted.",
   "admin.msg.selfDisable": "You cannot disable your own account.",
   "admin.msg.selfRemove": "You cannot remove your own account.",
+  "multistream.liveUnknown": "The relay did not answer, so this page cannot tell whether you are live right now.",
+  "multistream.regenerate.button": "Regenerate stream key",
+  "multistream.regenerate.hint": "Use this if your stream key was shared or leaked. The old key stops working at once.",
+  "multistream.regenerate.confirm": "Make a new stream key? The current key stops working immediately: OBS cannot stream through the relay until you paste the new key into OBS (Settings > Stream > Stream Key).",
+  "multistream.regenerate.done": "New stream key made. Paste it into OBS (Settings > Stream > Stream Key) before you go live again.",
+  "multistream.regenerate.refusedLive": "You are live: stop streaming in OBS before you make a new stream key.",
+  "multistream.regenerate.refusedUnknown": "The relay did not answer, so it is not clear whether you are live. Try again in a minute.",
 
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",

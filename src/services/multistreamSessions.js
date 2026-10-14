@@ -230,6 +230,14 @@ function createMultistreamSessions(deps) {
     pendingStops.set(key, pending);
   }
 
+  // A stream key the streamer replaced (only while not live): what it still
+  // had on the relay goes now, not a minute after its stream ended, when the
+  // stop would complete the broadcast a stream on the new key may be reusing.
+  function keyReplaced(key, streamerId) {
+    cancelStop(key);
+    return withLock(key, () => stopForwarding(key, streamerId));
+  }
+
   async function check() {
     if (!settings().enabled) return;
     let live;
@@ -305,6 +313,7 @@ function createMultistreamSessions(deps) {
   return {
     goLive,
     streamEnded,
+    keyReplaced,
     check,
     startChecks,
     stopAll,

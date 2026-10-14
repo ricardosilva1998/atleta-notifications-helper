@@ -13,9 +13,18 @@ const express = require('express');
 const config = require('../config');
 const db = require('../db');
 const twitch = require('../services/twitch');
+const relay = require('../services/multistreamRelay');
+const { sanitizeBroadcastTitle } = require('../services/youtubeBroadcast');
 const { decideRelayAuth, streamTokenFromPath, sameSecret } = require('../services/multistreamAuth');
 const { sessions, STOP_GRACE_MS } = require('../services/multistreamSessions');
 const { requireActiveStreamer } = require('../services/streamerAccess');
+
+// The YouTube categories the settings page offers (multistream.ejs), and the
+// only ones saved. Anything else is saved as Gaming.
+const YOUTUBE_CATEGORY_IDS = Object.freeze(['20', '22', '24', '17', '28', '10']);
+const YOUTUBE_PRIVACY = Object.freeze(['public', 'unlisted', 'private']);
+// The page asks the relay whether the streamer is live; it waits this long at most.
+const RELAY_LOOKUP_TIMEOUT_MS = 3000;
 
 const dashboardRouter = express.Router();
 const apiRouter = express.Router();
@@ -25,13 +34,32 @@ dashboardRouter.use((req, res, next) => (config.multistream.enabled ? next() : r
 dashboardRouter.use(requireActiveStreamer);
 apiRouter.use((req, res, next) => (config.multistream.enabled ? next() : res.status(404).json({ error: 'not found' })));
 
+// The relay API settings (config.multistream) for services/multistreamRelay.js.
+function relaySettings() {
+  const { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret } = config.multistream;
+  return { apiUrl, apiUser, apiToken, accessClientId, accessClientSecret };
+}
+
+// Whether the streamer's stream is on the relay right now, as the relay sees
+// it: 'live', 'offline', or 'unknown' when the relay did not answer in time.
+async function liveState(token, streamerId) {
+  try {
+    const stats = await relay.getPathStats({ ...relaySettings(), sourceToken: token, signal: AbortSignal.timeout(RELAY_LOOKUP_TIMEOUT_MS) });
+    return relay.isLive(stats) ? 'live' : 'offline';
+  } catch (err) {
+    console.warn(`[multistream] could not ask the relay whether streamer ${streamerId} is live: ${err.message}`);
+    return 'unknown';
+  }
+}
+
 // --- Dashboard page ---
 
-dashboardRouter.get('/', (req, res) => {
+dashboardRouter.get('/', async (req, res) => {
   const streamer = req.streamer;
   const cfg = db.getMultistreamConfig(streamer.id) || {};
   const token = db.ensureMultistreamToken(streamer.id);
   const fresh = db.getStreamerById(streamer.id);
+  const state = await liveState(token, streamer.id);
 
   res.render('multistream', {
     streamer: fresh,
@@ -42,7 +70,10 @@ dashboardRouter.get('/', (req, res) => {
     twitchHasStreamKeyScope: twitch.hasStreamKeyScope(fresh),
     youtubeConnected: !!fresh.yt_access_token,
     youtubeChannelName: fresh.yt_channel_name || null,
-    isLive: !!cfg.multistream_active_broadcast_id,
+    // From the relay, not from the stored YouTube broadcast (which says
+    // nothing about a stream that only goes to Twitch).
+    isLive: state === 'live',
+    liveUnknown: state === 'unknown',
     query: req.query,
   });
 });
@@ -51,11 +82,26 @@ dashboardRouter.post('/save', (req, res) => {
   const { enabled, youtube_privacy, youtube_category_id, youtube_default_title } = req.body;
   db.setMultistreamConfig(req.streamer.id, {
     enabled: !!enabled,
-    youtubePrivacy: ['public', 'unlisted', 'private'].includes(youtube_privacy) ? youtube_privacy : 'public',
-    youtubeCategoryId: youtube_category_id || '20',
-    youtubeDefaultTitle: youtube_default_title?.slice(0, 100) || null,
+    youtubePrivacy: YOUTUBE_PRIVACY.includes(youtube_privacy) ? youtube_privacy : 'public',
+    youtubeCategoryId: YOUTUBE_CATEGORY_IDS.includes(youtube_category_id) ? youtube_category_id : '20',
+    // Saved as YouTube will take it, so the page shows what will be used.
+    youtubeDefaultTitle: typeof youtube_default_title === 'string' ? (sanitizeBroadcastTitle(youtube_default_title, '') || null) : null,
   });
   res.redirect('/dashboard/multistream?saved=1');
+});
+
+// A new stream key, for one that was shared or leaked. Refused while the
+// streamer is live (or the relay cannot say), because the stream on the old
+// key would lose its forwarders.
+dashboardRouter.post('/regenerate-key', async (req, res) => {
+  const streamer = req.streamer;
+  const current = db.ensureMultistreamToken(streamer.id);
+  const state = await liveState(current, streamer.id);
+  if (state !== 'offline') return res.redirect(`/dashboard/multistream?error=${state === 'live' ? 'live' : 'relay'}`);
+  db.rotateMultistreamToken(streamer.id);
+  sessions().keyReplaced(current, streamer.id)
+    .catch((err) => console.error(`[multistream] clearing the old stream key of streamer ${streamer.id}: ${err.message}`));
+  res.redirect('/dashboard/multistream?regenerated=1');
 });
 
 dashboardRouter.post('/reset-youtube-stream', (req, res) => {
@@ -132,4 +178,4 @@ apiRouter.post('/webhook/on-not-ready', (req, res) => {
   res.json({ ok: true, stopsInSeconds: STOP_GRACE_MS / 1000 });
 });
 
-module.exports = { dashboardRouter, apiRouter };
+module.exports = { dashboardRouter, apiRouter, YOUTUBE_CATEGORY_IDS };

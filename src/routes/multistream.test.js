@@ -39,10 +39,16 @@ const twitchStub = {
   getStreamKey: record('twitch.getStreamKey', 'live_000000_synthetic'),
   hasStreamKeyScope: () => true,
 };
+// What the relay answers about live/<key>: stats, null (no such path), or an Error.
+const relayAnswer = { stats: null };
 const relayStub = {
   addForwardPaths: record('relay.add', ['twitch']),
   removeForwardPaths: record('relay.remove', undefined),
-  getPathStats: record('relay.stats', null),
+  getPathStats: async (options) => {
+    calls.push(['relay.stats', options.sourceToken, options.signal instanceof AbortSignal]);
+    if (relayAnswer.stats instanceof Error) throw relayAnswer.stats;
+    return relayAnswer.stats;
+  },
   isLive: (stats) => !!stats && stats.available === true,
 };
 // The session lifecycle (services/multistreamSessions.js) has its own tests;
@@ -57,6 +63,7 @@ const sessionsStub = {
       return session.goLive;
     },
     streamEnded: (key) => { calls.push(['sessions.streamEnded', key]); },
+    keyReplaced: async (key, streamerId) => { calls.push(['sessions.keyReplaced', key, streamerId]); },
   }),
 };
 
@@ -183,6 +190,7 @@ const relayAuth = (body, authorization = basic('mediamtx', WEBHOOK_SECRET)) => r
 beforeEach(() => {
   calls.length = 0;
   logs.length = 0;
+  relayAnswer.stats = null;
 });
 afterEach(() => relayConfigured(false));
 
@@ -363,5 +371,125 @@ describe('the webhooks', () => {
     assert.equal(res.status, 200);
     assert.deepEqual(res.json(), { ok: true, stopsInSeconds: 60 });
     assert.deepEqual(calls, [['sessions.streamEnded', KEY]]);
+  });
+});
+
+// ── The settings page: live state, saving, a new key (MS12, MS13) ─────────
+
+describe('the settings page', () => {
+  beforeEach(() => relayConfigured(true));
+  const page = (id) => request('GET', '/dashboard/multistream', { streamer: id, json: true }).then((res) => res.json().locals);
+
+  test('says "live" from the relay\'s own view of the stream, asked with a short deadline', async () => {
+    const id = addStreamer({ multistream_active_broadcast_id: 'yt-broadcast-left-over' });
+    const key = db.ensureMultistreamToken(id);
+    relayAnswer.stats = { name: `live/${key}`, available: true };
+    let locals = await page(id);
+    assert.equal(locals.isLive, true);
+    assert.equal(locals.liveUnknown, false);
+    assert.deepEqual(calls, [['relay.stats', key, true]]);
+
+    relayAnswer.stats = null; // the relay has no stream there, whatever the stored broadcast says
+    locals = await page(id);
+    assert.equal(locals.isLive, false);
+    assert.equal(locals.liveUnknown, false);
+
+    relayAnswer.stats = new Error('The operation was aborted due to timeout');
+    locals = await page(id);
+    assert.equal(locals.isLive, false);
+    assert.equal(locals.liveUnknown, true);
+    assert.ok(logs.some(([level, line]) => level === 'warn' && line.includes(`streamer ${id} is live`) && !line.includes(key)), 'logged, without the key');
+  });
+
+  test('saving keeps only the categories and privacy settings the page offers, and the title as YouTube will take it', async () => {
+    const id = addStreamer();
+    const save = (form) => request('POST', '/dashboard/multistream/save', { streamer: id, form });
+    await save({ enabled: '1', youtube_privacy: 'unlisted', youtube_category_id: '17', youtube_default_title: '  Race <3 night  ' });
+    let row = db.getMultistreamConfig(id);
+    assert.deepEqual([row.multistream_enabled, row.multistream_youtube_privacy, row.multistream_youtube_category_id, row.multistream_youtube_default_title],
+      [1, 'unlisted', '17', 'Race 3 night']);
+    await save({ youtube_privacy: 'friends-only', youtube_category_id: '99', youtube_default_title: '<<>>' });
+    row = db.getMultistreamConfig(id);
+    assert.deepEqual([row.multistream_enabled, row.multistream_youtube_privacy, row.multistream_youtube_category_id, row.multistream_youtube_default_title],
+      [0, 'public', '20', null]);
+    await save({ youtube_category_id: '10', youtube_default_title: '🏁'.repeat(150) });
+    row = db.getMultistreamConfig(id);
+    assert.equal(row.multistream_youtube_category_id, '10');
+    assert.equal(Array.from(row.multistream_youtube_default_title).length, 100);
+  });
+
+  test('offers exactly the categories that are saved', async () => {
+    const { YOUTUBE_CATEGORY_IDS } = require(ROUTES_FILE);
+    const id = addStreamer({ yt_access_token: 'synthetic-yt-token' });
+    const res = await request('GET', '/dashboard/multistream', { streamer: id });
+    assert.equal(res.status, 200);
+    const select = res.text.match(/<select name="youtube_category_id"[\s\S]*?<\/select>/);
+    assert.ok(select, 'the category list is on the page');
+    const offered = [...select[0].matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
+    assert.deepEqual([...offered].sort(), [...YOUTUBE_CATEGORY_IDS].sort());
+  });
+
+  test('offers a new stream key, asking first and saying OBS must be updated', async () => {
+    const res = await request('GET', '/dashboard/multistream', { streamer: addStreamer() });
+    const form = res.text.match(/<form id="regenerate-key-form"[^>]*>/);
+    assert.ok(form, 'the form is on the page');
+    assert.match(form[0], /action="\/dashboard\/multistream\/regenerate-key"/);
+    assert.match(form[0], /data-confirm="[^"]*OBS[^"]*"/);
+    assert.match(form[0], /onsubmit="return confirm\(this\.dataset\.confirm\)"/);
+    assert.match(res.text, /<button type="submit" form="regenerate-key-form"/);
+  });
+});
+
+describe('a new stream key (MS12)', () => {
+  beforeEach(() => relayConfigured(true));
+  const regenerate = (id) => request('POST', '/dashboard/multistream/regenerate-key', { streamer: id });
+
+  test('replaces the key while the streamer is not live; the old key finds nobody, and what it still had on the relay is cleared', async () => {
+    const id = addStreamer();
+    const old = db.ensureMultistreamToken(id);
+    const res = await regenerate(id);
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard/multistream?regenerated=1');
+    const fresh = db.getMultistreamConfig(id).multistream_token;
+    assert.match(fresh, /^[A-Za-z0-9_-]{32}$/);
+    assert.notEqual(fresh, old);
+    assert.equal(db.getStreamerByMultistreamToken(old), undefined);
+    assert.equal(db.getStreamerByMultistreamToken(fresh).id, id);
+    assert.deepEqual(calls, [['relay.stats', old, true], ['sessions.keyReplaced', old, id]]);
+  });
+
+  test('is refused while the streamer is live, and when the relay cannot say', async () => {
+    const id = addStreamer();
+    const key = db.ensureMultistreamToken(id);
+    relayAnswer.stats = { available: true };
+    let res = await regenerate(id);
+    assert.equal(res.headers.location, '/dashboard/multistream?error=live');
+    relayAnswer.stats = new Error('fetch failed');
+    res = await regenerate(id);
+    assert.equal(res.headers.location, '/dashboard/multistream?error=relay');
+    assert.equal(db.getMultistreamConfig(id).multistream_token, key, 'unchanged');
+    assert.deepEqual(calls.filter(([name]) => name === 'sessions.keyReplaced'), []);
+  });
+
+  test('the page says what happened', async () => {
+    const id = addStreamer();
+    const html = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+    const { t } = require('../i18n');
+    for (const [query, key] of [['regenerated=1', 'multistream.regenerate.done'], ['error=live', 'multistream.regenerate.refusedLive'], ['error=relay', 'multistream.regenerate.refusedUnknown']]) {
+      const res = await request('GET', `/dashboard/multistream?${query}`, { streamer: id });
+      assert.ok(res.text.includes(html(t('en', key))), query);
+    }
+    const other = await request('GET', '/dashboard/multistream?error=%3Cb%3Eanything%3C%2Fb%3E', { streamer: id });
+    assert.ok(!other.text.includes('anything'), 'an error code that is not known shows nothing');
+  });
+
+  test('needs a logged-in streamer, and the relay to be configured', async () => {
+    const anonymous = await request('POST', '/dashboard/multistream/regenerate-key');
+    assert.equal(anonymous.headers.location, '/auth/login');
+    relayConfigured(false);
+    const id = addStreamer({ multistream_token: 'tok-regen-gated-000000000' });
+    const res = await regenerate(id);
+    assert.equal(res.headers.location, '/dashboard');
+    assert.equal(db.getMultistreamConfig(id).multistream_token, 'tok-regen-gated-000000000');
   });
 });
