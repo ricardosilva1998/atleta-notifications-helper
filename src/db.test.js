@@ -465,3 +465,41 @@ describe('getOverlayStats7d: the dashboard\'s 7-day tiles', () => {
     assert.deepEqual(db.getOverlayStats7d(streamerA), { follows: 0, subs: 0, bits_events: 0, donations: 0, raids: 0, giftsubs: 0, total: 0 });
   });
 });
+
+describe('a disabled account is left out of the lookups the bot uses', () => {
+  const GUILD = '400000000000000041';
+  const disable = (id) => db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(id);
+
+  test('the server lookup behind welcome messages and /link skips a disabled streamer\'s claim, and brings it back when enabled', () => {
+    db.upsertGuild(GUILD, streamerA, 'Shared server');
+    db.upsertGuild(GUILD, streamerB, 'Shared server');
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD).map((g) => g.streamer_id).sort(), [streamerA, streamerB].sort());
+
+    disable(streamerA);
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD).map((g) => g.streamer_id), [streamerB]);
+    assert.equal(db.getGuildConfigsByGuildId(GUILD)[0].twitch_username, 'streamer_b', 'and still names the Twitch channel');
+
+    disable(streamerB);
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD), []);
+
+    db.enableStreamer(streamerA);
+    assert.deepEqual(db.getGuildConfigsByGuildId(GUILD).map((g) => g.streamer_id), [streamerA]);
+  });
+
+  test('an account with no enabled flag at all (an old row) still counts as enabled', () => {
+    db.upsertGuild(GUILD, streamerA, 'Shared server');
+    db.db.prepare('UPDATE streamers SET enabled = NULL WHERE id = ?').run(streamerA);
+    assert.equal(db.getGuildConfigsByGuildId(GUILD).length, 1);
+  });
+
+  test('the YouTube chat bot\'s streamers leave out a disabled account', () => {
+    db.db.prepare("UPDATE streamers SET yt_chatbot_enabled = 1, youtube_channel_id = 'UCsynthetic' WHERE id IN (?, ?)").run(streamerA, streamerB);
+    assert.deepEqual(db.getYoutubeChatbotEnabledStreamers().map((s) => s.id).sort(), [streamerA, streamerB].sort());
+
+    disable(streamerA);
+    assert.deepEqual(db.getYoutubeChatbotEnabledStreamers().map((s) => s.id), [streamerB]);
+
+    db.enableStreamer(streamerA);
+    assert.equal(db.getYoutubeChatbotEnabledStreamers().length, 2);
+  });
+});

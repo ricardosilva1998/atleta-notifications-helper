@@ -1417,7 +1417,9 @@ function updateStreamerYoutube(streamerId, youtubeChannelId, youtubeApiKey) {
 
 const _getGuildsForStreamer = db.prepare('SELECT * FROM guilds WHERE streamer_id = ?');
 const _getGuildConfig = db.prepare('SELECT * FROM guilds WHERE guild_id = ? AND streamer_id = ?');
-const _getGuildConfigsByGuildId = db.prepare('SELECT guilds.*, streamers.twitch_username FROM guilds JOIN streamers ON guilds.streamer_id = streamers.id WHERE guild_id = ?');
+// Behind welcome messages and /link. A disabled account's claim of a server is left
+// out, so the bot does nothing for it there until it is enabled again.
+const _getGuildConfigsByGuildId = db.prepare('SELECT guilds.*, streamers.twitch_username FROM guilds JOIN streamers ON guilds.streamer_id = streamers.id WHERE guild_id = ? AND COALESCE(streamers.enabled, 1) = 1');
 const _upsertGuild = db.prepare(`
   INSERT INTO guilds (guild_id, streamer_id, guild_name)
   VALUES (?, ?, ?)
@@ -3151,10 +3153,12 @@ function updateStreamerYoutubeAccessToken(streamerId, accessToken, refreshToken,
   `).run(sealToken(accessToken), sealToken(refreshToken), expiresAt, streamerId);
 }
 
+// Disabled accounts are left out, like in getChatbotEnabledStreamers.
 function getYoutubeChatbotEnabledStreamers() {
   return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
     WHERE yt_chatbot_enabled = 1
+    AND COALESCE(enabled, 1) = 1
     AND youtube_channel_id IS NOT NULL
     AND youtube_channel_id != ''
   `).all());
