@@ -663,7 +663,7 @@
 
   function renderClassStats(trackName, className) {
     const trackStats = allStats.filter(s => s.track_name === trackName && s.car_class === className);
-    const raceTypes = RACE_TYPES_BY_CLASS[className] || DEFAULT_RACE_TYPES;
+    const raceTypes = Object.prototype.hasOwnProperty.call(RACE_TYPES_BY_CLASS, className) ? RACE_TYPES_BY_CLASS[className] : DEFAULT_RACE_TYPES;
 
     // Build lookup
     const lookup = Object.create(null);

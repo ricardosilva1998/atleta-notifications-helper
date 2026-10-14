@@ -496,6 +496,19 @@ describe('tracks.ejs with hostile values in every field', () => {
     assert.deepEqual(rejections, []);
   });
 
+  test('a class named like a built-in object property still gets its race statistics', async () => {
+    rejections.length = 0;
+    const api = tracksApi();
+    const page = await openTrack({
+      api: (url, options = {}) => (url === '/api/track-stats' && (!options.method || options.method === 'GET')
+        ? [{ track_name: TRACK, car_class: 'constructor', race_type: 'Sprint', avg_lap_time: 98.5, avg_pit_time: 30, avg_qualify_time: 97, est_laps: 20, avg_sof: 2000, race_count: 2, avg_drivers: 18, top_car: 'Car' }]
+        : api(url, options)),
+    });
+    const table = page.document.getElementById('class-stats-content').textContent;
+    assert.ok(table.includes('Sprint') && table.includes('Endurance'), 'the default race types are listed');
+    assert.deepEqual(rejections, []);
+  });
+
   test('the session list and a session\'s laps', async () => {
     rejections.length = 0;
     const page = await openTrack();
