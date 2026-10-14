@@ -851,9 +851,11 @@ describe('the tab named in the server page URL', () => {
   test('the page script holds a tab name from the list and nothing from the URL', async () => {
     const res = await request('GET', `/dashboard/guild/${G}?tab=%0A%5C%27%22%3C`, { streamer: id });
     assert.equal(res.status, 200);
-    assert.ok(res.text.includes("switchTab([null, savedTab].find(onPage) || 'twitch');"));
+    assert.ok(res.text.includes('const requestedTab = null;'));
     const ok = await request('GET', `/dashboard/guild/${G}?tab=discord`, { streamer: id });
-    assert.ok(ok.text.includes(`switchTab(["discord", savedTab].find(onPage) || 'twitch');`));
+    assert.ok(ok.text.includes('const requestedTab = "discord";'));
+    assert.ok(ok.text.includes("switchTab([requestedTab, savedTab].find(onPage) || 'twitch');"));
+    assert.ok(ok.text.includes("url.searchParams.delete('tab');"), 'the address forgets the tab once it is used');
   });
 });
 

@@ -109,7 +109,7 @@ MEDIAMTX_WEBHOOK_SECRET=<HOOK_SECRET from step 3>
 # Optional: MEDIAMTX_API_USER (default admin), MEDIAMTX_CF_ACCESS_CLIENT_ID / _SECRET (Cloudflare Access)
 ```
 
-All four are needed; `MULTISTREAM_KEY_SECRET` is no longer used. Railway redeploys on the change, and the Multistream card appears for every streamer — run step 8 right away. To hide it again, unset `MEDIAMTX_API_URL`.
+All four are needed; `MULTISTREAM_KEY_SECRET` is no longer used. Railway redeploys on the change, and the Multistream card appears for every streamer — run step 8 right away. The card and `/dashboard/multistream` also need `features.youtube: true` in `src/config.js` (they are hidden while YouTube is). To hide it again, unset `MEDIAMTX_API_URL`.
 
 ### Step 7 — Re-auth Twitch broadcaster (1 min)
 

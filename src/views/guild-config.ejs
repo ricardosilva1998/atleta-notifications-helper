@@ -477,7 +477,18 @@
   const onPage = (name) => Array.from(tabs).some(t => t.dataset.tab === name);
   let savedTab = null;
   try { savedTab = localStorage.getItem('guildconfig_tab'); } catch (e) { /* storage refused: the default */ }
-  switchTab([<%- JSON.stringify(typeof requestedTab !== 'undefined' && requestedTab ? requestedTab : null).replace(/</g, '\\u003c') %>, savedTab].find(onPage) || 'twitch');
+  const requestedTab = <%- JSON.stringify(typeof requestedTab !== 'undefined' && requestedTab ? requestedTab : null).replace(/</g, '\\u003c') %>;
+  switchTab([requestedTab, savedTab].find(onPage) || 'twitch');
+  // A tab named in the address counts once: it becomes the remembered tab and leaves
+  // the address, so after the streamer clicks another tab a reload opens that one.
+  if (onPage(requestedTab)) {
+    try { localStorage.setItem('guildconfig_tab', requestedTab); } catch (e) { /* storage refused: not remembered */ }
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('tab');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch (e) { /* the address keeps it */ }
+  }
 
   function toggleEdit(id) {
     var el = document.getElementById('edit-' + id);

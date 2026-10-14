@@ -279,7 +279,7 @@ router.delete('/account/avatar', (req, res) => {
 //   milestones     the same, and they need a working broadcaster authorization: 'wait' without one (the poller
 //                  could also use another streamer's who watches the channel; the card does not count on it);
 //   highlights     the server's switch, when the server's digest is this streamer's (pollers/weeklyDigest.js:
-//                  the first streamer who switched it on there), the channel is in it, and there is a go-live
+//                  the lowest streamer id that switched it on there), the channel is in it, and there is a go-live
 //                  channel in the server to post in;
 //   subRoles       the server's switch and role (pollers/subSync.js); 'wait' without a working authorization.
 // `servers`: the dashboard's server rows, each with the bot's view of the server (discordGuild, when it sees it)
