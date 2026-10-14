@@ -449,3 +449,161 @@ describe('getFollowAge', () => {
     assert.equal(calls.filter((c) => c.to === 'helix').length, 3);
   });
 });
+
+// ── Batched live checks, and a timeout on what the pollers call (N12, M21) ──
+
+describe('getStreams: one request for a batch of channels', () => {
+  const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+  let requests; // Helix requests: { url, signal }
+
+  // A fresh module per test, so the cached app token starts empty.
+  function freshTwitch() {
+    delete require.cache[require.resolve('./twitch')];
+    return require('./twitch');
+  }
+
+  // Helix answers with `streams` (or `status` when it is not 200).
+  function stubHelix({ streams = [], status = 200 } = {}) {
+    requests = [];
+    global.fetch = async (url, opts = {}) => {
+      if (String(url) === TOKEN_URL) {
+        return { ok: true, status: 200, json: async () => ({ access_token: 'app-token', expires_in: 3600 }), text: async () => '' };
+      }
+      requests.push({ url: String(url), signal: opts.signal });
+      return { ok: status === 200, status, json: async () => ({ data: streams }), text: async () => 'error body' };
+    };
+  }
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  test('asks about all the logins in one request, with first=100 so no live channel is cut off', async () => {
+    const tw = freshTwitch();
+    stubHelix();
+    await tw.getStreams(['alpha', 'bravo', 'charlie']);
+    assert.equal(requests.length, 1);
+    const url = new URL(requests[0].url);
+    assert.equal(url.pathname, '/helix/streams');
+    assert.deepEqual(url.searchParams.getAll('user_login'), ['alpha', 'bravo', 'charlie']);
+    assert.equal(url.searchParams.get('first'), '100', 'Helix returns 20 by default');
+    assert.ok(requests[0].signal instanceof AbortSignal, 'the request has a timeout');
+  });
+
+  test('answers with the live channels by lowercase login; offline channels have no entry', async () => {
+    const tw = freshTwitch();
+    stubHelix({ streams: [
+      { id: '1', user_login: 'alpha', user_name: 'Alpha', title: 'one' },
+      { id: '2', user_login: 'Charlie', user_name: 'Charlie', title: 'three' },
+    ] });
+    const streams = await tw.getStreams(['alpha', 'bravo', 'charlie']);
+    assert.deepEqual([...streams.keys()].sort(), ['alpha', 'charlie']);
+    assert.equal(streams.get('alpha').title, 'one');
+    assert.equal(streams.get('charlie').id, '2');
+    assert.equal(streams.has('bravo'), false);
+  });
+
+  test('100 logins are fine; 101 are refused before any request, because Helix takes 100', async () => {
+    const tw = freshTwitch();
+    stubHelix();
+    const logins = (n) => Array.from({ length: n }, (_, i) => `login_${i}`);
+    await tw.getStreams(logins(100));
+    assert.equal(requests.length, 1);
+    await assert.rejects(() => tw.getStreams(logins(101)), RangeError);
+    assert.equal(requests.length, 1, 'no request for the oversized batch');
+    assert.equal(tw.STREAMS_PER_REQUEST, 100);
+  });
+
+  test('no logins means no request', async () => {
+    const tw = freshTwitch();
+    stubHelix();
+    assert.equal((await tw.getStreams([])).size, 0);
+    assert.equal(requests.length, 0);
+  });
+
+  test('a failed request throws: it is never an empty map that reads as "everyone is offline"', async () => {
+    const tw = freshTwitch();
+    stubHelix({ status: 500 });
+    await assert.rejects(() => tw.getStreams(['alpha']), /Twitch API error: 500/);
+  });
+});
+
+describe('the pollers\' Twitch calls have a timeout', () => {
+  const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+  let seen; // [{ url, signal }]
+
+  function freshTwitch() {
+    delete require.cache[require.resolve('./twitch')];
+    return require('./twitch');
+  }
+
+  function stub(body = {}) {
+    seen = [];
+    global.fetch = async (url, opts = {}) => {
+      seen.push({ url: String(url), signal: opts.signal });
+      if (String(url) === TOKEN_URL) {
+        return { ok: true, status: 200, json: async () => ({ access_token: 'app-token', expires_in: 3600 }), text: async () => '' };
+      }
+      return { ok: true, status: 200, json: async () => body, text: async () => '' };
+    };
+  }
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  test('the app token request (cold start, and every 401) is cut after a while instead of holding every poller', async () => {
+    const tw = freshTwitch();
+    stub({ data: [] });
+    await tw.getStream('someone');
+    const tokenRequest = seen.find((call) => call.url === TOKEN_URL);
+    assert.ok(tokenRequest, 'the token was requested');
+    assert.ok(tokenRequest.signal instanceof AbortSignal);
+    assert.equal(tokenRequest.signal.aborted, false);
+  });
+
+  test('a token request that never answers fails instead of hanging', async () => {
+    const tw = freshTwitch();
+    global.fetch = (url, opts = {}) => new Promise((_resolve, reject) => {
+      if (opts.signal) opts.signal.addEventListener('abort', () => reject(opts.signal.reason), { once: true });
+    });
+    // The default timeout is 10 s: mock the deadline instead of waiting for it.
+    const realTimeout = AbortSignal.timeout;
+    AbortSignal.timeout = () => realTimeout.call(AbortSignal, 30);
+    try {
+      await assert.rejects(() => tw.getStream('someone'), (err) => err.name === 'TimeoutError');
+    } finally {
+      AbortSignal.timeout = realTimeout;
+    }
+  });
+
+  test('the follower count, the subscriber list and the subscriber total all have a timeout', async () => {
+    const tw = freshTwitch();
+    stub({ data: [], total: 7, pagination: {} });
+    await tw.getFollowerCount('42', 'broadcaster-token');
+    await tw.getSubscribers('42', 'broadcaster-token');
+    await tw.getSubscriberCount('42', 'broadcaster-token');
+    assert.equal(seen.length, 3);
+    for (const call of seen) assert.ok(call.signal instanceof AbortSignal, call.url);
+  });
+
+  test('getSubscriberCount asks for one entry and reads the total, so it never walks the whole list', async () => {
+    const tw = freshTwitch();
+    stub({ data: [{ user_id: '1' }], total: 1234, pagination: { cursor: 'more' } });
+    assert.equal(await tw.getSubscriberCount('42', 'broadcaster-token'), 1234);
+    assert.equal(seen.length, 1, 'one request, whatever the size of the list');
+    const url = new URL(seen[0].url);
+    assert.equal(url.pathname, '/helix/subscriptions');
+    assert.equal(url.searchParams.get('broadcaster_id'), '42');
+    assert.equal(url.searchParams.get('first'), '1');
+  });
+
+  test('getSubscriberCount: no total means 0, and a rejected request is an error', async () => {
+    const tw = freshTwitch();
+    stub({ data: [] });
+    assert.equal(await tw.getSubscriberCount('42', 'broadcaster-token'), 0);
+
+    global.fetch = async () => ({ ok: false, status: 401, json: async () => ({}), text: async () => 'Unauthorized' });
+    await assert.rejects(() => tw.getSubscriberCount('42', 'stale-token'), /Subscriptions API error: 401/);
+  });
+});

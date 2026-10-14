@@ -4,6 +4,9 @@ const db = require('../db');
 let accessToken = null;
 let tokenExpiresAt = 0;
 
+// A slow Twitch response must not hang a poller or a page indefinitely.
+const HELIX_TIMEOUT_MS = 10_000;
+
 // In-flight auth promise — multiple concurrent callers should share one fetch.
 // Without this, a cold start under load triggers N parallel /oauth2/token
 // requests that race and can clobber each other's tokens.
@@ -19,9 +22,12 @@ async function authenticate() {
       grant_type: 'client_credentials',
     });
 
+    // The pollers call this on a cold start and on every 401: a token endpoint
+    // that never answers must not hold every one of them.
     const res = await fetch('https://id.twitch.tv/oauth2/token', {
       method: 'POST',
       body: params,
+      signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -34,9 +40,6 @@ async function authenticate() {
   })().finally(() => { _authInFlight = null; });
   return _authInFlight;
 }
-
-// A slow Helix response must not hang a poller or a page indefinitely.
-const HELIX_TIMEOUT_MS = 10_000;
 
 function helixFetch(endpoint, signal) {
   return fetch(`https://api.twitch.tv/helix${endpoint}`, {
@@ -95,6 +98,31 @@ async function getStream(username, options) {
   return data.data?.[0] || null;
 }
 
+// Helix answers /streams with at most 100 streams per page, and takes 100
+// logins per request: one request covers a whole batch of channels.
+const STREAMS_PER_REQUEST = 100;
+
+// Which of these channels (at most STREAMS_PER_REQUEST logins) are live right
+// now: a Map of lowercase login -> stream. A channel that is offline, banned or
+// unknown has no entry. A failed request throws: it must never be read as "all
+// of these channels are offline".
+async function getStreams(logins, options) {
+  if (logins.length === 0) return new Map();
+  if (logins.length > STREAMS_PER_REQUEST) {
+    throw new RangeError(`Twitch /streams takes at most ${STREAMS_PER_REQUEST} logins per request, got ${logins.length}`);
+  }
+  const params = new URLSearchParams();
+  for (const login of logins) params.append('user_login', login);
+  params.set('first', String(STREAMS_PER_REQUEST));
+  const data = await apiCall(`/streams?${params}`, options);
+
+  const streams = new Map();
+  for (const stream of data.data || []) {
+    if (stream && stream.user_login) streams.set(String(stream.user_login).toLowerCase(), stream);
+  }
+  return streams;
+}
+
 async function getUserId(username, options) {
   const data = await apiCall(`/users?login=${encodeURIComponent(username)}`, options);
   return data.data?.[0]?.id || null;
@@ -141,6 +169,7 @@ async function getSubscribers(broadcasterId, broadcasterAccessToken) {
         Authorization: `Bearer ${broadcasterAccessToken}`,
         'Client-Id': config.twitch.clientId,
       },
+      signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -153,6 +182,28 @@ async function getSubscribers(broadcasterId, broadcasterAccessToken) {
   } while (cursor);
 
   return subs;
+}
+
+// How many people subscribe to the channel: Twitch states the total on every
+// page, so a single one-entry page answers it. Reading the whole list for a
+// count (getSubscribers) is one request per hundred subscribers.
+async function getSubscriberCount(broadcasterId, broadcasterAccessToken) {
+  const params = new URLSearchParams({ broadcaster_id: broadcasterId, first: '1' });
+
+  const res = await fetch(`https://api.twitch.tv/helix/subscriptions?${params}`, {
+    headers: {
+      Authorization: `Bearer ${broadcasterAccessToken}`,
+      'Client-Id': config.twitch.clientId,
+    },
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Subscriptions API error: ${res.status} ${await res.text()}`);
+  }
+
+  const data = await res.json();
+  return data.total || 0;
 }
 
 async function getVideos(broadcasterId, startedAfter, options) {
@@ -180,6 +231,7 @@ async function getFollowerCount(broadcasterId, broadcasterAccessToken) {
       Authorization: `Bearer ${broadcasterAccessToken}`,
       'Client-Id': config.twitch.clientId,
     },
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -393,4 +445,4 @@ async function getStreamKey(streamer) {
   return key;
 }
 
-module.exports = { getStream, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, getStreamKey, needsBroadcasterReauth };
+module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, getStreamKey, needsBroadcasterReauth };
