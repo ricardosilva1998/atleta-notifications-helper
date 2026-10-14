@@ -1,0 +1,362 @@
+'use strict';
+
+// The working cards' states (services/dashboardCards.js) from synthetic data: every card in the states the
+// dashboard meets. No database, Discord or Twitch: the input is what GET /dashboard gathers.
+
+const { test, describe } = require('node:test');
+const assert = require('node:assert/strict');
+const { buildCards, cardTexts, ORDER } = require('./dashboardCards');
+
+const G1 = '600000000000000001';
+const G2 = '600000000000000002';
+
+// One claimed server as discordNotificationsCard() gives it (with Task 13's fields).
+const server = (over = {}) => ({
+  guildId: G1, name: 'Synthetic Server', icon: null, botPresent: true, url: `/dashboard/guild/${G1}`,
+  goLive: { state: 'on', where: '#live' }, clips: { state: 'off', where: null }, recaps: 'off', milestones: 'off', highlights: 'off', subRoles: 'on',
+  switches: { goLive: true, clips: false, recaps: false, milestones: false, highlights: false, subRoles: true },
+  liveWhere: '#live', clipsWhere: null, hasLiveChannel: true, hasClipsChannel: false, hasSubRole: true,
+  ...over,
+});
+
+function input(over = {}) {
+  const streamer = {
+    id: 1, twitch_user_id: '1001', twitch_username: 'synthetic_channel', chatbot_enabled: 1,
+    chat_follow_enabled: 1, chat_follow_template: 'Welcome, {username}!', chat_sub_enabled: 1, chat_sub_template: 'Thanks {username}',
+    chat_giftsub_enabled: 0, chat_giftsub_template: null, chat_bits_enabled: 1, chat_bits_template: 'Bits from {username}',
+    chat_donation_enabled: 1, chat_donation_template: 'Tip of {amount}', chat_raid_enabled: 1, chat_raid_template: 'Raid of {viewers}',
+    overlay_enabled: 1, overlay_follow_enabled: 1, overlay_sub_enabled: 1, overlay_bits_enabled: 0, overlay_donation_enabled: 1,
+    overlay_raid_enabled: 1, overlay_giveaway_enabled: 1, overlay_follow_duration: 8, overlay_sub_duration: 10, overlay_bits_duration: 10,
+    overlay_donation_duration: 12, overlay_raid_duration: 7, overlay_giveaway_duration: 60, overlay_volume: 0.24,
+    cmd_followage_enabled: 1, mod_link_protection_enabled: 1, sponsor_send_chat: 1, sponsor_chat_interval_minutes: 15,
+    paypal_email: 'tips@example.test', donation_page_enabled: 1, donation_currency: 'EUR',
+    cp_rewards_enabled: 1, cp_affiliate_status: 'ok', multistream_enabled: 0,
+    ...(over.streamer || {}),
+  };
+  return {
+    features: { overlays: true },
+    now: Date.parse('2026-10-14T12:00:00Z'),
+    appUrl: 'https://atleta.example',
+    bot: { connected: true, moderator: true, username: 'atleta_bot' },
+    overlay: { url: 'https://atleta.example/overlay/synthetic-token', open: true },
+    discord: { twitchLinked: true, announcing: 1, needsAuth: false, authAction: 'enable', servers: [server()] },
+    commands: [],
+    bannedWords: { total: 0, regex: 0 },
+    modActionsThisWeek: 0,
+    sponsorMessages: [],
+    tips: { recent: [], count90d: 0 },
+    tipGoal: null,
+    rewards: [],
+    rewardsAccess: { hasScope: true },
+    giveaway: null,
+    spotifyConnected: true,
+    multistreamAvailable: false,
+    ...over,
+    streamer,
+  };
+}
+const build = (over) => buildCards(input(over));
+const keyOf = (status) => status && status.key;
+
+describe('the cards and their order', () => {
+  test('ten cards in reading order while the overlay features are on', () => {
+    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'rewards', 'spotify']);
+    assert.deepEqual(build().order, ORDER);
+    assert.equal(build().chatbotOn, true);
+  });
+
+  test('without the overlay features the OBS overlay and rewards cards are left out; Multistream comes last while the relay is set up', () => {
+    const off = build({ features: { overlays: false } });
+    assert.deepEqual(off.order, ['chatbot', 'discord', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'spotify']);
+    assert.equal(off.overlay, undefined);
+    assert.equal(off.rewards, undefined);
+    const relay = build({ multistreamAvailable: true, streamer: { multistream_enabled: 1 } });
+    assert.equal(relay.order.at(-1), 'multistream');
+    assert.equal(keyOf(relay.multistream.status), 'dashboard.cards.multistream.active');
+  });
+});
+
+describe('Chatbot', () => {
+  test('online in the channel, with the six thank-you messages and how many are on', () => {
+    const card = build().chatbot;
+    assert.equal(card.setup, null);
+    assert.deepEqual(card.status, { key: 'cards.chatbot.status.online', params: { channel: 'synthetic_channel' }, tone: 'ok' });
+    assert.deepEqual(card.thankYous.map((ty) => [ty.event, ty.label, ty.switchKey, ty.textKey, ty.on]), [
+      ['follow', 'cards.events.follow', 'chat_follow_enabled', 'chat_follow_template', true],
+      ['sub', 'cards.events.sub', 'chat_sub_enabled', 'chat_sub_template', true],
+      ['giftsub', 'cards.events.giftsub', 'chat_giftsub_enabled', 'chat_giftsub_template', false],
+      ['bits', 'cards.events.bits', 'chat_bits_enabled', 'chat_bits_template', true],
+      ['donation', 'cards.events.donation', 'chat_donation_enabled', 'chat_donation_template', true],
+      ['raid', 'cards.events.raid', 'chat_raid_enabled', 'chat_raid_template', true],
+    ]);
+    assert.equal(card.thankYous[0].text, 'Welcome, {username}!');
+    assert.equal(card.thankYous[2].text, '', 'no message saved');
+    assert.deepEqual(card.thankYous[4].vars, ['{username}', '{amount}', '{currency}', '{message}']);
+    assert.deepEqual(card.counts.thankYous, { key: 'cards.common.nOfM', params: { on: 5, total: 6 } });
+  });
+
+  test('off; connecting while the bot\'s chat connection is down; Twitch to link first', () => {
+    const off = build({ streamer: { chatbot_enabled: 0 } });
+    assert.deepEqual(off.chatbot.status, { key: 'cards.chatbot.status.off', params: {}, tone: 'off' });
+    assert.equal(off.chatbotOn, false);
+    assert.deepEqual(build({ bot: { connected: false, moderator: null, username: 'atleta_bot' } }).chatbot.status, { key: 'cards.chatbot.status.connecting', params: {}, tone: 'warn' });
+    const unlinked = build({ streamer: { twitch_user_id: null } }).chatbot;
+    assert.equal(unlinked.setup, 'linkTwitch');
+    assert.deepEqual(unlinked.status, { key: 'cards.chatbot.status.noTwitch', params: {}, tone: 'warn' });
+  });
+});
+
+describe('Discord notifications', () => {
+  const discord = (over) => ({ twitchLinked: true, announcing: 0, needsAuth: false, authAction: 'enable', servers: [], ...over });
+
+  test('Twitch to link first; with no server, a server to add', () => {
+    const unlinked = build({ discord: discord({ twitchLinked: false }) }).discord;
+    assert.deepEqual([unlinked.setup, unlinked.status], ['linkTwitch', { key: 'dashboard.cards.discord.statusNoTwitch', params: {}, tone: 'warn' }]);
+    const none = build({ discord: discord() }).discord;
+    assert.deepEqual([none.setup, keyOf(none.status), none.servers], ['addServer', 'dashboard.cards.discord.statusNoServer', []]);
+  });
+
+  test('a server: six switches, what each stores, where the posts go and the server page tab that fixes what is missing', () => {
+    const card = build().discord;
+    assert.equal(card.setup, null);
+    assert.deepEqual(card.status, { key: 'dashboard.cards.discord.statusAll', params: {}, tone: 'ok' });
+    const [s] = card.servers;
+    assert.deepEqual([s.guildId, s.name, s.botPresent, s.url], [G1, 'Synthetic Server', true, `/dashboard/guild/${G1}`]);
+    assert.deepEqual(s.switches.map((sw) => [sw.key, sw.label, sw.on, sw.fix]), [
+      ['notify_live', 'dashboard.cards.discord.goLive', true, 'twitch'],
+      ['notify_clips', 'dashboard.cards.discord.clips', false, 'twitch'],
+      ['recap_enabled', 'dashboard.cards.discord.recaps', false, 'twitch'],
+      ['milestones_enabled', 'dashboard.cards.discord.milestones', false, 'twitch'],
+      ['weekly_highlights_enabled', 'dashboard.cards.discord.highlights', false, 'twitch'],
+      ['sub_sync_enabled', 'dashboard.cards.discord.subRoles', true, 'discord'],
+    ]);
+    assert.deepEqual(s.switches[0].hint, { key: 'cards.discord.inChannel', params: { channel: '#live' } });
+    assert.deepEqual(s.switches[1].hint, { key: 'cards.discord.pickChannel', params: {}, warn: true }, 'no clips channel yet');
+    assert.deepEqual(s.switches[2].hint, { key: 'cards.discord.recapsHint', params: {} });
+  });
+
+  test('what is missing is said under its switch: a go-live channel, the Twitch authorization, a role, a digest that is not this streamer\'s', () => {
+    const missing = server({
+      switches: { goLive: false, clips: false, recaps: true, milestones: true, highlights: true, subRoles: true },
+      liveWhere: null, hasLiveChannel: false, highlights: 'off', subRoles: 'wait',
+    });
+    const [s] = build({ discord: discord({ needsAuth: true, authAction: 'reconnect', servers: [missing] }) }).discord.servers;
+    const hint = (key) => s.switches.find((sw) => sw.key === key).hint;
+    assert.deepEqual(hint('notify_live'), { key: 'cards.discord.pickChannel', params: {}, warn: true });
+    assert.deepEqual(hint('recap_enabled'), { key: 'cards.discord.needsLiveChannel', params: {}, warn: true });
+    assert.deepEqual(hint('milestones_enabled'), { key: 'cards.discord.needsLiveChannel', params: {}, warn: true });
+    assert.deepEqual(hint('weekly_highlights_enabled'), { key: 'cards.discord.notPosted', params: {}, warn: true });
+    assert.deepEqual(hint('sub_sync_enabled'), { key: 'dashboard.cards.discord.wait', params: {}, warn: true });
+
+    const waiting = server({ switches: { ...server().switches, milestones: true }, milestones: 'wait' });
+    const [w] = build({ discord: discord({ servers: [waiting] }) }).discord.servers;
+    assert.deepEqual(w.switches[3].hint, { key: 'dashboard.cards.discord.wait', params: {}, warn: true });
+
+    const noRole = server({ hasSubRole: false, subRoles: 'off' });
+    const [r] = build({ discord: discord({ servers: [noRole] }) }).discord.servers;
+    assert.deepEqual(r.switches[5].hint, { key: 'cards.discord.pickRole', params: {}, warn: true });
+
+    const hidden = server({ liveWhere: null });
+    const [h] = build({ discord: discord({ servers: [hidden] }) }).discord.servers;
+    assert.deepEqual(h.switches[0].hint, { key: 'cards.discord.channelUnknown', params: {} }, 'a channel the bot cannot see is not named');
+  });
+
+  test('several servers: how many announce; none announcing is amber', () => {
+    const two = build({ discord: discord({ announcing: 1, servers: [server(), server({ guildId: G2, botPresent: false })] }) }).discord;
+    assert.deepEqual(two.status, { key: 'dashboard.cards.discord.statusSome', params: { count: 1, total: 2 }, tone: 'ok' });
+    assert.deepEqual(two.servers.map((s) => [s.guildId, s.botPresent]), [[G1, true], [G2, false]]);
+    assert.deepEqual(build({ discord: discord({ announcing: 0, servers: [server()] }) }).discord.status, { key: 'dashboard.cards.discord.statusNone', params: {}, tone: 'warn' });
+  });
+});
+
+describe('OBS overlay', () => {
+  test('on and open in OBS: the link masked, the alerts with their seconds and test types, the volume in percent', () => {
+    const card = build().overlay;
+    assert.deepEqual(card.status, { key: 'cards.overlay.status.open', params: {}, tone: 'ok' });
+    assert.equal(card.on, true);
+    assert.equal(card.url, 'https://atleta.example/overlay/synthetic-token');
+    assert.equal(card.shown, 'atleta.example/overlay/synthetic-token');
+    assert.equal(card.masked, `atleta.example/overlay/${'•'.repeat(12)}`);
+    assert.deepEqual(card.alerts.map((a) => [a.label, a.switchKey, a.durationKey, a.on, a.seconds, a.test]), [
+      ['cards.events.follow', 'overlay_follow_enabled', 'overlay_follow_duration', true, 8, 'follow'],
+      ['cards.events.sub', 'overlay_sub_enabled', 'overlay_sub_duration', true, 10, 'subscription'],
+      ['cards.events.bits', 'overlay_bits_enabled', 'overlay_bits_duration', false, 10, 'bits'],
+      ['cards.events.donation', 'overlay_donation_enabled', 'overlay_donation_duration', true, 12, 'donation'],
+      ['cards.events.raid', 'overlay_raid_enabled', 'overlay_raid_duration', true, 7, 'raid'],
+      ['cards.events.giveaway', 'overlay_giveaway_enabled', 'overlay_giveaway_duration', true, 60, 'giveaway_winner'],
+    ]);
+    assert.deepEqual(card.alerts[0].choices, [5, 8, 10, 12, 15, 20, 30]);
+    assert.deepEqual(card.alerts[4].choices, [5, 7, 8, 10, 12, 15, 20, 30], 'a saved 7 stays a choice');
+    assert.deepEqual(card.alerts[5].choices, [5, 8, 10, 12, 15, 20, 30, 45, 60], 'the giveaway winner may stay up to 60 s');
+    assert.equal(card.volume, 24);
+    assert.deepEqual(card.counts.alerts, { key: 'cards.common.nOfM', params: { on: 5, total: 6 } });
+  });
+
+  test('not open in OBS, off, no link yet; a stored value out of range shows the default', () => {
+    assert.deepEqual(build({ overlay: { url: 'https://atleta.example/overlay/x', open: false } }).overlay.status, { key: 'cards.overlay.status.notOpen', params: {}, tone: 'warn' });
+    assert.deepEqual(build({ streamer: { overlay_enabled: 0 } }).overlay.status, { key: 'cards.overlay.status.off', params: {}, tone: 'off' });
+    const noLink = build({ overlay: { url: null, open: false } }).overlay;
+    assert.deepEqual([noLink.url, noLink.shown, noLink.masked], [null, null, null]);
+    assert.equal(build({ streamer: { overlay_follow_duration: 99 } }).overlay.alerts[0].seconds, 8);
+    assert.equal(build({ streamer: { overlay_volume: null } }).overlay.volume, 80);
+  });
+});
+
+describe('Commands', () => {
+  const commands = ['discord', 'socials', 'setup', 'schedule', 'sim'].map((name, i) => ({ id: i + 1, command: name, response: `About ${name}`, cooldown: 10 }));
+
+  test('the commands and the built-ins that are on; four shown, the rest behind Show all', () => {
+    const card = build({ commands }).commands;
+    assert.equal(card.needsChatbot, true);
+    assert.deepEqual(card.status, { key: 'cards.commands.status', params: { commands: 5, builtins: 1 }, tone: 'ok' });
+    assert.deepEqual(card.commands.map((c) => [c.id, c.name, c.response, c.cooldown, c.extra]), [
+      [1, 'discord', 'About discord', 10, false], [2, 'socials', 'About socials', 10, false], [3, 'setup', 'About setup', 10, false],
+      [4, 'schedule', 'About schedule', 10, false], [5, 'sim', 'About sim', 10, true],
+    ]);
+    assert.equal(card.builtins.length, 13);
+    assert.deepEqual(card.builtins.slice(0, 4).map((b) => [b.key, b.name, b.on]), [
+      ['cmd_followage_enabled', '!followage', true], ['cmd_subage_enabled', '!subage', false], ['cmd_uptime_enabled', '!uptime', false], ['cmd_accountage_enabled', '!accountage', false],
+    ]);
+    assert.deepEqual(card.counts, { commands: { text: '5' }, builtins: { key: 'cards.common.nOfM', params: { on: 1, total: 13 } } });
+  });
+
+  test('no command and no built-in is grey', () => {
+    assert.deepEqual(build({ streamer: { cmd_followage_enabled: 0 } }).commands.status, { key: 'cards.commands.status', params: { commands: 0, builtins: 0 }, tone: 'off' });
+  });
+});
+
+describe('Sponsor messages', () => {
+  const messages = (n, enabled = 1) => Array.from({ length: n }, (_, i) => ({ id: i + 1, message_text: `Partner ${i + 1}`, url: i ? null : 'https://example.test', enabled }));
+
+  test('posting one every N minutes; three shown; the sponsor images link only with the overlay features', () => {
+    const card = build({ sponsorMessages: messages(4) }).sponsors;
+    assert.equal(card.needsChatbot, true);
+    assert.deepEqual(card.status, { key: 'cards.sponsors.status.on', params: { minutes: 15, count: 4 }, tone: 'ok' });
+    assert.deepEqual(card.messages.map((m) => [m.id, m.text, m.url, m.on, m.extra]), [
+      [1, 'Partner 1', 'https://example.test', true, false], [2, 'Partner 2', '', true, false], [3, 'Partner 3', '', true, false], [4, 'Partner 4', '', true, true],
+    ]);
+    assert.deepEqual([card.on, card.minutes, card.intervals], [true, 15, [5, 10, 15, 20, 30, 60]]);
+    assert.deepEqual(card.counts, { messages: { text: '4' } });
+    assert.equal(card.imagesLink, true);
+    assert.equal(build({ features: { overlays: false } }).sponsors.imagesLink, false);
+  });
+
+  test('off keeps the messages; on with none switched on is amber; an odd saved interval stays a choice', () => {
+    assert.deepEqual(build({ streamer: { sponsor_send_chat: 0 }, sponsorMessages: messages(2) }).sponsors.status, { key: 'cards.sponsors.status.off', params: { count: 2 }, tone: 'off' });
+    assert.equal(build({ sponsorMessages: messages(2, 0) }).sponsors.status.tone, 'warn');
+    assert.deepEqual(build({ streamer: { sponsor_chat_interval_minutes: 7 } }).sponsors.intervals, [5, 7, 10, 15, 20, 30, 60]);
+  });
+});
+
+describe('Donations', () => {
+  test('a PayPal email first', () => {
+    const card = build({ streamer: { paypal_email: null } }).donations;
+    assert.deepEqual([card.setup, card.status], ['paypal', { key: 'cards.donations.status.setup', params: {}, tone: 'warn' }]);
+  });
+
+  test('the tip page on: its link, the goal and the latest tips, each with how long ago', () => {
+    const card = build({
+      tips: {
+        count90d: 7,
+        recent: [
+          { id: 3, amount: 5, currency: 'EUR', donor_name: 'RacerFan', message: 'Great race', created_at: '2026-10-12 11:30:00' },
+          { id: 2, amount: 10, currency: null, donor_name: null, message: null, created_at: '2026-10-14T11:58:00.000Z' },
+        ],
+      },
+      tipGoal: { title: 'New wheel', current_amount: 101, target_amount: 1000, currency: 'EUR' },
+    }).donations;
+    assert.deepEqual(card.status, { key: 'cards.donations.status.on', params: { count: 7 }, tone: 'ok' });
+    assert.deepEqual([card.setup, card.on, card.tipUrl, card.tipShown], [null, true, 'https://atleta.example/tip/synthetic_channel', 'atleta.example/tip/synthetic_channel']);
+    assert.equal(card.showGoal, true);
+    assert.deepEqual(card.goal, { title: 'New wheel', current: 101, target: 1000, currency: 'EUR', percent: 10 });
+    assert.deepEqual(card.recent.map((d) => [d.id, d.amount, d.currency, d.name, d.message, d.ago]), [
+      [3, 5, 'EUR', 'RacerFan', 'Great race', { key: 'nav.timeDays', params: { n: 2 } }],
+      [2, 10, 'EUR', '', '', { key: 'nav.timeMinutes', params: { n: 2 } }],
+    ]);
+  });
+
+  test('off; no goal; the goal section only with the overlay features; no tip link without Twitch', () => {
+    assert.deepEqual(build({ streamer: { donation_page_enabled: 0 } }).donations.status, { key: 'cards.donations.status.off', params: {}, tone: 'off' });
+    assert.deepEqual([build().donations.showGoal, build().donations.goal], [true, null]);
+    assert.equal(build({ features: { overlays: false } }).donations.showGoal, false);
+    const noTwitch = build({ streamer: { twitch_username: null } }).donations;
+    assert.deepEqual([noTwitch.tipUrl, keyOf(noTwitch.status)], [null, 'cards.donations.status.noTwitch']);
+  });
+});
+
+describe('Chat protection', () => {
+  test('the filters that are on, the banned words counted, this week\'s moderation log', () => {
+    const card = build({ bannedWords: { total: 3, regex: 1 }, modActionsThisWeek: 4 }).protection;
+    assert.equal(card.needsChatbot, true);
+    assert.deepEqual(card.status, { key: 'cards.protection.status.on', params: { on: 1, total: 6 }, tone: 'ok' });
+    assert.deepEqual(card.filters.map((f) => [f.key, f.label, f.on]), [
+      ['mod_link_protection_enabled', 'cards.protection.link', true],
+      ['mod_banned_words_enabled', 'cards.protection.banned', false],
+      ['mod_caps_enabled', 'cards.protection.caps', false],
+      ['mod_emote_spam_enabled', 'cards.protection.emotes', false],
+      ['mod_repetition_enabled', 'cards.protection.repetition', false],
+      ['mod_symbol_spam_enabled', 'cards.protection.symbols', false],
+    ]);
+    assert.deepEqual([card.filters[1].hint, card.filters[1].hintParams], ['cards.protection.bannedHint', { count: 3 }]);
+    assert.deepEqual(card.modLog, { key: 'cards.protection.modLog', params: { count: 4 } });
+    assert.deepEqual(build({ streamer: { mod_link_protection_enabled: 0 } }).protection.status, { key: 'cards.protection.status.off', params: {}, tone: 'off' });
+  });
+
+  test('the moderator note only while Twitch says the bot is not a moderator there and the chatbot is on', () => {
+    const note = (bot, streamer) => build({ bot: { connected: true, username: 'atleta_bot', ...bot }, streamer }).protection.moderatorNote;
+    assert.equal(note({ moderator: false }), true);
+    assert.equal(note({ moderator: true }), false);
+    assert.equal(note({ moderator: null }), false, 'unknown: the bot is not in the channel');
+    assert.equal(note({ moderator: false }, { chatbot_enabled: 0 }), false);
+    assert.equal(note({ moderator: false, username: '' }), false, 'no bot name to give');
+    assert.equal(build().protection.botName, 'atleta_bot');
+  });
+});
+
+describe('Giveaways', () => {
+  test('none running, or the running one with what its panel needs', () => {
+    assert.deepEqual(build().giveaways, { needsChatbot: true, running: null, status: { key: 'cards.giveaways.status.none', params: {}, tone: 'off' } });
+    const card = build({ giveaway: { id: 9, keyword: 'gw', prize: null, ends_at: '2026-10-14T12:05:00.000Z', winners_count: 2, subs_only: 1, entryCount: 4 } }).giveaways;
+    assert.deepEqual(card.status, { key: 'cards.giveaways.status.running', params: {}, tone: 'warn' });
+    assert.deepEqual(card.running, { id: 9, keyword: 'gw', prize: '', endsAt: '2026-10-14T12:05:00.000Z', winners: 2, subsOnly: true, entries: 4 });
+  });
+});
+
+describe('Channel point rewards', () => {
+  const rewards = [{ id: 1, title: 'Hydrate', cost: 500, enabled: 1 }, { id: 2, title: 'Horn', cost: 100, enabled: 0 }];
+
+  test('the Twitch permission first, then Affiliate, then the switch and the rewards', () => {
+    const states = [
+      [{ rewardsAccess: { hasScope: false } }, 'permission', 'cards.rewards.status.permission', 'warn'],
+      [{ streamer: { cp_affiliate_status: 'not_affiliate' } }, 'notAffiliate', 'cards.rewards.status.notAffiliate', 'warn'],
+      [{ streamer: { cp_rewards_enabled: 0 }, rewards }, 'ok', 'cards.rewards.status.off', 'off'],
+      [{}, 'ok', 'cards.rewards.status.empty', 'off'],
+      [{ rewards }, 'ok', 'cards.rewards.status.on', 'ok'],
+    ];
+    for (const [over, access, key, tone] of states) {
+      const card = build(over).rewards;
+      assert.deepEqual([card.access, card.status.key, card.status.tone], [access, key, tone], JSON.stringify(over));
+    }
+    const card = build({ rewards }).rewards;
+    assert.deepEqual(card.rewards, [{ id: 1, title: 'Hydrate', cost: 500, on: true }, { id: 2, title: 'Horn', cost: 100, on: false }]);
+    assert.deepEqual(card.status.params, { count: 2 });
+  });
+});
+
+describe('Spotify', () => {
+  test('connected or not', () => {
+    assert.deepEqual(build().spotify, { connected: true, status: { key: 'dashboard.status.connected', params: {}, tone: 'ok' } });
+    assert.deepEqual(build({ spotifyConnected: false }).spotify, { connected: false, status: { key: 'dashboard.status.notConnected', params: {}, tone: 'off' } });
+  });
+});
+
+describe('cardTexts', () => {
+  test('translates each status and count, gives plain counts as they are, and leaves the giveaway card to the page', () => {
+    const t = (key, params) => `${key}${params && Object.keys(params).length ? JSON.stringify(params) : ''}`;
+    const texts = cardTexts(build({ commands: [{ id: 1, command: 'discord', response: 'x', cooldown: 5 }] }), t);
+    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'rewards', 'spotify']);
+    assert.deepEqual(texts.chatbot, { status: { text: 'cards.chatbot.status.online{"channel":"synthetic_channel"}', tone: 'ok' }, counts: { thankYous: 'cards.common.nOfM{"on":5,"total":6}' } });
+    assert.deepEqual(texts.commands.counts, { commands: '1', builtins: 'cards.common.nOfM{"on":1,"total":13}' });
+    assert.deepEqual(texts.spotify, { status: { text: 'dashboard.status.connected', tone: 'ok' }, counts: {} });
+  });
+});
