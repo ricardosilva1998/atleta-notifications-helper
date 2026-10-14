@@ -131,6 +131,17 @@ test('the CSRF check runs once, after the session and the body parsers, before e
   }
 });
 
+test('the views get esc() and rich() next to t(), with rich() built on the request\'s own t()', () => {
+  // esc() and rich() are defined once, in i18n.js; no view carries a copy (tests/streamerViewsI18n.test.js checks the views).
+  const shown = at('res.locals.t = (key, params) => t(lang, key, params);');
+  const esc = at('res.locals.esc = esc;');
+  const rich = at('res.locals.rich = richFor(res.locals.t);');
+  assert.ok(shown < esc && esc < rich, 'esc and rich are set right after t, in that order');
+  assert.equal(code.match(/res\.locals\.(esc|rich) =/g).length, 2, 'each is set once');
+  assert.ok(rich < at('res.locals.currentPath = req.path;'), 'inside the middleware that also sets the language');
+  assert.ok(at("const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');") < shown, 'both come from i18n.js');
+});
+
 test('pages tell this site which page a request comes from (the CSRF check reads it), and no other site', () => {
   // Under helmet's default (no-referrer) a form post arrives with "Origin: null".
   at("referrerPolicy: { policy: 'same-origin' },");

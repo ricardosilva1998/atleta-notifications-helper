@@ -1,7 +1,4 @@
 <%- include('header', { title: guildName + ' - ' + t('guild.settings'), streamer: streamer }) %>
-<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
-<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
-<% const rich = (key, markup = {}) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
 
 <a href="/dashboard" style="color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -392,18 +389,13 @@
         <label for="recap_enabled"><%= t('guild.streamRecaps') %></label>
       </div>
       <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;"><%= t('guild.streamRecapsDesc') %></p>
-      <% if (!limits.recaps) { %>
-        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing"><%= t('guild.upgradeToEnable') %></a></p>
-      <% } %>
 
       <div class="toggle">
         <input type="checkbox" name="milestones_enabled" id="milestones_enabled" <%= guild.milestones_enabled ? 'checked' : '' %> <% if (!limits.milestones) { %>disabled<% } %>>
         <label for="milestones_enabled"><%= t('guild.milestones') %></label>
       </div>
       <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;"><%= t('guild.milestonesDesc') %></p>
-      <% if (!limits.milestones) { %>
-        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing"><%= t('guild.upgradeToEnable') %></a></p>
-      <% } else if (!hasBroadcasterToken) { %>
+      <% if (limits.milestones && !hasBroadcasterToken) { %>
         <p style="color: var(--warning); font-size: 12px; margin: -4px 0 12px 28px;"><%- rich('guild.milestonesTokenRequiredLink', { a: '<a href="' + esc(broadcasterAuthUrl) + '">', aEnd: '</a>' }) %></p>
       <% } %>
 
@@ -412,9 +404,6 @@
         <label for="weekly_highlights_enabled"><%= t('guild.weeklyHighlights') %></label>
       </div>
       <p style="color: var(--text-secondary); font-size: 12px; margin: -8px 0 12px 28px;"><%= t('guild.weeklyHighlightsDesc') %></p>
-      <% if (!limits.weeklyHighlights) { %>
-        <p style="font-size: 12px; margin: -4px 0 12px 28px;"><a href="/pricing"><%= t('guild.upgradeToEnable') %></a></p>
-      <% } %>
     </div>
 
     <button type="submit" class="btn btn-success" style="width: 100%; padding: 14px; font-size: 15px;"><%= t('guild.saveDiscordSettings') %></button>

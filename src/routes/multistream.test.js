@@ -130,7 +130,7 @@ before(async () => {
   db = require(DB_FILE);
   config = require('../config');
   saved.multistream = { ...config.multistream };
-  const { t } = require('../i18n');
+  const { t, esc, richFor } = require('../i18n');
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');
   const routes = require(ROUTES_FILE);
@@ -146,6 +146,8 @@ before(async () => {
     req.streamer = id ? db.getStreamerById(id) : undefined;
     applyAccountStatus(req);
     res.locals.t = (key, params) => t('en', key, params);
+    res.locals.esc = esc; // as server.js: the views print their sentences with rich() and escape their data with esc()
+    res.locals.rich = richFor(res.locals.t);
     res.locals.features = { youtube: true };
     res.locals.streamer = req.streamer || null;
     if (req.get('x-test-render') === 'json') res.render = (view, locals) => res.json({ view, locals });
@@ -431,6 +433,20 @@ describe('the settings page', () => {
     assert.ok(select, 'the category list is on the page');
     const offered = [...select[0].matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
     assert.deepEqual([...offered].sort(), [...YOUTUBE_CATEGORY_IDS].sort());
+  });
+
+  // The two lines that say which account is connected are built by the page around the names Twitch and YouTube gave.
+  test('prints those names as text, whatever they hold', async () => {
+    const { esc } = require('../i18n');
+    const name = '<img src=x onerror=alert(1)> "double" \'single\' {{b}} $&';
+    const id = addStreamer({
+      twitch_display_name: name, broadcaster_access_token: 'synthetic-broadcaster-token', broadcaster_scopes: 'channel:read:stream_key',
+      yt_access_token: 'synthetic-yt-token', yt_channel_name: name,
+    });
+    const res = await request('GET', '/dashboard/multistream', { streamer: id });
+    assert.equal(res.status, 200);
+    assert.ok(!res.text.includes('<img src=x onerror'), 'a name\'s own markup was printed');
+    assert.equal(res.text.split(`<strong>${esc(name)}</strong>`).length - 1, 2, 'once for Twitch and once for YouTube, as text');
   });
 
   test('offers a new stream key, asking first and saying OBS must be updated', async () => {

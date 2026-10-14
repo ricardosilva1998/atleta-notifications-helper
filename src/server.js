@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
-const { t, SUPPORTED_LANGS, fromAcceptLanguage } = require('./i18n');
+const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
@@ -207,6 +207,10 @@ app.use((req, res, next) => {
   res.locals.lang = lang;
   res.locals.SUPPORTED_LANGS = SUPPORTED_LANGS;
   res.locals.t = (key, params) => t(lang, key, params);
+  // For the views: esc() for data inside markup a view prints itself, rich() for a sentence with a link, bold word or code in it
+  // (src/i18n.js). No view defines its own.
+  res.locals.esc = esc;
+  res.locals.rich = richFor(res.locals.t);
   res.locals.currentPath = req.path;
 
   next();

@@ -35,4 +35,26 @@ function fromAcceptLanguage(header) {
   return hit ? hit.language : null;
 }
 
-module.exports = { t, SUPPORTED_LANGS, fromAcceptLanguage };
+// For the views. Both are set on res.locals next to t() (server.js); no view defines its own.
+//
+// esc(value): the value as HTML text or as the content of a quoted attribute. A view uses it for
+// data it puts into markup that it prints itself (<%- ... %>); <%= ... %> escapes on its own.
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function esc(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}
+
+// richFor(translate) is the rich() of one request: rich(key, markup) prints a sentence that has a
+// link, a bold word or code in it. The translation is escaped first, so whatever it holds, markup
+// of its own included, stays text; then only the {{fields}} that `markup` names are replaced by the
+// HTML the page built. A page that puts data into such a piece of HTML escapes it with esc().
+// The text is read once: a {{field}} that arrives inside the HTML is not replaced again.
+function richFor(translate) {
+  return function rich(key, markup = {}) {
+    const fields = {};
+    for (const name of Object.keys(markup)) fields[name] = `{{${name}}}`;
+    return esc(translate(key, fields)).replace(/\{\{(\w+)\}\}/g, (found, name) => (Object.hasOwn(markup, name) ? markup[name] : found));
+  };
+}
+
+module.exports = { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor };

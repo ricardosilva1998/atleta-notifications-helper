@@ -91,7 +91,6 @@
   "guild.milestonesDesc": "Announce when a channel hits follower or subscriber milestones.",
   "guild.weeklyHighlights": "Weekly Highlights",
   "guild.weeklyHighlightsDesc": "Post a weekly digest every Monday with stream stats and top clips.",
-  "guild.upgradeToEnable": "Upgrade to enable this feature.",
   "guild.saveDiscordSettings": "Save Discord Settings",
 
   "guild.serverSummary": "Server Summary",
@@ -1262,7 +1261,6 @@
   "account.resources": "Resources",
   "account.servers": "Servers",
   "account.quickActions": "Quick Actions",
-  "account.subscription": "Subscription",
   "account.feedback.title": "Give Feedback",
   "account.feedback.subtitle": "Help us improve! Rate your experience and share your thoughts.",
   "account.feedback.thanks": "Thanks for your feedback!",
@@ -1272,7 +1270,6 @@
   "account.feedback.placeholder": "What do you like? What could be better?",
   "account.memberSince": "Member since {{date}}",
   "account.notAvailable": "N/A",
-  "account.plan": "{{tier}} Plan",
   "account.chart.tooltipOne": "{{period}}: {{count}} notification",
   "account.chart.tooltipMany": "{{period}}: {{count}} notifications",
   "account.type.twitchLive": "Twitch Live",
@@ -1420,6 +1417,14 @@
 
   "upload.error.imageType": "Invalid file type. Allowed: png, jpg, gif, webp",
   "upload.error.writeFailed": "Write failed",
+
+  "auth.error.invalidCallback": "The sign-in could not be verified. Go back and try again.",
+  "auth.error.loginFailed": "Login failed. Please try again.",
+  "auth.error.missingParams": "The connection was not completed: the information Twitch sends back is missing. Go back to the dashboard and try again.",
+  "auth.error.invalidState": "The connection could not be verified. It may have taken too long, or been started in another browser. Go back to the dashboard and try again.",
+  "auth.error.twitchLinkFailed": "Twitch linking failed. Please try again.",
+  "auth.error.authorizationFailed": "Authorization failed. Please try again.",
+  "auth.error.spotifyNotConfigured": "Spotify is not set up on this server.",
 
   "admin.msg.disabled": "Account disabled: its web sessions were closed and its live connections stopped.",
   "admin.msg.enabled": "Account enabled: its live connections were restarted.",

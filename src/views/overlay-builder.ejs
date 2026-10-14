@@ -1063,7 +1063,7 @@
               <span class="ctrl-label"><%= t('overlayBuilder.size.cardWidth') %></span>
               <span class="range-val" id="val-card-width">420px</span>
             </div>
-            <input type="range" id="ctrl-card-width" min="280" max="900" step="10" value="420">
+            <input type="range" id="ctrl-card-width" min="200" max="900" step="10" value="420">
           </div>
           <div class="range-row" id="row-border-radius" style="margin-bottom:10px;">
             <div class="range-header">
@@ -3122,7 +3122,8 @@ function buildFontGallery(containerId, tabKey) {
     const div = document.createElement('div');
     div.className = 'font-gallery-item' + (modalFonts[tabKey] === f.name ? ' selected' : '');
     div.dataset.font = f.name;
-    div.innerHTML = `<div class="font-name">${f.label || f.name}</div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}">The quick brown fox</div>`;
+    div.innerHTML = `<div class="font-name"></div><div class="font-sample" style="font-family:${f.family};${f.sampleSize ? 'font-size:'+f.sampleSize+';' : ''}">The quick brown fox</div>`;
+    div.querySelector('.font-name').textContent = f.label || f.name; // the first label is a translation: text, never markup
     div.addEventListener('click', () => {
       container.querySelectorAll('.font-gallery-item').forEach(i => i.classList.remove('selected'));
       div.classList.add('selected');

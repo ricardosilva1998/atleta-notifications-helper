@@ -1,7 +1,6 @@
 <%- include('header', { title: t('nav.setupGuide'), streamer: typeof streamer !== 'undefined' ? streamer : null }) %>
-<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
-<%# rich(): the translation is escaped; only the {{fields}} named in `markup` become HTML (the links, bold and code this page builds). %>
-<% const rich = (key, markup = { b: '<strong>', bEnd: '</strong>', c: '<code>', cEnd: '</code>' }) => { const fields = {}; for (const name of Object.keys(markup)) fields[name] = '{{' + name + '}}'; return esc(t(key, fields)).replace(/\{\{(\w+)\}\}/g, (m, name) => (name in markup ? markup[name] : m)); }; %>
+<%# Every sentence on this page may have bold words and code in it: {{b}}..{{bEnd}} and {{c}}..{{cEnd}} in the text. %>
+<% const MARKUP = { b: '<strong>', bEnd: '</strong>', c: '<code>', cEnd: '</code>' }; %>
 
 <div style="max-width: 700px; margin: 0 auto;">
 
@@ -10,28 +9,28 @@
 
 <div style="background: rgba(247,144,9,0.1); border: 1px solid rgba(247,144,9,0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f79009" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  <span><%- rich('tutorial.notice') %></span>
+  <span><%- rich('tutorial.notice', MARKUP) %></span>
 </div>
 
 <div class="step">
   <div class="step-header"><div class="step-number">1</div><h3><%= t('tutorial.step1.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step1.p1') %></p>
+    <p><%- rich('tutorial.step1.p1', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-1.png" alt="<%= t('tutorial.step1.alt1') %>">
     </div>
-    <p><%- rich('tutorial.step1.p2') %></p>
+    <p><%- rich('tutorial.step1.p2', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-1.1.png" alt="<%= t('tutorial.step1.alt2') %>">
     </div>
-    <div class="tip"><%- rich('tutorial.step1.tip1') %></div>
+    <div class="tip"><%- rich('tutorial.step1.tip1', MARKUP) %></div>
   </div>
 </div>
 
 <div class="step">
   <div class="step-header"><div class="step-number">2</div><h3><%= t('tutorial.step2.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step2.p1') %></p>
+    <p><%- rich('tutorial.step2.p1', MARKUP) %></p>
     <div class="screenshot">
       <div class="icon">📸</div>
       <div class="label"><%= t('tutorial.step2.shotLabel') %></div>
@@ -43,18 +42,18 @@
 <div class="step">
   <div class="step-header"><div class="step-number">3</div><h3><%= t('tutorial.step3.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step3.p1') %></p>
+    <p><%- rich('tutorial.step3.p1', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-3.png" alt="<%= t('tutorial.step3.alt1') %>">
     </div>
-    <p><%- rich('tutorial.step3.p2') %></p>
+    <p><%- rich('tutorial.step3.p2', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-3.1.png" alt="<%= t('tutorial.step3.alt2') %>">
     </div>
     <ul>
-      <li><%- rich('tutorial.step3.li1') %></li>
-      <li><%- rich('tutorial.step3.li2') %></li>
-      <li><%- rich('tutorial.step3.li3') %></li>
+      <li><%- rich('tutorial.step3.li1', MARKUP) %></li>
+      <li><%- rich('tutorial.step3.li2', MARKUP) %></li>
+      <li><%- rich('tutorial.step3.li3', MARKUP) %></li>
     </ul>
   </div>
 </div>
@@ -62,34 +61,34 @@
 <div class="step">
   <div class="step-header"><div class="step-number">4</div><h3><%= t('tutorial.step4.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step4.p1') %></p>
+    <p><%- rich('tutorial.step4.p1', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-4.png" alt="<%= t('tutorial.step4.alt1') %>">
     </div>
-    <p><%- rich('tutorial.step4.p2') %></p>
+    <p><%- rich('tutorial.step4.p2', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-4.1.png" alt="<%= t('tutorial.step4.alt2') %>">
     </div>
-    <div class="tip"><%- rich('tutorial.step4.tip1') %></div>
+    <div class="tip"><%- rich('tutorial.step4.tip1', MARKUP) %></div>
   </div>
 </div>
 
 <div class="step">
   <div class="step-header"><div class="step-number">5</div><h3><%= t('tutorial.step5.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step5.p1') %></p>
+    <p><%- rich('tutorial.step5.p1', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-5.png" alt="<%= t('tutorial.step5.alt1') %>">
     </div>
-    <p><%- rich('tutorial.step5.p2') %></p>
+    <p><%- rich('tutorial.step5.p2', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-5.1.png" alt="<%= t('tutorial.step5.alt2') %>">
     </div>
-    <p><%- rich('tutorial.step5.p3') %></p>
+    <p><%- rich('tutorial.step5.p3', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-5.2.png" alt="<%= t('tutorial.step5.alt3') %>">
     </div>
-    <p><%- rich('tutorial.step5.p4') %></p>
+    <p><%- rich('tutorial.step5.p4', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-5.3.png" alt="<%= t('tutorial.step5.alt4') %>">
     </div>
@@ -99,26 +98,26 @@
 <div class="step">
   <div class="step-header"><div class="step-number">6</div><h3><%= t('tutorial.step6.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step6.p1') %></p>
+    <p><%- rich('tutorial.step6.p1', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-6.png" alt="<%= t('tutorial.step6.alt1') %>">
     </div>
-    <p><%- rich('tutorial.step6.p2') %></p>
+    <p><%- rich('tutorial.step6.p2', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-6.1.png" alt="<%= t('tutorial.step6.alt2') %>">
     </div>
-    <div class="tip"><%- rich('tutorial.step6.tip1') %></div>
+    <div class="tip"><%- rich('tutorial.step6.tip1', MARKUP) %></div>
   </div>
 </div>
 
 <div class="step">
   <div class="step-header"><div class="step-number">7</div><h3><%= t('tutorial.step7.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step7.p1') %></p>
+    <p><%- rich('tutorial.step7.p1', MARKUP) %></p>
     <ul>
-      <li><%- rich('tutorial.step7.li1') %></li>
-      <li><%- rich('tutorial.step7.li2') %></li>
-      <li><%- rich('tutorial.step7.li3') %></li>
+      <li><%- rich('tutorial.step7.li1', MARKUP) %></li>
+      <li><%- rich('tutorial.step7.li2', MARKUP) %></li>
+      <li><%- rich('tutorial.step7.li3', MARKUP) %></li>
     </ul>
     <div class="screenshot">
       <img src="/screenshots/step-7.png" alt="<%= t('tutorial.step7.alt1') %>">
@@ -129,29 +128,29 @@
 <div class="step">
   <div class="step-header"><div class="step-number">8</div><h3><%= t('tutorial.step8.title') %></h3></div>
   <div class="step-content">
-    <p><%- rich('tutorial.step8.p1') %></p>
+    <p><%- rich('tutorial.step8.p1', MARKUP) %></p>
 
-    <p><%- rich('tutorial.step8.p2') %></p>
+    <p><%- rich('tutorial.step8.p2', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-8.png" alt="<%= t('tutorial.step8.alt1') %>">
     </div>
 
-    <p><%- rich('tutorial.step8.p3') %></p>
+    <p><%- rich('tutorial.step8.p3', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-8.1.png" alt="<%= t('tutorial.step8.alt2') %>">
     </div>
 
-    <p><%- rich('tutorial.step8.p4') %></p>
+    <p><%- rich('tutorial.step8.p4', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-8.2.png" alt="<%= t('tutorial.step8.alt3') %>">
     </div>
 
-    <p><%- rich('tutorial.step8.p5') %></p>
+    <p><%- rich('tutorial.step8.p5', MARKUP) %></p>
     <div class="screenshot">
       <img src="/screenshots/step-8.3.png" alt="<%= t('tutorial.step8.alt4') %>">
     </div>
 
-    <div class="tip"><%- rich('tutorial.step8.tip1') %></div>
+    <div class="tip"><%- rich('tutorial.step8.tip1', MARKUP) %></div>
   </div>
 </div>
 

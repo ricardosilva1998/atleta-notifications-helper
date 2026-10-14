@@ -74,23 +74,48 @@ describe('"Solid (no gradient)"', () => {
 
 describe('the card width slider', () => {
   const { FIELD_SPECS } = require('../src/services/overlayDesign');
+  const PLACEMENT = require('../public/overlay/placement.js');
   const slider = builder.match(/<input type="range" id="ctrl-card-width"[^>]*>/)[0];
   const bound = (name) => Number(new RegExp(`${name}="(\\d+)"`).exec(slider)[1]);
 
-  // It used to stop at 700 while the server, the drag handle and placement.js allow 900, so a
-  // card saved wider than 700 was set back to 700 the next time the page set the slider.
-  test('reaches the widest card the server keeps, so a saved width is never cut by the slider', () => {
-    assert.equal(bound('max'), FIELD_SPECS.card_width.max);
+  // Two places have set it wrong. It stopped at 700 while the server, the drag handle and placement.js
+  // allow 900, so a card saved wider than 700 was set back to 700 the next time the page set the slider.
+  // It started at 280 while they allow 200, so a card dragged to a width of 200 to 279 was saved as 280.
+  test('spans the same widths as the server, the drag handle and the OBS overlay, at both ends', () => {
+    const { min, max } = FIELD_SPECS.card_width;
+    assert.deepEqual([bound('min'), bound('max')], [min, max], 'the slider and the server');
+    const drag = /newWidth = Math\.max\((\d+), Math\.min\((\d+), newWidth\)\);/.exec(builder);
+    assert.ok(drag, 'the drag handle clamps the width');
+    assert.deepEqual([Number(drag[1]), Number(drag[2])], [min, max], 'the drag handle and the server');
+    assert.deepEqual([PLACEMENT.MIN_WIDTH, PLACEMENT.MAX_WIDTH], [min, max], 'placement.js and the server');
   });
 
-  test('starts inside the range the server keeps', () => {
-    assert.ok(bound('min') >= FIELD_SPECS.card_width.min);
-    assert.ok(bound('min') <= bound('max'));
+  test('has a step that lands on both ends, so neither is rounded away', () => {
+    const step = bound('step');
+    assert.equal((bound('max') - bound('min')) % step, 0);
+  });
+
+  test('starts at a width that is inside the range', () => {
+    assert.ok(bound('value') >= bound('min') && bound('value') <= bound('max'));
   });
 
   test('is set from a saved width by setControlValues, which has no clamp of its own', () => {
     const set = functionSource('setControlValues');
     assert.match(set, /getElementById\('ctrl-card-width'\)\.value = d\.card_width \|\| 420;/);
     assert.ok(!/Math\.min\(\s*700/.test(builder), 'no 700 cap is left in the page');
+  });
+});
+
+describe('the font picker', () => {
+  // The first entry of the list is named by a translation ("System Default"); a font's own name is stored as it is.
+  test('prints each name as text, not inside the markup it builds for the item', () => {
+    const gallery = functionSource('buildFontGallery');
+    assert.ok(!/class="font-name">[^<]/.test(gallery), 'the name is not written into the template');
+    assert.match(gallery, /div\.querySelector\('\.font-name'\)\.textContent = f\.label \|\| f\.name;/);
+  });
+
+  test('keeps the stored name apart from the shown one', () => {
+    assert.match(builder, /\{ name: 'System Default', label: I18N\.systemDefault,/, 'the stored name stays English, the label is the translation');
+    assert.match(functionSource('buildFontGallery'), /div\.dataset\.font = f\.name;/);
   });
 });

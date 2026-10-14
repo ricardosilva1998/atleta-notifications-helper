@@ -103,7 +103,7 @@ before(async () => {
   for (const file of [DB_FILE, OVERLAY_FILE, DASHBOARD_FILE, OVERLAY_CONFIG_FILE]) delete require.cache[file];
   db = require(DB_FILE);
   bus = require('../services/overlayBus');
-  const { t } = require('../i18n');
+  const { t, esc, richFor } = require('../i18n');
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');
 
@@ -117,6 +117,8 @@ before(async () => {
     req.streamer = id ? db.getStreamerById(id) : undefined;
     applyAccountStatus(req);
     res.locals.t = (key, params) => t('en', key, params);
+    res.locals.esc = esc; // as server.js: the views print their sentences with rich() and escape their data with esc()
+    res.locals.rich = richFor(res.locals.t);
     next();
   });
   app.use('/overlay', require('./overlay'));

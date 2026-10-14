@@ -135,11 +135,6 @@
   <div class="card" style="padding: 20px;">
     <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><%= t('account.quickActions') %></div>
 
-    <a href="/payment/subscription" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 8px; color: var(--text-primary); transition: all 0.2s;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-      <div><div style="font-size: 13px; font-weight: 600;"><%= t('account.subscription') %></div><div style="font-size: 11px; color: var(--text-muted);"><%= t('account.plan', { tier: tier.charAt(0).toUpperCase() + tier.slice(1) }) %></div></div>
-    </a>
-
     <div style="padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 10px;">

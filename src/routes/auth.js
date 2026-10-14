@@ -10,6 +10,12 @@ const router = Router();
 // How long a call to Twitch, Google or Spotify while connecting an account may take.
 const OAUTH_TIMEOUT_MS = 10_000;
 
+// What the visitor reads in the browser when a sign-in or a connection stops: one sentence in the language of the request
+// (res.locals.t, set by server.js), sent as plain text so that whatever a language file holds is shown as it is.
+function sendText(res, status, key) {
+  return res.status(status).type('text/plain').send(res.locals.t(key));
+}
+
 // --- Discord OAuth Login ---
 
 router.get('/login', (req, res) => {
@@ -31,7 +37,7 @@ router.get('/login/callback', async (req, res) => {
   const expectedState = req.cookies?.oauth_state;
 
   if (!code || !state || state !== expectedState) {
-    return res.status(400).send('Invalid OAuth callback');
+    return sendText(res, 400, 'auth.error.invalidCallback');
   }
   res.clearCookie('oauth_state');
 
@@ -94,7 +100,7 @@ router.get('/login/callback', async (req, res) => {
     res.redirect('/dashboard');
   } catch (error) {
     console.error(`[Auth] Discord login error: ${error.message}`);
-    res.status(500).send('Login failed. Please try again.');
+    sendText(res, 500, 'auth.error.loginFailed');
   }
 });
 
@@ -133,8 +139,8 @@ router.get('/twitch', (req, res) => {
 router.get('/twitch/callback', async (req, res) => {
   const stateOk = checkOAuthState(req, res, 'twitch');
   const { code, state } = req.query;
-  if (!code || !state) return res.status(400).send('Missing parameters');
-  if (!stateOk || !req.streamer) return res.status(403).send('Invalid state');
+  if (!code || !state) return sendText(res, 400, 'auth.error.missingParams');
+  if (!stateOk || !req.streamer) return sendText(res, 403, 'auth.error.invalidState');
   const streamerId = req.streamer.id;
 
   try {
@@ -171,7 +177,7 @@ router.get('/twitch/callback', async (req, res) => {
     res.redirect('/dashboard?msg=twitch_linked');
   } catch (error) {
     console.error(`[Auth] Twitch link error: ${error.message}`);
-    res.status(500).send('Twitch linking failed. Please try again.');
+    sendText(res, 500, 'auth.error.twitchLinkFailed');
   }
 });
 
@@ -212,8 +218,8 @@ router.get('/broadcaster', (req, res) => {
 router.get('/broadcaster/callback', async (req, res) => {
   const stateOk = checkOAuthState(req, res, 'broadcaster');
   const { code, state } = req.query;
-  if (!code || !state) return res.status(400).send('Missing parameters');
-  if (!stateOk || !req.streamer) return res.status(403).send('Invalid state');
+  if (!code || !state) return sendText(res, 400, 'auth.error.missingParams');
+  if (!stateOk || !req.streamer) return sendText(res, 403, 'auth.error.invalidState');
   const streamer = req.streamer;
 
   try {
@@ -264,7 +270,7 @@ router.get('/broadcaster/callback', async (req, res) => {
     res.redirect('/dashboard?msg=broadcaster_authorized');
   } catch (error) {
     console.error(`[Auth] Broadcaster callback error: ${error.message}`);
-    res.status(500).send('Authorization failed');
+    sendText(res, 500, 'auth.error.authorizationFailed');
   }
 });
 
@@ -343,7 +349,7 @@ router.get('/youtube/callback', async (req, res) => {
 router.get('/spotify', (req, res) => {
   if (!req.streamer) return res.redirect('/auth/login');
   const { clientId } = config.spotify;
-  if (!clientId) return res.status(500).send('Spotify not configured');
+  if (!clientId) return sendText(res, 500, 'auth.error.spotifyNotConfigured');
 
   const redirectUri = `${config.app.url}/auth/spotify/callback`;
   const params = new URLSearchParams({

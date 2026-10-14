@@ -28,6 +28,7 @@ const DB_FILE = path.join(SRC, 'db.js');
 const AUTH_FILE = path.join(__dirname, 'auth.js');
 const TOKEN_KEY = '0123456789abcdef'.repeat(4);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const { t, esc, richFor } = require('../i18n'); // the texts the pages print, and what server.js puts on res.locals for them
 
 let db;
 let server;
@@ -61,9 +62,9 @@ const tokenAnswer = (prefix) => ({ status: 200, body: { access_token: `${prefix}
 
 // ── HTTP ─────────────────────────────────────────────────────────────────
 
-function request(urlPath, { streamer, cookie } = {}) {
+function request(urlPath, { streamer, cookie, headers: extra } = {}) {
   return new Promise((resolve, reject) => {
-    const headers = {};
+    const headers = { ...extra };
     if (streamer) headers['x-test-streamer'] = String(streamer);
     if (cookie) headers.Cookie = cookie;
     const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'GET', agent: false, headers }, (res) => {
@@ -123,6 +124,10 @@ before(async () => {
     // What server.js's session middleware does here: log the header's streamer in.
     const id = Number(req.get('x-test-streamer'));
     req.streamer = id ? db.getStreamerById(id) : undefined;
+    // And t(), in the language of the request. x-show-keys prints each message as its key, to see which one a route sent.
+    res.locals.t = req.get('x-show-keys') ? (key) => `[${key}]` : (key, params) => t('en', key, params);
+    res.locals.esc = esc; // and esc() and rich() for the pages it renders
+    res.locals.rich = richFor(res.locals.t);
     next();
   });
   app.use('/auth', require('./auth'));
@@ -167,11 +172,11 @@ async function start(flow, streamer) {
 const FLOWS = {
   twitch: {
     authorize: 'https://id.twitch.tv/oauth2/authorize',
-    refused: (res) => res.status === 403 && res.text === 'Invalid state',
+    refused: (res) => res.status === 403 && res.text === t('en', 'auth.error.invalidState'),
   },
   broadcaster: {
     authorize: 'https://id.twitch.tv/oauth2/authorize',
-    refused: (res) => res.status === 403 && res.text === 'Invalid state',
+    refused: (res) => res.status === 403 && res.text === t('en', 'auth.error.invalidState'),
   },
   youtube: {
     authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -228,6 +233,61 @@ describe('the OAuth state of the four connections', () => {
       for (const column of ['broadcaster_access_token', 'yt_access_token', 'spotify_access_token']) assert.equal(row[column], null, column);
     });
   }
+});
+
+// ── When a sign-in or a connection stops ─────────────────────────────────
+
+// The visitor reads these in the browser, in the language of the request. Each is asked for by its key (x-show-keys).
+describe('a sign-in or connection that stops tells the visitor why, through t()', () => {
+  const DISCORD_TOKEN = 'https://discord.com/api/oauth2/token';
+  const showKeys = { 'x-show-keys': '1' };
+  const says = (res, status, key) => {
+    assert.equal(res.status, status, res.text);
+    assert.equal(res.text, `[${key}]`);
+    assert.match(res.headers['content-type'], /^text\/plain/, 'plain text, so a translation is never read as markup');
+  };
+
+  test('Discord login: a callback without this browser\'s state, then a token exchange that fails', async () => {
+    says(await request('/auth/login/callback', { headers: showKeys }), 400, 'auth.error.invalidCallback');
+    says(await request('/auth/login/callback?code=synthetic-code&state=one', { cookie: 'oauth_state=another', headers: showKeys }), 400, 'auth.error.invalidCallback');
+    assert.deepEqual(calls, [], 'nothing was asked of Discord');
+
+    answers[DISCORD_TOKEN] = { status: 400, body: {} };
+    says(await request('/auth/login/callback?code=synthetic-code&state=one', { cookie: 'oauth_state=one', headers: showKeys }), 500, 'auth.error.loginFailed');
+    assert.deepEqual(calls.map((c) => c.url), [DISCORD_TOKEN]);
+  });
+
+  for (const [flow, failed] of [['twitch', 'auth.error.twitchLinkFailed'], ['broadcaster', 'auth.error.authorizationFailed']]) {
+    test(`${flow}: no code, no state, and a token exchange that fails`, async () => {
+      const id = addStreamer();
+      says(await request(`/auth/${flow}/callback`, { streamer: id, headers: showKeys }), 400, 'auth.error.missingParams');
+      says(await request(`/auth/${flow}/callback?code=synthetic-code`, { streamer: id, headers: showKeys }), 400, 'auth.error.missingParams');
+      says(await request(`/auth/${flow}/callback?code=synthetic-code&state=one`, { streamer: id, headers: showKeys }), 403, 'auth.error.invalidState');
+      assert.deepEqual(calls, [], 'nothing was asked of Twitch');
+
+      answers[TWITCH_TOKEN] = { status: 400, body: {} };
+      const { state, cookie } = await start(flow, id);
+      says(await request(`/auth/${flow}/callback?code=synthetic-code&state=${state}`, { streamer: id, cookie, headers: showKeys }), 500, failed);
+    });
+  }
+
+  test('Spotify: the server has no client id', async () => {
+    const config = require('../config');
+    const saved = config.spotify.clientId;
+    config.spotify.clientId = '';
+    try {
+      says(await request('/auth/spotify', { streamer: addStreamer(), headers: showKeys }), 500, 'auth.error.spotifyNotConfigured');
+    } finally {
+      config.spotify.clientId = saved;
+    }
+  });
+
+  test('without x-show-keys the visitor reads the English sentence, whole', async () => {
+    const res = await request('/auth/twitch/callback', { streamer: addStreamer() });
+    assert.equal(res.status, 400);
+    assert.equal(res.text, t('en', 'auth.error.missingParams'));
+    assert.match(res.text, / /, 'a sentence, not a key');
+  });
 });
 
 // ── Connecting: tokens go to the logged-in streamer, encrypted at rest ───
@@ -386,5 +446,20 @@ describe('/link', () => {
     assert.equal(`${target.origin}${target.pathname}`, 'https://id.twitch.tv/oauth2/authorize');
     assert.equal(target.searchParams.get('force_verify'), 'true');
     assert.ok(setCookies(res).some((c) => c.startsWith(`link_state=${target.searchParams.get('state')};`)));
+  });
+
+  // The page a subscriber lands on names the Twitch account just linked, with the name Twitch gives.
+  test('the page prints that name as text, whatever it holds', async () => {
+    const { signLink, linkSecret } = require('../services/linkSignature');
+    const name = '<img src=x onerror=alert(1)> "double" \'single\' {{b}} $&';
+    const id = addStreamer();
+    const start = await request(`/auth/link?${new URLSearchParams(signLink({ streamerId: id, discordId: '123456789012345678' }, linkSecret()))}`);
+    answers[TWITCH_TOKEN] = tokenAnswer('link');
+    answers[TWITCH_USERS] = { status: 200, body: { data: [{ id: '7201', login: 'synthetic_viewer', display_name: name }] } };
+
+    const res = await request(`/auth/link/callback?code=synthetic-code&state=${stateOf(start)}`, { cookie: cookieHeader(start) });
+    assert.equal(res.status, 200);
+    assert.ok(!res.text.includes('<img src=x onerror'), 'the name\'s own markup was printed');
+    assert.ok(res.text.includes(`<strong style="color: var(--accent);">${esc(name)}</strong>`), 'the name is in the sentence, once, as text');
   });
 });

@@ -164,6 +164,8 @@ let db;
 let server;
 let port;
 let t;
+let esc;
+let richFor;
 const logs = [];
 const saved = {};
 const CSRF_SECRET = 'synthetic-csrf-secret';
@@ -235,7 +237,7 @@ before(async () => {
   delete require.cache[DB_FILE];
   delete require.cache[DASHBOARD_FILE];
   db = require(DB_FILE);
-  ({ t } = require('../i18n'));
+  ({ t, esc, richFor } = require('../i18n'));
   const { applyAccountStatus } = require('../services/streamerAccess');
   const { errorHandler } = require('../errorHandler');
 
@@ -259,6 +261,8 @@ before(async () => {
     }
     applyAccountStatus(req);
     res.locals.t = (key, params) => t('en', key, params);
+    res.locals.esc = esc; // as server.js: the views print their sentences with rich() and escape their data with esc()
+    res.locals.rich = richFor(res.locals.t);
     res.locals.features = { youtube: true };
     res.locals.streamer = req.streamer || null;
     if (req.get('x-test-render') === 'json') res.render = (view, locals) => res.json({ view, locals });
@@ -1412,6 +1416,29 @@ describe('the translated streamer pages render through their routes', () => {
     const stats = await request('GET', '/dashboard/guild/800000000000000001/stats', { streamer: id });
     assert.equal(stats.status, 200);
     assert.ok(stats.text.includes(html(t('en', 'guildStats.chartTitle'))));
+  });
+});
+
+// A sentence that names a YouTube channel or the chat bot's account is built by the page around the name, which comes from the
+// provider. The stub-based check of every such place is in tests/streamerViewsI18n.test.js; this one goes through the real routes.
+describe('a name made of markup, printed in a sentence of a translated page', () => {
+  const NAME = '<img src=x onerror=alert(1)> "double" \'single\' {{b}} $&';
+
+  test('comes out as text on the YouTube chatbot page and on the chatbot page', async () => {
+    const config = require('../config');
+    const savedBot = config.bot.twitchUsername;
+    config.bot.twitchUsername = NAME;
+    try {
+      const id = addStreamer({ twitch_username: 'somechannel', yt_access_token: 'synthetic-yt-token', yt_channel_name: NAME });
+      for (const route of ['/dashboard/youtube-chatbot', '/dashboard/chatbot']) {
+        const res = await request('GET', route, { streamer: id });
+        assert.equal(res.status, 200, route);
+        assert.ok(!res.text.includes('<img src=x onerror'), `${route} printed the name's own markup`);
+        assert.ok(res.text.includes(`<strong>${esc(NAME)}</strong>`), `${route} prints the name once, in bold, as text`);
+      }
+    } finally {
+      config.bot.twitchUsername = savedBot;
+    }
   });
 });
 

@@ -1,12 +1,18 @@
 'use strict';
 
 // The streamer pages must not carry user-visible English of their own: every text, placeholder,
-// tooltip and message goes through t(). Three checks:
+// tooltip and message goes through t(). Checks:
 //   1. the page source has no words outside t() (scripts, styles, comments and EJS tags removed);
 //   2. the page, rendered with a t() that wraps what it returns in « », has no word outside the
 //      « » (this also catches text next to an EJS value, which the source check can only guess at);
 //   3. the texts a page hands its script are all there: every I18N.<name> the script reads is in
-//      the object the server renders, and the scripts parse.
+//      the object the server renders, and the scripts parse;
+//   4. a translation can not add markup to a page (a translator that adds a tag to every text);
+//   5. esc() and rich() come from the server (src/i18n.js, set on res.locals next to t()), no view
+//      has a copy, and no page links to the legacy pricing and subscription pages;
+//   6. what a page builds into the markup of a sentence (a bot's name, a channel name, a link) is
+//      printed as text: the stubs use names made of markup, quotes and {{fields}};
+//   7. a translated text that a script puts into the page is shown as text.
 // What is allowed to stay is listed below with the reason.
 
 const { test, describe } = require('node:test');
@@ -14,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ejs = require('ejs');
-const { t } = require('../src/i18n');
+const { t, esc, richFor } = require('../src/i18n');
 const en = require('../src/locales/en.json');
 const { EVENT_DEFAULTS } = require('../src/services/overlayDesign');
 
@@ -202,10 +208,11 @@ const marked = (key, params) => {
   assert.deepEqual(missing, [], `t('${key}') is called without ${missing.join(', ')}`);
   return '«' + t('en', key, params) + '»';
 };
+// What server.js puts on res.locals: t(), and esc() and rich() (from src/i18n.js) with rich() built on that t().
 function render(page, locals, translate = marked) {
   return ejs.render(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'), {
     racingUser: null, isAdmin: false, features: { youtube: false }, lang: 'en', csrfToken: 'token', currentPath: '/x', notifications: [], unreadNotifCount: 0, streamerTier: 'free',
-    SUPPORTED_LANGS: ['en'], t: translate, ...locals,
+    SUPPORTED_LANGS: ['en'], t: translate, esc, rich: richFor(translate), ...locals,
   }, { filename: path.join(VIEWS, page + '.ejs'), views: [VIEWS] });
 }
 // The page's own part: a header page starts at the container the shared header opens (its sidebar is not the page's).
@@ -287,8 +294,8 @@ describe('the texts a page hands its script are all there', () => {
 
 describe('a translation can not add markup to a page', () => {
   // Texts from the language files are printed escaped everywhere. The links, bold words and code of a sentence are built by the
-  // page and put in through the {{fields}} of the text (rich() in the view escapes the text first), so whatever a language file holds
-  // stays text.
+  // page and put in through the {{fields}} of the text (rich(), from src/i18n.js, escapes the text first), so whatever a language
+  // file holds stays text.
   const evil = (key, params) => t('en', key, params) + '<img src=x onerror=alert(1)>';
 
   for (const page of PAGES) {
@@ -303,5 +310,191 @@ describe('a translation can not add markup to a page', () => {
   test('no view prints t() unescaped', () => {
     const offenders = PAGES.filter((page) => /<%-\s*t\(/.test(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8')));
     assert.deepEqual(offenders, []);
+  });
+});
+
+// ── 5. esc() and rich() come from the server ─────────────────────────────
+
+// Strings in a piece of EJS become S, so what is left is its structure.
+const stripStrings = (code) => code.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, 'S');
+// Every <%- rich( ... ) %> in a page, with its arguments as written.
+const richCalls = (source) => [...source.matchAll(/<%-\s*rich\(([\s\S]*?)\)\s*%>/g)].map((m) => m[1]);
+// The data a page builds into the markup of its sentences: each esc( ... ) inside a rich() call.
+const escSites = (source) => richCalls(source).reduce((sum, args) => sum + (stripStrings(args).match(/\besc\(/g) || []).length, 0);
+
+describe('esc() and rich() come from the server, and are used the same way everywhere', () => {
+  test('no view defines its own copy (server.js puts them on res.locals next to t())', () => {
+    const offenders = [];
+    for (const file of fs.readdirSync(VIEWS).filter((name) => name.endsWith('.ejs'))) {
+      // only the EJS tags: the page scripts may have functions of their own with these names
+      for (const tag of fs.readFileSync(path.join(VIEWS, file), 'utf8').match(/<%[\s\S]*?%>/g) || []) {
+        if (/\b(?:const|let|var|function)\s+(?:esc|rich)\b/.test(tag)) offenders.push(`${file}: ${tag.replace(/\s+/g, ' ').slice(0, 70)}`);
+      }
+    }
+    assert.deepEqual(offenders, []);
+  });
+
+  test('every rich() call names the markup it fills in', () => {
+    const offenders = [];
+    for (const page of PAGES) {
+      for (const args of richCalls(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'))) {
+        if (!stripStrings(args).includes(',')) offenders.push(`${page}: rich(${args.slice(0, 50)})`);
+      }
+    }
+    assert.deepEqual(offenders, []);
+  });
+
+  test('whatever a rich() call builds into its markup besides fixed text is wrapped in esc()', () => {
+    const offenders = [];
+    for (const page of PAGES) {
+      for (const args of richCalls(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'))) {
+        // fixed text -> S, esc( ... ) -> E; around every "+" there must be one of the two
+        let shape = stripStrings(args);
+        for (let i = 0; i < 3; i++) shape = shape.replace(/\besc\((?:[^()]|\([^()]*\))*\)/g, 'E');
+        const pieces = shape.split('+');
+        const last = (piece) => piece.trim().split(/[\s,:{}]+/).pop();
+        const first = (piece) => piece.trim().split(/[\s,:{}]+/)[0];
+        pieces.forEach((piece, i) => {
+          if (i < pieces.length - 1 && !['S', 'E'].includes(last(piece))) offenders.push(`${page}: ${last(piece)} + ... in rich(${args.slice(0, 60)})`);
+          if (i > 0 && !['S', 'E'].includes(first(piece))) offenders.push(`${page}: ... + ${first(piece)} in rich(${args.slice(0, 60)})`);
+        });
+      }
+    }
+    assert.deepEqual(offenders, []);
+  });
+});
+
+describe('the pages lead nowhere into the legacy pricing and subscription pages', () => {
+  // Everything on the site is free. /pricing and /payment/subscription are leftovers that only speak English;
+  // no page of the streamer's may link to them.
+  const LEGACY = /(?:href|action)\s*=\s*["']\/(?:pricing|payment)\b/;
+
+  for (const page of PAGES) {
+    test(page, () => {
+      assert.ok(!LEGACY.test(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8')), `${page}.ejs links to a legacy page`);
+      for (const locals of PAGE_LOCALS[page]) assert.ok(!LEGACY.test(render(page, locals)), `${page} renders a link to a legacy page`);
+    });
+  }
+});
+
+// ── 6. Data inside the markup a page builds ──────────────────────────────
+
+describe('data a page builds into the markup of a sentence is printed as text', () => {
+  // A sentence with a link or a bold word is built by the page: <%- rich(key, { name: '<strong>' + esc(value) + '</strong>' }) %>.
+  // The value is a bot's name, a channel name, a display name or an authorize URL, so it is not the page's own. The stubs above use
+  // plain names; these use a value that is nothing but trouble (a tag, quotes of both kinds, {{fields}}, dollar patterns) and
+  // expect it in the page exactly as esc() prints it: once, whole, and as nothing else.
+  const TAG = '<img src=x onerror=alert(1)>';
+  const NAME = `${TAG} "double" 'single' {{b}} {{aEnd}} $& $1 </strong></a>`;
+  const URL_VALUE = `https://app.test/auth/broadcaster?a=1&b="onfocus="alert(1)'>${TAG}`;
+  const occurrences = (html, needle) => html.split(needle).length - 1;
+  const english = (key, params) => t('en', key, params);
+
+  // sites: how many places in the page print the value through rich(); around: what must surround it (an attribute value)
+  const CASES = [
+    { page: 'chatbot-config', what: 'the bot\'s name, connected', locals: { ...PAGE_LOCALS['chatbot-config'][0], botUsername: NAME }, value: NAME, sites: 1 },
+    { page: 'chatbot-config', what: 'the bot\'s name, not connected', locals: { ...PAGE_LOCALS['chatbot-config'][0], botConnected: false, botUsername: NAME }, value: NAME, sites: 1 },
+    { page: 'link-result', what: 'the Twitch name', locals: { success: true, twitchName: NAME, streamer: null }, value: NAME, sites: 1 },
+    { page: 'youtube-chatbot-config', what: 'the YouTube channel name', locals: { ...PAGE_LOCALS['youtube-chatbot-config'][0], streamer: { ...streamer, yt_channel_name: NAME } }, value: NAME, sites: 1 },
+    { page: 'multistream', what: 'the Twitch display name and the YouTube channel name', locals: { ...PAGE_LOCALS.multistream[0], streamer: { ...streamer, twitch_display_name: NAME }, youtubeChannelName: NAME }, value: NAME, sites: 2 },
+    { page: 'guild-config', what: 'the broadcaster authorize link, twice', locals: { ...PAGE_LOCALS['guild-config'][0], hasBroadcasterToken: false, broadcasterAuthUrl: URL_VALUE }, value: URL_VALUE, sites: 2, around: ['href="', '"'] },
+    { page: 'guild-stats', what: 'the two channel counts', locals: { ...PAGE_LOCALS['guild-stats'][0], twitchCount: NAME, youtubeCount: NAME }, value: NAME, sites: 2 },
+  ];
+
+  for (const { page, what, locals, value, sites, around = ['', ''] } of CASES) {
+    test(`${page}: ${what}`, () => {
+      const html = render(page, locals, english);
+      assert.ok(!html.includes(TAG), `${page} printed the value's own markup`);
+      const printed = around[0] + esc(value) + around[1];
+      assert.equal(occurrences(html, printed), sites, `${page} should print the value ${sites} time(s), escaped once, as ${printed.slice(0, 60)}...`);
+    });
+  }
+
+  test('the cases cover every place a page builds data into a rich() sentence', () => {
+    for (const page of PAGES) {
+      const places = escSites(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'));
+      const covered = CASES.filter((c) => c.page === page).reduce((sum, c) => sum + c.sites, 0);
+      assert.equal(covered, places, `${page}.ejs builds data into ${places} rich() place(s); the cases above cover ${covered}`);
+    }
+  });
+});
+
+// ── 7. A translated text that a script puts into the page ────────────────
+
+describe('a translated text that a script puts into the page is shown as text', () => {
+  const TAG = '<img src=x onerror=alert(1)>';
+  const english = (key, params) => t('en', key, params);
+
+  test('no script writes HTML that holds a translation unless it escapes it first', () => {
+    // A line that sets innerHTML (or the like) with an I18N text in it: esc(I18N.x), or I18N.x.replace(/</g, ...) for the "<"
+    // that opens markup. Anything else sets textContent.
+    const offenders = [];
+    for (const page of PAGES) {
+      fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8').split('\n').forEach((line, i) => {
+        if (!/\b(?:innerHTML|outerHTML)\s*=|insertAdjacentHTML\(/.test(line) || !/\bI18N\.\w+/.test(line)) return;
+        const texts = [...line.matchAll(/\bI18N\.\w+(?:\.\w+(?:\([^)]*\))?)*/g)].map((m) => m[0]);
+        const bare = texts.filter((text) => !line.includes(`esc(${text})`) && !/\.replace\(\/</.test(text));
+        if (bare.length) offenders.push(`${page}.ejs line ${i + 1}: ${bare.join(', ')} goes into HTML as it is`);
+      });
+    }
+    assert.deepEqual(offenders, []);
+  });
+
+  // The function with the given name in a page script, cut out by its braces.
+  function scriptFunction(script, name) {
+    const start = script.indexOf(`async function ${name}(`);
+    assert.ok(start >= 0, `${name} is in the page script`);
+    const open = script.indexOf('{', script.indexOf(')', start));
+    let depth = 0;
+    for (let i = open; i < script.length; i++) {
+      if (script[i] === '{') depth++;
+      else if (script[i] === '}' && --depth === 0) return script.slice(start, i + 1);
+    }
+    throw new Error(`${name} does not end`);
+  }
+  // A button that records how its content was set: as markup (innerHTML) or as text (textContent).
+  function fakeButton(markup) {
+    let html = markup;
+    const writes = [];
+    return {
+      writes,
+      disabled: false,
+      get innerHTML() { return html; },
+      set innerHTML(value) { writes.push(['markup', value]); html = value; },
+      set textContent(value) { writes.push(['text', value]); html = esc(value); },
+    };
+  }
+
+  // The chatbot page's test buttons show "Sending...", then how it went, and put their own markup (an icon) back after a moment.
+  describe('the chatbot page\'s test buttons', () => {
+    const ICON_BUTTON = '<svg viewBox="0 0 1 1"><path d="M0 0"/></svg> Test';
+    // every text of the script is made of the tag, so any that reaches the page as markup shows
+    const hostile = (key, params) => (key.startsWith('chatbot.js.') ? `${TAG} ${key}` : english(key, params));
+    const html = render('chatbot-config', PAGE_LOCALS['chatbot-config'][0], hostile);
+    const script = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).find((s) => s.includes('async function testChat('));
+    const I18N = JSON.parse(script.match(/(?:const|var|let) I18N = (\{.*\});/)[1]);
+
+    const outcomes = [
+      ['it worked', async () => ({ json: async () => ({ ok: true }) }), 'sent'],
+      ['the server said no', async () => ({ json: async () => ({ ok: false, error: 'No' }) }), 'failed'],
+      ['the request failed', async () => { throw new Error('offline'); }, 'error'],
+    ];
+    for (const [fn, args] of [['testChat', ['follow']], ['testCustomCommand', ['Hello']]]) {
+      for (const [label, fetchStub, status] of outcomes) {
+        test(`${fn}: ${label}`, async () => {
+          const run = new Function('I18N', 'fetch', 'setTimeout', 'alert', 'encodeURIComponent', `${scriptFunction(script, fn)}\nreturn ${fn};`);
+          const timers = [];
+          const button = fakeButton(ICON_BUTTON);
+          await run(I18N, fetchStub, (callback) => timers.push(callback), () => {}, encodeURIComponent)(...args, button);
+
+          assert.deepEqual(button.writes, [['text', I18N.sending], ['text', I18N[status]]], 'both statuses were set as text');
+          assert.ok(button.writes.every(([how, value]) => how === 'text' || !value.includes(TAG)), 'no status was set as markup');
+          assert.equal(button.disabled, true, 'the button waits while the status shows');
+          timers.forEach((callback) => callback());
+          assert.equal(button.innerHTML, ICON_BUTTON, 'the button\'s own markup, icon included, comes back');
+          assert.equal(button.disabled, false);
+        });
+      }
+    }
   });
 });
