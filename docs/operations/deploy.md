@@ -60,11 +60,21 @@ or go.
 
 1. **Deploy the release without the key.** Session ids are stored as hashes on the first boot
    (cookies stay valid, nobody is logged out); tokens stay as they are; one warning says the key is
-   not set. Check the boot log (below) and that logging in, the dashboard and an overlay work. Going
-   back at this point costs one re-login for everybody (older code cannot match hashed ids), and the
-   first boot's other moves stay: the four shared sounds are in `data/sounds/13/` (older code looks in
-   the folder root, so streamer 13's custom sounds fall back to the built-in ones), and the clean-up of
-   orphaned watchers deleted rows for good (only a database copy brings them back).
+   not set. Check the boot log (below) and that logging in, the dashboard and an overlay work.
+   Going back to the older release at this point is possible, with these costs:
+   - Everybody logs in once more: older code cannot match hashed session ids.
+   - The four shared alert sounds (follow, subscription, bits, donation) stop playing for **every**
+     streamer, not just streamer 13, until they are moved back. The first boot moved them into
+     `data/sounds/13/`, and older code looks in the folder root, so every overlay falls back to the
+     built-in sounds. Move them back inside the container (`railway ssh`; the braces need bash, so
+     type `bash` first if you land in plain `sh`):
+     `mv /app/data/sounds/13/{follow,subscription,bits,donation}.mp3 /app/data/sounds/`.
+     The next boot of this release moves them into `13/` again.
+   - Accounts switched off in Admin → Users work again (they can log in and their overlay links
+     answer): older code did not lock a switched-off account out, it only stopped that account's
+     notifications. After rolling forward, open Admin → Users and switch off again any that should
+     be off.
+   - The clean-up of orphaned watchers deleted rows for good (only a database copy brings them back).
 2. **Take a fresh backup** (`backup-restore.md`). Then generate the key with `openssl rand -hex 32`,
    keep a copy in a password manager, and set `TOKEN_ENCRYPTION_KEY`. The variable change redeploys
    the same code; its boot encrypts every stored token. Expect `[DB] Encrypted N stored token(s) with
@@ -118,7 +128,8 @@ Before:
 1. No streamer is live.
 2. The admin's `streamers.discord_user_id` is one of the admin ids (`src/adminAccess.js`); if not, set
    `ADMIN_DISCORD_IDS`.
-3. A fresh database copy exists (the orphan clean-up and the new "Remove" delete rows for good).
+3. A fresh database copy exists (the orphan clean-up and the new "Remove" delete rows for good): make
+   it in the container and take a Railway volume backup too (`backup-restore.md`).
 4. Admin → Users: a switched-off account loses the dashboard, its overlay links and its sessions; switch
    on the ones that should work.
 5. The five main alerts take their saved position and width again (they were ignored). To see who has
@@ -128,9 +139,23 @@ Before:
 6. `LINK_SIGNING_SECRET` and `CSRF_SECRET` are set; `WEEKLY_DIGEST_INTERVAL` is not; the service
    settings above are applied.
 
-After: `https://atletanotifications.com/health` answers `{"ok":true}`; the boot log shows the lines
-above and no `[DB migration]` error; the first real tip fires its alert (the capture asks PayPal for
-the full order, which has not been exercised against the real service: a small test tip is worth it).
+After, and over the first days:
+
+- `https://atletanotifications.com/health` answers `{"ok":true}`, and the boot log shows the lines
+  above and no `[DB migration]` error.
+- The first real tip fires its alert (the capture asks PayPal for the full order, which has not been
+  exercised against the real service: a small test tip is worth it).
+- `429` answers on `/api` should be rare. Rate limits now count per visitor address instead of per
+  Cloudflare data centre, so visitors no longer share one counter. A burst of `429`s means the limits
+  need a look. Railway's HTTP logs show them: `railway logs --http --status 429 --lines 100` (flags as
+  in `railway logs --help`).
+- Once the release has settled, delete the hand-made copy `data/backups/pre-release.db`
+  (`backup-restore.md`): it holds account tokens, and the nightly clean-up leaves it alone.
+- `build-bridge.yml` (the "Build Atleta Bridge" workflow) runs when a push touches `bridge/**`,
+  `bridge/CLAUDE.md` included, and this release changes that file. It publishes a new installer only
+  when the version in `bridge/package.json` is new, but its "Add release notes" step rewrites the notes
+  of the release for that version from the latest `bridge/` commits even when nothing is published. To
+  ship a Bridge change to drivers, raise the version in `bridge/package.json` in the same push.
 
 ### What streamers see, and what they need to do
 
