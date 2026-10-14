@@ -96,6 +96,13 @@ describe('the views have no English typed into them', () => {
     });
   }
 
+  test('the dashboard\'s card partials (views/cards/)', () => {
+    for (const file of fs.readdirSync(path.join(VIEWS, 'cards')).filter((name) => name.endsWith('.ejs'))) {
+      const found = hardCodedText(fs.readFileSync(path.join(VIEWS, 'cards', file), 'utf8'));
+      assert.deepEqual(found, [], `typed into cards/${file} instead of a t('key'):\n  ${found.map(([where, text]) => `${where}: ${text}`).join('\n  ')}`);
+    }
+  });
+
   test('the check itself finds what it is looking for', () => {
     const bad = [
       ['<p>Save everything now</p>', 'text'],
@@ -136,11 +143,16 @@ const guild = { guild_id: '1', name: 'zzserver', icon: null, botPresent: true, t
 // The Discord notifications card (discordNotificationsCard() in routes/dashboard.js): servers in every state.
 const notifyServer = (over = {}) => ({
   guildId: '1', name: 'zzserver', icon: null, botPresent: true, url: '/dashboard/guild/1',
-  goLive: { state: 'on', where: '#zzlive' }, clips: { state: 'off', where: null }, recaps: 'on', milestones: 'wait', highlights: 'off', subRoles: 'wait', ...over,
+  goLive: { state: 'on', where: '#zzlive' }, clips: { state: 'off', where: null }, recaps: 'on', milestones: 'wait', highlights: 'off', subRoles: 'wait',
+  switches: { goLive: true, clips: false, recaps: true, milestones: true, highlights: false, subRoles: true },
+  liveWhere: '#zzlive', clipsWhere: null, hasLiveChannel: true, hasClipsChannel: false, hasSubRole: true, ...over,
 });
 const discordNotifications = {
   twitchLinked: true, announcing: 1, needsAuth: true, authAction: 'reconnect',
-  servers: [notifyServer(), notifyServer({ guildId: '2', name: 'zzquiet', botPresent: false, url: '/dashboard/guild/2?tab=twitch', goLive: { state: 'off', where: null }, milestones: 'off', subRoles: 'on', recaps: 'off' })],
+  servers: [notifyServer(), notifyServer({
+    guildId: '2', name: 'zzquiet', botPresent: false, url: '/dashboard/guild/2?tab=twitch', goLive: { state: 'off', where: null }, milestones: 'off', subRoles: 'on', recaps: 'off',
+    switches: { goLive: false, clips: false, recaps: true, milestones: false, highlights: true, subRoles: true }, liveWhere: null, hasLiveChannel: false, hasSubRole: false,
+  })],
 };
 const months = (total) => Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, total: total(i), count: i % 3 }));
 
@@ -173,10 +185,16 @@ const SAMPLES = {
       streamer: streamerRow({ broadcaster_access_token: null }), guilds: [guild], unclaimedGuilds: [{ id: '3', name: 'zzother', icon: null }], botInviteUrl: 'https://example.test/invite', msg: 'youtube_saved',
       botConnected: true, botUsername: 'zzbot', overlayUrl: null, overlayStats: null, vtuberUrl: null, hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: false, isAdmin: false,
       features: { youtube: false, kick: false },
-      discordNotifications: { twitchLinked: true, announcing: 1, needsAuth: false, authAction: 'enable', servers: [notifyServer({ clips: { state: 'on', where: '#zzclips' }, milestones: 'on', subRoles: 'off' })] },
+      discordNotifications: {
+        twitchLinked: true, announcing: 1, needsAuth: false, authAction: 'enable',
+        servers: [notifyServer({
+          clips: { state: 'on', where: '#zzclips' }, milestones: 'on', subRoles: 'off',
+          switches: { goLive: true, clips: true, recaps: true, milestones: true, highlights: false, subRoles: false }, clipsWhere: '#zzclips', hasClipsChannel: true,
+        })],
+      },
     }],
     ['Twitch linked, no server yet, one to claim', {
-      streamer: streamerRow(), guilds: [], unclaimedGuilds: [{ id: '3', name: 'zzother', icon: null }], botInviteUrl: 'https://example.test/invite', msg: undefined, botConnected: false, botUsername: '',
+      streamer: streamerRow(), guilds: [], unclaimedGuilds: [{ id: '3', name: 'zzother', icon: null }], botInviteUrl: 'https://example.test/invite', msg: 'spotify_disconnected', botConnected: false, botUsername: '',
       overlayUrl: null, overlayStats: null, vtuberUrl: null, hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: false, isAdmin: false, features: { youtube: false },
       discordNotifications: { twitchLinked: true, servers: [], announcing: 0, needsAuth: false, authAction: 'enable' },
     }],
@@ -217,14 +235,48 @@ const SAMPLES = {
   ],
 };
 
+const { buildCards } = require('../src/services/dashboardCards');
+// What GET /dashboard gathers for the working cards (gatherCards() in routes/dashboard.js), from a sample's locals:
+// a sample with the bot connected also has commands, sponsor messages, tips, a goal, a reward and a giveaway.
+function sampleCards(data, features) {
+  const full = !!data.botConnected;
+  return buildCards({
+    streamer: data.streamer,
+    features,
+    now: Date.parse('2026-10-14T12:00:00Z'),
+    appUrl: 'https://example.test',
+    bot: { connected: full, moderator: full ? false : null, username: data.botUsername || '' },
+    overlay: { url: data.overlayUrl, open: !!data.overlayUrl },
+    discord: data.discordNotifications,
+    // (the database always has the column: the second command is switched off, the others are on)
+    commands: full ? [1, 2, 3, 4, 5].map((n) => ({ id: n, command: `zzcmd${n}`, response: `zzresponse${n}`, cooldown: 7, enabled: n === 2 ? 0 : 1 })) : [],
+    bannedWords: { total: 2, regex: 0 },
+    modActionsThisWeek: 3,
+    sponsorMessages: full ? [1, 2, 3, 4].map((n) => ({ id: n, message_text: `zzsponsor${n}`, url: n === 1 ? 'https://example.test/zz' : null, enabled: n % 2 })) : [],
+    tips: {
+      count90d: full ? 2 : 0,
+      recent: full ? [{ id: 1, amount: 5, currency: 'EUR', donor_name: 'zzdonor', message: 'zzmessage', created_at: '2026-10-12 10:00:00' }, { id: 2, amount: 2.5, currency: 'USD', donor_name: null, message: '', created_at: '2026-10-14 11:59:30' }] : [],
+    },
+    tipGoal: full ? { title: 'zzgoal', current_amount: 101, target_amount: 1000, currency: 'EUR' } : null,
+    rewards: full ? [{ id: 1, title: 'zzreward', cost: 500, enabled: 1 }, { id: 2, title: 'zzpaused', cost: 50, enabled: 0 }] : [],
+    rewardsAccess: { hasScope: data.hasScope },
+    giveaway: data.activeGiveaway ? { id: 3, keyword: 'zzword', prize: 'zzprize', ends_at: '2026-10-14T12:05:00.000Z', winners_count: 2, subs_only: 1, entryCount: 4 } : null,
+    spotifyConnected: !!data.streamer.spotify_access_token,
+    multistreamAvailable: !!data.multistreamAvailable && !!features.youtube,
+  });
+}
+
 // These pages show less while the overlay features are off (features.overlays): each of their samples is rendered
 // both ways. The dashboard's VTuber tab has its own switch (features.vtuber) and shows only with the overlays, so
 // the samples get that switch together with them.
 const OVERLAY_SWITCH_PAGES = ['dashboard', 'donation-settings', 'timed-notifications'];
 for (const page of OVERLAY_SWITCH_PAGES) {
-  SAMPLES[page] = SAMPLES[page].flatMap(([name, data]) => [true, false].map((overlays) => [
-    `${name}, overlay features ${overlays ? 'on' : 'off'}`, { ...data, features: { ...(data.features || { youtube: true }), overlays, vtuber: overlays } },
-  ]));
+  SAMPLES[page] = SAMPLES[page].flatMap(([name, data]) => [true, false].map((overlays) => {
+    const features = { ...(data.features || { youtube: true }), overlays, vtuber: overlays };
+    const locals = { ...data, features };
+    if (page === 'dashboard') locals.cards = sampleCards(data, features);
+    return [`${name}, overlay features ${overlays ? 'on' : 'off'}`, locals];
+  }));
 }
 
 // What header.ejs and the layout need besides a page's own data.
@@ -270,6 +322,7 @@ describe('rendered with each message as its key, no English is left on the page'
     // The page's own markup only: the layout (header, footer) belongs to other work.
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atleta-views-'));
     for (const page of PAGES) fs.copyFileSync(path.join(VIEWS, `${page}.ejs`), path.join(dir, `${page}.ejs`));
+    fs.cpSync(path.join(VIEWS, 'cards'), path.join(dir, 'cards'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'header.ejs'), '<!DOCTYPE html><html><head><title><%= typeof title !== "undefined" ? title : "" %></title></head><body>');
     fs.writeFileSync(path.join(dir, 'footer.ejs'), '</body></html>');
     fs.writeFileSync(path.join(dir, 'csrf.ejs'), '');
@@ -350,8 +403,8 @@ describe('while the overlay features are off, the pages say nothing about the ov
 
   test('switched on, they ask for the texts about them again', async () => {
     const wanted = {
-      dashboard: ['dashboard.cards.overlay.title', 'dashboard.cards.overlay.customize', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental',
-        'dashboard.youtube.overlayDesc', 'dashboard.cards.giveaways.desc', 'dashboard.cards.sponsors.desc'],
+      dashboard: ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental',
+        'dashboard.youtube.overlayDesc', 'cards.overlay.source', 'cards.donations.goal', 'cards.sponsors.images'],
       'donation-settings': ['donations.settings.intro', 'donations.goal.title', 'donations.goal.testLive', 'donations.goalOverlay.title', 'donations.goal.past'],
       'timed-notifications': ['sponsors.intro', 'sponsors.builderLink'],
     };

@@ -1,0 +1,38 @@
+<%# The Chatbot card (services/dashboardCards.js chatbotCard()): the chatbot's switch and the six thank-you messages,
+    each with its switch and the pop-up that changes its words (public/js/dashboard-cards.js). %>
+<section class="card wc-card" id="card-chatbot" data-card="chatbot" aria-labelledby="card-chatbot-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(145,71,255,0.15); color: #9146ff"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg></div>
+    <div><h3 class="wc-title" id="card-chatbot-title"><%= t('dashboard.cards.chatbot.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+    <% if (!card.setup) { %><label class="pill-toggle" title="<%= t('cards.chatbot.switch') %>"><input type="checkbox" role="switch" aria-label="<%= t('cards.chatbot.switch') %>" data-setting="chatbot_enabled" <%= card.on ? 'checked' : '' %>><span class="slider"></span></label><% } %>
+  </div>
+  <div class="wc-body">
+  <% if (card.setup === 'linkTwitch') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-twitch"/></svg></span><div><%= t('cards.chatbot.setup') %></div></div>
+    <a href="/auth/twitch" class="btn btn-primary wc-btn block"><%= t('dashboard.linkTwitch') %></a>
+  <% } else { %>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.chatbot.thankYous') %></span><span class="wc-count" data-count="thankYous"><%= t(card.counts.thankYous.key, card.counts.thankYous.params) %></span></div>
+    <div class="wc-list<%= card.on ? '' : ' wc-dim' %>" data-dim-with="chatbot_enabled">
+      <% for (const ty of card.thankYous) { %>
+      <div class="wc-row<%= ty.on ? '' : ' is-off' %>">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t(ty.label) %>" data-setting="<%= ty.switchKey %>" <%= ty.on ? 'checked' : '' %>><span class="slider"></span></label>
+        <span class="nm"><%= t(ty.label) %></span>
+        <span class="txt" data-text><%= ty.text || t('cards.chatbot.noMessage') %></span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="<%= ty.textKey %>" data-event="<%= ty.event %>" data-vars="<%= ty.vars.join(' ') %>" data-value="<%= ty.text %>" data-title="<%= t('cards.chatbot.editTitle', { event: t(ty.label) }) %>" title="<%= t('cards.chatbot.editMessage') %>" aria-label="<%= t('cards.chatbot.editMessage') %>: <%= t(ty.label) %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      <% } %>
+    </div>
+  <% } %>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/chatbot"><%= t('cards.chatbot.allSettings') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <template id="tpl-thankyou">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <textarea data-field="text" maxlength="500" rows="3"></textarea>
+      <div class="wc-vars"><span><%= t('cards.chatbot.insert') %></span><span data-vars></span></div>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn wc-left" data-chat-test><%= t('chatbot.events.testInChat') %></button><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
+      <div class="wc-msg" data-dialog-msg hidden></div>
+    </div>
+  </template>
+</section>

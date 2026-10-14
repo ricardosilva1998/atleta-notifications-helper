@@ -1,0 +1,45 @@
+<%# The Sponsor messages card (dashboardCards.js sponsorsCard()): the switch and the interval of the chat rotation, and
+    the messages, each with its switch, edited in a pop-up. Faded while the chatbot is off. %>
+<section class="card wc-card<%= cards.chatbotOn ? '' : ' needs-bot' %>" id="card-sponsors" data-card="sponsors" data-needs-chatbot aria-labelledby="card-sponsors-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(255,152,0,0.13); color: #ff9800"><svg class="i" aria-hidden="true"><use href="#i-mega"/></svg></div>
+    <div><h3 class="wc-title" id="card-sponsors-title"><%= t('sponsors.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+    <label class="pill-toggle" title="<%= t('cards.sponsors.switch') %>"><input type="checkbox" role="switch" aria-label="<%= t('cards.sponsors.switch') %>" data-setting="sponsor_send_chat" <%= card.on ? 'checked' : '' %>><span class="slider"></span></label>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg><%= t('cards.sponsors.needsChatbot') %></div>
+  <div class="wc-body">
+    <div class="wc-setrow"><span><%= t('cards.sponsors.every') %></span><select class="wc-select" data-setting="sponsor_chat_interval_minutes" aria-label="<%= t('cards.sponsors.every') %>"><% for (const m of card.intervals) { %><option value="<%= m %>"<%= m === card.minutes ? ' selected' : '' %>><%= t('cards.common.minutes', { minutes: m }) %></option><% } %></select></div>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.sponsors.messages') %></span><span class="wc-count" data-count="messages"><%= card.counts.messages.text %></span><button type="button" class="btn btn-primary wc-btn xs" data-add="sponsor" data-title="<%= t('cards.sponsors.newTitle') %>"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg><%= t('cards.common.add') %></button></div>
+    <div class="wc-list<%= card.on ? '' : ' wc-dim' %>" id="wc-sponsors" data-list="sponsors" data-dim-with="sponsor_send_chat">
+      <% for (const m of card.messages) { %>
+      <div class="wc-row<%= m.on ? '' : ' is-off' %><%= m.extra ? ' hidden' : '' %>" data-row data-id="<%= m.id %>" data-text="<%= m.text %>" data-url="<%= m.url %>">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= m.text %>" data-setting="sponsor_message_enabled" data-id="<%= m.id %>" <%= m.on ? 'checked' : '' %>><span class="slider"></span></label>
+        <span class="txt" data-field="text"><%= m.text %></span>
+        <button type="button" class="wc-ib" data-edit="sponsor" data-title="<%= t('cards.sponsors.editTitle') %>" title="<%= t('cards.common.edit') %>" aria-label="<%= t('cards.common.edit') %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="sponsor" title="<%= t('cards.common.delete') %>" aria-label="<%= t('cards.common.delete') %>"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      <% } %>
+    </div>
+    <p class="wc-hint" data-empty="sponsors"<%= card.messages.length ? ' hidden' : '' %>><%= t('cards.sponsors.none') %></p>
+    <% if (card.messages.some((m) => m.extra)) { %><button type="button" class="wc-more" data-show-all="wc-sponsors"><%= t('cards.common.showAll', { count: card.messages.length }) %></button><% } %>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><% if (card.imagesLink) { %><a href="/dashboard/overlay-builder?tab=timed"><%= t('cards.sponsors.images') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><% } %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <template id="tpl-sponsor">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <label class="wc-field"><span><%= t('cards.sponsors.text') %></span><textarea data-field="message_text" maxlength="500" rows="3"></textarea></label>
+      <label class="wc-field"><span><%= t('cards.sponsors.link') %></span><input class="wc-input" data-field="url" type="url" maxlength="500" placeholder="https://..."></label>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
+      <div class="wc-msg" data-dialog-msg hidden></div>
+    </div>
+  </template>
+  <template id="tpl-sponsor-row">
+    <div class="wc-row" data-row>
+      <label class="pill-toggle mini"><input type="checkbox" role="switch" data-setting="sponsor_message_enabled" checked><span class="slider"></span></label>
+      <span class="txt" data-field="text"></span>
+      <button type="button" class="wc-ib" data-edit="sponsor" data-title="<%= t('cards.sponsors.editTitle') %>" title="<%= t('cards.common.edit') %>" aria-label="<%= t('cards.common.edit') %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      <button type="button" class="wc-ib" data-delete="sponsor" title="<%= t('cards.common.delete') %>" aria-label="<%= t('cards.common.delete') %>"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+    </div>
+  </template>
+</section>

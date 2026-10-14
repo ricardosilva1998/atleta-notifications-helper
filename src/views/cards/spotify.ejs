@@ -1,0 +1,15 @@
+<%# The Spotify card: connect it, or (connected) what !song does and the way to disconnect it. %>
+<section class="card wc-card" id="card-spotify" data-card="spotify" aria-labelledby="card-spotify-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(29,185,84,0.13); color: #1db954"><svg class="i" aria-hidden="true"><use href="#i-music"/></svg></div>
+    <div><h3 class="wc-title" id="card-spotify-title">Spotify</h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-body">
+    <% const _song = around(card.connected ? 'dashboard.cards.spotify.connectedDesc' : 'dashboard.cards.spotify.connectDesc', 'command'); %>
+    <p class="wc-text"><%= _song[0] %><code>!song</code><%= _song[1] %></p>
+    <% if (!card.connected) { %><a href="/auth/spotify" class="btn btn-primary wc-btn block"><%= t('dashboard.cards.spotify.connect') %></a><% } %>
+  </div>
+  <% if (card.connected) { %>
+  <div class="wc-foot"><form method="POST" action="/dashboard/spotify/disconnect" class="wc-inline-form"><button type="submit" class="wc-linkbtn"><%= t('dashboard.cards.spotify.disconnect') %></button></form></div>
+  <% } %>
+</section>

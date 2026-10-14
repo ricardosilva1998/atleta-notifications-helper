@@ -1,0 +1,27 @@
+<%# The Chat protection card (dashboardCards.js protectionCard()): the six filters, the note that asks to make the
+    bot a moderator (shown while Twitch says it is not one; Check again asks Twitch again) and the moderation log.
+    Faded while the chatbot is off. %>
+<section class="card wc-card<%= cards.chatbotOn ? '' : ' needs-bot' %>" id="card-protection" data-card="protection" data-needs-chatbot aria-labelledby="card-protection-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(240,68,56,0.13); color: #f04438"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg></div>
+    <div><h3 class="wc-title" id="card-protection-title"><%= t('cards.protection.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg><%= t('cards.protection.needsChatbot') %></div>
+  <div class="wc-body">
+    <% if (card.botName) { const _mod = around('cards.protection.modNote', 'command', { bot: card.botName }); %>
+    <div class="wc-note" data-mod-note<%= card.moderatorNote ? '' : ' hidden' %>>
+      <svg class="i sm" aria-hidden="true" style="color: var(--warning)"><use href="#i-warn"/></svg>
+      <span><%= _mod[0] %><code>/mod <%= card.botName %></code><%= _mod[1] %></span>
+      <button type="button" class="btn btn-secondary wc-btn xs" data-copy="/mod <%= card.botName %>"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label><%= t('dashboard.copy') %></span></button>
+      <button type="button" class="btn btn-secondary wc-btn xs" data-check-moderator><%= t('cards.protection.checkAgain') %></button>
+    </div>
+    <% } %>
+    <div class="wc-switches">
+      <% for (const f of card.filters) { %>
+      <div class="wc-sw<%= f.on ? ' is-on' : '' %>"><span><%= t(f.label) %><small><%= t(f.hint, f.hintParams) %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t(f.label) %>" data-setting="<%= f.key %>" <%= f.on ? 'checked' : '' %>><span class="slider"></span></label></div>
+      <% } %>
+    </div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/chatbot/mod-log"><%= t(card.modLog.key, card.modLog.params) %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/chatbot?tab=moderation"><%= t('cards.protection.fineTune') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+</section>

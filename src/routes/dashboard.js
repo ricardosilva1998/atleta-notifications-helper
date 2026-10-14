@@ -429,16 +429,6 @@ router.get('/', async (req, res) => {
   const botInviteUrl = inviteUrlFor(client.application?.id ?? config.discord.clientId);
 
   // Twitch tab data
-  let botConnected = false;
-  let botUsername = '';
-  try {
-    const { chatManager } = require('../services/twitchChat');
-    botConnected = chatManager.isConnected();
-    botUsername = require('../config').bot.twitchUsername;
-  } catch (e) {}
-  const overlayUrl = req.streamer.overlay_token
-    ? `${config.app.url}/overlay/${req.streamer.overlay_token}`
-    : null;
   const vtuberUrl = req.streamer.overlay_token
     ? `${config.app.url}/vtuber/${req.streamer.overlay_token}`
     : null;
@@ -447,12 +437,8 @@ router.get('/', async (req, res) => {
   let overlayStats = null;
   try { overlayStats = db.getOverlayStats7d(req.streamer.id); } catch (e) {}
 
-  const { hasRedemptionScope, needsBroadcasterReauth } = require('../services/twitch');
-  const hasScope = hasRedemptionScope(req.streamer);
+  const { needsBroadcasterReauth } = require('../services/twitch');
   const needsReauth = needsBroadcasterReauth(req.streamer);
-
-  let activeGiveaway = null;
-  try { activeGiveaway = db.getActiveGiveaway(req.streamer.id); } catch (e) {}
 
   const discordNotifications = discordNotificationsCard(req.streamer,
     enrichedGuilds.map((g, i) => ({ ...g, ...serverViews[i] })), { needsReauth });
@@ -464,14 +450,9 @@ router.get('/', async (req, res) => {
     unclaimedGuilds,
     botInviteUrl,
     msg,
-    botConnected,
-    botUsername,
-    overlayUrl,
     overlayStats,
     vtuberUrl,
-    hasScope,
     needsReauth,
-    activeGiveaway,
     discordNotifications,
     cards,
     wideLayout: true, // header.ejs: the dashboard uses the wide container

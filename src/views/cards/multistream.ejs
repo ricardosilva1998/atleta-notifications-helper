@@ -1,0 +1,11 @@
+<%# The Multistream card, only while the relay is set up (config.multistream.enabled) and YouTube is shown. %>
+<section class="card wc-card" id="card-multistream" data-card="multistream" aria-labelledby="card-multistream-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: linear-gradient(135deg, #9146ff, #ff0000); color: #fff"><svg class="i" aria-hidden="true"><use href="#i-video"/></svg></div>
+    <div><h3 class="wc-title" id="card-multistream-title"><%= t('dashboard.cards.multistream.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-body">
+    <p class="wc-text"><%= t('dashboard.cards.multistream.desc') %></p>
+    <a href="/dashboard/multistream" class="btn btn-primary wc-btn block"><%= t('dashboard.cards.multistream.cta') %></a>
+  </div>
+</section>

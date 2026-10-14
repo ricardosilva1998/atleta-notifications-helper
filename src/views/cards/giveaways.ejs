@@ -1,0 +1,34 @@
+<%# The Giveaways card (dashboardCards.js giveawaysCard()): the form that starts one (the giveaways page's JSON
+    routes) and, while one runs, how to enter, the entries, the time left and Pick a winner. Faded while the chatbot is
+    off: the chatbot collects the entries. %>
+<% const _gw = card.running || {}; const _enter = around('cards.giveaways.howToEnter', 'keyword'); %>
+<section class="card wc-card<%= cards.chatbotOn ? '' : ' needs-bot' %><%= card.running ? ' gw-running' : '' %>" id="card-giveaways" data-card="giveaways" data-needs-chatbot aria-labelledby="card-giveaways-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(245,158,11,0.15); color: #f59e0b"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg></div>
+    <div><h3 class="wc-title" id="card-giveaways-title"><%= t('dashboard.cards.giveaways') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg><%= t('cards.giveaways.needsChatbot') %></div>
+  <div class="wc-body">
+    <form class="wc-gw-form" data-giveaway-form>
+      <div class="wc-fields">
+        <label class="wc-field"><span><%= t('cards.giveaways.keyword') %></span><span class="wc-prefixed"><b aria-hidden="true">!</b><input class="wc-input" name="keyword" value="gw" maxlength="25" autocomplete="off" spellcheck="false" required></span></label>
+        <label class="wc-field grow"><span><%= t('cards.giveaways.prize') %> <em><%= t('cards.giveaways.optional') %></em></span><input class="wc-input" name="prize" maxlength="100" placeholder="<%= t('cards.giveaways.prizePlaceholder') %>"></label>
+      </div>
+      <div class="wc-fields">
+        <label class="wc-field grow"><span><%= t('cards.giveaways.ends') %></span><select class="wc-select" name="duration_seconds"><option value=""><%= t('cards.giveaways.endsManual') %></option><% for (const m of [1, 5, 10, 30]) { %><option value="<%= m * 60 %>"<%= m === 5 ? ' selected' : '' %>><%= t('cards.giveaways.endsAfter', { minutes: m }) %></option><% } %></select></label>
+        <label class="wc-field"><span><%= t('cards.giveaways.winners') %></span><select class="wc-select" name="winners_count"><% for (const n of [1, 2, 3, 5]) { %><option value="<%= n %>"><%= n %></option><% } %></select></label>
+        <label class="wc-field"><span><%= t('cards.giveaways.subsOnly') %></span><span class="pill-toggle mini"><input type="checkbox" role="switch" name="subs_only" aria-label="<%= t('cards.giveaways.subsOnly') %>"><span class="slider"></span></span></label>
+      </div>
+      <button type="submit" class="btn btn-primary wc-btn block"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg><%= t('cards.giveaways.start') %></button>
+    </form>
+    <div class="wc-gw-live" data-giveaway-live data-giveaway-id="<%= _gw.id || '' %>" data-keyword="<%= _gw.keyword || '' %>" data-ends-at="<%= _gw.endsAt || '' %>" data-winners="<%= _gw.winners || 1 %>" data-entries="<%= _gw.entries || 0 %>">
+      <div class="wc-setrow wc-gw-how"><span class="pulse-dot" aria-hidden="true"></span><span><%= _enter[0] %><code data-gw-keyword>!<%= _gw.keyword || '' %></code><%= _enter[1] %></span></div>
+      <div class="wc-gw-stats"><div><b data-gw-entries><%= _gw.entries || 0 %></b><span><%= t('cards.giveaways.entries') %></span></div><div><b data-gw-left>–</b><span><%= t('cards.giveaways.left') %></span></div><div><b data-gw-winners><%= _gw.winners || 1 %></b><span><%= t('cards.giveaways.winners') %></span></div></div>
+      <div class="wc-winner" data-gw-winner role="status"></div>
+      <button type="button" class="btn btn-primary wc-btn block" data-gw-pick><%= t('cards.giveaways.pick') %></button>
+      <button type="button" class="btn btn-secondary wc-btn block" data-gw-end><%= t('cards.giveaways.end') %></button>
+    </div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/giveaways"><%= t('cards.giveaways.past') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+</section>

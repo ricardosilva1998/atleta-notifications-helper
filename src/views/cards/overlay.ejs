@@ -1,0 +1,37 @@
+<%# The OBS overlay card (with features.overlays; dashboardCards.js overlayCard()): the alerts' on/off switch, the
+    browser source link (masked until the eye is clicked), each alert's switch, seconds on screen and test, and the
+    volume. %>
+<section class="card wc-card" id="card-overlay" data-card="overlay" aria-labelledby="card-overlay-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(224,64,251,0.13); color: #e040fb"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></div>
+    <div><h3 class="wc-title" id="card-overlay-title"><%= t('dashboard.cards.overlay.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+    <label class="pill-toggle" title="<%= t('cards.overlay.switch') %>"><input type="checkbox" role="switch" aria-label="<%= t('cards.overlay.switch') %>" data-setting="overlay_enabled" <%= card.on ? 'checked' : '' %>><span class="slider"></span></label>
+  </div>
+  <div class="wc-body">
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.overlay.source') %></span></div>
+    <% if (card.url) { %>
+    <div class="wc-linkbox">
+      <code class="wc-link" data-masked="<%= card.masked %>" data-shown="<%= card.shown %>"><%= card.masked %></code>
+      <button type="button" class="btn btn-secondary wc-btn" data-reveal aria-pressed="false" title="<%= t('cards.overlay.reveal') %>" aria-label="<%= t('cards.overlay.reveal') %>"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button>
+      <button type="button" class="btn btn-secondary wc-btn" data-copy="<%= card.url %>"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label><%= t('dashboard.copy') %></span></button>
+    </div>
+    <% } else { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><div><%= t('cards.overlay.createLinkHint') %></div></div>
+    <form method="POST" action="/dashboard/overlay/generate-token" class="wc-inline-form"><button type="submit" class="btn btn-primary wc-btn block"><%= t('cards.overlay.createLink') %></button></form>
+    <% } %>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.overlay.alerts') %></span><span class="wc-count" data-count="alerts"><%= t(card.counts.alerts.key, card.counts.alerts.params) %></span></div>
+    <div class="wc-list<%= card.on ? '' : ' wc-dim' %>" data-dim-with="overlay_enabled">
+      <% for (const a of card.alerts) { %>
+      <div class="wc-row wc-alert<%= a.on ? '' : ' is-off' %>">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t(a.label) %>" data-setting="<%= a.switchKey %>" <%= a.on ? 'checked' : '' %>><span class="slider"></span></label>
+        <span class="nm"><%= t(a.label) %></span>
+        <select class="wc-select sm" data-setting="<%= a.durationKey %>" aria-label="<%= t('cards.overlay.secondsLabel') %>: <%= t(a.label) %>"><% for (const s of a.choices) { %><option value="<%= s %>"<%= s === a.seconds ? ' selected' : '' %>><%= t('cards.common.seconds', { seconds: s }) %></option><% } %></select>
+        <button type="button" class="wc-ib" data-alert-test="<%= a.test %>" title="<%= t('cards.overlay.testAlert') %>" aria-label="<%= t('cards.overlay.testAlert') %>: <%= t(a.label) %>"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      <% } %>
+    </div>
+    <div class="wc-volume"><svg class="i sm" aria-hidden="true"><use href="#i-vol"/></svg><%= t('cards.overlay.volume') %><input type="range" min="0" max="100" step="1" value="<%= card.volume %>" data-setting="overlay_volume" data-scale="100" aria-label="<%= t('cards.overlay.volume') %>"><span class="v" data-volume-label><%= card.volume %>%</span></div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/overlay-builder"><%= t('cards.overlay.look') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/overlay"><%= t('cards.overlay.sounds') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+</section>

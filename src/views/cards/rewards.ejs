@@ -1,0 +1,33 @@
+<%# The Channel point rewards card (with features.overlays; dashboardCards.js rewardsCard()): the switch (while it is
+    off every redemption is refunded), each reward's switch and test, or what is missing: the Twitch permission, or
+    Affiliate. %>
+<section class="card wc-card" id="card-rewards" data-card="rewards" aria-labelledby="card-rewards-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(145,70,255,0.15); color: #b18cff"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg></div>
+    <div><h3 class="wc-title" id="card-rewards-title"><%= t('dashboard.cards.cpRewards') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+    <% if (card.access === 'ok') { %><label class="pill-toggle" title="<%= t('cards.rewards.switch') %>"><input type="checkbox" role="switch" aria-label="<%= t('cards.rewards.switch') %>" data-setting="cp_rewards_enabled" <%= card.on ? 'checked' : '' %>><span class="slider"></span></label><% } %>
+  </div>
+  <div class="wc-body">
+  <% if (card.access === 'permission') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg></span><div><%= t('cards.rewards.permissionText') %></div></div>
+    <a href="/auth/broadcaster" class="btn btn-primary wc-btn block"><%= t('dashboard.reconnectTwitch') %></a>
+  <% } else if (card.access === 'notAffiliate') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg></span><div><%= t('cards.rewards.notAffiliateText') %></div></div>
+  <% } else if (!card.rewards.length) { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg></span><div><%= t('cards.rewards.emptyText') %></div></div>
+    <a href="/dashboard/redemptions" class="btn btn-primary wc-btn block"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg><%= t('cards.rewards.create') %></a>
+  <% } else { %>
+    <div class="wc-list<%= card.on ? '' : ' wc-dim' %>" data-dim-with="cp_rewards_enabled">
+      <% for (const r of card.rewards) { %>
+      <div class="wc-row<%= r.on ? '' : ' is-off' %>">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= r.title %>" data-reward-id="<%= r.id %>" <%= r.on ? 'checked' : '' %>><span class="slider"></span></label>
+        <span class="nm"><%= r.title %></span><span class="txt"><%= t('cards.rewards.cost', { cost: r.cost }) %></span>
+        <button type="button" class="wc-ib" data-reward-test="<%= r.id %>" title="<%= t('cards.rewards.test') %>" aria-label="<%= t('cards.rewards.test') %>: <%= r.title %>"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      <% } %>
+    </div>
+  <% } %>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/redemptions"><%= t('cards.rewards.history') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+</section>

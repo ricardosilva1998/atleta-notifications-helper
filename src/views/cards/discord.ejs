@@ -1,0 +1,43 @@
+<%# The Discord notifications card (dashboardCards.js discordCard(), from discordNotificationsCard() in
+    routes/dashboard.js): per claimed server, six switches that save at once, each with where its posts go or what is
+    missing. Without a linked Twitch account or a server it shows the one step to take. %>
+<section class="card wc-card" id="card-discord" data-card="discord" aria-labelledby="card-discord-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(88,101,242,0.15); color: #5865F2"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></div>
+    <div><h3 class="wc-title" id="card-discord-title"><%= t('dashboard.cards.discord.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-body">
+  <% if (card.setup === 'linkTwitch') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-twitch"/></svg></span><div><%= t('dashboard.cards.discord.noTwitch') %></div></div>
+    <a href="/auth/twitch" class="btn btn-primary wc-btn block"><%= t('dashboard.linkTwitch') %></a>
+  <% } else if (card.setup === 'addServer') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></span><div><%= t('dashboard.cards.discord.noServer') %></div></div>
+    <a href="<%= botInviteUrl %>" target="_blank" rel="noopener" class="btn btn-primary wc-btn block"><%= t('dashboard.addBot') %></a>
+    <% for (const g of unclaimedGuilds) { %>
+    <form method="POST" action="/dashboard/claim/<%= g.id %>" class="wc-row wc-inline-form"><span class="nm"><%= g.name %></span><span class="txt"></span><button type="submit" class="btn btn-secondary wc-btn xs"><%= t('dashboard.claim') %></button></form>
+    <% } %>
+  <% } else { %>
+    <% for (const s of card.servers) { %>
+    <div class="wc-server" data-guild="<%= s.guildId %>">
+      <div class="wc-server-name"><span class="av" aria-hidden="true"><%= String(s.name || '?').charAt(0).toUpperCase() %></span><span class="sn"><%= s.name %></span><% if (!s.botPresent) { %><span class="wc-off-tag"><%= t('dashboard.offline') %></span><% } %><a class="wc-link-sm" href="<%= s.url %>"><%= t('cards.discord.channels') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+      <div class="wc-switches">
+        <% for (const sw of s.switches) { %>
+        <div class="wc-sw<%= sw.on ? ' is-on' : '' %>"><span><%= t(sw.label) %><small class="<%= sw.hint.warn ? 'warn' : '' %>"><%= t(sw.hint.key, sw.hint.params) %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t(sw.label) %> · <%= s.name %>" data-setting="<%= sw.key %>" data-guild-id="<%= s.guildId %>" data-fix-href="/dashboard/guild/<%= s.guildId %>?tab=<%= sw.fix %>" <%= sw.on ? 'checked' : '' %>><span class="slider"></span></label></div>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+    <% if (card.needsAuth) { const _auth = around('dashboard.cards.discord.authNote', 'link'); %>
+    <div class="wc-note"><svg class="i sm" aria-hidden="true" style="color: var(--warning)"><use href="#i-warn"/></svg><span><%= _auth[0] %><a href="/auth/broadcaster"><%= card.authAction === 'reconnect' ? t('dashboard.reconnect.cta') : t('dashboard.enableSubSync') %></a><%= _auth[1] %></span></div>
+    <% } %>
+  <% } %>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <% if (!card.setup) { %>
+  <div class="wc-foot">
+    <% if (card.servers.length === 1) { %><a href="/dashboard/guild/<%= card.servers[0].guildId %>?tab=discord"><%= t('cards.discord.welcome') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><% } %>
+    <a href="#tab-discord" data-open-tab="discord"><%= t('cards.discord.addServer') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a>
+    <span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span>
+  </div>
+  <% } %>
+</section>
