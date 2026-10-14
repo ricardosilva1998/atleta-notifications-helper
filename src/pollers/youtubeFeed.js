@@ -1,4 +1,5 @@
 const { getLatestVideos, getVideoDetails } = require('../services/youtube');
+const { escapeLinkText } = require('../discord');
 
 // Said once per outage, not on every poll: the feed is read every five minutes.
 let warnedAboutDetails = false;
@@ -48,12 +49,16 @@ async function check(youtubeChannelId, channelState, apiKey) {
   // is still remembered as known, so it is not announced as an upload later.
   const uploads = newVideos.filter((v) => !videoDetails[v.id]?.isLiveOrUpcoming);
 
-  // Send as plain text messages so Discord auto-generates the video player
+  // Send as plain text messages so Discord auto-generates the video player (the
+  // URL stays on its own line, as it is). The channel's name and the video's title
+  // are the channel owner's own text: their brackets must not turn into a link.
   const videoData = uploads.map((video) => {
     const isShort = videoDetails[video.id]?.isShort || false;
+    const author = video.author ? escapeLinkText(video.author) : 'New';
+    const title = escapeLinkText(video.title);
     const message = isShort
-      ? `📱 **${video.author || 'New'} posted a Short!** — ${video.title}\n${video.url}`
-      : `🎬 **${video.author || 'New'} uploaded a new video!** — ${video.title}\n${video.url}`;
+      ? `📱 **${author} posted a Short!** — ${title}\n${video.url}`
+      : `🎬 **${author} uploaded a new video!** — ${title}\n${video.url}`;
     return { message, isShort };
   });
 

@@ -1,4 +1,4 @@
-const { buildEmbed } = require('../discord');
+const { buildEmbed, escapeLinkText } = require('../discord');
 
 // How many of a channel's latest videos are looked at for a live broadcast.
 const LIVE_CHECK_VIDEOS = 5;
@@ -10,12 +10,16 @@ const LIVE_CHECK_VIDEOS = 5;
 // requests and the daily quota.
 function decide(channelState, liveVideo) {
   if (liveVideo && !channelState.is_live) {
+    // An embed's description shows links written as [text](url), so the broadcaster's
+    // text is escaped (after it is cut to length). The title is the embed's title,
+    // which shows no links: left as it is, an escape would only show as backslashes.
+    const description = liveVideo.description?.substring(0, 200);
     const embed = buildEmbed({
       color: 0xff0000,
       author: { name: 'Live on YouTube!' },
       title: liveVideo.title,
       url: `https://www.youtube.com/watch?v=${liveVideo.id}`,
-      description: liveVideo.description?.substring(0, 200) || undefined,
+      description: description ? escapeLinkText(description) : undefined,
       image: liveVideo.thumbnail,
       footer: { text: 'YouTube Live' },
       timestamp: new Date(),
