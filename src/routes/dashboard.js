@@ -741,27 +741,29 @@ router.get('/overlay', overlayPage, (req, res) => {
 // the StreamElements connection also follows its token, when that is added,
 // replaced or removed (streamElementsChanged).
 function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt, streamElementsChanged = false }) {
-  try {
-    const { eventSubManager } = require('../services/eventsub');
-    const { streamElementsManager } = require('../services/streamelements');
-    const { timedNotificationManager } = require('../services/timedNotifications');
-    if (needed) {
-      if (!wasNeeded) {
-        eventSubManager.startForStreamer(streamerId);
+  // Each step runs on its own, so one that fails does not keep the others from running.
+  const attempt = (what, fn) => {
+    try { fn(); } catch (e) { console.error(`[Dashboard] ${what} failed for streamer ${streamerId}:`, e.message); }
+  };
+  const { eventSubManager } = require('../services/eventsub');
+  const { streamElementsManager } = require('../services/streamelements');
+  const { timedNotificationManager } = require('../services/timedNotifications');
+  if (needed) {
+    if (!wasNeeded) {
+      attempt('Starting EventSub', () => eventSubManager.startForStreamer(streamerId));
+      attempt('Starting the sponsor rotation', () => {
         timedNotificationManager.restartForStreamer(streamerId);
         timedNotificationManager.restartChatForStreamer(streamerId);
-      }
-      if (!wasNeeded || streamElementsChanged) {
-        if (streamElementsJwt) streamElementsManager.startForStreamer(streamerId);
-        else if (streamElementsChanged) streamElementsManager.stopForStreamer(streamerId); // token removed
-      }
-    } else {
-      eventSubManager.stopForStreamer(streamerId);
-      streamElementsManager.stopForStreamer(streamerId);
-      timedNotificationManager.stopForStreamer(streamerId);
+      });
     }
-  } catch (e) {
-    console.error('[Dashboard] Starting or stopping the event connections failed:', e.message);
+    if (!wasNeeded || streamElementsChanged) {
+      if (streamElementsJwt) attempt('Starting StreamElements', () => streamElementsManager.startForStreamer(streamerId));
+      else if (streamElementsChanged) attempt('Stopping StreamElements', () => streamElementsManager.stopForStreamer(streamerId)); // token removed
+    }
+  } else {
+    attempt('Stopping EventSub', () => eventSubManager.stopForStreamer(streamerId));
+    attempt('Stopping StreamElements', () => streamElementsManager.stopForStreamer(streamerId));
+    attempt('Stopping the sponsor rotation', () => timedNotificationManager.stopForStreamer(streamerId));
   }
 }
 

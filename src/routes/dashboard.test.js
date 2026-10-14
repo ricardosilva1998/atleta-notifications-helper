@@ -1138,6 +1138,22 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       assert.deepEqual(sponsorCalls, forId(id, SPONSORS_STARTED));
     });
 
+    test('a connection that fails to start does not keep the others from starting, and is logged', async () => {
+      const id = make();
+      const real = eventSubStub.eventSubManager.startForStreamer;
+      eventSubStub.eventSubManager.startForStreamer = () => { throw new Error('synthetic failure'); };
+      logs.length = 0;
+      try {
+        const res = await saveChatbot(id, { chatbot_enabled: '1' });
+        assert.equal(res.status, 302);
+        assert.deepEqual(managerCalls, [['chat.start', id], ['se.start', id]], 'StreamElements still starts');
+        assert.deepEqual(sponsorCalls, forId(id, SPONSORS_STARTED), 'the sponsor rotation still starts');
+        assert.ok(logs.some(([level, line]) => level === 'error' && line.includes('EventSub') && line.includes('synthetic failure')), 'the failure is logged');
+      } finally {
+        eventSubStub.eventSubManager.startForStreamer = real;
+      }
+    });
+
     test('switching it on while the overlay is already on changes nothing (they are running)', async () => {
       const id = make({ overlay_enabled: 1 });
       await saveChatbot(id, { chatbot_enabled: '1' });
@@ -1187,7 +1203,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
         eventSubStub.eventSubManager.startForStreamer = start;
       }
       assert.equal(db.getStreamerById(id).chatbot_enabled, 1, 'the setting is saved');
-      assert.ok(logs.some(([level, line]) => level === 'error' && /event connections failed: eventsub exploded/.test(line)));
+      assert.ok(logs.some(([level, line]) => level === 'error' && /Starting EventSub failed for streamer \d+: eventsub exploded/.test(line)));
     });
   });
 
