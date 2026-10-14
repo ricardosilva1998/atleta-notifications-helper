@@ -2,11 +2,13 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS, fromAcceptLanguage, esc, richFor } = require('./i18n');
+const { clientIp } = require('./clientIp');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
@@ -30,7 +32,11 @@ const multistreamRoutes = require('./routes/multistream');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
-app.set('trust proxy', 1); // Trust first proxy (Railway/Cloudflare)
+// Trust the first proxy (Railway's edge): req.ip is the address that connected
+// to it, and req.secure / req.protocol follow its X-Forwarded-Proto. Behind
+// Cloudflare that address is a Cloudflare edge; the rate limits count the
+// visitor's own address (clientIp.js).
+app.set('trust proxy', 1);
 
 // Every request is counted until it is answered, so a shutdown can wait for it
 // (httpDrain.js, stop() below).
@@ -68,8 +74,11 @@ app.use(helmet({
 // stranger could get every streamer refused. Requests that carry the relay's
 // secret (MEDIAMTX_WEBHOOK_SECRET) are not counted by either limit below.
 const fromRelay = (req) => config.multistream.enabled && isRelayRequest(req, config.multistream.webhookSecret);
-const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false, skip: fromRelay });
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: 'Too many attempts, please try again later' });
+// Every limit below counts per visitor: their own address behind Cloudflare
+// (clientIp.js), and for IPv6 their /56 (the library's ipKeyGenerator).
+const byVisitor = (req) => ipKeyGenerator(clientIp(req));
+const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor, skip: fromRelay });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor, message: 'Too many attempts, please try again later' });
 // Every /api request, counted once per address. One Atleta Racing app polls
 // about 50 times a minute (Spotify every 4 s, Discord voice every 2 s, the live
 // session every 30 s, laps and logs), so 150 leaves room for two apps behind
@@ -81,10 +90,11 @@ const apiLimiter = rateLimit({
   max: 150,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: byVisitor,
   skip: (req) => fromRelay(req) || (req.method === 'GET' && req.path.startsWith('/track-map/')),
 });
 // The Discord voice overlay asks every 2 s (30 a minute); twice that per address.
-const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
+const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
 app.use(generalLimiter);
 // Every /api route (the multistream webhooks, the Atleta Racing app's endpoints,
 // the api router) is behind this one limiter. It is mounted ahead of the body

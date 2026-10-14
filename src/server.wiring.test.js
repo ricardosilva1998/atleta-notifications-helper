@@ -160,3 +160,14 @@ test('the relay\'s requests (with its secret) are counted by neither the general
   assert.match(api[0], /skip: \(req\) => fromRelay\(req\) \|\|/);
   assert.equal(code.match(/\bfromRelay\b/g).length, 3, 'declared, and used by those two limits only');
 });
+
+test('every rate limit counts the visitor\'s address (clientIp.js), and trust proxy stays at one hop', () => {
+  // The app's own behaviour behind Cloudflare is tested in server.app.test.js.
+  at("app.set('trust proxy', 1);");
+  at("const { clientIp } = require('./clientIp');");
+  at('const byVisitor = (req) => ipKeyGenerator(clientIp(req));');
+  const limiters = [...code.matchAll(/const (\w+) = rateLimit\(\{[\s\S]*?\}\);/g)];
+  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'authLimiter', 'apiLimiter', 'voiceLimiter']);
+  for (const [declaration, name] of limiters) assert.match(declaration, /\bkeyGenerator: byVisitor\b/, `${name} counts by visitor`);
+  assert.equal(code.match(/\brateLimit\(/g).length, limiters.length, 'no other limiter');
+});
