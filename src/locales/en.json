@@ -1048,6 +1048,13 @@
   "tutorial.login": "Log in with Discord",
   "tutorial.notice": "This guide may not be fully up to date. {{b}}Last updated: March 2026{{bEnd}}",
 
+  "link.success.title": "Account Linked!",
+  "link.success.hint": "If you're subscribed, you'll automatically get the subscriber role. You can close this page.",
+  "link.failed.title": "Linking Failed",
+  "link.failed.body": "Something went wrong while connecting your Twitch account.",
+  "link.failed.hint": "Please try again using the /link command in Discord.",
+  "link.success.body": "Your Twitch account {{name}} is now connected.",
+
   "admin.msg.disabled": "Account disabled: its web sessions were closed and its live connections stopped.",
   "admin.msg.enabled": "Account enabled: its live connections were restarted.",
   "admin.msg.selfDisable": "You cannot disable your own account.",

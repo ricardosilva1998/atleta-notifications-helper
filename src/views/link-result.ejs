@@ -1,5 +1,6 @@
 <% const linkExpired = !success && !!locals.expired; %>
-<%- include('header', { title: success ? 'Account Linked!' : (linkExpired ? t('link.expired.title') : 'Linking Failed'), streamer: null }) %>
+<% const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+<%- include('header', { title: success ? t('link.success.title') : (linkExpired ? t('link.expired.title') : t('link.failed.title')), streamer: null }) %>
 
 <div style="text-align: center; padding: 60px 0;">
   <% if (linkExpired) { %>
@@ -13,18 +14,18 @@
     <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(62,207,142,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     </div>
-    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Account Linked!</h2>
+    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;"><%= t('link.success.title') %></h2>
     <p style="color: var(--text-secondary); font-size: 16px; margin-bottom: 8px;">
-      Your Twitch account <strong style="color: var(--accent);"><%= twitchName %></strong> is now connected.
+      <%- t('link.success.body', { name: '<strong style="color: var(--accent);">' + esc(twitchName) + '</strong>' }) %>
     </p>
-    <p style="color: var(--text-muted); font-size: 14px;">If you're subscribed, you'll automatically get the subscriber role. You can close this page.</p>
+    <p style="color: var(--text-muted); font-size: 14px;"><%= t('link.success.hint') %></p>
   <% } else { %>
     <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(240,68,56,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f04438" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
     </div>
-    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--danger);">Linking Failed</h2>
-    <p style="color: var(--text-secondary); font-size: 16px;">Something went wrong while connecting your Twitch account.</p>
-    <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;">Please try again using the /link command in Discord.</p>
+    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--danger);"><%= t('link.failed.title') %></h2>
+    <p style="color: var(--text-secondary); font-size: 16px;"><%= t('link.failed.body') %></p>
+    <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;"><%= t('link.failed.hint') %></p>
   <% } %>
 </div>
 

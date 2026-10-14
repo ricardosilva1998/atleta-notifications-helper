@@ -22,7 +22,7 @@ const VIEWS = path.join(__dirname, '..', 'src', 'views');
 const PAGES = [
   'guild-config', 'overlay-config', 'overlay-builder', 'chatbot-config', 'mod-log', 'youtube-chatbot-config', 'multistream',
   // linked from the site's menus, or the pages a streamer meets before logging in
-  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats',
+  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
 ];
 
 // Words that are not the page's own wording: product names, the sample alert content the builder previews,
@@ -141,6 +141,7 @@ const statsPage = { total: 20, success_count: 18, fail_count: 2, live_count: 5, 
 const PAGE_LOCALS = {
   account: [accountPage, { ...accountPage, streamer: { ...streamer, created_at: null, profile_picture: null, discord_avatar: null }, notificationsOverTime: [], notificationsByType: [], feedbackMsg: undefined }],
   'report-issue': [{ streamer }],
+  'link-result': [{ success: true, twitchName: 'TwitchName', streamer: null }, { success: false, twitchName: null, streamer: null }, { success: false, expired: true, linkMinutes: 15, twitchName: null, streamer: null }],
   tutorial: [{ streamer: null }],
   donate: [{ streamer }],
   'streamer-landing': [{ streamer: null }],
