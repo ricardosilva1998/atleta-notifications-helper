@@ -7,6 +7,7 @@ const bus = require('../services/overlayBus');
 const customSounds = require('../services/customSounds');
 const { buildOverlayConfig } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
+const { setUserContentHeaders } = require('../services/userContentHeaders');
 
 // Unique ID per server process — changes on every restart/deploy
 const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
@@ -82,6 +83,7 @@ router.get('/sounds/:token/:type', async (req, res) => {
   // The overlay asks for ?v=<mtimeMs>, so a replaced sound has a new URL;
   // no-cache also makes OBS revalidate a URL it has played before.
   res.set('Cache-Control', 'no-cache');
+  setUserContentHeaders(res, file); // an uploaded file: never run as a page here
   res.type(mimeType);
   res.sendFile(path.basename(file), { root: path.dirname(file) }, (err) => {
     if (err && !res.headersSent) res.status(404).end();

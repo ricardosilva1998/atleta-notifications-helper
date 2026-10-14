@@ -10,6 +10,7 @@ const { t, SUPPORTED_LANGS } = require('./i18n');
 const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
+const { setUserContentHeaders } = require('./services/userContentHeaders');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -88,20 +89,27 @@ app.use('/pitwall/overlays', express.static(path.join(__dirname, '..', 'bridge',
     }
   }
 }));
-// Custom alert sounds are per streamer: served by GET /overlay/sounds/:token/:type
-// (routes/overlay.js), not from a shared static folder.
-// Serve sponsor images from persistent data volume
-app.use('/sponsors', express.static(path.join(__dirname, '..', 'data', 'sponsors')));
-// Serve channel point redemption media from persistent data volume
-app.use('/redemptions', express.static(path.join(__dirname, '..', 'data', 'redemptions'), {
-  setHeaders: (res) => { res.set('Cache-Control', 'public, max-age=86400'); }
-}));
-// Serve uploaded avatars from persistent data volume
-app.use('/avatars', express.static(path.join(__dirname, '..', 'data', 'avatars')));
-// Serve issue screenshots from persistent data volume
-app.use('/issues-files', express.static(path.join(__dirname, '..', 'data', 'issues')));
-// Serve custom VTuber models from persistent data volume
-app.use('/vtuber-models', express.static(path.join(__dirname, '..', 'data', 'vtuber-models')));
+// Files people uploaded, from the persistent data volume. Each is sent with the
+// headers in services/userContentHeaders.js, so a file opened directly can
+// never run as a page on this site. Custom alert sounds are per streamer and
+// served by GET /overlay/sounds/:token/:type (routes/overlay.js) with the same
+// headers. Nothing serves data/ itself (the database and its backups).
+const dataFiles = (folder, extraHeaders) => express.static(path.join(__dirname, '..', 'data', folder), {
+  setHeaders: (res, filePath) => {
+    setUserContentHeaders(res, filePath);
+    if (extraHeaders) extraHeaders(res);
+  },
+});
+// Sponsor images
+app.use('/sponsors', dataFiles('sponsors'));
+// Channel point redemption media
+app.use('/redemptions', dataFiles('redemptions', (res) => res.set('Cache-Control', 'public, max-age=86400')));
+// Profile pictures
+app.use('/avatars', dataFiles('avatars'));
+// Issue screenshots
+app.use('/issues-files', dataFiles('issues'));
+// Custom VTuber models
+app.use('/vtuber-models', dataFiles('vtuber-models'));
 // Serve custom overlay uploads from persistent data volume — DISABLED for now
 // app.use('/uploads/custom', express.static(path.join(__dirname, '..', 'data', 'uploads', 'custom')));
 

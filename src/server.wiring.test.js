@@ -61,6 +61,16 @@ test('the body parsers are mounted once, from bodyParsers.js, before any route',
   assert.equal(source.match(/express\.(json|urlencoded|raw|text)\(/g), null, 'no other parser in server.js');
 });
 
+test('every route that serves uploaded files from data/ sends the user-content headers', () => {
+  for (const [route, folder] of [['/sponsors', 'sponsors'], ['/redemptions', 'redemptions'], ['/avatars', 'avatars'], ['/issues-files', 'issues'], ['/vtuber-models', 'vtuber-models']]) {
+    assert.ok(source.includes(`app.use('${route}', dataFiles('${folder}'`), `${route} is served by dataFiles('${folder}')`);
+  }
+  at('setUserContentHeaders(res, filePath);');
+  // data/ itself (the database and its backups) is never served.
+  const staticFolders = [...code.matchAll(/express\.static\(path\.join\(__dirname, '\.\.', ([^)]*)\)/g)].map((m) => m[1]);
+  assert.deepEqual(staticFolders, ["'public'", "'bridge', 'overlays'", "'data', folder"]);
+});
+
 test('every /api route is behind apiLimiter, which counts each request once', () => {
   const limiter = at("app.use('/api', apiLimiter);");
   const firstApiRoute = Math.min(...[...source.matchAll(/app\.(use|get|post|put|patch|delete|all)\('\/api/g)]
