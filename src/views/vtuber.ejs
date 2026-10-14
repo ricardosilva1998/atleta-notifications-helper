@@ -142,8 +142,8 @@
     import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
     import { FilesetResolver, FaceLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
 
-    const MODE = '<%= mode %>';
-    const MODEL_URL = <%- modelUrl ? JSON.stringify(modelUrl) : 'null' %>;
+    const MODE = <%- JSON.stringify(mode).replace(/</g, '\\u003c') %>;
+    const MODEL_URL = <%- modelUrl ? JSON.stringify(modelUrl).replace(/</g, '\\u003c') : 'null' %>;
     const canvas = document.getElementById('canvas3d');
     const loading = document.getElementById('loading-screen');
     const errorEl = document.getElementById('error-msg');
