@@ -710,7 +710,7 @@
   "overlay.se.remove": "移除已保存的令牌",
   "overlay.regenerate.button": "重新生成叠加层 URL",
   "overlay.regenerate.hint": "如果你的叠加层 URL 被分享或泄露，请使用此功能。旧 URL 会立即失效。",
-  "overlay.regenerate.confirm": "生成新的叠加层 URL？当前 URL 会立即失效：所有使用它的 OBS 浏览器源（提醒、赞助商、捐赠目标、iRacing 叠加层）都不会显示任何内容，直到你将新 URL 粘贴到 OBS 中。",
+  "overlay.regenerate.confirm": "生成新的叠加层 URL？当前 URL 会立即失效：所有使用它的 OBS 浏览器源（提醒、赞助商、捐赠目标、iRacing 叠加层、VTuber）都不会显示任何内容，直到你将新 URL 粘贴到 OBS 中。",
 
   "modLog.back": "返回聊天管理",
   "modLog.title": "管理日志",

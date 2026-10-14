@@ -710,7 +710,7 @@
   "overlay.se.remove": "保存済みのトークンを削除",
   "overlay.regenerate.button": "オーバーレイ URL を再生成",
   "overlay.regenerate.hint": "オーバーレイ URL を共有してしまった場合や、漏洩した場合に使用してください。古い URL はただちに使えなくなります。",
-  "overlay.regenerate.confirm": "新しいオーバーレイ URL を生成しますか？現在の URL はただちに使えなくなります。その URL を使用しているすべての OBS ブラウザソース（アラート、スポンサー、寄付目標、iRacing オーバーレイ）は、新しい URL を OBS に貼り付けるまで何も表示されなくなります。",
+  "overlay.regenerate.confirm": "新しいオーバーレイ URL を生成しますか？現在の URL はただちに使えなくなります。その URL を使用しているすべての OBS ブラウザソース（アラート、スポンサー、寄付目標、iRacing オーバーレイ、VTuber）は、新しい URL を OBS に貼り付けるまで何も表示されなくなります。",
 
   "modLog.back": "モデレーションに戻る",
   "modLog.title": "モデレーションログ",

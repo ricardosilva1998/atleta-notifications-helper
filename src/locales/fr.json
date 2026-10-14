@@ -710,7 +710,7 @@
   "overlay.se.remove": "Supprimer le jeton enregistré",
   "overlay.regenerate.button": "Régénérer l'URL de l'overlay",
   "overlay.regenerate.hint": "Utilisez cette option si l'URL de votre overlay a été partagée ou divulguée. L'ancienne URL cesse de fonctionner immédiatement.",
-  "overlay.regenerate.confirm": "Générer une nouvelle URL d'overlay ? L'URL actuelle cesse de fonctionner immédiatement : chaque source Navigateur OBS qui l'utilise (alertes, sponsors, objectif de dons, overlays iRacing) n'affichera rien tant que vous n'aurez pas collé la nouvelle URL dans OBS.",
+  "overlay.regenerate.confirm": "Générer une nouvelle URL d'overlay ? L'URL actuelle cesse de fonctionner immédiatement : chaque source Navigateur OBS qui l'utilise (alertes, sponsors, objectif de dons, overlays iRacing, VTuber) n'affichera rien tant que vous n'aurez pas collé la nouvelle URL dans OBS.",
 
   "modLog.back": "Retour à la Modération",
   "modLog.title": "Journal de Modération",

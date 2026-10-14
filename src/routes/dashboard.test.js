@@ -1102,6 +1102,16 @@ describe('a save is pushed to the overlays that are open', () => {
       assert.match(form[0], /onsubmit="return confirm\(this\.dataset\.confirm\)"/);
       assert.match(form[0], /<button type="submit"/);
     });
+
+    // The VTuber browser source (/vtuber/<token>) is opened with the same link.
+    test('the warning names the VTuber source too, in every language', async () => {
+      const { SUPPORTED_LANGS } = require('../i18n');
+      for (const lang of SUPPORTED_LANGS) {
+        assert.match(t(lang, 'overlay.regenerate.confirm'), /VTuber/, lang);
+      }
+      const res = await request('GET', '/dashboard/overlay', { streamer: id });
+      assert.match(res.text.match(/data-confirm="([^"]*)"/)[1], /VTuber/);
+    });
   });
 });
 

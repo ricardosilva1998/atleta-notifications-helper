@@ -710,7 +710,7 @@
   "overlay.se.remove": "Eliminar el token guardado",
   "overlay.regenerate.button": "Regenerar URL del overlay",
   "overlay.regenerate.hint": "Úsalo si tu URL del overlay se compartió o se filtró. La URL anterior deja de funcionar de inmediato.",
-  "overlay.regenerate.confirm": "¿Generar una nueva URL del overlay? La URL actual deja de funcionar de inmediato: todas las fuentes de navegador de OBS que la usen (alertas, patrocinadores, meta de donaciones, overlays de iRacing) no mostrarán nada hasta que pegues la nueva URL en OBS.",
+  "overlay.regenerate.confirm": "¿Generar una nueva URL del overlay? La URL actual deja de funcionar de inmediato: todas las fuentes de navegador de OBS que la usen (alertas, patrocinadores, meta de donaciones, overlays de iRacing, VTuber) no mostrarán nada hasta que pegues la nueva URL en OBS.",
 
   "modLog.back": "Volver a Moderación",
   "modLog.title": "Registro de Moderación",
