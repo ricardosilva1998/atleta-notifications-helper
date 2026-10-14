@@ -148,8 +148,8 @@ test('pages tell this site which page a request comes from (the CSRF check reads
 });
 
 test('the relay\'s requests (with its secret) are counted by neither the general limit nor the /api limit', () => {
-  // MediaMTX asks /api/multistream/auth before every publish, read and API login
-  // from one address; counting them would let anyone get every streamer refused.
+  // MediaMTX asks /api/multistream/auth before every publish, read and API login,
+  // all from one address: requests carrying its secret are not counted.
   at('const fromRelay = (req) => config.multistream.enabled && isRelayRequest(req, config.multistream.webhookSecret);');
   at("const { isRelayRequest } = require('./services/multistreamAuth');");
   const general = code.match(/const generalLimiter = rateLimit\(\{[^}]*\}\);/);

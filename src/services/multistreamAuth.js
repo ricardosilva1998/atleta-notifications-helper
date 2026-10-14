@@ -55,9 +55,10 @@ function presentedSecret(authorization) {
 }
 
 // A request from the relay: to /api/multistream/..., carrying its secret
-// (MEDIAMTX_WEBHOOK_SECRET). The rate limits do not count these (server.js):
-// the relay asks before every publish, read and API login, all from one
-// address, and anyone can make it ask.
+// (MEDIAMTX_WEBHOOK_SECRET). The relay asks before every publish, read and API
+// login, all from one address. Requests carrying MEDIAMTX_WEBHOOK_SECRET come
+// from the relay and are not counted by the rate limits (server.js); a request
+// without it gets 401 and is counted.
 function isRelayRequest(req, secret) {
   const url = (req && (req.originalUrl || req.url)) || '';
   if (!url.startsWith('/api/multistream/')) return false;

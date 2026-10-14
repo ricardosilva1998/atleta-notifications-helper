@@ -1,8 +1,8 @@
 'use strict';
 
 // The Track Database (src/views/tracks.ejs) and the iRacing page
-// (src/views/iracing.ejs) show what the Atleta Racing app, and anyone else,
-// posts to the public racing routes. Each page is rendered with EJS and its
+// (src/views/iracing.ejs) show what the racing routes store, which the Atleta
+// Racing app uploads. Each page is rendered with EJS and its
 // script runs in a vm with a small DOM that parses the HTML it is given the way
 // a browser would (elements, attributes, entities). The API answers it reads
 // hold hostile values in every field the page shows: none may come out as

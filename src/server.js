@@ -69,10 +69,9 @@ app.use(helmet({
 
 // Rate limiters
 // The multistream relay (MediaMTX) asks /api/multistream/auth before every
-// publish, read and API login, all from its one address, and anyone can make it
-// ask (an RTMP connection to the ingest is enough): if those were counted, a
-// stranger could get every streamer refused. Requests that carry the relay's
-// secret (MEDIAMTX_WEBHOOK_SECRET) are not counted by either limit below.
+// publish, read and API login, all from its one address. Requests carrying
+// MEDIAMTX_WEBHOOK_SECRET come from the relay and are not counted by the rate
+// limits; a request without it gets 401 and is counted.
 const fromRelay = (req) => config.multistream.enabled && isRelayRequest(req, config.multistream.webhookSecret);
 // Every limit below counts per visitor: their own address behind Cloudflare
 // (clientIp.js), and for IPv6 their /56 (the library's ipKeyGenerator).
@@ -293,11 +292,8 @@ app.get('/streamer', (req, res) => {
   res.render('streamer-landing', { streamer: null, racingUser: null });
 });
 // Bridge feature-detect endpoint. The Bridge calls this without a session
-// cookie (raw https.get), so it must NOT require auth. The response is a
-// plain capability flag — no secrets — so the missing auth check is safe.
-// (Until v3.22.0 this endpoint returned process.env.OPENAI_API_KEY which IS
-// why it had auth in the first place; that has been moved server-side to
-// /api/bridge/whisper.)
+// cookie (raw https.get), so it needs no login. It answers only whether the
+// server-side Whisper proxy (/api/bridge/whisper) is available, never a key.
 app.get('/api/bridge/config', (req, res) => {
   res.json({ whisperProxyEnabled: !!process.env.OPENAI_API_KEY });
 });
@@ -1177,14 +1173,9 @@ app.get('/api/session/:id/telemetry/:lapId', (req, res) => {
   }
 });
 
-// Ownership guard for the two progressive session-upload endpoints below.
-//
-// Session ids are sequential integers, so without this check anyone could
-// append laps to -- or rewrite the result of -- another driver's session.
-// Installed Bridges predate `bridge_id` on these payloads, so a MISSING id is
-// still accepted (and logged) rather than breaking an in-progress session; a
-// WRONG id is always rejected. Once updated Bridges are the floor, set
-// STRICT_SESSION_OWNERSHIP=1 to reject the unidentified ones too.
+// Ownership check for the two progressive session-upload endpoints below.
+// STRICT_SESSION_OWNERSHIP=1 — Atleta Racing: require bridge_id on
+// session-upload calls; leave unset until every installed app sends it.
 //
 // Returns the session row, or null after having already sent the error response.
 const SESSION_WRITE_WINDOW_MS = 48 * 60 * 60 * 1000; // 2x the longest real session (24h endurance)
@@ -1208,9 +1199,8 @@ function authorizeSessionWrite(req, res, sessionId) {
     console.warn('[Session Write] Unverified write to session ' + sessionId + ' (legacy Bridge, no bridge_id)');
   }
 
-  // Even when unverified, refuse writes to a long-stale session: a Bridge only
-  // appends to a session it created in the current run, so a legitimate write
-  // always lands within that session's own lifetime.
+  // A session takes writes for SESSION_WRITE_WINDOW_MS after it was created: the
+  // app only appends to a session it created in the current run.
   // SQLite stores 'YYYY-MM-DD HH:MM:SS' in UTC -- parse it as UTC, since V8
   // reads the bare space-separated form as LOCAL time. Unparseable: fail open.
   const createdMs = session.created_at

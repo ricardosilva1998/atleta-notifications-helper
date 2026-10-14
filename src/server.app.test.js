@@ -204,8 +204,8 @@ describe('the Racing sign-in log records the visitor\'s address', () => {
 
 // ── What the Atleta Racing app uploads ───────────────────────────────────
 // Payloads shaped exactly as bridge/sessionRecorder.js, bridge/telemetry.js and
-// bridge/main.js send them; the hostile values stand for anyone else posting
-// to these public routes.
+// bridge/main.js send them, and values of the wrong kind or length in every
+// field, which the routes must not store as they are.
 
 const zlib = require('node:zlib');
 
