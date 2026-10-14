@@ -1415,6 +1415,14 @@ describe('the translated streamer pages render through their routes', () => {
   });
 });
 
+describe('the sponsor image upload', () => {
+  test('a file type that is not an image is refused with the translated message', async () => {
+    const res = await request('POST', '/dashboard/sponsors/upload?name=Acme&ext=exe', { streamer: addStreamer(), rawBody: 'x', contentType: 'application/octet-stream' });
+    assert.equal(res.status, 400);
+    assert.equal(res.json().error, t('en', 'upload.error.imageType'));
+  });
+});
+
 describe('the profile picture upload', () => {
   const upload = (streamer, query, rawBody) => request('POST', `/dashboard/account/avatar${query}`, { streamer, rawBody, contentType: 'application/octet-stream' });
 

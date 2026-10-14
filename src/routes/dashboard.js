@@ -1588,7 +1588,7 @@ router.get('/sponsors/list', (req, res) => {
 router.post('/sponsors/upload', async (req, res) => {
   const ext = (req.query.ext || 'png').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'png';
   if (!['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
-    return res.status(400).json({ error: 'Invalid file type. Allowed: png, jpg, gif, webp' });
+    return res.status(400).json({ error: res.locals.t('upload.error.imageType') });
   }
 
   let buf;
@@ -1602,7 +1602,7 @@ router.post('/sponsors/upload', async (req, res) => {
 
   const filename = `sponsor_${Date.now()}.${ext}`;
   try { await fs.promises.writeFile(path.join(sponsorDir, filename), buf); }
-  catch (e) { return res.status(500).json({ error: 'Write failed' }); }
+  catch (e) { return res.status(500).json({ error: res.locals.t('upload.error.writeFailed') }); }
 
   const displayName = req.query.name || 'Sponsor';
   const displayDuration = sponsorDurationSeconds(req.query.dur);

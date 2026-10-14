@@ -1055,6 +1055,9 @@
   "link.failed.hint": "Please try again using the /link command in Discord.",
   "link.success.body": "Your Twitch account {{name}} is now connected.",
 
+  "upload.error.imageType": "Invalid file type. Allowed: png, jpg, gif, webp",
+  "upload.error.writeFailed": "Write failed",
+
   "admin.msg.disabled": "Account disabled: its web sessions were closed and its live connections stopped.",
   "admin.msg.enabled": "Account enabled: its live connections were restarted.",
   "admin.msg.selfDisable": "You cannot disable your own account.",
