@@ -26,7 +26,10 @@ function setup({ streamer = { id: 7, ...TEXTS }, latest = { poll: null, predicti
   world.lp = createLivePolls({
     emit: (channel, payload) => world.emitted.push({ channel, payload }),
     send: (_streamerId, text) => world.said.push(text),
-    getStreamer: () => world.streamer,
+    getStreamer: () => {
+      if (world.streamer instanceof Error) throw world.streamer;
+      return world.streamer;
+    },
     fetchLatest: async () => {
       world.reads += 1;
       if (world.latest instanceof Error) throw world.latest;
@@ -46,6 +49,12 @@ const outcomes = [{ id: 'o1', title: 'Clean', color: 'blue', users: 18, channel_
 const predictionBegin = { id: 'pred-1', title: 'Clean first lap?', outcomes: outcomes.map(({ id, title, color }) => ({ id, title, color })), started_at: iso(NOW), locks_at: iso(NOW + 60000) };
 const predictionLock = { id: 'pred-1', title: 'Clean first lap?', outcomes, started_at: iso(NOW), locked_at: iso(NOW + 60000) };
 const predictionEnd = (status) => ({ id: 'pred-1', title: 'Clean first lap?', outcomes, status, winning_outcome_id: status === 'resolved' ? 'o1' : null, started_at: iso(NOW), ended_at: iso(NOW + 90000) });
+
+// The same poll and prediction as Twitch's Get Polls and Get Predictions answer them, and what twitchPolls throws (a
+// PollsError: an Error whose code is one of pollRules.ERRORS'), synthetic.
+const helixPoll1 = (status, endedAt = null) => ({ id: 'poll-1', title: 'Top 5?', status, duration: 120, started_at: iso(NOW), ended_at: endedAt === null ? null : iso(endedAt), choices: choices(48, 27) });
+const helixPrediction1 = (status) => ({ id: 'pred-1', title: 'Clean first lap?', status, outcomes, created_at: iso(NOW), prediction_window: 60, locked_at: status === 'LOCKED' ? iso(NOW + 60000) : null });
+const refusal = (code) => Object.assign(new Error(`${code}: synthetic`), { code });
 
 describe('EventSub\'s events', () => {
   test('a poll started on Twitch: the card and the bar get it at once; the bot announces its start and its result, nothing in between', () => {
@@ -87,7 +96,20 @@ describe('EventSub\'s events', () => {
     w.lp.onEvent(7, 'channel.poll.begin', pollBegin);
     w.lp.setFromTwitch(7, 'poll', { ...pollEnd, status: 'TERMINATED' }, 'end');
     w.lp.onEvent(7, 'channel.poll.end', { ...pollEnd, status: 'terminated' });
-    assert.equal(w.said.length, 2);
+    assert.deepEqual(w.said, ['Poll: Top 5? — vote now! (2:00 to vote)', 'Poll closed: Yes won with 64% of the votes.']);
+    assert.equal(w.emitted.length, 2, 'what EventSub repeats changes nothing on the bar');
+  });
+
+  test('a streamer\'s id given as text is the same streamer: the button and EventSub announce a moment once', async () => {
+    const w = setup();
+    w.lp.setFromTwitch('7', 'poll', { ...pollBegin, status: 'ACTIVE', duration: 120 }, 'start');
+    w.lp.onEvent(7, 'channel.poll.begin', pollBegin);
+    assert.deepEqual(w.said, ['Poll: Top 5? — vote now! (2:00 to vote)']);
+    assert.deepEqual(w.emitted.map((e) => e.channel), ['poll:7']);
+    assert.equal(w.lp.snapshot('7').poll.id, 'poll-1');
+    assert.equal(w.lp.barState('7').poll.id, 'poll-1');
+    assert.equal((await w.lp.live('7')).poll.id, 'poll-1');
+    assert.equal(w.reads, 0, 'EventSub spoke just now, about the same streamer');
   });
 
   test('a late or repeated event never takes a poll back, and an earlier poll never replaces a later one', () => {
@@ -161,6 +183,18 @@ describe('reading Twitch (live)', () => {
     assert.deepEqual(w.said, [], 'a read after a restart must not announce a poll that is already running');
   });
 
+  test('after 30 seconds without events, a read updates what EventSub told: the result shows, never announced', async () => {
+    const w = setup();
+    w.lp.onEvent(7, 'channel.poll.begin', pollBegin);
+    w.t += 30000;
+    w.latest = { poll: helixPoll1('COMPLETED', NOW + 30000), prediction: null };
+    const seen = await w.lp.live(7);
+    assert.equal(w.reads, 1);
+    assert.equal(seen.poll.state, 'ended');
+    assert.equal(w.lp.snapshot(7).poll.result, 'won');
+    assert.deepEqual(w.said, ['Poll: Top 5? — vote now! (2:00 to vote)'], 'only the start EventSub reported is announced');
+  });
+
   test('at most one read every 5 seconds, shared by callers at the same time; none while EventSub spoke in the last 30 seconds', async () => {
     const w = setup({ latest: { poll: helixPoll, prediction: null } });
     await Promise.all([w.lp.live(7), w.lp.live(7)]);
@@ -180,15 +214,114 @@ describe('reading Twitch (live)', () => {
     assert.equal(w.reads, 3);
   });
 
-  test('a failed read keeps what is known; a missing permission is passed on', async () => {
+  test('a running poll past its end is read although EventSub spoke in the last 30 seconds: its result shows, never announced', async () => {
+    const w = setup();
+    w.lp.onEvent(7, 'channel.poll.begin', pollBegin);
+    for (const at of [30000, 60000, 90000, 119000]) {
+      w.t = NOW + at;
+      w.lp.onEvent(7, 'channel.poll.progress', pollProgress);
+    }
+    w.latest = { poll: helixPoll1('COMPLETED', NOW + 120000), prediction: null };
+    await w.lp.live(7);
+    assert.equal(w.reads, 0, 'before its end, EventSub speaking is enough');
+    w.t = NOW + 120000; // its end event never comes
+    const seen = await w.lp.live(7);
+    assert.equal(w.reads, 1, 'at its end, although EventSub spoke a second ago');
+    assert.equal(seen.poll.state, 'ended');
+    assert.equal(w.lp.snapshot(7).poll.state, 'ended');
+    assert.deepEqual(w.said, ['Poll: Top 5? — vote now! (2:00 to vote)']);
+  });
+
+  test('a running prediction past its lock time is read too, still at most once every 5 seconds', async () => {
+    const w = setup();
+    w.lp.onEvent(7, 'channel.prediction.begin', predictionBegin);
+    w.t = NOW + 59000;
+    w.lp.onEvent(7, 'channel.prediction.progress', { ...predictionBegin, outcomes });
+    w.latest = { poll: null, prediction: helixPrediction1('ACTIVE') }; // Twitch has not locked it yet
+    w.t = NOW + 60000;
+    await w.lp.live(7);
+    assert.equal(w.reads, 1, 'at its lock time, although EventSub spoke a second ago');
+    w.latest = { poll: null, prediction: helixPrediction1('LOCKED') };
+    w.t += 4999;
+    await w.lp.live(7);
+    assert.equal(w.reads, 1);
+    w.t += 1;
+    assert.equal((await w.lp.live(7)).prediction.state, 'locked');
+    assert.equal(w.reads, 2);
+    assert.equal(w.said.length, 1, 'only the start EventSub reported is announced');
+  });
+
+  test('a read Twitch does not answer keeps what is known and is logged once until a read works', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => {});
     const w = setup({ latest: { poll: helixPoll, prediction: null } });
     await w.lp.live(7);
-    w.latest = Object.assign(new Error('twitch_failed'), { code: 'twitch_failed' });
+    w.latest = refusal('twitch_failed');
+    for (let i = 0; i < 3; i += 1) {
+      w.t += 5000;
+      assert.equal((await w.lp.live(7)).poll.id, 'poll-9');
+    }
+    assert.equal(w.reads, 4);
+    assert.equal(warn.mock.callCount(), 1, 'one line for the whole streak');
+    const line = warn.mock.calls[0].arguments.join(' ');
+    assert.match(line, /^\[Polls\] /);
+    assert.match(line, /streamer 7\b/);
+    assert.match(line, /twitch_failed/);
+    w.latest = { poll: helixPoll, prediction: null };
     w.t += 5000;
-    assert.equal((await w.lp.live(7)).poll.id, 'poll-9');
-    w.latest = Object.assign(new Error('needs_reconnect'), { code: 'needs_reconnect' });
+    await w.lp.live(7);
+    w.latest = refusal('twitch_failed');
     w.t += 5000;
+    await w.lp.live(7);
+    assert.equal(warn.mock.callCount(), 2, 'a read that works ends the streak');
+  });
+
+  test('a missing permission is passed on to every caller until the next read, 5 seconds later; a read that works forgets it', async () => {
+    const w = setup({ latest: { poll: helixPoll, prediction: null } });
+    await w.lp.live(7);
+    w.latest = refusal('needs_reconnect');
+    w.t += 5000;
+    const both = await Promise.allSettled([w.lp.live(7), w.lp.live(7)]);
+    assert.deepEqual(both.map((r) => r.status === 'rejected' && r.reason.code), ['needs_reconnect', 'needs_reconnect']);
+    w.t += 4999;
     await assert.rejects(w.lp.live(7), (err) => err.code === 'needs_reconnect');
+    assert.equal(w.reads, 2, 'every caller is answered from the one read');
+    w.latest = { poll: helixPoll, prediction: null };
+    w.t += 1;
+    assert.equal((await w.lp.live(7)).poll.id, 'poll-9');
+    w.t += 1;
+    assert.equal((await w.lp.live(7)).poll.id, 'poll-9', 'a read that works forgets it');
+    assert.equal(w.reads, 3);
+  });
+
+  test('a read that breaks in this module\'s own code keeps what is known and is logged with its stack', async (t) => {
+    const error = t.mock.method(console, 'error', () => {});
+    const bug = new TypeError('synthetic: the bus broke');
+    const lp = createLivePolls({
+      emit: () => { throw bug; },
+      send: () => {},
+      getStreamer: () => ({ id: 7, ...TEXTS }),
+      fetchLatest: async () => ({ poll: helixPoll, prediction: null }),
+      now: () => NOW,
+    });
+    assert.equal((await lp.live(7)).poll.id, 'poll-9', 'stored before the bus broke, and the card is answered');
+    assert.equal(error.mock.callCount(), 1);
+    const [line, logged] = error.mock.calls[0].arguments;
+    assert.match(line, /^\[Polls\] .*streamer 7\b/);
+    assert.equal(logged, bug, 'the error itself, so its stack is printed');
+  });
+
+  test('a read that breaks before Twitch is asked never stops the next reads, and is logged', async (t) => {
+    const error = t.mock.method(console, 'error', () => {});
+    const w = setup({ latest: { poll: helixPoll, prediction: null } });
+    w.streamer = new TypeError('synthetic: the row could not be read');
+    assert.equal((await w.lp.live(7)).poll, null);
+    assert.equal(w.reads, 0);
+    assert.equal(error.mock.callCount(), 1);
+    assert.match(error.mock.calls[0].arguments[0], /^\[Polls\] .*streamer 7\b/);
+    w.streamer = { id: 7, ...TEXTS };
+    w.t += 5000;
+    assert.equal((await w.lp.live(7)).poll.id, 'poll-9', 'read again 5 seconds later');
+    assert.equal(w.reads, 1);
   });
 });
 
