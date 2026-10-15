@@ -240,7 +240,7 @@ while it is empty. The other words inside a look stay English, as the overlay is
   `previewObjectFor`). Position and width work as today, and the chosen look's description shows under the
   preview.
 - **Test** plays the look in the preview and, through the existing test route, in OBS (the shared test cooldown
-  applies).
+  applies). It sends `chat: false`, so the route posts no test thank-you in the Twitch chat (decided in the final review).
 - **Translation.** All builder text goes through `t()` in the seven languages: section and button texts, the 18
   family names and descriptions, the 108 look names and descriptions, the sound names and the five new effect
   names. `tests/i18n.test.js` already checks them.
