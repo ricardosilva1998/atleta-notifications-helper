@@ -1808,7 +1808,7 @@ describe('the test buttons', () => {
   ];
 
   test('the first test goes through; every other test button is then held for the cooldown', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
+    const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1, chatbot_enabled: 1 });
     const first = await customTest(id, 'hello chat');
     assert.equal(first.status, 200);
     assert.deepEqual(first.json(), { ok: true });
@@ -1836,7 +1836,7 @@ describe('the test buttons', () => {
 
   test('every test button starts the cooldown, not only the custom one', async () => {
     for (const route of testRoutes.filter((r) => !r.includes('sponsor-messages'))) {
-      const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
+      const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1, chatbot_enabled: 1 });
       const first = await post(route, id);
       assert.notEqual(first.status, 429, `${route} should go through the first time`);
       assert.equal((await customTest(id, 'right after')).status, 429, `${route} should start the shared cooldown`);
@@ -2008,7 +2008,7 @@ describe('the test buttons', () => {
   });
 
   test('the chatbot test sends the thank-you as a test, and the sponsor test as a sponsor message', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
     assert.deepEqual((await post('/dashboard/chatbot/test/follow', id)).json(), { ok: true });
     assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]]);
 
@@ -2017,6 +2017,84 @@ describe('the test buttons', () => {
     const messageId = db.getSponsorMessages(other)[0].id;
     assert.deepEqual((await post(`/dashboard/sponsor-messages/${messageId}/test`, other)).json(), { ok: true });
     assert.deepEqual(chatCalls[1], ['say', other, 'Thanks to our sponsors https://example.com', { priority: 'low' }]);
+  });
+
+  // The Chatbot card's pop-up and the chatbot page both send a thank-you as a test. The bot posts nothing for a streamer
+  // whose chatbot is off, for a message that is switched off and for one with no text (twitchChat.js sendEventMessage),
+  // so the route says so, in words, instead of answering ok.
+  describe('the thank-you test says why nothing would be posted', () => {
+    const EVENTS = [['follow', 'follow'], ['sub', 'subscription'], ['giftsub', 'giftsub'], ['bits', 'bits'], ['donation', 'donation'], ['raid', 'raid']];
+    const working = (over = {}) => addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1, ...over });
+
+    test('each event sends its thank-you as a test when the bot would post it', async () => {
+      for (const [type, eventType] of EVENTS) {
+        const id = working();
+        const res = await post(`/dashboard/chatbot/test/${type}`, id);
+        assert.equal(res.status, 200, type);
+        assert.deepEqual(res.json(), { ok: true }, type);
+        assert.equal(chatCalls.length, 1, type);
+        const [kind, streamer, sentType, data, options] = chatCalls[0];
+        assert.deepEqual([kind, streamer, sentType, options], ['event', id, eventType, { test: true }], type);
+        assert.equal(typeof data.username, 'string', type);
+        chatCalls.length = 0;
+      }
+    });
+
+    test('with the chatbot off the answer is a 409 with the reason, and the bot is not asked', async () => {
+      const res = await post('/dashboard/chatbot/test/follow', addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 0 }));
+      assert.equal(res.status, 409);
+      assert.deepEqual(res.json(), { ok: false, code: 'chatbot_off', error: t('en', 'chatbot.test.chatbotOff') });
+      assert.deepEqual(chatCalls, []);
+    });
+
+    test('a thank-you that is switched off, or has no text, is refused the same way for every event (the columns are the event\'s own)', async () => {
+      for (const [type] of EVENTS) {
+        const off = await post(`/dashboard/chatbot/test/${type}`, working({ [`chat_${type}_enabled`]: 0 }));
+        assert.equal(off.status, 409, type);
+        assert.deepEqual(off.json(), { ok: false, code: 'message_off', error: t('en', 'chatbot.test.messageOff') }, type);
+        for (const empty of ['', '   \n ']) {
+          const none = await post(`/dashboard/chatbot/test/${type}`, working({ [`chat_${type}_template`]: empty }));
+          assert.equal(none.status, 409, type);
+          assert.deepEqual(none.json(), { ok: false, code: 'no_message', error: t('en', 'chatbot.test.noMessage') }, type);
+        }
+        // another event's switch or text is not this event's
+        const other = EVENTS.find(([name]) => name !== type)[0];
+        assert.equal((await post(`/dashboard/chatbot/test/${type}`, working({ [`chat_${other}_enabled`]: 0, [`chat_${other}_template`]: '' }))).status, 200, type);
+      }
+      assert.deepEqual(chatCalls.map((call) => call[0]), EVENTS.map(() => 'event'), 'only the six working tests reached the bot');
+    });
+
+    test('the checks come in order (the chatbot, the switch, the text) and a refusal does not start the shared cooldown', async () => {
+      const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 0, chat_follow_enabled: 0, chat_follow_template: '' });
+      const code = async () => (await post('/dashboard/chatbot/test/follow', id)).json().code;
+      assert.equal(await code(), 'chatbot_off');
+      db.updateChatbotConfig(id, { chatbot_enabled: 1 });
+      assert.equal(await code(), 'message_off');
+      db.updateChatbotConfig(id, { chat_follow_enabled: 1 });
+      assert.equal(await code(), 'no_message');
+      db.updateChatbotConfig(id, { chat_follow_template: 'Hi {username}' });
+      const sent = await post('/dashboard/chatbot/test/follow', id);
+      assert.equal(sent.status, 200, 'three refusals in a row did not hold up the test that works');
+      assert.equal(chatCalls.length, 1);
+      assert.equal((await post('/dashboard/chatbot/test/follow', id)).status, 429, 'a test that went to the bot does start it');
+    });
+
+    test('the answer is what the chatbot page\'s button shows: not ok, with a text to alert', async () => {
+      const body = (await post('/dashboard/chatbot/test/follow', addStreamer({ twitch_username: 'somechannel' }))).json();
+      assert.equal(body.ok, false);
+      assert.ok(typeof body.error === 'string' && body.error.length > 0);
+      const view = realFs.readFileSync(path.join(SRC, 'views', 'chatbot-config.ejs'), 'utf8');
+      assert.match(view, /btn\.textContent = data\.ok \? I18N\.sent : I18N\.failed;\s*\n\s*if \(!data\.ok && data\.error\) alert\(data\.error\);/, 'testChat() shows "failed" and alerts the refusal\'s text');
+    });
+
+    test('a name from the object prototype is not an event type', async () => {
+      for (const type of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+        const res = await post(`/dashboard/chatbot/test/${type}`, working());
+        assert.equal(res.status, 400, type);
+        assert.equal(res.json().error, t('en', 'chatbot.test.invalidType'), type);
+      }
+      assert.deepEqual(chatCalls, []);
+    });
   });
 
   // The answers a test button's script shows are words from the language files, not text of the route's own.
@@ -4731,6 +4809,13 @@ describe('the working cards on the page', () => {
     assert.match(html, /<template id="tpl-thankyou">[\s\S]*?<textarea data-field="text"[^>]*aria-labelledby="wc-dialog-title"/);
   });
 
+  test('every pop-up\'s message box is an alert, so a refused save is said to a screen reader while the pop-up is open', async () => {
+    const html = await pane(linkedStreamer({ chatbot_enabled: 1, paypal_email: 'tips@example.test' }));
+    const boxes = html.match(/<div class="wc-msg"[^>]*data-dialog-msg[^>]*>/g) || [];
+    assert.equal(boxes.length, 5, 'one in each of the five editors: thank-you, command, built-ins, sponsor message, tip goal');
+    for (const box of boxes) assert.match(box, /\brole="alert"/, box);
+  });
+
   test('a command switched off on the chatbot page shows dimmed on the Commands card; one that is on does not', async () => {
     const id = linkedStreamer({ chatbot_enabled: 1 });
     db.addChatCommand(id, 'alwayson', 'Answered', 10);
@@ -4799,6 +4884,8 @@ describe('the working cards\' script', () => {
     const T = table(html);
     assert.equal(T.showAll, t('en', 'cards.common.showAll', { count: '{{count}}' }), 'a text with a field the script fills');
     assert.equal(T.giveaway.pickAgain, t('en', 'cards.giveaways.pickAgain'));
+    assert.equal(T.giveaway.confirmEnd, t('en', 'giveaways.confirm.close'), 'End without a winner asks what the giveaways page asks');
+    assert.equal(T.confirmEndGoal, t('en', 'donations.goal.endConfirm'), 'End the goal asks what the donations page asks');
   });
 
   test('the overlay texts only while the overlay features are on', async () => {
@@ -4807,7 +4894,7 @@ describe('the working cards\' script', () => {
     features.overlays = false;
     try {
       const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
-      for (const key of ['alertSent', 'rewardPlayed', 'startGoal', 'goalAmount', 'goalHint']) assert.ok(!(key in T), key);
+      for (const key of ['alertSent', 'rewardPlayed', 'startGoal', 'goalAmount', 'goalHint', 'confirmEndGoal']) assert.ok(!(key in T), key);
     } finally {
       features.overlays = true;
     }
@@ -4841,5 +4928,59 @@ describe('the working cards\' script', () => {
     } finally {
       features.overlays = before;
     }
+  });
+});
+
+// ── The giveaway entries, as the Giveaways card reads them ───────────────
+// The card's panel does not draw on its own: when its poll finds the giveaway over it shows the winners the server drew
+// (the entries flagged as winners and not as replaced by a re-draw), goes back to the form when there are none, and
+// treats a 404 as a giveaway that is gone.
+
+describe('the giveaway entries answer the Giveaways card reads', () => {
+  const giveawayManager = require('../services/giveawayManager');
+  const entriesOf = async (streamer, giveawayId) => request('GET', `/dashboard/giveaways/${giveawayId}/entries`, { streamer });
+  const winnersOf = (answer) => answer.entries.filter((entry) => entry.is_winner && !entry.is_redrawn_out).map((entry) => entry.username);
+  const enter = (giveawayId, names) => names.forEach((name, i) => db.insertEntry({ giveaway_id: giveawayId, twitch_user_id: `synthetic-${giveawayId}-${i}`, username: name, is_subscriber: 0 }));
+  // The winners' chat lines and winner cards are sent from timers (0 ms for the first): let them run inside the test
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  test('open: the count and the status; after a draw and a re-draw the current winners are those flagged as winners and not as replaced', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
+    const giveaway = giveawayManager.startGiveaway(id, { keyword: 'synthetic', winnersCount: 1 });
+    enter(giveaway.id, ['Alice', 'Bob', 'Carol']);
+    const open = (await entriesOf(id, giveaway.id)).json();
+    assert.equal(open.status, 'open');
+    assert.equal(open.count, 3);
+    assert.deepEqual(winnersOf(open), []);
+
+    const first = giveawayManager.pickWinners(giveaway.id, id, {});
+    const drawn = (await entriesOf(id, giveaway.id)).json();
+    assert.equal(drawn.status, 'closed', 'a draw closes the giveaway');
+    assert.deepEqual(winnersOf(drawn), first.winners.map((winner) => winner.username));
+
+    const second = giveawayManager.pickWinners(giveaway.id, id, { redraw: true });
+    const redrawn = (await entriesOf(id, giveaway.id)).json();
+    assert.deepEqual(winnersOf(redrawn), second.winners.map((winner) => winner.username));
+    assert.notDeepEqual(winnersOf(redrawn), winnersOf(drawn), 'the re-draw replaced the winner');
+    assert.ok(redrawn.entries.some((entry) => entry.is_winner && entry.is_redrawn_out), 'the replaced winner stays flagged as a winner, so the card also reads is_redrawn_out');
+    await settle();
+  });
+
+  test('closed without a draw: no winners; a giveaway that is gone (or another streamer\'s) answers 404', async () => {
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
+    const giveaway = giveawayManager.startGiveaway(id, { keyword: 'synthetic', winnersCount: 1 });
+    enter(giveaway.id, ['Alice']);
+    giveawayManager.closeGiveaway(id, { silent: true });
+    const closed = (await entriesOf(id, giveaway.id)).json();
+    assert.equal(closed.status, 'closed');
+    assert.equal(closed.count, 1);
+    assert.deepEqual(winnersOf(closed), [], 'nobody was drawn: the card goes back to its form, it draws nothing itself');
+
+    const missing = await entriesOf(id, 987654);
+    assert.equal(missing.status, 404);
+    assert.ok(typeof missing.json().error === 'string');
+    const other = addStreamer({ twitch_username: 'otherchannel' });
+    assert.equal((await entriesOf(other, giveaway.id)).status, 404, 'another streamer\'s giveaway is not found');
+    await settle();
   });
 });

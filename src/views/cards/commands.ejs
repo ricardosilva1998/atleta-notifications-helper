@@ -37,7 +37,7 @@
       </div>
       <label class="wc-field"><span><%= t('cards.commands.answer') %></span><textarea data-field="response" maxlength="500" rows="3" placeholder="<%= t('cards.commands.answerPlaceholder') %>"></textarea></label>
       <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
-      <div class="wc-msg" data-dialog-msg hidden></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
     </div>
   </template>
   <template id="tpl-command-row">
@@ -53,7 +53,7 @@
       <p class="wc-hint"><%= t('cards.commands.builtinsHint') %></p>
       <div class="wc-chips" data-chips></div>
       <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
-      <div class="wc-msg" data-dialog-msg hidden></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
     </div>
   </template>
 </section>

@@ -833,6 +833,7 @@ function toggleStats(guildId) {
       pickAgain: t('cards.giveaways.pickAgain'),
       end: t('cards.giveaways.end'),
       done: t('cards.giveaways.done'),
+      confirmEnd: t('giveaways.confirm.close'),
     },
   };
   if (features.overlays) {
@@ -842,6 +843,7 @@ function toggleStats(guildId) {
       startGoal: t('cards.donations.startGoal'),
       goalAmount: t('cards.donations.goalAmount', { raised: '{{raised}}', target: '{{target}}' }),
       goalHint: t('cards.donations.goalHint', { raised: '{{raised}}', currency: '{{currency}}' }),
+      confirmEndGoal: t('donations.goal.endConfirm'),
     });
   }
 %>

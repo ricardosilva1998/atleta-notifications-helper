@@ -254,8 +254,11 @@
 
   const dialog = document.getElementById('wc-dialog');
   let opener = null;
-  // Opens the pop-up with one of the page's <template>s: `setup(editor)` fills it; Save runs `save(editor)` and closes
-  // the pop-up when that resolves true. Esc and Cancel close it; the focus goes back to the button that opened it.
+  // Whether the pop-up still holds this editor: an answer that comes late must not act on the one that replaced it.
+  const holds = (editor) => !!dialog && dialog.open && dialog.firstElementChild === editor;
+  // Opens the pop-up with one of the page's <template>s: `setup(editor)` fills it; Save (or Enter in a one-line field)
+  // runs `save(editor)` and closes the pop-up when that resolves true. Esc, Cancel and a click on the dimmed page close
+  // it; the focus goes back to the button that opened it. A refusal keeps the pop-up open, with the focus on Save.
   function openEditor(templateId, title, from, setup, save) {
     const template = document.getElementById(templateId);
     if (!dialog || !template) return null;
@@ -265,16 +268,32 @@
     const heading = $('[data-title]', editor);
     if (heading) heading.textContent = title || '';
     if (setup) setup(editor);
-    $$('[data-cancel]', editor).forEach((button) => button.addEventListener('click', closeEditor));
+    $$('[data-cancel]', editor).forEach((button) => button.addEventListener('click', () => closeEditor(editor)));
     const saveButton = $('[data-save]', editor);
     if (saveButton) {
       saveButton.addEventListener('click', async () => {
         saveButton.disabled = true;
+        let done = false;
         try {
-          if (await save(editor)) closeEditor();
+          done = await save(editor);
         } finally {
           saveButton.disabled = false;
         }
+        if (done) {
+          closeEditor(editor);
+        } else if (holds(editor)) {
+          // Disabling Save took the focus off it: put it back, so a keyboard user is not left on the page with the
+          // refusal (a field the streamer moved to meanwhile keeps it).
+          const active = document.activeElement;
+          if (active === saveButton || !editor.contains(active)) saveButton.focus();
+        }
+      });
+      // Enter in a one-line field saves, as the button does: not in a text area (a new line), not while an input
+      // method is composing text (Enter confirms it), and a button keeps its own action.
+      editor.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || !event.target.matches('input')) return;
+        event.preventDefault();
+        saveButton.click();
       });
     }
     dialog.showModal();
@@ -285,23 +304,43 @@
     }
     return editor;
   }
-  function closeEditor() {
-    if (dialog && dialog.open) dialog.close();
+  // Closes the pop-up, or only `editor`'s: the answer to a save the streamer closed meanwhile must not close the pop-up
+  // that opened after it.
+  function closeEditor(editor) {
+    if (dialog && dialog.open && (!editor || dialog.firstElementChild === editor)) dialog.close();
   }
   if (dialog) {
+    let pressedOnPage = false;
+    const outsideBox = (event) => {
+      const box = dialog.getBoundingClientRect();
+      return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+    };
     dialog.addEventListener('close', () => {
       dialog.replaceChildren();
+      pressedOnPage = false;
       if (opener && opener.isConnected) opener.focus();
       opener = null;
     });
-    // A click on the dimmed page around the pop-up closes it, as Esc does.
+    // A click on the dimmed page around the pop-up closes it, as Esc does: when the press began there too. A text
+    // selection dragged out of a field and released over the dimmed page also ends in a click on the dialog, but it
+    // is not a click on the page (the typed text would be lost).
+    dialog.addEventListener('mousedown', (event) => {
+      pressedOnPage = event.target === dialog && outsideBox(event);
+    });
     dialog.addEventListener('click', (event) => {
-      if (event.target !== dialog) return;
-      const box = dialog.getBoundingClientRect();
-      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) closeEditor();
+      const began = pressedOnPage;
+      pressedOnPage = false;
+      if (event.target === dialog && began && outsideBox(event)) closeEditor();
     });
   }
   const dialogMessage = (editor, answer) => showMessage(null, answer, { box: $('[data-dialog-msg]', editor) });
+  const clearDialogMessage = (editor) => {
+    const box = $('[data-dialog-msg]', editor);
+    if (box && !box.hidden) {
+      box.hidden = true;
+      box.textContent = '';
+    }
+  };
   function insertAtCursor(area, text) {
     const start = area.selectionStart ?? area.value.length;
     const end = area.selectionEnd ?? area.value.length;
@@ -330,17 +369,33 @@
     list.insertBefore(row, list.firstChild);
     return row;
   }
-  // After a row is added or deleted: the count, the empty hint and Show all.
+  // After a row is added or deleted: the count, the empty hint and Show all (offered only while a row is hidden).
   function afterListChange(card, name) {
     const list = $('[data-list="' + name + '"]', card);
     const rows = $$('[data-row]', list);
     const empty = $('[data-empty="' + name + '"]', card);
     if (empty) empty.hidden = rows.length > 0;
     const more = $('[data-show-all="' + list.id + '"]', card);
-    if (more && !list.classList.contains('show-all')) more.textContent = core.fill(T.showAll, { count: rows.length });
+    if (more) {
+      more.hidden = !rows.some((row) => row.classList.contains('hidden'));
+      if (!list.classList.contains('show-all')) more.textContent = core.fill(T.showAll, { count: rows.length });
+    }
     const count = $('[data-count="' + name + '"]', card);
     if (count) count.textContent = String(rows.length);
     repack();
+  }
+  // The row after this one that is on the page (not behind Show all), for the focus once this one is deleted.
+  function nextVisibleRow(row) {
+    for (let next = row.nextElementSibling; next; next = next.nextElementSibling) {
+      if (next.hasAttribute('data-row') && getComputedStyle(next).display !== 'none') return next;
+    }
+    return null;
+  }
+  // After a delete the button that had the focus is gone: the focus goes to the next row's edit button, else to the
+  // list's Add button.
+  function focusAfterDelete(card, kind, next) {
+    const target = (next && $('[data-edit="' + kind + '"]', next)) || $('[data-add="' + kind + '"]', card);
+    if (target) target.focus();
   }
 
   // ── Thank-you messages ──
@@ -364,8 +419,12 @@
       const test = $('[data-chat-test]', editor);
       test.addEventListener('click', async () => {
         const answer = await call('POST', '/dashboard/chatbot/test/' + encodeURIComponent(button.dataset.event));
-        if (answer.ok) flash(test, T.sentToChat);
-        else dialogMessage(editor, answer);
+        if (answer.ok) {
+          clearDialogMessage(editor);
+          flash(test, T.sentToChat);
+        } else {
+          dialogMessage(editor, answer);
+        }
       });
     }, async (editor) => {
       const answer = await call('POST', '/dashboard/settings', { key: button.dataset.key, value: $('[data-field="text"]', editor).value });
@@ -375,6 +434,7 @@
       }
       button.dataset.value = answer.data.value;
       $('[data-text]', row).textContent = answer.data.value;
+      clearMessage(card);
       showSaved(card);
       return true;
     });
@@ -421,6 +481,7 @@
       }
       fillCommandRow(row || addRow('tpl-command-row', $('[data-list="commands"]', card)), answer.data.command);
       afterListChange(card, 'commands');
+      clearMessage(card);
       showSaved(card);
       refreshSoon();
       return true;
@@ -437,10 +498,13 @@
       showMessage(card, answer);
       return;
     }
+    const next = nextVisibleRow(row);
     row.remove();
     afterListChange(card, 'commands');
+    clearMessage(card);
     showSaved(card);
     refreshSoon();
+    focusAfterDelete(card, 'command', next);
   });
   // The built-in commands: the thirteen as toggles in the pop-up, saved together (one batch, all or nothing).
   onClick('[data-edit="builtins"]', (button) => {
@@ -475,6 +539,7 @@
       }
       for (const pill of pills) pill.hidden = !answer.data.values[pill.dataset.builtin];
       $('[data-builtins-none]', card).hidden = pills.some((pill) => !pill.hidden);
+      clearMessage(card);
       showSaved(card);
       refreshSoon();
       repack();
@@ -517,6 +582,7 @@
         queueFor(toggle);
       }
       afterListChange(card, 'sponsors');
+      clearMessage(card);
       showSaved(card);
       refreshSoon();
       return true;
@@ -533,10 +599,13 @@
       showMessage(card, answer);
       return;
     }
+    const next = nextVisibleRow(row);
     row.remove();
     afterListChange(card, 'sponsors');
+    clearMessage(card);
     showSaved(card);
     refreshSoon();
+    focusAfterDelete(card, 'sponsor', next);
   });
 
   // ── The tip goal ──
@@ -577,13 +646,15 @@
         return;
       }
       end.addEventListener('click', async () => {
+        if (!window.confirm(T.confirmEndGoal)) return;
         const answer = await call('POST', '/dashboard/api/tip-goal/end', {});
         if (!answer.ok) {
           dialogMessage(editor, answer);
           return;
         }
         showGoal(card, null);
-        closeEditor();
+        closeEditor(editor);
+        clearMessage(card);
         showSaved(card);
       });
     }, async (editor) => {
@@ -594,6 +665,7 @@
         return false;
       }
       showGoal(card, answer.data.goal);
+      clearMessage(card);
       showSaved(card);
       return true;
     });
@@ -682,6 +754,8 @@
 
   // ── Giveaways ──
 
+  // The giveaway panel. `id` is the giveaway it follows: every answer is dropped when the panel has moved on to another
+  // (or none) by the time it arrives. Only the streamer's clicks start a draw; the poll just shows what the server did.
   function setupGiveaway(card) {
     const form = $('[data-giveaway-form]', card);
     const panel = $('[data-giveaway-live]', card);
@@ -690,11 +764,15 @@
     const winnerBox = $('[data-gw-winner]', panel);
     const pick = $('[data-gw-pick]', panel);
     const end = $('[data-gw-end]', panel);
+    const startButton = $('button[type="submit"]', form);
     const G = T.giveaway || {};
     let id = panel.dataset.giveawayId || null;
     let endsAt = NaN;
-    let timer = null;
-    let picked = false;
+    let entries = 0;
+    let pollTimer = null;
+    let clockTimer = null;
+    let picked = false; // the winners are on display
+    let busy = false; // a start, a draw or an end is on its way
 
     function setStatus(text, tone) {
       status.textContent = text;
@@ -703,80 +781,128 @@
     function showClock() {
       $('[data-gw-left]', panel).textContent = Number.isFinite(endsAt) ? core.formatLeft(endsAt - Date.now()) : '–';
     }
-    function stop() {
-      clearInterval(timer);
-      timer = null;
+    function stopTimers() {
+      clearInterval(pollTimer);
+      clearInterval(clockTimer);
+      pollTimer = null;
+      clockTimer = null;
     }
-    // The panel of a giveaway that runs: how to enter, the entries (asked every 2 s), the time left.
+    // Pick needs entries (with none the server would end the giveaway without a winner), and nothing more is sent
+    // while a request is on its way.
+    function syncButtons() {
+      pick.disabled = busy || (!picked && entries < 1);
+      end.disabled = busy;
+      if (startButton) startButton.disabled = busy;
+    }
+    function setBusy(on) {
+      busy = on;
+      syncButtons();
+    }
+    function setEntries(count) {
+      entries = count;
+      $('[data-gw-entries]', panel).textContent = String(count);
+      syncButtons();
+    }
+    // The panel of a giveaway that runs: how to enter, the entries (asked every 2 s), the time left (every second).
     function running(giveaway) {
+      stopTimers();
       id = String(giveaway.id);
       picked = false;
       endsAt = core.parseUtc(giveaway.ends_at);
       $('[data-gw-keyword]', panel).textContent = '!' + giveaway.keyword;
       $('[data-gw-winners]', panel).textContent = String(giveaway.winners_count || 1);
-      $('[data-gw-entries]', panel).textContent = String(giveaway.entries || 0);
       winnerBox.classList.remove('show');
       winnerBox.textContent = '';
       pick.textContent = G.pick;
       end.textContent = G.end;
       card.classList.add('gw-running');
       setStatus(G.running, 'warn');
+      setEntries(Number(giveaway.entries) || 0);
       showClock();
-      stop();
-      timer = setInterval(poll, 2000);
+      pollTimer = setInterval(poll, 2000);
+      if (Number.isFinite(endsAt)) clockTimer = setInterval(showClock, 1000);
       repack();
     }
-    async function poll() {
+    // The winners are drawn (by a click, or by the server when the time ran out): show them and stop following.
+    function drawn(names, message) {
+      stopTimers();
       showClock();
-      const answer = await call('GET', '/dashboard/giveaways/' + id + '/entries');
-      if (!answer.ok) return;
-      $('[data-gw-entries]', panel).textContent = String(answer.data.count);
-      // A timed giveaway draws its winners itself when it ends: show them.
-      if (answer.data.status !== 'open' && !picked) {
-        stop();
-        await draw(false);
-      }
-    }
-    async function draw(again) {
-      const answer = await call('POST', '/dashboard/giveaways/' + id + '/pick', again ? { redraw: true } : {});
-      if (!answer.ok) {
-        showMessage(card, answer);
-        return;
-      }
-      stop();
       picked = true;
-      const names = (answer.data.winners || []).map((w) => '@' + w.username).join(', ');
-      winnerBox.textContent = names ? core.fill(G.winner, { names }) : (answer.data.message || G.nobody);
+      winnerBox.textContent = names ? core.fill(G.winner, { names }) : (message || G.nobody);
       winnerBox.classList.add('show');
       pick.textContent = G.pickAgain;
       end.textContent = G.done;
       setStatus(names ? G.picked : G.none, names ? 'ok' : 'off');
+      syncButtons();
       repack();
     }
     function idle() {
-      stop();
+      stopTimers();
       id = null;
       picked = false;
+      endsAt = NaN;
       card.classList.remove('gw-running');
       setStatus(G.none, 'off');
+      setEntries(0);
       repack();
+    }
+    async function poll() {
+      const mine = id;
+      if (!mine) return;
+      const answer = await call('GET', '/dashboard/giveaways/' + mine + '/entries');
+      if (id !== mine || picked) return;
+      if (!answer.ok) {
+        if (answer.status === 404) idle(); // the giveaway is gone; any other trouble: the next tick asks again
+        return;
+      }
+      setEntries(Number(answer.data.count) || 0);
+      if (answer.data.status === 'open' || busy) return;
+      // It is over and this card did not end it: the server did (a timed giveaway closes itself and draws its winners
+      // in the same step) or it was closed elsewhere. Show the winners the server drew; with none, it is simply over.
+      const winners = (answer.data.entries || []).filter((entry) => entry.is_winner && !entry.is_redrawn_out);
+      if (winners.length) drawn(winners.map((winner) => '@' + winner.username).join(', '));
+      else idle();
+    }
+    async function draw(again) {
+      const mine = id;
+      if (!mine || busy) return;
+      setBusy(true);
+      try {
+        const answer = await call('POST', '/dashboard/giveaways/' + mine + '/pick', again ? { redraw: true } : {});
+        if (id !== mine) return;
+        if (!answer.ok) {
+          if (answer.status === 404) idle();
+          showMessage(card, answer);
+          return;
+        }
+        clearMessage(card);
+        drawn((answer.data.winners || []).map((winner) => '@' + winner.username).join(', '), answer.data.message);
+      } finally {
+        setBusy(false);
+      }
     }
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (busy) return;
       const data = new FormData(form);
-      const answer = await call('POST', '/dashboard/giveaways/start', {
-        keyword: String(data.get('keyword') || '').trim().replace(/^!+/, ''),
-        prize: String(data.get('prize') || '').trim(),
-        duration_seconds: data.get('duration_seconds') ? Number(data.get('duration_seconds')) : null,
-        winners_count: Number(data.get('winners_count')) || 1,
-        subs_only: data.get('subs_only') === 'on',
-      });
-      if (!answer.ok) {
-        showMessage(card, answer);
-        return;
+      setBusy(true);
+      try {
+        const answer = await call('POST', '/dashboard/giveaways/start', {
+          keyword: String(data.get('keyword') || '').trim().replace(/^!+/, ''),
+          prize: String(data.get('prize') || '').trim(),
+          duration_seconds: data.get('duration_seconds') ? Number(data.get('duration_seconds')) : null,
+          winners_count: Number(data.get('winners_count')) || 1,
+          subs_only: data.get('subs_only') === 'on',
+        });
+        if (!answer.ok) {
+          showMessage(card, answer);
+          return;
+        }
+        clearMessage(card);
+        running({ ...answer.data, entries: 0 });
+      } finally {
+        setBusy(false);
       }
-      clearMessage(card);
-      running({ ...answer.data, entries: 0 });
     });
     pick.addEventListener('click', () => draw(picked));
     end.addEventListener('click', async () => {
@@ -784,15 +910,27 @@
         idle();
         return;
       }
-      const answer = await call('POST', '/dashboard/giveaways/' + id + '/close', {});
-      if (!answer.ok) {
-        showMessage(card, answer);
-        return;
+      const mine = id;
+      if (!mine || busy) return;
+      if (!window.confirm(G.confirmEnd)) return;
+      setBusy(true);
+      try {
+        const answer = await call('POST', '/dashboard/giveaways/' + mine + '/close', {});
+        if (id !== mine) return;
+        if (!answer.ok && answer.status !== 404) {
+          showMessage(card, answer);
+          return;
+        }
+        clearMessage(card);
+        idle();
+      } finally {
+        setBusy(false);
       }
-      idle();
     });
     if (id) {
       running({ id, keyword: panel.dataset.keyword, ends_at: panel.dataset.endsAt, winners_count: Number(panel.dataset.winners), entries: Number(panel.dataset.entries) });
+    } else {
+      syncButtons();
     }
   }
   const giveawayCard = document.getElementById('card-giveaways');

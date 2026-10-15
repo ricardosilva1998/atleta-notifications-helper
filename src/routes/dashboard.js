@@ -1580,24 +1580,39 @@ router.post('/chatbot/test/custom', limitTests, (req, res) => {
   }
 });
 
-// Test chat message
-router.post('/chatbot/test/:eventType', limitTests, (req, res) => {
+// The thank-you tests: the event each one stands for and the example values it is sent with. The route's own name is
+// also the suffix of the streamer's columns (chat_<name>_enabled, chat_<name>_template).
+const CHAT_TEST_EVENTS = Object.freeze({
+  follow: { eventType: 'follow', data: { username: 'TestRacer' } },
+  sub: { eventType: 'subscription', data: { username: 'SpeedDemon', tier: '1', months: 6, message: 'Love the stream!' } },
+  giftsub: { eventType: 'giftsub', data: { username: 'GiftKing', amount: 5, tier: '1' } },
+  bits: { eventType: 'bits', data: { username: 'NitroFan', amount: 500, message: 'Take my bits!' } },
+  donation: { eventType: 'donation', data: { username: 'BigSponsor', amount: 25, currency: 'USD', message: 'Keep racing!' } },
+  raid: { eventType: 'raid', data: { username: 'RaidLeader', viewers: 42 } },
+});
+
+// The bot posts nothing for a streamer whose chatbot is off, for a thank-you that is switched off and for one with no
+// text (chatManager.sendEventMessage returns without a word), so a test that would post nothing is refused here, with
+// the reason: the button must not say "sent" for it. Refused before the shared cooldown starts, as the overlay test is,
+// so the click that finds out why does not hold up the one after the fix.
+function chatTestReady(req, res, next) {
+  const t = res.locals.t;
   const type = req.params.eventType;
-  const testData = {
-    follow: { eventType: 'follow', data: { username: 'TestRacer' } },
-    sub: { eventType: 'subscription', data: { username: 'SpeedDemon', tier: '1', months: 6, message: 'Love the stream!' } },
-    giftsub: { eventType: 'giftsub', data: { username: 'GiftKing', amount: 5, tier: '1' } },
-    bits: { eventType: 'bits', data: { username: 'NitroFan', amount: 500, message: 'Take my bits!' } },
-    donation: { eventType: 'donation', data: { username: 'BigSponsor', amount: 25, currency: 'USD', message: 'Keep racing!' } },
-    raid: { eventType: 'raid', data: { username: 'RaidLeader', viewers: 42 } },
-  };
+  if (!Object.hasOwn(CHAT_TEST_EVENTS, type)) return res.status(400).json({ error: t('chatbot.test.invalidType') });
+  const refuse = (code, key) => res.status(409).json({ ok: false, code, error: t(key) });
+  const streamer = req.streamer;
+  if (!streamer.chatbot_enabled) return refuse('chatbot_off', 'chatbot.test.chatbotOff');
+  if (!streamer[`chat_${type}_enabled`]) return refuse('message_off', 'chatbot.test.messageOff');
+  if (!String(streamer[`chat_${type}_template`] || '').trim()) return refuse('no_message', 'chatbot.test.noMessage');
+  next();
+}
 
-  const test = testData[type];
-  if (!test) return res.status(400).json({ error: res.locals.t('chatbot.test.invalidType') });
-
+// Test chat message
+router.post('/chatbot/test/:eventType', chatTestReady, limitTests, (req, res) => {
+  const test = CHAT_TEST_EVENTS[req.params.eventType];
   try {
     const { chatManager } = require('../services/twitchChat');
-    chatManager.sendEventMessage(req.streamer.id, test.eventType, test.data, { test: true });
+    chatManager.sendEventMessage(req.streamer.id, test.eventType, { ...test.data }, { test: true });
     res.json({ ok: true });
   } catch (e) {
     console.error('[Dashboard] Test chat message failed:', e.message);
