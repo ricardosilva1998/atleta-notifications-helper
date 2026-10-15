@@ -5127,3 +5127,20 @@ describe('the Shoutouts card\'s Test in chat', () => {
     assert.deepEqual(failed.json(), { ok: false, code: 'twitch_failed', error: t('en', 'cards.polls.error.twitchFailed') });
   });
 });
+
+describe('the Polls & predictions routes in the dashboard', () => {
+  test('are behind the login and the CSRF check, like every card route', async () => {
+    const id = addStreamer();
+    const body = { kind: 'poll', title: 'Top 5?', choices: ['Yes', 'No'], durationSeconds: 60 };
+    const loggedOut = await request('POST', '/dashboard/api/poll-templates', { body });
+    assert.equal(loggedOut.status, 302);
+    const sid = `synthetic-session-polls-${id}`;
+    db.createSession(sid, id, Date.now() + 60_000);
+    const cookie = `session=${sid}`;
+    const page = await request('GET', '/dashboard/chatbot', { cookie });
+    const token = page.text.match(/<script src="\/js\/csrf\.js" data-csrf-token="([A-Za-z0-9_-]+)"><\/script>/)[1];
+    assert.equal((await request('POST', '/dashboard/api/poll-templates', { cookie, fetchMode: 'cors', body })).status, 403);
+    assert.equal(db.countPollTemplates(id), 0);
+    assert.equal((await request('POST', '/dashboard/api/poll-templates', { cookie, csrf: token, body })).status, 201);
+  });
+});

@@ -1101,6 +1101,9 @@ router.delete('/api/commands/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// The Polls & predictions card's JSON routes (routes/polls.js), behind this router's login.
+router.use(require('./polls'));
+
 // The Donations card's tip goal: start, edit (title and target; the bar keeps its colour) and end.
 function goalJsonError(res, status, code) {
   res.status(status).json({ ok: false, code, error: errorMessage(GOAL_ERRORS, code, res.locals.t) });
