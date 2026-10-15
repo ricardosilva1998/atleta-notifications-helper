@@ -1638,7 +1638,7 @@
   "cards.giveaways.endsManual": "quand je tire au sort",
   "cards.giveaways.endsAfter": "dans {{minutes}} min",
   "cards.giveaways.winners": "Gagnants",
-  "cards.giveaways.subsOnly": "Abonnés",
+  "cards.giveaways.subsOnly": "Sub only",
   "cards.giveaways.start": "Lancer le giveaway",
   "cards.giveaways.howToEnter": "Les spectateurs tapent {{keyword}} dans le chat pour participer",
   "cards.giveaways.entries": "Inscrits",

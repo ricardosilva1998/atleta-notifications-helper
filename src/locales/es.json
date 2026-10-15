@@ -1642,7 +1642,7 @@
   "cards.giveaways.start": "Iniciar sorteo",
   "cards.giveaways.howToEnter": "Los espectadores escriben {{keyword}} en el chat para participar",
   "cards.giveaways.entries": "Entradas",
-  "cards.giveaways.left": "Tiempo",
+  "cards.giveaways.left": "Falta",
   "cards.giveaways.pick": "Elegir un ganador",
   "cards.giveaways.end": "Cerrar sin ganador",
   "cards.giveaways.past": "Sorteos anteriores",
