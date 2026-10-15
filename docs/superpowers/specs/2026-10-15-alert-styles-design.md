@@ -35,6 +35,8 @@ timed messages and the separate OBS sources (sponsors, tip goal, VTuber, iRacing
 - Grand Prix, Cockpit and Arcade are built; Quest's animations are tidied (proposal 4).
 - All 18 families are kept: Samurai, Racing, Grand Prix, Cockpit, Arcade, Quest, Comic, Cozy, Cosmos, Glass,
   Spooky, Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk and Frost. That is 108 looks (Appendix A).
+- Every look's colour is customizable by the streamer, today's samurai looks and the omikuji included (given with
+  the spec's approval).
 
 ## 3. Goals and non-goals
 
@@ -106,7 +108,7 @@ saved row. A Quest look reading them would come out lavender, saying "New Pit Cr
 | `style` | a public style id that draws this alert, or the streamer's own private one | 400 |
 | `style_accent` | a hex colour | 400 |
 | `style_label` | text | cut to 40 characters |
-| `style_sound` | a catalogue sound or `none` | 400 |
+| `style_sound` | a catalogue sound or `none` | left out: the look's own sound |
 | `style_grows` | a switch value | 400 |
 
 An empty `style` means the alert's default look. A 400 names the field, as for any other value no builder
@@ -167,14 +169,21 @@ The Overlay Consistency Rule stands: the OBS overlay and the builder preview dra
 
 | Look | Colour | Main text | Speed | Effect | Sound | Grows | Position and width |
 |---|---|---|---|---|---|---|---|
-| Today's five (samurai presets) | – | – | – | yes (none by default, as today) | yes | – | yes |
-| Omikuji | – | yes | yes | yes | yes | – | yes |
+| Today's five (samurai presets) | accent (Ronin red by default) | – | – | yes (none by default, as today) | yes | – | yes |
+| Omikuji | accent | yes | yes | yes | yes | – | yes |
 | Racing | card, accent, name colour, name font | yes | yes | yes | yes | where it has an amount | yes |
 | Every other family | accent | yes | yes | yes | yes | where it has an amount | yes |
 
-**Colour.** On the proposal page the colour swatches set three CSS variables: `--a` (the accent), `--a-rgb`
-(the same colour as numbers) and `--a-on` (black or white, whichever reads better on it, as `onColour()`
-decides). In OBS the overlay sets the same three on the alert's slot from `style_accent`.
+**Colour.** Every look takes the streamer's colour, and a change of colour must be obvious at a glance in the
+finished look: the accent colours its main element (its plate, frame, hero object or headline). On the proposal
+page the colour swatches set three CSS variables: `--a` (the accent), `--a-rgb` (the same colour as numbers) and
+`--a-on` (black or white, whichever reads better on it, as `onColour()` decides). In OBS the overlay sets the same
+three on the alert's slot from `style_accent`, plus four shades worked out from it: `--a-hi` (lighter), `--a-lo`
+(darker), `--a-deep` (much darker) and `--a-soft` (a muted tone for small text).
+
+Today's samurai looks are drawn in one red and a dozen fixed shades of it. Each shade reads the matching variable
+with today's colour as its fallback (`var(--a-hi, #F0343C)`), so the look follows the accent once one is chosen,
+and an alert nobody has restyled stays exactly as it is. The omikuji does the same.
 
 **Main text.** The main text is the look's main line ("Quest accepted", "WANTED"); a look shows its own words
 while it is empty. The other words inside a look stay English, as the overlay is today.
@@ -305,7 +314,9 @@ A family moves as a unit, and nothing about how it looks changes.
   - every animation time in a family's CSS is divided by `--spd`;
   - every class and keyframe carries the family's prefix, and no selector reaches inside another part (`.x i`, `.x span`, `.x div`);
   - nothing uses `:has()`, `color-mix()`, container queries, `@property` or `backdrop-filter`;
-  - every keyframe a look uses is defined.
+  - every keyframe a look uses is defined;
+  - every look's own CSS colours something with the accent, and every shade of today's samurai red reads its
+    variable with today's colour as the fallback.
 - **`tests/alertStyles.test.js`** (new): the catalogue and the registry list the same ids, every family has all six alerts, and every default sound and effect exists.
 - **`src/db.overlayDesigns.test.js`** (the C1 branch's): the `style_*` columns survive a save, Reset clears them and keeps the look, and the family route sets six rows in one transaction and resets the look's settings in the rows whose look changed.
 - **`src/routes/dashboard.test.js`:** the save answers 400 for an unknown style, a style of another alert, or another streamer's private style; the family route works.
@@ -314,7 +325,8 @@ A family moves as a unit, and nothing about how it looks changes.
 - **`tests/i18n.test.js`** (existing): the new keys exist in all seven languages.
 
 **In OBS, by hand, at each release:**
-- Play every new look once, at 1× and 1.5×, in a real browser source.
+- Play every new look once, at 1× and 1.5×, in a real browser source, and once more with a second colour far from
+  the first (a red and a cyan): the change must be obvious.
 - Watch the 3D looks (Quest's, Cyber's and Western's giveaways) and the clip-path reveals most closely.
 
 ## 8. Releases
