@@ -985,8 +985,9 @@ router.post('/overlay/test/:eventType', knownOverlayTestType, overlayOn, limitTe
   bus.emit(`overlay:${req.streamer.id}`, { ...event, data: { ...event.data } });
 
   // Fire chatbot message in sync (a test is never merged with real thank-yous).
-  // Only the Twitch alerts have a thank-you in Twitch chat.
-  if (TWITCH_ALERT_TYPES.includes(type)) {
+  // Only the Twitch alerts have a thank-you in Twitch chat; the Overlay Builder's Test (chat: false)
+  // only plays the alert, so trying looks never posts in a live channel.
+  if (TWITCH_ALERT_TYPES.includes(type) && !(req.body && req.body.chat === false)) {
     const { chatManager } = require('../services/twitchChat');
     chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
   }

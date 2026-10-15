@@ -2560,7 +2560,7 @@ async function testLook() {
     const res = await fetch('/dashboard/overlay/test/' + encodeURIComponent(currentType), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      body: JSON.stringify({ chat: false }),   // the look in OBS, no test thank-you in the Twitch chat
     });
     const data = await res.json().catch(() => ({}));
     msg.textContent = res.ok ? I18N.style.testSent : (data.error || I18N.style.failed);

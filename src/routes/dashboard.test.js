@@ -1972,6 +1972,18 @@ describe('the test buttons', () => {
       }
     });
 
+    test('a test from the Overlay Builder (chat: false) plays the alert and posts nothing in Twitch chat', async () => {
+      for (const type of TWITCH_TYPES) {
+        chatCalls.length = 0;
+        const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
+        let res;
+        const events = await overlayDuring(id, async () => { res = await post(`/dashboard/overlay/test/${type}`, id, { body: { chat: false } }); });
+        assert.equal(res.status, 200, type);
+        assert.equal(events.length, 1, `${type}: the alert is played`);
+        assert.deepEqual(chatCalls, [], `${type}: nothing is posted in chat`);
+      }
+    });
+
     test('a sample is not changed by being sent: the next test sends the same alert', async () => {
       const a = addStreamer({ overlay_enabled: 1 });
       const b = addStreamer({ overlay_enabled: 1 });

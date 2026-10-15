@@ -223,6 +223,10 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
 describe('the Style section (alert styles)', () => {
   const vm = require('node:vm');
 
+  test('Test plays the look in OBS without a thank-you in the Twitch chat (chat: false)', () => {
+    assert.match(functionSource('testLook'), /body: JSON\.stringify\(\{ chat: false \}\)/);
+  });
+
   test('"Use <family> for all six" keeps every tab\'s unsaved edits: only the look and its settings come from the server', () => {
     const source = functionSource('useStyleFamily');
     assert.match(source, /workingDesigns\[type\] = STYLE_CORE\.lookApplied\(/);
