@@ -334,3 +334,20 @@
 .exiting .o-c1 .o-c1-blur{animation:c1BlurIn calc(.84s / var(--spd)) linear both}
 .exiting .o-c1 .o-c1-exsmoke i{animation:c1Puff calc(.9s / var(--spd)) ease-out calc(var(--pd) / var(--spd)) both}
 .exiting .o-c1 .o-c1-rig{animation:c1Leave calc(.74s / var(--spd)) cubic-bezier(.6,0,.85,.35) calc(.1s / var(--spd)) both}
+
+/* ══ Shared by the looks (objects/kit.js) ════════════════════════════════
+   A long name scales down (--fit) and still ends in an ellipsis, like .o-name above. Numbers roll
+   like an odometer (.o-odo); a message can be typed (.o-typed). */
+.o-nm{display:flow-root}
+.o-nm-t{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.3em 0;margin:-.3em 0}
+.o-odo{display:inline-flex;align-items:flex-start;line-height:1;font-variant-numeric:tabular-nums;vertical-align:top}
+.o-odo-d{display:inline-block;height:1em;overflow:hidden}
+.o-odo-s{display:inline-block;height:1em;line-height:1}
+.o-odo-strip{display:block;transform:translateY(calc(var(--to) * -1em))}
+.o-odo-strip i{display:block;height:1em;line-height:1;font-style:normal;text-align:center}
+.playing .o-odo-strip{animation:odoRoll calc(var(--odur) / var(--spd)) cubic-bezier(.22,.7,.18,1) calc(var(--odel) / var(--spd)) both}
+@keyframes odoRoll{from{transform:translateY(0)}}
+.playing .o-typed .o-ch{animation:chIn .01s linear calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both}
+@keyframes chIn{from{opacity:0}to{opacity:1}}
+/* A look (not today's five) is drawn for 420px; another width scales it (overlay.js sets --zw). */
+.alert-pos.look > .obj{width:420px;zoom:var(--zw,1)}
