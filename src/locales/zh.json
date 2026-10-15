@@ -544,6 +544,8 @@
   "chatbot.test.noMessage": "请先写一条消息。",
   "overlayBuilder.error.eventType": "无法在这里设计该提醒类型。",
   "overlayBuilder.error.invalidField": "无法保存此设计：“{{field}}”的值不被允许。",
+  "overlayBuilder.error.style": "此提醒不能使用该样式。",
+  "overlayBuilder.error.family": "该样式系列不存在。",
   "ytChatbot.error.notConnected": "尚未连接 YouTube 账户。请先点击“连接 YouTube 账户”。",
   "ytChatbot.error.tokenRefresh": "刷新 YouTube 令牌失败。请尝试重新连接你的账户。",
   "ytChatbot.error.noLiveStream": "未找到正在进行的直播。请确认你正在 YouTube 上直播。",

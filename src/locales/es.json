@@ -544,6 +544,8 @@
   "chatbot.test.noMessage": "Escribe primero un mensaje.",
   "overlayBuilder.error.eventType": "Ese tipo de alerta no se puede diseñar aquí.",
   "overlayBuilder.error.invalidField": "No se pudo guardar este diseño: el valor de \"{{field}}\" no está permitido.",
+  "overlayBuilder.error.style": "Ese estilo no se puede usar en esta alerta.",
+  "overlayBuilder.error.family": "Esa familia de estilos no existe.",
   "ytChatbot.error.notConnected": "Cuenta de YouTube no conectada. Primero haz clic en \"Conectar Cuenta de YouTube\".",
   "ytChatbot.error.tokenRefresh": "No se pudo renovar el token de YouTube. Intenta reconectar tu cuenta.",
   "ytChatbot.error.noLiveStream": "No se encontró ninguna transmisión en vivo activa. Asegúrate de estar en vivo en YouTube.",

@@ -544,6 +544,8 @@
   "chatbot.test.noMessage": "先にメッセージを入力してください。",
   "overlayBuilder.error.eventType": "その種類のアラートは、ここではデザインできません。",
   "overlayBuilder.error.invalidField": "このデザインを保存できませんでした：「{{field}}」の値は使用できません。",
+  "overlayBuilder.error.style": "このアラートにはそのスタイルを使えません。",
+  "overlayBuilder.error.family": "そのスタイルのシリーズは存在しません。",
   "ytChatbot.error.notConnected": "YouTube アカウントが接続されていません。先に「YouTube アカウントを接続」をクリックしてください。",
   "ytChatbot.error.tokenRefresh": "YouTube のトークンを更新できませんでした。アカウントの再接続をお試しください。",
   "ytChatbot.error.noLiveStream": "進行中のライブ配信が見つかりません。YouTube でライブ配信中であることを確認してください。",

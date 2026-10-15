@@ -30,6 +30,7 @@ const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCo
 const { testCooldown } = require('../services/testCooldown');
 const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
+const { canUseStyle, familyStyles } = require('../services/alertStyles');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
@@ -2688,8 +2689,18 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
   });
 });
 
+// The streamer's designs, sent to their open overlays so a change applies without a reload.
+function pushOverlayDesigns(streamerId) {
+  const designMap = {};
+  db.getAllOverlayDesigns(streamerId).forEach(d => { designMap[d.event_type] = d; });
+  require('../services/overlayBus').emit(`overlay:${streamerId}`, { type: 'config-update', designs: designMap });
+}
+
 // Only what the builder itself can produce is saved (services/overlayDesign.js);
-// anything else is a 400 that names the field.
+// anything else is a 400 that names the field. Next to the design comes the look the builder
+// shows (`style`, alert styles): one that draws this alert, or the streamer's own private one;
+// '' or null is the alert's default look. A page from before the looks sends none, and the
+// stored look stays.
 router.post('/overlay-builder/save', (req, res) => {
   const t = res.locals.t;
   const { eventType, design } = req.body || {};
@@ -2700,16 +2711,31 @@ router.post('/overlay-builder/save', (req, res) => {
   if (!checked.ok) {
     return res.status(400).json({ ok: false, field: checked.field, error: t('overlayBuilder.error.invalidField', { field: checked.field }) });
   }
+  const namesStyle = Object.prototype.hasOwnProperty.call(req.body, 'style');
+  const style = req.body.style === '' ? null : req.body.style;
+  if (namesStyle && !canUseStyle(style, eventType, req.streamer)) {
+    return res.status(400).json({ ok: false, field: 'style', error: t('overlayBuilder.error.style') });
+  }
+  // The look first: another look starts from its own settings, then the design is what the builder sent.
+  if (namesStyle) db.setOverlayDesignStyle(req.streamer.id, eventType, style);
   db.saveOverlayDesign(req.streamer.id, eventType, checked.design);
-
-  // Push updated designs to running overlay so it updates without reconnecting
-  const bus = require('../services/overlayBus');
-  const designs = db.getAllOverlayDesigns(req.streamer.id);
-  const designMap = {};
-  designs.forEach(d => { designMap[d.event_type] = d; });
-  bus.emit(`overlay:${req.streamer.id}`, { type: 'config-update', designs: designMap });
-
+  pushOverlayDesigns(req.streamer.id);
   res.json({ ok: true });
+});
+
+// "Use <family> for all six alerts": the family's look on each of the six alerts, all or none (a
+// row whose look changes starts from the look's own settings), one config-update to the open
+// overlay, and the six rows for the builder.
+router.post('/overlay-builder/family', (req, res) => {
+  const styles = familyStyles(req.body && req.body.family);
+  if (!styles) {
+    return res.status(400).json({ ok: false, field: 'family', error: res.locals.t('overlayBuilder.error.family') });
+  }
+  db.setOverlayDesignStyles(req.streamer.id, styles);
+  pushOverlayDesigns(req.streamer.id);
+  const designs = {};
+  for (const eventType of Object.keys(styles)) designs[eventType] = db.getOverlayDesign(req.streamer.id, eventType);
+  res.json({ ok: true, designs });
 });
 
 router.post('/overlay-builder/reset', (req, res) => {
@@ -2717,16 +2743,9 @@ router.post('/overlay-builder/reset', (req, res) => {
   if (!isBuilderEventType(eventType)) {
     return res.status(400).json({ ok: false, error: res.locals.t('overlayBuilder.error.eventType') });
   }
-  // Back to the defaults; a style the owner set (andre_vilela_'s C1) is kept
+  // Back to the defaults; the alert's look is kept (its own settings start again)
   db.resetOverlayDesign(req.streamer.id, eventType);
-
-  // Push updated designs to running overlay
-  const bus = require('../services/overlayBus');
-  const designs = db.getAllOverlayDesigns(req.streamer.id);
-  const designMap = {};
-  designs.forEach(d => { designMap[d.event_type] = d; });
-  bus.emit(`overlay:${req.streamer.id}`, { type: 'config-update', designs: designMap });
-
+  pushOverlayDesigns(req.streamer.id);
   res.json({ ok: true });
 });
 

@@ -544,6 +544,8 @@
   "chatbot.test.noMessage": "Write a message first.",
   "overlayBuilder.error.eventType": "That alert type cannot be designed here.",
   "overlayBuilder.error.invalidField": "This design could not be saved: the value for \"{{field}}\" is not allowed.",
+  "overlayBuilder.error.style": "That look cannot be used for this alert.",
+  "overlayBuilder.error.family": "That family of looks does not exist.",
   "ytChatbot.error.notConnected": "YouTube account not connected. Click \"Connect YouTube Account\" first.",
   "ytChatbot.error.tokenRefresh": "Failed to refresh the YouTube token. Try reconnecting your account.",
   "ytChatbot.error.noLiveStream": "No active live stream found. Make sure you are live on YouTube.",
