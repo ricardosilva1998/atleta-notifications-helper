@@ -3239,10 +3239,15 @@ function updateSpotifyTokens(streamerId, accessToken, refreshToken, expiresAt) {
 
 // ─── Overlay Designs ────────────────────────────────────────────
 
-// The label and detail an alert gets when a save does not carry them: the builder's own
-// defaults (services/overlayDesign.js), so there is one copy of them.
-const DEFAULT_OVERLAY_LABELS = Object.fromEntries(Object.entries(EVENT_DEFAULTS)
-  .map(([type, defaults]) => [type, { event_label: defaults.event_label, detail_text: defaults.detail_text }]));
+// The colours, label and detail an alert gets when a save does not carry them: the builder's own
+// defaults (services/overlayDesign.js), so there is one copy of them. A row the database writes by
+// itself (a Reset that keeps the look, one family picked for all six alerts) gets the alert's own
+// colours too, not the follow alert's: Racing draws with them.
+const DEFAULT_OVERLAY_VALUES = Object.fromEntries(Object.entries(EVENT_DEFAULTS)
+  .map(([type, d]) => [type, {
+    event_label: d.event_label, detail_text: d.detail_text,
+    bg_color: d.bg_color, accent_color: d.accent_color, border_color: d.border_color,
+  }]));
 
 // Hot path: called per overlay alert render.
 const _stmtGetOverlayDesign = db.prepare('SELECT * FROM overlay_designs WHERE streamer_id = ? AND event_type = ?');
@@ -3266,11 +3271,11 @@ const OVERLAY_DESIGN_COLUMNS = new Set([
 ]);
 
 function saveOverlayDesign(streamerId, eventType, design) {
-  const defaults = DEFAULT_OVERLAY_LABELS[eventType] || {};
+  const defaults = DEFAULT_OVERLAY_VALUES[eventType] || {};
   const row = {
-    bg_color: design.bg_color || '#1a1a3e',
-    accent_color: design.accent_color || '#8888cc',
-    border_color: design.border_color || '#8888cc',
+    bg_color: design.bg_color || defaults.bg_color || '#1a1a3e',
+    accent_color: design.accent_color || defaults.accent_color || '#8888cc',
+    border_color: design.border_color || defaults.border_color || '#8888cc',
     text_color: design.text_color || '#ffffff',
     font_family: design.font_family || 'System Default',
     username_size: design.username_size != null ? design.username_size : 24,
@@ -3315,6 +3320,12 @@ function saveOverlayDesign(streamerId, eventType, design) {
     shadow_blur: design.shadow_blur != null ? design.shadow_blur : 32,
     shadow_spread: design.shadow_spread != null ? design.shadow_spread : 0,
     shadow_opacity: design.shadow_opacity != null ? design.shadow_opacity : 0.6,
+    // The look's own settings (docs/superpowers/specs/2026-10-15-alert-styles-design.md, 4.2);
+    // NULL is the look's own colour, main text, sound and growing with the amount.
+    style_accent: design.style_accent || null,
+    style_label: design.style_label != null ? design.style_label : null,
+    style_sound: design.style_sound || null,
+    style_grows: design.style_grows != null ? design.style_grows : null,
   };
   // An upsert: on the (streamer_id, event_type) conflict only the columns listed here are
   // written, so the ones the builder does not send (style, design_version) keep their values.
@@ -3342,13 +3353,29 @@ function resetOverlayDesign(streamerId, eventType) {
   else deleteOverlayDesign(streamerId, eventType);
 }
 
-// The style an alert is drawn in (overlay_designs.style; null: its own look). Writes the
-// default design first when the streamer never saved one for this alert, so the row exists.
+// The look an alert is drawn in (overlay_designs.style; null: its default look). Writes the default
+// design first when the streamer never saved one for this alert, so the row exists. Another look
+// starts from its own settings: style_* emptied, the screen effect back to 'default' (the look's
+// own) and the speed to 1. Where the alert sits, and Racing's colours, stay. The look it already
+// has changes nothing.
 function setOverlayDesignStyle(streamerId, eventType, style) {
+  db.transaction(() => changeOverlayDesignStyle(streamerId, eventType, style))();
+}
+
+// Several alerts' looks at once ({ eventType: style }), all or none: "Use <family> for all six
+// alerts" in the builder.
+function setOverlayDesignStyles(streamerId, styles) {
   db.transaction(() => {
-    if (!getOverlayDesign(streamerId, eventType)) saveOverlayDesign(streamerId, eventType, {});
-    db.prepare('UPDATE overlay_designs SET style = ? WHERE streamer_id = ? AND event_type = ?').run(style, streamerId, eventType);
+    for (const [eventType, style] of Object.entries(styles)) changeOverlayDesignStyle(streamerId, eventType, style);
   })();
+}
+
+function changeOverlayDesignStyle(streamerId, eventType, style) {
+  const current = getOverlayDesign(streamerId, eventType);
+  if (!current) saveOverlayDesign(streamerId, eventType, {});
+  else if ((current.style || null) === (style || null)) return;
+  db.prepare(`UPDATE overlay_designs SET style = ?, style_accent = NULL, style_label = NULL, style_sound = NULL, style_grows = NULL,
+    screen_effect = 'default', animation_speed = 1.0 WHERE streamer_id = ? AND event_type = ?`).run(style || null, streamerId, eventType);
 }
 
 function getIracingOverlaySettings(streamerId) {
@@ -4004,6 +4031,19 @@ try {
     console.log('[DB] Added style to overlay_designs');
   }
 } catch (e) { _migrationLog('overlay_designs.style', e); }
+
+// Migration: a look's own settings (docs/superpowers/specs/2026-10-15-alert-styles-design.md, 4.2).
+// NULL is the look's own colour, main text, sound and growing with the amount. Before the C1's
+// switch-on below: setOverlayDesignStyle() writes these columns.
+try {
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  for (const [col, type] of [['style_accent', 'TEXT'], ['style_label', 'TEXT'], ['style_sound', 'TEXT'], ['style_grows', 'INTEGER']]) {
+    if (!cols.includes(col)) {
+      db.exec(`ALTER TABLE overlay_designs ADD COLUMN ${col} ${type}`);
+      console.log(`[DB] Added ${col} to overlay_designs`);
+    }
+  }
+} catch (e) { _migrationLog('overlay_designs look settings', e); }
 
 // andre_vilela_ asked for the C1 billboard trailer as his donation alert
 // (docs/superpowers/specs/2026-10-15-vilela-c1-donation-design.md): switched on once. He is
@@ -5746,6 +5786,7 @@ module.exports = {
   deleteOverlayDesign,
   resetOverlayDesign,
   setOverlayDesignStyle,
+  setOverlayDesignStyles,
   getSponsorImages,
   getEnabledSponsorImages,
   addSponsorImage,

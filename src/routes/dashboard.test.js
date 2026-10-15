@@ -2370,7 +2370,7 @@ describe('saving an overlay design', () => {
     assert.equal((await save('raid', { bg_color: '#010203' })).status, 200);
     const [row] = stored();
     assert.equal(row.bg_color, '#010203');
-    assert.equal(row.accent_color, '#8888cc');
+    assert.equal(row.accent_color, '#ff4444', 'the raid\'s own accent, not the follow alert\'s');
     assert.equal(row.username_size, 24);
     assert.equal(row.card_position, 'top-center');
   });
