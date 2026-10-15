@@ -7,6 +7,7 @@ const { isStreamerDisabled } = require('./streamerAccess');
 const { commandCooldownSeconds } = require('./chatCommands');
 const { fillChatTemplate } = require('./chatTemplate');
 const { createChatDispatcher } = require('./chatDispatcher');
+const { shoutouts, isShoutoutCommand } = require('./shoutouts');
 
 let client = null;
 // Every line the bot posts goes out through it: the bot-wide rate limit, the
@@ -92,6 +93,14 @@ async function handleMessage(channel, tags, message, self) {
 
   // Mod-only commands (!permit, !slow, !slowoff)
   if (await handleModCommand(replies, channel, tags, message, streamer)) return;
+
+  // !so @name from the broadcaster or a moderator while the Shoutouts card's switch is on (services/shoutouts.js).
+  // Twitch's lookup is not waited for here; a viewer's !so goes on to the other commands.
+  if (isShoutoutCommand(streamer, tags, message)) {
+    shoutouts.fromCommand(streamer, message)
+      .catch((err) => console.error(`[Shoutout] !so failed for streamer ${streamer.id}:`, err.message));
+    return;
+  }
 
   // Giveaway entry hook — keyword owned by the active giveaway while one is open
   if (message.startsWith('!')) {

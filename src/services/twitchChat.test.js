@@ -66,6 +66,10 @@ function stubModule(file, exports) {
 }
 stubModule('./builtinCommands', { handleBuiltinCommand: async () => false });
 stubModule('./giveawayManager', { tryAddEntry: () => false });
+// !so goes to the shoutouts, whose lookups would reach Twitch: the real check of who may use it, a recording fromCommand.
+const { isShoutoutCommand } = require('./shoutouts');
+const shoutoutCalls = [];
+stubModule('./shoutouts', { isShoutoutCommand, shoutouts: { fromCommand: async (s, message) => { shoutoutCalls.push([s.id, message]); return 'sent'; } } });
 
 // The real chat dispatcher (bot-wide limit, 1.5 s per channel, merged
 // thank-yous), on a clock that only the tests move.
@@ -170,6 +174,7 @@ beforeEach(() => {
   bannedWords = [];
   bannedWordReads = 0;
   chatCommands = {};
+  shoutoutCalls.length = 0;
   stubTwitch(200);
   chatManager.connect();
   chatManager.joinChannel(1, 'somestreamer');
@@ -676,5 +681,35 @@ describe('whether the bot is a moderator in a streamer\'s channel', () => {
       ['[Chat] Rejoining #somestreamer failed:', 'No response from Twitch.'],
       ['[Chat] Rejoining #somestreamer failed:', 'timed out'],
     ]);
+  });
+});
+
+// ── !so (the Shoutouts card) ─────────────────────────────────────────
+
+describe('!so in chat', () => {
+  const command = (name, response) => ({ id: 1, command: name, response, cooldown: 5, enabled: 1 });
+
+  test('a moderator\'s or the broadcaster\'s !so goes to the shoutouts while the switch is on, and nothing else answers it', async () => {
+    streamer = streamerRow({ shoutout_command_enabled: 1 });
+    chatCommands = { so: command('so', 'A custom so') };
+    await chat('!so @OtherStreamer', tags({ username: 'somemod', mod: true }));
+    await chat('!so otherstreamer', tags({ username: 'somestreamer', badges: { broadcaster: '1' }, id: 'msg-2' }));
+    assert.deepEqual(shoutoutCalls, [[1, '!so @OtherStreamer'], [1, '!so otherstreamer']]);
+    assert.deepEqual(tmiClient.said, []);
+  });
+
+  test('a viewer\'s !so is an ordinary command', async () => {
+    chatClock.advance(1_500); // the bot's own gap between two lines in one chat
+    streamer = streamerRow({ shoutout_command_enabled: 1 });
+    chatCommands = { so: command('so', 'A custom so') };
+    await chat('!so @OtherStreamer', tags());
+    assert.deepEqual(shoutoutCalls, []);
+    assert.deepEqual(tmiClient.said.map((m) => m.text), ['A custom so']);
+  });
+
+  test('with the switch off, a moderator\'s !so is not a shoutout', async () => {
+    streamer = streamerRow({ shoutout_command_enabled: 0 });
+    await chat('!so @OtherStreamer', tags({ username: 'somemod', mod: true }));
+    assert.deepEqual(shoutoutCalls, []);
   });
 });

@@ -1707,6 +1707,7 @@
   "cards.polls.texts.predictionLock": "Prediction locked",
   "cards.polls.texts.predictionEnd": "Prediction result",
   "cards.polls.texts.predictionCancel": "Prediction cancelled",
+  "cards.shoutouts.error.unknown": "Twitch has no channel with the name linked to your account.",
 
   "lang.en": "English",
   "lang.pt": "Portugu\u00eas",

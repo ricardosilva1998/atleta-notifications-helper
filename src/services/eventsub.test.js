@@ -40,7 +40,7 @@ class FakeWebSocket {
 }
 
 let streamers;
-const effects = { overlay: [], overlayLog: [], chat: [], raidProtection: [], redemptions: [], polls: [] };
+const effects = { overlay: [], overlayLog: [], chat: [], raidProtection: [], redemptions: [], polls: [], shoutouts: [] };
 let pollsScope = false; // what the stubbed hasPollsScope answers
 let subscribeCalls;
 
@@ -60,6 +60,7 @@ const stubs = {
   './overlayBus': { emit: (channel, event) => effects.overlay.push({ channel, event }) },
   './twitch': { refreshBroadcasterToken: async () => 'synthetic-fresh-token', hasRedemptionScope: () => true, hasPollsScope: () => pollsScope },
   './livePolls': { livePolls: { onEvent: (streamerId, type, event) => effects.polls.push({ streamerId, type, event }) } },
+  './shoutouts': { shoutouts: { afterRaid: async (streamerId, raid) => { effects.shoutouts.push([streamerId, raid]); return 'sent'; } } },
   './twitchChat': {
     chatManager: {
       sendEventMessage: (streamerId, type, data) => effects.chat.push({ streamerId, type, data }),
@@ -743,6 +744,16 @@ describe('a raid', () => {
     socket.receive(raid);
     assert.deepEqual(effects.chat.map((c) => c.type), ['raid']);
     assert.deepEqual(effects.raidProtection, [1]);
+  });
+
+  test('the raider goes to the shoutouts, with their login and id, once', async () => {
+    const socket = await connected();
+    const raid = notification('channel.raid', {
+      from_broadcaster_user_id: '9002', from_broadcaster_user_login: 'raider', from_broadcaster_user_name: 'Raider', viewers: 42,
+    }, 'synthetic-message-10');
+    socket.receive(raid);
+    socket.receive(raid);
+    assert.deepEqual(effects.shoutouts, [[1, { username: 'Raider', viewers: 42, login: 'raider', userId: '9002' }]]);
   });
 });
 

@@ -7,6 +7,7 @@ const { chatManager } = require('./twitchChat');
 const { isStreamerDisabled } = require('./streamerAccess');
 const { createMessageDedupe } = require('./messageDedupe');
 const { livePolls } = require('./livePolls');
+const { shoutouts } = require('./shoutouts');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 const SUBSCRIPTIONS_URL = 'https://api.twitch.tv/helix/eventsub/subscriptions';
@@ -351,7 +352,12 @@ class EventSubClient {
 
     // Emit to chat service
     chatManager.sendEventMessage(this.streamerId, normalized.type, normalized.data);
-    if (normalized.type === 'raid') chatManager.startRaidProtection(this.streamerId);
+    if (normalized.type === 'raid') {
+      chatManager.startRaidProtection(this.streamerId);
+      // The Shoutouts card's raid shoutout: after the thank-you above (it waits for Twitch's lookup of the raider).
+      shoutouts.afterRaid(this.streamerId, normalized.data)
+        .catch((err) => console.error(`[Shoutout] Raid shoutout failed for streamer ${this.streamerId}:`, err.message));
+    }
   }
 
   // Twitch is moving the session to another server: connect to the URL it gave
@@ -524,6 +530,8 @@ class EventSubClient {
           data: {
             username: event.from_broadcaster_user_name,
             viewers: event.viewers,
+            login: event.from_broadcaster_user_login,
+            userId: event.from_broadcaster_user_id,
           },
         };
 

@@ -97,6 +97,9 @@ const chatStub = {
     recheckModerator: async (id) => { chatCalls.push(['recheck', id]); return true; },
   },
 };
+// The Shoutouts card's test line (its lookups would reach Twitch); `answer` is what testInChat resolves to.
+const shoutoutTests = [];
+const shoutoutsStub = { answer: 'sent', shoutouts: { testInChat: async (s) => { shoutoutTests.push(s.id); return shoutoutsStub.answer; } } };
 // The real one starts a polling interval when it loads.
 // The AI analysis would call the Anthropic API; this records which issues it was asked for.
 const analyses = [];
@@ -244,6 +247,7 @@ before(async () => {
       if (request === '../services/twitch') return twitchStub;
       if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/twitchChat') return chatStub;
+      if (request === '../services/shoutouts') return shoutoutsStub;
       if (request === '../services/youtubeLiveChat') return youtubeChatStub;
       if (request === '../services/agentTriage') return agentTriageStub;
       if (request === '../services/eventsub') return eventSubStub;
@@ -334,6 +338,8 @@ beforeEach(() => {
   fileWrites.length = 0;
   fileRemovals.length = 0;
   chatCalls.length = 0;
+  shoutoutTests.length = 0;
+  shoutoutsStub.answer = 'sent';
   analyses.length = 0;
   agentTriageStub.failWith = null;
   ytPolling.clear();
@@ -5070,5 +5076,41 @@ describe('the giveaway entries answer the Giveaways card reads', () => {
     const other = addStreamer({ twitch_username: 'otherchannel' });
     assert.equal((await entriesOf(other, giveaway.id)).status, 404, 'another streamer\'s giveaway is not found');
     await settle();
+  });
+});
+
+describe('the Shoutouts card\'s Test in chat', () => {
+  const testShout = (id) => request('POST', '/dashboard/shoutouts/test', { streamer: id });
+
+  test('shouts out the streamer\'s own channel with the saved text', async () => {
+    const id = addStreamer({ chatbot_enabled: 1, twitch_username: 'mychannel' });
+    const res = await testShout(id);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json(), { ok: true });
+    assert.deepEqual(shoutoutTests, [id]);
+  });
+
+  test('refused with the reason before the shared cooldown: the chatbot off, or no text', async () => {
+    const off = await testShout(addStreamer({ chatbot_enabled: 0 }));
+    assert.equal(off.status, 409);
+    assert.deepEqual(off.json(), { ok: false, code: 'chatbot_off', error: t('en', 'chatbot.test.chatbotOff') });
+    const id = addStreamer({ chatbot_enabled: 1, shoutout_template: '   ' });
+    const empty = await testShout(id);
+    assert.equal(empty.status, 409);
+    assert.deepEqual(empty.json(), { ok: false, code: 'no_message', error: t('en', 'chatbot.test.noMessage') });
+    assert.deepEqual(shoutoutTests, []);
+    db.updateShoutoutSettings(id, { shoutout_template: 'Check out {name}' });
+    assert.equal((await testShout(id)).status, 200, 'the refusals did not start the cooldown');
+  });
+
+  test('a channel Twitch does not know, or no answer from Twitch, is said', async () => {
+    shoutoutsStub.answer = 'unknown';
+    const unknown = await testShout(addStreamer({ chatbot_enabled: 1 }));
+    assert.equal(unknown.status, 404);
+    assert.deepEqual(unknown.json(), { ok: false, code: 'not_found', error: t('en', 'cards.shoutouts.error.unknown') });
+    shoutoutsStub.answer = 'failed';
+    const failed = await testShout(addStreamer({ chatbot_enabled: 1 }));
+    assert.equal(failed.status, 502);
+    assert.deepEqual(failed.json(), { ok: false, code: 'twitch_failed', error: t('en', 'cards.polls.error.twitchFailed') });
   });
 });

@@ -1642,6 +1642,28 @@ router.post('/chatbot/check-moderator', limitTests, async (req, res) => {
   res.json({ ok: true, moderator });
 });
 
+// The Shoutouts card's Test in chat: a shoutout for the streamer's own channel with the saved text (it skips the
+// one-a-minute rule, so a second test works). A test that would post nothing is refused with the reason before the
+// shared cooldown starts, like the thank-you tests.
+function shoutoutTestReady(req, res, next) {
+  if (String(req.streamer.shoutout_template || '').trim()) return next();
+  res.status(409).json({ ok: false, code: 'no_message', error: res.locals.t('chatbot.test.noMessage') });
+}
+
+const SHOUTOUT_TEST_REFUSALS = Object.freeze({
+  unknown: { status: 404, code: 'not_found', text: 'cards.shoutouts.error.unknown' },
+  empty: { status: 409, code: 'no_message', text: 'chatbot.test.noMessage' },
+  failed: { status: 502, code: 'twitch_failed', text: 'cards.polls.error.twitchFailed' },
+});
+
+router.post('/shoutouts/test', chatbotOnForTest, shoutoutTestReady, limitTests, async (req, res) => {
+  const { shoutouts } = require('../services/shoutouts');
+  const outcome = await shoutouts.testInChat(req.streamer);
+  if (outcome === 'sent') return res.json({ ok: true });
+  const refusal = SHOUTOUT_TEST_REFUSALS[outcome] || SHOUTOUT_TEST_REFUSALS.failed;
+  res.status(refusal.status).json({ ok: false, code: refusal.code, error: res.locals.t(refusal.text) });
+});
+
 // Back to the commands tab; `error` is a COMMAND_ERRORS code the page shows as text.
 function commandsBack(res, error) {
   res.redirect('/dashboard/chatbot?tab=commands' + (error ? `&cmd_error=${encodeURIComponent(error)}` : ''));
