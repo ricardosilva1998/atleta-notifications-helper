@@ -3516,7 +3516,7 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       const res = await request('GET', '/dashboard', { streamer: streamerWithEverything() });
       const page = body(res.text);
       for (const tab of ['discord', 'twitch', 'youtube', 'kick']) assert.ok(page.includes(`data-tab="${tab}"`), tab);
-      for (const href of ['/dashboard/chatbot', '/dashboard/donations', '/dashboard/donations/history', '/dashboard/giveaways', '/dashboard/youtube-chatbot', '/auth/spotify']) {
+      for (const href of ['/dashboard/chatbot', '/dashboard/chatbot?tab=commands', '/dashboard/timed-notifications', '/dashboard/donations', '/dashboard/donations/history', '/dashboard/giveaways', '/dashboard/youtube-chatbot', '/auth/spotify']) {
         assert.ok(page.includes(`href="${href}"`), href);
       }
       assert.ok(page.includes(esc(t('en', 'dashboard.kick.comingSoonChat'))));
@@ -4677,6 +4677,17 @@ describe('a sponsor message edit changes only what it is given', () => {
     assert.equal((await update({ message_text: 'New line', url: null, enabled: '1' })).status, 200);
     assert.deepEqual(stored(), ['New line', null, 1], 'a link taken away');
   });
+
+  // The routes refuse a message over 500 characters, and the page shows nothing for that refusal: its two message
+  // boxes take no more than that.
+  test('the sponsor messages page\'s two message boxes take at most 500 characters, as the routes do', async () => {
+    const id = addStreamer();
+    db.addSponsorMessage(id, 'Partner line', null);
+    const messageId = db.getSponsorMessages(id)[0].id;
+    const page = (await request('GET', '/dashboard/timed-notifications', { streamer: id })).text;
+    assert.match(page, /<input type="text" id="new-msg-text"[^>]*\smaxlength="500"/);
+    assert.match(page, new RegExp(`<input type="text" id="edit-text-${messageId}"[^>]*\\smaxlength="500"`));
+  });
 });
 
 describe('the Donations card\'s tip goal (JSON)', () => {
@@ -4876,7 +4887,7 @@ describe('the working cards on the page', () => {
     for (const box of boxes) assert.match(box, /\brole="alert"/, box);
   });
 
-  test('a command switched off on the chatbot page shows dimmed on the Commands card; one that is on does not', async () => {
+  test('a command switched off on the chatbot page shows dimmed on the Commands card and says so; one that is on does not', async () => {
     const id = linkedStreamer({ chatbot_enabled: 1 });
     db.addChatCommand(id, 'alwayson', 'Answered', 10);
     const quiet = db.addChatCommand(id, 'quiet', 'Ignored by the bot', 10);
@@ -4885,6 +4896,22 @@ describe('the working cards on the page', () => {
     const rowOf = (name) => (commands.match(new RegExp(`<div class="(wc-row[^"]*)" data-row data-id="\\d+" data-name="${name}"`)) || [])[1];
     assert.equal(rowOf('quiet'), 'wc-row is-off');
     assert.equal(rowOf('alwayson'), 'wc-row');
+    // Why it is dimmed, and where to switch it on: a title for the mouse, a visually hidden text for a screen reader
+    const rowHtml = (name) => {
+      const at = commands.indexOf(`data-name="${name}"`);
+      return commands.slice(commands.lastIndexOf('<div', at), commands.indexOf('</div>', at));
+    };
+    const hint = esc(t('en', 'cards.commands.offHint'));
+    assert.ok(rowHtml('quiet').includes(` title="${hint}"`), rowHtml('quiet'));
+    assert.ok(rowHtml('quiet').includes(`<span class="wc-live">${hint}</span>`), rowHtml('quiet'));
+    assert.ok(!rowHtml('alwayson').includes(hint), rowHtml('alwayson'));
+  });
+
+  test('the Commands and Sponsor messages cards link their full pages from their foot', async () => {
+    const html = await pane(linkedStreamer({ chatbot_enabled: 1 }));
+    const foot = (name) => { const card = cardOf(html, name); return card.slice(card.indexOf('<div class="wc-foot">')); };
+    assert.match(foot('commands'), new RegExp(`^<div class="wc-foot"><a href="/dashboard/chatbot\\?tab=commands">${esc(t('en', 'cards.commands.allSettings'))} <svg`));
+    assert.ok(foot('sponsors').includes(`<a href="/dashboard/timed-notifications">${esc(t('en', 'cards.sponsors.allSettings'))} <svg`));
   });
 
   test('cards that are not set up show their one step: link Twitch, add a PayPal email, connect Spotify', async () => {
@@ -4946,6 +4973,7 @@ describe('the working cards\' script', () => {
     assert.equal(T.giveaway.pickAgain, t('en', 'cards.giveaways.pickAgain'));
     assert.equal(T.giveaway.confirmEnd, t('en', 'giveaways.confirm.close'), 'End without a winner asks what the giveaways page asks');
     assert.equal(T.confirmEndGoal, t('en', 'donations.goal.endConfirm'), 'End the goal asks what the donations page asks');
+    assert.equal(T.saveFirst, t('en', 'cards.chatbot.saveFirst'), 'a thank-you test with an unsaved text asks to save first');
   });
 
   test('the overlay texts only while the overlay features are on', async () => {

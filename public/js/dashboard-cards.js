@@ -415,9 +415,15 @@
         chip.addEventListener('click', () => insertAtCursor(area, name));
         vars.appendChild(chip);
       }
-      // Posts the saved message in the streamer's chat with example values (the chatbot page's test).
+      // Posts the saved message in the streamer's chat with example values (the chatbot page's test). The route posts
+      // the saved text, so while the box holds another one (spaces around it aside: a save trims them) the pop-up asks
+      // to save first instead.
       const test = $('[data-chat-test]', editor);
       test.addEventListener('click', async () => {
+        if (area.value.trim() !== (button.dataset.value || '').trim()) {
+          dialogMessage(editor, T.saveFirst);
+          return;
+        }
         const answer = await call('POST', '/dashboard/chatbot/test/' + encodeURIComponent(button.dataset.event));
         if (answer.ok) {
           clearDialogMessage(editor);

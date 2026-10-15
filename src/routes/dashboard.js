@@ -480,8 +480,8 @@ router.get('/api/cards', (req, res) => {
   res.json({ ok: true, cards: cardTexts(gatherCards(req, discord), res.locals.t) });
 });
 
-// Disconnect Spotify (the Spotify card): the stored tokens are cleared, so !song gets no answer until the
-// streamer connects again.
+// Disconnect Spotify (the Spotify card): the stored tokens are cleared, so !song answers that Spotify is not
+// connected until the streamer connects again.
 router.post('/spotify/disconnect', (req, res) => {
   db.updateSpotifyTokens(req.streamer.id, null, null, null);
   res.redirect('/dashboard?msg=spotify_disconnected');

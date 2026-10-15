@@ -1,6 +1,7 @@
 <%# The Commands card (dashboardCards.js commandsCard()): the streamer's !commands, added, changed and deleted in a
     pop-up (/dashboard/api/commands), and the built-in commands that are on, chosen in a pop-up and saved together.
-    Faded while the chatbot is off. %>
+    Faded while the chatbot is off. A command switched off on the chatbot page is dimmed and says so (a title, and
+    a text in wc-live, the page's visually hidden style). %>
 <section class="card wc-card<%= cards.chatbotOn ? '' : ' needs-bot' %>" id="card-commands" data-card="commands" data-needs-chatbot aria-labelledby="card-commands-title">
   <div class="wc-head">
     <div class="wc-icon" style="background: rgba(0,200,180,0.13); color: #2dd4bf"><svg class="i" aria-hidden="true"><use href="#i-term"/></svg></div>
@@ -11,8 +12,8 @@
     <div class="wc-sec"><span class="wc-label"><%= t('cards.commands.yours') %></span><span class="wc-count" data-count="commands"><%= card.counts.commands.text %></span><button type="button" class="btn btn-primary wc-btn xs" data-add="command" data-title="<%= t('cards.commands.newTitle') %>"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg><%= t('cards.common.add') %></button></div>
     <div class="wc-list" id="wc-commands" data-list="commands">
       <% for (const c of card.commands) { %>
-      <div class="wc-row<%= c.on ? '' : ' is-off' %><%= c.extra ? ' hidden' : '' %>" data-row data-id="<%= c.id %>" data-name="<%= c.name %>" data-response="<%= c.response %>" data-cooldown="<%= c.cooldown %>">
-        <code class="nm">!<span data-field="name"><%= c.name %></span></code><span class="txt" data-field="response"><%= c.response %></span>
+      <div class="wc-row<%= c.on ? '' : ' is-off' %><%= c.extra ? ' hidden' : '' %>" data-row data-id="<%= c.id %>" data-name="<%= c.name %>" data-response="<%= c.response %>" data-cooldown="<%= c.cooldown %>"<% if (!c.on) { %> title="<%= t('cards.commands.offHint') %>"<% } %>>
+        <code class="nm">!<span data-field="name"><%= c.name %></span></code><span class="txt" data-field="response"><%= c.response %></span><% if (!c.on) { %><span class="wc-live"><%= t('cards.commands.offHint') %></span><% } %>
         <button type="button" class="wc-ib" data-edit="command" data-title="<%= t('cards.commands.editTitle', { name: c.name }) %>" title="<%= t('cards.common.edit') %>" aria-label="<%= t('cards.common.edit') %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
         <button type="button" class="wc-ib" data-delete="command" title="<%= t('cards.common.delete') %>" aria-label="<%= t('cards.common.delete') %>"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
       </div>
@@ -27,7 +28,7 @@
     </div>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <div class="wc-foot"><a href="/dashboard/chatbot?tab=commands"><%= t('cards.commands.allSettings') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
   <template id="tpl-command">
     <div class="wc-editor">
       <h4 id="wc-dialog-title" data-title></h4>

@@ -140,7 +140,7 @@
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
     <div>
       <label class="sp-label"><%= t('sponsors.messageText') %></label>
-      <input type="text" id="new-msg-text" class="sp-input" placeholder="<%= t('sponsors.messagePlaceholder') %>">
+      <input type="text" id="new-msg-text" class="sp-input" maxlength="500" placeholder="<%= t('sponsors.messagePlaceholder') %>">
     </div>
     <div>
       <label class="sp-label"><%= t('sponsors.url') %> <span style="font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted);"><%= t('sponsors.optional') %></span></label>
@@ -221,7 +221,7 @@
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
             <div>
               <label class="sp-label"><%= t('sponsors.messageText') %></label>
-              <input type="text" id="edit-text-<%= m.id %>" class="sp-input" value="<%= m.message_text %>">
+              <input type="text" id="edit-text-<%= m.id %>" class="sp-input" maxlength="500" value="<%= m.message_text %>">
             </div>
             <div>
               <label class="sp-label"><%= t('sponsors.url') %></label>
