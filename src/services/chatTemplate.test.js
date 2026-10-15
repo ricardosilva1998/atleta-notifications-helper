@@ -152,10 +152,12 @@ describe('joinNames', () => {
   });
 });
 
-describe('fillChatTemplate: a title', () => {
-  test('{title} keeps up to 140 characters (a poll or stream title); other values 50', () => {
+describe('fillChatTemplate: titles, poll winners and games', () => {
+  test('{title}, {winner} and {game} keep up to 140 characters (a poll or stream title, tied choices, a category); other values 50', () => {
     const { fillChatTemplate } = require('./chatTemplate');
     assert.equal(fillChatTemplate('{title}', { title: 't'.repeat(200) }), 't'.repeat(140));
-    assert.equal(fillChatTemplate('{game}', { game: 'g'.repeat(200) }), 'g'.repeat(50));
+    assert.equal(fillChatTemplate('{winner}', { winner: 'w'.repeat(200) }), 'w'.repeat(140));
+    assert.equal(fillChatTemplate('{game}', { game: 'g'.repeat(200) }), 'g'.repeat(140));
+    assert.equal(fillChatTemplate('{other}', { other: 'o'.repeat(200) }), 'o'.repeat(50));
   });
 });
