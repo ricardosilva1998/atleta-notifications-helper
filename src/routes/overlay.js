@@ -67,10 +67,12 @@ router.get('/events/:token', (req, res) => {
     try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
   }, 30000);
 
-  // Listen for events on the bus
+  // Listen for events on the bus. The listener runs inside the sender's emit, so nothing may throw out of it.
   const listener = (event) => {
-    if (event && ALERT_TYPES.has(event.type) && !db.isOverlayEnabled(streamer.id)) return;
-    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) { /* connection closed */ }
+    try {
+      if (event && ALERT_TYPES.has(event.type) && !db.isOverlayEnabled(streamer.id)) return;
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch (e) { /* the switch could not be read (the alert is not shown), or the connection closed */ }
   };
 
   bus.on(`overlay:${streamer.id}`, listener);

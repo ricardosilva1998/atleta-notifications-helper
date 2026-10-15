@@ -300,6 +300,24 @@ describe('the overlay switch (overlay_enabled) decides whether alerts reach the 
     await until(() => stream.chunks.join('').includes('afterSwitch'), 'the alert after the switch arrived');
     assert.ok(!stream.chunks.join('').includes('beforeSwitch'));
   });
+
+  // The bus calls the stream's listener inside the sender's emit (eventsub.js logs the event, thanks and starts raid
+  // protection after it): a switch that cannot be read must not throw back into the sender.
+  test('a switch that cannot be read drops that alert and throws nothing back to whoever sent it', async () => {
+    const { id, token } = addStreamer();
+    setOverlay(id, 1);
+    const stream = await openStream(`/overlay/events/${token}?source=alerts`);
+    const isOverlayEnabled = db.isOverlayEnabled;
+    db.isOverlayEnabled = () => { throw new Error('synthetic database failure'); };
+    try {
+      assert.doesNotThrow(() => bus.emit(`overlay:${id}`, { type: 'follow', data: { username: 'whileUnreadable' } }));
+    } finally {
+      db.isOverlayEnabled = isOverlayEnabled;
+    }
+    bus.emit(`overlay:${id}`, { type: 'follow', data: { username: 'onceReadable' } });
+    await until(() => stream.chunks.join('').includes('onceReadable'), 'the next alert arrived');
+    assert.ok(!stream.chunks.join('').includes('whileUnreadable'));
+  });
 });
 
 describe('whether the alert overlay is open in OBS', () => {
