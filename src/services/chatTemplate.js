@@ -12,7 +12,7 @@
 //    "/me ..."): the bot is a moderator, so a line it posts that starts with
 //    another bot's command could run that command;
 //  - line breaks and other control characters become spaces;
-//  - names are cut to 50 characters, messages to 300, any other value to 50,
+//  - names are cut to 50 characters, messages to 300, titles to 140, any other value to 50,
 //    and the line to 500 (options.maxLength; Infinity leaves the whole line,
 //    for a caller that must see whether it fits, as merged thank-yous do);
 //  - a list of names (thank-yous merged into one line) reads "A, B and C".
@@ -21,9 +21,10 @@ const { singleLine } = require('./chatCommands');
 
 const NAME_MAX = 50;
 const MESSAGE_MAX = 300;
+const TITLE_MAX = 140; // a poll's title (60 at most) or a stream's (140)
 const OTHER_VALUE_MAX = 50;
 const RESULT_MAX = 500;
-const VALUE_MAX = Object.freeze({ username: NAME_MAX, message: MESSAGE_MAX });
+const VALUE_MAX = Object.freeze({ username: NAME_MAX, message: MESSAGE_MAX, title: TITLE_MAX });
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 const LEADING_COMMAND = /^[\s!/.\\]+/;

@@ -151,3 +151,11 @@ describe('joinNames', () => {
     assert.equal(joinNames(['A', 'B', 'C', 'D']), 'A, B, C and D');
   });
 });
+
+describe('fillChatTemplate: a title', () => {
+  test('{title} keeps up to 140 characters (a poll or stream title); other values 50', () => {
+    const { fillChatTemplate } = require('./chatTemplate');
+    assert.equal(fillChatTemplate('{title}', { title: 't'.repeat(200) }), 't'.repeat(140));
+    assert.equal(fillChatTemplate('{game}', { game: 'g'.repeat(200) }), 'g'.repeat(50));
+  });
+});
