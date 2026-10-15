@@ -6,7 +6,7 @@ const db = require('../db');
 const bus = require('../services/overlayBus');
 const overlayPresence = require('../services/overlayPresence');
 const customSounds = require('../services/customSounds');
-const { buildOverlayConfig } = require('../services/overlayConfig');
+const { buildOverlayConfig, channelLettering } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
 const { bundle: alertStyles } = require('../services/alertStyleBundle');
@@ -333,6 +333,7 @@ router.get('/:token', (req, res) => {
          style="position:absolute; display:none; pointer-events:none; object-fit:contain; z-index:90;"></video>
   <audio id="redemption-audio" preload="auto"></audio>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script>window.ATLETA_CHANNEL = ${JSON.stringify(channelLettering(streamer)).replace(/</g, '\\u003c')};</script>
   <script src="/overlay/objects/index.js"></script>
   <script src="/overlay/objects/kit.js"></script>
   <script src="/overlay/objects/styles.js?v=${alertStyles().version}"></script>

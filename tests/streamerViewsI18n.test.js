@@ -190,8 +190,8 @@ const PAGE_LOCALS = {
   ],
   'overlay-builder': [
     { streamer, designs: '[]', sponsors: JSON.stringify([{ id: 1, filename: 'a.png', display_name: 'SponsorName', display_duration: 30, enabled: 1, image_scale: 1 }]),
-      eventDefaults: JSON.stringify(EVENT_DEFAULTS), stylesVersion: 'abc123def456', styleData: STYLE_DATA, styleFontsHref: 'https://fonts.googleapis.com/css2?family=Kanit&display=swap', overlayUrl: 'https://app.test/overlay/tok123', streamThumbnail: 'https://img.test/t.jpg', features: { youtube: true, kick: true } },
-    { streamer, designs: '[]', sponsors: '[]', eventDefaults: JSON.stringify(EVENT_DEFAULTS), stylesVersion: 'abc123def456', styleData: STYLE_DATA, styleFontsHref: 'https://fonts.googleapis.com/css2?family=Kanit&display=swap', overlayUrl: null, streamThumbnail: null, features: { youtube: false } },
+      eventDefaults: JSON.stringify(EVENT_DEFAULTS), stylesVersion: 'abc123def456', styleData: STYLE_DATA, styleFontsHref: 'https://fonts.googleapis.com/css2?family=Kanit&display=swap', channel: '"SOMESTREAMER"', overlayUrl: 'https://app.test/overlay/tok123', streamThumbnail: 'https://img.test/t.jpg', features: { youtube: true, kick: true } },
+    { streamer, designs: '[]', sponsors: '[]', eventDefaults: JSON.stringify(EVENT_DEFAULTS), stylesVersion: 'abc123def456', styleData: STYLE_DATA, styleFontsHref: 'https://fonts.googleapis.com/css2?family=Kanit&display=swap', channel: '""', overlayUrl: null, streamThumbnail: null, features: { youtube: false } },
   ],
   'chatbot-config': [
     chatbotPage,

@@ -199,3 +199,27 @@ describe('buildOverlayConfig: the result', () => {
     }
   });
 });
+
+describe("channelLettering: the name on the C1's rear window", () => {
+  const { channelLettering } = require('./overlayConfig');
+
+  test("is the streamer's Twitch name in capitals", () => {
+    assert.equal(channelLettering({ twitch_username: 'andre_vilela_' }), 'ANDRE_VILELA_');
+    assert.equal(channelLettering({ twitch_username: 'ricardobsilva98', twitch_display_name: 'RicardoBSilva98' }), 'RICARDOBSILVA98');
+  });
+
+  test('is the login even when the display name is written in another script', () => {
+    assert.equal(channelLettering({ twitch_username: 'vilela_jp', twitch_display_name: 'ヴィレラ' }), 'VILELA_JP');
+  });
+
+  test('is empty for a streamer without a linked Twitch account', () => {
+    for (const s of [null, undefined, {}, { twitch_username: null }, { twitch_username: '' }]) {
+      assert.equal(channelLettering(s), '', JSON.stringify(s));
+    }
+  });
+
+  test('keeps only what a Twitch login can hold (letters, digits, _), at most 25 characters', () => {
+    assert.equal(channelLettering({ twitch_username: 'a<b>c"d e' }), 'ABCDE');
+    assert.equal(channelLettering({ twitch_username: 'x'.repeat(40) }), 'X'.repeat(25));
+  });
+});

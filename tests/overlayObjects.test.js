@@ -475,7 +475,7 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
   test('rides along with the registry without changing the five', () => {
     assert.deepEqual(Object.keys(OBJECTS).sort(), [...KEYS].sort(), 'Object.keys still lists only the five');
     assert.ok(STYLES, 'STYLES is on the export');
-    assert.deepEqual(Object.keys(STYLES), ['donation-c1']);
+    assert.deepEqual(Object.keys(STYLES), ['donation-c1', 'donation-c1-channel']);
   });
 
   test('has the registry shape, the id it is filed under and the alert it draws', () => {
@@ -581,6 +581,85 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
   test('every class it uses is under the o-c1 prefix (besides the shared obj and o-mesh)', () => {
     const classes = [...tip().matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
     for (const name of classes) assert.ok(name === 'obj' || name === 'o-mesh' || name.startsWith('o-c1'), name);
+  });
+});
+
+describe('styles — the C1 any streamer can pick, with their own name on it (donation-c1-channel)', () => {
+  const STYLES = OBJECTS.STYLES;
+  const ANY = STYLES && STYLES['donation-c1-channel'];
+  const C1 = STYLES && STYLES['donation-c1'];
+  const data = { username: 'PitBoss92', amount: '25.00', currency: 'EUR', message: 'Go!' };
+  const lettering = (html) => {
+    const m = /<text class="o-c1-decal"([^>]*)>([^<]*)<\/text>/.exec(html);
+    return m ? { attrs: m[1], text: m[2] } : null;
+  };
+  const AT = ' x="88" y="38" text-anchor="middle"';
+  const SQUEEZED = AT + ' textLength="30" lengthAdjust="spacingAndGlyphs"';
+  // The page says whose overlay it is (window.ATLETA_CHANNEL, set by the overlay page and the
+  // builder) and render() reads it as it draws. Node has no window, so the test lends one.
+  function onPage(channel, render) {
+    const had = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+    const before = globalThis.window;
+    globalThis.window = channel === undefined ? {} : { ATLETA_CHANNEL: channel };
+    try { return render(); } finally { if (had) globalThis.window = before; else delete globalThis.window; }
+  }
+  const draw = (channel) => onPage(channel, () => ANY.render(data));
+
+  test('is the same C1, filed under its own id, for donations', () => {
+    assert.ok(ANY, 'STYLES has donation-c1-channel');
+    assert.equal(ANY.key, 'donation-c1-channel');
+    assert.equal(ANY.eventType, 'donation');
+    assert.deepEqual(ANY.anim, C1.anim);
+    assert.deepEqual(ANY.exit, C1.exit);
+    const drawing = (html) => html.replace(/oc1u\d+/g, 'U').replace(/<text class="o-c1-decal"[^>]*>[^<]*<\/text>/, '');
+    assert.equal(drawing(draw('ABC')), drawing(onPage('ABC', () => C1.render(data))), 'everything but the lettering is his drawing');
+  });
+
+  test('a name that fits the glass is set like VILELA, at its own width and never stretched, however many letters it has', () => {
+    // Widths measured in Chromium at the decal's font: PABLOS 26.1, JILLIAN 25.5, FIJI_11 22.5, TILLIE_1 27.9 (of 29).
+    for (const name of ['PABLOS', 'JILLIAN', 'FIJI_11', 'TILLIE_1']) {
+      assert.deepEqual(lettering(draw(name)), { attrs: AT, text: name }, name);
+    }
+  });
+
+  test('a name wider than the glass is squeezed into its 30 units, short names of wide capitals too', () => {
+    // RICARDO 29.8, MOMWOW 34.7, WWWWWW 39.4, RICARDOBSILVA98 62.7 (of 29).
+    for (const name of ['RICARDO', 'MOMWOW', 'WWWWWW', 'RICARDOBSILVA98']) {
+      assert.deepEqual(lettering(draw(name)), { attrs: SQUEEZED, text: name }, name);
+    }
+    assert.deepEqual(lettering(draw('ABCDEFGHIJKLMNOP')), { attrs: SQUEEZED, text: 'ABCDEFGHIJKLMNOP' }, 'sixteen characters are shown whole');
+  });
+
+  test("the width table was measured at the decal's font, size and spacing: changing them means measuring it again", () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+    assert.match(css, /\.o-c1 \.o-c1-decal\{font-family:var\(--o-cond\);font-weight:700;font-size:7\.5px;letter-spacing:\.9px;/);
+  });
+
+  test('a character the width table does not hold counts as the widest, so it never overruns the glass', () => {
+    assert.deepEqual(lettering(draw('ÉÉÉÉÉ')), { attrs: SQUEEZED, text: 'ÉÉÉÉÉ' }, 'five unknown characters are wider than 29 units');
+  });
+
+  test('a name past sixteen characters is cut with …', () => {
+    assert.deepEqual(lettering(draw('AVERYLONGTWITCHNAMEIS25CH')), { attrs: SQUEEZED, text: 'AVERYLONGTWITCH…' });
+  });
+
+  test('no name, no lettering: the window stays plain glass (a streamer without Twitch, or Node with no page)', () => {
+    assert.equal(lettering(draw('')), null);
+    assert.equal(lettering(draw(undefined)), null);
+    assert.equal(typeof globalThis.window, 'undefined', 'this test file runs without a window');
+    assert.equal(lettering(ANY.render(data)), null, 'no window at all');
+    assert.match(draw(''), /^<div class="obj o-c1">/, 'still the whole C1');
+  });
+
+  test('the name is escaped like every text the registry prints', () => {
+    // Its symbols are not in the width table, so they count as the widest and the name is squeezed.
+    assert.deepEqual(lettering(draw('<B>&"X')), { attrs: SQUEEZED, text: '&lt;B&gt;&amp;&quot;X' });
+  });
+
+  test("andre_vilela_'s C1 keeps VILELA whatever name the page gives", () => {
+    const html = onPage('SOMEONEELSE', () => C1.render(data));
+    assert.ok(html.includes('<text class="o-c1-decal" x="88" y="38" text-anchor="middle">VILELA</text>'));
+    assert.ok(!html.includes('SOMEONEELSE'));
   });
 });
 

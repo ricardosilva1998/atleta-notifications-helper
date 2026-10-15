@@ -17,7 +17,7 @@ const { parseOverlaySettings, giveawayDurationSeconds, DEFAULT_DURATION_SECONDS 
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
 const storageQuota = require('../services/storageQuota');
-const { buildOverlayConfig } = require('../services/overlayConfig');
+const { buildOverlayConfig, channelLettering } = require('../services/overlayConfig');
 const {
   TIP_GOAL_CURRENCIES, SETTINGS_ERRORS, GOAL_ERRORS, MIN_AMOUNT_FLOOR, MIN_AMOUNT_CEIL, PAYPAL_EMAIL_MAX,
   parseDonationSettings, parseTipGoalFields, errorMessage, goalCurrencyMismatch,
@@ -2697,6 +2697,8 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
   const sponsors = db.getSponsorImages(req.streamer.id);
   res.render('overlay-builder', {
     streamer: req.streamer,
+    // The name on the rear window of the C1 any streamer can pick (services/overlayConfig.js).
+    channel: JSON.stringify(channelLettering(req.streamer)).replace(/</g, '\\u003c'),
     // \u003c escaping: these are embedded raw into an inline <script> in the
     // builder, and JSON.stringify does NOT neutralise a literal "</script>" in
     // user-controlled text (event_label, detail_text, sponsor names).

@@ -159,6 +159,13 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')), 'the look travels next to the design, not in it');
   });
 
+  test("the page tells the registry the streamer's Twitch name for the C1's rear window, before any preview is drawn", () => {
+    assert.match(builder, /const EVENT_DEFAULTS = <%- eventDefaults %>;\s*window\.ATLETA_CHANNEL = <%- channel %>;/);
+    const firstPreview = builder.indexOf('\nupdatePreview();');
+    assert.ok(firstPreview > 0, 'the page draws its first preview at the end of its script');
+    assert.ok(builder.indexOf('window.ATLETA_CHANNEL = ') < firstPreview, 'the name is set before the first preview is drawn');
+  });
+
   test('the car drives in from the edge of the preview screen (the 1920px canvas, scaled)', () => {
     assert.match(builder, /#preview-object-host \{[^}]*--fw: 1920px;/);
   });
@@ -184,7 +191,7 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     };
 
     const TYPES = ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat'];
-    const STYLE_IDS = [undefined, 'donation-c1', 'donation-gp', '__proto__', 'constructor', 'toString', 'follow'];
+    const STYLE_IDS = [undefined, 'donation-c1', 'donation-c1-channel', 'donation-gp', '__proto__', 'constructor', 'toString', 'follow'];
     const real = { ATLETA_OBJECTS: OBJECTS, ATLETA_OBJECT_STYLES: OBJECTS.STYLES };
     // An alias whose key is not its style id: only the key clause keeps it from drawing the donation.
     const alias = { ATLETA_OBJECTS: OBJECTS, ATLETA_OBJECT_STYLES: { 'donation-alias': { key: 'donation-c1', eventType: 'donation' } } };
