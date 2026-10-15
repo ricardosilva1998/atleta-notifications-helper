@@ -29,7 +29,7 @@
   <template id="tpl-thankyou">
     <div class="wc-editor">
       <h4 id="wc-dialog-title" data-title></h4>
-      <textarea data-field="text" maxlength="500" rows="3"></textarea>
+      <textarea data-field="text" maxlength="500" rows="3" aria-labelledby="wc-dialog-title"></textarea>
       <div class="wc-vars"><span><%= t('cards.chatbot.insert') %></span><span data-vars></span></div>
       <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn wc-left" data-chat-test><%= t('chatbot.events.testInChat') %></button><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
       <div class="wc-msg" data-dialog-msg hidden></div>

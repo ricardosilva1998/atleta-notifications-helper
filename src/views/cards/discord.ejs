@@ -19,7 +19,7 @@
   <% } else { %>
     <% for (const s of card.servers) { %>
     <div class="wc-server" data-guild="<%= s.guildId %>">
-      <div class="wc-server-name"><span class="av" aria-hidden="true"><%= String(s.name || '?').charAt(0).toUpperCase() %></span><span class="sn"><%= s.name %></span><% if (!s.botPresent) { %><span class="wc-off-tag"><%= t('dashboard.offline') %></span><% } %><a class="wc-link-sm" href="<%= s.url %>"><%= t('cards.discord.channels') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+      <div class="wc-server-name"><span class="av" aria-hidden="true"><%= Array.from(String(s.name || '?'))[0].toUpperCase() %></span><span class="sn"><%= s.name %></span><% if (!s.botPresent) { %><span class="wc-off-tag"><%= t('dashboard.offline') %></span><% } %><a class="wc-link-sm" href="<%= s.url %>"><%= t('cards.discord.channels') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
       <div class="wc-switches">
         <% for (const sw of s.switches) { %>
         <div class="wc-sw<%= sw.on ? ' is-on' : '' %>"><span><%= t(sw.label) %><small class="<%= sw.hint.warn ? 'warn' : '' %>"><%= t(sw.hint.key, sw.hint.params) %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t(sw.label) %> · <%= s.name %>" data-setting="<%= sw.key %>" data-guild-id="<%= s.guildId %>" data-fix-href="/dashboard/guild/<%= s.guildId %>?tab=<%= sw.fix %>" <%= sw.on ? 'checked' : '' %>><span class="slider"></span></label></div>

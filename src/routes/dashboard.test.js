@@ -3863,6 +3863,14 @@ describe('the Discord notifications card on the Twitch tab', () => {
     assert.ok(!card.includes('<img src=x'));
     assert.ok(card.includes(esc('<img src=x onerror=alert(1)>')));
   });
+
+  test('the avatar letter of a server is its first character, also when that is an emoji (never half of one)', async () => {
+    const id = linked();
+    claimed(id, {}, { seen: false, name: '🏎️ Racing club' });
+    const card = await cardOf(id);
+    assert.ok(card.includes('<span class="av" aria-hidden="true">🏎</span>'));
+    assert.ok(!card.includes('�'));
+  });
 });
 
 // ── YouTube and Kick switched off (config.features.youtube, .kick) ───────
@@ -4670,7 +4678,7 @@ describe('the working cards on the page', () => {
     assert.ok(at > 0, `${name} is on the page`);
     return html.slice(html.lastIndexOf('<section', at), html.indexOf('</section>', at));
   };
-  const linkedStreamer =(over = {}) => addStreamer({ twitch_user_id: `tw-wcp-${counter + 1}`, twitch_username: `synthetic_wcp_${counter + 1}`, ...over });
+  const linkedStreamer = (over = {}) => addStreamer({ twitch_user_id: `tw-wcp-${counter + 1}`, twitch_username: `synthetic_wcp_${counter + 1}`, ...over });
 
   test('switches show what is stored and name the setting they save', async () => {
     const id = linkedStreamer({ chatbot_enabled: 1, chat_follow_enabled: 0, overlay_enabled: 1, overlay_bits_enabled: 0, overlay_raid_duration: 7, overlay_volume: 0.24, mod_caps_enabled: 1 });
@@ -4695,9 +4703,12 @@ describe('the working cards on the page', () => {
 
   test('the OBS link is masked; the whole link is only in the copy button', async () => {
     const id = linkedStreamer({ overlay_token: 'synthetic-token-wcp-mask' });
-    const overlay = cardOf(await pane(id), 'overlay');
+    const html = await pane(id);
+    const overlay = cardOf(html, 'overlay');
     assert.match(overlay, /<code class="wc-link" data-masked="[^"]*\/overlay\/•{12}" data-shown="[^"]*\/overlay\/synthetic-token-wcp-mask">[^<]*\/overlay\/•{12}<\/code>/);
     assert.match(overlay, /data-copy="[^"]*\/overlay\/synthetic-token-wcp-mask"/);
+    // The token is on the tab exactly twice (data-shown and data-copy): in no text, link or other attribute.
+    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 2);
     const noLink = cardOf(await pane(linkedStreamer()), 'overlay');
     assert.ok(noLink.includes('action="/dashboard/overlay/generate-token"') && noLink.includes(esc(t('en', 'cards.overlay.createLink'))));
   });
@@ -4716,6 +4727,8 @@ describe('the working cards on the page', () => {
     assert.ok(sponsors.includes('data-url="https://example.test/&#34;x"'));
     assert.ok(!cardOf(html, 'chatbot').includes('<b>raid</b>'));
     for (const id of ['tpl-thankyou', 'tpl-command', 'tpl-command-row', 'tpl-builtins', 'tpl-sponsor', 'tpl-sponsor-row']) assert.ok(html.includes(`<template id="${id}">`), id);
+    // The thank-you pop-up's text box is named by the pop-up's heading (the event it changes)
+    assert.match(html, /<template id="tpl-thankyou">[\s\S]*?<textarea data-field="text"[^>]*aria-labelledby="wc-dialog-title"/);
   });
 
   test('a command switched off on the chatbot page shows dimmed on the Commands card; one that is on does not', async () => {
