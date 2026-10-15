@@ -132,6 +132,23 @@ const PAGES = [
   (t) => `/overlay/sounds/${t}/follow`,
 ];
 
+describe("the overlay page names the streamer's channel for the C1's rear window", () => {
+  test("window.ATLETA_CHANNEL is the Twitch name in capitals, set before the registry loads", async () => {
+    const { id, token } = addStreamer();
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run('c1_lettering_test', id);
+    const page = await get(`/overlay/${token}`);
+    assert.equal(page.status, 200);
+    assert.ok(page.text.includes('<script>window.ATLETA_CHANNEL = "C1_LETTERING_TEST";</script>'));
+    assert.ok(page.text.indexOf('window.ATLETA_CHANNEL') < page.text.indexOf('/overlay/objects/index.js'));
+  });
+
+  test('a streamer without a Twitch account gets an empty name (the window stays plain glass)', async () => {
+    const { token } = addStreamer();
+    const page = await get(`/overlay/${token}`);
+    assert.ok(page.text.includes('<script>window.ATLETA_CHANNEL = "";</script>'));
+  });
+});
+
 describe('overlay links of a disabled account', () => {
   test('an enabled account\'s links serve', async () => {
     const { token } = addStreamer();

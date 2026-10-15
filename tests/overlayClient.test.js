@@ -98,7 +98,7 @@ function makeClock() {
 }
 
 // Loads overlay.js (and, unless told not to, the object registry) into a fresh context.
-function loadOverlay({ objects = true, designs = {} } = {}) {
+function loadOverlay({ objects = true, designs = {}, channel } = {}) {
   const clock = makeClock();
   const body = makeElement('body');
   const container = makeElement('div'); container.id = 'notification-container'; body.appendChild(container);
@@ -150,6 +150,8 @@ function loadOverlay({ objects = true, designs = {} } = {}) {
   };
   sandbox.window = sandbox;
   sandbox.OVERLAY_TOKEN = 'test-token';
+  // The overlay page names the streamer's Twitch channel for the C1's rear window (src/routes/overlay.js).
+  if (channel !== undefined) sandbox.ATLETA_CHANNEL = channel;
   const context = vm.createContext(sandbox);
   if (objects) vm.runInContext(OBJECTS_JS, context, { filename: 'objects/index.js' });
   vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
@@ -752,6 +754,22 @@ describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
     const [slot] = overlay.slots();
     assert.deepEqual(placed(slot), POSITION_STYLES['bot-right']);
     assert.equal(slot.style.width, '520px');
+  });
+
+  test('the C1 any streamer can pick (donation-c1-channel) carries the name the overlay page gives, and leaves like his', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1-channel' }) }, channel: 'RICARDOBSILVA98' });
+    overlay.send(tip);
+    const [slot] = overlay.slots();
+    assert.match(slot.innerHTML, /^<div class="obj o-c1">/);
+    assert.match(slot.innerHTML, /<text class="o-c1-decal"[^>]*>RICARDOBSILVA98<\/text>/);
+    assert.ok(!slot.innerHTML.includes('VILELA'));
+    assert.equal(slot.style.properties['--dur'], '1.25s');
+    overlay.clock.advance(6000); // the donation's 6 s in baseConfig
+    assert.equal(slot.style.properties['--outdur'], '0.90s');
+    overlay.clock.advance(899);
+    assert.equal(overlay.slots().length, 1, 'still driving off');
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 0);
   });
 
   test('a style pushed while the overlay is open applies to the next donation, with no reload', () => {

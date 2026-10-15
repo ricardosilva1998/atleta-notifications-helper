@@ -2754,6 +2754,13 @@ describe('the overlay builder page and a slow Twitch', () => {
     }
   });
 
+  test("hands the page the streamer's Twitch name for the C1's rear window, escaped like the other embeds", async () => {
+    const { locals } = (await builder()).json();
+    assert.equal(locals.channel, '"SOMESTREAMER"');
+    const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });
+    assert.ok(page.text.includes('window.ATLETA_CHANNEL = "SOMESTREAMER";'));
+  });
+
   test('a "</script>" in nothing the page is given can end its inline script (the default table is escaped like the rest)', async () => {
     const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });
     const defaultsLine = page.text.split('\n').find((line) => line.startsWith('const EVENT_DEFAULTS = '));

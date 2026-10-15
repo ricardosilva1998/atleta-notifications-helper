@@ -293,3 +293,20 @@ boot migration against the live database while the app is using it.
 Going back to an earlier release is a plain revert (older code never reads `style`), but older code's save
 writes the whole row again and would drop the style; after coming back, set it again with the command above
 (`SET style = 'donation-c1'`).
+
+### The C1 for any streamer
+
+The same C1 is also a look any streamer can have: `donation-c1-channel`. Its rear window carries the streamer's
+own Twitch login in capitals instead of VILELA (the overlay page and the Overlay Builder give it to the drawing
+as `window.ATLETA_CHANNEL`; a streamer without a linked Twitch account gets plain glass). Streamers pick it
+themselves in the Overlay Builder's style gallery once the alert-styles release ships. Until then, give it to a
+streamer who asks with the same kind of command as above, naming them by their Twitch login:
+
+```bash
+cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE overlay_designs SET style = 'donation-c1-channel' WHERE event_type = 'donation' AND streamer_id = (SELECT id FROM streamers WHERE lower(twitch_username) = lower('their_login'))"
+```
+
+`changes: 1` means it is on (an open overlay picks it up after a builder save or a reconnect). `changes: 0` means
+no streamer has that login, or they have no donation design yet: have them save their Donation design once in
+the Overlay Builder, which writes the row, and run it again. `SET style = NULL` gives them the standard donation
+alert back. Nothing here needs a deploy, and andre_vilela_'s own look (`donation-c1`) is not affected.
