@@ -45,6 +45,7 @@
    padding (taken back by negative margins) gives the glow room, and the mask tiles into the padding. */
 .o-gfi-sten{--ls:.14em;font-family:var(--gfi-cond);font-weight:700;line-height:1.1;letter-spacing:var(--ls);text-transform:uppercase;white-space:nowrap;color:var(--gfi-lime);
   text-shadow:0 1px 0 rgba(0,0,0,.75),0 0 8px rgba(0,0,0,.6)}
+.o-gfi-sten .o-odo{text-shadow:none;filter:drop-shadow(0 1px 0 rgba(0,0,0,.75)) drop-shadow(0 0 8px rgba(0,0,0,.6))}
 .o-gfi-br{display:inline-block;letter-spacing:0;padding:.25em;margin:-.25em calc(var(--ls) - .25em) -.25em -.25em;
   -webkit-mask-image:linear-gradient(90deg,#000 calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) + .05em),#000 calc(var(--bx) + .05em));-webkit-mask-origin:content-box;
   mask-image:linear-gradient(90deg,#000 calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) + .05em),#000 calc(var(--bx) + .05em));mask-origin:content-box}

@@ -1,0 +1,212 @@
+/* ═════════ BREAKING NEWS — TV news graphics and the newspaper ═════════
+   White and navy broadcast panels, a ticker, a LIVE bug, a market chart, a weather map and the newspaper.
+   The accent is the channel's colour (news red by default): the BREAKING NEWS bar, the LIVE bug and the
+   amount, the chart line, the storm on the radar and the mastheads; text on it uses --nws-on, and accent is
+   never used as a text colour on white or paper. Oswald for the straps, Roboto Condensed for the ticker and
+   the captions, Playfair Display on the newspaper. Motion: crisp broadcast wipes (clip-path, left to right),
+   a ticker that scrolls in once and stops, and the classic spinning newspaper that lands still. */
+.o-nws{--nwsa:var(--a,#E8202A);--nwsa-rgb:var(--a-rgb,232,32,42);--nws-on:var(--a-on,#FFFFFF);--nws-navy:#0E1A33;--nws-navy2:#1D2E54;--nws-ink:#0D1424;--nws-mute:#4F5A70;--nws-paper:#F1EDE2;--nws-print:#17140F;font-family:"Oswald","Roboto Condensed","Arial Narrow",sans-serif;font-weight:600;line-height:1.15;color:var(--nws-ink)}
+.o-nws,.o-nws [class*="o-nws"]{box-sizing:border-box}
+/* The channel colour with a broadcast gloss; white and navy panels. */
+.o-nws-acc{background:linear-gradient(180deg,rgba(255,255,255,.24) 0,rgba(255,255,255,.07) 46%,rgba(0,0,0,0) 54%,rgba(0,0,0,.16) 100%),var(--nwsa);color:var(--nws-on)}
+.o-nws-white{background:linear-gradient(180deg,#FFFFFF 0,#F4F6FA 55%,#E1E6EE 100%);color:var(--nws-ink)}
+.o-nws-navy{background:linear-gradient(180deg,var(--nws-navy2) 0,var(--nws-navy) 100%);color:#FFFFFF}
+.o-nws-cap{font-family:"Roboto Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:11px;line-height:1.25;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-nws-name{font-weight:600;line-height:1.1;text-transform:uppercase;color:var(--nws-ink)}
+.o-nws-clip{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-nws-dot{flex:none;display:block;width:8px;height:8px;border-radius:50%;background:currentColor}
+/* The ticker: a tag in the channel colour and a window the text scrolls through once, from the right. */
+.o-nws-tick{position:absolute;left:0;right:0;height:30px;display:flex;background:linear-gradient(180deg,#26375E 0,#121D37 100%);box-shadow:0 10px 20px rgba(0,0,0,.42)}
+.o-nws-ttag{flex:none;display:flex;align-items:center;padding:0 11px;font-size:14px;line-height:1;letter-spacing:.06em;text-transform:uppercase}
+/* The window fades out at its right edge, so the next item reads as more ticker to come rather than cut-off text. */
+.o-nws-twin{position:relative;flex:1;min-width:0;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 22px),rgba(0,0,0,0));mask-image:linear-gradient(90deg,#000 calc(100% - 22px),rgba(0,0,0,0))}
+.o-nws-ttxt{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;gap:11px;padding-left:12px;font-family:"Roboto Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:14px;line-height:1.3;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;color:rgba(255,255,255,.84)}
+.o-nws-titem{flex:none;display:block}
+.o-nws-tname{font-weight:700;color:#FFFFFF}
+.o-nws-tsep{flex:none;display:block;width:7px;height:7px;background:var(--nwsa);box-shadow:0 0 0 1.5px rgba(255,255,255,.3)}
+/* Newsprint, its masthead (in the channel colour) and the columns of small type. */
+.o-nws-paper{background:radial-gradient(120% 110% at 50% 40%,rgba(255,255,255,.55) 0,rgba(255,255,255,0) 62%),radial-gradient(40% 46% at 92% 92%,rgba(120,98,58,.16),rgba(120,98,58,0) 70%),repeating-linear-gradient(0deg,rgba(60,48,28,.035) 0 1px,rgba(0,0,0,0) 1px 3px),var(--nws-paper);color:var(--nws-print)}
+.o-nws-mast{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:0 8px}
+.o-nws-mt{font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:800;line-height:1.2;white-space:nowrap}
+.o-nws-ear{min-width:0;font-family:"Roboto Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:7.5px;line-height:1.2;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;opacity:.88}
+.o-nws-ear.r{text-align:right}
+.o-nws-col{flex:1;min-width:0;display:block;background:repeating-linear-gradient(180deg,rgba(23,20,15,.42) 0 2px,rgba(23,20,15,0) 2px 5px)}
+@keyframes nwsWipe{from{clip-path:inset(-60px 100% -60px 0)}to{clip-path:inset(-60px -60px -60px -60px)}}
+@keyframes nwsWipeDown{from{clip-path:inset(0 -60px 100% -60px)}to{clip-path:inset(-60px -60px -60px -60px)}}
+@keyframes nwsNudge{from{transform:translateX(-16px)}to{transform:none}}
+@keyframes nwsTick{from{transform:translateX(var(--tw,380px))}to{transform:none}}
+@keyframes nwsBlink{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes nwsPop{0%{opacity:0;transform:scale(.4)}65%{opacity:1;transform:scale(1.12)}100%{opacity:1;transform:none}}
+/* Exits: broadcast graphics wipe through to the right; a newspaper spins away. */
+@keyframes nwsExit{0%{clip-path:inset(-60px -60px -60px -60px);transform:none}100%{clip-path:inset(-60px -60px -60px 100%);transform:translateX(16px)}}
+@keyframes nwsPaperOut{0%{opacity:1;transform:none}40%{opacity:1;transform:rotate(18deg) scale(.6)}100%{opacity:0;transform:rotate(240deg) scale(.05)}}
+
+/* follow — Breaking: the BREAKING NEWS bar wipes in, the lower third names the follower, the ticker runs once */
+.o-nwsf{height:130px}
+.o-nwsf-bar{position:absolute;left:0;top:0;width:100%;height:38px;display:flex;align-items:center;gap:12px;padding:0 14px 0 16px;box-shadow:0 8px 18px rgba(0,0,0,.35)}
+.o-nwsf-head{flex:1;min-width:0;font-weight:700;font-size:calc(24px * var(--fit,1));line-height:1.3;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-nwsf-live{flex:none;display:flex;align-items:center;gap:6px;font-size:14px;line-height:1;letter-spacing:.1em;text-transform:uppercase}
+.o-nwsf-band{position:absolute;left:0;top:38px;width:100%;height:58px;display:flex;box-shadow:0 10px 20px rgba(0,0,0,.4)}
+.o-nwsf-band::after{content:"";position:absolute;left:58px;right:0;bottom:0;height:3px;background:var(--nwsa)}
+.o-nwsf-globe{flex:none;width:58px;height:58px;display:flex;align-items:center;justify-content:center}
+.o-nwsf-gl{display:block;width:38px;height:38px;overflow:visible}
+.o-nwsf-gf{fill:rgba(var(--nwsa-rgb),.6)}
+.o-nwsf-gs{fill:none;stroke:#FFFFFF;stroke-width:1.8;stroke-linecap:round}
+.o-nwsf-txt{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:0 16px 3px}
+.o-nwsf-name{font-size:calc(30px * var(--fit,1))}
+.o-nwsf-sub{margin-top:1px;font-size:11.5px;color:var(--nws-mute)}
+.o-nwsf-tick{top:96px}
+@keyframes nwsGlobe{0%{opacity:0;transform:rotate(-80deg) scale(.5)}70%{opacity:1;transform:rotate(6deg) scale(1.05)}100%{opacity:1;transform:none}}
+.playing .o-nwsf-bar{animation:nwsWipe calc(.3s / var(--spd)) cubic-bezier(.2,.8,.25,1) both}
+.playing .o-nwsf-live > .o-nws-dot{animation:nwsBlink calc(.44s / var(--spd)) steps(1,end) calc(.36s / var(--spd)) 3 both}
+.playing .o-nwsf-band{animation:nwsWipe calc(.32s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.22s / var(--spd)) both}
+.playing .o-nwsf-txt{animation:nwsNudge calc(.42s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.26s / var(--spd)) both}
+.playing .o-nwsf-gl{animation:nwsGlobe calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.3s / var(--spd)) both}
+.playing .o-nwsf-tick{animation:nwsWipe calc(.26s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.5s / var(--spd)) both}
+.playing .o-nwsf-tick .o-nws-ttxt{animation:nwsTick calc(.88s / var(--spd)) cubic-bezier(.25,.55,.35,1) calc(.68s / var(--spd)) both}
+
+/* subscription — Extra! Extra!: the newspaper spins in and lands, EXTRA! is stamped on, the months roll in the headline */
+.o-nwss{height:186px}
+.o-nwss-paper{position:absolute;left:50px;top:9px;width:320px;height:168px;display:flex;flex-direction:column;padding:7px 12px;transform:rotate(-2deg);box-shadow:0 12px 24px rgba(0,0,0,.5),0 2px 5px rgba(0,0,0,.3)}
+.o-nwss-mast{flex:none;height:26px}
+.o-nwss-mast > .o-nws-mt{font-size:17px}
+.o-nwss-rule{flex:none;height:5px;margin-top:3px;border-top:1.5px solid var(--nws-print);border-bottom:.8px solid var(--nws-print)}
+.o-nwss-kick{flex:none;display:flex;align-items:center;gap:8px;height:19px;margin-top:5px}
+.o-nwss-extra{flex:none;max-width:230px;height:19px;padding:0 8px;font-weight:700;font-size:calc(14px * var(--fit,1));line-height:19px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-nwss-krule{flex:1;height:3px;background:var(--nws-print)}
+.o-nwss-name{flex:none;margin-top:3px;font-weight:700;font-size:calc(34px * var(--fit,1));line-height:1.04;color:var(--nws-print)}
+.o-nwss-line{flex:none;display:flex;align-items:center;gap:.26em;font-weight:600;font-size:20px;line-height:1.1;text-transform:uppercase;white-space:nowrap}
+.o-nwss-deck{flex:none;margin-top:3px;font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:800;font-size:12.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-nwss-cols{flex:none;display:flex;gap:10px;height:14px;margin-top:auto}
+.o-nwss-quote{flex:none;margin-top:auto;font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:800;font-size:11.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(23,20,15,.86)}
+/* The spin keeps the page inside its slot: it turns while it is small and only grows once it is nearly upright. */
+@keyframes nwsSpin{
+  0%{opacity:0;transform:rotate(-740deg) scale(.05)}
+  8%{opacity:1;transform:rotate(-620deg) scale(.12)}
+  22%{transform:rotate(-420deg) scale(.26)}
+  36%{transform:rotate(-250deg) scale(.4)}
+  50%{transform:rotate(-120deg) scale(.5)}
+  60%{transform:rotate(-50deg) scale(.55)}
+  70%{transform:rotate(-18deg) scale(.7)}
+  80%{transform:rotate(-5deg) scale(.9)}
+  90%{transform:rotate(1deg) scale(1.04)}
+  100%{opacity:1;transform:rotate(-2deg) scale(1)}
+}
+@keyframes nwsStamp{0%{opacity:0;transform:scale(1.9) rotate(-8deg)}55%{opacity:1;transform:scale(.93) rotate(0deg)}78%{transform:scale(1.04) rotate(0deg)}100%{opacity:1;transform:none}}
+.playing .o-nwss-paper{animation:nwsSpin calc(.9s / var(--spd)) linear both}
+.playing .o-nwss-extra{animation:nwsStamp calc(.32s / var(--spd)) cubic-bezier(.3,0,.4,1) calc(.9s / var(--spd)) both}
+
+/* bits — Market ticker: the chart line climbs (higher for more bits) to the amount; the ticker carries the name */
+.o-nwsb{height:158px}
+.o-nwsb-panel{position:absolute;left:0;top:0;width:100%;height:126px;overflow:hidden;border-radius:4px 4px 0 0;box-shadow:0 12px 24px rgba(0,0,0,.45)}
+.o-nwsb-head{position:absolute;left:0;top:0;right:0;height:28px;display:flex;align-items:center;gap:10px;padding-right:12px;background:rgba(255,255,255,.05);box-shadow:inset 0 -1px 0 rgba(255,255,255,.1)}
+.o-nwsb-chip{flex:none;max-width:260px;height:28px;display:flex;align-items:center;padding:0 12px;font-size:15px;line-height:1.3;letter-spacing:.05em;text-transform:uppercase}
+.o-nwsb-hl{margin-left:auto;color:rgba(255,255,255,.64)}
+.o-nwsb-chart{position:absolute;left:0;top:28px;width:100%;height:98px;background:repeating-linear-gradient(180deg,rgba(255,255,255,0) 0 23px,rgba(255,255,255,.07) 23px 24px),repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 59px,rgba(255,255,255,.045) 59px 60px)}
+.o-nwsb-base{position:absolute;left:12px;width:250px;height:0;display:block;border-top:1.5px dashed rgba(255,255,255,.34)}
+.o-nwsb-draw{position:absolute;left:0;top:0;height:98px}
+.o-nwsb-svg{position:absolute;left:0;top:0;display:block;width:420px;height:98px;overflow:visible}
+.o-nwsb-area{fill:rgba(var(--nwsa-rgb),.3)}
+.o-nwsb-line{fill:none;stroke:var(--nwsa);stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}
+.o-nwsb-glow{filter:drop-shadow(0 0 4px rgba(var(--nwsa-rgb),.7))}
+.o-nwsb-dot{position:absolute;display:block;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#FFFFFF;box-shadow:0 0 0 3px var(--nwsa),0 0 12px 2px rgba(var(--nwsa-rgb),.65)}
+.o-nwsb-ring{position:absolute;left:-6px;top:-6px;display:block;width:24px;height:24px;border-radius:50%;border:2px solid var(--nwsa);opacity:0}
+.o-nwsb-tagw{position:absolute;margin-top:-18px}
+.o-nwsb-tag{display:flex;align-items:center;gap:7px;height:36px;padding:0 11px 0 18px;font-weight:700;font-size:25px;line-height:1;white-space:nowrap;clip-path:polygon(10px 0,100% 0,100% 100%,10px 100%,0 50%)}
+.o-nwsb-num{display:flex;align-items:flex-start;line-height:1}
+.o-nwsb-up{flex:none;display:block;width:14px;height:12px;background:currentColor;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.o-nwsb-tick{top:126px}
+@keyframes nwsRing{0%{opacity:0;transform:scale(.6)}15%{opacity:.95}100%{opacity:0;transform:scale(2.6)}}
+.playing .o-nwsb-panel{animation:nwsWipe calc(.3s / var(--spd)) cubic-bezier(.2,.8,.25,1) both}
+.playing .o-nwsb-draw{animation:nwsWipe calc(.8s / var(--spd)) cubic-bezier(.45,.05,.55,.95) calc(.32s / var(--spd)) both}
+.playing .o-nwsb-dot{animation:nwsPop calc(.3s / var(--spd)) ease-out calc(1.08s / var(--spd)) both}
+.playing .o-nwsb-ring{animation:nwsRing calc(.6s / var(--spd)) ease-out calc(1.3s / var(--spd)) 2 both}
+.playing .o-nwsb-tagw{animation:nwsWipe calc(.28s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(1.12s / var(--spd)) both}
+.playing .o-nwsb-tick{animation:nwsWipe calc(.26s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.46s / var(--spd)) both}
+.playing .o-nwsb-tick .o-nws-ttxt{animation:nwsTick calc(.9s / var(--spd)) cubic-bezier(.25,.55,.35,1) calc(.64s / var(--spd)) both}
+
+/* donation — Live report: the LIVE bug, the lower third with the amount, then the donor's message as a quote card */
+.o-nwsd{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-bottom:4px}
+.o-nwsd-bug{display:flex;max-width:100%;height:28px;box-shadow:0 8px 16px rgba(0,0,0,.38)}
+.o-nwsd-live{flex:none;display:flex;align-items:center;gap:7px;padding:0 12px 0 11px;font-weight:700;font-size:15px;line-height:1;letter-spacing:.1em;text-transform:uppercase}
+.o-nwsd-loc{min-width:0;display:flex;align-items:center;padding:0 13px;font-weight:500;font-size:14px;line-height:1.3;letter-spacing:.08em;text-transform:uppercase}
+.o-nwsd-l3{display:flex;width:100%;height:62px;box-shadow:0 10px 22px rgba(0,0,0,.42)}
+.o-nwsd-amt{flex:none;min-width:112px;display:flex;align-items:center;justify-content:center;padding:0 16px;font-weight:700;font-size:30px;line-height:1;white-space:nowrap}
+.o-nwsd-who{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:0 16px 2px}
+.o-nwsd-name{font-size:calc(27px * var(--fit,1))}
+.o-nwsd-sub{margin-top:1px;color:var(--nws-mute)}
+.o-nwsd-card{position:relative;width:100%;min-height:56px;display:flex;flex-direction:column;justify-content:center;padding:10px 16px 11px 54px;border-left:6px solid var(--nwsa);box-shadow:0 10px 22px rgba(0,0,0,.42)}
+.o-nwsd-qm{position:absolute;left:9px;top:3px;display:block;height:46px;font-family:"Playfair Display",Georgia,serif;font-weight:900;font-size:62px;line-height:1;color:var(--nwsa);text-shadow:0 1px 0 rgba(0,0,0,.18)}
+.o-nwsd-msg{font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:800;font-size:17px;line-height:22px;color:var(--nws-ink);max-height:66px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.playing .o-nwsd-bug{animation:nwsWipe calc(.3s / var(--spd)) cubic-bezier(.2,.8,.25,1) both}
+.playing .o-nwsd-live > .o-nws-dot{animation:nwsBlink calc(.44s / var(--spd)) steps(1,end) calc(.3s / var(--spd)) 3 both}
+.playing .o-nwsd-l3{animation:nwsWipe calc(.38s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.26s / var(--spd)) both}
+.playing .o-nwsd-name,.playing .o-nwsd-sub{animation:nwsNudge calc(.42s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.36s / var(--spd)) both}
+.playing .o-nwsd-card{animation:nwsWipeDown calc(.3s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.7s / var(--spd)) both}
+.playing .o-nwsd-qm{animation:nwsPop calc(.3s / var(--spd)) ease-out calc(.84s / var(--spd)) both}
+.playing .o-nwsd-msg{animation:nwsWipeDown calc(var(--md,.6s) / var(--spd)) linear calc(.96s / var(--spd)) both}
+
+/* raid — Weather map: a storm front sweeps over the map and leaves one cloud per raider (up to twelve) */
+.o-nwsr{height:200px}
+.o-nwsr-map{position:absolute;left:0;top:0;width:100%;height:128px;overflow:hidden;border-radius:4px;background:radial-gradient(120% 140% at 28% 0,#1D335C 0,#0F1E3B 55%,#0A152C 100%);box-shadow:0 12px 24px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.08)}
+.o-nwsr-land{position:absolute;left:0;top:0;display:block;width:420px;height:128px}
+.o-nwsr-lp{fill:#33445F;stroke:#566A90;stroke-width:1.2;stroke-linejoin:round}
+.o-nwsr-grid{position:absolute;left:0;top:0;right:0;bottom:0;display:block;background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 41px,rgba(255,255,255,.055) 41px 42px),repeating-linear-gradient(180deg,rgba(255,255,255,0) 0 31px,rgba(255,255,255,.055) 31px 32px)}
+.o-nwsr-sys{position:absolute;left:0;top:0;height:128px}
+/* The rain on the radar: the channel colour in bands, stronger for a bigger raid (--ri). */
+.o-nwsr-radar{position:absolute;left:0;top:0;bottom:0;right:14px;display:block;opacity:var(--ri,.6);background:repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,rgba(255,255,255,0) 2px 7px),radial-gradient(34% 44% at 72% 42%,rgba(var(--nwsa-rgb),.95) 0,rgba(var(--nwsa-rgb),.5) 45%,rgba(var(--nwsa-rgb),0) 100%),radial-gradient(30% 40% at 42% 72%,rgba(var(--nwsa-rgb),.8) 0,rgba(var(--nwsa-rgb),.35) 50%,rgba(var(--nwsa-rgb),0) 100%),radial-gradient(26% 36% at 18% 28%,rgba(var(--nwsa-rgb),.65) 0,rgba(var(--nwsa-rgb),0) 100%),radial-gradient(32% 36% at 88% 80%,rgba(var(--nwsa-rgb),.75) 0,rgba(var(--nwsa-rgb),0) 100%),linear-gradient(90deg,rgba(var(--nwsa-rgb),.14),rgba(var(--nwsa-rgb),.34));-webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,.5) 0,#000 50%,#000 84%,rgba(0,0,0,0) 100%);mask-image:linear-gradient(90deg,rgba(0,0,0,.5) 0,#000 50%,#000 84%,rgba(0,0,0,0) 100%)}
+.o-nwsr-front{position:absolute;right:0;top:0;display:block;width:44px;height:128px;overflow:visible}
+.o-nwsr-fl{fill:none;stroke:var(--nwsa);stroke-width:3.5;stroke-linecap:round}
+.o-nwsr-ft{fill:var(--nwsa);stroke:rgba(255,255,255,.55);stroke-width:.8;stroke-linejoin:round}
+.o-nwsr-chip{position:absolute;right:8px;top:8px;z-index:3;padding:3px 7px 2px;border-radius:2px;background:rgba(8,16,34,.85);color:#FFFFFF;font-size:9.5px;letter-spacing:.16em}
+.o-nwsr-cloud{position:absolute;z-index:2;display:block;width:var(--cw,36px);height:calc(var(--cw,36px) * .75)}
+.o-nwsr-cl{display:block;width:100%;height:100%;overflow:visible}
+.o-nwsr-cs{fill:#8D9AB2}
+.o-nwsr-cb{fill:#F3F6FB}
+.o-nwsr-rain{fill:none;stroke:var(--nwsa);stroke-width:2.4;stroke-linecap:round}
+.o-nwsr-kw{position:absolute;left:0;top:134px;max-width:100%}
+.o-nwsr-kick{display:flex;align-items:center;height:24px;padding:0 22px 0 12px;font-size:14px;line-height:1.3;letter-spacing:.06em;text-transform:uppercase;clip-path:polygon(0 0,calc(100% - 11px) 0,100% 50%,calc(100% - 11px) 100%,0 100%)}
+.o-nwsr-plate{position:absolute;left:0;top:158px;width:100%;height:40px;display:flex;align-items:center;gap:10px;padding:0 14px;box-shadow:0 10px 20px rgba(0,0,0,.42)}
+.o-nwsr-name{flex:1;min-width:0;font-weight:700;font-size:calc(25px * var(--fit,1))}
+.o-nwsr-count{flex:none;display:flex;align-items:flex-start;height:28px;padding:4px 9px 0;border-radius:3px;font-weight:700;font-size:21px;line-height:1}
+.o-nwsr-unit{flex:none;color:var(--nws-mute)}
+@keyframes nwsSweep{from{transform:translateX(calc(-1 * var(--sx,360px)))}to{transform:none}}
+@keyframes nwsCloud{0%{opacity:0;transform:translateX(-10px) scale(.5)}70%{opacity:1;transform:translateX(1px) scale(1.06)}100%{opacity:1;transform:none}}
+.playing .o-nwsr-map{animation:nwsWipe calc(.3s / var(--spd)) cubic-bezier(.2,.8,.25,1) both}
+.playing .o-nwsr-sys{animation:nwsSweep calc(.78s / var(--spd)) cubic-bezier(.5,1,.89,1) calc(.3s / var(--spd)) both}
+.playing .o-nwsr-cloud{animation:nwsCloud calc(.3s / var(--spd)) ease-out calc(var(--cd,.6s) / var(--spd)) both}
+.playing .o-nwsr-kw{animation:nwsWipe calc(.26s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(.94s / var(--spd)) both}
+.playing .o-nwsr-plate{animation:nwsWipe calc(.3s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(1.02s / var(--spd)) both}
+.playing .o-nwsr-name{animation:nwsNudge calc(.4s / var(--spd)) cubic-bezier(.2,.8,.25,1) calc(1.04s / var(--spd)) both}
+
+/* giveaway — Front page: a blank sheet lands, the press roller passes over it and prints the winner's front page */
+.o-nwsg{height:214px}
+.o-nwsg-paper{position:absolute;left:30px;top:6px;width:360px;height:200px;box-shadow:0 14px 28px rgba(0,0,0,.5),0 2px 5px rgba(0,0,0,.3)}
+.o-nwsg-print{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;flex-direction:column;padding:8px 12px}
+.o-nwsg-mast{flex:none;height:34px}
+.o-nwsg-mast > .o-nws-mt{font-size:20px}
+.o-nwsg-date{flex:none;height:14px;margin-top:4px;display:flex;align-items:center;justify-content:center;border-top:1.5px solid var(--nws-print);border-bottom:.8px solid var(--nws-print);font-size:8px;letter-spacing:.2em;color:var(--nws-print)}
+.o-nwsg-kick{flex:none;align-self:center;max-width:100%;margin-top:6px;padding:2px 10px 1px;font-size:11px;letter-spacing:.18em}
+.o-nwsg-name{flex:none;margin-top:3px;font-family:"Playfair Display",Georgia,serif;font-weight:900;font-size:calc(38px * var(--fit,1));line-height:1.06;text-align:center;color:var(--nws-print)}
+.o-nwsg-deck{flex:none;font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:800;font-size:17px;line-height:1.25;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-nwsg-cols{flex:none;display:flex;gap:10px;height:34px;margin-top:auto}
+/* The front-page photo: a trophy printed in the channel colour's halftone. */
+.o-nwsg-photo{position:relative;flex:none;width:88px;background:radial-gradient(circle,rgba(var(--nwsa-rgb),.95) 0 1.1px,rgba(var(--nwsa-rgb),0) 1.5px) 0 0/4px 4px,rgba(var(--nwsa-rgb),.18);box-shadow:inset 0 0 0 1px rgba(23,20,15,.55)}
+.o-nwsg-cup{position:absolute;left:50%;top:3px;display:block;width:28px;height:28px;margin-left:-14px;overflow:visible}
+.o-nwsg-cf{fill:var(--nws-print)}
+.o-nwsg-ch{fill:none;stroke:var(--nws-print);stroke-width:2.2;stroke-linecap:round}
+/* The press roller: hidden at rest, it rolls across once and lifts off. */
+.o-nwsg-roll{position:absolute;left:17px;top:0;width:26px;height:214px;opacity:0;border-radius:6px;background:linear-gradient(90deg,#07080B 0,#2C313C 22%,#5C6576 44%,#2A2F39 64%,#07080B 100%);box-shadow:0 6px 14px rgba(0,0,0,.55)}
+.o-nwsg-roll::before,.o-nwsg-roll::after{content:"";position:absolute;left:3px;right:3px;height:9px;border-radius:3px;background:var(--nwsa)}
+.o-nwsg-roll::before{top:2px}
+.o-nwsg-roll::after{bottom:2px}
+.o-nwsg-tex{position:absolute;left:0;right:0;top:13px;bottom:13px;display:block;background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 5px,rgba(255,255,255,.13) 5px 6px,rgba(255,255,255,0) 6px 9px)}
+@keyframes nwsSheet{0%{opacity:0;transform:translateY(-12px) scale(1.04)}60%{opacity:1;transform:translateY(1px) scale(.995)}100%{opacity:1;transform:none}}
+/* The roller and the print share their keyframes and timing, so the ink appears exactly behind the roller. */
+@keyframes nwsRoll{0%{opacity:0;transform:translateX(0)}6%{opacity:1;transform:translateX(0)}86%{opacity:1;transform:translateX(360px)}100%{opacity:0;transform:translateX(360px)}}
+@keyframes nwsPrint{0%,6%{clip-path:inset(-20px 100% -20px -20px)}86%,100%{clip-path:inset(-20px 0 -20px -20px)}}
+@keyframes nwsRollTex{from{background-position:0 0}to{background-position:90px 0}}
+.playing .o-nwsg-paper{animation:nwsSheet calc(.32s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-nwsg-roll{animation:nwsRoll calc(1s / var(--spd)) ease-in-out calc(.3s / var(--spd)) both}
+.playing .o-nwsg-print{animation:nwsPrint calc(1s / var(--spd)) ease-in-out calc(.3s / var(--spd)) both}
+.playing .o-nwsg-tex{animation:nwsRollTex calc(.8s / var(--spd)) linear calc(.36s / var(--spd)) both}

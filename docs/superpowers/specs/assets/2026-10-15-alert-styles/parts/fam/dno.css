@@ -1,0 +1,288 @@
+/* ═════════ DINO — a friendly prehistoric adventure ═════════
+   Chunky cartoons with a dark ink outline: stone slabs, sand, bone, ferns and a volcano stay natural;
+   every dinosaur, the egg's spots, the gems, the lava and the amber wear the streamer's colour (--dnoa).
+   Luckiest Guy for names, Nunito Black for labels and numbers (Luckiest Guy's digits rise above its
+   ascender, so the rolling numbers use Nunito). Stompy, bouncy motion: the alert gives a small shake on
+   every stomp (.o-dno-sh), things squash as they land, then everything holds still. Text always sits on
+   stone or on the accent, so it reads over any game. */
+.o-dno{--dnoa:var(--a,#7BD34A);--dnoa-rgb:var(--a-rgb,123,211,74);--dno-on:var(--a-on,#14240C);--dno-ink:#2B1D14;--dno-bone:#F3E7CC;font-family:"Nunito","Varela Round","Arial Rounded MT Bold",system-ui,sans-serif;font-weight:800;line-height:1.2;color:var(--dno-ink)}
+.o-dno-sh{position:absolute;left:0;top:0;width:100%;height:100%}
+.o-dno-pic > svg{display:block;width:100%;height:100%;overflow:visible}
+/* A stone slab: warm grey, speckled, a soft bevel and the ink outline. */
+.o-dno-stone{position:absolute;border:3px solid var(--dno-ink);border-radius:26px 18px 28px 16px / 20px 26px 18px 24px;background:radial-gradient(circle at 30% 40%,rgba(70,52,34,.22) 0 1.1px,rgba(70,52,34,0) 1.7px) 0 0/14px 12px,radial-gradient(circle at 60% 70%,rgba(255,255,255,.34) 0 1px,rgba(255,255,255,0) 1.6px) 5px 3px/11px 15px,radial-gradient(120% 90% at 30% 12%,rgba(255,255,255,.3),rgba(255,255,255,0) 55%),linear-gradient(180deg,#D9D1C1,#BBB19F);box-shadow:inset 0 3px 0 rgba(255,255,255,.38),inset 0 -6px 0 rgba(70,52,34,.16),0 5px 0 rgba(43,29,20,.42),0 12px 22px rgba(0,0,0,.42)}
+/* The label: a pebble of the streamer's colour. */
+.o-dno-tag{display:block;max-width:100%;padding:3px 12px 2px;border:2.5px solid var(--dno-ink);border-radius:999px;background:var(--dnoa);color:var(--dno-on);font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;font-size:12.5px;line-height:1.3;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 0 2px 0 rgba(255,255,255,.32),0 2px 0 rgba(43,29,20,.42);transform:rotate(var(--tr,-2deg))}
+.o-dno-name{font-family:"Luckiest Guy","Bangers","Impact",system-ui,sans-serif;font-weight:400;line-height:1.15;letter-spacing:.02em;color:var(--dno-ink)}
+.o-dno-cap{font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;font-size:11px;line-height:1.2;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;color:rgba(43,29,20,.7)}
+.o-dno-puff{position:absolute;width:var(--ps,22px);height:var(--ps,22px);margin:calc(var(--ps,22px) / -2) 0 0 calc(var(--ps,22px) / -2);border-radius:50%;background:radial-gradient(circle,rgba(240,222,184,.95) 0,rgba(222,198,150,.6) 45%,rgba(222,198,150,0) 70%);opacity:0;pointer-events:none}
+/* Drawing: skin in the accent with the ink outline; shades are drawn on top of it. */
+.o-dno-sk{fill:var(--dnoa);stroke:var(--dno-ink);stroke-width:var(--sw,3);stroke-linejoin:round;stroke-linecap:round}
+.o-dno-dk{fill:rgba(20,10,0,.22)}
+.o-dno-lt{fill:rgba(255,255,255,.42)}
+.o-dno-wh{fill:#FFFFFF;stroke:var(--dno-ink);stroke-width:var(--sw2,2.2)}
+.o-dno-in{fill:var(--dno-ink)}
+.o-dno-gl{fill:#FFFFFF}
+.o-dno-ln{fill:none;stroke:var(--dno-ink);stroke-width:var(--sw2,2.4);stroke-linecap:round;stroke-linejoin:round}
+.o-dno-bl{fill:rgba(255,105,130,.45)}
+.o-dno-th{fill:#FFFFFF;stroke:var(--dno-ink);stroke-width:1.3;stroke-linejoin:round}
+.o-dno-pr{fill:rgba(var(--dnoa-rgb),.6);stroke:rgba(43,29,20,.6);stroke-width:1.5;stroke-linejoin:round}
+.o-dno-fern{display:block;width:100%;height:100%;overflow:visible}
+.o-dno-fl{fill:#4E7E3B;stroke:var(--dno-ink);stroke-width:1.3;stroke-linejoin:round}
+.o-dno-fs{fill:none;stroke:var(--dno-ink);stroke-width:2;stroke-linecap:round}
+.o-dno-hl{fill:none;stroke:rgba(255,255,255,.75);stroke-width:4;stroke-linecap:round}
+@keyframes dnoThud{0%,100%{transform:none}25%{transform:translate(0,3px)}50%{transform:translate(-2px,-1px)}75%{transform:translate(1px,1px)}}
+@keyframes dnoDrop{0%{opacity:0;transform:translateY(-18px)}55%{opacity:1;transform:translateY(2px) scale(1.03,.95)}78%{transform:translateY(-1px) scale(.99,1.01)}100%{opacity:1;transform:none}}
+@keyframes dnoPop{0%{opacity:0;transform:scale(.4)}55%{opacity:1;transform:scale(1.07,.94)}78%{transform:scale(.97,1.03)}100%{opacity:1;transform:none}}
+@keyframes dnoPress{0%{opacity:0;transform:scale(1.6) rotate(var(--tr,-2deg))}60%{opacity:1;transform:scale(.94) rotate(var(--tr,-2deg))}100%{opacity:1;transform:scale(1) rotate(var(--tr,-2deg))}}
+@keyframes dnoTextIn{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
+@keyframes dnoPuff{0%{opacity:0;transform:translate(0,0) scale(.3)}25%{opacity:.95}100%{opacity:0;transform:translate(var(--dx,0px),var(--dy,-8px)) scale(1.6)}}
+.playing .o-dno-puff{animation:dnoPuff calc(.6s / var(--spd)) cubic-bezier(.2,.7,.3,1) calc(var(--pd,0s) / var(--spd)) both}
+
+/* follow — Footprints: four prints stomp across the sand, then the dino pops up with its sign */
+.o-dnof{height:136px}
+.o-dnof-rise{position:absolute;left:0;top:0;width:420px;height:118px;overflow:hidden}
+.o-dnof-up{position:absolute;left:0;top:0;width:420px;height:118px;transform-origin:72% 100%}
+.o-dnof-sign{left:8px;top:24px;width:310px;height:100px;transform:rotate(-1.2deg)}
+.o-dnof-txt{position:absolute;left:12px;right:12px;top:5px;height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.o-dnof-name{width:100%;margin-top:7px;font-size:calc(30px * var(--fit,1))}
+.o-dnof-dino{position:absolute;left:286px;top:0;width:134px;height:120px}
+.o-dnof-ground{position:absolute;left:0;top:100px;width:420px;height:36px;border:3px solid var(--dno-ink);border-radius:14px 14px 18px 18px;background:radial-gradient(circle at 30% 40%,rgba(150,110,50,.28) 0 1px,rgba(150,110,50,0) 1.6px) 0 0/10px 8px,radial-gradient(circle at 70% 60%,rgba(255,250,230,.5) 0 .9px,rgba(255,250,230,0) 1.5px) 3px 2px/7px 11px,linear-gradient(180deg,#ECD5A3,#D9BA7E);box-shadow:inset 0 3px 0 rgba(255,255,255,.35),inset 0 -5px 0 rgba(120,84,40,.18),0 10px 18px rgba(0,0,0,.42)}
+.o-dnof-print{position:absolute;width:28px;height:28px;transform:rotate(var(--pr))}
+.o-dnof-peb{position:absolute;border:2px solid var(--dno-ink);border-radius:50%;background:radial-gradient(circle at 35% 30%,#D8D2C6 0,#A69D8F 70%)}
+@keyframes dnoStomp{0%{opacity:0;transform:rotate(var(--pr)) scale(1.9)}55%{opacity:1;transform:rotate(var(--pr)) scale(.88)}100%{opacity:1;transform:rotate(var(--pr)) scale(1)}}
+@keyframes dnoRise{0%{transform:translateY(124px)}55%{transform:translateY(-7px) scale(.98,1.03)}76%{transform:translateY(0) scale(1.03,.96)}90%{transform:scale(.995,1.005)}100%{transform:none}}
+@keyframes dnoDuckOut{0%{transform:none}30%{transform:translateY(-5px) scale(1.01,.98)}100%{opacity:0;transform:translateY(30px)}}
+.playing .o-dnof > .o-dno-sh{animation:dnoThud calc(.18s / var(--spd)) linear calc(.35s / var(--spd)),dnoThud calc(.18s / var(--spd)) linear calc(.5s / var(--spd)),dnoThud calc(.18s / var(--spd)) linear calc(.65s / var(--spd)),dnoThud calc(.18s / var(--spd)) linear calc(.8s / var(--spd))}
+.playing .o-dnof-ground{animation:dnoDrop calc(.3s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-dnof-print{animation:dnoStomp calc(.2s / var(--spd)) cubic-bezier(.5,0,.7,1) calc(var(--pd) / var(--spd)) both}
+.playing .o-dnof-up{animation:dnoRise calc(.5s / var(--spd)) cubic-bezier(.25,.8,.35,1) calc(.86s / var(--spd)) both}
+
+/* subscriber — Egg hatch: the egg lands, rocks, cracks; the baby pops out and the shell top lands as a hat */
+.o-dnos{height:188px}
+.o-dnos-plate{left:142px;top:34px;width:272px;height:134px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:8px 14px 8px 20px}
+.o-dnos-tag{margin-bottom:6px}
+.o-dnos-name{align-self:stretch;font-size:calc(28px * var(--fit,1))}
+.o-dnos-meta{display:flex;align-items:center;margin-top:6px;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;font-size:14px;line-height:1.2;color:rgba(43,29,20,.8);white-space:nowrap}
+.o-dnos-mn{font-weight:900;color:var(--dno-ink)}
+.o-dnos-sep{width:5px;height:5px;margin:0 8px;border-radius:50%;background:rgba(43,29,20,.5)}
+.o-dnos-dots{display:inline-flex;gap:3px;margin-left:7px}
+.o-dnos-dot{width:12px;height:10px;border:2px solid var(--dno-ink);border-radius:50%;background:var(--dnoa)}
+.o-dnos-msg{max-width:100%;margin-top:5px;font-size:12.5px;line-height:1.3;color:rgba(43,29,20,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-dnos-egg{position:absolute;left:22px;top:60px;width:100px;height:122px;transform-origin:50% 100%}
+.o-dnos-back,.o-dnos-front{position:absolute;left:0;top:0;width:100px;height:122px;overflow:visible}
+.o-dnos-hole{fill:#B49C74;stroke:var(--dno-ink);stroke-width:2.4}
+.o-dno-shell{fill:#FFF4DE}
+.o-dno-shd{fill:rgba(140,100,50,.14)}
+.o-dno-eo{fill:none;stroke:var(--dno-ink);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.o-dno-spot{fill:var(--dnoa);stroke:var(--dno-ink);stroke-width:2.2}
+.o-dnos-crack{fill:none;stroke:var(--dno-ink);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:100 100;stroke-dashoffset:0}
+.o-dnos-babyw{position:absolute;left:-10px;top:-50px;width:120px;height:96px;overflow:hidden}
+.o-dnos-baby{position:absolute;left:0;top:0;width:120px;height:96px;transform-origin:50% 100%}
+.o-dnos-baby > svg{position:absolute;left:0;top:0;width:120px;height:96px;overflow:visible}
+.o-dnos-tab{position:absolute;left:30px;top:63px;width:60px;height:34px;display:flex;align-items:center;justify-content:center;border-width:2.5px;border-radius:12px 9px 12px 9px;box-shadow:inset 0 2px 0 rgba(255,255,255,.4),0 2px 0 rgba(43,29,20,.4)}
+.o-dnos-num{display:block;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;line-height:1;color:var(--dno-ink)}
+.o-dnos-hand{position:absolute;top:60px;width:15px;height:13px;border:2.5px solid var(--dno-ink);border-radius:50%;background:var(--dnoa)}
+.o-dnos-handl{left:24px}
+.o-dnos-handr{left:81px}
+.o-dnos-topw{position:absolute;left:0;top:0;width:100px;height:56px;transform-origin:50px 28px;transform:translate(-2px,-60px) rotate(-14deg) scale(.6)}
+.o-dnos-top{display:block;width:100px;height:56px;overflow:visible}
+.o-dnos-nest{position:absolute;left:4px;top:156px;width:136px;height:32px}
+.o-dnos-nest > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-dno-nest{fill:#C99A55;stroke:var(--dno-ink);stroke-width:2.5;stroke-linejoin:round}
+.o-dno-twig{fill:none;stroke:#8A6230;stroke-width:2;stroke-linecap:round}
+@keyframes dnoEggIn{0%{opacity:0;transform:translateY(-44px)}60%{opacity:1;transform:translateY(3px) scale(1.06,.92)}80%{transform:translateY(-2px) scale(.98,1.02)}100%{opacity:1;transform:none}}
+@keyframes dnoWobble{0%,100%{transform:rotate(0deg)}15%{transform:rotate(-8deg)}35%{transform:rotate(7deg)}55%{transform:rotate(-6deg)}75%{transform:rotate(4deg)}90%{transform:rotate(-1deg)}}
+@keyframes dnoCrack{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+@keyframes dnoHat{0%{transform:none}40%{transform:translate(-12px,-84px) rotate(-200deg) scale(.78)}80%{transform:translate(-2px,-58px) rotate(-374deg) scale(.6)}90%{transform:translate(-2px,-60px) rotate(-374deg) scale(.66,.55)}100%{transform:translate(-2px,-60px) rotate(-374deg) scale(.6)}}
+@keyframes dnoHatch{0%{transform:translateY(84px)}55%{transform:translateY(-6px) scale(.96,1.05)}78%{transform:translateY(0) scale(1.04,.96)}100%{transform:none}}
+@keyframes dnoEggOut{0%{transform:none}25%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}100%{opacity:0;transform:translateY(16px) scale(.88)}}
+.playing .o-dnos > .o-dno-sh{animation:dnoThud calc(.2s / var(--spd)) linear calc(.38s / var(--spd))}
+.playing .o-dnos-plate{animation:dnoPop calc(.4s / var(--spd)) ease-out calc(.06s / var(--spd)) both}
+.playing .o-dnos-tag{animation:dnoPress calc(.28s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-dnos-name{animation:dnoTextIn calc(.3s / var(--spd)) ease-out calc(.36s / var(--spd)) both}
+.playing .o-dnos-meta{animation:dnoTextIn calc(.3s / var(--spd)) ease-out calc(.44s / var(--spd)) both}
+.playing .o-dnos-msg{animation:dnoTextIn calc(.3s / var(--spd)) ease-out calc(.5s / var(--spd)) both}
+.playing .o-dnos-nest{animation:dnoDrop calc(.3s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-dnos-egg{animation:dnoEggIn calc(.36s / var(--spd)) cubic-bezier(.4,0,.6,1) calc(.08s / var(--spd)) both,dnoWobble calc(.5s / var(--spd)) ease-in-out calc(.48s / var(--spd))}
+.playing .o-dnos-crack{animation:dnoCrack calc(.3s / var(--spd)) steps(3,end) calc(.62s / var(--spd)) both}
+.playing .o-dnos-topw{animation:dnoHat calc(.5s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(.96s / var(--spd)) both}
+.playing .o-dnos-baby{animation:dnoHatch calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1s / var(--spd)) both}
+
+/* bits — Volcano: it rumbles and smokes, then erupts gems that arc out and land at its foot */
+.o-dnob{height:166px}
+.o-dnob-glow{position:absolute;left:44px;top:0;width:140px;height:92px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--dnoa-rgb),.75),rgba(var(--dnoa-rgb),.28) 55%,rgba(var(--dnoa-rgb),0));opacity:.8}
+.o-dnob-volc{position:absolute;left:8px;top:30px;width:196px;height:120px;transform-origin:50% 100%}
+.o-dnob-volc > svg{position:absolute;left:0;top:0;width:196px;height:120px;overflow:visible}
+.o-dnob-rock{fill:#77665B}
+.o-dno-dk2{fill:rgba(20,10,0,.28)}
+.o-dno-hi{fill:rgba(255,255,255,.1)}
+.o-dnob-edge{fill:none;stroke:var(--dno-ink);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.o-dnob-crack{fill:none;stroke:rgba(43,29,20,.55);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.o-dnob-crater{fill:var(--dnoa);stroke:var(--dno-ink);stroke-width:3}
+.o-dnob-core{fill:rgba(255,255,255,.7)}
+.o-dnob-lavaw{position:absolute;left:0;top:0;width:196px;height:120px}
+.o-dnob-lava{fill:var(--dnoa);stroke:var(--dno-ink);stroke-width:2.5;stroke-linejoin:round}
+.o-dnob-smoke{position:absolute;left:106px;top:40px;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#EEE9E2 0,#BDB4AA 58%,rgba(189,180,170,0) 72%);opacity:0}
+.o-dnob-ground{position:absolute;left:0;top:142px;width:214px;height:24px;border:3px solid var(--dno-ink);border-radius:12px;background:radial-gradient(circle at 30% 40%,rgba(60,40,20,.25) 0 1px,rgba(60,40,20,0) 1.6px) 0 0/9px 7px,linear-gradient(180deg,#B39672,#927552);box-shadow:inset 0 3px 0 rgba(255,255,255,.22),0 8px 16px rgba(0,0,0,.4)}
+.o-dnob-fern{position:absolute;right:2px;top:-23px;width:34px;height:26px}
+.o-dnob-gemw{position:absolute}
+.o-dnob-gemw::before{content:"";position:absolute;left:-55%;top:-55%;width:210%;height:210%;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--dnoa-rgb),.5),rgba(var(--dnoa-rgb),0))}
+.o-dnob-gemw > svg{position:relative;display:block;width:100%;height:100%;overflow:visible;transform:rotate(var(--fr))}
+.o-dnob-gem{fill:var(--dnoa);stroke:var(--dno-ink);stroke-width:1.6;stroke-linejoin:round}
+.o-dnob-facet{fill:none;stroke:rgba(43,29,20,.45);stroke-width:.9}
+.o-dnob-plate{left:216px;top:20px;width:198px;height:128px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 12px;text-align:center}
+.o-dnob-amt{display:flex;align-items:flex-end;justify-content:center;margin-top:7px;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;line-height:1;color:var(--dno-ink)}
+.o-dnob-plus{display:block;line-height:1}
+.o-dnob-unit{display:block;margin-left:5px;font-size:16px;line-height:1;color:rgba(43,29,20,.75)}
+.o-dnob-name{width:100%;margin-top:6px;font-size:calc(21px * var(--fit,1))}
+@keyframes dnoRumble{0%,100%{transform:none}12%{transform:translate(-2px,1px)}25%{transform:translate(2px,-1px)}37%{transform:translate(-2px,0)}50%{transform:translate(2px,1px)}62%{transform:translate(-1.5px,-1px)}75%{transform:translate(1.5px,0)}88%{transform:translate(-1px,1px)}}
+@keyframes dnoSmoke{0%{opacity:0;transform:scale(.4)}30%{opacity:.9}100%{opacity:0;transform:translate(var(--sx2,0px),-46px) scale(1.6)}}
+@keyframes dnoGlow{0%{opacity:0;transform:scale(.5)}30%{opacity:1;transform:scale(1.15)}100%{opacity:.8;transform:none}}
+@keyframes dnoOoze{from{clip-path:inset(0 0 88% 0)}to{clip-path:inset(0 0 38% 0)}}
+@keyframes dnoGem{
+  0%{opacity:0;transform:translate(var(--sx),var(--sy)) rotate(var(--gr)) scale(.4)}
+  6%{opacity:1}
+  14.33%{transform:translate(calc(var(--sx) * .833),calc(var(--sy) * .833 - var(--h) * .556)) rotate(calc(var(--gr) * .833)) scale(.8)}
+  28.67%{transform:translate(calc(var(--sx) * .667),calc(var(--sy) * .667 - var(--h) * .889)) rotate(calc(var(--gr) * .667)) scale(1)}
+  43%{transform:translate(calc(var(--sx) * .5),calc(var(--sy) * .5 - var(--h))) rotate(calc(var(--gr) * .5)) scale(1)}
+  57.33%{transform:translate(calc(var(--sx) * .333),calc(var(--sy) * .333 - var(--h) * .889)) rotate(calc(var(--gr) * .333)) scale(1)}
+  71.67%{transform:translate(calc(var(--sx) * .167),calc(var(--sy) * .167 - var(--h) * .556)) rotate(calc(var(--gr) * .167)) scale(1)}
+  86%{transform:translate(0px,0px) rotate(0deg) scale(1.12,.86)}
+  93%{transform:translate(0px,-3px) rotate(0deg) scale(.97,1.03)}
+  100%{opacity:1;transform:translate(0px,0px) rotate(0deg) scale(1)}
+}
+@keyframes dnoQuakeOut{0%{transform:none}12%{transform:translateX(-4px)}24%{transform:translateX(4px)}36%{transform:translateX(-3px)}48%{opacity:1;transform:translateX(2px)}100%{opacity:0;transform:translateY(26px)}}
+.playing .o-dnob > .o-dno-sh{animation:dnoThud calc(.22s / var(--spd)) linear calc(.74s / var(--spd))}
+.playing .o-dnob-ground{animation:dnoDrop calc(.3s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-dnob-volc{animation:dnoPop calc(.36s / var(--spd)) ease-out calc(.04s / var(--spd)) both,dnoRumble calc(.4s / var(--spd)) linear calc(.32s / var(--spd))}
+.playing .o-dnob-smoke{animation:dnoSmoke calc(.7s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-dnob-glow{animation:dnoGlow calc(.7s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-dnob-lavaw{animation:dnoOoze calc(.45s / var(--spd)) ease-out calc(.8s / var(--spd)) both}
+.playing .o-dnob-gemw{animation:dnoGem calc(.62s / var(--spd)) linear calc(var(--gd) / var(--spd)) both}
+.playing .o-dnob-plate{animation:dnoPop calc(.4s / var(--spd)) ease-out calc(.1s / var(--spd)) both}
+.playing .o-dnob-tag{animation:dnoPress calc(.28s / var(--spd)) ease-out calc(.32s / var(--spd)) both}
+.playing .o-dnob-amt{animation:dnoTextIn calc(.26s / var(--spd)) ease-out calc(.66s / var(--spd)) both}
+.playing .o-dnob-name{animation:dnoTextIn calc(.3s / var(--spd)) ease-out calc(.42s / var(--spd)) both}
+
+/* donation — Fossil dig: a sandy slab lands, the brush sweeps the sand off in two strokes */
+.o-dnod{height:212px}
+.o-dnod-slab{left:4px;top:8px;width:412px;height:198px;border-radius:30px 20px 34px 22px / 24px 30px 20px 32px;background:radial-gradient(circle at 30% 40%,rgba(110,74,34,.22) 0 1.1px,rgba(110,74,34,0) 1.7px) 0 0/15px 13px,radial-gradient(circle at 60% 70%,rgba(255,250,235,.4) 0 1px,rgba(255,250,235,0) 1.6px) 6px 4px/12px 16px,radial-gradient(120% 90% at 30% 12%,rgba(255,255,255,.28),rgba(255,255,255,0) 55%),linear-gradient(180deg,#DCCAA6,#C6AF86)}
+.o-dnod-strata{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:inherit;background:repeating-linear-gradient(176deg,rgba(120,84,40,0) 0 30px,rgba(120,84,40,.14) 30px 32px,rgba(120,84,40,0) 32px 47px)}
+.o-dnod-fossil{position:absolute;left:10px;top:20px;width:144px;height:154px}
+.o-dnod-fossil > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-dnod-bo{fill:none;stroke:var(--dno-ink);stroke-width:7.5;stroke-linecap:round;stroke-linejoin:round}
+.o-dnod-bb{fill:none;stroke:var(--dno-bone);stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round}
+.o-dnod-bt{fill:none;stroke:rgba(var(--dnoa-rgb),.55);stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round}
+.o-dnod-bov{stroke-width:11}
+.o-dnod-bbv,.o-dnod-btv{stroke-width:6.6;stroke-dasharray:6.5 3;stroke-linecap:butt}
+.o-dnod-skull{fill:var(--dno-bone);stroke:var(--dno-ink);stroke-width:2.6;stroke-linejoin:round}
+.o-dnod-tint{fill:rgba(var(--dnoa-rgb),.55)}
+.o-dnod-hole{fill:#4A3826}
+.o-dnod-jaw{fill:none;stroke:var(--dno-ink);stroke-width:2.2;stroke-linecap:round}
+.o-dnod-teeth{fill:#FFFFFF;stroke:var(--dno-ink);stroke-width:1.2;stroke-linejoin:round}
+.o-dnod-txt{position:absolute;left:160px;right:14px;top:12px;bottom:12px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-dnod-amt{margin-top:7px;padding:5px 14px;border:3px solid var(--dno-ink);border-radius:12px 16px 12px 16px;background:var(--dnoa);color:var(--dno-on);box-shadow:inset 0 3px 0 rgba(255,255,255,.3),inset 0 -4px 0 rgba(0,0,0,.14),0 3px 0 rgba(43,29,20,.4)}
+.o-dnod-amt > b{display:block;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;line-height:1}
+.o-dnod-msg{margin-top:7px;font-size:14px;line-height:18px;max-height:54px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere;color:var(--dno-ink)}
+.o-dnod-sign{display:flex;align-items:center;gap:6px;width:100%;min-width:0;margin-top:7px}
+.o-dnod-stamp{flex:none;display:block;width:20px;height:20px;transform:rotate(-12deg)}
+.o-dnod-stamp > svg{display:block;width:100%;height:100%}
+.o-dnod-sign > .o-dno-cap{flex:none}
+.o-dnod-name{flex:1;min-width:0;font-size:calc(22px * var(--fit,1))}
+.o-dnod-sand{position:absolute;left:5px;right:5px;border-radius:22px;background:radial-gradient(circle at 30% 40%,rgba(150,110,50,.3) 0 1px,rgba(150,110,50,0) 1.6px) 0 0/9px 8px,radial-gradient(circle at 70% 60%,rgba(255,250,230,.55) 0 .9px,rgba(255,250,230,0) 1.5px) 3px 2px/7px 10px,repeating-linear-gradient(172deg,rgba(150,110,50,0) 0 9px,rgba(150,110,50,.12) 9px 11px),linear-gradient(180deg,#EDD6A4,#DDBD80);clip-path:polygon(100% 0,100% 0,100% 100%,100% 100%,100% 75%,100% 50%,100% 25%)}
+.o-dnod-sandt{top:5px;height:94px;border-radius:24px 16px 0 0}
+.o-dnod-sandb{top:97px;bottom:5px;border-radius:0 0 18px 26px;clip-path:polygon(0 0,0 0,0 25%,0 50%,0 75%,0 100%,0 100%)}
+.o-dnod-brush{position:absolute;left:0;top:0;width:84px;height:34px;opacity:0;transform-origin:74px 17px}
+.o-dnod-bri{width:84px;height:34px;transform-origin:74px 17px}
+.o-dnod-bri > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-dnod-handle{fill:#B07A44;stroke:var(--dno-ink);stroke-width:2.2;stroke-linejoin:round}
+.o-dnod-band{fill:#A9AEB3;stroke:var(--dno-ink);stroke-width:2.2;stroke-linejoin:round}
+.o-dnod-hair{fill:#6E4E30;stroke:var(--dno-ink);stroke-width:2.2;stroke-linejoin:round}
+.o-dnod-hl2{fill:none;stroke:rgba(255,230,190,.45);stroke-width:1.2;stroke-linecap:round}
+@keyframes dnoSweepL{0%{clip-path:polygon(-3% 0,100% 0,100% 100%,-3% 100%,-7% 75%,0% 50%,-6% 25%)}100%{clip-path:polygon(107% 0,100% 0,100% 100%,107% 100%,103% 75%,110% 50%,104% 25%)}}
+@keyframes dnoSweepR{0%{clip-path:polygon(0 0,102% 0,105% 25%,100% 50%,106% 75%,102% 100%,0 100%)}100%{clip-path:polygon(0 0,-6% 0,-3% 25%,-8% 50%,-2% 75%,-6% 100%,0 100%)}}
+@keyframes dnoBrush{
+  0%{opacity:0;transform:translate(-76px,40px) rotate(-28deg)}
+  3.7%{opacity:1;transform:translate(-57px,40px) rotate(-28deg)}
+  46.3%{transform:translate(336px,40px) rotate(-28deg)}
+  51.9%{transform:translate(310px,135px) rotate(-208deg)}
+  90.7%{opacity:1;transform:translate(-97px,135px) rotate(-208deg)}
+  100%{opacity:0;transform:translate(-90px,118px) rotate(-200deg)}
+}
+@keyframes dnoScrub{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-12deg)}}
+@keyframes dnoSinkOut{0%{transform:none}30%{transform:translateY(-4px)}100%{opacity:0;transform:translateY(24px) scale(.96)}}
+.playing .o-dnod > .o-dno-sh{animation:dnoThud calc(.2s / var(--spd)) linear calc(.3s / var(--spd))}
+.playing .o-dnod-slab{animation:dnoDrop calc(.34s / var(--spd)) cubic-bezier(.4,0,.6,1) both}
+.playing .o-dnod-sandt{animation:dnoSweepL calc(.48s / var(--spd)) linear calc(.4s / var(--spd)) both}
+.playing .o-dnod-sandb{animation:dnoSweepR calc(.44s / var(--spd)) linear calc(.9s / var(--spd)) both}
+.playing .o-dnod-brush{animation:dnoBrush calc(1.08s / var(--spd)) linear calc(.36s / var(--spd)) both}
+.playing .o-dnod-bri{animation:dnoScrub calc(.16s / var(--spd)) ease-in-out calc(.4s / var(--spd)) 6}
+
+/* raid — Stampede: the herd runs in through the dust and pulls up in a row */
+.o-dnor{height:202px}
+.o-dnor-scene{position:absolute;left:0;top:0;width:420px;height:118px;overflow:hidden;border:3px solid var(--dno-ink);border-radius:18px;background:linear-gradient(180deg,#F6ECD6 0%,#F0DDB8 55%,#E6CB98 100%);box-shadow:0 10px 20px rgba(0,0,0,.45)}
+.o-dnor-hills{position:absolute;left:0;right:0;bottom:30px;height:30px;background:#DDC59B;clip-path:polygon(0 100%,0 55%,12% 30%,24% 52%,38% 20%,52% 48%,64% 30%,78% 56%,90% 34%,100% 50%,100% 100%)}
+.o-dnor-ridge{position:absolute;left:280px;right:0;top:44px;height:40px;background:#D3BA90;clip-path:polygon(0 100%,6% 30%,10% 12%,96% 12%,100% 0,100% 100%)}
+.o-dnor-volc{position:absolute;left:96px;bottom:46px;width:70px;height:38px;background:linear-gradient(180deg,#B3A08C,#A58F7A);clip-path:polygon(0 100%,36% 10%,64% 10%,100% 100%)}
+.o-dnor-ground{position:absolute;left:0;right:0;bottom:0;height:34px;border-top:3px solid rgba(43,29,20,.55);background:radial-gradient(circle at 30% 40%,rgba(120,84,40,.25) 0 1px,rgba(120,84,40,0) 1.6px) 0 0/10px 8px,linear-gradient(180deg,#DDBD80,#CDA669)}
+.o-dnor-fern{position:absolute;left:4px;bottom:26px;width:36px;height:30px}
+.o-dnor-dino{position:absolute;bottom:6px;width:56px;height:46px}
+.o-dnor-back{bottom:22px;width:44px;height:36px}
+.o-dnor-bob{width:100%;height:100%;transform-origin:50% 92%}
+.o-dnor-bob > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-dno-leg{fill:none;stroke:var(--dno-ink);stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
+.o-dno-legc{fill:none;stroke:var(--dnoa);stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round}
+.o-dno-legd{fill:none;stroke:rgba(20,10,0,.22);stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round}
+.o-dnor-far{position:absolute;display:block;width:20px;height:17px}
+.o-dnor-far > svg{display:block;width:100%;height:100%}
+.o-dnor-farp{fill:rgba(var(--dnoa-rgb),.6);stroke:rgba(43,29,20,.5);stroke-width:2.5;stroke-linejoin:round}
+.o-dnor-plate{left:6px;top:122px;width:408px;height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 20px;text-align:center}
+.o-dnor-name{width:100%;font-size:calc(26px * var(--fit,1))}
+.o-dnor-line{display:flex;align-items:center;justify-content:center;gap:8px;max-width:100%;margin-top:4px}
+.o-dnor-tag{flex:0 1 auto;min-width:0}
+.o-dnor-num{flex:none;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;font-size:22px;line-height:1;color:var(--dno-ink)}
+.o-dnor-unit{flex:none;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;font-size:15px;line-height:1;color:rgba(43,29,20,.75)}
+@keyframes dnoRun{from{transform:translateX(calc(-1 * var(--x) - 24px))}to{transform:translateX(0)}}
+@keyframes dnoBob{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-4px) rotate(-6deg)}}
+@keyframes dnoHalt{0%,100%{transform:none}40%{transform:scale(1.14,.84)}70%{transform:scale(.97,1.03)}}
+@keyframes dnoFar{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes dnoRunOut{0%{transform:none}30%{transform:translateX(-6px)}100%{opacity:0;transform:translateX(60px)}}
+.playing .o-dnor > .o-dno-sh{animation:dnoThud calc(.2s / var(--spd)) linear calc(.5s / var(--spd)),dnoThud calc(.2s / var(--spd)) linear calc(.72s / var(--spd)),dnoThud calc(.2s / var(--spd)) linear calc(.94s / var(--spd))}
+.playing .o-dnor-scene{animation:dnoDrop calc(.34s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-dnor-plate{animation:dnoPop calc(.4s / var(--spd)) ease-out calc(.1s / var(--spd)) both}
+.playing .o-dnor-name{animation:dnoTextIn calc(.3s / var(--spd)) ease-out calc(.24s / var(--spd)) both}
+.playing .o-dnor-line{animation:dnoTextIn calc(.3s / var(--spd)) ease-out calc(.32s / var(--spd)) both}
+.playing .o-dnor-dino{animation:dnoRun calc(.62s / var(--spd)) cubic-bezier(.25,.6,.35,1) calc(var(--rd) / var(--spd)) both}
+.playing .o-dnor-bob{animation:dnoBob calc(.155s / var(--spd)) ease-in-out calc(var(--rd) / var(--spd)) 4,dnoHalt calc(.26s / var(--spd)) ease-out calc((var(--rd) + .62s) / var(--spd))}
+.playing .o-dnor-far{animation:dnoFar calc(.4s / var(--spd)) ease-out calc(var(--fd) / var(--spd)) both}
+
+/* giveaway — Amber: a drop swells on the branch, falls, spreads around the name, glows and sets */
+.o-dnog{height:214px}
+.o-dnog-halo{position:absolute;left:10px;top:2px;width:400px;height:172px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--dnoa-rgb),.6),rgba(var(--dnoa-rgb),.22) 60%,rgba(var(--dnoa-rgb),0));opacity:.85}
+.o-dnog-tab{left:62px;top:132px;width:296px;height:78px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:0 18px 10px}
+.o-dnog-pl{display:block;margin-bottom:2px}
+.o-dnog-prize{display:block;max-width:100%;font-family:"Luckiest Guy","Bangers","Impact",system-ui,sans-serif;font-weight:400;font-size:21px;line-height:1.2;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.2em 0;margin:-.2em 0}
+.o-dnog-branch{position:absolute;left:0;top:-2px;width:230px;height:40px}
+.o-dnog-branch > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-dnog-twigo{fill:none;stroke:var(--dno-ink);stroke-width:8.5;stroke-linecap:round}
+.o-dnog-twig{fill:none;stroke:#8A6038;stroke-width:4.5;stroke-linecap:round}
+.o-dnog-drop{position:absolute;left:206px;top:24px;width:15px;height:19px;border:2.5px solid var(--dno-ink);border-radius:50% 50% 50% 50% / 62% 62% 40% 40%;background:var(--dnoa);opacity:0;transform-origin:50% 0}
+.o-dnog-amber{position:absolute;left:30px;top:28px;width:360px;height:114px;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 30px 10px;border:3px solid var(--dno-ink);border-radius:52% 48% 50% 50% / 58% 56% 44% 42%;background:radial-gradient(70% 90% at 30% 18%,rgba(255,255,255,.45),rgba(255,255,255,0) 58%),radial-gradient(90% 90% at 78% 96%,rgba(0,0,0,.26),rgba(0,0,0,0) 60%),var(--dnoa);color:var(--dno-on);box-shadow:inset 0 0 0 4px rgba(255,255,255,.16),inset 0 -8px 16px rgba(0,0,0,.16),0 10px 22px rgba(0,0,0,.45);transform-origin:50% 100%}
+.o-dnog-cap{max-width:100%;font-family:"Nunito","Varela Round",system-ui,sans-serif;font-weight:900;font-size:12px;line-height:1.2;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+.o-dnog-name{width:100%;margin-top:3px;font-size:calc(34px * var(--fit,1));text-align:center;color:var(--dno-on);text-shadow:0 0 6px rgba(var(--dnoa-rgb),1),0 0 2px rgba(var(--dnoa-rgb),1)}
+.o-dnog-bub{position:absolute;width:var(--bs);height:var(--bs);border:1.5px solid rgba(255,255,255,.7);border-radius:50%;background:rgba(255,255,255,.22)}
+.o-dnog-gloss{position:absolute;left:9%;top:9%;width:30%;height:28%;border-top:4px solid rgba(255,255,255,.8);border-radius:50%;transform:rotate(-12deg)}
+.o-dnog-sweep{position:absolute;left:0;top:-10%;width:28%;height:120%;background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.6) 50%,rgba(255,255,255,0));opacity:0;transform:translateX(-120%) skewX(-18deg)}
+@keyframes dnoSwing{0%{opacity:0;transform:translateY(-16px) rotate(-4deg)}60%{opacity:1;transform:translateY(2px) rotate(1deg)}100%{opacity:1;transform:none}}
+@keyframes dnoDrip{0%{opacity:0;transform:scale(0)}22%{opacity:1;transform:scale(1,1.1)}40%{transform:translateY(0) scale(.9,1.25)}86%{opacity:1;transform:translateY(98px) scale(.85,1.3)}100%{opacity:0;transform:translateY(102px) scale(1.6,.4)}}
+@keyframes dnoAmber{0%{opacity:0;transform:scale(.05,.08)}15%{opacity:1}55%{transform:scale(1.06,.94)}75%{transform:scale(.98,1.03)}100%{opacity:1;transform:none}}
+@keyframes dnoHalo{0%{opacity:0;transform:scale(.6)}40%{opacity:1;transform:scale(1.08)}100%{opacity:.85;transform:none}}
+@keyframes dnoSweep{from{opacity:1;transform:translateX(-120%) skewX(-18deg)}to{opacity:1;transform:translateX(420%) skewX(-18deg)}}
+@keyframes dnoAmberOut{0%{transform:none}30%{transform:scale(1.03)}100%{opacity:0;transform:translateY(12px) scale(.86)}}
+.playing .o-dnog > .o-dno-sh{animation:dnoThud calc(.2s / var(--spd)) linear calc(.26s / var(--spd))}
+.playing .o-dnog-tab{animation:dnoDrop calc(.32s / var(--spd)) cubic-bezier(.4,0,.6,1) both}
+.playing .o-dnog-branch{animation:dnoSwing calc(.36s / var(--spd)) ease-out calc(.14s / var(--spd)) both}
+.playing .o-dnog-drop{animation:dnoDrip calc(.5s / var(--spd)) ease-in calc(.38s / var(--spd)) both}
+.playing .o-dnog-amber{animation:dnoAmber calc(.42s / var(--spd)) ease-out calc(.84s / var(--spd)) both}
+.playing .o-dnog-halo{animation:dnoHalo calc(.6s / var(--spd)) ease-out calc(1s / var(--spd)) both}
+.playing .o-dnog-sweep{animation:dnoSweep calc(.5s / var(--spd)) ease-in-out calc(1.28s / var(--spd)) both}

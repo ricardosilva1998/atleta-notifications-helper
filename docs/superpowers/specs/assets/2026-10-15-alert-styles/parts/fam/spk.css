@@ -90,6 +90,7 @@
 .o-spks-drip{fill:var(--spk-slime)}
 .o-spks-sim{position:absolute;width:var(--s);height:var(--s);border-radius:50%;background:radial-gradient(circle at 35% 32%,#F2FFE0 0 18%,#A9EF62 45%,#62B82A 100%);box-shadow:0 0 0 1px rgba(14,8,24,.35);transform-origin:50% 100%}
 .o-spks-num{position:absolute;left:0;right:0;top:54px;text-align:center;font-weight:900;font-size:30px;line-height:1;color:#B8F56E;text-shadow:0 0 10px rgba(139,225,58,.75),0 2px 0 rgba(0,0,0,.5)}
+.o-spks-num .o-odo{text-shadow:none;filter:drop-shadow(0 0 10px rgba(139,225,58,.75)) drop-shadow(0 2px 0 rgba(0,0,0,.5))}
 .o-spks-mo{display:block;margin-top:3px;font-weight:800;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(244,241,255,.75);text-shadow:0 1px 0 rgba(0,0,0,.6)}
 .o-spks-bub{position:absolute;left:64px;top:90px;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.95) 0 3px,rgba(201,247,143,.55) 4px,rgba(139,225,58,.22) 75%);box-shadow:inset 0 0 0 1.5px rgba(214,255,170,.9),0 0 10px rgba(139,225,58,.5);opacity:0}
 @keyframes spkBrew{0%{opacity:0}40%{opacity:1}70%{opacity:.6}100%{opacity:1}}
@@ -111,6 +112,7 @@
 .o-spkb-plate{left:168px;right:4px;top:24px;height:116px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:10px 16px 10px 20px}
 .o-spkb-lbl{font-size:20px}
 .o-spkb-amt{display:flex;align-items:flex-end;gap:6px;font-weight:900;font-size:32px;line-height:1;color:var(--spk-ghost);text-shadow:0 2px 0 rgba(0,0,0,.55),0 0 14px rgba(var(--spka-rgb),.35);white-space:nowrap}
+.o-spkb-amt .o-odo{text-shadow:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.55)) drop-shadow(0 0 14px rgba(var(--spka-rgb),.35))}
 .o-spkb-plus{margin-right:-4px;color:var(--spka)}
 .o-spkb-unit{margin-bottom:3px;font-weight:800;font-size:16px;line-height:1;letter-spacing:.02em;color:rgba(244,241,255,.82);text-shadow:0 1px 0 rgba(0,0,0,.6)}
 .o-spkb-name{font-size:calc(22px * var(--fit,1))}
@@ -178,6 +180,7 @@
 .o-spkr-count{display:flex;align-items:flex-end;gap:6px;font-weight:800;font-size:15px;line-height:1;color:rgba(244,241,255,.85);white-space:nowrap}
 .o-spkr-word{margin-bottom:1px}
 .o-spkr-num{font-weight:900;font-size:22px;color:var(--spka);text-shadow:0 0 10px rgba(var(--spka-rgb),.5)}
+.o-spkr-num .o-odo{text-shadow:none;filter:drop-shadow(0 0 10px rgba(var(--spka-rgb),.5))}
 @keyframes spkMoonUp{0%{opacity:0;transform:translateY(24px) scale(.9)}100%{opacity:1;transform:none}}
 @keyframes spkSwarm{0%{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.4)}15%{opacity:1}55%{transform:translate(calc(var(--sx) * .38),calc(var(--sy) * .38 + var(--arc))) scale(1.08)}100%{opacity:1;transform:none}}
 .playing .o-spkr-moon{animation:spkMoonUp calc(.55s / var(--spd)) ease-out both}

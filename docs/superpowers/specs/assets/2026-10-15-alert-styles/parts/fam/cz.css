@@ -19,8 +19,8 @@
 
 /* follow — Sticky note */
 .o-czf{height:132px}
-.o-czf-note{--rot:-2deg;position:absolute;left:50%;top:14px;width:316px;height:108px;margin-left:-158px;display:flex;flex-direction:column;justify-content:center;padding:14px 20px 10px 22px;transform:rotate(var(--rot));background:linear-gradient(180deg,#F4D46E 0,var(--cz-butter) 14%,#FFF0BF 100%);box-shadow:0 12px 22px rgba(20,14,40,.38),0 2px 4px rgba(20,14,40,.25)}
-.o-czf-note::after{content:"";position:absolute;right:0;bottom:0;width:26px;height:26px;background:linear-gradient(135deg,rgba(0,0,0,0) 50%,#E9C760 50%,#F7DE92);box-shadow:-2px -2px 4px rgba(20,14,40,.1)}
+.o-czf-note{--rot:-2deg;position:absolute;left:50%;top:14px;width:316px;height:108px;margin-left:-158px;display:flex;flex-direction:column;justify-content:center;padding:14px 20px 10px 22px;transform:rotate(var(--rot));background:linear-gradient(180deg,var(--a-hi,#F4D46E) 0,var(--a-tint,var(--cz-butter)) 14%,var(--a-soft,#FFF0BF) 100%);box-shadow:0 12px 22px rgba(20,14,40,.38),0 2px 4px rgba(20,14,40,.25)}
+.o-czf-note::after{content:"";position:absolute;right:0;bottom:0;width:26px;height:26px;background:linear-gradient(135deg,rgba(0,0,0,0) 50%,var(--a-lo,#E9C760) 50%,var(--a-tint,#F7DE92));box-shadow:-2px -2px 4px rgba(20,14,40,.1)}
 .o-czf-tag{--sr:-3deg;align-self:flex-start;padding:3px 10px;margin-bottom:5px;transform:rotate(var(--sr))}
 .o-czf-row{display:flex;align-items:center;gap:8px;min-width:0}
 .o-czf-hi{flex:1;min-width:0;font-size:calc(38px * var(--fit,1))}
@@ -39,7 +39,7 @@
 /* subscriber — Polaroid */
 .o-czs{height:188px}
 .o-czs-pola{--rot:2.5deg;position:absolute;left:50%;top:12px;width:300px;height:168px;margin-left:-150px;padding:11px 11px 0;transform:rotate(var(--rot));background:#FFFDF8;box-shadow:0 14px 26px rgba(20,14,40,.4),0 2px 5px rgba(20,14,40,.25)}
-.o-czs-photo{position:relative;height:108px;overflow:hidden;background:linear-gradient(180deg,#F1FBF6 0,#DDF5E8 60%,var(--cz-mint) 100%)}
+.o-czs-photo{position:relative;height:108px;overflow:hidden;background:linear-gradient(180deg,#F1FBF6 0,var(--a-soft,#DDF5E8) 60%,var(--a-tint,var(--cz-mint)) 100%)}
 .o-czs-photo svg{position:absolute;left:50%;bottom:0;width:120px;height:108px;margin-left:-60px;overflow:visible}
 .o-czs-dev{position:absolute;inset:0;background:linear-gradient(160deg,#2E2C38,#56506A);opacity:0}
 .o-czs-tier{--sr:-10deg;position:absolute;left:8px;top:8px;width:48px;height:48px;flex-direction:column;font-size:10px;line-height:1.05;text-align:center;transform:rotate(var(--sr))}

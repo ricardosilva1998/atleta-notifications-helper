@@ -14,7 +14,7 @@
 .o-wst-puff{position:absolute;width:var(--ps,22px);height:var(--ps,22px);margin:calc(var(--ps,22px) / -2) 0 0 calc(var(--ps,22px) / -2);border-radius:50%;background:radial-gradient(circle,rgba(232,208,166,.95) 0,rgba(214,186,140,.55) 42%,rgba(214,186,140,0) 70%);opacity:0;pointer-events:none}
 .o-wst-glint{position:absolute;z-index:4;width:var(--gs,14px);height:var(--gs,14px);margin:calc(var(--gs,14px) / -2) 0 0 calc(var(--gs,14px) / -2);background:#FFFBEA;clip-path:polygon(50% 0,59% 41%,100% 50%,59% 59%,50% 100%,41% 59%,0 50%,41% 41%);opacity:.85;transform:scale(.55) rotate(90deg)}
 /* A rubber stamp in red ink, a little worn. */
-.o-wst-stamp{position:relative;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 9px 3px;border:2.5px solid var(--wst-red);border-radius:5px;color:var(--wst-red);box-shadow:inset 0 0 0 1.5px rgba(234,217,181,.9),inset 0 0 0 3px var(--wst-red);transform:rotate(var(--sr,0deg))}
+.o-wst-stamp{--wst-ink-stamp:var(--a-deep,var(--wst-red));position:relative;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 9px 3px;border:2.5px solid var(--wst-ink-stamp);border-radius:5px;color:var(--wst-ink-stamp);box-shadow:inset 0 0 0 1.5px rgba(234,217,181,.9),inset 0 0 0 3px var(--wst-ink-stamp);transform:rotate(var(--sr,0deg))}
 .o-wst-stamp::after{content:"";position:absolute;inset:0;background:radial-gradient(circle,rgba(234,217,181,.75) 0 .9px,rgba(234,217,181,0) 1.4px) 0 0/7px 9px,radial-gradient(circle,rgba(234,217,181,.6) 0 .7px,rgba(234,217,181,0) 1.2px) 3px 4px/11px 7px}
 .o-wst-stamp > span{font-family:"Special Elite","Courier New",monospace;font-size:9px;line-height:1.2;letter-spacing:.3em;padding-left:.3em;text-transform:uppercase}
 .o-wst-stamp > b{font-family:"Rye","Rockwell","Georgia",serif;font-weight:400;line-height:1.1;white-space:nowrap}
@@ -160,7 +160,7 @@
 
 /* raid — Posse: riders gallop in at sunset and pull up in the dust, one per raider up to eight */
 .o-wstr{height:196px}
-.o-wstr-scene{position:absolute;left:0;right:0;top:0;height:116px;overflow:hidden;border-radius:12px;background:linear-gradient(180deg,#F4CC80 0%,#EFA457 40%,#DC6B32 70%,#B44A22 100%);box-shadow:0 12px 24px rgba(0,0,0,.5)}
+.o-wstr-scene{position:absolute;left:0;right:0;top:0;height:116px;overflow:hidden;border-radius:12px;background:linear-gradient(180deg,var(--a-tint,#F4CC80) 0%,var(--a-hi,#EFA457) 40%,var(--a,#DC6B32) 70%,var(--a-lo,#B44A22) 100%);box-shadow:0 12px 24px rgba(0,0,0,.5)}
 .o-wstr-scene::after{content:"";position:absolute;inset:0;z-index:4;border-radius:inherit;box-shadow:inset 0 0 0 3px rgba(42,22,8,.55),inset 0 0 22px rgba(70,24,4,.4);pointer-events:none}
 .o-wstr-sun{position:absolute;left:62%;top:22px;width:58px;height:58px;margin-left:-29px;border-radius:50%;background:radial-gradient(circle,#FFF6DA 0,#FFE3A0 45%,#F7C25E 70%,rgba(247,194,94,0) 72%);box-shadow:0 0 36px 10px rgba(255,214,140,.45)}
 .o-wstr-mesa{position:absolute;left:0;right:0;bottom:28px;height:40px;background:#A2492A;opacity:.92;clip-path:polygon(0 100%,0 52%,6% 52%,8% 18%,20% 18%,23% 50%,33% 56%,35% 100%,54% 100%,56% 46%,59% 14%,71% 14%,74% 46%,78% 62%,100% 62%,100% 100%)}

@@ -15,6 +15,8 @@
    the saved position and width on it (placement.js), and the object or card inside animates. */
 .alert-pos{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:min(420px,88%);z-index:10;pointer-events:none}
 .obj{position:relative;will-change:transform,opacity,clip-path;font-family:var(--o-disp)}
+/* Today's red is the streamer's colour once they pick one (kit.accentVars sets --a and its shades on the slot). */
+.obj{--r-red:var(--a,#D81E26);--r-red-deep:var(--a-lo,#B50000)}
 
 /* ══ Shared discipline ═════════════════════════════════════ */
 /* --fit (set inline by objects/index.js for a long name) scales the font size so the
@@ -45,7 +47,7 @@
 
 /* ── 01 follow — iaido band ──────────────────────────────── */
 .o-follow{
-  transform:skewX(-11deg);background:linear-gradient(100deg,var(--r-red-deep),var(--r-red) 58%,#F0343C);
+  transform:skewX(-11deg);background:linear-gradient(100deg,var(--r-red-deep),var(--r-red) 58%,var(--a-hi,#F0343C));
   width:97%;margin:0 auto;overflow:hidden;
   display:flex;align-items:center;gap:14px;padding:13px 20px;
   box-shadow:0 14px 32px rgba(0,0,0,.58);
@@ -54,33 +56,33 @@
 .o-follow .o-follow-hatch{position:absolute;left:0;top:0;bottom:0;width:66px;transform:none;background:repeating-linear-gradient(112deg,rgba(0,0,0,.34) 0 10px,transparent 10px 20px);background-size:24px 24px}
 .o-follow .o-mesh{position:absolute;inset:0;transform:none;background:var(--o-hex);opacity:.9;pointer-events:none}
 .o-follow .o-follow-scar{position:absolute;top:-20%;bottom:-20%;left:50%;width:2px;transform:rotate(22deg);background:rgba(255,255,255,.95);box-shadow:0 0 12px 2px rgba(255,255,255,.7);opacity:0;z-index:3}
-.o-follow .o-follow-glyph{font-weight:800;font-size:26px;line-height:1;color:rgba(255,255,255,.9);z-index:1}
+.o-follow .o-follow-glyph{font-weight:800;font-size:26px;line-height:1;color:rgba(var(--a-on-rgb,255,255,255),.9);z-index:1}
 .o-follow .o-follow-txt{z-index:1;min-width:0}
-.o-follow .o-name{color:#fff;font-size:calc(22px * var(--fit,1))}
-.o-follow .o-meta{color:rgba(255,255,255,.82);margin-top:4px}
+.o-follow .o-name{color:var(--a-on,#fff);font-size:calc(22px * var(--fit,1))}
+.o-follow .o-meta{color:rgba(var(--a-on-rgb,255,255,255),.82);margin-top:4px}
 @keyframes scarFade{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
 
 /* ── 02 subscription — torii gate + gaku name plaque ─────── */
 .o-sub{height:172px}
 .o-sub .o-sub-kasagi{
   position:absolute;left:-5%;right:-5%;top:0;height:18px;
-  background:linear-gradient(#F0343C,var(--r-red) 42%,#8E0A10);
+  background:linear-gradient(var(--a-hi,#F0343C),var(--r-red) 42%,var(--a-deep,#8E0A10));
   clip-path:polygon(0 0,100% 0,96% 100%,4% 100%);
   box-shadow:0 3px 0 rgba(0,0,0,.45);
 }
 .o-sub .o-sub-nuki{
   position:absolute;left:3%;right:3%;top:36px;height:12px;
-  background:linear-gradient(#D8282F,#9A0C13);
+  background:linear-gradient(var(--a,#D8282F),var(--a-deep,#9A0C13));
   box-shadow:0 2px 0 rgba(0,0,0,.4);
 }
 .o-sub .o-sub-pillar{
   position:absolute;top:11px;bottom:0;width:18px;
-  background:linear-gradient(90deg,#8E0A10,var(--r-red) 38%,#F0343C 56%,#9A0C13);
+  background:linear-gradient(90deg,var(--a-deep,#8E0A10),var(--r-red) 38%,var(--a-hi,#F0343C) 56%,var(--a-deep,#9A0C13));
   box-shadow:inset -2px 0 0 rgba(0,0,0,.32);
 }
 .o-sub .o-sub-pillar.l{left:7%}
 .o-sub .o-sub-pillar.r{right:7%}
-.o-sub .o-sub-base{position:absolute;bottom:0;height:6px;width:36px;background:#2A0205}
+.o-sub .o-sub-base{position:absolute;bottom:0;height:6px;width:36px;background:var(--a-ink,#2A0205)}
 .o-sub .o-sub-base.l{left:calc(7% - 9px)}
 .o-sub .o-sub-base.r{right:calc(7% - 9px)}
 /* the gaku — the name plaque a real torii carries between its beams.
@@ -88,7 +90,7 @@
 .o-sub .o-sub-gaku{
   position:absolute;left:15%;right:15%;top:52px;
   background:linear-gradient(162deg,#131B24,#070B10);
-  box-shadow:0 12px 28px rgba(0,0,0,.66),inset 0 0 0 1px rgba(216,30,38,.55),inset 0 1px 0 rgba(255,255,255,.09);
+  box-shadow:0 12px 28px rgba(0,0,0,.66),inset 0 0 0 1px rgba(var(--a-rgb,216,30,38),.55),inset 0 1px 0 rgba(255,255,255,.09);
   clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%,0 10px);
   padding:14px 14px 16px;text-align:center;transform-origin:50% -18px;z-index:2;
   box-sizing:border-box;max-height:118px;overflow:hidden;
@@ -98,11 +100,11 @@
 .o-sub .o-sub-cords::before,.o-sub .o-sub-cords::after{content:"";position:absolute;top:0;bottom:0;width:2px;background:#C9CDD2;opacity:.65}
 .o-sub .o-sub-cords::before{left:0}
 .o-sub .o-sub-cords::after{right:0}
-.o-sub .o-sub-mark{font-family:var(--o-cond);font-size:10.5px;color:#FF6B6B;margin-bottom:8px;letter-spacing:.4em;text-transform:uppercase;position:relative}
+.o-sub .o-sub-mark{font-family:var(--o-cond);font-size:10.5px;color:var(--a-tint,#FF6B6B);margin-bottom:8px;letter-spacing:.4em;text-transform:uppercase;position:relative}
 .o-sub .o-name{color:#FFFDF9;position:relative}
-.o-sub .o-meta{color:#C9636A;margin-top:9px;position:relative}
+.o-sub .o-meta{color:var(--a-soft,#C9636A);margin-top:9px;position:relative}
 /* Gift-sub context (e.g. "Gifted 5 subs!") — subtle, the gaku plaque is small */
-.o-sub .o-sub-msg{font-family:var(--o-cond);font-weight:600;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:#C9636A;opacity:.85;margin-top:6px;position:relative;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-sub .o-sub-msg{font-family:var(--o-cond);font-weight:600;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--a-soft,#C9636A);opacity:.85;margin-top:6px;position:relative;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .o-sub .o-sub-dust{position:absolute;bottom:0;left:0;right:0;height:26px;background:radial-gradient(60% 100% at 14% 100%,rgba(255,255,255,.3),transparent 70%),radial-gradient(60% 100% at 86% 100%,rgba(255,255,255,.3),transparent 70%);opacity:0;pointer-events:none}
 @keyframes pillarDrive{from{transform:translateY(-240%)}to{transform:translateY(0)}}
 @keyframes beamDrop{0%{transform:translateY(-330%)}78%{transform:translateY(5%)}100%{transform:translateY(0)}}
@@ -113,7 +115,7 @@
 .o-bits{
   background:linear-gradient(162deg,#1A0609,#0A0407);
   padding:17px 20px 13px;
-  box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3);
+  box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(var(--a-rgb,216,30,38),.3);
 }
 .o-bits .o-bits-br{position:absolute;width:15px;height:15px;border:2px solid #AEB5BD;z-index:3}
 .o-bits .o-bits-br.tl{top:-1px;left:-1px;border-right:0;border-bottom:0}
@@ -123,38 +125,38 @@
 .o-bits .o-bits-cells{display:flex;gap:6px;justify-content:center;position:relative;z-index:2}
 .o-bits .o-bits-tile{
   width:48px;height:60px;display:grid;place-items:center;
-  background:linear-gradient(160deg,#36090F,#1A050A);
-  box-shadow:inset 0 0 0 1px rgba(216,30,38,.45),0 4px 10px rgba(0,0,0,.5);
+  background:linear-gradient(160deg,var(--a-night,#36090F),var(--a-ink,#1A050A));
+  box-shadow:inset 0 0 0 1px rgba(var(--a-rgb,216,30,38),.45),0 4px 10px rgba(0,0,0,.5);
   border-bottom:2px solid var(--r-red);
   font-weight:800;font-size:33px;color:#FFFDF9;font-variant-numeric:tabular-nums;
-  text-shadow:0 0 18px rgba(216,30,38,.75);
+  text-shadow:0 0 18px rgba(var(--a-rgb,216,30,38),.75);
   transform-origin:50% 50%;
 }
 .o-bits .o-bits-who{text-align:center;margin-top:13px;color:#FFFDF9;position:relative;z-index:2}
-.o-bits .o-bits-unit{text-align:center;color:#C9636A;margin-top:5px;position:relative;z-index:2}
+.o-bits .o-bits-unit{text-align:center;color:var(--a-soft,#C9636A);margin-top:5px;position:relative;z-index:2}
 @keyframes oBitsIn{0%{transform:scale(.93);opacity:0}100%{transform:scale(1);opacity:1}}
 @keyframes tileFlip{0%{transform:perspective(340px) rotateX(-94deg);opacity:0}54%{opacity:1}78%{transform:perspective(340px) rotateX(9deg)}100%{transform:perspective(340px) rotateX(0deg);opacity:1}}
-@keyframes boardFlash{0%,100%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(216,30,38,.3)}40%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(255,66,71,.9),0 0 34px rgba(216,30,38,.5)}}
+@keyframes boardFlash{0%,100%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(var(--a-rgb,216,30,38),.3)}40%{box-shadow:0 14px 32px rgba(0,0,0,.64),inset 0 0 0 1px rgba(var(--a-rgb,255,66,71),.9),0 0 34px rgba(var(--a-rgb,216,30,38),.5)}}
 
 /* ── 04 donation — byobu folding screen (the big one) ────── */
 .o-don{height:178px;width:99%;margin:0 auto}
 .o-don .o-don-screen{position:absolute;inset:0;display:flex;perspective:1100px}
 .o-don .o-don-panel{
   position:relative;flex:1;transform-origin:left center;
-  background:linear-gradient(166deg,#20060A,#34080F 42%,#140408);
-  box-shadow:inset -1px 0 0 rgba(216,30,38,.6),inset 0 0 0 1px rgba(255,255,255,.04);
+  background:linear-gradient(166deg,var(--a-ink,#20060A),var(--a-night,#34080F) 42%,var(--a-ink,#140408));
+  box-shadow:inset -1px 0 0 rgba(var(--a-rgb,216,30,38),.6),inset 0 0 0 1px rgba(255,255,255,.04);
 }
 .o-don .o-don-panel .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.5;pointer-events:none}
-.o-don .o-don-rail{position:absolute;left:-7px;right:-7px;height:10px;z-index:3;background:linear-gradient(#F0343C,var(--r-red) 48%,#8E0A10);box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.o-don .o-don-rail{position:absolute;left:-7px;right:-7px;height:10px;z-index:3;background:linear-gradient(var(--a-hi,#F0343C),var(--r-red) 48%,var(--a-deep,#8E0A10));box-shadow:0 3px 0 rgba(0,0,0,.4)}
 .o-don .o-don-rail.t{top:-6px}
 .o-don .o-don-rail.b{bottom:-6px;box-shadow:0 -3px 0 rgba(0,0,0,.4)}
 .o-don .o-don-face{position:absolute;inset:0;display:grid;place-content:center;text-align:center;z-index:4;overflow:hidden}
-.o-don .o-don-head{font-family:var(--o-cond);font-weight:600;font-size:11px;letter-spacing:.34em;color:#FF6B6B;text-transform:uppercase}
-.o-don .o-don-amt{font-weight:800;font-size:50px;line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;color:#FFFDF9;margin-top:8px;text-shadow:0 0 32px rgba(216,30,38,.8),0 3px 10px rgba(0,0,0,.6)}
+.o-don .o-don-head{font-family:var(--o-cond);font-weight:600;font-size:11px;letter-spacing:.34em;color:var(--a-tint,#FF6B6B);text-transform:uppercase}
+.o-don .o-don-amt{font-weight:800;font-size:50px;line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;color:#FFFDF9;margin-top:8px;text-shadow:0 0 32px rgba(var(--a-rgb,216,30,38),.8),0 3px 10px rgba(0,0,0,.6)}
 /* Donor message — muted, well under the amount's 50px, wraps within the face
    rather than overflowing it so the 6-panel screen behind stays untouched. */
-.o-don .o-don-msg{font-family:var(--o-cond);font-weight:500;font-style:italic;font-size:13px;line-height:1.3;color:#C9636A;opacity:.9;margin-top:8px;max-width:88%;margin-left:auto;margin-right:auto;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
-.o-don .o-don-from{font-family:var(--o-cond);font-weight:600;font-size:13px;margin-top:10px;text-transform:uppercase;letter-spacing:.2em;color:#C9636A}
+.o-don .o-don-msg{font-family:var(--o-cond);font-weight:500;font-style:italic;font-size:13px;line-height:1.3;color:var(--a-soft,#C9636A);opacity:.9;margin-top:8px;max-width:88%;margin-left:auto;margin-right:auto;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-don .o-don-from{font-family:var(--o-cond);font-weight:600;font-size:13px;margin-top:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--a-soft,#C9636A)}
 @keyframes panelUnfold{from{transform:rotateY(-84deg)}to{transform:rotateY(0deg)}}
 @keyframes railSnap{from{transform:scaleX(.1);opacity:0}to{transform:scaleX(1);opacity:1}}
 
@@ -163,7 +165,7 @@
 .o-raid .o-raid-rank{position:absolute;left:0;right:0;top:0;height:132px;display:flex;align-items:flex-start;justify-content:center;gap:7px}
 .o-raid .o-raid-ban{
   position:relative;transform-origin:50% 0;
-  background:linear-gradient(170deg,#8E0A10,#5E070C 70%,#3A0407);
+  background:linear-gradient(170deg,var(--a-deep,#8E0A10),var(--a-night,#5E070C) 70%,var(--a-ink,#3A0407));
   clip-path:polygon(0 0,100% 0,100% 84%,50% 100%,0 84%);
   box-shadow:0 12px 26px rgba(0,0,0,.6);
 }
@@ -172,11 +174,11 @@
 .o-raid .o-raid-ban.m{width:34px;height:112px}
 .o-raid .o-raid-ban.main{
   width:118px;height:132px;
-  background:linear-gradient(168deg,#F0343C,var(--r-red) 40%,#A50F16);
+  background:linear-gradient(168deg,var(--a-hi,#F0343C),var(--r-red) 40%,var(--a-lo,#A50F16));
 }
 .o-raid .o-raid-ban.main .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.85;pointer-events:none}
-.o-raid .o-raid-cnt{white-space:nowrap;font-weight:800;font-size:46px;line-height:1;color:#fff;letter-spacing:-.045em;font-variant-numeric:tabular-nums;text-align:center;margin-top:22px;text-shadow:0 3px 10px rgba(0,0,0,.5)}
-.o-raid .o-raid-clbl{font-family:var(--o-cond);font-weight:700;font-size:9.5px;letter-spacing:.24em;color:rgba(255,255,255,.82);text-transform:uppercase;text-align:center;margin-top:4px}
+.o-raid .o-raid-cnt{white-space:nowrap;font-weight:800;font-size:46px;line-height:1;color:var(--a-on,#fff);letter-spacing:-.045em;font-variant-numeric:tabular-nums;text-align:center;margin-top:22px;text-shadow:0 3px 10px rgba(0,0,0,.5)}
+.o-raid .o-raid-clbl{font-family:var(--o-cond);font-weight:700;font-size:9.5px;letter-spacing:.24em;color:rgba(var(--a-on-rgb,255,255,255),.82);text-transform:uppercase;text-align:center;margin-top:4px}
 .o-raid .o-raid-plaque{
   position:absolute;left:8%;right:8%;bottom:0;
   background:linear-gradient(160deg,#141C26,#070B10);
@@ -186,7 +188,7 @@
   box-shadow:0 12px 26px rgba(0,0,0,.6);
 }
 .o-raid .o-name{color:#FFFDF9;font-size:calc(21px * var(--fit,1))}
-.o-raid .o-meta{color:#C9636A;margin-top:5px}
+.o-raid .o-meta{color:var(--a-soft,#C9636A);margin-top:5px}
 @keyframes banPlant{
   0%  {transform:translateY(-210%) skewX(0deg)}
   56% {transform:translateY(0) skewX(0deg)}
