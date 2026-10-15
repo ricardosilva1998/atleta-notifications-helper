@@ -105,7 +105,7 @@ describe('the gallery', () => {
 describe('the families of Appendix A', () => {
   // In the gallery's order. Release B adds them one task at a time
   // (docs/superpowers/plans/2026-10-15-alert-styles-release-b.md).
-  const FAMILIES = ['samurai', 'racing', 'grandprix', 'cockpit', 'arcade', 'quest', 'comic', 'cozy', 'cosmos', 'glass', 'spooky', 'cyber', 'western', 'retro', 'graffiti', 'kawaii', 'steampunk', 'frost', 'neon', 'deepsea', 'music'];
+  const FAMILIES = ['samurai', 'racing', 'grandprix', 'cockpit', 'arcade', 'quest', 'comic', 'cozy', 'cosmos', 'glass', 'spooky', 'cyber', 'western', 'retro', 'graffiti', 'kawaii', 'steampunk', 'frost', 'neon', 'deepsea', 'music', 'stadium'];
   test('are the gallery\'s families, in its order, each drawing all six alerts', () => {
     assert.deepEqual(styles.familyKeys(), FAMILIES);
     for (const family of FAMILIES) assert.ok(styles.familyStyles(family), `${family} draws all six alerts`);
