@@ -12,18 +12,33 @@ describe('object registry contract', () => {
     assert.deepEqual(Object.keys(OBJECTS).sort(), [...KEYS].sort());
   });
 
+  // The shape every object and every style has. exitMs() in overlay.js reads exit.dur as seconds
+  // (parseFloat), so a duration written as "900ms" would hold the alert queue for 15 minutes.
+  function assertTimedObject(label, o) {
+    assert.equal(typeof o.render, 'function', `${label}: render must be a function`);
+    for (const phase of ['anim', 'exit']) {
+      assert.ok(o[phase], `${label}: missing ${phase}`);
+      assert.match(o[phase].dur, /^\d+(\.\d+)?s$/, `${label}: ${phase}.dur must be like "0.40s"`);
+      assert.equal(typeof o[phase].ease, 'string', `${label}: ${phase}.ease must be a string`);
+    }
+    assert.equal(typeof o.anim.in, 'string', `${label}: anim.in must name a keyframe`);
+    assert.equal(typeof o.exit.out, 'string', `${label}: exit.out must name a keyframe`);
+  }
+
   test('every object has a render function and timing metadata', () => {
     for (const k of KEYS) {
-      const o = OBJECTS[k];
-      assert.equal(o.key, k, `${k}: key must match its registry slot`);
-      assert.equal(typeof o.render, 'function', `${k}: render must be a function`);
-      for (const phase of ['anim', 'exit']) {
-        assert.ok(o[phase], `${k}: missing ${phase}`);
-        assert.match(o[phase].dur, /^\d+(\.\d+)?s$/, `${k}: ${phase}.dur must be like "0.40s"`);
-        assert.equal(typeof o[phase].ease, 'string', `${k}: ${phase}.ease must be a string`);
-      }
-      assert.equal(typeof o.anim.in, 'string', `${k}: anim.in must name a keyframe`);
-      assert.equal(typeof o.exit.out, 'string', `${k}: exit.out must name a keyframe`);
+      assert.equal(OBJECTS[k].key, k, `${k}: key must match its registry slot`);
+      assertTimedObject(k, OBJECTS[k]);
+    }
+  });
+
+  test('every style has the same shape, is filed under its own id and names the alert it draws', () => {
+    const styles = Object.entries(OBJECTS.STYLES);
+    assert.ok(styles.length >= 1, 'there is at least one style');
+    for (const [id, style] of styles) {
+      assert.equal(style.key, id, `${id}: key must match its STYLES slot (objectFor() compares them)`);
+      assert.equal(typeof style.eventType, 'string', `${id}: eventType names the alert it draws`);
+      assertTimedObject(id, style);
     }
   });
 });
@@ -434,5 +449,214 @@ describe('objects.css — display font and name fitting (N2, N3)', () => {
 
   test('the raid count never wraps', () => {
     assert.match(rule('.o-raid .o-raid-cnt'), /white-space:\s*nowrap/);
+  });
+});
+
+// ── Styles: an alert drawn in another look (andre_vilela_'s C1) ─────────
+
+describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
+  const STYLES = OBJECTS.STYLES;
+  const C1 = STYLES && STYLES['donation-c1'];
+  const tip = (over = {}) => C1.render({ username: 'PitBoss92', amount: '25.00', currency: 'EUR', message: 'Força Vilela!', ...over });
+  const hasClass = (html, name) => new RegExp(`class="(?:[^"]* )?${name}(?: [^"]*)?"`).test(html);
+  const ids = (html) => [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+
+  test('rides along with the registry without changing the five', () => {
+    assert.deepEqual(Object.keys(OBJECTS).sort(), [...KEYS].sort(), 'Object.keys still lists only the five');
+    assert.ok(STYLES, 'STYLES is on the export');
+    assert.deepEqual(Object.keys(STYLES), ['donation-c1']);
+  });
+
+  test('has the registry shape, the id it is filed under and the alert it draws', () => {
+    assert.equal(C1.key, 'donation-c1');
+    assert.equal(C1.eventType, 'donation');
+    assert.equal(typeof C1.render, 'function');
+    assert.deepEqual(C1.anim, { in: 'hold', dur: '1.25s', ease: 'linear' });
+    assert.deepEqual(C1.exit, { out: 'hold', dur: '0.90s', ease: 'linear' });
+  });
+
+  test('is one object: the rig (trailer, board, car) and the smoke it leaves behind', () => {
+    const html = tip();
+    assert.match(html, /^<div class="obj o-c1">/);
+    for (const part of ['o-c1-rig', 'o-c1-streaks', 'o-c1-trailer', 'o-c1-board', 'o-c1-tframe', 'o-c1-hitch', 'o-c1-car', 'o-c1-flame', 'o-c1-bsmoke', 'o-c1-exsmoke']) {
+      assert.ok(hasClass(html, part), part);
+    }
+    assert.equal((html.match(/class="o-c1-tw"/g) || []).length, 2, 'two trailer wheels');
+  });
+
+  test('the car is the traced C1: its outline, both wheels, the name and the number', () => {
+    const html = tip();
+    assert.match(html, /<svg class="o-c1-svg" viewBox="0 0 320 140"/);
+    assert.match(html, /class="o-c1-wheel o-c1-rear" transform="translate\(57 108\.5\)"/);
+    assert.match(html, /class="o-c1-wheel o-c1-front" transform="translate\(249 108\.5\)"/);
+    assert.match(html, /class="o-c1-decal"[^>]*>VILELA</);
+    assert.match(html, /class="o-c1-num"[^>]*>1</);
+  });
+
+  test('the traced outline, the glass and the wheel wells are the committed prototype\'s, character for character, and the render prints them', () => {
+    // The drawing was measured from a real C1 once (see the comment above C1_BODY): a path edited by accident
+    // anywhere along its length must fail here, not only at its first characters.
+    const prototype = fs.readFileSync(path.join(__dirname, '..', 'docs', 'superpowers', 'specs', 'assets', '2026-10-15-vilela-c1-donation-prototype.html'), 'utf8');
+    const registry = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
+    const paths = (source, declaration) => Object.fromEntries([...source.matchAll(declaration)].map((m) => [m[1], m[2]]));
+    const fromPrototype = paths(prototype, /const (BODY|DOOR_GLASS|QUARTER_GLASS|WELLS) = '([^']*)';/g);
+    const fromRegistry = paths(registry, /var C1_(BODY|DOOR_GLASS|QUARTER_GLASS|WELLS) = '([^']*)';/g);
+    const names = ['BODY', 'DOOR_GLASS', 'QUARTER_GLASS', 'WELLS'];
+    assert.deepEqual(Object.keys(fromPrototype).sort(), [...names].sort(), 'the prototype declares the four paths');
+    assert.deepEqual(Object.keys(fromRegistry).sort(), [...names].sort(), 'the registry declares the four paths');
+    const html = tip();
+    for (const name of names) {
+      assert.ok(fromPrototype[name].length > 50, `${name} is a whole path, not a stub`);
+      assert.equal(fromRegistry[name], fromPrototype[name], `C1_${name} is the prototype's ${name}`);
+      assert.ok(html.includes(`d="${fromPrototype[name]}"`), `the render draws ${name}`);
+    }
+  });
+
+  test('prints the board: Sponsor, the amount, the message in quotes and the name', () => {
+    const html = tip();
+    assert.ok(html.includes('<div class="o-c1-head">Sponsor</div>'));
+    assert.ok(html.includes('<div class="o-c1-amt">€25.00</div>'));
+    assert.ok(html.includes('<div class="o-c1-msg">&quot;Força Vilela!&quot;</div>'));
+    assert.ok(html.includes('<div class="o-c1-from">PitBoss92</div>'));
+  });
+
+  test('escapes the name and the message', () => {
+    const html = tip({ username: '<img src=x>Ap&x', message: '<b>hi</b>' });
+    assert.ok(html.includes('&lt;img src=x&gt;Ap&amp;x'));
+    assert.ok(html.includes('&lt;b&gt;hi&lt;/b&gt;'));
+    assert.ok(!html.includes('<img src=x>') && !html.includes('<b>hi</b>'));
+  });
+
+  test('no message, no message line', () => {
+    assert.ok(!tip({ message: '' }).includes('o-c1-msg'));
+    assert.ok(!tip({ message: undefined }).includes('o-c1-msg'));
+  });
+
+  test('a long amount is set smaller so it stays on the board, never below 60 %', () => {
+    assert.ok(tip().includes('<div class="o-c1-amt">€25.00</div>'), '€25.00 is at full size');
+    assert.ok(tip({ amount: '1250' }).includes('<div class="o-c1-amt" style="--afit:0.78">€1,250.00</div>'));
+    assert.ok(tip({ amount: '10000' }).includes('style="--afit:0.70">€10,000.00<'));
+    assert.ok(tip({ amount: '1000000000' }).includes('style="--afit:0.60">'));
+  });
+
+  test('an amount in a long currency format is set smaller too (CA$1,250.00)', () => {
+    assert.ok(tip({ amount: '1250', currency: 'CAD' }).includes('<div class="o-c1-amt" style="--afit:0.64">CA$1,250.00</div>'));
+  });
+
+  test('the amount is set smaller from its 8th character: 7 characters ($100.00) stay at full size, 8 (CA$25.00) get 7/8', () => {
+    const amount = (html) => /<div class="o-c1-amt"([^>]*)>([^<]*)<\/div>/.exec(html);
+    const seven = amount(tip({ amount: '100', currency: 'USD' }));
+    assert.equal(seven[2], '$100.00', 'seven characters');
+    assert.equal(seven[1], '', 'the board holds seven at 46px: no --afit');
+    const eight = amount(tip({ amount: '25', currency: 'CAD' }));
+    assert.equal(eight[2], 'CA$25.00', 'eight characters');
+    assert.equal(eight[1], ' style="--afit:0.88"', '7 / 8 = 0.875, written with two decimals');
+  });
+
+  test('renders the dashboard test donation (src/routes/dashboard.js) in its currency', () => {
+    assert.ok(C1.render({ username: 'BigSponsor', amount: 25, message: 'Keep racing!', currency: 'USD' }).includes('$25.00'));
+  });
+
+  test('every SVG id is its own: two alerts on one page never share a gradient or a clip path', () => {
+    const a = tip();
+    const b = tip();
+    assert.ok(ids(a).length >= 6);
+    assert.equal(new Set(ids(a)).size, ids(a).length, 'unique within one alert');
+    assert.ok(ids(a).every((id) => !ids(b).includes(id)), 'unique between alerts');
+    const own = new Set(ids(a));
+    for (const [, ref] of a.matchAll(/url\(#([^)]+)\)/g)) assert.ok(own.has(ref), `url(#${ref}) points into the same alert`);
+  });
+
+  test('every class it uses is under the o-c1 prefix (besides the shared obj and o-mesh)', () => {
+    const classes = [...tip().matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    for (const name of classes) assert.ok(name === 'obj' || name === 'o-mesh' || name.startsWith('o-c1'), name);
+  });
+});
+
+describe('objects.css — the C1 (donation-c1)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const defined = new Set([...css.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map((m) => m[1]));
+  const rule = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css);
+    assert.ok(m, `rule ${selector} exists`);
+    return m[1];
+  };
+
+  test('every keyframe the C1 names or plays is defined', () => {
+    const c1 = OBJECTS.STYLES['donation-c1'];
+    for (const name of [c1.anim.in, c1.exit.out]) assert.ok(defined.has(name), name);
+    const played = new Set([...bare.matchAll(/\bc1[A-Z][A-Za-z]*\b/g)].map((m) => m[0]));
+    assert.ok(played.size >= 16, 'the C1 has its own keyframes');
+    for (const name of played) assert.ok(defined.has(name), `${name} is played but not defined`);
+  });
+
+  test('every C1 selector is under .o-c1, so none of its classes can collide with the builder page', () => {
+    const selectors = [...bare.matchAll(/(^|\})\s*([^{}@]+)\{/g)].map((m) => m[2].trim()).filter((s) => /o-c1/.test(s));
+    assert.ok(selectors.length > 20);
+    for (const selector of selectors) {
+      for (const part of selector.split(',')) assert.match(part.trim(), /^(\.(playing|exiting) )?\.o-c1\b/, part.trim());
+    }
+  });
+
+  test('the car drives in and out across the whole OBS source, whatever its size', () => {
+    // A --fw declared on any element inside the builder preview's host would shadow the host's own (1920px).
+    const header = css.indexOf('/* ══ 06 styles');
+    assert.ok(header >= 0, 'the C1 section has its header comment');
+    const nextHeader = css.indexOf('/* ══ ', header + 1);
+    const section = css.slice(header, nextHeader === -1 ? undefined : nextHeader).replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(section.includes('.o-c1{') && section.includes('.exiting .o-c1 .o-c1-rig{'), 'the slice runs from the first C1 rule to the last');
+    assert.ok(!/--fw\s*:/.test(section), 'no rule in the C1 section declares --fw, so a parent (the builder preview) can set it');
+    assert.ok(css.includes('@keyframes c1Arrive{from{transform:translateX(calc(-1 * var(--fw, 100vw)))}to{transform:translateX(0)}}'));
+    assert.ok(css.includes('@keyframes c1Leave{from{transform:translateX(0)}to{transform:translateX(var(--fw, 100vw))}}'));
+  });
+
+  test('its exit outranks the shared .exiting .obj * that stops every other animation', () => {
+    assert.match(css, /\n\.exiting \.o-c1 \.o-c1-rig\{animation:c1Leave /);
+    assert.match(css, /\n\.exiting \.o-c1 \.o-c1-spin\{animation:c1SpinOut /);
+  });
+
+  test('the name stays on one line, cut with an ellipsis; the message has two lines at most', () => {
+    const from = rule('.o-c1 .o-c1-from');
+    assert.match(from, /white-space:\s*nowrap/);
+    assert.match(from, /overflow:\s*hidden/);
+    assert.match(from, /text-overflow:\s*ellipsis/);
+    assert.match(rule('.o-c1 .o-c1-msg'), /-webkit-line-clamp:\s*2/);
+    assert.match(rule('.o-c1 .o-c1-amt'), /white-space:\s*nowrap/);
+  });
+
+  test('the car takes 39 % of the alert, at most 230px, and the board the rest less the hitch', () => {
+    assert.match(rule('.o-c1'), /--o-c1-cw:\s*min\(39%,\s*230px\)/);
+    assert.match(rule('.o-c1 .o-c1-car'), /width:\s*var\(--o-c1-cw\)/);
+    assert.match(rule('.o-c1 .o-c1-trailer'), /width:\s*calc\(100% - var\(--o-c1-cw\) - 14px\)/);
+    assert.match(rule('.o-c1 .o-c1-board'), /box-sizing:\s*border-box/);
+  });
+
+  test('the message and the name are never squeezed: a flex item that clips would shrink below its lines', () => {
+    assert.match(rule('.o-c1 .o-c1-msg'), /(?:^|;)flex:\s*none/);
+    assert.match(rule('.o-c1 .o-c1-from'), /(?:^|;)flex:\s*none/);
+  });
+
+  test('the board holds its worst case in its 126px: the 46px amount, two message lines and the name', () => {
+    const num = (text, re, what) => { const m = re.exec(text); assert.ok(m, `${what} is declared`); return Number(m[1]); };
+    const optional = (text, re) => { const m = re.exec(text); return m ? Number(m[1]) : 0; };
+    const lineBox = (selector, size) => {
+      const body = rule(selector);
+      return num(body, size, `${selector} font-size`) * num(body, /(?:^|;)line-height:\s*([\d.]+)(?:;|$)/, `${selector} line-height`);
+    };
+    const board = rule('.o-c1 .o-c1-board');
+    const room = num(board, /(?:^|;)height:\s*([\d.]+)px/, 'the board height')
+      - num(board, /(?:^|;)padding:\s*([\d.]+)px\s+[\d.]+px\s+[\d.]+px/, 'the top padding')
+      - num(board, /(?:^|;)padding:\s*[\d.]+px\s+[\d.]+px\s+([\d.]+)px/, 'the bottom padding');
+    const gaps = 3 * num(board, /(?:^|;)gap:\s*([\d.]+)px/, 'the gap');
+    const margins = ['.o-c1 .o-c1-amt', '.o-c1 .o-c1-from'].reduce((sum, s) => sum + optional(rule(s), /(?:^|;)margin-top:\s*([\d.]+)px/), 0);
+    const px = /(?:^|;)font-size:\s*([\d.]+)px/;
+    const need = lineBox('.o-c1 .o-c1-head', px)
+      + lineBox('.o-c1 .o-c1-amt', /(?:^|;)font-size:\s*calc\(([\d.]+)px/)
+      + 2 * lineBox('.o-c1 .o-c1-msg', px)
+      + lineBox('.o-c1 .o-c1-from', px)
+      + gaps + margins;
+    assert.ok(need <= room, `the worst case needs ${need}px between the paddings and the board has ${room}px`);
   });
 });

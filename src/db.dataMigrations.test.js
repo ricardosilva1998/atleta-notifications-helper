@@ -17,6 +17,7 @@ const DB_FILE = path.join(__dirname, 'db.js');
 const SWITCH_MIGRATION = 'cp_rewards_enabled_for_existing_rewards';
 const SESSION_HASH_MIGRATION = 'hash_web_session_ids';
 const DURATIONS_MIGRATION = 'longer_alert_durations';
+const C1_MIGRATION = 'c1_donation_for_andre_vilela';
 
 let tmpDir;
 before(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-data-migrations-')); });
@@ -58,7 +59,7 @@ function boot(file, inspect, stubs = {}) {
   return errors;
 }
 
-const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|longer_alert_durations/i.test(line));
+const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|longer_alert_durations|c1_donation_for_andre_vilela/i.test(line));
 
 test('a fresh database boots twice: each data migration is recorded once, without errors', () => {
   const file = path.join(tmpDir, 'fresh.db');
@@ -67,7 +68,7 @@ test('a fresh database boots twice: each data migration is recorded once, withou
 
   const raw = new RealDatabase(file);
   try {
-    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION].sort());
+    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION].sort());
   } finally {
     raw.close();
   }

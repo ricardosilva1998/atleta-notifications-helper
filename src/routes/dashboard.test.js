@@ -2454,6 +2454,65 @@ describe('saving an overlay design', () => {
     assert.deepEqual(res.json(), { ok: true });
     assert.deepEqual(stored().map((d) => d.event_type), ['raid']);
   });
+
+  test('a save keeps the alert\'s style, from a page that knows none and from one that posts one', async () => {
+    db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
+    // A builder tab opened before the switch-on posts no style at all.
+    assert.equal((await save('donation', design({ card_width: 560 }))).status, 200);
+    const donation = stored().find((d) => d.event_type === 'donation');
+    assert.equal(donation.style, 'donation-c1', 'moving the C1 keeps it');
+    assert.equal(donation.card_width, 560);
+    assert.equal((await save('follow', design({ style: 'donation-c1' }))).status, 200);
+    assert.equal(stored().find((d) => d.event_type === 'follow').style, null, 'the builder cannot choose a style');
+  });
+
+  test('a style anywhere in a builder save is ignored, neither stored nor refused: his C1 stays, and nobody else gets one', async () => {
+    // The route reads eventType and design; validateOverlayDesign() copies only the fields the builder has controls for,
+    // and saveOverlayDesign() writes a fixed list of columns. The save itself goes through: the width proves it.
+    const bodies = {
+      'inside the design': (style, card_width) => ({ eventType: 'donation', design: design({ card_width, style }) }),
+      'beside the design': (style, card_width) => ({ eventType: 'donation', design: design({ card_width }), style }),
+    };
+    const post = (streamer, body) => request('POST', '/dashboard/overlay-builder/save', { streamer, body });
+    const donation = (streamer) => stored(streamer).find((d) => d.event_type === 'donation');
+    const other = addStreamer();
+    db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
+    let width = 450;
+    for (const [where, body] of Object.entries(bodies)) {
+      for (const style of [null, 'donation-c1']) {
+        const label = `${where}, style ${style}`;
+        width += 10;
+        assert.equal((await post(id, body(style, width))).status, 200, label);
+        assert.equal(donation(id).card_width, width, `${label}: his save went through`);
+        assert.equal(donation(id).style, 'donation-c1', `${label}: his C1 is as it was`);
+
+        width += 10;
+        assert.equal((await post(other, body(style, width))).status, 200, label);
+        assert.equal(donation(other).card_width, width, `${label}: their save went through`);
+        assert.equal(donation(other).style, null, `${label}: a streamer with no style does not get one`);
+      }
+    }
+  });
+
+  test('Reset keeps the alert\'s style, and the open overlay is told', async () => {
+    db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
+    const saved = await save('donation', design({ card_width: 600 }));
+    assert.equal(saved.status, 200, 'the save worked, so the Reset below has a design to put back');
+    assert.equal(stored().find((d) => d.event_type === 'donation').card_width, 600, 'and it stored the width');
+    const pushed = [];
+    const listener = (event) => pushed.push(event);
+    bus.on(`overlay:${id}`, listener);
+    try {
+      const res = await request('POST', '/dashboard/overlay-builder/reset', { streamer: id, body: { eventType: 'donation' } });
+      assert.deepEqual(res.json(), { ok: true });
+    } finally {
+      bus.off(`overlay:${id}`, listener);
+    }
+    const donation = stored().find((d) => d.event_type === 'donation');
+    assert.equal(donation.style, 'donation-c1');
+    assert.equal(donation.card_width, 420);
+    assert.equal(pushed.at(-1).designs.donation.style, 'donation-c1');
+  });
 });
 
 // ── YouTube chatbot: errors are codes, not text from the URL (N22) ───────

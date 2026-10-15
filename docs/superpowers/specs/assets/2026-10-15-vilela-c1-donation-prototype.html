@@ -1,0 +1,629 @@
+<title>Vilela C1 Donation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: masthead, a sticky control rail, the car up close, the billboard trailer on a stream
+   stage, notes. Page tokens follow the alert-objects prototype (paper/ink, scarlet accent); the
+   stage and the alert colours are fixed, because they are stream graphics, not part of the page. */
+:root{
+  --paper:#FFFDF9; --paper-2:#F2EFE9; --panel:#FFFFFF;
+  --ink:#070B10; --ink-2:#4E5560; --ink-3:#8A9099;
+  --rule:#D9D5CD; --rule-soft:#EBE7DF;
+  --accent:#B50000; --accent-soft:#FBEAEA;
+  --disp:"Oxanium",system-ui,-apple-system,sans-serif;
+  --cond:"Saira Condensed","Arial Narrow",sans-serif;
+
+  /* The alert's own tokens, as in public/overlay/objects/objects.css */
+  --r-red:#D81E26; --r-red-deep:#B50000; --r-ink:#070B10;
+  --o-disp:var(--disp); --o-cond:var(--cond);
+  --o-hex:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0l14 8v16l-14 8L0 24V8z' fill='none' stroke='%23ffffff' stroke-opacity='.07'/%3E%3C/svg%3E");
+  --spd:1;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#070B10; --paper-2:#0E141B; --panel:#111820;
+    --ink:#F2EFE9; --ink-2:#A3ACB6; --ink-3:#6F7984;
+    --rule:#232C36; --rule-soft:#19212A;
+    --accent:#FF3B3B; --accent-soft:#1E0F10;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#070B10; --paper-2:#0E141B; --panel:#111820;
+  --ink:#F2EFE9; --ink-2:#A3ACB6; --ink-3:#6F7984;
+  --rule:#232C36; --rule-soft:#19212A;
+  --accent:#FF3B3B; --accent-soft:#1E0F10;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 15px/1.55 var(--disp);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 76px}
+
+/* ══ Masthead ══════════════════════════════════════════════ */
+header.mast{border-bottom:3px solid var(--accent);background:var(--paper-2)}
+.mast-in{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:30px 24px;display:flex;flex-wrap:wrap;gap:20px 28px;align-items:flex-end;justify-content:space-between}
+.eyebrow{font:600 11px/1 var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.mast h1{font-weight:800;font-size:clamp(28px,4.8vw,46px);line-height:.98;margin:0;letter-spacing:.004em;text-transform:uppercase;transform:skewX(-7deg);transform-origin:left bottom;text-wrap:balance}
+.mast .sub{margin:13px 0 0;color:var(--ink-2);max-width:64ch;font-size:14.5px}
+.rev{font:600 10.5px/1.6 var(--cond);color:var(--ink-3);text-transform:uppercase;letter-spacing:.14em;text-align:right;white-space:nowrap}
+.rev b{color:var(--accent);font-weight:700}
+
+/* ══ Control rail ══════════════════════════════════════════ */
+.ctl-rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:60;background:var(--paper);border-bottom:1px solid var(--rule)}
+.ctl-rail-in{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;display:flex;flex-wrap:wrap;gap:9px 18px;align-items:center}
+.grp{display:flex;gap:8px;align-items:center}
+.lab{font:600 10px/1 var(--cond);color:var(--ink-3);text-transform:uppercase;letter-spacing:.16em}
+.seg{display:flex;border:1px solid var(--rule);overflow:hidden}
+.seg button{font:600 11px/1 var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);background:transparent;border:0;border-right:1px solid var(--rule);padding:7px 10px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.seg button:hover:not([aria-pressed="true"]){background:var(--accent-soft);color:var(--accent)}
+input[type=range]{accent-color:var(--accent);width:92px;height:20px}
+.val{font:700 11.5px/1 var(--disp);color:var(--ink);min-width:36px;font-variant-numeric:tabular-nums}
+.btn{font:700 11px/1 var(--cond);text-transform:uppercase;letter-spacing:.14em;background:var(--ink);color:var(--paper);border:0;padding:10px 15px;cursor:pointer;clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px)}
+.btn:hover{background:var(--accent);color:#fff}
+.btn.ghost{background:transparent;color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--rule)}
+.btn.ghost:hover{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+:is(button,a,input,[tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ══ Sections ══════════════════════════════════════════════ */
+.sec{margin:50px 0 0}
+.sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:2px solid var(--ink);padding-bottom:7px}
+.sec-head h2{font-weight:800;font-size:19px;line-height:1.1;margin:0;text-transform:uppercase;letter-spacing:.02em}
+.sec-head .ct{font:600 10.5px/1 var(--cond);color:var(--ink-3);margin-left:auto;white-space:nowrap;text-transform:uppercase;letter-spacing:.14em}
+.intro{color:var(--ink-2);margin:14px 0 22px;max-width:70ch;font-size:14.5px}
+
+/* ── The car, up close ── */
+.solo{background:#070B10;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:36px 36px;padding:34px 20px 40px;display:grid;place-items:center;overflow:hidden}
+.solo-car{position:relative;width:min(700px,100%);aspect-ratio:320/140;isolation:isolate}
+.solo-car .c1-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.solo-car::after{content:"";position:absolute;left:-9%;right:-9%;top:94.3%;height:3.2%;z-index:-1;
+  background:linear-gradient(rgba(255,255,255,.28),transparent 45%,rgba(0,0,0,.3)),repeating-linear-gradient(90deg,#D81E26 0 4.4%,#EEF0F2 4.4% 8.8%)}
+.spec{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin:0;border-bottom:1px solid var(--rule)}
+.spec div{padding:14px 16px 15px 0;border-right:1px solid var(--rule-soft);min-width:0}
+.spec div+div{padding-left:16px}
+.spec div:last-child{border-right:0}
+.spec dt{font:600 10.5px/1 var(--cond);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.spec dd{margin:0;font-size:14px;color:var(--ink);line-height:1.45}
+
+/* ── The concept ── */
+.bay{margin:22px 0 0}
+.bay-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px 34px;padding:16px 0 0}
+.bay-desc{margin:0;color:var(--ink-2);font-size:14.5px;max-width:62ch}
+.bay-desc b{color:var(--ink);font-weight:700}
+.beats{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.beats li{display:grid;grid-template-columns:54px minmax(0,1fr);gap:10px;font-size:13.5px;line-height:1.35;color:var(--ink)}
+.beats .t{font:600 11.5px/1.35 var(--cond);letter-spacing:.06em;color:var(--accent);font-variant-numeric:tabular-nums;text-align:right}
+.beats li.out{color:var(--ink-2);margin-top:4px;padding-top:6px;border-top:1px dashed var(--rule)}
+.bay-ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+
+/* ── Stage: a piece of the stream ── */
+.stage{position:relative;overflow:hidden;background:var(--rule-soft);cursor:pointer;height:240px}
+.frame{position:absolute;left:50%;top:0;transform-origin:50% 0;overflow:hidden;background:#070B10}
+.slot{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:420px;z-index:10}
+.stage-tag{position:absolute;left:10px;top:8px;z-index:20;font:600 9.5px/1 var(--cond);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);pointer-events:none}
+.stage::after{content:"Replay";position:absolute;right:10px;bottom:8px;z-index:20;font:600 9.5px/1 var(--cond);letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.6);opacity:0;transition:opacity .18s}
+.stage:hover::after,.stage:focus-visible::after{opacity:1}
+[data-ground="dark"] .frame{background-color:#070B10;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:36px 36px}
+[data-ground="game"] .frame{background:radial-gradient(55% 120% at 72% 0%,rgba(255,255,255,.4),transparent 62%),linear-gradient(180deg,#8fb0cf 0%,#b9cedd 46%,#7c8971 46.4%,#56604f 64%,#363c38 100%)}
+[data-ground="mid"] .frame{background:#6E7873}
+[data-ground="light"] .frame{background:#DCE0DB}
+[data-ground="light"] .stage-tag,[data-ground="game"] .stage-tag{color:rgba(0,0,0,.5)}
+[data-ground="light"] .stage::after,[data-ground="game"] .stage::after{color:rgba(0,0,0,.55)}
+
+/* ── Notes ── */
+.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 34px;margin-top:18px}
+.notes h3{margin:0 0 8px;font:600 11px/1 var(--cond);letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+.notes ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:14.5px}
+.notes li{margin:0 0 6px}
+.notes li b{color:var(--ink)}
+
+@media (max-width:760px){
+  .spec{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .spec div:nth-child(2){border-right:0}
+  .spec div:nth-child(3){padding-left:0}
+  .spec div:nth-child(n+3){border-top:1px solid var(--rule-soft)}
+  .bay-body,.notes{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ════════════════════════════════════════════════════════════
+   The C1 object — written the way objects.css writes the five
+   alerts, so it can move there as it is.
+   ════════════════════════════════════════════════════════════ */
+.obj{position:relative;will-change:transform,opacity;font-family:var(--o-disp)}
+@keyframes hold{from{opacity:1}to{opacity:1}}
+@keyframes struck{from{opacity:0;filter:blur(7px)}to{opacity:1;filter:blur(0)}}
+.playing .obj{animation:var(--in) calc(var(--dur) / var(--spd)) var(--ease) both}
+.exiting .obj{animation:var(--out) calc(var(--outdur) / var(--spd)) var(--outease) both}
+.exiting .obj *{animation:none}
+
+/* Paint: red matches his other alerts; white and black are the alternatives */
+.o-c1,.solo-car{--c1-hi:#F2454C;--c1-mid:#D81E26;--c1-lo:#7E0910;--c1-stripe:#FFFFFF;--c1-rim:#E7EAEE;--c1-caliper:#FFC21A;--c1-ring:rgba(0,0,0,.25)}
+[data-paint="white"] :is(.o-c1,.solo-car){--c1-hi:#FFFFFF;--c1-mid:#E9ECEF;--c1-lo:#A3AAB3;--c1-stripe:#D81E26;--c1-rim:#1C2025;--c1-caliper:#D81E26;--c1-ring:#D81E26}
+[data-paint="black"] :is(.o-c1,.solo-car){--c1-hi:#3A424C;--c1-mid:#171B20;--c1-lo:#050608;--c1-stripe:#D81E26;--c1-rim:#D4AF37;--c1-caliper:#D81E26;--c1-ring:rgba(0,0,0,.25)}
+
+.c1-pitch{transform-box:view-box;transform-origin:153px 106px}
+.c1-spin{transform-box:fill-box;transform-origin:50% 50%}
+.c1-blur,.c1-glow{opacity:0}
+.c1-num{font:800 20px var(--o-disp);fill:#0B0D10}
+.c1-name{font:700 7.5px var(--o-cond);letter-spacing:.9px;fill:rgba(255,255,255,.9)}
+
+.o-c1{--cw:165px;--lane:calc(var(--cw) * 132 / 320)}
+.o-c1-car{position:absolute;top:0;width:var(--cw);height:calc(var(--cw) * 140 / 320);z-index:4}
+.o-c1-car .c1-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+
+/* Speed lines behind the rig, a backfire at the exhaust, smoke at a tyre */
+.c1-streaks{position:absolute;opacity:0;transform-origin:100% 50%;pointer-events:none}
+.c1-streaks i{position:absolute;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6))}
+.c1-streaks i:nth-child(1){top:6%;width:72%}
+.c1-streaks i:nth-child(2){top:34%;width:100%}
+.c1-streaks i:nth-child(3){top:62%;width:84%}
+.c1-streaks i:nth-child(4){top:92%;width:58%}
+.c1-flame{position:absolute;right:94.1%;top:74.6%;width:13%;height:8.5%;opacity:0;transform-origin:100% 50%;pointer-events:none;
+  background:radial-gradient(ellipse 100% 50% at 100% 50%,#FFF7CF 0 16%,#FFC53A 32%,#FF6A1F 56%,rgba(255,40,0,0) 74%)}
+.c1-bsmoke{position:absolute;left:68.8%;top:76%;width:18%;aspect-ratio:1;pointer-events:none}
+.c1-bsmoke i,.o-c1-exsmoke i{position:absolute;inset:0;border-radius:50%;opacity:0;filter:blur(3.5px);
+  background:radial-gradient(circle,rgba(226,229,233,.6) 0,rgba(226,229,233,.3) 42%,rgba(226,229,233,0) 70%)}
+.o-c1-exsmoke{position:absolute;width:56px;height:56px;pointer-events:none;z-index:5}
+
+/* The board: the same lacquer as the folding screen, so it reads with his other alerts */
+.o-c1-board{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;overflow:hidden;
+  padding:15px 16px 17px;background:linear-gradient(166deg,#1C0609,#2E080E 42%,#120407);
+  box-shadow:0 14px 30px rgba(0,0,0,.6),inset 0 0 0 1px rgba(216,30,38,.35)}
+.o-c1-board::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(#F0343C,var(--r-red) 48%,#8E0A10)}
+.o-c1-board .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.5;pointer-events:none}
+.o-c1-head{position:relative;font:600 11px/1 var(--o-cond);letter-spacing:.34em;text-transform:uppercase;color:#FF6B6B}
+.o-c1-amt{position:relative;font-weight:800;font-size:calc(46px * var(--afit,1));line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;color:#FFFDF9;text-shadow:0 0 30px rgba(216,30,38,.8),0 3px 10px rgba(0,0,0,.6);margin-top:2px}
+.o-c1-msg{position:relative;font:italic 500 13px/1.3 var(--o-cond);color:#C9636A;opacity:.92;max-width:90%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-c1-from{position:relative;font:600 13px/1 var(--o-cond);letter-spacing:.2em;text-transform:uppercase;color:#C9636A;margin-top:2px}
+
+/* ── Billboard trailer ──────────────────────────────────── */
+.o-c1-b{height:150px}
+.o-c1-b .o-c1-rig{position:absolute;inset:0}
+.o-c1-b .o-c1-car{right:0;top:calc(150px - var(--lane))}
+.o-c1-b .o-c1-trailer{position:absolute;left:0;top:0;bottom:0;width:calc(100% - var(--cw) - 14px)}
+.o-c1-b .o-c1-board{position:absolute;left:0;right:0;top:0;height:126px;justify-content:center;gap:5px;padding:12px 12px 14px;transform-origin:50% 100%}
+.o-c1-b .o-c1-head{font-size:10.5px}
+.o-c1-b .o-c1-msg,.o-c1-b .o-c1-from{font-size:12px}
+.o-c1-b .o-c1-tframe{position:absolute;left:3%;right:-2px;top:126px;height:7px;background:linear-gradient(#3A4048,#15191E);box-shadow:0 2px 0 rgba(0,0,0,.4)}
+.o-c1-b .o-c1-hitch{position:absolute;right:-19px;top:131px;width:23px;height:4px;background:linear-gradient(#4A5058,#1A1E23)}
+.o-c1-b .o-c1-tw{position:absolute;top:129px;width:21px;height:21px;overflow:visible}
+.o-c1-b .c1-streaks{right:100%;top:10%;width:80%;height:75%}
+.o-c1-b .o-c1-exsmoke{left:calc(100% - var(--cw) + var(--cw) * .178 - 28px);top:110px}
+
+/* ══ Motion ═════════════════════════════════════════════════ */
+@keyframes c1Arrive{from{transform:translateX(calc(-1 * var(--fw)))}to{transform:translateX(0)}}
+@keyframes c1Leave{from{transform:translateX(0)}to{transform:translateX(var(--fw))}}
+@keyframes c1SpinIn{from{transform:rotate(-2160deg)}to{transform:rotate(0deg)}}
+@keyframes c1SpinInSmall{from{transform:rotate(-4680deg)}to{transform:rotate(0deg)}}
+@keyframes c1SpinOut{from{transform:rotate(0deg)}to{transform:rotate(2160deg)}}
+@keyframes c1SpinOutSmall{from{transform:rotate(0deg)}to{transform:rotate(4680deg)}}
+@keyframes c1BlurOut{0%,52%{opacity:.95}82%,100%{opacity:0}}
+@keyframes c1BlurIn{0%,22%{opacity:0}58%,100%{opacity:.95}}
+@keyframes c1Streaks{0%{opacity:.9;transform:scaleX(1)}100%{opacity:0;transform:scaleX(.2)}}
+@keyframes c1Pop{0%{opacity:0;transform:scale(.2,.6)}15%{opacity:1;transform:scale(1,1)}38%{opacity:0;transform:scale(.6,.8)}56%{opacity:0;transform:scale(.2,.6)}70%{opacity:1;transform:scale(.85,.9)}100%{opacity:0;transform:scale(.4,.7)}}
+@keyframes c1Glow{0%{opacity:0}35%{opacity:.95}100%{opacity:0}}
+@keyframes c1Puff{0%{opacity:0;transform:translate(0,0) scale(.3)}22%{opacity:.85}100%{opacity:0;transform:translate(var(--dx,0px),var(--dy,0px)) scale(var(--ps,2.4))}}
+@keyframes c1Idle{0%,100%{transform:translateY(0)}50%{transform:translateY(1.1px)}}
+@keyframes c1Squat{to{transform:rotate(-2.6deg)}}
+@keyframes c1bPitch{0%,50%{transform:rotate(0)}71%{transform:rotate(2.6deg)}82%{transform:rotate(-1deg)}92%{transform:rotate(.3deg)}100%{transform:rotate(0)}}
+@keyframes c1bSway{0%,52%{transform:rotate(0)}70%{transform:rotate(1.8deg)}82%{transform:rotate(-.8deg)}92%{transform:rotate(.25deg)}100%{transform:rotate(0)}}
+
+/* The C1 tows the board in, brakes, the board leans forward on the trailer and settles */
+.playing .o-c1-b .o-c1-rig{animation:c1Arrive calc(.85s / var(--spd)) cubic-bezier(.18,.68,.2,1) both}
+.playing .o-c1-b .c1-spin{animation:c1SpinIn calc(.85s / var(--spd)) cubic-bezier(.18,.68,.2,1) both}
+.playing .o-c1-b .o-c1-tw .c1-spin{animation:c1SpinInSmall calc(.85s / var(--spd)) cubic-bezier(.18,.68,.2,1) both}
+.playing .o-c1-b .c1-blur{animation:c1BlurOut calc(.85s / var(--spd)) linear both}
+.playing .o-c1-b .c1-streaks{animation:c1Streaks calc(.62s / var(--spd)) ease-out both}
+.playing .o-c1-b .c1-flame{animation:c1Pop calc(.26s / var(--spd)) linear calc(.34s / var(--spd)) both}
+.playing .o-c1-b .c1-pitch{animation:c1bPitch calc(1.2s / var(--spd)) linear both}
+.playing .o-c1-b .c1-front .c1-glow{animation:c1Glow calc(1.4s / var(--spd)) ease-out calc(.46s / var(--spd)) both}
+.playing .o-c1-b .c1-bsmoke i{animation:c1Puff calc(.85s / var(--spd)) ease-out calc((var(--pd) + .2s) / var(--spd)) both}
+.playing .o-c1-b .o-c1-board{animation:c1bSway calc(1.25s / var(--spd)) linear both}
+.playing .o-c1-b .c1-shake{animation:c1Idle calc(.11s / var(--spd)) linear calc(1.3s / var(--spd)) infinite}
+.playing .o-c1-b .o-c1-head{animation:struck calc(.24s / var(--spd)) ease-out calc(.92s / var(--spd)) both}
+.playing .o-c1-b .o-c1-amt{animation:struck calc(.28s / var(--spd)) ease-out calc(.98s / var(--spd)) both}
+.playing .o-c1-b .o-c1-msg{animation:struck calc(.24s / var(--spd)) ease-out calc(1.04s / var(--spd)) both}
+.playing .o-c1-b .o-c1-from{animation:struck calc(.24s / var(--spd)) ease-out calc(1.1s / var(--spd)) both}
+
+/* Exit: the C1 squats, spins its rears and tows everything off to the right */
+.exiting .o-c1 .c1-pitch{animation:c1Squat calc(.16s / var(--spd)) ease-out both}
+.exiting .o-c1 .c1-spin{animation:c1SpinOut calc(.84s / var(--spd)) cubic-bezier(.45,0,.85,.4) both}
+.exiting .o-c1 .o-c1-tw .c1-spin{animation:c1SpinOutSmall calc(.84s / var(--spd)) cubic-bezier(.45,0,.85,.4) both}
+.exiting .o-c1 .c1-blur{animation:c1BlurIn calc(.84s / var(--spd)) linear both}
+.exiting .o-c1 .o-c1-exsmoke i{animation:c1Puff calc(.9s / var(--spd)) ease-out calc(var(--pd) / var(--spd)) both}
+.exiting .o-c1-b .o-c1-rig{animation:c1Leave calc(.74s / var(--spd)) cubic-bezier(.6,0,.85,.35) calc(.1s / var(--spd)) both}
+
+@media (prefers-reduced-motion:reduce){
+  .c1-shake{animation:none!important}
+}
+</style>
+
+<header class="mast">
+  <div class="mast-in">
+    <div>
+      <p class="eyebrow">For andre_vilela_ only</p>
+      <h1>Vilela C1 Donation</h1>
+      <p class="sub">The billboard trailer, now with the car redrawn from a real first-generation <b>Citroën C1</b>.
+        It plays on his stream at his donation alert's default spot: top centre, 420&nbsp;px wide. Click the stage to replay it.</p>
+    </div>
+    <div class="rev">Round 2 <b>&#9679;</b> billboard trailer<br>car redrawn from a real C1</div>
+  </div>
+</header>
+
+<div class="ctl-rail">
+  <div class="ctl-rail-in">
+    <div class="grp">
+      <span class="lab" id="lab-ground">Behind it</span>
+      <div class="seg" id="ctl-ground" role="group" aria-labelledby="lab-ground">
+        <button type="button" id="g-dark" data-v="dark" aria-pressed="true">dark</button>
+        <button type="button" id="g-game" data-v="game" aria-pressed="false">game</button>
+        <button type="button" id="g-mid" data-v="mid" aria-pressed="false">grey</button>
+        <button type="button" id="g-light" data-v="light" aria-pressed="false">light</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lab" id="lab-paint">Paint</span>
+      <div class="seg" id="ctl-paint" role="group" aria-labelledby="lab-paint">
+        <button type="button" id="p-red" data-v="red" aria-pressed="true">red</button>
+        <button type="button" id="p-white" data-v="white" aria-pressed="false">white</button>
+        <button type="button" id="p-black" data-v="black" aria-pressed="false">black</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lab" id="lab-sample">Donation</span>
+      <div class="seg" id="ctl-sample" role="group" aria-labelledby="lab-sample">
+        <button type="button" id="s-typical" data-v="typical" aria-pressed="true">€25</button>
+        <button type="button" id="s-big" data-v="big" aria-pressed="false">€1,250 + long</button>
+        <button type="button" id="s-bare" data-v="bare" aria-pressed="false">€2, no message</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lab" id="lab-view">View</span>
+      <div class="seg" id="ctl-view" role="group" aria-labelledby="lab-view">
+        <button type="button" id="v-actual" data-v="actual" aria-pressed="true">actual size</button>
+        <button type="button" id="v-stream" data-v="stream" aria-pressed="false">whole stream</button>
+      </div>
+    </div>
+    <div class="grp">
+      <label class="lab" for="ctl-speed">Speed</label>
+      <input type="range" id="ctl-speed" min="0.2" max="1.5" step="0.1" value="1">
+      <span class="val" id="val-speed">1.0&times;</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section class="sec">
+    <div class="sec-head"><h2>The car</h2><span class="ct">first-generation C1, three doors</span></div>
+    <p class="intro">Traced from a side view of a real 2005–2014 C1, the one people race in the C1 Racing Club. The paint
+      buttons above change it everywhere on this page.</p>
+    <div class="solo"><div class="solo-car" id="solo-car"></div></div>
+    <dl class="spec">
+      <div><dt>Shape</dt><dd>One long slope from the nose up the windscreen, an arched roof and a short, rounded tail.</dd></div>
+      <div><dt>Face and tail</dt><dd>The big teardrop headlight swept back along the wing; tail lights high on the rear corners.</dd></div>
+      <div><dt>Windows</dt><dd>The long three-door door, a black B-pillar and the big rounded rear side window.</dd></div>
+      <div><dt>Race kit</dt><dd>Lowered on 15-inch wheels, roll cage, driver, number 1, VILELA on the rear window. No Citroën badges.</dd></div>
+    </dl>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head"><h2>Billboard trailer</h2><span class="ct">1.2 s in &middot; 0.85 s out</span></div>
+    <div class="bay" data-key="b">
+      <div class="stage" role="button" tabindex="0" aria-label="Replay the billboard trailer"><div class="frame"><div class="slot"></div></div><span class="stage-tag"></span></div>
+      <div class="bay-body">
+        <div>
+          <p class="bay-desc">The C1 tows the donation in on a billboard trailer and parks with the board behind it. When
+            it brakes, the board leans forward on the trailer and settles, then the amount is struck on it. It idles while
+            the alert holds, then leaves the way it came, towing everything off to the right. <b>A big amount is set a
+            little smaller, because the car takes the right end of the alert.</b></p>
+          <div class="bay-ctl">
+            <button type="button" class="btn" data-act="play">Replay</button>
+            <button type="button" class="btn ghost" data-act="full">Full alert</button>
+            <button type="button" class="btn ghost" data-act="exit">Exit only</button>
+          </div>
+        </div>
+        <ol class="beats">
+          <li><span class="t">0.00 s</span><span>Tows the board in from the left edge</span></li>
+          <li><span class="t">0.34 s</span><span>Backfire</span></li>
+          <li><span class="t">0.46 s</span><span>Brakes: nose dives, front disc glows; the board leans forward</span></li>
+          <li><span class="t">0.85 s</span><span>Parks</span></li>
+          <li><span class="t">0.98 s</span><span>Amount struck on the board, then the name</span></li>
+          <li class="out"><span class="t">exit</span><span>Squats, spins the rears, pulls the trailer off to the right</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-head"><h2>Same as his alert today</h2><span class="ct">and what is still open</span></div>
+    <div class="notes">
+      <div>
+        <h3>Kept from his alert today</h3>
+        <ul>
+          <li>The <b>amount in its currency</b>, the donor's <b>name</b> and their <b>message</b> (two lines at most), for PayPal and StreamElements tips alike.</li>
+          <li>Where his donation alert sits and how wide it is, as he saved them in the Overlay Builder.</li>
+          <li>How long it stays on screen (12&nbsp;s unless he changed it).</li>
+          <li>His own donation sound if he uploaded one; otherwise today's engine sound.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Still to decide</h3>
+        <ul>
+          <li>The word on the board. It says <b>Sponsor</b> here; it can say anything.</li>
+          <li>The paint, and whether VILELA stays on the rear window.</li>
+          <li>A sound made for it: a little three-cylinder revving, popping and braking in time with the car.</li>
+          <li>Whether it idles while it holds, or sits perfectly still like his other alerts.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const root = document.documentElement;
+  const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  // As objects/index.js writes an amount: "€25.00", "€1,250.00"
+  function money(amount, currency) {
+    const code = String(currency == null ? '' : currency).trim().toUpperCase();
+    const prefix = code ? code + ' ' : '';
+    const number = Number(amount);
+    if (amount == null || String(amount).trim() === '' || !isFinite(number)) return (prefix + String(amount == null ? '' : amount)).trim();
+    if (/^[A-Z]{3}$/.test(code)) {
+      try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(number); } catch (e) { /* plain form */ }
+    }
+    return prefix + number.toFixed(2);
+  }
+  // A long amount is set smaller so it stays on the board
+  function amountFit(text, holds) {
+    const n = Array.from(text).length;
+    return n > holds ? ' style="--afit:' + Math.max(0.6, holds / n).toFixed(2) + '"' : '';
+  }
+
+  // ── The car ──────────────────────────────────────────────
+  // Side view facing right. viewBox 0 0 320 140: rear axle x=57, front axle x=249, ground y=132.
+  // The body is traced from a side view of a first-generation C1 and lowered 2 units like a race
+  // car (translate(0 2)); the wheels stay where they are.
+  const BODY = 'M30,108L27,108C24.5,107.5 23.4,104 23.2,98L23.1,86C23.5,82 24.6,79.5 26,77.5C28.5,74.5 30.5,71.5 31.5,68.5L33.6,61.5C37,50 43,37 49.5,29C50.6,27.6 51.2,24 51.6,20.3C52.5,19 54,18.6 56,18.4C88,11.2 128,9.6 160,14.2C163.5,14.6 166.5,15.6 169,17.2C190,25 215,37.4 236,49.8C240,51.1 246,51.8 252,52.2C262,53 272,57 279,63C283,66.6 285.5,70 287,72.5C292,74.5 297,79 299,86C300.6,91 300.6,99 299.4,104C298.4,108.5 295.8,111.6 291.5,113C287,114.2 281,114.4 275.3,114A27,27 0 1 0 223.4,116.7L82.6,116.7A27,27 0 1 0 30,108Z';
+  const DOOR_GLASS = 'M116,20.2L150,20.6C165,21.4 178,24.6 188,30.8C196,36 201.6,42 203.8,52L204.2,56.4C204.3,57.6 203.4,58.2 202.2,58.1L119.6,50C118.4,49.9 117.6,49.2 117.5,48.2Z';
+  const QUARTER_GLASS = 'M108.6,19.9L110.4,50.6L80,47.6C73.5,46.9 68.2,43.6 66,38.4C64.4,34.4 64.4,28.6 66,24.8C67.4,21.8 70.4,20.6 74,20.3Z';
+  const WELLS = 'M275.3,114A27,27 0 1 0 223.4,116.7Z M82.6,116.7A27,27 0 1 0 30,108Z';
+  let uid = 0;
+
+  function wheel(u, cx, side) {
+    let spokes = '';
+    for (let a = 0; a < 360; a += 72) {
+      spokes += '<path d="M-1.8,-3.6L-2.7,-14.2L2.7,-14.2L1.8,-3.6Z" style="fill:var(--c1-rim)" transform="rotate(' + a + ')"/>';
+    }
+    return '<g class="c1-wheel ' + side + '" transform="translate(' + cx + ' 108.5)">'
+      + '<circle r="23.5" fill="#0E1013"/>'
+      + '<circle r="21.9" fill="none" stroke="#262A30" stroke-width="1.3"/>'
+      + '<circle r="15.6" fill="#23272C"/>'
+      + '<circle r="12" fill="#555C64"/>'
+      + '<circle class="c1-glow" r="12.4" fill="url(#' + u + 'h)"/>'
+      + '<path d="M3.2,-11.4A11.8,11.8 0 0 1 11.2,-3.6L8.1,-2.6A8.5,8.5 0 0 0 2.3,-8.2Z" style="fill:var(--c1-caliper)"/>'
+      + '<g class="c1-spin">'
+      +   '<circle r="15.2" fill="none" style="stroke:var(--c1-rim)" stroke-width="2.6"/>' + spokes
+      +   '<circle r="4" style="fill:var(--c1-rim)"/><circle r="1.5" fill="#0E1013"/>'
+      + '</g>'
+      + '<circle class="c1-blur" r="15.6" fill="url(#' + u + 'd)"/>'
+      + '</g>';
+  }
+
+  function car() {
+    const u = 'c1u' + (++uid);
+    const svg = '<svg class="c1-svg" viewBox="0 0 320 140" aria-hidden="true" focusable="false">'
+      + '<defs>'
+      +   '<linearGradient id="' + u + 'p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--c1-hi)"/><stop offset=".45" style="stop-color:var(--c1-mid)"/><stop offset="1" style="stop-color:var(--c1-lo)"/></linearGradient>'
+      +   '<linearGradient id="' + u + 'g" x1="0" y1="0" x2=".5" y2="1"><stop offset="0" stop-color="#3A4D60"/><stop offset=".5" stop-color="#152029"/><stop offset="1" stop-color="#090D12"/></linearGradient>'
+      +   '<radialGradient id="' + u + 'd"><stop offset="0" stop-color="#AAB2BB"/><stop offset=".6" stop-color="#7A828B"/><stop offset=".86" stop-color="#4A5057"/><stop offset="1" stop-color="#2A2F35"/></radialGradient>'
+      +   '<radialGradient id="' + u + 'h"><stop offset="0" stop-color="#FFD27A"/><stop offset=".45" stop-color="#FF7A1A" stop-opacity=".95"/><stop offset="1" stop-color="#FF3D00" stop-opacity="0"/></radialGradient>'
+      +   '<radialGradient id="' + u + 's"><stop offset="0" stop-color="#000" stop-opacity=".6"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>'
+      +   '<clipPath id="' + u + 'w"><path d="' + DOOR_GLASS + '"/><path d="' + QUARTER_GLASS + '"/></clipPath>'
+      + '</defs>'
+      // shadow, wheel wells (they pitch with the body), wheels
+      + '<ellipse cx="162" cy="131.5" rx="150" ry="6" fill="url(#' + u + 's)"/>'
+      + '<g class="c1-pitch"><g transform="translate(0 2)"><path d="' + WELLS + '" fill="#06070A"/></g></g>'
+      + wheel(u, 57, 'c1-rear') + wheel(u, 249, 'c1-front')
+      + '<g class="c1-pitch"><g class="c1-shake"><g transform="translate(0 2)">'
+      +   '<path d="' + BODY + '" fill="url(#' + u + 'p)"/>'
+      // the windscreen seen edge-on along the A-pillar
+      +   '<path d="M166.6,16.4C188,24.4 213,36.6 235.4,50L233.6,52.2C211.4,39.6 186.6,27.6 165.6,19.4Z" fill="url(#' + u + 'g)"/>'
+      // the rear haunch over the back wheel and the front arch flare
+      +   '<path d="M26.5,78.5C36,72 48,67.6 60,67.4C74,67.2 84,74 88.5,90C89.6,94.5 89.4,99 88.6,103.8" stroke="rgba(0,0,0,.3)" stroke-width="1.1" fill="none"/>'
+      +   '<path d="M27.5,77C37,70.6 48.5,66.4 60,66.2C73,66 82,71.6 86.6,84" stroke="rgba(255,255,255,.2)" stroke-width="1" fill="none"/>'
+      +   '<path d="M211.5,109C215,88 230,75.5 249,74.6C266,74 279,84 281.5,102" stroke="rgba(0,0,0,.3)" stroke-width="1.1" fill="none"/>'
+      // black side skirt, front intake and fog-lamp housing, splitter
+      +   '<path d="M82.6,108.4L223.7,108.4L223.4,116.7L82.6,116.7Z" fill="#0B0D10"/>'
+      +   '<path d="M283,103.2L298.6,103.2C297.8,107.4 295.4,110.6 291.4,112C288.6,112.9 285.6,113.3 282.6,113.4Z" fill="#0B0D10"/>'
+      +   '<path d="M289.6,85.6C293.6,85 297.4,85 299.6,85.8C300.4,89.6 300.4,94.8 299.8,98.6C296.6,98.8 293,98.7 290,98.2C289,94.4 288.9,89.4 289.6,85.6Z" fill="#0B0D10"/>'
+      +   '<circle cx="295" cy="92.1" r="2.4" fill="#D9DDE2"/>'
+      +   '<path d="M276,113.6L304,112.8L304,115L277.5,116.2Z" fill="#0B0D10"/>'
+      // livery: two stripes from the headlight to the tail light
+      +   '<path d="M246,62C190,60.6 120,59.8 56.5,60.6" style="stroke:var(--c1-stripe)" stroke-width="3.2" fill="none"/>'
+      +   '<path d="M246,66.4C190,65 120,64.2 57,65" style="stroke:var(--c1-stripe)" stroke-width="1.2" fill="none" opacity=".9"/>'
+      +   '<path d="M60,56.5C120,53.5 190,55.5 240,58.6" stroke="rgba(255,255,255,.2)" stroke-width="1.1" fill="none"/>'
+      // door: shut lines, bottom edge, handle; indicator on the front wing
+      +   '<path d="M217.5,59C219.2,72 219.6,86 218,98C217.4,101.6 216.8,103 216.6,104" stroke="rgba(0,0,0,.4)" stroke-width="1" fill="none"/>'
+      +   '<path d="M110.8,51.2C111.4,70 112,88 112.8,104" stroke="rgba(0,0,0,.4)" stroke-width="1" fill="none"/>'
+      +   '<path d="M112.8,104L216.6,104" stroke="rgba(0,0,0,.28)" stroke-width="1" fill="none"/>'
+      +   '<rect x="121" y="54.4" width="11" height="3" rx="1.5" fill="rgba(0,0,0,.5)"/>'
+      +   '<ellipse cx="226" cy="67.8" rx="2.6" ry="1.4" fill="#FFB347" stroke="rgba(0,0,0,.35)" stroke-width=".6"/>'
+      // race number
+      +   '<circle cx="166" cy="80.5" r="13.5" fill="#FFFFFF" style="stroke:var(--c1-ring)" stroke-width="1.6"/>'
+      +   '<text class="c1-num" x="166" y="87.6" text-anchor="middle">1</text>'
+      // glass, roll cage, the driver in a helmet, name on the rear side window
+      +   '<path d="' + DOOR_GLASS + '" fill="url(#' + u + 'g)" stroke="#0B0D10" stroke-width=".8"/>'
+      +   '<path d="' + QUARTER_GLASS + '" fill="url(#' + u + 'g)" stroke="#0B0D10" stroke-width=".8"/>'
+      +   '<g clip-path="url(#' + u + 'w)">'
+      +     '<path d="M158,22.4C172,24.4 186,31 196,42.6" stroke="#7A8592" stroke-width="2.4" fill="none" stroke-linecap="round"/>'
+      +     '<path d="M104.5,20.6L105.6,50" stroke="#7A8592" stroke-width="2.4" stroke-linecap="round"/>'
+      +     '<path d="M104,22L74,46.5" stroke="#7A8592" stroke-width="2.4" stroke-linecap="round"/>'
+      +     '<path d="M139.6,52C140.8,45.6 145.6,42.8 152,42.8C158.4,42.8 163.2,45.6 164.4,52Z" fill="#1F2A36"/>'
+      +     '<path d="M141,35.6C140.6,27.8 145.8,22.6 152.4,22.6C158.8,22.6 162.6,27 162.8,32.6L162.8,37.4C162.8,39.4 161.6,40.6 159.8,40.6L146,40.6C143.2,40.6 141.2,38.6 141,35.6Z" fill="#BFC6CE" opacity=".85"/>'
+      +     '<path d="M154.8,28.2L162.7,28.2L162.8,33.8L154.8,33.8C153.4,33.8 152.8,32.8 152.8,31C152.8,29.2 153.4,28.2 154.8,28.2Z" fill="#141D27"/>'
+      +     '<path d="M144.2,27C147.4,24.4 151.6,23.4 156,23.8" stroke="#D81E26" stroke-width="1.8" fill="none"/>'
+      +     '<path d="M168,18L182,18L146,58L132,58Z" fill="rgba(255,255,255,.07)"/>'
+      +     '<text class="c1-name" x="88" y="38" text-anchor="middle">VILELA</text>'
+      +   '</g>'
+      +   '<path d="M108.6,19.6L116.4,19.6L118.4,50.8L110.4,51.2Z" fill="#0B0D10"/>'
+      // tail light high on the rear corner, with its two round lamps
+      +   '<path d="M34.2,58.7C37.3,48.6 43,37 49.5,29C51,27.3 52.6,26.2 54.4,26L55.2,58.7Z" fill="#3A0B10" stroke="rgba(0,0,0,.5)" stroke-width=".7"/>'
+      +   '<circle cx="48.4" cy="36.2" r="3.7" fill="#D0141C"/>'
+      +   '<circle cx="44.2" cy="50" r="4.4" fill="#E9E3E3" opacity=".9"/>'
+      +   '<circle cx="44.2" cy="50" r="2.2" fill="#F4A3A6" opacity=".7"/>'
+      // headlight, swept back along the wing
+      +   '<path d="M249,56.2C256,57.2 265,58.6 271.2,60.4C276.5,61.9 281.5,65.4 284,71.5C284.8,73.5 283.8,75.2 282,75C278,74.6 272,71.8 267.8,69.8C262,67 254.5,61.6 249,56.2Z" fill="#E3E8EE" stroke="rgba(0,0,0,.4)" stroke-width=".8"/>'
+      +   '<circle cx="277.6" cy="68.6" r="3.2" fill="#FFF6D2"/>'
+      // mirror, its black sail, exhaust, tow straps
+      +   '<path d="M215,46.6L228.6,60.2L215.8,60.2Z" fill="#0B0D10"/>'
+      +   '<path d="M203,54.4L215,53.6C217.2,53.6 217.6,55.6 216.2,56.8L213.6,58.4L205,58.6C203.2,58.6 202.4,56.4 203,54.4Z" fill="#0B0D10"/>'
+      +   '<path d="M197.6,50C197.6,44.6 203,42.4 208.6,43C213.6,43.6 216.4,47 215.6,50.4C214.8,53.8 210.2,55.2 205.2,54.8C200.8,54.4 197.6,53 197.6,50Z" fill="url(#' + u + 'p)" stroke="#0B0D10" stroke-width=".8"/>'
+      +   '<rect x="19" y="106.2" width="12" height="4.2" rx="2.1" fill="#3B4148"/>'
+      +   '<ellipse cx="20.2" cy="108.3" rx="1.1" ry="1.5" fill="#0B0D10"/>'
+      +   '<path d="M299.6,100.4h6a3,3 0 0 1 0,6h-6" stroke="#FF2A2A" stroke-width="1.9" fill="none"/>'
+      +   '<path d="M23.4,92h-6a3,3 0 0 0 0,6h6" stroke="#FF2A2A" stroke-width="1.9" fill="none"/>'
+      + '</g></g></g>'
+      + '</svg>';
+    return { u, svg };
+  }
+
+  function trailerWheel(u, left) {
+    let spokes = '';
+    for (let a = 0; a < 360; a += 120) spokes += '<rect x="-1" y="-6.4" width="2" height="5" fill="#9AA3AD" transform="rotate(' + a + ')"/>';
+    return '<svg class="o-c1-tw" style="left:' + left + '" viewBox="-12 -12 24 24" aria-hidden="true" focusable="false">'
+      + '<circle r="11.5" fill="#0E1013"/>'
+      + '<g class="c1-spin"><circle r="6.6" fill="none" stroke="#9AA3AD" stroke-width="1.6"/>' + spokes + '<circle r="2" fill="#9AA3AD"/></g>'
+      + '<circle class="c1-blur" r="7" fill="url(#' + u + 'd)"/>'
+      + '</svg>';
+  }
+
+  function puffs(list) {
+    return list.map(p => '<i style="--pd:' + p[0] + 's;--dx:' + p[1] + 'px;--dy:' + p[2] + 'px;--ps:' + p[3] + '"></i>').join('');
+  }
+  const STREAKS = '<div class="c1-streaks"><i></i><i></i><i></i><i></i></div>';
+  const FLAME = '<div class="c1-flame"></div>';
+  const BRAKE_SMOKE = '<div class="c1-bsmoke">' + puffs([[0.46, 16, -7, 2.1], [0.52, 26, -12, 2.6], [0.58, 10, -4, 1.8]]) + '</div>';
+  const EXIT_SMOKE = '<div class="o-c1-exsmoke">' + puffs([[0, -26, -8, 2.4], [0.06, -46, -14, 3], [0.12, -30, -4, 2.6], [0.2, -58, -18, 3.2]]) + '</div>';
+
+  function board(d, holds) {
+    const amount = money(d.amount, d.currency);
+    return '<div class="o-c1-board"><div class="o-mesh"></div>'
+      + '<div class="o-c1-head">Sponsor</div>'
+      + '<div class="o-c1-amt"' + amountFit(amount, holds) + '>' + esc(amount) + '</div>'
+      + (d.message ? '<div class="o-c1-msg">&quot;' + esc(d.message) + '&quot;</div>' : '')
+      + '<div class="o-c1-from">' + esc(d.username) + '</div>'
+      + '</div>';
+  }
+
+  const TRAILER = { inDur: 1.25, outDur: 0.9, hold: 3.2, render(d) {
+    const c = car();
+    return '<div class="obj o-c1 o-c1-b"><div class="o-c1-rig">' + STREAKS
+      + '<div class="o-c1-trailer">' + board(d, 8) + '<div class="o-c1-tframe"></div>'
+      +   trailerWheel(c.u, '14%') + trailerWheel(c.u, '66%') + '<div class="o-c1-hitch"></div></div>'
+      + '<div class="o-c1-car">' + c.svg + FLAME + BRAKE_SMOKE + '</div>'
+      + '</div>' + EXIT_SMOKE + '</div>';
+  } };
+
+  // ── Example donations ──────────────────────────────────
+  const SAMPLES = {
+    typical: { username: 'PitBoss92', amount: '25', currency: 'EUR', message: 'Força Vilela, acelera esse C1!' },
+    big: { username: 'TurboTina_PT', amount: '1250', currency: 'EUR', message: 'For the engine rebuild. Bring it home in one piece this time, and stay off the sausage kerb in turn 5 please!' },
+    bare: { username: 'Anonymous', amount: '2', currency: 'EUR', message: '' },
+  };
+  // Actual size: the box is a piece of the stream at 1:1 (scaled down only on a narrow screen),
+  // and its left edge stands for the edge of the stream. Whole stream: all 1920 px, scaled to fit.
+  const VIEWS = {
+    actual: { size: w => ({ w: Math.min(1920, Math.max(760, w)), h: 230 }), label: 'Actual size' },
+    stream: { size: () => ({ w: 1920, h: 400 }), label: 'Whole stream width, top of a 1920 × 1080 frame' },
+  };
+  const state = { sample: 'typical', view: 'actual', spd: 1 };
+
+  const el = document.querySelector('.bay');
+  const stage = el.querySelector('.stage');
+  const bay = { stage, frame: stage.querySelector('.frame'), slot: stage.querySelector('.slot'), tag: stage.querySelector('.stage-tag'), timers: [] };
+
+  function hydrate() {
+    bay.slot.classList.remove('playing', 'exiting');
+    bay.slot.innerHTML = TRAILER.render(SAMPLES[state.sample]);
+    const s = bay.slot.style;
+    s.setProperty('--in', 'hold'); s.setProperty('--dur', TRAILER.inDur + 's'); s.setProperty('--ease', 'linear');
+    s.setProperty('--out', 'hold'); s.setProperty('--outdur', TRAILER.outDur + 's'); s.setProperty('--outease', 'linear');
+  }
+  function layout() {
+    const view = VIEWS[state.view];
+    const stageWidth = bay.stage.clientWidth;
+    const f = view.size(stageWidth);
+    const scale = Math.min(1, stageWidth / f.w);
+    bay.frame.style.width = f.w + 'px';
+    bay.frame.style.height = f.h + 'px';
+    bay.frame.style.transform = 'translateX(-50%) scale(' + scale + ')';
+    bay.stage.style.height = Math.round(f.h * scale) + 'px';
+    bay.slot.style.setProperty('--fw', f.w + 'px');
+    bay.tag.textContent = view.label;
+  }
+  function restart(cls) {
+    bay.timers.forEach(clearTimeout);
+    bay.timers = [];
+    bay.slot.classList.remove('playing', 'exiting');
+    void bay.slot.offsetWidth; // restart the animations from their first frame
+    bay.slot.classList.add(cls);
+  }
+  const ACTIONS = {
+    play: () => restart('playing'),
+    exit: () => restart('exiting'),
+    full: () => {
+      restart('playing');
+      bay.timers.push(setTimeout(() => restart('exiting'), (TRAILER.inDur + TRAILER.hold) * 1000 / state.spd));
+    },
+  };
+  stage.addEventListener('click', ACTIONS.play);
+  stage.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ACTIONS.play(); } });
+  el.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => ACTIONS[b.dataset.act]()));
+
+  function segmented(id, onPick) {
+    const group = document.getElementById(id);
+    group.addEventListener('click', e => {
+      const button = e.target.closest('button');
+      if (!button) return;
+      group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+      onPick(button.dataset.v);
+    });
+  }
+  segmented('ctl-ground', v => { root.dataset.ground = v; });
+  segmented('ctl-paint', v => { root.dataset.paint = v; });
+  segmented('ctl-sample', v => { state.sample = v; hydrate(); ACTIONS.play(); });
+  segmented('ctl-view', v => { state.view = v; layout(); ACTIONS.play(); });
+  const speed = document.getElementById('ctl-speed');
+  const speedLabel = document.getElementById('val-speed');
+  speed.addEventListener('input', () => {
+    state.spd = Number(speed.value) || 1;
+    root.style.setProperty('--spd', String(state.spd));
+    speedLabel.textContent = state.spd.toFixed(1) + '×';
+  });
+  window.addEventListener('resize', layout);
+
+  root.dataset.ground = 'dark';
+  root.dataset.paint = 'red';
+  document.getElementById('solo-car').innerHTML = car().svg;
+  hydrate();
+  layout();
+
+  // The stage starts on its finished frame; the entrance plays once the fonts are in
+  if (!reduce) {
+    const fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    Promise.race([fonts, new Promise(r => setTimeout(r, 1500))]).then(() => setTimeout(ACTIONS.play, 300));
+  }
+})();
+</script>

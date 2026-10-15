@@ -252,3 +252,85 @@
 @keyframes exStrike{to{transform:translateY(-26%);opacity:0}}
 .exiting .obj{animation:var(--out) calc(var(--outdur) / var(--spd)) var(--outease) both}
 .exiting .obj *{animation:none}
+
+/* ══ 06 styles — andre_vilela_'s C1 (donation-c1) ═══════════
+   A racing Citroën C1 tows the donation in on a billboard trailer
+   (docs/superpowers/specs/2026-10-15-vilela-c1-donation-design.md),
+   drawn instead of the folding screen for a donation whose saved design
+   has style 'donation-c1'. Every class is under .o-c1 and every keyframe
+   starts with c1. --fw (how far the car drives in and out) falls back to
+   100vw, the width of the OBS source; the builder preview sets its own on a parent. */
+.o-c1{height:150px;--o-c1-cw:min(39%,230px);--o-c1-hi:#F2454C;--o-c1-mid:#D81E26;--o-c1-lo:#7E0910;--o-c1-stripe:#FFFFFF;--o-c1-rim:#E7EAEE;--o-c1-caliper:#FFC21A;--o-c1-ring:rgba(0,0,0,.25)}
+.o-c1 .o-c1-rig{position:absolute;inset:0}
+.o-c1 .o-c1-trailer{position:absolute;left:0;top:0;bottom:0;width:calc(100% - var(--o-c1-cw) - 14px)}
+/* The board is 126px and nothing on it may shrink: the lines are spaced to fit the worst case
+   (10.5 + 46 + 2 x 15.6 + 14.4 + 3 gaps of 3 = 111px of the 112px between the paddings). A flex
+   item that clips (the message, the name) would otherwise be squeezed below its lines and cut mid-letter. */
+.o-c1 .o-c1-board{position:absolute;left:0;right:0;top:0;height:126px;box-sizing:border-box;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 12px 8px;text-align:center;overflow:hidden;transform-origin:50% 100%;background:linear-gradient(166deg,#1C0609,#2E080E 42%,#120407);box-shadow:0 14px 30px rgba(0,0,0,.6),inset 0 0 0 1px rgba(216,30,38,.35)}
+.o-c1 .o-c1-board::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(#F0343C,var(--r-red) 48%,#8E0A10)}
+.o-c1 .o-c1-board .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.5;pointer-events:none}
+.o-c1 .o-c1-head{position:relative;font-family:var(--o-cond);font-weight:600;font-size:10.5px;line-height:1;letter-spacing:.34em;text-transform:uppercase;color:#FF6B6B}
+.o-c1 .o-c1-amt{position:relative;font-weight:800;font-size:calc(46px * var(--afit,1));line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;white-space:nowrap;color:#FFFDF9;text-shadow:0 0 30px rgba(216,30,38,.8),0 3px 10px rgba(0,0,0,.6)}
+.o-c1 .o-c1-msg{position:relative;max-width:90%;font-family:var(--o-cond);font-style:italic;font-weight:500;font-size:12px;line-height:1.3;color:#C9636A;opacity:.92;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;flex:none}
+.o-c1 .o-c1-from{position:relative;max-width:100%;font-family:var(--o-cond);font-weight:600;font-size:12px;line-height:1.2;letter-spacing:.2em;text-transform:uppercase;color:#C9636A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}
+.o-c1 .o-c1-tframe{position:absolute;left:3%;right:-2px;top:126px;height:7px;background:linear-gradient(#3A4048,#15191E);box-shadow:0 2px 0 rgba(0,0,0,.4)}
+.o-c1 .o-c1-hitch{position:absolute;right:-19px;top:131px;width:23px;height:4px;background:linear-gradient(#4A5058,#1A1E23)}
+.o-c1 .o-c1-tw{position:absolute;top:129px;width:21px;height:21px;overflow:visible}
+.o-c1 .o-c1-car{position:absolute;right:0;bottom:0;width:var(--o-c1-cw);aspect-ratio:320/140;transform:translateY(5.714%);z-index:4}
+.o-c1 .o-c1-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.o-c1 .o-c1-pitch{transform-box:view-box;transform-origin:153px 106px}
+.o-c1 .o-c1-spin{transform-box:fill-box;transform-origin:50% 50%}
+.o-c1 .o-c1-blur,.o-c1 .o-c1-glow{opacity:0}
+.o-c1 .o-c1-num{font-family:var(--o-disp);font-weight:800;font-size:20px;fill:#0B0D10}
+.o-c1 .o-c1-decal{font-family:var(--o-cond);font-weight:700;font-size:7.5px;letter-spacing:.9px;fill:rgba(255,255,255,.9)}
+.o-c1 .o-c1-streaks{position:absolute;right:100%;top:10%;width:80%;height:75%;opacity:0;transform-origin:100% 50%;pointer-events:none}
+.o-c1 .o-c1-streaks i{position:absolute;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6))}
+.o-c1 .o-c1-streaks i:nth-child(1){top:6%;width:72%}
+.o-c1 .o-c1-streaks i:nth-child(2){top:34%;width:100%}
+.o-c1 .o-c1-streaks i:nth-child(3){top:62%;width:84%}
+.o-c1 .o-c1-streaks i:nth-child(4){top:92%;width:58%}
+.o-c1 .o-c1-flame{position:absolute;right:94.1%;top:74.6%;width:13%;height:8.5%;opacity:0;transform-origin:100% 50%;pointer-events:none;background:radial-gradient(ellipse 100% 50% at 100% 50%,#FFF7CF 0 16%,#FFC53A 32%,#FF6A1F 56%,rgba(255,40,0,0) 74%)}
+.o-c1 .o-c1-bsmoke{position:absolute;left:68.8%;top:76%;width:18%;aspect-ratio:1;pointer-events:none}
+.o-c1 .o-c1-exsmoke{position:absolute;left:calc(100% - var(--o-c1-cw) + var(--o-c1-cw) * .178 - 28px);top:110px;width:56px;height:56px;pointer-events:none;z-index:5}
+.o-c1 .o-c1-bsmoke i,.o-c1 .o-c1-exsmoke i{position:absolute;inset:0;border-radius:50%;opacity:0;filter:blur(3.5px);background:radial-gradient(circle,rgba(226,229,233,.6) 0,rgba(226,229,233,.3) 42%,rgba(226,229,233,0) 70%)}
+@keyframes c1Arrive{from{transform:translateX(calc(-1 * var(--fw, 100vw)))}to{transform:translateX(0)}}
+@keyframes c1Leave{from{transform:translateX(0)}to{transform:translateX(var(--fw, 100vw))}}
+@keyframes c1SpinIn{from{transform:rotate(-2160deg)}to{transform:rotate(0deg)}}
+@keyframes c1SpinInSmall{from{transform:rotate(-4680deg)}to{transform:rotate(0deg)}}
+@keyframes c1SpinOut{from{transform:rotate(0deg)}to{transform:rotate(2160deg)}}
+@keyframes c1SpinOutSmall{from{transform:rotate(0deg)}to{transform:rotate(4680deg)}}
+@keyframes c1BlurOut{0%,52%{opacity:.95}82%,100%{opacity:0}}
+@keyframes c1BlurIn{0%,22%{opacity:0}58%,100%{opacity:.95}}
+@keyframes c1Streaks{0%{opacity:.9;transform:scaleX(1)}100%{opacity:0;transform:scaleX(.2)}}
+@keyframes c1Pop{0%{opacity:0;transform:scale(.2,.6)}15%{opacity:1;transform:scale(1,1)}38%{opacity:0;transform:scale(.6,.8)}56%{opacity:0;transform:scale(.2,.6)}70%{opacity:1;transform:scale(.85,.9)}100%{opacity:0;transform:scale(.4,.7)}}
+@keyframes c1Glow{0%{opacity:0}35%{opacity:.95}100%{opacity:0}}
+@keyframes c1Puff{0%{opacity:0;transform:translate(0,0) scale(.3)}22%{opacity:.85}100%{opacity:0;transform:translate(var(--dx,0px),var(--dy,0px)) scale(var(--ps,2.4))}}
+@keyframes c1Idle{0%,100%{transform:translateY(0)}50%{transform:translateY(1.1px)}}
+@keyframes c1Squat{to{transform:rotate(-2.6deg)}}
+@keyframes c1Pitch{0%,50%{transform:rotate(0)}71%{transform:rotate(2.6deg)}82%{transform:rotate(-1deg)}92%{transform:rotate(.3deg)}100%{transform:rotate(0)}}
+@keyframes c1Sway{0%,52%{transform:rotate(0)}70%{transform:rotate(1.8deg)}82%{transform:rotate(-.8deg)}92%{transform:rotate(.25deg)}100%{transform:rotate(0)}}
+/* Entrance: tows the board in, backfires, brakes (the nose dives, the disc glows,
+   the board leans forward and settles), then the text is struck and it idles */
+.playing .o-c1 .o-c1-rig{animation:c1Arrive calc(.85s / var(--spd)) cubic-bezier(.18,.68,.2,1) both}
+.playing .o-c1 .o-c1-spin{animation:c1SpinIn calc(.85s / var(--spd)) cubic-bezier(.18,.68,.2,1) both}
+.playing .o-c1 .o-c1-tw .o-c1-spin{animation:c1SpinInSmall calc(.85s / var(--spd)) cubic-bezier(.18,.68,.2,1) both}
+.playing .o-c1 .o-c1-blur{animation:c1BlurOut calc(.85s / var(--spd)) linear both}
+.playing .o-c1 .o-c1-streaks{animation:c1Streaks calc(.62s / var(--spd)) ease-out both}
+.playing .o-c1 .o-c1-flame{animation:c1Pop calc(.26s / var(--spd)) linear calc(.34s / var(--spd)) both}
+.playing .o-c1 .o-c1-pitch{animation:c1Pitch calc(1.2s / var(--spd)) linear both}
+.playing .o-c1 .o-c1-front .o-c1-glow{animation:c1Glow calc(1.4s / var(--spd)) ease-out calc(.46s / var(--spd)) both}
+.playing .o-c1 .o-c1-bsmoke i{animation:c1Puff calc(.85s / var(--spd)) ease-out calc((var(--pd) + .2s) / var(--spd)) both}
+.playing .o-c1 .o-c1-board{animation:c1Sway calc(1.25s / var(--spd)) linear both}
+.playing .o-c1 .o-c1-shake{animation:c1Idle calc(.11s / var(--spd)) linear calc(1.3s / var(--spd)) infinite}
+.playing .o-c1 .o-c1-head{animation:struck calc(.24s / var(--spd)) ease-out calc(.92s / var(--spd)) both}
+.playing .o-c1 .o-c1-amt{animation:struck calc(.28s / var(--spd)) ease-out calc(.98s / var(--spd)) both}
+.playing .o-c1 .o-c1-msg{animation:struck calc(.24s / var(--spd)) ease-out calc(1.04s / var(--spd)) both}
+.playing .o-c1 .o-c1-from{animation:struck calc(.24s / var(--spd)) ease-out calc(1.1s / var(--spd)) both}
+/* Exit: it squats, spins its rear wheels in a puff of smoke and tows everything off
+   to the right. These outrank .exiting .obj *, which stops every other animation. */
+.exiting .o-c1 .o-c1-pitch{animation:c1Squat calc(.16s / var(--spd)) ease-out both}
+.exiting .o-c1 .o-c1-spin{animation:c1SpinOut calc(.84s / var(--spd)) cubic-bezier(.45,0,.85,.4) both}
+.exiting .o-c1 .o-c1-tw .o-c1-spin{animation:c1SpinOutSmall calc(.84s / var(--spd)) cubic-bezier(.45,0,.85,.4) both}
+.exiting .o-c1 .o-c1-blur{animation:c1BlurIn calc(.84s / var(--spd)) linear both}
+.exiting .o-c1 .o-c1-exsmoke i{animation:c1Puff calc(.9s / var(--spd)) ease-out calc(var(--pd) / var(--spd)) both}
+.exiting .o-c1 .o-c1-rig{animation:c1Leave calc(.74s / var(--spd)) cubic-bezier(.6,0,.85,.35) calc(.1s / var(--spd)) both}
