@@ -604,14 +604,23 @@ describe('styles — the C1 any streamer can pick, with their own name on it (do
     assert.equal(drawing(draw('ABC')), drawing(onPage('ABC', () => C1.render(data))), 'everything but the lettering is his drawing');
   });
 
-  test('the rear window carries the name the page gives, set like VILELA when it fits (up to six capitals)', () => {
-    assert.deepEqual(lettering(draw('PABLOS')), { attrs: AT, text: 'PABLOS' });
+  test('a name that fits the glass is set like VILELA, at its own width and never stretched, however many letters it has', () => {
+    // Widths measured in Chromium at the decal's font: PABLOS 26.1, JILLIAN 25.5, FIJI_11 22.5, TILLIE_1 27.9 (of 29).
+    for (const name of ['PABLOS', 'JILLIAN', 'FIJI_11', 'TILLIE_1']) {
+      assert.deepEqual(lettering(draw(name)), { attrs: AT, text: name }, name);
+    }
   });
 
-  test('a longer name is squeezed into the 30 units of glass between the window edge and the cage bar', () => {
-    assert.deepEqual(lettering(draw('RICARDO')), { attrs: SQUEEZED, text: 'RICARDO' });
-    assert.deepEqual(lettering(draw('RICARDOBSILVA98')), { attrs: SQUEEZED, text: 'RICARDOBSILVA98' });
+  test('a name wider than the glass is squeezed into its 30 units, short names of wide capitals too', () => {
+    // RICARDO 29.8, MOMWOW 34.7, WWWWWW 39.4, RICARDOBSILVA98 62.7 (of 29).
+    for (const name of ['RICARDO', 'MOMWOW', 'WWWWWW', 'RICARDOBSILVA98']) {
+      assert.deepEqual(lettering(draw(name)), { attrs: SQUEEZED, text: name }, name);
+    }
     assert.deepEqual(lettering(draw('ABCDEFGHIJKLMNOP')), { attrs: SQUEEZED, text: 'ABCDEFGHIJKLMNOP' }, 'sixteen characters are shown whole');
+  });
+
+  test('a character the width table does not hold counts as the widest, so it never overruns the glass', () => {
+    assert.deepEqual(lettering(draw('ÉÉÉÉÉ')), { attrs: SQUEEZED, text: 'ÉÉÉÉÉ' }, 'five unknown characters are wider than 29 units');
   });
 
   test('a name past sixteen characters is cut with …', () => {
@@ -627,7 +636,8 @@ describe('styles — the C1 any streamer can pick, with their own name on it (do
   });
 
   test('the name is escaped like every text the registry prints', () => {
-    assert.deepEqual(lettering(draw('<B>&"X')), { attrs: AT, text: '&lt;B&gt;&amp;&quot;X' });
+    // Its symbols are not in the width table, so they count as the widest and the name is squeezed.
+    assert.deepEqual(lettering(draw('<B>&"X')), { attrs: SQUEEZED, text: '&lt;B&gt;&amp;&quot;X' });
   });
 
   test("andre_vilela_'s C1 keeps VILELA whatever name the page gives", () => {

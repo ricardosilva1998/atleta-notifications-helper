@@ -235,19 +235,36 @@ function c1AmountFit(text) {
 }
 
 // The name on the rear side window: VILELA on andre_vilela_'s C1, the streamer's own Twitch name on
-// the C1 any streamer can pick. Measured in Chromium: a capital at the decal's font and spacing is
-// about 4.3 units wide, and the glass between the window's edge and the roll-cage bar holds 30 units
-// centred on x 88. So up to six capitals are set as they are, a longer name is squeezed into the 30
-// units, and one past sixteen characters is cut with "…". No name, no lettering: plain glass.
-var C1_LETTER_WIDTH = 4.3;
+// the C1 any streamer can pick. The glass between the window's edge and the roll-cage bar holds 30
+// units centred on x 88. Each character a lettering can hold (the page gives A–Z, 0–9 and _; "…" ends
+// a cut name) is as wide as below at the decal's font, size and spacing (Saira Condensed 700, 7.5
+// units, .9 spacing), measured in Chromium; any other character counts as the widest. A name wider
+// than 29 units (one kept for kerning) is squeezed into the 30; a narrower one is set as it is, never
+// stretched; one past sixteen characters is cut with "…". No name, no lettering: plain glass.
+var C1_LETTER_WIDTHS = {
+  A: 4.66, B: 4.56, C: 3.87, D: 4.62, E: 4.06, F: 3.84, G: 4.55, H: 4.79, I: 2.72, J: 3.12, K: 4.59, L: 3.74, M: 6.17,
+  N: 4.82, O: 4.7, P: 4.46, Q: 4.7, R: 4.61, S: 4.22, T: 4.04, U: 4.7, V: 4.54, W: 6.57, X: 4.66, Y: 4.37, Z: 4.19,
+  '0': 4.48, '1': 3.23, '2': 4.28, '3': 4.18, '4': 4.42, '5': 4.3, '6': 4.45, '7': 4.06, '8': 4.55, '9': 4.45,
+  _: 3.61, '…': 6.35
+};
+var C1_LETTER_WIDEST = 6.57;
 var C1_LETTERING_ROOM = 30;
+var C1_LETTERING_FITS = 29;
 var C1_LETTERING_MAX = 16;
+
+function c1LetteringWidth(chars) {
+  var width = 0;
+  for (var i = 0; i < chars.length; i++) {
+    width += Object.prototype.hasOwnProperty.call(C1_LETTER_WIDTHS, chars[i]) ? C1_LETTER_WIDTHS[chars[i]] : C1_LETTER_WIDEST;
+  }
+  return width;
+}
 
 function c1Lettering(name) {
   var chars = Array.from(String(name == null ? '' : name));
   if (!chars.length) return '';
   if (chars.length > C1_LETTERING_MAX) chars = chars.slice(0, C1_LETTERING_MAX - 1).concat('…');
-  var fit = chars.length * C1_LETTER_WIDTH > C1_LETTERING_ROOM
+  var fit = c1LetteringWidth(chars) > C1_LETTERING_FITS
     ? ' textLength="' + C1_LETTERING_ROOM + '" lengthAdjust="spacingAndGlyphs"' : '';
   return '<text class="o-c1-decal" x="88" y="38" text-anchor="middle"' + fit + '>' + esc(chars.join('')) + '</text>';
 }

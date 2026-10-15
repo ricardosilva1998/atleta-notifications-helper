@@ -2754,7 +2754,7 @@ describe('the overlay builder page and a slow Twitch', () => {
     }
   });
 
-  test("hands the page the streamer's Twitch name for the C1's rear window, escaped like the other embeds", async () => {
+  test("hands the page the streamer's Twitch name for the C1's rear window, as JSON for its inline script", async () => {
     const { locals } = (await builder()).json();
     assert.equal(locals.channel, '"SOMESTREAMER"');
     const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });

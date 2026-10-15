@@ -160,6 +160,9 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
 
   test("the page tells the registry the streamer's Twitch name for the C1's rear window, before any preview is drawn", () => {
     assert.match(builder, /const EVENT_DEFAULTS = <%- eventDefaults %>;\s*window\.ATLETA_CHANNEL = <%- channel %>;/);
+    const firstPreview = builder.indexOf('\nupdatePreview();');
+    assert.ok(firstPreview > 0, 'the page draws its first preview at the end of its script');
+    assert.ok(builder.indexOf('window.ATLETA_CHANNEL = ') < firstPreview, 'the name is set before the first preview is drawn');
   });
 
   test('the car drives in from the edge of the preview screen (the 1920px canvas, scaled)', () => {
