@@ -19,6 +19,9 @@
   <!-- The alert looks: their shared kit and every family, joined (services/alertStyleBundle.js) -->
   <script src="/overlay/objects/kit.js"></script>
   <script src="/overlay/objects/styles.js?v=<%= stylesVersion %>"></script>
+  <!-- The looks' five screen effects, drawn as the OBS overlay draws them -->
+  <link rel="stylesheet" href="/overlay/fx.css">
+  <script src="/overlay/fx.js"></script>
   <!-- Where an alert sits, read from a saved design: shared with the live OBS overlay -->
   <script src="/overlay/placement.js"></script>
   <style>
@@ -1050,7 +1053,7 @@
           <div style="display:none;">
             <select id="ctrl-entrance-animation"><option value="slideDown"><%= t('overlayBuilder.anim.slideDown') %></option><option value="slideUp"><%= t('overlayBuilder.anim.slideUp') %></option><option value="slideLeft"><%= t('overlayBuilder.anim.slideLeft') %></option><option value="slideRight"><%= t('overlayBuilder.anim.slideRight') %></option><option value="zoomIn"><%= t('overlayBuilder.anim.zoomIn') %></option><option value="fadeIn"><%= t('overlayBuilder.anim.fadeIn') %></option></select>
             <select id="ctrl-car-animation"><option value="zoomLR"><%= t('overlayBuilder.anim.car.zoomLR') %></option><option value="zoomRL"><%= t('overlayBuilder.anim.car.zoomRL') %></option><option value="checkered"><%= t('overlayBuilder.anim.car.checkered') %></option><option value="flames"><%= t('overlayBuilder.anim.car.flames') %></option><option value="sparkles"><%= t('overlayBuilder.anim.car.sparkles') %></option><option value="lightning"><%= t('overlayBuilder.anim.car.lightning') %></option><option value="neonSweep"><%= t('overlayBuilder.anim.car.neonSweep') %></option><option value="equalizer"><%= t('overlayBuilder.anim.car.equalizer') %></option><option value="pulse"><%= t('overlayBuilder.anim.car.pulse') %></option><option value="none"><%= t('overlayBuilder.none') %></option></select>
-            <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option></select>
+            <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option><option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option><option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option><option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option><option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option><option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option></select>
             <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
             <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0">
             <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0">
@@ -1202,7 +1205,9 @@ const I18N = <%- JSON.stringify({
   effect: {
     default: t('overlayBuilder.anim.summary.effectDefault'), none: t('overlayBuilder.none'), confetti: t('overlayBuilder.anim.effect.confetti'),
     gold: t('overlayBuilder.anim.effect.gold'), money: t('overlayBuilder.anim.effect.money'), robots: t('overlayBuilder.anim.effect.robots'),
-    tiremarks: t('overlayBuilder.anim.effect.tiremarks'),
+    tiremarks: t('overlayBuilder.anim.effect.tiremarks'), smoke: t('overlayBuilder.anim.effect.smoke'),
+    checker: t('overlayBuilder.anim.effect.checker'), speed: t('overlayBuilder.anim.effect.speed'),
+    sparks: t('overlayBuilder.anim.effect.sparks'), champagne: t('overlayBuilder.anim.effect.champagne'),
   },
   direction: {
     down: t('overlayBuilder.anim.summary.down'), up: t('overlayBuilder.anim.summary.up'), left: t('overlayBuilder.anim.summary.left'), right: t('overlayBuilder.anim.summary.right'),
@@ -1495,13 +1500,12 @@ function updatePreview() {
       objHost.classList.add('playing');
       renderedObjectType = currentType;
     }
-    // renderScreenEffect('none') is a clean clear: objects carry their own motion and
-    // the live overlay skips spawnEffects() for them, so a saved screen effect would
-    // misrepresent what the streamer gets. No loadGoogleFont() call: objects use
-    // Oxanium/Saira Condensed from the page's own <link>, not the per-design font path.
+    // The effect the OBS overlay plays with this look (kit.js effectFor): none for today's
+    // objects with no look picked and for the C1, else the one the design names or the look's own.
+    // No loadGoogleFont() call: objects use their own fonts, not the per-design font path.
     positionCard(d.card_position, d.card_width);
     updateOverlayGuide();
-    renderScreenEffect('none');
+    renderScreenEffect(window.ATLETA_KIT ? window.ATLETA_KIT.effectFor(objDef, d) : 'none');
     return;
   }
   renderedObjectType = null;
@@ -1822,6 +1826,16 @@ function renderScreenEffect(effect) {
     effect = defaultEffects[currentType] || 'none';
   }
   if (!effect || effect === 'none') return;
+
+  // The alert looks' five effects (fx.js), as the OBS overlay draws them, at the preview's scale
+  if (window.ATLETA_FX && window.ATLETA_FX.KINDS.includes(effect)) {
+    const layer = document.createElement('div');
+    layer.className = 'preview-fx';
+    layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5;';
+    screen.appendChild(layer);
+    window.ATLETA_FX.spawn(layer, effect, { scale: screen.offsetWidth / 1920 });
+    return;
+  }
 
   const d = workingDesigns[currentType] || {};
   const speed = d.animation_speed || 1.0;
@@ -2948,6 +2962,11 @@ document.addEventListener('mouseup', e => {
             <option value="money"><%= t('overlayBuilder.anim.effect.money') %></option>
             <option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option>
             <option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option>
+            <option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option>
+            <option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option>
+            <option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option>
+            <option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option>
+            <option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option>
           </select>
         </div>
         <div>

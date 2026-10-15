@@ -16,6 +16,7 @@ const OVERLAY_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay
 const OBJECTS_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
 const PLACEMENT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'placement.js'), 'utf8');
 const KIT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'kit.js'), 'utf8');
+const FX_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'fx.js'), 'utf8');
 // The family files joined, as the page loads them from /overlay/objects/styles.js
 const STYLES_JS = require('../src/services/alertStyleBundle').bundle().js;
 
@@ -160,6 +161,7 @@ function loadOverlay({ objects = true, styles = false, kit = styles, designs = {
   if (objects) vm.runInContext(OBJECTS_JS, context, { filename: 'objects/index.js' });
   if (kit) vm.runInContext(KIT_JS, context, { filename: 'objects/kit.js' });
   if (styles) vm.runInContext(STYLES_JS, context, { filename: 'objects/styles.js' });
+  vm.runInContext(FX_JS, context, { filename: 'fx.js' });
   vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
   vm.runInContext(OVERLAY_JS, context, { filename: 'overlay.js' });
 
@@ -978,5 +980,86 @@ describe('the look an alert is drawn in (alert styles)', () => {
     assert.ok(overlay.slots()[0].children.some((c) => c.classList.contains('alert-card')));
     assert.equal(overlay.errors.filter((e) => e.includes('follow-racing')).length, 1, 'once per look');
     assert.equal(overlay.errors.filter((e) => e.includes('giveaway-racing')).length, 1);
+  });
+});
+
+describe('the screen effect and the sound of a look (alert styles)', () => {
+  const giveaway = () => ({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Season pass' } });
+  const effects = (overlay, cls) => overlay.container.children.filter((c) => c.classList.contains(cls)).length;
+  const all = (overlay) => overlay.container.children.filter((c) => c.classList.contains('screen-effect')).length;
+  // Which sound played: today's synthesized one or a look's, replaced by markers.
+  const listen = (overlay) => {
+    overlay.run("window.played = []; soundEffects.follow = () => window.played.push('today:follow'); soundEffects.giveaway_winner = () => window.played.push('today:giveaway');");
+    for (const [key, family] of [['rcVictory', 'racing'], ['rcFlyby', 'racing'], ['samuraiBell', 'samurai']]) {
+      overlay.run(`window.ATLETA_KIT.registerSound('${key}', '${family}', () => window.played.push('${key}'))`);
+    }
+    return () => JSON.parse(overlay.run('JSON.stringify(window.played)')); // an array of this realm
+  };
+
+  test('an alert nobody has restyled plays no effect, whatever an older builder saved, and today\'s sound', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ screen_effect: 'confetti' }) } });
+    const played = listen(overlay);
+    overlay.send(follow());
+    assert.equal(all(overlay), 0);
+    assert.deepEqual(played(), ['today:follow']);
+  });
+
+  test('a picked look plays the effect its design names, or its own, and its own sound', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing', screen_effect: 'default' }), raid: design({ style: 'raid-racing', screen_effect: 'sparks' }) } });
+    const played = listen(overlay);
+    overlay.send(follow());
+    assert.equal(all(overlay), 0, 'Fly-by has no effect of its own');
+    assert.deepEqual(played(), ['rcFlyby']);
+    overlay.send({ type: 'clear' });
+    overlay.send({ type: 'raid', data: { username: 'GridWalker', viewers: 42 } });
+    assert.equal(effects(overlay, 'fx-spark'), 56);
+  });
+
+  test('the giveaway\'s Victory lap plays its chequered confetti and its fanfare; a saved effect carries over', () => {
+    const fresh = loadOverlay({ styles: true });
+    const played = listen(fresh);
+    fresh.send(giveaway());
+    assert.equal(effects(fresh, 'fx-check'), 60);
+    assert.deepEqual(played(), ['rcVictory']);
+    const saved = loadOverlay({ styles: true, designs: { giveaway_winner: design({ screen_effect: 'gold' }) } });
+    saved.send(giveaway());
+    assert.ok(effects(saved, 'gold-item') > 0, 'the gold rain the streamer saved for the old card');
+  });
+
+  test('the design\'s sound wins over the look\'s; "none" is silence; an unknown one is the look\'s own', () => {
+    for (const [style_sound, expected] of [['samuraiBell', ['samuraiBell']], ['today', ['today:giveaway']], ['none', []], ['nope', ['rcVictory']]]) {
+      const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style_sound }) } });
+      const played = listen(overlay);
+      overlay.send(giveaway());
+      assert.deepEqual(played(), expected, style_sound);
+    }
+  });
+
+  test('a sound the streamer uploaded still plays first, even over "none"', () => {
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style_sound: 'none' }) } });
+    overlay.send({ type: 'config-update', config: baseConfig({ sounds: { giveaway_winner: '/overlay/sounds/test-token/giveaway_winner?v=1' } }) });
+    const played = listen(overlay);
+    overlay.send(giveaway());
+    assert.equal(overlay.audio.instances.length, 1);
+    assert.ok(overlay.audio.instances[0].played);
+    assert.deepEqual(played(), []);
+  });
+
+  test('the looks\' sounds use the overlay\'s AudioContext and volume', () => {
+    const overlay = loadOverlay({ styles: true });
+    const before = overlay.audio.oscillators;
+    overlay.send(giveaway());
+    assert.ok(overlay.audio.oscillators > before, 'Victory lap was played through the page\'s AudioContext');
+    overlay.send({ type: 'config-update', config: baseConfig({ volume: 0 }) });
+    overlay.send({ type: 'clear' });
+    const muted = overlay.audio.oscillators;
+    overlay.send(giveaway());
+    assert.equal(overlay.audio.oscillators, muted, 'volume 0 is silent');
+  });
+
+  test('a legacy card can play one of the new effects too', () => {
+    const overlay = loadOverlay({ styles: true, designs: { yt_member: design({ screen_effect: 'smoke' }) } });
+    overlay.send({ type: 'yt_member', data: { username: 'NewMember42', level: 'Member' } });
+    assert.equal(effects(overlay, 'fx-smoke'), 20);
   });
 });

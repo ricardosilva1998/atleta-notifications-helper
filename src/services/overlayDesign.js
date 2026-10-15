@@ -96,7 +96,8 @@ const FIELD_SPECS = Object.freeze({
   detail_text: { kind: 'text', max: 300 },
   entrance_animation: { kind: 'enum', values: ['slideDown', 'slideUp', 'slideLeft', 'slideRight', 'zoomIn', 'fadeIn'] },
   car_animation: { kind: 'enum', values: ['zoomLR', 'zoomRL', 'checkered', 'flames', 'sparkles', 'lightning', 'neonSweep', 'equalizer', 'pulse', 'none'] },
-  screen_effect: { kind: 'enum', values: ['default', 'none', 'confetti', 'gold', 'money', 'robots', 'tiremarks'] },
+  // 'default' is the alert's own effect (a look's own, for a look); the last five are fx.js's
+  screen_effect: { kind: 'enum', values: ['default', 'none', 'confetti', 'gold', 'money', 'robots', 'tiremarks', 'smoke', 'checker', 'speed', 'sparks', 'champagne'] },
   animation_speed: { kind: 'number', min: 0.5, max: 2 },
   // The width slider runs 280-900; dragging the card's resize handle allows 200-900.
   card_width: { kind: 'int', min: 200, max: 900 },

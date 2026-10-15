@@ -324,6 +324,7 @@ router.get('/:token', (req, res) => {
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/overlay/objects/objects.css">
   <link rel="stylesheet" href="/overlay/objects/styles.css?v=${alertStyles().version}">
+  <link rel="stylesheet" href="/overlay/fx.css">
 </head>
 <body>
   <div id="notification-container"></div>
@@ -335,6 +336,7 @@ router.get('/:token', (req, res) => {
   <script src="/overlay/objects/index.js"></script>
   <script src="/overlay/objects/kit.js"></script>
   <script src="/overlay/objects/styles.js?v=${alertStyles().version}"></script>
+  <script src="/overlay/fx.js"></script>
   <script src="/overlay/placement.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>

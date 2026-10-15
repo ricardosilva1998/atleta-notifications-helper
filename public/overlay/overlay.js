@@ -155,6 +155,8 @@ function loadDesignFonts(designs) {
 
 // Synthesized notification sounds using Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// The looks' sounds (objects/kit.js) play through the same AudioContext, at the streamer's volume.
+if (window.ATLETA_KIT) window.ATLETA_KIT.setAudio(audioCtx, overlayVolume);
 
 // Racing-themed sound synthesis
 function createNoise(duration, vol) {
@@ -490,10 +492,19 @@ function showNotification(event) {
   // Stop any currently playing sound before starting new one
   stopCurrentSound();
 
-  // Play notification sound — the streamer's custom sound when they set one,
-  // otherwise (or if it fails to play) the synthesized default
+  const drawn = drawAlert(event);
+  const objectDef = drawn.look;
+  const design = overlayDesigns[event.type];
+
+  // Play notification sound — the streamer's custom sound when they set one, otherwise (or if it
+  // fails to play) the look's sound (kit.js soundFor: the design's, else the look's own; today's
+  // synthesized one for today's objects, the C1 and the cards; 'none' is silence)
   if (audioCtx.state === 'suspended') audioCtx.resume();
+  const kit = window.ATLETA_KIT;
+  const soundKey = kit ? kit.soundFor(objectDef, design) : 'today';
   const playDefaultSound = () => {
+    if (soundKey === 'none') return;
+    if (soundKey !== 'today' && kit.playSound(soundKey)) return;
     const playSound = soundEffects[event.type];
     if (playSound) playSound();
   };
@@ -514,9 +525,6 @@ function showNotification(event) {
   // Build the alert. Every alert sits in a slot (.alert-pos) that carries its saved
   // position and width; what is inside animates on its own, so no entrance has to
   // know where it is placed.
-  const drawn = drawAlert(event);
-  const objectDef = drawn.look;
-  const design = overlayDesigns[event.type];
   let speed = 1;
   const cardClass = getCardClass(event.type);
   const isSubLike = event.type === 'subscription' || event.type === 'yt_member';
@@ -546,8 +554,13 @@ function showNotification(event) {
   // Saved colours and text for the legacy cards (the objects style themselves for now)
   if (!objectDef) applyCustomDesign(card, event.type);
 
-  // Spawn full-screen effects — objects carry their own motion
+  // Full-screen effects: a card plays its design's; a look the one its design names or its own
+  // (kit.js effectFor: none for today's objects with no look picked, and for the C1)
   if (!objectDef) spawnEffects(event.type);
+  else {
+    const effect = kit ? kit.effectFor(objectDef, design) : 'none';
+    if (effect !== 'none') spawnEffects(event.type, effect);
+  }
 
   // Dismiss after duration
   alertTimer(() => {
@@ -743,7 +756,8 @@ function buildBannerContent(event) {
 }
 
 // ─── Full-screen effects ───────────────────────────────────────
-function spawnEffects(type) {
+// `chosen`: the effect a look plays (showNotification); a card plays its design's, or its alert's default.
+function spawnEffects(type, chosen) {
   document.querySelectorAll('.screen-effect').forEach(e => e.remove());
 
   const design = overlayDesigns[type] || {};
@@ -753,7 +767,7 @@ function spawnEffects(type) {
   const dir = design.effect_direction || 'down';
 
   // Use custom screen_effect if set, otherwise default per event type
-  let effect = design.screen_effect || 'default';
+  let effect = chosen || design.screen_effect || 'default';
   if (effect === 'default') {
     const defaults = {
       follow: 'tiremarks', subscription: 'confetti', yt_member: 'confetti',
@@ -765,6 +779,12 @@ function spawnEffects(type) {
     effect = defaults[type] || 'none';
   }
   if (effect === 'none') return;
+
+  // The alert looks' five effects (fx.js), drawn the same way in the builder preview
+  if (window.ATLETA_FX && window.ATLETA_FX.KINDS.includes(effect)) {
+    window.ATLETA_FX.spawn(container, effect);
+    return;
+  }
 
   switch (effect) {
     case 'tiremarks':  spawnTireMarks(speed, amount, size, dir);           break;

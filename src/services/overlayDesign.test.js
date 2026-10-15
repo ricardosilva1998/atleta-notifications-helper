@@ -607,3 +607,19 @@ describe('a look\'s settings (alert styles)', () => {
     assert.equal('style_grows' in accepts({ style_grows: 2 }), false, 'a number that is not a choice is left out');
   });
 });
+
+describe('the five screen effects of the alert looks', () => {
+  test('are choices of the effect, and each is kept as chosen', () => {
+    for (const effect of ['smoke', 'checker', 'speed', 'sparks', 'champagne']) {
+      assert.ok(FIELD_SPECS.screen_effect.values.includes(effect), effect);
+      assert.equal(accepts({ screen_effect: effect }).screen_effect, effect);
+    }
+  });
+
+  test('are the effects public/overlay/fx.js draws, for the OBS overlay and the builder alike', () => {
+    const FX = require('../../public/overlay/fx.js');
+    for (const kind of FX.KINDS) assert.ok(FIELD_SPECS.screen_effect.values.includes(kind), kind);
+    assert.match(overlayJs, /window\.ATLETA_FX\.spawn\(container, effect\)/);
+    assert.match(builder, /window\.ATLETA_FX\.spawn\(/);
+  });
+});
