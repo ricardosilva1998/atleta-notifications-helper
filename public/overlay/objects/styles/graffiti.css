@@ -1,0 +1,215 @@
+/* ═════════ GRAFFITI — street art ═════════
+   Walls of brick and concrete, and paint that arrives the way paint does: a tag is revealed by a clip
+   that moves with the can (a rail carries the can and a soft mist along the reveal edge), drips run
+   down once the pass is over, stencils puff on, stickers slap on. Tags sit on a black buff patch so
+   they read over any game. The accent (--a) is the main paint colour; lime and electric blue support
+   it. Every selector is by class: nothing here reaches into the shared .o-odo or .o-typed parts. */
+.o-gfi{--gfia:var(--a,#FF3EA5);--gfia-rgb:var(--a-rgb,255,62,165);--gfi-on:var(--a-on,#1A0010);--gfi-lime:#B6FF3B;--gfi-blue:#2E7BFF;--gfi-ink:#111111;
+  --gfi-cond:"Saira Condensed",Impact,"Arial Narrow",sans-serif;font-family:"Permanent Marker","Comic Sans MS",cursive;font-weight:400;color:#FFFFFF}
+
+/* The walls: brick (mortar from a 96x28 tile, a few bricks lighter or darker) and concrete (grain,
+   panel seams, tie holes). Opaque, with a vignette, so the paint always has a plate behind it. */
+.o-gfi-wall{position:absolute;left:6px;right:6px;top:6px;bottom:6px;border-radius:4px;
+  background:radial-gradient(ellipse 80% 90% at 50% 40%,rgba(0,0,0,0) 50%,rgba(0,0,0,.42) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='28'%3E%3Cpath d='M2 2h46v12H2z' fill='%23fff' fill-opacity='.06'/%3E%3Cpath d='M50 2h46v12H50z' fill='%23000' fill-opacity='.05'/%3E%3Cpath d='M26 16h46v12H26z' fill='%23000' fill-opacity='.13'/%3E%3Cpath d='M0 1H96M0 15H96M1 2V14M49 2V14M25 16V28M73 16V28' fill='none' stroke='%23C9B6A4' stroke-opacity='.5' stroke-width='2'/%3E%3C/svg%3E") 0 0/96px 28px,
+    linear-gradient(180deg,#9A473B,#8A3B2E 45%,#712F25);
+  box-shadow:0 14px 28px rgba(0,0,0,.5),inset 0 0 0 1px rgba(0,0,0,.45),inset 0 2px 0 rgba(255,255,255,.07)}
+.o-gfi-wall.o-gfi-conc{background:radial-gradient(ellipse 80% 90% at 50% 40%,rgba(0,0,0,0) 50%,rgba(0,0,0,.45) 100%),
+    radial-gradient(circle at 18px 16px,rgba(0,0,0,.42) 0 3px,rgba(255,255,255,.08) 3.5px 4.5px,rgba(0,0,0,0) 5px) 0 0/139px 76px,
+    radial-gradient(circle,rgba(255,255,255,.07) 0 1px,rgba(255,255,255,0) 1.6px) 0 0/7px 7px,
+    radial-gradient(circle,rgba(0,0,0,.22) 0 1px,rgba(0,0,0,0) 1.7px) 3px 4px/11px 9px,
+    linear-gradient(90deg,rgba(0,0,0,0) 0 136px,rgba(0,0,0,.3) 136px 138px,rgba(255,255,255,.06) 138px 139px,rgba(0,0,0,0) 139px) 0 0/139px 100%,
+    linear-gradient(180deg,#474747,#3A3A3A 50%,#2F2F2F)}
+
+/* A tag: the buff patch, the name in spray paint, drips, and the rail with the mist and the can. */
+.o-gfi-tagbox{position:relative;display:inline-block;vertical-align:top;text-align:left}
+.o-gfi-buff{position:absolute;left:-14px;right:-16px;top:-3px;bottom:-5px;border-radius:3px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 10px,rgba(255,255,255,0) 10px 20px),rgba(17,17,19,.88);
+  box-shadow:0 0 0 2px rgba(17,17,19,.32),0 0 12px rgba(0,0,0,.35)}
+.o-gfi-tag{position:relative;font-family:"Rubik Spray Paint","Permanent Marker",cursive;font-weight:400;line-height:1.15;color:var(--gfia);
+  text-shadow:0 2px 0 rgba(0,0,0,.55),0 0 12px rgba(var(--gfia-rgb),.5)}
+.o-gfi-rail{position:absolute;left:0;top:0;bottom:0;width:100%;pointer-events:none}
+.o-gfi-mist{position:absolute;right:-21px;top:30%;width:42px;height:42px;margin-top:-21px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,rgba(var(--gfia-rgb),.62) 0,rgba(var(--gfia-rgb),.26) 40%,rgba(var(--gfia-rgb),0) 70%)}
+.o-gfi-can{position:absolute;right:-30px;top:-10px;width:24px;height:54px;overflow:visible;opacity:0;transform-origin:50% 8%}
+.o-gfi-can-nz{fill:#2B2B2B}
+.o-gfi-can-dome{fill:#D8D8D8;stroke:#111111;stroke-width:1}
+.o-gfi-can-body{fill:var(--gfia);stroke:#111111;stroke-width:1.2}
+.o-gfi-can-band{fill:#161616}
+.o-gfi-can-stripe{fill:var(--gfi-lime)}
+.o-gfi-can-shine{fill:#FFFFFF;opacity:.5}
+.o-gfi-drip{--dcol:var(--dc,var(--gfia));position:absolute;left:var(--x);top:var(--dt,64%);width:6px;height:calc(var(--dl) + 6px);margin-left:-3px;
+  background:radial-gradient(circle at 50% calc(100% - 3px),var(--dcol) 0 2.7px,rgba(0,0,0,0) 3.3px),linear-gradient(var(--dcol),var(--dcol)) 50% 0/2.6px calc(100% - 3px) no-repeat}
+
+/* Stencil lettering. A bridged letter is an inline-block masked by a thin vertical gap at --bx; its
+   padding (taken back by negative margins) gives the glow room, and the mask tiles into the padding. */
+.o-gfi-sten{--ls:.14em;font-family:var(--gfi-cond);font-weight:700;line-height:1.1;letter-spacing:var(--ls);text-transform:uppercase;white-space:nowrap;color:var(--gfi-lime);
+  text-shadow:0 1px 0 rgba(0,0,0,.75),0 0 8px rgba(0,0,0,.6)}
+.o-gfi-sten .o-odo{text-shadow:none;filter:drop-shadow(0 1px 0 rgba(0,0,0,.75)) drop-shadow(0 0 8px rgba(0,0,0,.6))}
+.o-gfi-br{display:inline-block;letter-spacing:0;padding:.25em;margin:-.25em calc(var(--ls) - .25em) -.25em -.25em;
+  -webkit-mask-image:linear-gradient(90deg,#000 calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) + .05em),#000 calc(var(--bx) + .05em));-webkit-mask-origin:content-box;
+  mask-image:linear-gradient(90deg,#000 calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) - .05em),rgba(0,0,0,0) calc(var(--bx) + .05em),#000 calc(var(--bx) + .05em));mask-origin:content-box}
+
+@keyframes gfiWallIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes gfiRoll{from{clip-path:inset(-14px 100% -14px -14px)}to{clip-path:inset(-14px -14px -14px -14px)}}
+@keyframes gfiSpray{from{clip-path:inset(-40% 100% -60% -8%)}to{clip-path:inset(-40% -8% -60% -8%)}}
+@keyframes gfiTrack{from{transform:translateX(-100%)}to{transform:none}}
+@keyframes gfiMist{0%{opacity:0;transform:scale(.4)}18%{opacity:1;transform:none}82%{opacity:.9;transform:none}100%{opacity:0;transform:scale(1.4)}}
+@keyframes gfiCan{0%{opacity:0;transform:translate(-16px,-12px) rotate(-36deg)}14%{opacity:1;transform:rotate(-16deg)}78%{opacity:1;transform:rotate(-10deg)}100%{opacity:0;transform:translate(26px,-24px) rotate(16deg)}}
+@keyframes gfiDrip{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes gfiStencil{0%{opacity:0;filter:blur(3px);transform:scale(1.06)}100%{opacity:1;filter:blur(0);transform:none}}
+@keyframes gfiWrite{from{clip-path:inset(-35% 100% -45% -6%)}to{clip-path:inset(-35% -6% -45% -6%)}}
+@keyframes gfiSlap{0%{opacity:0;transform:rotate(var(--sr,0deg)) scale(1.45)}55%{opacity:1;transform:rotate(var(--sr,0deg)) scale(.95)}78%{transform:rotate(var(--sr,0deg)) scale(1.02)}100%{opacity:1;transform:rotate(var(--sr,0deg))}}
+@keyframes gfiPop{0%{opacity:0;transform:scale(0)}65%{opacity:1;transform:scale(1.25)}100%{opacity:1;transform:none}}
+@keyframes gfiFadeIn{from{opacity:0}}
+.playing .o-gfi-wall{animation:gfiWallIn calc(.3s / var(--spd)) cubic-bezier(.2,.8,.2,1) both}
+.playing .o-gfi-buff{animation:gfiRoll calc(.26s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(var(--gbd) / var(--spd)) both}
+.playing .o-gfi-tag{animation:gfiSpray calc(var(--gtd) / var(--spd)) cubic-bezier(.45,.05,.55,.95) calc(var(--gt0) / var(--spd)) both}
+.playing .o-gfi-rail{animation:gfiTrack calc(var(--gtd) / var(--spd)) cubic-bezier(.45,.05,.55,.95) calc(var(--gt0) / var(--spd)) both}
+.playing .o-gfi-mist{animation:gfiMist calc((var(--gtd) + .1s) / var(--spd)) ease-out calc(var(--gt0) / var(--spd)) both}
+.playing .o-gfi-can{animation:gfiCan calc((var(--gtd) + .4s) / var(--spd)) ease-in-out calc((var(--gt0) - .15s) / var(--spd)) both}
+.playing .o-gfi-drip{animation:gfiDrip calc(.45s / var(--spd)) cubic-bezier(.45,0,.6,1) calc(var(--dd) / var(--spd)) both}
+
+/* Exit: the wall is buffed, a grey roller stroke wiping down while everything above it is gone. */
+@keyframes gfiBuff{0%{clip-path:inset(-40px -40px -40px -40px)}100%{clip-path:inset(100% -40px -40px -40px)}}
+@keyframes gfiRoller{from{transform:translateY(-14px)}to{transform:translateY(100%)}}
+.exiting .o-gfi::after{content:"";position:absolute;left:4px;right:4px;top:0;bottom:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0)) 0 16px/100% 8px no-repeat,repeating-linear-gradient(90deg,#8C8C8C 0 7px,#7F7F7F 7px 14px) 0 0/100% 16px no-repeat;
+  animation:gfiRoller calc(var(--outdur) / var(--spd)) var(--outease) both}
+
+/* follow — Tag */
+.o-gfif{height:132px}
+.o-gfif-in{position:absolute;left:24px;right:24px;top:16px;bottom:14px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:6px}
+.o-gfif-lbl{max-width:100%;padding-left:4px;font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.o-gfif-name-box{max-width:calc(100% - 36px);margin-left:16px;transform:rotate(-2.5deg)}
+.o-gfif-name{font-size:calc(40px * var(--fit,1))}
+.playing .o-gfif-lbl{animation:gfiStencil calc(.3s / var(--spd)) ease-out calc(1.1s / var(--spd)) both}
+
+/* subscriber — Piece: fat round strokes along each letter's centre line make the bubble letters */
+.o-gfis{height:186px}
+.o-gfis-piece{position:absolute;left:14px;top:10px;width:200px;height:104px;overflow:visible}
+.o-gfis-dk,.o-gfis-dp,.o-gfis-ol,.o-gfis-fill,.o-gfis-hi{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.o-gfis-depth{transform:translate(5px,6px)}
+.o-gfis-dk{stroke:var(--gfi-ink);stroke-width:33}
+.o-gfis-dp{stroke:var(--gfi-blue);stroke-width:25}
+.o-gfis-ol{stroke:var(--gfi-ink);stroke-width:29;stroke-dasharray:100;stroke-dashoffset:0}
+.o-gfis-fill{stroke:var(--gfia);stroke-width:18;stroke-dasharray:100;stroke-dashoffset:0}
+.o-gfis-shine{opacity:.9;transform:translate(-2.5px,-3.5px)}
+.o-gfis-hi{stroke:#FFFFFF;stroke-width:3.2;stroke-dasharray:9 6 2 83}
+.o-gfis-side{position:absolute;left:226px;right:20px;top:18px;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.o-gfis-lbl{max-width:100%;font-size:17px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transform:rotate(-3deg);transform-origin:0 50%;
+  text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 8px rgba(0,0,0,.5)}
+.o-gfis-mo{display:flex;align-items:flex-end;gap:7px;font-size:17px}
+.o-gfis-num{font-size:38px;letter-spacing:0;color:#FFFFFF}
+.o-gfis-unit{padding-bottom:4px}
+.o-gfis-tier{display:flex;align-items:center;gap:4px;font-size:12px;color:#FFFFFF}
+.o-gfis-tl{margin-right:3px}
+.o-gfis-star{display:block;flex:none;width:18px;height:18px;overflow:visible}
+.o-gfis-starp{fill:var(--gfi-lime);stroke:var(--gfi-ink);stroke-width:1.8;stroke-linejoin:round}
+.o-gfis-msg{max-width:100%;font-size:12.5px;line-height:1.3;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 0 rgba(0,0,0,.75)}
+.o-gfis-row{position:absolute;left:22px;right:22px;top:120px;text-align:center}
+.o-gfis-name-box{max-width:calc(100% - 32px);transform:rotate(-1.5deg)}
+.o-gfis-name{font-size:calc(34px * var(--fit,1))}
+@keyframes gfiDraw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+@keyframes gfiExtrude{from{opacity:0;transform:none}to{opacity:1;transform:translate(5px,6px)}}
+.playing .o-gfis-fill{animation:gfiDraw calc(.3s / var(--spd)) cubic-bezier(.45,.05,.55,.95) calc(var(--ld) / var(--spd)) both}
+.playing .o-gfis-ol{animation:gfiDraw calc(.26s / var(--spd)) ease-in-out calc(var(--ld) / var(--spd)) both}
+.playing .o-gfis-depth{animation:gfiExtrude calc(.22s / var(--spd)) cubic-bezier(.2,.8,.2,1) calc(1s / var(--spd)) both}
+.playing .o-gfis-shine{animation:gfiFadeIn calc(.14s / var(--spd)) ease-out calc(1.18s / var(--spd)) both}
+.playing .o-gfis-lbl{animation:gfiWrite calc(.4s / var(--spd)) cubic-bezier(.4,.1,.5,1) calc(.35s / var(--spd)) both}
+.playing .o-gfis-mo{animation:gfiStencil calc(.28s / var(--spd)) ease-out calc(1.24s / var(--spd)) both}
+.playing .o-gfis-tier{animation:gfiStencil calc(.28s / var(--spd)) ease-out calc(1.4s / var(--spd)) both}
+.playing .o-gfis-star{animation:gfiPop calc(.24s / var(--spd)) cubic-bezier(.3,1.4,.5,1) calc(var(--sd) / var(--spd)) both}
+.playing .o-gfis-msg{animation:gfiFadeIn calc(.3s / var(--spd)) ease-out calc(1.6s / var(--spd)) both}
+
+/* bits — Paint splat */
+.o-gfib{height:164px}
+.o-gfib-splats{position:absolute;left:6px;right:6px;top:6px;bottom:6px;overflow:hidden;border-radius:4px}
+.o-gfib-sp{position:absolute;width:var(--s);height:var(--s);margin:calc(var(--s) / -2) 0 0 calc(var(--s) / -2);transform:rotate(var(--r))}
+.o-gfib-svg{display:block;width:100%;height:100%;overflow:visible}
+.o-gfib-ink{fill:var(--c)}
+.o-gfib-stk{--sr:-5deg;position:absolute;right:20px;top:18px;width:202px;padding:3px;border-radius:13px;background:#FFFFFF;box-shadow:0 10px 18px rgba(0,0,0,.45),0 2px 3px rgba(0,0,0,.35);transform:rotate(var(--sr))}
+.o-gfib-band{border-radius:10px 10px 0 0;padding:6px 10px 5px;background:var(--gfia);color:var(--gfi-on);font-family:var(--gfi-cond);font-weight:700;font-size:12.5px;line-height:1.1;letter-spacing:.16em;text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-gfib-body{padding:6px 12px 7px;text-align:center;color:var(--gfi-ink)}
+.o-gfib-amt{display:flex;align-items:flex-end;justify-content:center;gap:6px;font-family:var(--gfi-cond);font-weight:700;font-size:42px;line-height:1;color:var(--gfi-ink)}
+.o-gfib-unit{padding-bottom:5px;font-size:15px;line-height:1;letter-spacing:.12em;text-transform:uppercase}
+.o-gfib-name{margin-top:2px;font-size:calc(22px * var(--fit,1));line-height:1.25;color:var(--gfi-ink)}
+@keyframes gfiSplat{0%{opacity:0;transform:rotate(var(--r)) scale(.2)}55%{opacity:1;transform:rotate(var(--r)) scale(1.12)}100%{opacity:1;transform:rotate(var(--r))}}
+.playing .o-gfib-sp{animation:gfiSplat calc(.22s / var(--spd)) cubic-bezier(.2,.9,.3,1.2) calc(var(--sd) / var(--spd)) both}
+.playing .o-gfib-stk{animation:gfiSlap calc(.32s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.95s / var(--spd)) both}
+.playing .o-gfib-name{animation:gfiWrite calc(.38s / var(--spd)) cubic-bezier(.4,.1,.5,1) calc(1.24s / var(--spd)) both}
+
+/* donation — Paste-up: the poster sits in the flow, so the alert is as tall as its message needs.
+   The brush rides a rail as tall as the poster, so it stays on the edge of the reveal. */
+.o-gfid{padding:16px 36px 18px}
+.o-gfid-poster{position:relative;transform:rotate(-1.2deg);filter:drop-shadow(0 4px 4px rgba(0,0,0,.45))}
+.o-gfid-reveal{position:relative}
+.o-gfid-paste{position:absolute;left:-12px;right:-12px;top:-9px;bottom:-9px;border-radius:8px;opacity:.45;
+  background:repeating-linear-gradient(176deg,rgba(255,255,255,.1) 0 3px,rgba(255,255,255,0) 3px 8px),linear-gradient(105deg,rgba(255,255,255,.05),rgba(255,255,255,.26) 45%,rgba(255,255,255,.06))}
+.o-gfid-paper{position:relative;background:radial-gradient(circle,rgba(0,0,0,.07) 0 .8px,rgba(0,0,0,0) 1.3px) 0 0/5px 5px,linear-gradient(160deg,#F7F3EA,#EAE3D3);color:var(--gfi-ink)}
+.o-gfid-head{padding:7px 12px 5px;background:var(--gfia);color:var(--gfi-on);font-family:var(--gfi-cond);font-weight:700;font-size:12.5px;line-height:1.1;letter-spacing:.24em;text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-gfid-body{display:flex;flex-direction:column;gap:3px;padding:6px 16px 8px}
+.o-gfid-amt{font-family:var(--gfi-cond);font-weight:700;font-size:40px;line-height:1;color:var(--gfi-ink)}
+.o-gfid-msg{font-size:14.5px;line-height:18px;max-height:54px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;color:#222222}
+.o-gfid-sign{align-self:flex-end;max-width:100%;font-size:calc(20px * var(--fit,1));line-height:1.2;color:var(--gfi-ink);transform:rotate(-2deg)}
+.o-gfid-wet{position:absolute;left:0;right:0;top:0;bottom:0;opacity:0;pointer-events:none;background:linear-gradient(115deg,rgba(255,255,255,0) 15%,rgba(255,255,255,.55) 42%,rgba(255,255,255,0) 68%),rgba(170,190,210,.2)}
+.o-gfid-rail{position:absolute;left:0;right:0;top:0;height:100%;pointer-events:none}
+.o-gfid-brush{position:absolute;left:-18px;right:-18px;bottom:-11px;height:22px;border-radius:4px 4px 2px 2px;opacity:0;
+  background:linear-gradient(180deg,#9A6A3E 0 7px,#5E3D20 7px 8px,#B9BEC4 8px 11px,#7D8288 11px 12px,rgba(0,0,0,0) 12px),repeating-linear-gradient(90deg,#EADBB2 0 2px,#C9B484 2px 4px);
+  box-shadow:0 4px 8px rgba(0,0,0,.4)}
+@keyframes gfiUnroll{from{clip-path:inset(-14px -18px 100% -18px)}to{clip-path:inset(-14px -18px -14px -18px)}}
+@keyframes gfiDown{from{transform:translateY(-100%)}to{transform:none}}
+@keyframes gfiBrush{0%{opacity:0;transform:translateY(-12px)}12%{opacity:1;transform:none}82%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-22px) rotate(-3deg)}}
+@keyframes gfiDry{from{opacity:.85}to{opacity:0}}
+@keyframes gfiPaste{from{opacity:1}}
+.playing .o-gfid-reveal{animation:gfiUnroll calc(.7s / var(--spd)) cubic-bezier(.4,.1,.5,1) calc(.38s / var(--spd)) both}
+.playing .o-gfid-rail{animation:gfiDown calc(.7s / var(--spd)) cubic-bezier(.4,.1,.5,1) calc(.38s / var(--spd)) both}
+.playing .o-gfid-brush{animation:gfiBrush calc(1.1s / var(--spd)) ease-in-out calc(.3s / var(--spd)) both}
+.playing .o-gfid-wet{animation:gfiDry calc(.8s / var(--spd)) ease-in calc(.55s / var(--spd)) both}
+.playing .o-gfid-paste{animation:gfiPaste calc(1s / var(--spd)) ease-in calc(.45s / var(--spd)) both}
+.playing .o-gfid-sign{animation:gfiWrite calc(.45s / var(--spd)) cubic-bezier(.4,.1,.5,1) calc(1.15s / var(--spd)) both}
+
+/* raid — Crew */
+.o-gfir{height:200px}
+.o-gfir-lbl{position:absolute;left:96px;right:96px;top:15px;text-align:center;font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.o-gfir-main{position:absolute;left:80px;right:80px;top:42px;text-align:center}
+.o-gfir-name-box{max-width:calc(100% - 30px);transform:rotate(-2deg)}
+.o-gfir-name{font-size:calc(40px * var(--fit,1))}
+.o-gfir-crew{display:flex;justify-content:center;align-items:flex-end;gap:8px;margin-top:16px;font-size:19px}
+.o-gfir-n{font-size:28px;letter-spacing:0;color:#FFFFFF}
+.o-gfir-w{padding-bottom:3px}
+.o-gfir-ct{position:absolute;white-space:nowrap;font-size:var(--fs);line-height:1;color:var(--c);transform:translate(-50%,-50%) rotate(var(--r));text-shadow:0 2px 0 rgba(0,0,0,.65),0 0 7px rgba(0,0,0,.45)}
+.o-gfir-spray{font-family:"Rubik Spray Paint","Permanent Marker",cursive}
+@keyframes gfiCrewIn{from{clip-path:inset(-30% 100% -40% -12%);transform:translate(-50%,-50%) rotate(var(--r)) scale(1.18)}to{clip-path:inset(-30% -12% -40% -12%);transform:translate(-50%,-50%) rotate(var(--r))}}
+.playing .o-gfir-lbl{animation:gfiStencil calc(.28s / var(--spd)) ease-out calc(.24s / var(--spd)) both}
+.playing .o-gfir-crew{animation:gfiStencil calc(.28s / var(--spd)) ease-out calc(.92s / var(--spd)) both}
+.playing .o-gfir-ct{animation:gfiCrewIn calc(.2s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(var(--cd) / var(--spd)) both}
+
+/* giveaway — Crown */
+.o-gfig{height:214px}
+.o-gfig-crownbox{--gt0:.45s;--gtd:.6s;position:absolute;left:50%;top:14px;width:140px;height:84px;margin-left:-70px}
+.o-gfig-crown{display:block;width:140px;height:84px;overflow:visible}
+.o-gfig-depth{transform:translate(4px,5px)}
+.o-gfig-cb{fill:var(--gfi-blue);stroke:var(--gfi-ink);stroke-width:4.5;stroke-linejoin:round}
+.o-gfig-cf{fill:var(--gfi-lime);stroke:var(--gfi-ink);stroke-width:4.5;stroke-linejoin:round}
+.o-gfig-band{fill:none;stroke:var(--gfi-ink);stroke-width:3;stroke-linecap:round}
+.o-gfig-gem{fill:var(--gfia);stroke:var(--gfi-ink);stroke-width:1.6}
+.o-gfig-shine{fill:none;stroke:#FFFFFF;stroke-width:3;stroke-linecap:round;opacity:.8}
+.o-gfig-mist{background:radial-gradient(circle,rgba(182,255,59,.6) 0,rgba(182,255,59,.25) 40%,rgba(182,255,59,0) 70%)}
+.o-gfig-rail .o-gfi-can-body{fill:var(--gfi-lime)}
+.o-gfig-rail .o-gfi-can-stripe{fill:var(--gfia)}
+.o-gfig-rail .o-gfi-can{top:6px}
+.o-gfig-spark{position:absolute;width:var(--ss);height:var(--ss);background:#FFFFFF;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%)}
+.o-gfig-main{position:absolute;left:28px;right:28px;top:100px;text-align:center}
+.o-gfig-name-box{max-width:calc(100% - 30px);transform:rotate(-2deg)}
+.o-gfig-name{font-size:calc(40px * var(--fit,1))}
+.o-gfig-foot{position:absolute;left:24px;right:22px;bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.o-gfig-lbl{flex:0 1 auto;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis}
+.o-gfig-stk{--sr:3deg;flex:0 1 auto;min-width:0;max-width:62%;display:flex;align-items:stretch;padding:3px;border-radius:9px;background:#FFFFFF;box-shadow:0 8px 14px rgba(0,0,0,.45),0 2px 3px rgba(0,0,0,.3);transform:rotate(var(--sr))}
+.o-gfig-won{flex:none;display:flex;align-items:center;padding:0 8px;border-radius:6px 0 0 6px;background:var(--gfia);color:var(--gfi-on);font-family:var(--gfi-cond);font-weight:700;font-size:12px;letter-spacing:.16em;text-transform:uppercase}
+.o-gfig-prize{min-width:0;padding:4px 10px 3px 9px;font-size:16px;line-height:1.3;color:var(--gfi-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes gfiTwinkle{0%{opacity:0;transform:scale(0) rotate(0deg)}55%{opacity:1;transform:scale(1.3) rotate(60deg)}100%{opacity:1;transform:rotate(90deg)}}
+.playing .o-gfig-crown{animation:gfiSpray calc(var(--gtd) / var(--spd)) cubic-bezier(.45,.05,.55,.95) calc(var(--gt0) / var(--spd)) both}
+.playing .o-gfig-spark{animation:gfiTwinkle calc(.4s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-gfig-lbl{animation:gfiStencil calc(.28s / var(--spd)) ease-out calc(1.42s / var(--spd)) both}
+.playing .o-gfig-stk{animation:gfiSlap calc(.32s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1.55s / var(--spd)) both}
