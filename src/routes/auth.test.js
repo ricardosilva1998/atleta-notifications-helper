@@ -483,7 +483,7 @@ describe('broadcaster authorization', () => {
     try {
       multistream.enabled = false;
       const off = await scopesAskedFor();
-      assert.deepEqual(off, ['channel:read:subscriptions', 'moderator:read:followers', 'bits:read', 'channel:manage:redemptions']);
+      assert.deepEqual(off, ['channel:read:subscriptions', 'moderator:read:followers', 'bits:read', 'channel:manage:redemptions', 'channel:manage:polls', 'channel:manage:predictions']);
       multistream.enabled = true;
       const on = await scopesAskedFor();
       assert.deepEqual(on, [...off, 'channel:read:stream_key']);

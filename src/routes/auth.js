@@ -226,7 +226,8 @@ async function validateTwitchToken(accessToken) {
 router.get('/broadcaster', (req, res) => {
   if (!req.streamer) return res.redirect('/auth/login');
 
-  const scopes = ['channel:read:subscriptions', 'moderator:read:followers', 'bits:read', 'channel:manage:redemptions'];
+  // channel:manage:polls and channel:manage:predictions: the Polls & predictions card (they also cover their events).
+  const scopes = ['channel:read:subscriptions', 'moderator:read:followers', 'bits:read', 'channel:manage:redemptions', 'channel:manage:polls', 'channel:manage:predictions'];
   // The stream key is read only to forward a multistream to Twitch, so it is
   // asked for only while the relay is configured (config.multistream.enabled).
   if (config.multistream.enabled) scopes.push('channel:read:stream_key');

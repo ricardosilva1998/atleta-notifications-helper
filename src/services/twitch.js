@@ -131,6 +131,18 @@ async function getChannelTitle(broadcasterId, options) {
   return typeof title === 'string' && title.trim() ? title : null;
 }
 
+// A channel's category (its last game) and title (Helix GET /channels, app token), whether or not it is live; null
+// when Twitch has no such channel. The shoutouts fill {game} and {title} with them.
+async function getChannelInfo(broadcasterId, options) {
+  const data = await apiCall(`/channels?broadcaster_id=${encodeURIComponent(broadcasterId)}`, options);
+  const channel = data.data?.[0];
+  if (!channel) return null;
+  return {
+    gameName: typeof channel.game_name === 'string' ? channel.game_name : '',
+    title: typeof channel.title === 'string' ? channel.title : '',
+  };
+}
+
 async function getUserId(username, options) {
   const data = await apiCall(`/users?login=${encodeURIComponent(username)}`, options);
   return data.data?.[0]?.id || null;
@@ -408,6 +420,13 @@ function hasStreamKeyScope(streamer) {
   return (streamer.broadcaster_scopes || '').split(' ').includes('channel:read:stream_key');
 }
 
+// The Polls & predictions card needs both permissions; a connection made before they were asked for has neither (the
+// card then asks for one reconnect, and EventSub skips the poll and prediction events).
+function hasPollsScope(streamer) {
+  const scopes = ((streamer && streamer.broadcaster_scopes) || '').split(' ');
+  return scopes.includes('channel:manage:polls') && scopes.includes('channel:manage:predictions');
+}
+
 // Scopes the overlay's core alerts depend on. A streamer missing any of them
 // either never finished broadcaster auth, or had their scopes cleared after the
 // refresh token died — see refreshBroadcasterToken's INVALID_REFRESH_TOKEN path.
@@ -453,4 +472,4 @@ async function getStreamKey(streamer) {
   return key;
 }
 
-module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, getStreamKey, needsBroadcasterReauth };
+module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getChannelInfo, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, hasPollsScope, getStreamKey, needsBroadcasterReauth };

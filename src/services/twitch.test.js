@@ -650,6 +650,27 @@ describe('what multistream asks Twitch', () => {
     assert.equal(await tw.getChannelTitle('42'), null);
   });
 
+  test('getChannelInfo reads the channel\'s game and title from /channels; no channel is null', async () => {
+    const tw = freshTwitch();
+    stub({ data: [{ broadcaster_id: '42', title: 'Endurance night', game_name: 'iRacing' }] });
+    assert.deepEqual(await tw.getChannelInfo('42'), { gameName: 'iRacing', title: 'Endurance night' });
+    const helix = seen.filter((call) => call.url !== TOKEN_URL);
+    assert.equal(helix[0].url, 'https://api.twitch.tv/helix/channels?broadcaster_id=42');
+    assert.ok(helix[0].opts.signal instanceof AbortSignal);
+    stub({ data: [{ broadcaster_id: '42', title: '', game_name: '' }] });
+    assert.deepEqual(await tw.getChannelInfo('42'), { gameName: '', title: '' });
+    stub({ data: [] });
+    assert.equal(await tw.getChannelInfo('42'), null);
+  });
+
+  test('hasPollsScope: both permissions, as Twitch stored them', () => {
+    const tw = freshTwitch();
+    assert.equal(tw.hasPollsScope({ broadcaster_scopes: 'bits:read channel:manage:polls channel:manage:predictions' }), true);
+    assert.equal(tw.hasPollsScope({ broadcaster_scopes: 'channel:manage:polls' }), false);
+    assert.equal(tw.hasPollsScope({ broadcaster_scopes: null }), false);
+    assert.equal(tw.hasPollsScope(null), false);
+  });
+
   test('getStreamKey has a timeout, so a slow Twitch cannot hold a go-live', async () => {
     const tw = freshTwitch();
     stub({ data: [{ stream_key: 'live_42_synthetic' }] });
