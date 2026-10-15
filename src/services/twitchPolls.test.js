@@ -1,8 +1,9 @@
 'use strict';
 
 // The polls and predictions Helix client (services/twitchPolls.js) with a fake Helix in place of fetch: the bodies it
-// sends, one token refresh on a 401, and Twitch's refusals (as its API reference words them) as the card's codes. Its
-// config, database and token refresh are stubs: nothing leaves the machine. All ids and tokens are synthetic.
+// sends, one token refresh on a 401 (only a grant Twitch no longer accepts asks for a reconnect), and Twitch's refusals
+// (as its API reference words them) as the card's codes. Its config, database and token refresh are stubs: nothing
+// leaves the machine. All ids and tokens are synthetic.
 
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,14 +13,14 @@ const Module = require('module');
 const FILE = path.join(__dirname, 'twitchPolls.js');
 const affiliateFlags = [];
 const refreshes = [];
-let refreshFails = false;
+let refreshFailure = null; // what the shared token refresh throws, or null while it works
 const stubs = {
   '../config': { twitch: { clientId: 'synthetic-client-id' } },
   '../db': { updateStreamerCpSync: (id, fields) => affiliateFlags.push([id, fields]) },
   './twitch': {
-    refreshBroadcasterToken: async (streamer) => {
+    refreshBroadcasterTokenShared: async (streamer) => {
       refreshes.push(streamer.id);
-      if (refreshFails) throw Object.assign(new Error('refresh refused'), { code: 'INVALID_REFRESH_TOKEN' });
+      if (refreshFailure) throw refreshFailure;
       return 'fresh-token';
     },
     hasPollsScope: (s) => /channel:manage:polls/.test(s.broadcaster_scopes || '') && /channel:manage:predictions/.test(s.broadcaster_scopes || ''),
@@ -50,7 +51,7 @@ beforeEach(() => {
   answers = [];
   affiliateFlags.length = 0;
   refreshes.length = 0;
-  refreshFails = false;
+  refreshFailure = null;
   global.fetch = async (url, opts) => {
     calls.push({ url: String(url), method: opts.method, body: opts.body ? JSON.parse(opts.body) : null, auth: opts.headers.Authorization, signal: opts.signal });
     const next = answers.shift() || { status: 200, body: { data: [] } };
@@ -66,6 +67,8 @@ const streamer = (over = {}) => ({ id: 7, twitch_user_id: '9001', broadcaster_ac
 const poll = { id: 'poll-1', title: 'Top 5?', status: 'ACTIVE', choices: [{ id: 'c1', title: 'Yes', votes: 0 }, { id: 'c2', title: 'No', votes: 0 }] };
 const value = { kind: 'poll', title: 'Top 5?', choices: ['Yes', 'No'], durationSeconds: 60, pointsPerVote: null };
 const refused = (status, message) => ({ status, body: { error: 'Bad Request', status, message } });
+// What the shared refresh throws for a grant Twitch no longer accepts (twitch.js: the token endpoint answered 400).
+const deadGrant = () => Object.assign(new Error('Token refresh failed: 400'), { code: 'INVALID_REFRESH_TOKEN' });
 const code = async (promise) => { try { await promise; } catch (err) { return err.code; } return 'resolved'; };
 
 describe('what is sent to Twitch', () => {
@@ -117,12 +120,27 @@ describe('the broadcaster token', () => {
     assert.deepEqual(calls.map((c) => c.auth), ['Bearer old-token', 'Bearer fresh-token']);
   });
 
-  test('a second 401 (a missing permission), or a refresh Twitch refuses, asks for a reconnect', async () => {
+  test('a second 401 (a missing permission), or a grant Twitch no longer accepts, asks for a reconnect', async () => {
     answers.push(refused(401, 'The user access token is missing the channel:manage:polls scope.'), refused(401, 'The user access token is missing the channel:manage:polls scope.'));
     assert.equal(await code(polls.createPoll(streamer(), value)), 'needs_reconnect');
-    refreshFails = true;
+    refreshFailure = deadGrant();
     answers.push({ status: 401, body: {} });
     assert.equal(await code(polls.latestPoll(streamer())), 'needs_reconnect');
+  });
+
+  test('a token refresh that fails for a moment (a 5xx or a 429, no answer, no network) is twitch_failed, not a reconnect', async () => {
+    const failures = [
+      new Error('Token refresh failed: 503'),
+      new DOMException('The operation was aborted due to timeout', 'TimeoutError'), // its code is a number, not Twitch's
+      new TypeError('fetch failed'),
+    ];
+    for (const failure of failures) {
+      refreshFailure = failure;
+      answers.push({ status: 401, body: {} });
+      assert.equal(await code(polls.latestPoll(streamer())), 'twitch_failed', failure.message);
+    }
+    assert.deepEqual(refreshes, [7, 7, 7]);
+    assert.equal(calls.length, 3, 'nothing is sent again after a refresh that failed');
   });
 
   test('without both permissions (or a linked channel, or a token) nothing is sent', async () => {
@@ -141,12 +159,21 @@ describe('Twitch\'s refusals', () => {
     assert.deepEqual(affiliateFlags, [[7, { affiliate_status: 'not_affiliate' }], [7, { affiliate_status: 'not_affiliate' }]]);
   });
 
-  test('a start that works clears a stored not-affiliate flag (the channel became one); otherwise nothing is stored', async () => {
+  test('a message naming an Affiliate or Partner is not_affiliate whatever the status, 401 and 404 included', async () => {
+    const message = 'The broadcaster must be an affiliate or partner to use this feature.';
+    answers.push(refused(401, message), refused(401, message)); // a 401 is refreshed once first
+    assert.equal(await code(polls.createPoll(streamer(), value)), 'not_affiliate');
+    answers.push(refused(404, message));
+    assert.equal(await code(polls.createPrediction(streamer(), { ...value, kind: 'prediction' })), 'not_affiliate');
+    assert.deepEqual(affiliateFlags, [[7, { affiliate_status: 'not_affiliate' }], [7, { affiliate_status: 'not_affiliate' }]]);
+  });
+
+  test('a start that works sets a stored not-affiliate flag back to ok (the rewards client\'s value); otherwise nothing is stored', async () => {
     answers.push({ status: 200, body: { data: [poll] } }, { status: 200, body: { data: [poll] } });
     await polls.createPoll(streamer(), value);
     assert.deepEqual(affiliateFlags, []);
     await polls.createPoll(streamer({ cp_affiliate_status: 'not_affiliate' }), value);
-    assert.deepEqual(affiliateFlags, [[7, { affiliate_status: 'affiliate' }]]);
+    assert.deepEqual(affiliateFlags, [[7, { affiliate_status: 'ok' }]]);
   });
 
   test('one already running when starting: running; a text AutoMod refuses: automod', async () => {
@@ -156,6 +183,13 @@ describe('Twitch\'s refusals', () => {
     assert.equal(await code(polls.createPrediction(streamer(), { ...value, kind: 'prediction' })), 'running');
     answers.push(refused(400, 'The choice\'s title failed AutoMod checks.'));
     assert.equal(await code(polls.createPoll(streamer(), value)), 'automod');
+  });
+
+  test('"already running" on a call that is not a start is not running: only a start can find one running', async () => {
+    answers.push(refused(400, 'The broadcaster already has a poll that\'s running; you may not create another poll until the current poll completes.'));
+    assert.equal(await code(polls.endPoll(streamer(), 'poll-1')), 'twitch_failed');
+    answers.push(refused(400, 'The broadcaster already has a prediction that\'s running; you may not create another prediction until the current prediction is resolved or canceled.'));
+    assert.equal(await code(polls.cancelPrediction(streamer(), 'pred-1')), 'twitch_failed');
   });
 
   test('acting on one whose status changed meanwhile: changed', async () => {

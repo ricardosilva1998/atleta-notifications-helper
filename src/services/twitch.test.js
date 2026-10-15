@@ -448,6 +448,25 @@ describe('getFollowAge', () => {
     assert.equal(calls.filter((c) => c.to === 'token').length, 1);
     assert.equal(calls.filter((c) => c.to === 'helix').length, 3);
   });
+
+  test('refreshBroadcasterTokenShared, the polls client\'s refresh too: one at a time per streamer; only a dead grant clears the scopes', async () => {
+    const tw = freshTwitch();
+    stubTwitch([{ status: 200, follows: [] }]);
+    assert.deepEqual(await Promise.all([tw.refreshBroadcasterTokenShared(streamer()), tw.refreshBroadcasterTokenShared(streamer())]), ['fresh-token', 'fresh-token']);
+    assert.equal(calls.filter((c) => c.to === 'token').length, 1);
+    stubTwitch([{ status: 200, follows: [] }], 503);
+    await assert.rejects(() => tw.refreshBroadcasterTokenShared(streamer()), (err) => err.code === undefined && /503/.test(err.message));
+    assert.deepEqual(_clearedScopes, [], 'a refresh that failed for a moment keeps the scopes');
+    stubTwitch([{ status: 200, follows: [] }], 400);
+    const realWarn = console.warn;
+    console.warn = () => {};
+    try {
+      await assert.rejects(() => tw.refreshBroadcasterTokenShared(streamer()), (err) => err.code === 'INVALID_REFRESH_TOKEN');
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.deepEqual(_clearedScopes, [1]);
+  });
 });
 
 // ── Batched live checks, and a timeout on what the pollers call (N12, M21) ──
@@ -669,6 +688,14 @@ describe('what multistream asks Twitch', () => {
     assert.equal(tw.hasPollsScope({ broadcaster_scopes: 'channel:manage:polls' }), false);
     assert.equal(tw.hasPollsScope({ broadcaster_scopes: null }), false);
     assert.equal(tw.hasPollsScope(null), false);
+  });
+
+  test('needsBroadcasterReauth never requires the polls permissions: a connection made before they were asked for keeps working', () => {
+    const tw = freshTwitch();
+    const earlier = { broadcaster_scopes: 'channel:read:subscriptions moderator:read:followers bits:read channel:manage:redemptions' };
+    assert.equal(tw.hasPollsScope(earlier), false, 'the polls card asks for its own reconnect');
+    assert.equal(tw.needsBroadcasterReauth(earlier), false, 'the dashboard\'s general banner does not');
+    assert.equal(tw.needsBroadcasterReauth({ broadcaster_scopes: 'channel:manage:polls channel:manage:predictions' }), true, 'the core alerts still need theirs');
   });
 
   test('getStreamKey has a timeout, so a slow Twitch cannot hold a go-live', async () => {

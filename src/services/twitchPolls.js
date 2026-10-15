@@ -1,21 +1,24 @@
 'use strict';
 
 // Twitch's polls and predictions for a streamer (Helix, with the streamer's broadcaster token): start, end, lock,
-// resolve, cancel, and the newest of each. A token Twitch refuses is refreshed once. Twitch's refusals become the codes
+// resolve, cancel, and the newest of each. A token Twitch refuses is refreshed once, through the refresh the follow
+// checks share (twitch.refreshBroadcasterTokenShared: one at a time per streamer). Twitch's refusals become the codes
 // the Polls & predictions card shows (PollsError.code; their texts are pollRules.ERRORS):
-//   needs_reconnect  no linked channel or token, the two permissions missing, or a token Twitch refuses twice
+//   needs_reconnect  no linked channel or token, the two permissions missing, a token Twitch refuses twice, or a grant
+//                    Twitch no longer accepts (the shared refresh clears its permissions)
 //   not_affiliate    Twitch allows polls and predictions to Affiliates and Partners only: recognised by the message,
 //                    since Twitch documents no status for it; the flag the rewards card reads is stored, and a start
-//                    that works clears it again
+//                    that works sets it back to 'ok' (the rewards client's value)
 //   running          a start while one of the same kind runs
 //   automod          a title or choice Twitch's AutoMod refused
 //   changed          an end, lock, result or cancel of one whose status changed meanwhile
 //   not_found        a prediction or outcome Twitch does not know
-//   twitch_failed    no answer within 10 seconds, no network, or anything else Twitch refuses (the route logs it)
+//   twitch_failed    no answer within 10 seconds, no network, a token refresh that failed for a moment, or anything
+//                    else Twitch refuses (the route logs it)
 
 const config = require('../config');
 const db = require('../db');
-const { refreshBroadcasterToken, hasPollsScope } = require('./twitch');
+const { refreshBroadcasterTokenShared, hasPollsScope } = require('./twitch');
 
 const HELIX_BASE = 'https://api.twitch.tv/helix';
 const HELIX_TIMEOUT_MS = 10_000;
@@ -54,9 +57,12 @@ async function helix(streamer, method, urlPath, body, { creating = false } = {})
     if (res.status === 401) {
       let fresh;
       try {
-        fresh = await refreshBroadcasterToken(streamer);
+        fresh = await refreshBroadcasterTokenShared(streamer);
       } catch (err) {
-        throw new PollsError('needs_reconnect', err.message);
+        // Only a grant Twitch no longer accepts asks for a reconnect (the shared refresh has cleared the permissions);
+        // a refresh that failed for a moment (a 5xx or a 429, no answer, no network) is Twitch failing this once.
+        if (err && err.code === 'INVALID_REFRESH_TOKEN') throw new PollsError('needs_reconnect', err.message);
+        throw new PollsError('twitch_failed', err && err.message);
       }
       res = await send(fresh);
     }
@@ -70,7 +76,7 @@ async function helix(streamer, method, urlPath, body, { creating = false } = {})
     if (code === 'not_affiliate') db.updateStreamerCpSync(streamer.id, { affiliate_status: 'not_affiliate' });
     throw new PollsError(code, `${res.status} ${(data && data.message) || ''}`.trim());
   }
-  if (creating && streamer.cp_affiliate_status === 'not_affiliate') db.updateStreamerCpSync(streamer.id, { affiliate_status: 'affiliate' });
+  if (creating && streamer.cp_affiliate_status === 'not_affiliate') db.updateStreamerCpSync(streamer.id, { affiliate_status: 'ok' });
   return data;
 }
 

@@ -349,12 +349,14 @@ function hasBroadcasterScope(streamer, scope) {
   return (streamer.broadcaster_scopes || '').split(' ').includes(scope);
 }
 
-// One broadcaster-token refresh at a time per streamer for the follow checks:
-// the follow-age filter can look up several chatters at the same moment.
-const followTokenRefreshes = new Map(); // streamerId -> pending refresh (removed when it settles)
+// One broadcaster-token refresh at a time per streamer, shared by the follow
+// checks (the follow-age filter can look up several chatters at the same
+// moment) and the polls client (twitchPolls.js). A dead grant clears the
+// scopes; any other failure leaves them, and a later call refreshes again.
+const broadcasterTokenRefreshes = new Map(); // streamerId -> pending refresh (removed when it settles)
 
-function refreshFollowToken(streamer) {
-  let pending = followTokenRefreshes.get(streamer.id);
+function refreshBroadcasterTokenShared(streamer) {
+  let pending = broadcasterTokenRefreshes.get(streamer.id);
   if (!pending) {
     pending = refreshBroadcasterToken(streamer)
       .catch((err) => {
@@ -367,8 +369,8 @@ function refreshFollowToken(streamer) {
         }
         throw err;
       })
-      .finally(() => followTokenRefreshes.delete(streamer.id));
-    followTokenRefreshes.set(streamer.id, pending);
+      .finally(() => broadcasterTokenRefreshes.delete(streamer.id));
+    broadcasterTokenRefreshes.set(streamer.id, pending);
   }
   return pending;
 }
@@ -398,11 +400,11 @@ async function getFollowAge(streamer, userId) {
 
   let token = streamer.broadcaster_access_token;
   if (streamer.broadcaster_token_expires_at && Date.now() >= streamer.broadcaster_token_expires_at) {
-    token = await refreshFollowToken(streamer);
+    token = await refreshBroadcasterTokenShared(streamer);
   }
   let res = await ask(token);
   if (res.status === 401) {
-    token = await refreshFollowToken(streamer);
+    token = await refreshBroadcasterTokenShared(streamer);
     res = await ask(token);
   }
   if (!res.ok) throw new Error(`Followers API error: ${res.status}`);
@@ -472,4 +474,4 @@ async function getStreamKey(streamer) {
   return key;
 }
 
-module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getChannelInfo, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, hasPollsScope, getStreamKey, needsBroadcasterReauth };
+module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getChannelInfo, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBroadcasterTokenShared, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, hasPollsScope, getStreamKey, needsBroadcasterReauth };
