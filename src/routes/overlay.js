@@ -11,6 +11,7 @@ const { accountDisabledChannel } = require('../services/streamerAccess');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
 // Event streams are ended when the server shuts down; OBS reconnects to the new one.
 const { holdStream } = require('../httpDrain');
+const { t, SUPPORTED_LANGS } = require('../i18n');
 
 // Unique ID per server process — changes on every restart/deploy
 const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
@@ -247,6 +248,74 @@ router.get('/goal/:token', (req, res) => {
 
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.send(goalPageHtml(`window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};`));
+});
+
+// The Polls & predictions bar (an OBS browser source of its own). Its stream says what runs when it opens — read from
+// Twitch when EventSub said nothing lately (after a restart OBS reconnects here) — then every change on the bus
+// channel poll:<streamerId>; it does not follow the alerts' switch.
+router.get('/poll/events/:token', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+  const { livePolls } = require('../services/livePolls');
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  const send = (event) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+  };
+  send({ type: 'config', serverVersion: SERVER_INSTANCE_ID });
+
+  const heartbeat = setInterval(() => {
+    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+  }, 30000);
+  const channel = `poll:${streamer.id}`;
+  bus.on(channel, send);
+  endStreamWhenAccountDisabled(streamer.id, req, res);
+  holdStream(res);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    bus.off(channel, send);
+  });
+
+  livePolls.live(streamer.id).catch(() => null).then(() => send({ type: 'poll-state', ...livePolls.barState(streamer.id) }));
+});
+
+// The bar's texts: pollbar.* in the language the link names. {{count}}, {{points}} and {{viewers}} stay for the bar to
+// fill in (POLL_BAR_FIELDS).
+const POLL_BAR_TEXTS = Object.freeze({
+  poll: 'pollbar.poll', prediction: 'pollbar.prediction', locked: 'pollbar.locked', result: 'pollbar.result',
+  votes: 'pollbar.votes', pointsViewers: 'pollbar.pointsViewers', pollFoot: 'pollbar.pollFoot',
+  predictionFoot: 'pollbar.predictionFoot', winners: 'pollbar.winners', tie: 'pollbar.tie', noVotes: 'pollbar.noVotes',
+  cancelled: 'pollbar.cancelled',
+});
+const POLL_BAR_FIELDS = Object.freeze({ count: '{{count}}', points: '{{points}}', viewers: '{{viewers}}' });
+
+router.get('/poll/:token', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+
+  const lang = SUPPORTED_LANGS.includes(req.query.lang) ? req.query.lang : 'en';
+  const texts = Object.fromEntries(Object.entries(POLL_BAR_TEXTS).map(([name, key]) => [name, t(lang, key, POLL_BAR_FIELDS)]));
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(`<!DOCTYPE html>
+<html lang="${lang}">
+<head>
+  <meta charset="UTF-8">
+  <title>Poll Bar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&family=DM+Sans:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/overlay/poll.css">
+</head>
+<body>
+  <div id="poll-root"></div>
+  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)}; window.POLL_BAR_TEXTS = ${JSON.stringify(texts).replace(/</g, '\\u003c')};</script>
+  <script src="/overlay/pollModel.js"></script>
+  <script src="/overlay/poll.js"></script>
+</body>
+</html>`);
 });
 
 // Custom overlay routes — DISABLED for now

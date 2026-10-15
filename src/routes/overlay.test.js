@@ -129,6 +129,8 @@ const PAGES = [
   (t) => `/overlay/events/${t}`,
   (t) => `/overlay/sponsors/events/${t}`,
   (t) => `/overlay/goal/events/${t}`,
+  (t) => `/overlay/poll/${t}`,
+  (t) => `/overlay/poll/events/${t}`,
   (t) => `/overlay/sounds/${t}/follow`,
 ];
 
@@ -165,6 +167,7 @@ describe('a stream that is already open when the account is disabled', () => {
     ['alerts', (t) => `/overlay/events/${t}`, (id) => `overlay:${id}`],
     ['sponsors', (t) => `/overlay/sponsors/events/${t}`, (id) => `overlay:${id}`],
     ['tip goal', (t) => `/overlay/goal/events/${t}`, (id) => `tipgoal:${id}`],
+    ['poll bar', (t) => `/overlay/poll/events/${t}`, (id) => `poll:${id}`],
   ];
 
   for (const [name, link, channel] of STREAMS) {
@@ -342,5 +345,33 @@ describe('whether the alert overlay is open in OBS', () => {
     disable(id);
     await until(() => alerts.ended, 'the stream was ended');
     await until(() => !presence.isOpen(id), 'a stream the server ended no longer counts as open');
+  });
+});
+
+describe('the Polls & predictions bar', () => {
+  const { t } = require('../i18n');
+
+  test('its page has its texts in the language its link names, English otherwise', async () => {
+    const { token } = addStreamer();
+    const pt = await get(`/overlay/poll/${token}?lang=pt`);
+    assert.equal(pt.status, 200);
+    assert.match(pt.text, /<html lang="pt">/);
+    assert.ok(pt.text.includes(`"locked":${JSON.stringify(t('pt', 'pollbar.locked'))}`));
+    const fields = { count: '{{count}}', points: '{{points}}', viewers: '{{viewers}}' };
+    assert.ok(pt.text.includes(`"winners":${JSON.stringify(t('pt', 'pollbar.winners', fields))}`), 'the numbers are filled in by the bar');
+    assert.ok(t('pt', 'pollbar.winners', fields).includes('{{viewers}}'));
+    assert.match(pt.text, /\/overlay\/pollModel\.js/);
+    for (const lang of ['xx', '']) assert.match((await get(`/overlay/poll/${token}?lang=${lang}`)).text, /<html lang="en">/);
+  });
+
+  test('its stream sends what runs when it opens, then every change on its own channel, and nothing of the alerts', async () => {
+    const { id, token } = addStreamer();
+    const stream = await openStream(`/overlay/poll/events/${token}`);
+    assert.match(stream.chunks[0], /"type":"config"/);
+    await until(() => stream.chunks.join('').includes('"type":"poll-state"'), 'the bar is told what runs when it opens');
+    bus.emit(`overlay:${id}`, { type: 'follow', data: { username: 'Viewer' } });
+    bus.emit(`poll:${id}`, { type: 'poll-state', poll: { id: 'poll-1' }, prediction: null, serverNow: 1 });
+    await until(() => stream.chunks.join('').includes('"poll-1"'), 'a change on poll:<id> reaches the bar');
+    assert.ok(!stream.chunks.join('').includes('"follow"'), 'an alert is not the bar\'s');
   });
 });
