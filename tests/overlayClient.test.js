@@ -796,6 +796,7 @@ describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
     overlay.send(follow('Queued'));
     overlay.clock.advance(6000 + 300); // 0.3 s into its exit
     overlay.send({ type: 'clear' });
+    assert.equal(overlay.slots().length, 0, 'the clear removes the C1 at once');
     overlay.send(follow('After'));
     overlay.clock.advance(1200);          // past the stale 6900 removal and 7400 next-alert timers
     overlay.send(follow('Third'));
