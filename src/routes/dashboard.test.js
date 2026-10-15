@@ -2754,6 +2754,18 @@ describe('the overlay builder page and a slow Twitch', () => {
     }
   });
 
+  test('loads the alert looks the OBS overlay loads: the kit and the joined family files, at their version', async () => {
+    const { bundle } = require('../services/alertStyleBundle');
+    const { locals } = (await builder()).json();
+    assert.equal(locals.stylesVersion, bundle().version);
+    const page = (await request('GET', '/dashboard/overlay-builder', { streamer: id })).text;
+    const order = ['/overlay/objects/index.js', '/overlay/objects/kit.js', `/overlay/objects/styles.js?v=${bundle().version}`, '/overlay/placement.js']
+      .map((src) => page.indexOf(`<script src="${src}"></script>`));
+    assert.ok(order.every((i) => i > 0), JSON.stringify(order));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'in that order');
+    assert.ok(page.includes(`<link rel="stylesheet" href="/overlay/objects/styles.css?v=${bundle().version}">`));
+  });
+
   test('a "</script>" in nothing the page is given can end its inline script (the default table is escaped like the rest)', async () => {
     const page = await request('GET', '/dashboard/overlay-builder', { streamer: id });
     const defaultsLine = page.text.split('\n').find((line) => line.startsWith('const EVENT_DEFAULTS = '));

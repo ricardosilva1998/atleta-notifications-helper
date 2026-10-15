@@ -29,6 +29,7 @@ const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, m
 const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
 const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
+const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
@@ -2680,6 +2681,8 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
     sponsors: JSON.stringify(sponsors).replace(/</g, '\\u003c'),
     // What each alert starts from (the server's own table, see services/overlayDesign.js)
     eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
+    // The joined alert looks' version (services/alertStyleBundle.js), as the OBS overlay asks for them
+    stylesVersion: alertStyleBundle().version,
     overlayUrl,
     streamThumbnail
   });

@@ -14,7 +14,11 @@
   <!-- Alert object registry — shared with the live OBS overlay (public/overlay/overlay.js) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/overlay/objects/objects.css">
+  <link rel="stylesheet" href="/overlay/objects/styles.css?v=<%= stylesVersion %>">
   <script src="/overlay/objects/index.js"></script>
+  <!-- The alert looks: their shared kit and every family, joined (services/alertStyleBundle.js) -->
+  <script src="/overlay/objects/kit.js"></script>
+  <script src="/overlay/objects/styles.js?v=<%= stylesVersion %>"></script>
   <!-- Where an alert sits, read from a saved design: shared with the live OBS overlay -->
   <script src="/overlay/placement.js"></script>
   <style>
