@@ -5136,6 +5136,7 @@ describe('the working cards\' script', () => {
     assert.ok(scriptTag < modelTag && modelTag < pollsTag, 'the polls card\'s script comes after the cards\' script and the bar\'s model');
     assert.equal(T.polls.endNow, t('en', 'cards.polls.endNow'));
     assert.equal(T.polls.outcomeWon, t('en', 'cards.polls.outcomeWon', { outcome: '{{outcome}}' }), 'a text with a field the script fills');
+    assert.equal(T.polls.voteOne, t('en', 'cards.polls.voteOne', { count: '{{count}}' }), 'exactly one vote reads as one');
     assert.equal(T.shoutoutExample, t('en', 'cards.shoutouts.example', { line: '{{line}}' }));
   });
 
@@ -5154,13 +5155,14 @@ describe('the working cards\' script', () => {
   // The script reads its texts from window.ATLETA_CARD_TEXTS as T.name, T.name.sub or, for a group kept under a short
   // name (const G = T.giveaway), G.sub. A text the table does not hold would show as "undefined" only when its moment
   // comes, so the script's source is read here and each text it reads is looked up in the table the page gives it.
+  // The helpers in dashboard-cards-core.js are read too: they take the polls card's texts as P (T.polls).
   test('every text the page script reads is in the table the page gives it', async () => {
     const { features } = require('../config');
     const before = features.overlays;
     features.overlays = true;
     try {
       const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
-      const source = ['dashboard-cards.js', 'dashboard-polls.js']
+      const source = ['dashboard-cards.js', 'dashboard-polls.js', 'dashboard-cards-core.js']
         .map((name) => realFs.readFileSync(path.join(SRC, '..', 'public', 'js', name), 'utf8')).join('\n');
       const reads = new Set();
       for (const [, name, sub] of source.matchAll(/\bT\.(\w+)(?:\.(\w+))?/g)) {

@@ -165,6 +165,11 @@
   .lp-kind { font: 700 10px var(--font-display); letter-spacing: .6px; text-transform: uppercase; color: #38bdf8; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 2px 7px; border-radius: 999px; flex: none; }
   .lp-kind.pred { color: #c084fc; background: rgba(192,132,252,0.12); border-color: rgba(192,132,252,0.32); }
   .wc-row .lp-kind { margin-right: 2px; }
+  /* A template's row: its tag, title and buttons on the first line, its choices and time on a line of their own (a
+     340–400 px column leaves them no room beside the title) */
+  #wc-poll-templates .wc-row { flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
+  #wc-poll-templates .wc-row .nm { flex: 1; max-width: none; }
+  #wc-poll-templates .wc-row .txt { order: 1; flex-basis: 100%; }
   .wc-ib.play { color: var(--success); }
   .wc-ib[disabled] { opacity: .35; cursor: not-allowed; }
   .wc-live-polls { display: flex; flex-direction: column; gap: 10px; }

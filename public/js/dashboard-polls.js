@@ -48,8 +48,9 @@
 
   // The texts pollModel.render() fills for the card (the bar has its own).
   const panelTexts = {
-    poll: P.kindPoll, prediction: P.kindPrediction, locked: P.locked, result: '', votes: P.votes, pointsViewers: P.pointsShort,
-    pollFoot: P.votes, predictionFoot: P.totalPoints, winners: P.pointsShort, tie: '', noVotes: '', cancelled: '',
+    poll: P.kindPoll, prediction: P.kindPrediction, locked: P.locked, result: '', votes: P.votes, voteOne: P.voteOne,
+    pointsViewers: P.pointsShort, pollFoot: P.votes, pollFootOne: P.voteOne, predictionFoot: P.totalPoints,
+    winners: P.pointsShort, tie: '', noVotes: '', cancelled: '',
   };
   const panels = { poll: null, prediction: null }; // drawn: { key, root, corner, rows: [{ row, fill, pc, ct }], total }
   const resultLine = document.createElement('div');
@@ -154,6 +155,8 @@
       moved = true;
     }
     resultLine.classList.toggle('show', !!line);
+    // With nothing to show the box takes no room (it always holds the result line, so :empty never applies).
+    panelBox.hidden = !panels.poll && !panels.prediction && !line;
     if (moved) ui.repack();
   }
 
@@ -255,6 +258,7 @@
       schedule();
     } else {
       syncStarts();
+      refresh(); // one may run that the card has not seen yet (started on Twitch): show where it stands
     }
     return answer;
   }

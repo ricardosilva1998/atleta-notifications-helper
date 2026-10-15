@@ -14,8 +14,9 @@ const rules = require('../src/services/pollRules');
 
 const NOW = Date.parse('2026-10-15T20:00:00Z');
 const TEXTS = {
-  poll: 'Poll', prediction: 'Prediction', locked: 'Locked', result: 'Result', votes: '{{count}} votes',
+  poll: 'Poll', prediction: 'Prediction', locked: 'Locked', result: 'Result', votes: '{{count}} votes', voteOne: '{{count}} vote',
   pointsViewers: '{{points}} points · {{viewers}} viewers', pollFoot: '{{count}} votes · vote in the chat\'s poll box',
+  pollFootOne: '{{count}} vote · vote in the chat\'s poll box',
   predictionFoot: '{{count}} points at stake', winners: '{{viewers}} viewers share {{points}} points', tie: 'Tie',
   noVotes: 'No votes', cancelled: 'Cancelled — points refunded',
 };
@@ -72,6 +73,20 @@ describe('what the bar shows', () => {
     assert.equal(model.render(ended('poll', NOW, 'none'), NOW, TEXTS, 'en').footer, 'No votes');
     assert.equal(model.render(ended('prediction', NOW, 'canceled'), NOW, TEXTS, 'en').footer, 'Cancelled — points refunded');
     assert.equal(model.render(null, NOW, TEXTS, 'en'), null);
+  });
+
+  test('exactly one vote reads as one: under a choice, in a running poll\'s total and in a result\'s; the plural without a singular text', () => {
+    const options = [{ ...OPTIONS.poll[0], votes: 1, percent: 100 }, { ...OPTIONS.poll[1], votes: 0, percent: 0 }];
+    const running = model.render(view('poll', { options, total: 1 }), NOW, TEXTS, 'en');
+    assert.deepEqual(running.rows.map((r) => r.extra), ['1 vote', '0 votes']);
+    assert.equal(running.footer, '1 vote · vote in the chat\'s poll box');
+    const result = view('poll', { state: 'ended', endsAt: null, endedAt: NOW, result: 'won', options: options.map((o, i) => ({ ...o, won: i === 0 })), total: 1 });
+    assert.equal(model.render(result, NOW, TEXTS, 'en').footer, '1 vote');
+    const plural = { ...TEXTS };
+    delete plural.voteOne;
+    delete plural.pollFootOne;
+    const older = model.render(view('poll', { options, total: 1 }), NOW, plural, 'en');
+    assert.deepEqual([older.rows[0].extra, older.footer], ['1 votes', '1 votes · vote in the chat\'s poll box'], 'texts without the singular');
   });
 
   test('a result shows for 10 seconds; with both on, the prediction; nothing otherwise', () => {

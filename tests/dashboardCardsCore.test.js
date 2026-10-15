@@ -172,8 +172,9 @@ describe('the Polls & predictions card', () => {
 });
 
 describe('the browser files', () => {
-  // CI's node --check covers src/ only, and these two are served as they are: a slip in either (the page script
-  // grows by hundreds of lines) would stop every switch from saving while the rest of the suite stays green.
+  // CI's node --check covers src/ only, and these three are served as they are: a slip in the cards' script or its
+  // helpers would stop every switch from saving, one in the polls card's script would stop that card, and the rest of
+  // the suite would stay green.
   for (const name of ['dashboard-cards-core.js', 'dashboard-cards.js', 'dashboard-polls.js']) {
     test(`${name} compiles`, () => {
       const file = path.join(__dirname, '..', 'public', 'js', name);
