@@ -1024,7 +1024,13 @@ function runSettingFollowUps({ before, after, steps }) {
     const needed = !!(after.overlay_enabled || after.chatbot_enabled);
     if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed, streamElementsJwt: after.streamelements_jwt });
   }
-  if (steps.has('overlay')) pushOverlayConfig(id);
+  if (steps.has('overlay')) {
+    try {
+      pushOverlayConfig(id);
+    } catch (e) {
+      console.error('[Dashboard] Overlay config push failed:', e.message);
+    }
+  }
   if (steps.has('sponsorChat')) {
     try {
       const { timedNotificationManager } = require('../services/timedNotifications');
@@ -1559,8 +1565,16 @@ router.delete('/chatbot/banned-words/:id', (req, res) => {
   res.json({ ok: true, words: db.getBannedWords(req.streamer.id) });
 });
 
+// The custom command and sponsor message tests post a plain line, which the bot drops for a streamer whose chatbot is
+// off (chatManager.sendMessage): refused with the reason then, before the shared cooldown starts, as the thank-you
+// tests are (chatTestReady below), so the button does not say "sent" for it.
+function chatbotOnForTest(req, res, next) {
+  if (req.streamer.chatbot_enabled) return next();
+  res.status(409).json({ ok: false, code: 'chatbot_off', error: res.locals.t('chatbot.test.chatbotOff') });
+}
+
 // Test custom command — send raw message to chat (must be before :eventType wildcard)
-router.post('/chatbot/test/custom', limitTests, (req, res) => {
+router.post('/chatbot/test/custom', chatbotOnForTest, limitTests, (req, res) => {
   const t = res.locals.t;
   // One line of at most a chat message's length (the text is sent exactly as given).
   const raw = req.query.response || (req.body || {}).response;
@@ -2160,7 +2174,7 @@ router.post('/sponsor-messages/settings', (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/sponsor-messages/:id/test', limitTests, (req, res) => {
+router.post('/sponsor-messages/:id/test', chatbotOnForTest, limitTests, (req, res) => {
   const msg = db.getSponsorMessages(req.streamer.id).find(m => m.id === parseInt(req.params.id));
   if (!msg) return res.json({ ok: false, error: res.locals.t('sponsors.error.notFound') });
   const { chatManager } = require('../services/twitchChat');

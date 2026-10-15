@@ -1668,7 +1668,7 @@ describe('custom chat commands', () => {
   });
 
   test('the response reaches chat as it was typed: the route takes it as plain text', async () => {
-    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run('somechannel', id);
+    db.db.prepare('UPDATE streamers SET twitch_username = ?, chatbot_enabled = 1 WHERE id = ?').run('somechannel', id);
     const typed = 'Say "hello" & <b>wave</b>';
     const res = await request('POST', `/dashboard/chatbot/test/custom?response=${encodeURIComponent(typed)}`, { streamer: id });
     assert.equal(res.status, 200);
@@ -1826,8 +1826,8 @@ describe('the test buttons', () => {
   });
 
   test('each streamer has their own cooldown', async () => {
-    const a = addStreamer({ twitch_username: 'channel_a' });
-    const b = addStreamer({ twitch_username: 'channel_b' });
+    const a = addStreamer({ twitch_username: 'channel_a', chatbot_enabled: 1 });
+    const b = addStreamer({ twitch_username: 'channel_b', chatbot_enabled: 1 });
     assert.equal((await customTest(a, 'from a')).status, 200);
     assert.equal((await customTest(a, 'again from a')).status, 429);
     assert.equal((await customTest(b, 'from b')).status, 200, 'another streamer is not held up');
@@ -1841,7 +1841,7 @@ describe('the test buttons', () => {
       assert.notEqual(first.status, 429, `${route} should go through the first time`);
       assert.equal((await customTest(id, 'right after')).status, 429, `${route} should start the shared cooldown`);
     }
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
     db.addSponsorMessage(id, 'Thanks to our sponsors', null);
     const messageId = db.getSponsorMessages(id)[0].id;
     assert.equal((await post(`/dashboard/sponsor-messages/${messageId}/test`, id)).json().ok, true);
@@ -1849,41 +1849,41 @@ describe('the test buttons', () => {
   });
 
   test('a test message can be at most 500 characters', async () => {
-    const at500 = await customTest(addStreamer({ twitch_username: 'somechannel' }), 'x'.repeat(500));
+    const at500 = await customTest(addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 }), 'x'.repeat(500));
     assert.equal(at500.status, 200);
-    const over = await customTest(addStreamer({ twitch_username: 'somechannel' }), 'x'.repeat(501));
+    const over = await customTest(addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 }), 'x'.repeat(501));
     assert.equal(over.status, 400);
     assert.deepEqual(over.json(), { ok: false, error: 'A test message can be at most 500 characters.' });
     assert.equal(chatCalls.length, 1, 'only the 500-character message was sent');
   });
 
   test('a test message needs text, and must be plain text (an array from a repeated parameter is not)', async () => {
-    const empty = await post('/dashboard/chatbot/test/custom', addStreamer());
+    const empty = await post('/dashboard/chatbot/test/custom', addStreamer({ chatbot_enabled: 1 }));
     assert.equal(empty.status, 400);
     assert.equal(empty.json().error, 'There is no text to send.');
-    const blank = await customTest(addStreamer(), '   ');
+    const blank = await customTest(addStreamer({ chatbot_enabled: 1 }), '   ');
     assert.equal(blank.status, 400);
-    const repeated = await post('/dashboard/chatbot/test/custom?response=a&response=b', addStreamer());
+    const repeated = await post('/dashboard/chatbot/test/custom?response=a&response=b', addStreamer({ chatbot_enabled: 1 }));
     assert.equal(repeated.status, 400);
     assert.deepEqual(chatCalls, []);
   });
 
   test('the text of a test is sent as one line, so it cannot add IRC commands', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
     const res = await customTest(id, 'hi\r\nPRIVMSG #other :spam');
     assert.equal(res.status, 200);
     assert.deepEqual(chatCalls, [['say', id, 'hi PRIVMSG #other :spam', { priority: 'high' }]]);
   });
 
   test('the text can also come in the body', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
     const res = await post('/dashboard/chatbot/test/custom', id, { body: { response: 'from the body' } });
     assert.equal(res.status, 200);
     assert.deepEqual(chatCalls, [['say', id, 'from the body', { priority: 'high' }]]);
   });
 
   test('a failure to send is a generic message, not the internal error text', async () => {
-    const id = addStreamer({ twitch_username: 'somechannel' });
+    const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 1 });
     const original = chatStub.chatManager.sendMessage;
     chatStub.chatManager.sendMessage = () => { throw new Error('socket at 10.0.0.5 is on fire'); };
     try {
@@ -2012,7 +2012,7 @@ describe('the test buttons', () => {
     assert.deepEqual((await post('/dashboard/chatbot/test/follow', id)).json(), { ok: true });
     assert.deepEqual(chatCalls, [['event', id, 'follow', { username: 'TestRacer' }, { test: true }]]);
 
-    const other = addStreamer({ twitch_username: 'otherchannel' });
+    const other = addStreamer({ twitch_username: 'otherchannel', chatbot_enabled: 1 });
     db.addSponsorMessage(other, 'Thanks to our sponsors', 'https://example.com');
     const messageId = db.getSponsorMessages(other)[0].id;
     assert.deepEqual((await post(`/dashboard/sponsor-messages/${messageId}/test`, other)).json(), { ok: true });
@@ -2094,6 +2094,52 @@ describe('the test buttons', () => {
         assert.equal(res.json().error, t('en', 'chatbot.test.invalidType'), type);
       }
       assert.deepEqual(chatCalls, []);
+    });
+  });
+
+  // The custom command test (chatbot page) and the sponsor message test (sponsor messages page) post a plain line, which
+  // the bot drops for a streamer whose chatbot is off (chatManager.sendMessage): the route says so instead of "sent",
+  // before the shared cooldown starts, as the thank-you test does.
+  describe('a command or sponsor message test says when the chatbot is off', () => {
+    const sponsorTest = (streamer) => {
+      db.addSponsorMessage(streamer, 'Thanks to our sponsors', null);
+      const messageId = db.getSponsorMessages(streamer)[0].id;
+      return () => post(`/dashboard/sponsor-messages/${messageId}/test`, streamer);
+    };
+    const TESTS = [
+      ['custom command', (streamer) => () => customTest(streamer, 'hello chat'), ['hello chat', { priority: 'high' }]],
+      ['sponsor message', sponsorTest, ['Thanks to our sponsors', { priority: 'low' }]],
+    ];
+
+    for (const [name, prepare, [text, options]] of TESTS) {
+      test(`the ${name} test is refused with the reason while the chatbot is off, without starting the cooldown; with it on it sends`, async () => {
+        const id = addStreamer({ twitch_username: 'somechannel', chatbot_enabled: 0 });
+        const send = prepare(id);
+        const refused = await send();
+        assert.equal(refused.status, 409);
+        assert.deepEqual(refused.json(), { ok: false, code: 'chatbot_off', error: t('en', 'chatbot.test.chatbotOff') });
+        assert.deepEqual(chatCalls, [], 'the bot was not asked');
+        db.updateChatbotConfig(id, { chatbot_enabled: 1 });
+        const sent = await send();
+        assert.equal(sent.status, 200, 'straight after the refusal: not held for the cooldown');
+        assert.deepEqual(sent.json(), { ok: true });
+        assert.deepEqual(chatCalls, [['say', id, text, options]]);
+        assert.equal((await send()).status, 429, 'a test that went to the bot does start the cooldown');
+      });
+    }
+
+    test('both pages show the refusal\'s words', () => {
+      const scriptOf = (file, from, to) => {
+        const text = realFs.readFileSync(path.join(SRC, 'views', file), 'utf8');
+        const start = text.indexOf(from);
+        const end = text.indexOf(to, start);
+        assert.ok(start >= 0 && end > start, `${file}: ${from}`);
+        return text.slice(start, end);
+      };
+      assert.match(scriptOf('chatbot-config.ejs', 'async function testCustomCommand', 'function switchModTab'),
+        /btn\.textContent = data\.ok \? I18N\.sent : I18N\.failed;\s*\n\s*if \(!data\.ok && data\.error\) alert\(data\.error\);/);
+      assert.match(scriptOf('timed-notifications.ejs', 'async function testMessage', 'async function deleteMessage'),
+        /btn\.textContent = T\.failed;\s*\n\s*if \(data\.error\) showStatus\(data\.error\);/);
     });
   });
 
@@ -4463,12 +4509,17 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
   });
 
   test('a follow-up that fails is logged; the save still answers ok and the other follow-ups still run', async () => {
+    const bus = require('../services/overlayBus');
     const id = addStreamer({ chatbot_enabled: 1, overlay_enabled: 0, twitch_username: 'synthetic_failing_steps' });
     const chat = chatStub.chatManager;
     const sponsors = timedNotificationsStub.timedNotificationManager;
     const original = { stop: chat.stopForStreamer, restartChat: sponsors.restartChatForStreamer };
     chat.stopForStreamer = () => { throw new Error('synthetic chat failure'); };
     sponsors.restartChatForStreamer = () => { throw new Error('synthetic sponsor failure'); };
+    // An open overlay that fails on the settings it is sent: pushing them (pushOverlayConfig) throws out of the bus.
+    const failingOverlay = () => { throw new Error('synthetic overlay failure'); };
+    bus.on(`overlay:${id}`, failingOverlay);
+    const sponsorFailures = () => logs.filter(([level, line]) => level === 'error' && line === '[Dashboard] Sponsor chat restart failed: synthetic sponsor failure').length;
     try {
       const off = await save(id, { key: 'chatbot_enabled', value: 0 });
       assert.equal(off.status, 200);
@@ -4476,12 +4527,21 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
       const sponsor = await save(id, { key: 'sponsor_send_chat', value: 1 });
       assert.equal(sponsor.status, 200);
       assert.equal(db.getStreamerById(id).sponsor_send_chat, 1);
+      // The overlay push fails: the save is kept and answered ok, and the follow-up after it still runs.
+      const failuresBefore = sponsorFailures();
+      const overlay = await save(id, { changes: [{ key: 'overlay_follow_enabled', value: 0 }, { key: 'sponsor_send_chat', value: 0 }] });
+      assert.equal(overlay.status, 200);
+      assert.deepEqual(overlay.json(), { ok: true, values: { overlay_follow_enabled: 0, sponsor_send_chat: 0 } });
+      assert.equal(db.getStreamerById(id).overlay_follow_enabled, 0);
+      assert.equal(sponsorFailures(), failuresBefore + 1, 'the sponsor chat restart after the overlay push still ran');
     } finally {
       chat.stopForStreamer = original.stop;
       sponsors.restartChatForStreamer = original.restartChat;
+      bus.off(`overlay:${id}`, failingOverlay);
     }
     assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Chatbot start/stop error: synthetic chat failure'));
     assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Sponsor chat restart failed: synthetic sponsor failure'));
+    assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Overlay config push failed: synthetic overlay failure'));
   });
 });
 
