@@ -4,9 +4,12 @@
 // accepted. Each entry says how its value is read (kind), which database function writes it (writer), what
 // `guildId` or `id` names (target), what must be in place to switch it on (needs) and what must follow the
 // write (after). The route passes in the database and the follow-ups, so this module is tested without them.
+// Kinds: 'switch', 'int' and 'number' (min to max), 'choice' (one of its choices), 'text' (trimmed, up to max; empty only with allowEmpty).
 
 const { parseSwitch, SPONSOR_CHAT_INTERVAL_MINUTES } = require('./inputLimits');
 const { DURATIONS } = require('./overlaySettings');
+const { CHAT_TEXTS: POLL_TEXTS } = require('./pollRules');
+const { RAID_MIN_VIEWERS } = require('./shoutouts');
 
 const TEMPLATE_MAX = 500;
 const BATCH_MAX = 20;
@@ -39,6 +42,14 @@ const SETTINGS = Object.freeze({
   notify_live: Object.freeze({ kind: 'switch', target: 'watcher', writer: 'watcher', needs: 'liveChannel' }),
   notify_clips: Object.freeze({ kind: 'switch', target: 'watcher', writer: 'watcher', needs: 'clipsChannel' }),
   sponsor_message_enabled: Object.freeze({ kind: 'switch', target: 'sponsorMessage', writer: 'sponsorMessage', after: ['sponsorChat'] }),
+  // The Polls & predictions card: a poll or prediction text left empty posts nothing for that moment.
+  polls_chat_enabled: Object.freeze({ kind: 'switch', writer: 'polls' }),
+  ...entries(POLL_TEXTS.map((text) => text.key), { kind: 'text', max: TEMPLATE_MAX, allowEmpty: true, writer: 'polls' }),
+  // The Shoutouts card.
+  shoutout_command_enabled: Object.freeze({ kind: 'switch', writer: 'shoutouts' }),
+  shoutout_raid_enabled: Object.freeze({ kind: 'switch', writer: 'shoutouts' }),
+  shoutout_raid_min_viewers: Object.freeze({ kind: 'choice', choices: RAID_MIN_VIEWERS, writer: 'shoutouts' }),
+  shoutout_template: Object.freeze({ kind: 'text', max: TEMPLATE_MAX, writer: 'shoutouts' }),
 });
 
 // A refusal: its HTTP status and the text the card shows.
@@ -69,9 +80,13 @@ function readValue(setting, raw) {
     if (setting.kind === 'int' && !Number.isInteger(n)) return { error: 'invalid' };
     return { value: n };
   }
+  if (setting.kind === 'choice') {
+    const n = isNumberLike(raw) ? Number(raw) : NaN;
+    return setting.choices.includes(n) ? { value: n } : { error: 'invalid' };
+  }
   if (typeof raw !== 'string') return { error: 'invalid' };
   const text = raw.trim();
-  if (!text) return { error: 'required' };
+  if (!text) return setting.allowEmpty ? { value: '' } : { error: 'required' };
   if (text.length > setting.max) return { error: 'too_long' };
   return { value: text };
 }
@@ -111,6 +126,8 @@ function write(db, streamerId, key, setting, value, target) {
     case 'guild': return db.setGuildSwitch(target.guild_id, streamerId, key, value);
     case 'watcher': return target.watcher ? db.setWatcherNotify(target.watcher.id, streamerId, key, value) : null;
     case 'sponsorMessage': return db.setSponsorMessageEnabled(target.id, streamerId, value);
+    case 'polls': return db.updatePollSettings(streamerId, { [key]: value });
+    case 'shoutouts': return db.updateShoutoutSettings(streamerId, { [key]: value });
     default: throw new Error(`no writer for ${key}`);
   }
 }

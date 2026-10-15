@@ -4549,6 +4549,19 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
     assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Sponsor chat restart failed: synthetic sponsor failure'));
     assert.ok(logs.some(([level, line]) => level === 'error' && line === '[Dashboard] Overlay config push failed: synthetic overlay failure'));
   });
+
+  test('the Polls & predictions and Shoutouts settings reach their columns', async () => {
+    const id = addStreamer();
+    const res = await save(id, { changes: [
+      { key: 'polls_chat_enabled', value: 0 },
+      { key: 'poll_end_template', value: '' },
+      { key: 'shoutout_raid_min_viewers', value: 10 },
+      { key: 'shoutout_template', value: 'Follow {name}' },
+    ] });
+    assert.equal(res.status, 200);
+    const row = db.getStreamerById(id);
+    assert.deepEqual([row.polls_chat_enabled, row.poll_end_template, row.shoutout_raid_min_viewers, row.shoutout_template], [0, '', 10, 'Follow {name}']);
+  });
 });
 
 // ── The working cards' text routes ───────────────────────────────────────

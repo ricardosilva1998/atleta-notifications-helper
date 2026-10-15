@@ -26,6 +26,8 @@ function fakeDb({ streamer = {}, guilds = {}, watchers = [], sponsorMessages = [
     updateModerationConfig: recordInto('updateModerationConfig'),
     updateOverlayConfig: recordInto('updateOverlayConfig'),
     updateDonationSettings: recordInto('updateDonationSettings'),
+    updatePollSettings: recordInto('updatePollSettings'),
+    updateShoutoutSettings: recordInto('updateShoutoutSettings'),
     setSponsorChatSetting: (id, column, value) => { writes.push(['setSponsorChatSetting', id, column, value]); row[column] = value; },
     setGuildSwitch: (guildId, id, column, value) => { writes.push(['setGuildSwitch', guildId, id, column, value]); return true; },
     setWatcherNotify: (watcherId, id, column, value) => { writes.push(['setWatcherNotify', watcherId, id, column, value]); return true; },
@@ -41,7 +43,7 @@ function run(body, setup = {}) {
 }
 
 describe('the settings a card may save', () => {
-  test('are exactly these 57 keys', () => {
+  test('are exactly these 68 keys', () => {
     assert.deepEqual(Object.keys(SETTINGS).sort(), [
       'chat_bits_enabled', 'chat_bits_template', 'chat_donation_enabled', 'chat_donation_template',
       'chat_follow_enabled', 'chat_follow_template', 'chat_giftsub_enabled', 'chat_giftsub_template',
@@ -54,7 +56,10 @@ describe('the settings a card may save', () => {
       'notify_clips', 'notify_live', 'overlay_bits_duration', 'overlay_bits_enabled', 'overlay_donation_duration',
       'overlay_donation_enabled', 'overlay_enabled', 'overlay_follow_duration', 'overlay_follow_enabled',
       'overlay_giveaway_duration', 'overlay_giveaway_enabled', 'overlay_raid_duration', 'overlay_raid_enabled',
-      'overlay_sub_duration', 'overlay_sub_enabled', 'overlay_volume', 'recap_enabled',
+      'overlay_sub_duration', 'overlay_sub_enabled', 'overlay_volume', 'poll_end_template', 'poll_start_template',
+      'polls_chat_enabled', 'prediction_cancel_template', 'prediction_end_template', 'prediction_lock_template',
+      'prediction_start_template', 'recap_enabled', 'shoutout_command_enabled', 'shoutout_raid_enabled',
+      'shoutout_raid_min_viewers', 'shoutout_template',
       'sponsor_chat_interval_minutes', 'sponsor_message_enabled', 'sponsor_send_chat', 'sub_sync_enabled',
       'weekly_highlights_enabled',
     ]);
@@ -182,5 +187,43 @@ describe('batches and follow-ups', () => {
     assert.deepEqual([...run({ key: 'overlay_enabled', value: 1 }).followUps[0].steps].sort(), ['connections', 'overlay']);
     assert.deepEqual([...run({ key: 'overlay_raid_duration', value: 10 }).followUps[0].steps], ['overlay']);
     assert.deepEqual([...run({ key: 'sponsor_chat_interval_minutes', value: 30 }).followUps[0].steps], ['sponsorChat']);
+  });
+});
+
+describe('the Polls & predictions and Shoutouts cards', () => {
+  test('the announcements switch and the six texts go to the polls writer; a text may be emptied (that moment posts nothing)', () => {
+    const { result, writes } = run({ changes: [
+      { key: 'polls_chat_enabled', value: false },
+      { key: 'poll_start_template', value: '  Vote: {title}  ' },
+      { key: 'prediction_cancel_template', value: '' },
+    ] });
+    assert.deepEqual(result, { ok: true, values: { polls_chat_enabled: 0, poll_start_template: 'Vote: {title}', prediction_cancel_template: '' } });
+    assert.deepEqual(writes, [
+      ['updatePollSettings', 1, { polls_chat_enabled: 0 }],
+      ['updatePollSettings', 1, { poll_start_template: 'Vote: {title}' }],
+      ['updatePollSettings', 1, { prediction_cancel_template: '' }],
+    ]);
+    assert.equal(run({ key: 'poll_end_template', value: 'x'.repeat(501) }).result.code, 'too_long');
+    assert.equal(run({ key: 'poll_end_template', value: 42 }).result.code, 'invalid');
+  });
+
+  test('the shoutout switches, the raid minimum (one of the card\'s choices) and the text go to the shoutouts writer', () => {
+    const { result, writes } = run({ changes: [
+      { key: 'shoutout_command_enabled', value: true },
+      { key: 'shoutout_raid_enabled', value: '1' },
+      { key: 'shoutout_raid_min_viewers', value: '25' },
+      { key: 'shoutout_template', value: 'Check out {name}: {link}' },
+    ] });
+    assert.deepEqual(result.values, { shoutout_command_enabled: 1, shoutout_raid_enabled: 1, shoutout_raid_min_viewers: 25, shoutout_template: 'Check out {name}: {link}' });
+    assert.deepEqual(writes.map(([name]) => name), ['updateShoutoutSettings', 'updateShoutoutSettings', 'updateShoutoutSettings', 'updateShoutoutSettings']);
+    for (const value of [3, 0, -1, 1000, '5.5', 'many', '', null]) {
+      assert.equal(run({ key: 'shoutout_raid_min_viewers', value }).result.code, 'invalid', JSON.stringify(value));
+    }
+    assert.equal(run({ key: 'shoutout_template', value: '   ' }).result.code, 'required', 'the shoutout always has a text');
+  });
+
+  test('none of them needs anything first or starts a follow-up', () => {
+    const { followUps } = run({ changes: [{ key: 'polls_chat_enabled', value: true }, { key: 'shoutout_raid_enabled', value: true }] });
+    assert.deepEqual([...followUps[0].steps], []);
   });
 });

@@ -164,10 +164,14 @@ function columnOf(key, setting) {
 }
 
 // A valid value other than the stored one: the opposite switch; the largest number, or the smallest when that is
-// what is stored; a text that names its key and the round.
+// what is stored; the last choice, or the first when that is what is stored; a text that names its key and the round.
 function otherValue(key, setting, stored, round) {
   if (setting.kind === 'switch') return stored ? 0 : 1;
   if (setting.kind === 'text') return `Round ${round}: thanks, {username}! (${key})`;
+  if (setting.kind === 'choice') {
+    const last = setting.choices[setting.choices.length - 1];
+    return Number(stored) === last ? setting.choices[0] : last;
+  }
   return Number(stored) === setting.max ? setting.min : setting.max;
 }
 
