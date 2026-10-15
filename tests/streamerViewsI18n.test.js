@@ -216,7 +216,7 @@ const PAGE_LOCALS = {
 PAGE_LOCALS['account-disabled'] = [{ streamer: null }];
 // The account page shows YouTube's channels and posts only while YouTube is (features.youtube): each sample both ways.
 PAGE_LOCALS.account = PAGE_LOCALS.account.flatMap((locals) => [true, false].map((youtube) => ({ ...locals, features: { youtube } })));
-// These pages show less while the overlay features are off (features.overlays, off by default): each of their samples is rendered both ways.
+// These pages show less while the overlay features are off (features.overlays, which src/config.js has on): each of their samples is rendered both ways.
 for (const page of ['youtube-chatbot-config', 'account-disabled']) {
   PAGE_LOCALS[page] = PAGE_LOCALS[page].flatMap((locals) => [true, false].map((overlays) => ({ ...locals, features: { youtube: true, overlays } })));
 }

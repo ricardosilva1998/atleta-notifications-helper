@@ -213,3 +213,25 @@ earlier gift fix, for up to 7 days); alerts stay on screen longer by default (fo
 giveaway winner 10 s; donation 12 s; YouTube Super Chat 12 s, member 8 s, gift member 10 s; a duration a streamer
 had changed stays), and the YouTube alerts' durations and switches on the overlay settings page are saved; a
 Discord sub role that may mention @everyone syncs again.
+
+## Dashboard working cards (Release B)
+
+Before:
+
+1. No streamer is live and no giveaway is open.
+2. Nothing to migrate: this release changes no table or column. Going back to the previous release is a
+   plain revert.
+
+Checked before this release: no streamer with the overlay switch off had an overlay set up (no designs,
+sounds, alerts, tips or giveaways), and no sponsor message was longer than 500 characters.
+
+### What streamers see
+
+- **Everyone:** a dashboard tab that was open across the deploy needs one reload.
+- **The Twitch tab** is now ten working cards: their switches save as they move, and their short texts are
+  edited in pop-ups. The sponsor messages page is reached from the Sponsor messages card.
+- **The OBS overlay switch** now turns the alerts on stream on and off: an open OBS source with the switch
+  off shows no alert at all, PayPal tip alerts and giveaway winner cards included (they used to show
+  regardless).
+- **Back:** the overlay settings page, the Overlay Builder, the Channel Point Rewards page and the tip goals
+  on the donations page, with the settings saved before.
