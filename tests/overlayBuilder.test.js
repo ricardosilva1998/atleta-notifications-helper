@@ -12,12 +12,13 @@ const path = require('node:path');
 
 const builder = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'overlay-builder.ejs'), 'utf8');
 
-// The source of one function declaration, up to the next top-level function.
-function functionSource(name) {
-  const match = new RegExp(`(?:async )?function ${name}\\(`).exec(builder);
+// The source of one function declaration, up to the next top-level function. It reads the builder
+// unless given another file's source (the parity test reads overlay.js the same way).
+function functionSource(name, source = builder) {
+  const match = new RegExp(`(?:async )?function ${name}\\(`).exec(source);
   assert.ok(match, `${name} exists`);
-  const next = /\n(?:async )?function |\n\/\/ ─── /.exec(builder.slice(match.index + 1));
-  return builder.slice(match.index, next ? match.index + 1 + next.index : undefined);
+  const next = /\n(?:async )?function |\n\/\/ ─── /.exec(source.slice(match.index + 1));
+  return source.slice(match.index, next ? match.index + 1 + next.index : undefined);
 }
 
 describe('the sponsor Scale slider', () => {
@@ -159,5 +160,51 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
 
   test('the car drives in from the edge of the preview screen (the 1920px canvas, scaled)', () => {
     assert.match(builder, /#preview-object-host \{[^}]*--fw: 1920px;/);
+  });
+
+  // previewObjectFor (the builder, from ALERT_STYLES) and objectFor (the OBS overlay, from overlayDesigns)
+  // are two copies of one rule in two files. Each real source runs in its own context over the same
+  // window, and the two picks are compared by identity: a change that reaches one copy only is named here.
+  test('the preview and the OBS overlay pick the same object for every alert and style', () => {
+    const overlayJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
+    const previewSource = functionSource('previewObjectFor');
+    const overlaySource = functionSource('objectFor', overlayJs);
+    const pickPreview = (win, type, styleId) => {
+      const alertStyles = styleId === undefined ? {} : { [type]: styleId };
+      const context = vm.createContext({ window: win, ALERT_STYLES: alertStyles });
+      vm.runInContext(previewSource, context);
+      return vm.runInContext(`previewObjectFor(${JSON.stringify(type)})`, context);
+    };
+    const pickOverlay = (win, type, styleId) => {
+      const designs = styleId === undefined ? {} : { [type]: { style: styleId } };
+      const context = vm.createContext({ window: win, overlayDesigns: designs });
+      vm.runInContext(overlaySource, context);
+      return vm.runInContext(`objectFor(${JSON.stringify(type)})`, context);
+    };
+
+    const TYPES = ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat'];
+    const STYLE_IDS = [undefined, 'donation-c1', 'donation-gp', '__proto__', 'constructor', 'toString', 'follow'];
+    const real = { ATLETA_OBJECTS: OBJECTS, ATLETA_OBJECT_STYLES: OBJECTS.STYLES };
+    // An alias whose key is not its style id: only the key clause keeps it from drawing the donation.
+    const alias = { ATLETA_OBJECTS: OBJECTS, ATLETA_OBJECT_STYLES: { 'donation-alias': { key: 'donation-c1', eventType: 'donation' } } };
+    const registries = [
+      { name: 'real styles', win: real, styleIds: STYLE_IDS },
+      { name: 'synthetic styles', win: alias, styleIds: [...STYLE_IDS, 'donation-alias'] },
+    ];
+    for (const { name, win, styleIds } of registries) {
+      for (const type of TYPES) {
+        for (const styleId of styleIds) {
+          const label = styleId === undefined ? 'none' : `"${styleId}"`;
+          assert.strictEqual(pickPreview(win, type, styleId), pickOverlay(win, type, styleId),
+            `${name}: type "${type}", style ${label}: the preview and the OBS overlay pick different objects`);
+        }
+      }
+    }
+
+    assert.strictEqual(pickPreview(alias, 'donation', 'donation-alias'), OBJECTS.donation, 'the preview draws the donation object, not the alias');
+    assert.strictEqual(pickOverlay(alias, 'donation', 'donation-alias'), OBJECTS.donation, 'the OBS overlay draws the donation object, not the alias');
+    // Not two nulls: both picks give the real C1 for its own style.
+    assert.strictEqual(pickPreview(real, 'donation', 'donation-c1'), OBJECTS.STYLES['donation-c1'], 'the preview draws the C1');
+    assert.strictEqual(pickOverlay(real, 'donation', 'donation-c1'), OBJECTS.STYLES['donation-c1'], 'the OBS overlay draws the C1');
   });
 });
