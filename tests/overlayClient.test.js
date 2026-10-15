@@ -796,9 +796,10 @@ describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
     overlay.send(follow('Queued'));
     overlay.clock.advance(6000 + 300); // 0.3 s into its exit
     overlay.send({ type: 'clear' });
-    assert.equal(overlay.slots().length, 0);
-    overlay.clock.advance(5000);
-    assert.equal(overlay.slots().length, 0, 'its removal and next-alert timers went with it');
+    overlay.send(follow('After'));
+    overlay.clock.advance(1200);          // past the stale 6900 removal and 7400 next-alert timers
+    overlay.send(follow('Third'));
+    assert.equal(overlay.slots().length, 1, 'Third waits behind After');
   });
 
   test('a style switched off while a C1 is on screen: that one still drives off in 0.9 s, the next donation is the folding screen', () => {
