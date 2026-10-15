@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "A light laps the panel's outline and leaves it lit, then the winner's name glows. The prize sits on a tag.",
   "overlayBuilder.looks.donation-c1.title": "C1 billboard trailer",
   "overlayBuilder.looks.donation-c1.desc": "Your C1 tows a billboard onto the stream with the donation on it. Made for you.",
+  "overlayBuilder.looks.donation-c1-channel.title": "C1 with your name",
+  "overlayBuilder.looks.donation-c1-channel.desc": "A C1 tows a billboard onto the stream with the donation on it, your channel’s name on its rear window.",
   "overlayBuilder.sounds.samuraiBlade": "Blade draw",
   "overlayBuilder.sounds.samuraiTaiko": "Taiko drum",
   "overlayBuilder.sounds.samuraiTaiko3": "Three taiko beats",

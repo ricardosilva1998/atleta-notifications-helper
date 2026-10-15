@@ -122,7 +122,7 @@ const DYNAMIC_KEY_FAMILIES = {
   // routes/dashboard.js, the Overlay Builder's Style section: every family's, look's and look sound's name, from the
   // catalogue (services/alertStyles.js), so a new family's texts are checked as soon as its file is added
   'overlayBuilder.families.': alertStyles.familyKeys().flatMap((key) => [`${key}.name`, `${key}.desc`]),
-  'overlayBuilder.looks.': alertStyles.lookIds().concat(Object.keys(alertStyles.PRIVATE_STYLES)).flatMap((id) => [`${id}.title`, `${id}.desc`]),
+  'overlayBuilder.looks.': alertStyles.lookIds().concat(Object.keys(alertStyles.PRIVATE_STYLES), Object.keys(alertStyles.STANDALONE_STYLES)).flatMap((id) => [`${id}.title`, `${id}.desc`]),
   'overlayBuilder.sounds.': alertStyles.soundGroups().flatMap((group) => group.sounds),
 };
 

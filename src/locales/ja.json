@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "光がパネルの縁を一周して灯したままにし、当選者の名前が輝きます。賞品はタグに表示されます。",
   "overlayBuilder.looks.donation-c1.title": "C1 ビルボードトレーラー",
   "overlayBuilder.looks.donation-c1.desc": "あなたの C1 が寄付を載せた看板を引いて配信に登場します。あなた専用です。",
+  "overlayBuilder.looks.donation-c1-channel.title": "あなたの名前入り C1",
+  "overlayBuilder.looks.donation-c1-channel.desc": "C1 が寄付を載せた看板を引いて配信に登場します。リアウィンドウにはあなたのチャンネル名が入ります。",
   "overlayBuilder.sounds.samuraiBlade": "抜刀",
   "overlayBuilder.sounds.samuraiTaiko": "太鼓",
   "overlayBuilder.sounds.samuraiTaiko3": "太鼓三打",

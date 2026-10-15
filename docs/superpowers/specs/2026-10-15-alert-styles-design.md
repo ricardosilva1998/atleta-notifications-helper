@@ -225,6 +225,9 @@ while it is empty. The other words inside a look stay English, as the overlay is
   - The alert's default look comes first, marked "Today" (for the giveaway, "Default").
   - The other looks follow in family order, filtered by family, with the chosen one marked.
   - A private look the streamer owns (andre_vilela_'s C1) comes first of all, as "Made for you".
+  - A look that belongs to no family and is open to every streamer (the C1 with the streamer's own name,
+    `donation-c1-channel`, decided 2026-10-15) follows the default look, before the families; the filter "All"
+    shows it.
 - **A gallery tile** shows the look itself (the registry, at rest, scaled down), its name and its family. It plays
   when hovered or focused, one at a time, as the proposal's tiles do.
 - **Use \<family\> for all six alerts** is one button under the gallery (4.2).

@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "Uma luz dá a volta no contorno do painel e o deixa aceso, então o nome do vencedor brilha. O prêmio fica numa etiqueta.",
   "overlayBuilder.looks.donation-c1.title": "Reboque com outdoor do C1",
   "overlayBuilder.looks.donation-c1.desc": "Seu C1 reboca um outdoor para a live com a doação nele. Feito para você.",
+  "overlayBuilder.looks.donation-c1-channel.title": "C1 com o seu nome",
+  "overlayBuilder.looks.donation-c1-channel.desc": "Um C1 reboca um outdoor para a live com a doação nele, com o nome do seu canal no vidro traseiro.",
   "overlayBuilder.sounds.samuraiBlade": "Lâmina sacada",
   "overlayBuilder.sounds.samuraiTaiko": "Tambor taiko",
   "overlayBuilder.sounds.samuraiTaiko3": "Três batidas de taiko",

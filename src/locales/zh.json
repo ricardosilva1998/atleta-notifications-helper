@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "一道光沿面板边缘绕行一圈并保持点亮，随后中奖者的名字发光。奖品显示在标签上。",
   "overlayBuilder.looks.donation-c1.title": "C1 拖车广告牌",
   "overlayBuilder.looks.donation-c1.desc": "你的 C1 拖着写有捐赠的广告牌驶入直播。为你定制。",
+  "overlayBuilder.looks.donation-c1-channel.title": "带你名字的 C1",
+  "overlayBuilder.looks.donation-c1-channel.desc": "一辆 C1 拖着写有捐赠的广告牌驶入直播，后车窗上是你的频道名。",
   "overlayBuilder.sounds.samuraiBlade": "拔刀",
   "overlayBuilder.sounds.samuraiTaiko": "太鼓",
   "overlayBuilder.sounds.samuraiTaiko3": "三声太鼓",

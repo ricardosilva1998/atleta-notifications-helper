@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "Ein Licht umrundet den Rand des Panels und lässt ihn leuchten, dann strahlt der Name des Gewinners. Der Preis steht auf einem Schild.",
   "overlayBuilder.looks.donation-c1.title": "C1 mit Plakatanhänger",
   "overlayBuilder.looks.donation-c1.desc": "Dein C1 zieht ein Werbeplakat mit der Spende in den Stream. Für dich gemacht.",
+  "overlayBuilder.looks.donation-c1-channel.title": "C1 mit deinem Namen",
+  "overlayBuilder.looks.donation-c1-channel.desc": "Ein C1 zieht ein Werbeplakat mit der Spende in den Stream, mit dem Namen deines Kanals auf der Heckscheibe.",
   "overlayBuilder.sounds.samuraiBlade": "Klinge gezogen",
   "overlayBuilder.sounds.samuraiTaiko": "Taiko-Trommel",
   "overlayBuilder.sounds.samuraiTaiko3": "Drei Taiko-Schläge",

@@ -66,6 +66,13 @@ describe('who may save which look', () => {
     assert.equal(styles.canUseStyle('donation-c1', 'donation', null), false);
     assert.equal(styles.canUseStyle('donation-c1', 'follow', vilela), false);
   });
+
+  test('the C1 with the streamer\'s own name: any streamer\'s donation, and only the donation', () => {
+    assert.equal(styles.canUseStyle('donation-c1-channel', 'donation', someone), true);
+    assert.equal(styles.canUseStyle('donation-c1-channel', 'donation', vilela), true);
+    assert.equal(styles.canUseStyle('donation-c1-channel', 'follow', someone), false);
+    assert.equal(styles.canUseStyle('donation-c1-channel', 'yt_superchat', someone), false);
+  });
 });
 
 describe('the gallery', () => {
@@ -73,6 +80,16 @@ describe('the gallery', () => {
     assert.deepEqual(styles.galleryFor('donation', vilela)[0], { id: 'donation-c1', family: null, mine: true });
     assert.ok(!styles.galleryFor('donation', someone).some((e) => e.id === 'donation-c1'));
     assert.deepEqual(styles.galleryFor('yt_member', someone), []);
+  });
+
+  test('every streamer\'s donation gallery has the C1 with their own name, after a look made for them and before the families', () => {
+    const gallery = styles.galleryFor('donation', someone);
+    assert.deepEqual(gallery[0], { id: 'donation-c1-channel', family: null, mine: false });
+    assert.ok(gallery.slice(1).length && gallery.slice(1).every((e) => e.family), 'then the families');
+    assert.deepEqual(styles.galleryFor('donation', vilela).slice(0, 2).map((e) => e.id), ['donation-c1', 'donation-c1-channel']);
+    for (const alert of ['follow', 'subscription', 'bits', 'raid', 'giveaway_winner']) {
+      assert.ok(!styles.galleryFor(alert, someone).some((e) => e.id === 'donation-c1-channel'), alert);
+    }
   });
 
   test('a family\'s six looks; nothing for an unknown family', () => {

@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "Una luz recorre el contorno del panel y lo deja encendido; luego brilla el nombre del ganador. El premio va en una etiqueta.",
   "overlayBuilder.looks.donation-c1.title": "Remolque con valla del C1",
   "overlayBuilder.looks.donation-c1.desc": "Tu C1 remolca una valla publicitaria hasta el directo con la donación. Hecho para ti.",
+  "overlayBuilder.looks.donation-c1-channel.title": "C1 con tu nombre",
+  "overlayBuilder.looks.donation-c1-channel.desc": "Un C1 remolca una valla publicitaria hasta el directo con la donación, con el nombre de tu canal en la ventanilla trasera.",
   "overlayBuilder.sounds.samuraiBlade": "Espada desenvainada",
   "overlayBuilder.sounds.samuraiTaiko": "Tambor taiko",
   "overlayBuilder.sounds.samuraiTaiko3": "Tres golpes de taiko",

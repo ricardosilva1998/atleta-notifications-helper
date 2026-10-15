@@ -304,9 +304,8 @@ writes the whole row again and would drop the style; after coming back, set it a
 The same C1 is also a look any streamer can have: `donation-c1-channel`. Its rear window carries the streamer's
 own Twitch login in capitals instead of VILELA (the overlay page and the Overlay Builder give it to the drawing
 as `window.ATLETA_CHANNEL`; a streamer without a linked Twitch account gets plain glass). Streamers pick it
-themselves in the Overlay Builder's style gallery once the alert-styles release ships. Until then, once the
-release that added `donation-c1-channel` is live (before it, the overlay does not know the look and plays the
-standard donation alert), give it to a streamer who asks, naming them by their Twitch login. First, read only:
+themselves in the Overlay Builder's donation gallery (alert styles, release A). By hand, give it to a streamer
+who asks, naming them by their Twitch login. First, read only:
 their row, and their donation design with its current look (`style` null is the standard donation alert; with
 `card_width` null too, they have no donation design yet):
 
@@ -338,12 +337,13 @@ What changes when it deploys:
 - Four columns are added to `overlay_designs` (`style_accent`, `style_label`, `style_sound`, `style_grows`); the boot log shows `[DB] Added style_… to overlay_designs` four times, once. Nothing stored is rewritten.
 - The giveaway winner alert becomes Racing's Victory lap for every streamer (decided). Its saved colours, text and screen effect carry over; it plays the look's fanfare unless the streamer uploaded a sound.
 - Every other alert stays exactly as it is until its streamer picks a look in the Overlay Builder's Style section.
+- Every streamer's donation gallery offers the C1 with their own Twitch name (`donation-c1-channel`), to pick themselves.
 - The overlay page and the builder load `/overlay/objects/kit.js`, `/overlay/objects/styles.js?v=…` and `.css`, and `/overlay/fx.js`/`fx.css`. An open OBS source reloads itself when the server restarts.
 
 After the deploy (while no streamer is live):
 1. `/health` answers 200, and the boot log shows the four `Added style_…` lines.
 2. In the Overlay Builder, the Style section opens each of the six alert tabs. Pick Racing's Fly-by for the follow, save, and press Test: OBS plays it.
 3. Pick a colour far from the look's own (cyan on a red look) and test again: the change is obvious.
-4. andre_vilela_'s donation still shows the C1, first in his gallery as "Made for you".
+4. andre_vilela_'s donation still shows the C1, first in his gallery as "Made for you"; another streamer's donation gallery shows "C1 with your name", with their Twitch name on the rear window.
 
 Rolling back is safe: older code ignores the four columns, and a style id it does not know (`follow-racing`) draws the alert's own object.

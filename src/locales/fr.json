@@ -609,6 +609,8 @@
   "overlayBuilder.looks.giveaway-racing.desc": "Une lumière fait le tour du panneau et le laisse allumé, puis le nom du gagnant brille. Le lot est sur une étiquette.",
   "overlayBuilder.looks.donation-c1.title": "Remorque panneau de la C1",
   "overlayBuilder.looks.donation-c1.desc": "Votre C1 tire un panneau publicitaire jusqu'au stream avec le don dessus. Fait pour vous.",
+  "overlayBuilder.looks.donation-c1-channel.title": "C1 à votre nom",
+  "overlayBuilder.looks.donation-c1-channel.desc": "Une C1 tire un panneau publicitaire jusqu’au stream avec le don dessus, le nom de votre chaîne sur la vitre arrière.",
   "overlayBuilder.sounds.samuraiBlade": "Lame dégainée",
   "overlayBuilder.sounds.samuraiTaiko": "Tambour taiko",
   "overlayBuilder.sounds.samuraiTaiko3": "Trois coups de taiko",
