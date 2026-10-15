@@ -42,6 +42,7 @@ const PREFIXES = {
   music: { classes: ['o-mus'], keyframes: ['mus'] },
   stadium: { classes: ['o-std'], keyframes: ['std'] },
   fireworks: { classes: ['o-fwk'], keyframes: ['fwk'] },
+  dino: { classes: ['o-dno'], keyframes: ['dno'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
