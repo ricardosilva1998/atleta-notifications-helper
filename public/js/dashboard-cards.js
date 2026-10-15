@@ -250,6 +250,554 @@
     for (const card of $$('.wc-card', grid)) card.style.gridRowEnd = 'span ' + core.rowSpan(card.getBoundingClientRect().height);
   }
 
+  // ── The pop-up editor ──
+
+  const dialog = document.getElementById('wc-dialog');
+  let opener = null;
+  // Opens the pop-up with one of the page's <template>s: `setup(editor)` fills it; Save runs `save(editor)` and closes
+  // the pop-up when that resolves true. Esc and Cancel close it; the focus goes back to the button that opened it.
+  function openEditor(templateId, title, from, setup, save) {
+    const template = document.getElementById(templateId);
+    if (!dialog || !template) return null;
+    opener = from;
+    dialog.replaceChildren(template.content.cloneNode(true));
+    const editor = dialog.firstElementChild;
+    const heading = $('[data-title]', editor);
+    if (heading) heading.textContent = title || '';
+    if (setup) setup(editor);
+    $$('[data-cancel]', editor).forEach((button) => button.addEventListener('click', closeEditor));
+    const saveButton = $('[data-save]', editor);
+    if (saveButton) {
+      saveButton.addEventListener('click', async () => {
+        saveButton.disabled = true;
+        try {
+          if (await save(editor)) closeEditor();
+        } finally {
+          saveButton.disabled = false;
+        }
+      });
+    }
+    dialog.showModal();
+    const first = $('textarea, input, select', editor);
+    if (first) {
+      first.focus();
+      if (first.tagName === 'TEXTAREA' || first.type === 'text') first.setSelectionRange(first.value.length, first.value.length);
+    }
+    return editor;
+  }
+  function closeEditor() {
+    if (dialog && dialog.open) dialog.close();
+  }
+  if (dialog) {
+    dialog.addEventListener('close', () => {
+      dialog.replaceChildren();
+      if (opener && opener.isConnected) opener.focus();
+      opener = null;
+    });
+    // A click on the dimmed page around the pop-up closes it, as Esc does.
+    dialog.addEventListener('click', (event) => {
+      if (event.target !== dialog) return;
+      const box = dialog.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) closeEditor();
+    });
+  }
+  const dialogMessage = (editor, answer) => showMessage(null, answer, { box: $('[data-dialog-msg]', editor) });
+  function insertAtCursor(area, text) {
+    const start = area.selectionStart ?? area.value.length;
+    const end = area.selectionEnd ?? area.value.length;
+    area.value = area.value.slice(0, start) + text + area.value.slice(end);
+    area.focus();
+    area.selectionStart = area.selectionEnd = start + text.length;
+  }
+  // A button that says what happened for a moment, then its own words again.
+  function flash(button, text) {
+    const before = button.textContent;
+    button.textContent = text;
+    button.disabled = true;
+    setTimeout(() => {
+      button.textContent = before;
+      button.disabled = false;
+    }, 1800);
+  }
+  // A ▶ button that worked turns green for a moment.
+  function tick(button) {
+    button.classList.add('done');
+    setTimeout(() => button.classList.remove('done'), 1500);
+  }
+  // A new row made from a row <template>, first in its list.
+  function addRow(templateId, list) {
+    const row = document.getElementById(templateId).content.firstElementChild.cloneNode(true);
+    list.insertBefore(row, list.firstChild);
+    return row;
+  }
+  // After a row is added or deleted: the count, the empty hint and Show all.
+  function afterListChange(card, name) {
+    const list = $('[data-list="' + name + '"]', card);
+    const rows = $$('[data-row]', list);
+    const empty = $('[data-empty="' + name + '"]', card);
+    if (empty) empty.hidden = rows.length > 0;
+    const more = $('[data-show-all="' + list.id + '"]', card);
+    if (more && !list.classList.contains('show-all')) more.textContent = core.fill(T.showAll, { count: rows.length });
+    const count = $('[data-count="' + name + '"]', card);
+    if (count) count.textContent = String(rows.length);
+    repack();
+  }
+
+  // ── Thank-you messages ──
+
+  onClick('[data-edit="thankyou"]', (button) => {
+    const card = button.closest('.wc-card');
+    const row = button.closest('.wc-row');
+    openEditor('tpl-thankyou', button.dataset.title, button, (editor) => {
+      const area = $('[data-field="text"]', editor);
+      area.value = button.dataset.value || '';
+      const vars = $('[data-vars]', editor);
+      for (const name of (button.dataset.vars || '').split(' ').filter(Boolean)) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'wc-var';
+        chip.textContent = name;
+        chip.addEventListener('click', () => insertAtCursor(area, name));
+        vars.appendChild(chip);
+      }
+      // Posts the saved message in the streamer's chat with example values (the chatbot page's test).
+      const test = $('[data-chat-test]', editor);
+      test.addEventListener('click', async () => {
+        const answer = await call('POST', '/dashboard/chatbot/test/' + encodeURIComponent(button.dataset.event));
+        if (answer.ok) flash(test, T.sentToChat);
+        else dialogMessage(editor, answer);
+      });
+    }, async (editor) => {
+      const answer = await call('POST', '/dashboard/settings', { key: button.dataset.key, value: $('[data-field="text"]', editor).value });
+      if (!answer.ok) {
+        dialogMessage(editor, answer);
+        return false;
+      }
+      button.dataset.value = answer.data.value;
+      $('[data-text]', row).textContent = answer.data.value;
+      showSaved(card);
+      return true;
+    });
+  });
+
+  // ── Commands ──
+
+  // A select set to a value, which becomes a choice when it is not one yet (a cooldown saved on the chatbot page).
+  function selectValue(select, value) {
+    const text = String(value);
+    if (!$$('option', select).some((option) => option.value === text)) {
+      const option = document.createElement('option');
+      option.value = text;
+      option.textContent = core.fill(T.seconds, { seconds: text });
+      select.appendChild(option);
+    }
+    select.value = text;
+  }
+  function fillCommandRow(row, command) {
+    row.dataset.id = command.id;
+    row.dataset.name = command.command;
+    row.dataset.response = command.response;
+    row.dataset.cooldown = command.cooldown;
+    $('[data-field="name"]', row).textContent = command.command;
+    $('[data-field="response"]', row).textContent = command.response;
+    $('[data-edit="command"]', row).dataset.title = core.fill(T.commandEditTitle, { name: command.command });
+  }
+  function commandEditor(from, row) {
+    const card = from.closest('.wc-card');
+    openEditor('tpl-command', from.dataset.title, from, (editor) => {
+      $('[data-field="command"]', editor).value = row ? row.dataset.name : '';
+      $('[data-field="response"]', editor).value = row ? row.dataset.response : '';
+      selectValue($('[data-field="cooldown"]', editor), row ? row.dataset.cooldown : 10);
+    }, async (editor) => {
+      const body = {
+        command: $('[data-field="command"]', editor).value.trim().replace(/^!+/, ''),
+        response: $('[data-field="response"]', editor).value,
+        cooldown: Number($('[data-field="cooldown"]', editor).value),
+      };
+      const answer = row ? await call('PATCH', '/dashboard/api/commands/' + row.dataset.id, body) : await call('POST', '/dashboard/api/commands', body);
+      if (!answer.ok) {
+        dialogMessage(editor, answer);
+        return false;
+      }
+      fillCommandRow(row || addRow('tpl-command-row', $('[data-list="commands"]', card)), answer.data.command);
+      afterListChange(card, 'commands');
+      showSaved(card);
+      refreshSoon();
+      return true;
+    });
+  }
+  onClick('[data-add="command"]', (button) => commandEditor(button, null));
+  onClick('[data-edit="command"]', (button) => commandEditor(button, button.closest('[data-row]')));
+  onClick('[data-delete="command"]', async (button) => {
+    const row = button.closest('[data-row]');
+    const card = button.closest('.wc-card');
+    if (!window.confirm(core.fill(T.confirmDeleteCommand, { name: row.dataset.name }))) return;
+    const answer = await call('DELETE', '/dashboard/api/commands/' + row.dataset.id);
+    if (!answer.ok) {
+      showMessage(card, answer);
+      return;
+    }
+    row.remove();
+    afterListChange(card, 'commands');
+    showSaved(card);
+    refreshSoon();
+  });
+  // The built-in commands: the thirteen as toggles in the pop-up, saved together (one batch, all or nothing).
+  onClick('[data-edit="builtins"]', (button) => {
+    const card = button.closest('.wc-card');
+    const pills = $$('[data-builtin]', card);
+    openEditor('tpl-builtins', button.dataset.title, button, (editor) => {
+      const chips = $('[data-chips]', editor);
+      for (const pill of pills) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'wc-chip' + (pill.hidden ? '' : ' on');
+        chip.dataset.key = pill.dataset.builtin;
+        chip.setAttribute('aria-pressed', String(!pill.hidden));
+        const mark = document.createElement('span');
+        mark.className = 'tick';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = '✓';
+        chip.append(mark, document.createTextNode(pill.dataset.name));
+        chip.addEventListener('click', () => {
+          const on = chip.getAttribute('aria-pressed') !== 'true';
+          chip.setAttribute('aria-pressed', String(on));
+          chip.classList.toggle('on', on);
+        });
+        chips.appendChild(chip);
+      }
+    }, async (editor) => {
+      const changes = $$('[data-key]', editor).map((chip) => ({ key: chip.dataset.key, value: chip.getAttribute('aria-pressed') === 'true' }));
+      const answer = await call('POST', '/dashboard/settings', { changes });
+      if (!answer.ok) {
+        dialogMessage(editor, answer);
+        return false;
+      }
+      for (const pill of pills) pill.hidden = !answer.data.values[pill.dataset.builtin];
+      $('[data-builtins-none]', card).hidden = pills.some((pill) => !pill.hidden);
+      showSaved(card);
+      refreshSoon();
+      repack();
+      return true;
+    });
+  });
+
+  // ── Sponsor messages ──
+
+  function fillSponsorRow(row, message) {
+    row.dataset.id = message.id;
+    row.dataset.text = message.message_text;
+    row.dataset.url = message.url || '';
+    $('[data-field="text"]', row).textContent = message.message_text;
+    const toggle = $('[data-setting="sponsor_message_enabled"]', row);
+    toggle.dataset.id = message.id;
+    toggle.setAttribute('aria-label', message.message_text);
+  }
+  function sponsorEditor(from, row) {
+    const card = from.closest('.wc-card');
+    openEditor('tpl-sponsor', from.dataset.title, from, (editor) => {
+      $('[data-field="message_text"]', editor).value = row ? row.dataset.text : '';
+      $('[data-field="url"]', editor).value = row ? row.dataset.url : '';
+    }, async (editor) => {
+      const body = { message_text: $('[data-field="message_text"]', editor).value, url: $('[data-field="url"]', editor).value };
+      const answer = row
+        ? await call('POST', '/dashboard/sponsor-messages/' + row.dataset.id + '/update', body)
+        : await call('POST', '/dashboard/sponsor-messages/add', body);
+      if (!answer.ok) {
+        dialogMessage(editor, answer);
+        return false;
+      }
+      if (row) {
+        fillSponsorRow(row, { id: row.dataset.id, message_text: body.message_text.trim(), url: body.url.trim() });
+      } else {
+        const added = addRow('tpl-sponsor-row', $('[data-list="sponsors"]', card));
+        fillSponsorRow(added, answer.data.message);
+        const toggle = $('[data-setting="sponsor_message_enabled"]', added);
+        toggle.checked = !!answer.data.message.enabled;
+        queueFor(toggle);
+      }
+      afterListChange(card, 'sponsors');
+      showSaved(card);
+      refreshSoon();
+      return true;
+    });
+  }
+  onClick('[data-add="sponsor"]', (button) => sponsorEditor(button, null));
+  onClick('[data-edit="sponsor"]', (button) => sponsorEditor(button, button.closest('[data-row]')));
+  onClick('[data-delete="sponsor"]', async (button) => {
+    const row = button.closest('[data-row]');
+    const card = button.closest('.wc-card');
+    if (!window.confirm(T.confirmDeleteSponsor)) return;
+    const answer = await call('POST', '/dashboard/sponsor-messages/' + row.dataset.id + '/delete', {});
+    if (!answer.ok) {
+      showMessage(card, answer);
+      return;
+    }
+    row.remove();
+    afterListChange(card, 'sponsors');
+    showSaved(card);
+    refreshSoon();
+  });
+
+  // ── The tip goal ──
+
+  function money(amount, currency) {
+    try {
+      return new Intl.NumberFormat(document.documentElement.lang || 'en', { style: 'currency', currency: currency || 'EUR' }).format(Number(amount) || 0);
+    } catch (e) {
+      return (Number(amount) || 0).toFixed(2) + ' ' + (currency || '');
+    }
+  }
+  function showGoal(card, goal) {
+    const box = $('[data-goal]', card);
+    box.hidden = !goal;
+    $('[data-goal-none]', card).hidden = !!goal;
+    $('[data-goal-button]', card).textContent = goal ? T.edit : T.startGoal;
+    if (goal) {
+      const current = Number(goal.current_amount) || 0;
+      const target = Number(goal.target_amount) || 0;
+      Object.assign(box.dataset, { title: goal.title, current: String(current), target: String(target), currency: goal.currency });
+      $('[data-goal-title]', box).textContent = goal.title;
+      $('[data-goal-amount]', box).textContent = core.fill(T.goalAmount, { raised: money(current, goal.currency), target: money(target, goal.currency) });
+      $('[data-goal-bar]', box).style.width = (target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0) + '%';
+    }
+    repack();
+  }
+  onClick('[data-edit="goal"]', (button) => {
+    const card = button.closest('.wc-card');
+    const box = $('[data-goal]', card);
+    const running = !box.hidden;
+    openEditor('tpl-goal', button.dataset.title, button, (editor) => {
+      $('[data-field="title"]', editor).value = running ? box.dataset.title : '';
+      $('[data-field="target_amount"]', editor).value = running ? box.dataset.target : '';
+      $('[data-goal-hint]', editor).textContent = core.fill(T.goalHint, { raised: money(running ? box.dataset.current : 0, box.dataset.currency), currency: box.dataset.currency });
+      const end = $('[data-goal-end]', editor);
+      if (!running) {
+        end.hidden = true;
+        return;
+      }
+      end.addEventListener('click', async () => {
+        const answer = await call('POST', '/dashboard/api/tip-goal/end', {});
+        if (!answer.ok) {
+          dialogMessage(editor, answer);
+          return;
+        }
+        showGoal(card, null);
+        closeEditor();
+        showSaved(card);
+      });
+    }, async (editor) => {
+      const body = { title: $('[data-field="title"]', editor).value, target_amount: $('[data-field="target_amount"]', editor).value };
+      const answer = running ? await call('PATCH', '/dashboard/api/tip-goal', body) : await call('POST', '/dashboard/api/tip-goal', body);
+      if (!answer.ok) {
+        dialogMessage(editor, answer);
+        return false;
+      }
+      showGoal(card, answer.data.goal);
+      showSaved(card);
+      return true;
+    });
+  });
+
+  // ── Test buttons ──
+
+  onClick('[data-alert-test]', async (button) => {
+    const card = button.closest('.wc-card');
+    const answer = await call('POST', '/dashboard/overlay/test/' + encodeURIComponent(button.dataset.alertTest));
+    if (!answer.ok) {
+      showMessage(card, answer);
+      return;
+    }
+    clearMessage(card);
+    tick(button);
+    announce(T.alertSent);
+  });
+  onClick('[data-reward-test]', async (button) => {
+    const card = button.closest('.wc-card');
+    const answer = await call('POST', '/dashboard/redemptions/' + encodeURIComponent(button.dataset.rewardTest) + '/test');
+    if (!answer.ok) {
+      showMessage(card, answer);
+      return;
+    }
+    clearMessage(card);
+    tick(button);
+    announce(T.rewardPlayed);
+  });
+
+  // ── Channel point rewards: each reward's switch (the rewards page's own route) ──
+
+  const rewardQueues = new WeakMap();
+  function rewardQueue(toggle) {
+    if (!rewardQueues.has(toggle)) {
+      rewardQueues.set(toggle, core.createLatestQueue((on) => call('PATCH', '/dashboard/redemptions/' + toggle.dataset.rewardId, { enabled: on }), {
+        confirmed: toggle.checked,
+        onDone(answer, held) {
+          const card = toggle.closest('.wc-card');
+          if (answer && answer.ok) {
+            clearMessage(card);
+            showSaved(card);
+            refreshSoon();
+            return;
+          }
+          // Twitch may refuse an edit the site has saved: the answer then carries the reward as it is stored.
+          const stored = answer && answer.data && answer.data.reward;
+          toggle.checked = stored ? !!stored.enabled : !!held;
+          reflect(toggle);
+          showMessage(card, answer || { ok: false, kind: 'failed' });
+        },
+      }));
+    }
+    return rewardQueues.get(toggle);
+  }
+  grid.addEventListener('change', (event) => {
+    const toggle = event.target.closest('[data-reward-id]');
+    if (!toggle || !grid.contains(toggle)) return;
+    reflect(toggle);
+    rewardQueue(toggle).push(toggle.checked);
+  });
+  $$('[data-reward-id]', grid).forEach(rewardQueue);
+
+  // ── Whether the bot is a moderator: Check again ──
+
+  onClick('[data-check-moderator]', async (button) => {
+    const card = button.closest('.wc-card');
+    button.disabled = true;
+    const answer = await call('POST', '/dashboard/chatbot/check-moderator', {});
+    button.disabled = false;
+    if (!answer.ok) {
+      showMessage(card, answer);
+      return;
+    }
+    if (answer.data.moderator === true) {
+      $('[data-mod-note]', card).hidden = true;
+      clearMessage(card);
+      announce(T.moderatorYes);
+      repack();
+    } else if (answer.data.moderator === null) {
+      showMessage(card, T.moderatorUnknown, { info: true });
+    } else {
+      showMessage(card, T.moderatorNo, { info: true });
+    }
+  });
+
+  // ── Giveaways ──
+
+  function setupGiveaway(card) {
+    const form = $('[data-giveaway-form]', card);
+    const panel = $('[data-giveaway-live]', card);
+    if (!form || !panel) return;
+    const status = $('[data-status]', card);
+    const winnerBox = $('[data-gw-winner]', panel);
+    const pick = $('[data-gw-pick]', panel);
+    const end = $('[data-gw-end]', panel);
+    const G = T.giveaway || {};
+    let id = panel.dataset.giveawayId || null;
+    let endsAt = NaN;
+    let timer = null;
+    let picked = false;
+
+    function setStatus(text, tone) {
+      status.textContent = text;
+      status.className = 'wc-status' + (tone === 'ok' ? '' : ' ' + tone);
+    }
+    function showClock() {
+      $('[data-gw-left]', panel).textContent = Number.isFinite(endsAt) ? core.formatLeft(endsAt - Date.now()) : '–';
+    }
+    function stop() {
+      clearInterval(timer);
+      timer = null;
+    }
+    // The panel of a giveaway that runs: how to enter, the entries (asked every 2 s), the time left.
+    function running(giveaway) {
+      id = String(giveaway.id);
+      picked = false;
+      endsAt = core.parseUtc(giveaway.ends_at);
+      $('[data-gw-keyword]', panel).textContent = '!' + giveaway.keyword;
+      $('[data-gw-winners]', panel).textContent = String(giveaway.winners_count || 1);
+      $('[data-gw-entries]', panel).textContent = String(giveaway.entries || 0);
+      winnerBox.classList.remove('show');
+      winnerBox.textContent = '';
+      pick.textContent = G.pick;
+      end.textContent = G.end;
+      card.classList.add('gw-running');
+      setStatus(G.running, 'warn');
+      showClock();
+      stop();
+      timer = setInterval(poll, 2000);
+      repack();
+    }
+    async function poll() {
+      showClock();
+      const answer = await call('GET', '/dashboard/giveaways/' + id + '/entries');
+      if (!answer.ok) return;
+      $('[data-gw-entries]', panel).textContent = String(answer.data.count);
+      // A timed giveaway draws its winners itself when it ends: show them.
+      if (answer.data.status !== 'open' && !picked) {
+        stop();
+        await draw(false);
+      }
+    }
+    async function draw(again) {
+      const answer = await call('POST', '/dashboard/giveaways/' + id + '/pick', again ? { redraw: true } : {});
+      if (!answer.ok) {
+        showMessage(card, answer);
+        return;
+      }
+      stop();
+      picked = true;
+      const names = (answer.data.winners || []).map((w) => '@' + w.username).join(', ');
+      winnerBox.textContent = names ? core.fill(G.winner, { names }) : (answer.data.message || G.nobody);
+      winnerBox.classList.add('show');
+      pick.textContent = G.pickAgain;
+      end.textContent = G.done;
+      setStatus(names ? G.picked : G.none, names ? 'ok' : 'off');
+      repack();
+    }
+    function idle() {
+      stop();
+      id = null;
+      picked = false;
+      card.classList.remove('gw-running');
+      setStatus(G.none, 'off');
+      repack();
+    }
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = new FormData(form);
+      const answer = await call('POST', '/dashboard/giveaways/start', {
+        keyword: String(data.get('keyword') || '').trim().replace(/^!+/, ''),
+        prize: String(data.get('prize') || '').trim(),
+        duration_seconds: data.get('duration_seconds') ? Number(data.get('duration_seconds')) : null,
+        winners_count: Number(data.get('winners_count')) || 1,
+        subs_only: data.get('subs_only') === 'on',
+      });
+      if (!answer.ok) {
+        showMessage(card, answer);
+        return;
+      }
+      clearMessage(card);
+      running({ ...answer.data, entries: 0 });
+    });
+    pick.addEventListener('click', () => draw(picked));
+    end.addEventListener('click', async () => {
+      if (picked) {
+        idle();
+        return;
+      }
+      const answer = await call('POST', '/dashboard/giveaways/' + id + '/close', {});
+      if (!answer.ok) {
+        showMessage(card, answer);
+        return;
+      }
+      idle();
+    });
+    if (id) {
+      running({ id, keyword: panel.dataset.keyword, ends_at: panel.dataset.endsAt, winners_count: Number(panel.dataset.winners), entries: Number(panel.dataset.entries) });
+    }
+  }
+  const giveawayCard = document.getElementById('card-giveaways');
+  if (giveawayCard) setupGiveaway(giveawayCard);
+
   // ── Start ──
   $$('[data-setting]', grid).forEach(queueFor);
   if ('ResizeObserver' in window) {
