@@ -436,3 +436,96 @@ describe('objects.css — display font and name fitting (N2, N3)', () => {
     assert.match(rule('.o-raid .o-raid-cnt'), /white-space:\s*nowrap/);
   });
 });
+
+// ── Styles: an alert drawn in another look (andre_vilela_'s C1) ─────────
+
+describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
+  const STYLES = OBJECTS.STYLES;
+  const C1 = STYLES && STYLES['donation-c1'];
+  const tip = (over = {}) => C1.render({ username: 'PitBoss92', amount: '25.00', currency: 'EUR', message: 'Força Vilela!', ...over });
+  const hasClass = (html, name) => new RegExp(`class="(?:[^"]* )?${name}(?: [^"]*)?"`).test(html);
+  const ids = (html) => [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+
+  test('rides along with the registry without changing the five', () => {
+    assert.deepEqual(Object.keys(OBJECTS).sort(), [...KEYS].sort(), 'Object.keys still lists only the five');
+    assert.ok(STYLES, 'STYLES is on the export');
+    assert.deepEqual(Object.keys(STYLES), ['donation-c1']);
+  });
+
+  test('has the registry shape, the id it is filed under and the alert it draws', () => {
+    assert.equal(C1.key, 'donation-c1');
+    assert.equal(C1.eventType, 'donation');
+    assert.equal(typeof C1.render, 'function');
+    assert.deepEqual(C1.anim, { in: 'hold', dur: '1.25s', ease: 'linear' });
+    assert.deepEqual(C1.exit, { out: 'hold', dur: '0.90s', ease: 'linear' });
+  });
+
+  test('is one object: the rig (trailer, board, car) and the smoke it leaves behind', () => {
+    const html = tip();
+    assert.match(html, /^<div class="obj o-c1">/);
+    for (const part of ['o-c1-rig', 'o-c1-streaks', 'o-c1-trailer', 'o-c1-board', 'o-c1-tframe', 'o-c1-hitch', 'o-c1-car', 'o-c1-flame', 'o-c1-bsmoke', 'o-c1-exsmoke']) {
+      assert.ok(hasClass(html, part), part);
+    }
+    assert.equal((html.match(/class="o-c1-tw"/g) || []).length, 2, 'two trailer wheels');
+  });
+
+  test('the car is the traced C1: its outline, both wheels, the name and the number', () => {
+    const html = tip();
+    assert.match(html, /<svg class="o-c1-svg" viewBox="0 0 320 140"/);
+    assert.ok(html.includes('M30,108L27,108C24.5,107.5 23.4,104 23.2,98'), 'the body outline measured from the reference');
+    assert.match(html, /class="o-c1-wheel o-c1-rear" transform="translate\(57 108\.5\)"/);
+    assert.match(html, /class="o-c1-wheel o-c1-front" transform="translate\(249 108\.5\)"/);
+    assert.match(html, /class="o-c1-decal"[^>]*>VILELA</);
+    assert.match(html, /class="o-c1-num"[^>]*>1</);
+  });
+
+  test('prints the board: Sponsor, the amount, the message in quotes and the name', () => {
+    const html = tip();
+    assert.ok(html.includes('<div class="o-c1-head">Sponsor</div>'));
+    assert.ok(html.includes('<div class="o-c1-amt">€25.00</div>'));
+    assert.ok(html.includes('<div class="o-c1-msg">&quot;Força Vilela!&quot;</div>'));
+    assert.ok(html.includes('<div class="o-c1-from">PitBoss92</div>'));
+  });
+
+  test('escapes the name and the message', () => {
+    const html = tip({ username: '<img src=x>Ap&x', message: '<b>hi</b>' });
+    assert.ok(html.includes('&lt;img src=x&gt;Ap&amp;x'));
+    assert.ok(html.includes('&lt;b&gt;hi&lt;/b&gt;'));
+    assert.ok(!html.includes('<img src=x>') && !html.includes('<b>hi</b>'));
+  });
+
+  test('no message, no message line', () => {
+    assert.ok(!tip({ message: '' }).includes('o-c1-msg'));
+    assert.ok(!tip({ message: undefined }).includes('o-c1-msg'));
+  });
+
+  test('a long amount is set smaller so it stays on the board, never below 60 %', () => {
+    assert.ok(tip().includes('<div class="o-c1-amt">€25.00</div>'), '€25.00 is at full size');
+    assert.ok(tip({ amount: '1250' }).includes('<div class="o-c1-amt" style="--afit:0.78">€1,250.00</div>'));
+    assert.ok(tip({ amount: '10000' }).includes('style="--afit:0.70">€10,000.00<'));
+    assert.ok(tip({ amount: '1000000000' }).includes('style="--afit:0.60">'));
+  });
+
+  test('an amount in a long currency format is set smaller too (CA$1,250.00)', () => {
+    assert.ok(tip({ amount: '1250', currency: 'CAD' }).includes('<div class="o-c1-amt" style="--afit:0.64">CA$1,250.00</div>'));
+  });
+
+  test('renders the dashboard test donation (src/routes/dashboard.js) in its currency', () => {
+    assert.ok(C1.render({ username: 'BigSponsor', amount: 25, message: 'Keep racing!', currency: 'USD' }).includes('$25.00'));
+  });
+
+  test('every SVG id is its own: two alerts on one page never share a gradient or a clip path', () => {
+    const a = tip();
+    const b = tip();
+    assert.ok(ids(a).length >= 6);
+    assert.equal(new Set(ids(a)).size, ids(a).length, 'unique within one alert');
+    assert.ok(ids(a).every((id) => !ids(b).includes(id)), 'unique between alerts');
+    const own = new Set(ids(a));
+    for (const [, ref] of a.matchAll(/url\(#([^)]+)\)/g)) assert.ok(own.has(ref), `url(#${ref}) points into the same alert`);
+  });
+
+  test('every class it uses is under the o-c1 prefix (besides the shared obj and o-mesh)', () => {
+    const classes = [...tip().matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    for (const name of classes) assert.ok(name === 'obj' || name === 'o-mesh' || name.startsWith('o-c1'), name);
+  });
+});
