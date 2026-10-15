@@ -109,11 +109,12 @@ function holdMs(type, look, data, speed) {
   return Number.isFinite(len) ? Math.max(base, Math.round((len / speed + 1) * 1000)) : base;
 }
 
-// How long an object's exit runs ("0.90s" is 900 ms), never less than the 400 ms every alert
-// has always had, so the five objects keep their pace.
-function exitMs(objectDef) {
+// How long an object's exit runs ("0.90s" is 900 ms) at the look's speed (objects.css runs it for
+// --outdur / --spd: a look at half speed leaves in twice the time), never less than the 400 ms every
+// alert has always had, so the five objects keep their pace.
+function exitMs(objectDef, speed = 1) {
   const seconds = parseFloat(objectDef && objectDef.exit && objectDef.exit.dur);
-  return Number.isFinite(seconds) ? Math.max(400, Math.round(seconds * 1000)) : 400;
+  return Number.isFinite(seconds) ? Math.max(400, Math.round(seconds / speed * 1000)) : 400;
 }
 
 // The timers of the alert on screen and of the queue: dismissing it, removing it,
@@ -649,7 +650,7 @@ function showNotification(event) {
     alertTimer(() => {
       slot.remove();
       alertTimer(playNext, 500);
-    }, objectDef ? exitMs(objectDef) : 400);
+    }, objectDef ? exitMs(objectDef, speed) : 400);
   }, holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed));
 }
 

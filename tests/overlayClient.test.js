@@ -941,6 +941,19 @@ describe('the look an alert is drawn in (alert styles)', () => {
     assert.ok(slot.classList.contains('exiting'), 'then it leaves');
   });
 
+  test('a slowed look stays until its exit has run: Racing at speed 0.5 leaves in 0.72 s, its 0.36 s at half speed', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing', animation_speed: 0.5 }) } });
+    overlay.send({ type: 'config-update', config: baseConfig({ follow: { enabled: true, duration: 5 } }) });
+    overlay.send(follow());
+    overlay.clock.advance(5000);
+    const [slot] = overlay.slots();
+    assert.ok(slot.classList.contains('exiting'), 'it leaves after its 5 s');
+    overlay.clock.advance(719);
+    assert.equal(overlay.slots().length, 1, 'still leaving');
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 0);
+  });
+
   test('today\'s objects keep the streamer\'s duration as it is', () => {
     const overlay = loadOverlay({ styles: true });
     overlay.send({ type: 'config-update', config: baseConfig({ follow: { enabled: true, duration: 1 } }) });
