@@ -2,10 +2,11 @@ const WebSocket = require('ws');
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { refreshBroadcasterToken, hasRedemptionScope } = require('./twitch');
+const { refreshBroadcasterToken, hasRedemptionScope, hasPollsScope } = require('./twitch');
 const { chatManager } = require('./twitchChat');
 const { isStreamerDisabled } = require('./streamerAccess');
 const { createMessageDedupe } = require('./messageDedupe');
+const { livePolls } = require('./livePolls');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 const SUBSCRIPTIONS_URL = 'https://api.twitch.tv/helix/eventsub/subscriptions';
@@ -52,6 +53,14 @@ const SUBSCRIPTION_TYPES = [
   { type: 'channel.cheer', version: '1' },
   { type: 'channel.raid', version: '1', conditionKey: 'to_broadcaster_user_id' },
   { type: 'channel.channel_points_custom_reward_redemption.add', version: '1' },
+  // The Polls & predictions card, the bar and the bot's lines (livePolls); only with both permissions (needsPolls).
+  { type: 'channel.poll.begin', version: '1', needsPolls: true },
+  { type: 'channel.poll.progress', version: '1', needsPolls: true },
+  { type: 'channel.poll.end', version: '1', needsPolls: true },
+  { type: 'channel.prediction.begin', version: '1', needsPolls: true },
+  { type: 'channel.prediction.progress', version: '1', needsPolls: true },
+  { type: 'channel.prediction.lock', version: '1', needsPolls: true },
+  { type: 'channel.prediction.end', version: '1', needsPolls: true },
 ];
 
 // One streamer's EventSub connection. The session lives on one socket (`ws`).
@@ -321,6 +330,13 @@ class EventSubClient {
       return;
     }
 
+    // Polls and predictions feed the Polls & predictions card, the bar and the bot's lines: no alert, no stats row,
+    // no thank-you.
+    if (normalized.type === 'poll') {
+      livePolls.onEvent(this.streamerId, normalized.subscriptionType, normalized.event);
+      return;
+    }
+
     const streamer = db.getStreamerById(this.streamerId);
 
     // Emit to overlay — giftsub shows as subscription banner
@@ -386,6 +402,10 @@ class EventSubClient {
     if (subType.type === 'channel.channel_points_custom_reward_redemption.add' && !hasRedemptionScope(streamer)) {
       return false;
     }
+
+    // A connection made before the polls permissions were asked for skips their events (its card asks for a
+    // reconnect).
+    if (subType.needsPolls && !hasPollsScope(streamer)) return false;
 
     let token = streamer.broadcaster_access_token;
 
@@ -522,6 +542,15 @@ class EventSubClient {
             redeemedAt: event.redeemed_at,
           },
         };
+
+      case 'channel.poll.begin':
+      case 'channel.poll.progress':
+      case 'channel.poll.end':
+      case 'channel.prediction.begin':
+      case 'channel.prediction.progress':
+      case 'channel.prediction.lock':
+      case 'channel.prediction.end':
+        return { type: 'poll', subscriptionType: subType, event };
 
       default:
         return null;

@@ -40,7 +40,8 @@ class FakeWebSocket {
 }
 
 let streamers;
-const effects = { overlay: [], overlayLog: [], chat: [], raidProtection: [], redemptions: [] };
+const effects = { overlay: [], overlayLog: [], chat: [], raidProtection: [], redemptions: [], polls: [] };
+let pollsScope = false; // what the stubbed hasPollsScope answers
 let subscribeCalls;
 
 const dbStub = {
@@ -57,7 +58,8 @@ const stubs = {
   '../config': { twitch: { clientId: 'synthetic-client-id' } },
   '../db': dbStub,
   './overlayBus': { emit: (channel, event) => effects.overlay.push({ channel, event }) },
-  './twitch': { refreshBroadcasterToken: async () => 'synthetic-fresh-token', hasRedemptionScope: () => true },
+  './twitch': { refreshBroadcasterToken: async () => 'synthetic-fresh-token', hasRedemptionScope: () => true, hasPollsScope: () => pollsScope },
+  './livePolls': { livePolls: { onEvent: (streamerId, type, event) => effects.polls.push({ streamerId, type, event }) } },
   './twitchChat': {
     chatManager: {
       sendEventMessage: (streamerId, type, data) => effects.chat.push({ streamerId, type, data }),
@@ -88,6 +90,7 @@ beforeEach(() => {
   for (const level of ['log', 'warn', 'error']) { saved[level] = console[level]; console[level] = () => {}; }
   saved.fetch = global.fetch;
   subscribeCalls = [];
+  pollsScope = false;
   global.fetch = async (url, opts) => {
     subscribeCalls.push({ url, body: JSON.parse(opts.body), signal: opts.signal, auth: opts.headers && opts.headers.Authorization });
     return { ok: true, status: 202, json: async () => ({}) };
@@ -740,5 +743,40 @@ describe('a raid', () => {
     socket.receive(raid);
     assert.deepEqual(effects.chat.map((c) => c.type), ['raid']);
     assert.deepEqual(effects.raidProtection, [1]);
+  });
+});
+
+describe('polls and predictions', () => {
+  const POLL_TYPES = [
+    'channel.poll.begin', 'channel.poll.progress', 'channel.poll.end',
+    'channel.prediction.begin', 'channel.prediction.progress', 'channel.prediction.lock', 'channel.prediction.end',
+  ];
+
+  test('a connection made before the two permissions were asked for skips their seven events', async () => {
+    await connected();
+    assert.deepEqual(subscribeCalls.map((c) => c.body.type), SUBSCRIPTION_TYPES);
+  });
+
+  test('with them, each of the seven is subscribed once (version 1, the broadcaster\'s channel), after the others', async () => {
+    pollsScope = true;
+    await connected();
+    assert.deepEqual(subscribeCalls.map((c) => c.body.type), [...SUBSCRIPTION_TYPES, ...POLL_TYPES]);
+    for (const call of subscribeCalls.slice(SUBSCRIPTION_TYPES.length)) {
+      assert.equal(call.body.version, '1');
+      assert.deepEqual(call.body.condition, { broadcaster_user_id: '9001' });
+    }
+  });
+
+  test('their events go to the live polls only — no alert, no stats row, no thank-you — and a repeat once', async () => {
+    pollsScope = true;
+    const socket = await connected();
+    const begin = notification('channel.poll.begin', { id: 'poll-1', title: 'Top 5?', choices: [] }, 'synthetic-poll-message');
+    socket.receive(begin);
+    socket.receive(begin);
+    socket.receive(notification('channel.prediction.lock', { id: 'pred-1', title: 'Clean lap?', outcomes: [] }));
+    assert.deepEqual(effects.polls.map((p) => [p.streamerId, p.type, p.event.id]), [[1, 'channel.poll.begin', 'poll-1'], [1, 'channel.prediction.lock', 'pred-1']]);
+    assert.deepEqual(effects.overlay, []);
+    assert.deepEqual(effects.overlayLog, []);
+    assert.deepEqual(effects.chat, []);
   });
 });
