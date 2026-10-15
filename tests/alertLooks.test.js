@@ -20,6 +20,7 @@ const OBJECTS_CSS = fs.readFileSync(path.join(OBJECTS_DIR, 'objects.css'), 'utf8
 // Each family's class and keyframe prefixes. Today's five keep their names (objects.css).
 const PREFIXES = {
   samurai: { classes: ['o-omi'], keyframes: ['omi', 'exOmi'] },
+  racing: { classes: ['o-rc'], keyframes: ['rc'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
@@ -148,4 +149,34 @@ describe('every family stylesheet', () => {
       }
     });
   }
+});
+
+describe('Racing keeps today\'s defaults', () => {
+  test('each alert\'s colours and text are EVENT_DEFAULTS\'s', () => {
+    const { EVENT_DEFAULTS } = require('../src/services/overlayDesign');
+    const defaults = K.families.racing.defaults;
+    for (const alert of K.ALERTS) {
+      assert.equal(defaults[alert].bg, EVENT_DEFAULTS[alert].bg_color, `${alert} card`);
+      assert.equal(defaults[alert].accent, EVENT_DEFAULTS[alert].accent_color, `${alert} accent`);
+      assert.equal(defaults[alert].label, EVENT_DEFAULTS[alert].event_label, `${alert} text`);
+    }
+  });
+
+  test('a saved design\'s colours and font reach the look; anything else falls back', () => {
+    const look = K.styles['follow-racing'];
+    const html = look.render({ username: 'A', colours: { bg: '#123456', accent: '#ABCDEF', name: '#FEDCBA', font: 'Bangers' } });
+    assert.match(html, /--rc-bg:#123456;/);
+    assert.match(html, /--rc-a:#ABCDEF;/);
+    assert.match(html, /--rc-ink:#FEDCBA;/);
+    assert.match(html, /--rc-font:&quot;Bangers&quot;;/);
+    const odd = look.render({ username: 'A', colours: { bg: 'red', accent: null, font: 'x";}body{' } });
+    assert.match(odd, /--rc-bg:#1a1a3e;--rc-bg2:rgb\(8,8,19\);--rc-a:#8888cc;/);
+    assert.ok(!odd.includes('--rc-font'), 'a font that is not a plain name is left out');
+  });
+
+  test('with "grows with the amount" off, the nitro gauge is the middle one', () => {
+    const lit = (d) => (K.styles['bits-racing'].render(d).match(/o-rcb-seg on/g) || []).length;
+    assert.equal(lit({ username: 'A', amount: 10000, grows: false }), lit({ username: 'A', amount: 500 }));
+    assert.ok(lit({ username: 'A', amount: 10000 }) > lit({ username: 'A', amount: 500 }));
+  });
 });
