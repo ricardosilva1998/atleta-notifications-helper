@@ -4812,4 +4812,34 @@ describe('the working cards\' script', () => {
       features.overlays = true;
     }
   });
+
+  // The script reads its texts from window.ATLETA_CARD_TEXTS as T.name, T.name.sub or, for a group kept under a short
+  // name (const G = T.giveaway), G.sub. A text the table does not hold would show as "undefined" only when its moment
+  // comes, so the script's source is read here and each text it reads is looked up in the table the page gives it.
+  test('every text the page script reads is in the table the page gives it', async () => {
+    const { features } = require('../config');
+    const before = features.overlays;
+    features.overlays = true;
+    try {
+      const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
+      const source = realFs.readFileSync(path.join(SRC, '..', 'public', 'js', 'dashboard-cards.js'), 'utf8');
+      const reads = new Set();
+      for (const [, name, sub] of source.matchAll(/\bT\.(\w+)(?:\.(\w+))?/g)) {
+        reads.add(name);
+        if (sub && T[name] && typeof T[name] === 'object') reads.add(`${name}.${sub}`);
+      }
+      for (const [, alias, group] of source.matchAll(/\bconst (\w+) = T\.(\w+)/g)) {
+        if (!T[group] || typeof T[group] !== 'object') continue; // the alias of one text, not of a group
+        for (const [, sub] of source.matchAll(new RegExp(`\\b${alias}\\.(\\w+)`, 'g'))) reads.add(`${group}.${sub}`);
+      }
+      assert.ok(reads.size >= 5, `the scan finds the texts the script reads (${reads.size})`);
+      const missing = [...reads].filter((read) => {
+        const [name, sub] = read.split('.');
+        return !(name in T) || (sub !== undefined && !(sub in T[name]));
+      });
+      assert.deepEqual(missing, [], 'texts the script reads that the page does not give it');
+    } finally {
+      features.overlays = before;
+    }
+  });
 });

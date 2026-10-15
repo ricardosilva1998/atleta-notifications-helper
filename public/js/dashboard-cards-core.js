@@ -17,18 +17,23 @@
     });
   }
 
-  // What a fetch() answer means for a card:
+  // What a fetch() answer means for a card (the page script sends redirect: 'manual', so a redirect is never followed):
   //   { ok: true, status, data }                          the route did it (an answer without `ok` counts);
   //   { ok: false, kind: 'refused', status, code, error, data }   the route said no; `error` is translated;
-  //   { ok: false, kind: 'failed', status, … }            the server failed (5xx, or JSON that does not parse);
-  //   { ok: false, kind: 'session', status }              a page came back instead of JSON: the login page after the
-  //                                                       session ended (fetch followed the redirect), or the
-  //                                                       account-disabled page.
-  // A fetch that throws (no network) is the caller's { ok: false, kind: 'network' }.
+  //   { ok: false, kind: 'failed', status, … }            the server failed (5xx, or JSON that does not parse), or
+  //                                                       answered a page that says nothing about the session (a
+  //                                                       rate limit page, a missing page);
+  //   { ok: false, kind: 'session', status }              the session ended: the request was redirected (to sign in;
+  //                                                       fetch gives an opaque redirect, type 'opaqueredirect' and
+  //                                                       status 0, because following it would lead off the site, to
+  //                                                       Discord), or a 401 or 403 page came back (the
+  //                                                       account-disabled page).
+  // A fetch that throws (no network, or no answer in time) is the caller's { ok: false, kind: 'network' }.
   async function readAnswer(response) {
     const type = (response.headers && typeof response.headers.get === 'function' && response.headers.get('content-type')) || '';
     if (!/application\/json/i.test(type)) {
-      return response.status >= 500 ? { ok: false, kind: 'failed', status: response.status } : { ok: false, kind: 'session', status: response.status };
+      const ended = response.type === 'opaqueredirect' || response.status === 0 || response.status === 401 || response.status === 403;
+      return { ok: false, kind: ended ? 'session' : 'failed', status: response.status };
     }
     let data;
     try {

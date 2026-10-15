@@ -5,6 +5,9 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const core = require('../public/js/dashboard-cards-core.js');
 
 // A fetch() Response as readAnswer() reads it.
@@ -53,10 +56,26 @@ describe('readAnswer', () => {
     assert.equal((await core.readAnswer(response(429, { ok: false, error: 'Please wait' }))).error, 'Please wait');
   });
 
-  test('a page instead of JSON is a session that ended; a server error is a failure', async () => {
-    assert.deepEqual(await core.readAnswer(response(200, '<html>login</html>', 'text/html')), { ok: false, kind: 'session', status: 200 });
-    assert.equal((await core.readAnswer(response(403, '<html>disabled</html>', 'text/html'))).kind, 'session');
-    assert.equal((await core.readAnswer(response(502, '<html>bad gateway</html>', 'text/html'))).kind, 'failed');
+  // call() sends redirect: 'manual': the redirect to sign in (which leads off the site, to Discord, where fetch can only
+  // fail) is not followed; it arrives as an opaque redirect (type 'opaqueredirect', status 0, no headers).
+  test('a request sent to sign in again (an opaque redirect), or answered with a 401 or 403 page, is a session that ended', async () => {
+    const redirect = { type: 'opaqueredirect', status: 0, headers: { get: () => null } };
+    assert.deepEqual(await core.readAnswer(redirect), { ok: false, kind: 'session', status: 0 });
+    assert.deepEqual(await core.readAnswer(response(403, '<html>disabled</html>', 'text/html')), { ok: false, kind: 'session', status: 403 });
+    assert.deepEqual(await core.readAnswer(response(401, '<html>sign in</html>', 'text/html')), { ok: false, kind: 'session', status: 401 });
+  });
+
+  test('a 200 page is a failure, not a session that ended: with redirect "manual" the login page never arrives', async () => {
+    assert.deepEqual(await core.readAnswer(response(200, '<html>login</html>', 'text/html')), { ok: false, kind: 'failed', status: 200 });
+  });
+
+  test('any other answer that is not JSON is a failure too: a rate limit page, a missing page, a server error page', async () => {
+    for (const status of [429, 404, 500, 502]) {
+      assert.deepEqual(await core.readAnswer(response(status, '<html>page</html>', 'text/html')), { ok: false, kind: 'failed', status }, String(status));
+    }
+  });
+
+  test('a server error with a JSON body keeps its words; JSON that does not parse is a failure', async () => {
     const failed = await core.readAnswer(response(502, { ok: false, error: 'Twitch did not take it', reward: { enabled: 1 } }));
     assert.deepEqual([failed.kind, failed.error, failed.data.reward.enabled], ['failed', 'Twitch did not take it', 1]);
     assert.equal((await core.readAnswer(response(200, 'not json'))).kind, 'failed', 'JSON that does not parse');
@@ -116,4 +135,15 @@ describe('the giveaway clock', () => {
     assert.ok(Number.isNaN(core.parseUtc('')));
     assert.ok(Number.isNaN(core.parseUtc('soon')));
   });
+});
+
+describe('the browser files', () => {
+  // CI's node --check covers src/ only, and these two are served as they are: a slip in either (the page script
+  // grows by hundreds of lines) would stop every switch from saving while the rest of the suite stays green.
+  for (const name of ['dashboard-cards-core.js', 'dashboard-cards.js']) {
+    test(`${name} compiles`, () => {
+      const file = path.join(__dirname, '..', 'public', 'js', name);
+      assert.doesNotThrow(() => new vm.Script(fs.readFileSync(file, 'utf8'), { filename: file }));
+    });
+  }
 });

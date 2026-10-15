@@ -16,12 +16,17 @@
 
   // ── The server ──
 
-  // A JSON request (public/js/csrf.js adds the CSRF header); its answer as readAnswer() reads it.
+  // A JSON request (public/js/csrf.js adds the CSRF header); its answer as readAnswer() reads it. A redirect is not
+  // followed: the redirect to sign in leads off the site (to Discord), where fetch can only fail, so it comes back as
+  // an opaque redirect, which readAnswer() takes for a session that ended. A request that is not answered in 20 s
+  // counts as no network, so a control's queue is never kept busy for good.
   async function call(method, url, body) {
     const headers = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const options = { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin', redirect: 'manual' };
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) options.signal = AbortSignal.timeout(20000);
     try {
-      const response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin' });
+      const response = await fetch(url, options);
       return await core.readAnswer(response);
     } catch (e) {
       return { ok: false, kind: 'network' };
