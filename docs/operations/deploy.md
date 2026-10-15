@@ -293,3 +293,38 @@ boot migration against the live database while the app is using it.
 Going back to an earlier release is a plain revert (older code never reads `style`), but older code's save
 writes the whole row again and would drop the style; after coming back, set it again with the command above
 (`SET style = 'donation-c1'`).
+
+## Polls, predictions and shoutouts
+
+Before:
+
+1. No streamer is live and no giveaway is open.
+2. The release adds eleven `streamers` columns and the `poll_templates` table at boot: the log shows eleven
+   `[DB] Added … column to streamers` lines once, and no `[DB migration]` line. Going back to the previous
+   release is a plain revert (the new columns and table stay, unused).
+3. No new variable.
+
+After: `/health` answers 200; `/overlay/poll.css`, `/overlay/pollModel.js` and `/js/dashboard-polls.js` answer
+200. A streamer is subscribed to the seven poll and prediction events only once their Twitch connection has
+the two new permissions.
+
+Watch after release:
+
+- The first real not-Affiliate refusal: Twitch documents no status for it, so it is recognised by Twitch's
+  message. Check that its `[Polls]` line in the log says `not_affiliate`, and that the card, once reloaded,
+  offers Check again.
+- A channel that is not an Affiliate but has the two permissions: whether Twitch accepts the seven poll and
+  prediction subscriptions for it. If it refuses, each EventSub connection of that streamer logs seven
+  `[EventSub] Failed to subscribe …` lines; nothing else changes.
+- The six non-English translations of the new texts are machine-made and want a native read-through.
+
+### What streamers see
+
+- **Everyone:** a dashboard tab that was open across the deploy needs one reload.
+- **Shoutouts** card (after Commands): `!so @name` for moderators and a shoutout after a raid, both off until
+  switched on; the message is editable, and Test in chat shouts out the streamer's own channel.
+- **Polls & predictions** card (after Giveaways), for Twitch Affiliates and Partners: it asks for one
+  "Reconnect Twitch" (two new permissions) before it can start anything; then templates, live results, the
+  chat announcements (on by default) and their texts.
+- **The on-stream bar** is a new OBS browser source (its link is on the Polls & predictions card and on the
+  OBS overlay card; recommended size 600 x 700). It is empty while nothing runs.
