@@ -1519,7 +1519,7 @@ After the deploy:
 - The boot log shows `[DB] Added style to overlay_designs` and, once,
   `[DB] The C1 donation alert is on for andre_vilela_`. Neither appears again on later boots.
 - Read only: his donation design has `style = 'donation-c1'`.
-- He, or the owner, presses **Preview Alert → Donation** on the overlay settings page and sees the C1 in OBS.
+- Vilela (not the owner: the test acts only on the signed-in streamer's overlays), signed in as himself and off stream, presses **Preview Alert** on the Donation card of the overlay settings page; the test also posts his donation thank-you in his Twitch chat.
 
 Switching it off (the folding screen again): `db.setOverlayDesignStyle(<his streamer id>, 'donation', null)`,
 or the same `UPDATE overlay_designs SET style = NULL …`; an overlay that is already open picks it up after a
@@ -1749,9 +1749,9 @@ bash -c "railway ssh --project 4e52137b-f75a-4c71-8fbe-48c6e1ca445f --environmen
 
 Expected: `{"style":"donation-c1", …}` with the width and position noted in Step 2.
 
-- [ ] **Step 7: Ask the owner (or Vilela) to see it in OBS**
+- [ ] **Step 7: Ask Vilela to see it**
 
-On `atletanotifications.com`, overlay settings → **Preview Alert → Donation**. The C1 should play in his OBS browser source.
+Only Vilela can: the test acts on the signed-in streamer's overlays, and the admin panel has no overlay test. Signed in as himself and off stream, he presses **Preview Alert** on the Donation card of the overlay settings page on `atletanotifications.com`. The C1 should play in the preview and in his OBS browser source, and, while his chatbot is on, his donation thank-you with the test values is posted in his Twitch chat.
 
 - [ ] **Step 8: Tell the other sessions and update the memory**
 

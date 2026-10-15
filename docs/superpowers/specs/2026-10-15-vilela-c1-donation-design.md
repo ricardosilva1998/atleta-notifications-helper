@@ -289,8 +289,11 @@ save, reset). Screenshots or a short recording go to the owner.
 2. Merge `feat/vilela-c1-donation` into `main` when the suite and CI are green. A push to `main` deploys, so
    it ships when Vilela is not live (the rule in `docs/operations/deploy.md`).
 3. After the deploy: the boot log shows `[DB] The C1 donation alert is on for andre_vilela_` once; a read-only
-   check shows his donation design with `style = 'donation-c1'`; the owner, or Vilela, presses
-   **Preview Alert → Donation** to see it in OBS.
+   check shows his donation design with `style = 'donation-c1'`; to see it, Vilela presses **Preview Alert** on
+   the Donation card of his overlay settings page, signed in as himself and off stream. The owner cannot press it
+   for him (the test acts only on the signed-in streamer's overlays, and the admin panel has no overlay test); it
+   plays on every overlay he has open and, while his chatbot is on, posts his donation thank-you with the test
+   values in his Twitch chat.
 4. Message the Overlay Builder session and the polls session that it has merged.
 
 **Rolling back.** A plain revert is safe: older code never reads `style`. But older code's save would wipe
