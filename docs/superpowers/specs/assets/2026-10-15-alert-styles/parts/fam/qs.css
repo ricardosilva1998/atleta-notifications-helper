@@ -1,0 +1,220 @@
+/* Drawn and approved with content-box sizing; the overlay page sets border-box on every element, so the family says so. */
+.o-qs,.o-qs *{box-sizing:content-box}
+/* ═════════ QUEST — fantasy RPG: parchment, gold leaf, wax and steel ═════════
+   Weighty, magical motion: scrolls unroll between rods, seals stamp, gold glints.
+   One move at a time, and nothing is blurred in: what the parchment holds appears as the
+   parchment opens; text elsewhere fades up crisp.
+   The accent (gold by default) colours the rods' knobs, the ribbon, the rays and the trim. */
+.o-qs{--qsa:var(--a,#E2B53E);--qsa-rgb:var(--a-rgb,226,181,62);--qs-on:var(--a-on,#2B1A0E);--qs-ink:#2B1A0E;--qs-wine:#5B1A1A;--qs-wax:#A3121A;--qs-parch:#F1E3C2;
+  --qs-paper:radial-gradient(130% 120% at 50% 35%,#F7EDD3 0%,#EEDDB2 55%,#DCC28A 100%);
+  --qs-wood:linear-gradient(90deg,#3E2614,#7A4E26 35%,#A8743C 52%,#5E3A1C 80%,#3E2614);
+  font-family:"EB Garamond",Georgia,"Times New Roman",serif;color:var(--qs-ink)}
+.o-qs-paper{background:var(--qs-paper)}
+.o-qs-paper::before{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(90deg,rgba(120,80,30,.05) 0 1px,transparent 1px 9px),repeating-linear-gradient(0deg,rgba(120,80,30,.04) 0 1px,transparent 1px 13px)}
+.o-qs-kicker{position:relative;display:flex;align-items:center;justify-content:center;gap:10px;font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:11px;line-height:1.2;letter-spacing:.3em;text-transform:uppercase;color:var(--qs-wine)}
+.o-qs-kicker::before,.o-qs-kicker::after{content:"";flex:none;width:6px;height:6px;transform:rotate(45deg);background:var(--qsa);box-shadow:0 0 0 1px rgba(43,26,14,.55)}
+.o-qs-name{position:relative;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:calc(26px * var(--fit,1));line-height:1.12;letter-spacing:.03em;color:var(--qs-ink)}
+.o-qs-rod{position:absolute;top:0;bottom:0;width:16px}
+.o-qs-rod::before{content:"";position:absolute;left:3px;right:3px;top:9px;bottom:9px;border-radius:5px;background:var(--qs-wood);box-shadow:0 4px 10px rgba(0,0,0,.5)}
+.o-qs-rod::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 7px,#FBE3A0 0,var(--qsa) 4px,#7A5A12 7px,transparent 7.6px),radial-gradient(circle at 50% calc(100% - 7px),#FBE3A0 0,var(--qsa) 4px,#7A5A12 7px,transparent 7.6px)}
+@keyframes qsDrop{from{transform:translateY(-36px);opacity:0}to{transform:none;opacity:1}}
+@keyframes qsInk{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes qsRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes qsPop{0%{transform:scale(0)}65%{transform:scale(1.25)}100%{transform:none}}
+@keyframes qsGone{to{opacity:0}}
+@keyframes qsExitUp{0%,55%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-14px)}}
+@keyframes qsExitDown{to{opacity:0;transform:translateY(18px)}}
+@keyframes qsExitShrink{to{opacity:0;transform:scale(.82)}}
+
+/* follow — Quest accepted: the scroll unrolls between two rods */
+.o-qsf{height:112px}
+.o-qsf-paper{position:absolute;left:16px;right:16px;top:10px;bottom:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;box-shadow:inset 0 0 16px rgba(120,76,24,.5),inset 0 0 2px rgba(80,50,15,.6),0 10px 24px rgba(0,0,0,.55)}
+.o-qsf-in{position:relative;z-index:1;min-width:0;max-width:100%;padding:0 28px}
+.o-qsf-in .o-qs-kicker{margin-bottom:3px}
+.o-qsf-line{position:relative;font-style:italic;font-weight:500;font-size:15px;line-height:1.2;color:#5B3A1E;margin-top:2px}
+.o-qsf-glint{position:absolute;top:-20%;bottom:-20%;left:-90px;width:70px;z-index:2;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,240,190,.8),transparent);transform:skewX(-18deg);opacity:0}
+.o-qsf-half{position:absolute;top:0;bottom:0;width:50%;z-index:3;pointer-events:none}
+.o-qsf-half.l{left:0}
+.o-qsf-half.r{right:0}
+.o-qsf-half.l .o-qs-rod{left:6px}
+.o-qsf-half.r .o-qs-rod{right:6px}
+@keyframes qsOpenL{from{transform:translateX(calc(100% - 22px))}to{transform:none}}
+@keyframes qsOpenR{from{transform:translateX(calc(-100% + 22px))}to{transform:none}}
+@keyframes qsUnrollX{from{clip-path:inset(0 50% 0 50%)}to{clip-path:inset(0 0 0 0)}}
+@keyframes qsGlint{0%{opacity:0;transform:skewX(-18deg) translateX(0)}15%,80%{opacity:1}100%{opacity:0;transform:skewX(-18deg) translateX(560px)}}
+@keyframes qsCloseL{to{transform:translateX(calc(100% - 22px))}}
+@keyframes qsCloseR{to{transform:translateX(calc(-100% + 22px))}}
+@keyframes qsRollX{to{clip-path:inset(0 50% 0 50%)}}
+.playing .o-qsf-half.l{animation:qsOpenL calc(.6s / var(--spd)) cubic-bezier(.3,.85,.3,1) calc(.2s / var(--spd)) both}
+.playing .o-qsf-half.r{animation:qsOpenR calc(.6s / var(--spd)) cubic-bezier(.3,.85,.3,1) calc(.2s / var(--spd)) both}
+.playing .o-qsf-paper{animation:qsUnrollX calc(.6s / var(--spd)) cubic-bezier(.3,.85,.3,1) calc(.2s / var(--spd)) both}
+.playing .o-qsf-glint{animation:qsGlint calc(.7s / var(--spd)) ease-in-out calc(.78s / var(--spd)) both}
+.exiting .o-qsf .o-qsf-half.l{animation:qsCloseL calc(.4s / var(--spd)) cubic-bezier(.5,0,.8,.4) both}
+.exiting .o-qsf .o-qsf-half.r{animation:qsCloseR calc(.4s / var(--spd)) cubic-bezier(.5,0,.8,.4) both}
+.exiting .o-qsf .o-qsf-paper{animation:qsRollX calc(.4s / var(--spd)) cubic-bezier(.5,0,.8,.4) both}
+
+/* subscription — Level up: a crest with the months, rays, stars and an XP bar */
+.o-qss{height:178px}
+.o-qss-plate{position:absolute;left:0;right:0;top:22px;bottom:0;border-radius:10px;background:radial-gradient(120% 140% at 20% 0%,#4A1A16 0%,#2A0E0C 55%,#180806 100%);box-shadow:inset 0 0 0 2px rgba(var(--qsa-rgb),.8),inset 0 0 0 5px rgba(0,0,0,.35),inset 0 0 0 6px rgba(var(--qsa-rgb),.3),0 14px 30px rgba(0,0,0,.6)}
+.o-qss-rays{position:absolute;left:62px;top:56px;width:180px;height:180px;margin:-90px 0 0 -90px;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(var(--qsa-rgb),.45) 0 7deg,rgba(var(--qsa-rgb),0) 7deg 20deg);-webkit-mask-image:radial-gradient(circle,#000 0 22%,transparent 64%);mask-image:radial-gradient(circle,#000 0 22%,transparent 64%)}
+.o-qss-crestw{position:absolute;left:18px;top:4px;width:88px;height:104px;z-index:2;filter:drop-shadow(0 6px 10px rgba(0,0,0,.55))}
+.o-qss-crest{position:absolute;inset:0;clip-path:polygon(50% 0,100% 11%,100% 50%,94% 68%,82% 84%,50% 100%,18% 84%,6% 68%,0 50%,0 11%);background:linear-gradient(160deg,#FBE3A0,var(--qsa) 45%,#8A6414)}
+.o-qss-crest > i{position:absolute;inset:5px;clip-path:polygon(50% 0,100% 11%,100% 50%,94% 68%,82% 84%,50% 100%,18% 84%,6% 68%,0 50%,0 11%);background:linear-gradient(180deg,#6A1E1A,#2A0A0A)}
+.o-qss-lv{position:absolute;left:0;right:0;top:20px;text-align:center;font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:11px;letter-spacing:.24em;color:var(--qsa)}
+.o-qss-num{position:absolute;left:0;right:0;top:36px;display:flex;justify-content:center;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:34px;line-height:1;color:#F7E7C0;text-shadow:0 2px 0 rgba(0,0,0,.5)}
+.o-qss-txt{position:absolute;left:120px;right:16px;top:30px;bottom:14px;z-index:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.o-qss-up{font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:30px;line-height:1.05;letter-spacing:.04em;white-space:nowrap;background:linear-gradient(180deg,#FFF3C4 0%,var(--qsa) 55%,#9A7414 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 rgba(0,0,0,.6))}
+.o-qss .o-qs-name{color:#F7E7C0;font-size:calc(22px * var(--fit,1))}
+.o-qss-meta{display:flex;align-items:center;gap:8px;font-style:italic;font-size:14px;color:#D9C29A}
+.o-qss-stars{display:inline-flex;gap:3px}
+.o-qss-star{width:14px;height:14px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);background:rgba(var(--qsa-rgb),.25)}
+.o-qss-star.on{background:linear-gradient(180deg,#FFF3C4,var(--qsa))}
+.o-qss-xp{position:relative;height:12px;margin-top:auto;border-radius:6px;background:#140605;box-shadow:inset 0 0 0 1px rgba(var(--qsa-rgb),.6)}
+.o-qss-xp i{position:absolute;inset:2px;border-radius:4px;background:linear-gradient(90deg,#9A7414,var(--qsa),#FFF0B8);transform-origin:left}
+.o-qss-xp b{position:absolute;right:4px;top:-15px;font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:9px;letter-spacing:.22em;color:#D9C29A}
+@keyframes qsRays{from{opacity:0;transform:scale(.2) rotate(-40deg)}to{opacity:1;transform:none}}
+@keyframes qsCrest{0%{opacity:0;transform:scale(1.7)}60%{opacity:1;transform:scale(.94)}100%{opacity:1;transform:none}}
+@keyframes qsLevel{0%{opacity:0;transform:translateY(16px) scale(.8)}60%{opacity:1;transform:translateY(-3px) scale(1.06)}100%{opacity:1;transform:none}}
+@keyframes qsFill{from{transform:scaleX(0)}to{transform:none}}
+@keyframes qsFlash{0%,100%{filter:none}40%{filter:brightness(1.9)}}
+/* The story in order: the plate and its XP bar, the bar fills and flashes, then the level-up
+   (crest, rays, LEVEL UP!), then who it is (name, tier and months, stars). */
+.playing .o-qss-plate{animation:qsRise calc(.28s / var(--spd)) ease-out both}
+.playing .o-qss-xp{animation:qsRise calc(.28s / var(--spd)) ease-out calc(.06s / var(--spd)) both}
+.playing .o-qss-xp i{animation:qsFill calc(.55s / var(--spd)) cubic-bezier(.45,.05,.3,1) calc(.2s / var(--spd)) both,qsFlash calc(.45s / var(--spd)) ease-out calc(.75s / var(--spd))}
+.playing .o-qss-crestw{animation:qsCrest calc(.34s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.7s / var(--spd)) both}
+.playing .o-qss-rays{animation:qsRays calc(.5s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.74s / var(--spd)) both}
+.playing .o-qss-up{animation:qsLevel calc(.4s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.84s / var(--spd)) both}
+.playing .o-qss .o-qs-name{animation:qsInk calc(.26s / var(--spd)) ease-out calc(1s / var(--spd)) both}
+.playing .o-qss-meta{animation:qsInk calc(.26s / var(--spd)) ease-out calc(1.06s / var(--spd)) both}
+.playing .o-qss-star{animation:qsPop calc(.26s / var(--spd)) cubic-bezier(.3,1.5,.5,1) calc(var(--sd) / var(--spd)) both}
+
+/* bits — Treasure chest: the lid flips open, gold light, coins spill out */
+.o-qsb{height:160px}
+.o-qsb-beams{position:absolute;left:82px;bottom:70px;width:200px;height:90px;margin-left:-100px;transform-origin:50% 100%;opacity:.9;background:conic-gradient(from -45deg at 50% 100%,transparent 0deg,rgba(255,226,140,.5) 8deg,transparent 15deg,rgba(255,226,140,.36) 26deg,transparent 34deg,rgba(255,226,140,.5) 45deg,transparent 53deg,rgba(255,226,140,.36) 64deg,transparent 72deg,rgba(255,226,140,.5) 82deg,transparent 90deg);-webkit-mask-image:linear-gradient(0deg,#000 20%,transparent 100%);mask-image:linear-gradient(0deg,#000 20%,transparent 100%)}
+.o-qsb-chest{position:absolute;left:22px;bottom:14px;width:120px;height:92px}
+.o-qsb-glow{position:absolute;left:8px;right:8px;bottom:50px;height:14px;border-radius:50%;background:radial-gradient(ellipse at 50% 60%,#FFF7D0 0%,var(--qsa) 45%,rgba(var(--qsa-rgb),0) 75%)}
+.o-qsb-lid{position:absolute;left:-3px;right:-3px;bottom:54px;height:34px;border-radius:50% 50% 4px 4px / 70% 70% 4px 4px;background:linear-gradient(180deg,#8A5A2E,#5A381C);box-shadow:inset 0 0 0 2px #2A1708;transform-origin:94% 100%;transform:translate(4px,-6px) rotate(24deg)}
+.o-qsb-lid::before,.o-qsb-lid::after{content:"";position:absolute;top:0;bottom:0;width:11px;background:linear-gradient(90deg,#2E2E33,#6E6E78 50%,#2E2E33)}
+.o-qsb-lid::before{left:19px}
+.o-qsb-lid::after{right:19px}
+.o-qsb-body{position:absolute;left:0;right:0;bottom:0;height:56px;border-radius:4px;background:linear-gradient(180deg,#7A4E26,#5A381C);box-shadow:inset 0 -6px 0 rgba(0,0,0,.28),inset 0 0 0 2px #2A1708,0 10px 18px rgba(0,0,0,.55)}
+.o-qsb-body::before,.o-qsb-body::after{content:"";position:absolute;top:0;bottom:0;width:11px;background:linear-gradient(90deg,#2E2E33,#6E6E78 50%,#2E2E33)}
+.o-qsb-body::before{left:16px}
+.o-qsb-body::after{right:16px}
+.o-qsb-lock{position:absolute;left:50%;top:6px;width:18px;height:22px;margin-left:-9px;border-radius:3px;background:linear-gradient(180deg,#FBE3A0,var(--qsa) 50%,#8A6414);box-shadow:0 0 0 1px #3A2408}
+.o-qsb-lock::after{content:"";position:absolute;left:50%;top:6px;width:5px;height:9px;margin-left:-2.5px;border-radius:2.5px 2.5px 1px 1px;background:#2A1708}
+.o-qsb-coin{position:absolute;left:82px;bottom:76px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#FFF6C8 0 18%,#F5CF5A 20% 55%,#B8860B 58% 72%,#8A6410 74%);box-shadow:0 0 0 1px rgba(60,40,5,.6);transform:translate(var(--cx),var(--cl))}
+.o-qsb-ribbon{position:absolute;left:160px;right:8px;top:18px;height:46px;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(180deg,#FBE3A0,var(--qsa) 55%,#9A7414);clip-path:polygon(0 0,100% 0,95% 50%,100% 100%,0 100%,5% 50%);font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:22px;line-height:1;color:var(--qs-on);white-space:nowrap}
+.o-qsb-ribbon small{font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+.o-qsb-n{display:inline-flex;align-items:baseline}
+.o-qsb-plaque{position:absolute;left:172px;right:20px;top:76px;padding:8px 12px 9px;text-align:center;border-radius:3px;box-shadow:inset 0 0 10px rgba(120,76,24,.45),0 0 0 2px #6B4423,0 8px 18px rgba(0,0,0,.5)}
+.o-qsb .o-qs-name{font-size:calc(18px * var(--fit,1))}
+.o-qsb-sub{position:relative;font-style:italic;font-size:13px;line-height:1.2;color:#5B3A1E;margin-top:1px}
+@keyframes qsThud{0%{opacity:0;transform:translateY(-34px)}60%{opacity:1;transform:translateY(2px) scaleY(.94)}100%{opacity:1;transform:none}}
+@keyframes qsLid{0%{transform:none}55%{transform:translate(5px,-9px) rotate(31deg)}100%{transform:translate(4px,-6px) rotate(24deg)}}
+@keyframes qsGlowFlash{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:scale(1.25)}100%{opacity:1;transform:none}}
+@keyframes qsBeams{from{opacity:0;transform:scaleY(.1)}to{opacity:.9;transform:none}}
+@keyframes qsCoin{0%{opacity:0;transform:translate(0,0) scaleX(1)}8%{opacity:1}25%{transform:translate(calc(var(--cx) * .35),calc(var(--cy) * .9)) scaleX(.25)}50%{transform:translate(calc(var(--cx) * .65),var(--cy)) scaleX(1)}75%{transform:translate(calc(var(--cx) * .88),calc(var(--cy) * .55)) scaleX(.25)}100%{opacity:1;transform:translate(var(--cx),var(--cl)) scaleX(1)}}
+@keyframes qsUnfurl{from{clip-path:polygon(50% 0,50% 0,50% 50%,50% 100%,50% 100%,50% 50%)}to{clip-path:polygon(0 0,100% 0,95% 50%,100% 100%,0 100%,5% 50%)}}
+.playing .o-qsb-chest{animation:qsThud calc(.32s / var(--spd)) cubic-bezier(.4,0,.2,1) both}
+.playing .o-qsb-lid{animation:qsLid calc(.36s / var(--spd)) cubic-bezier(.3,.7,.3,1) calc(.36s / var(--spd)) both}
+.playing .o-qsb-glow{animation:qsGlowFlash calc(.4s / var(--spd)) ease-out calc(.42s / var(--spd)) both}
+.playing .o-qsb-beams{animation:qsBeams calc(.5s / var(--spd)) ease-out calc(.44s / var(--spd)) both}
+.playing .o-qsb-coin{animation:qsCoin calc(.8s / var(--spd)) cubic-bezier(.3,.6,.5,1) calc(var(--cd) / var(--spd)) both}
+.playing .o-qsb-ribbon{animation:qsUnfurl calc(.4s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.7s / var(--spd)) both}
+.playing .o-qsb-plaque{animation:qsRise calc(.3s / var(--spd)) ease-out calc(.92s / var(--spd)) both}
+
+/* donation — Royal decree: unrolls downwards, then the wax seal stamps on */
+.o-qsd-rod{position:relative;display:block;height:16px;margin:0 4px;border-radius:8px;background:linear-gradient(180deg,#A8743C,#7A4E26 45%,#3E2614);box-shadow:0 4px 8px rgba(0,0,0,.5);z-index:2}
+.o-qsd-rod::before,.o-qsd-rod::after{content:"";position:absolute;top:-2px;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#FBE3A0,var(--qsa) 50%,#7A5A12)}
+.o-qsd-rod::before{left:-8px}
+.o-qsd-rod::after{right:-8px}
+.o-qsd-sheet{position:relative;margin:-6px 18px 0}
+.o-qsd-paper{position:relative;padding:20px 26px 29px;text-align:center;box-shadow:inset 0 0 18px rgba(120,76,24,.5),0 12px 26px rgba(0,0,0,.55)}
+.o-qsd-amt{position:relative;margin-top:6px;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:38px;line-height:1.05;color:#8A5A0C;text-shadow:0 1px 0 rgba(255,246,216,.9),0 0 16px rgba(var(--qsa-rgb),.45)}
+.o-qsd-by{position:relative;margin-top:2px;font-style:italic;font-size:14px;color:#5B3A1E}
+.o-qsd .o-qs-name{font-size:calc(22px * var(--fit,1))}
+.o-qsd-msg{position:relative;margin:8px 56px 0;font-style:italic;font-weight:500;font-size:15px;line-height:1.3;color:#3A2410;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-qsd-carrier{position:absolute;left:-14px;right:-14px;top:0;bottom:0;z-index:2;pointer-events:none}
+.o-qsd-carrier .o-qsd-rod{position:absolute;left:0;right:0;bottom:-8px;margin:0}
+.o-qsd-seal{position:absolute;right:22px;bottom:16px;z-index:3;width:52px;height:52px;display:grid;place-items:center;clip-path:polygon(50% 0,63% 6%,78% 4%,86% 16%,98% 26%,95% 41%,100% 56%,90% 68%,88% 84%,73% 88%,62% 99%,48% 94%,34% 100%,24% 88%,9% 84%,10% 68%,0 55%,7% 41%,3% 25%,16% 16%,24% 4%,38% 7%);background:radial-gradient(circle at 40% 34%,#E04848,var(--qs-wax) 52%,#6E0A0F 100%)}
+.o-qsd-seal i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25),inset 0 0 0 4px rgba(255,255,255,.08)}
+.o-qsd-seal svg{display:block;width:18px;height:18px}
+/* The paper's visible edge and the lower rod's centre both start 10px down and travel the sheet's
+   height with the same easing, so the rod always covers the edge it is unrolling (in and out). */
+@keyframes qsUnrollY{0%{clip-path:inset(0 -30px calc(100% - 10px) -30px)}99.9%{clip-path:inset(0 -30px 0 -30px)}100%{clip-path:inset(0 -30px -40px -30px)}}
+@keyframes qsCarry{from{transform:translateY(calc(-100% + 10px))}to{transform:none}}
+@keyframes qsSeal{0%{opacity:0;transform:scale(2.3) rotate(-28deg)}55%{opacity:1;transform:scale(.88) rotate(4deg)}75%{transform:scale(1.06) rotate(-2deg)}100%{opacity:1;transform:none}}
+@keyframes qsThump{0%,100%{transform:none}30%{transform:translateY(2px)}}
+@keyframes qsRollUpY{from{clip-path:inset(0 -30px 0 -30px)}to{clip-path:inset(0 -30px calc(100% - 10px) -30px)}}
+@keyframes qsCarryUp{to{transform:translateY(calc(-100% + 10px))}}
+.playing .o-qsd-paper{animation:qsUnrollY calc(.7s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.2s / var(--spd)) both}
+.playing .o-qsd-carrier{animation:qsCarry calc(.7s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.2s / var(--spd)) both}
+.playing .o-qsd-seal{animation:qsSeal calc(.36s / var(--spd)) cubic-bezier(.3,.7,.3,1) calc(.78s / var(--spd)) both}
+.playing .o-qsd-sheet{animation:qsThump calc(.2s / var(--spd)) ease-out calc(.98s / var(--spd))}
+.exiting .o-qsd .o-qsd-paper{animation:qsRollUpY calc(.4s / var(--spd)) cubic-bezier(.5,0,.8,.4) both}
+.exiting .o-qsd .o-qsd-carrier{animation:qsCarryUp calc(.4s / var(--spd)) cubic-bezier(.5,0,.8,.4) both}
+.exiting .o-qsd .o-qsd-seal{animation:qsGone calc(.12s / var(--spd)) linear both}
+
+/* raid — The horde approaches: banners rise, a shield wall slams in */
+.o-qsr{height:196px}
+/* Only what is above the board's top edge shows, so the banners rise from behind it. */
+.o-qsr-banners{position:absolute;left:0;right:0;top:0;height:110px;clip-path:inset(-12px -12px 32px -12px)}
+.o-qsr-ban{position:absolute;top:4px;left:var(--bx);width:40px;height:104px;margin-left:-20px}
+.o-qsr-ban::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;background:linear-gradient(90deg,#3E2614,#8A5A2E,#3E2614)}
+.o-qsr-ban::after{content:"";position:absolute;left:50%;top:-4px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--qsa)}
+.o-qsr-flag{position:absolute;left:3px;right:3px;top:8px;height:64px;transform-origin:50% 0;clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);background:var(--qsa)}
+.o-qsr-flag i{position:absolute;inset:2px 2px 3px;clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);background:linear-gradient(180deg,#7A1E1E,#4A0E0E)}
+.o-qsr-flag b{position:absolute;left:50%;top:18px;width:13px;height:13px;margin-left:-6.5px;transform:rotate(45deg);background:var(--qsa)}
+.o-qsr-plate{position:absolute;left:0;right:0;top:76px;bottom:0;border-radius:8px;padding:12px 14px;text-align:center;background:linear-gradient(180deg,#2A1210,#140807);box-shadow:inset 0 0 0 2px rgba(var(--qsa-rgb),.7),0 14px 28px rgba(0,0,0,.6)}
+.o-qsr-title{font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:19px;line-height:1.15;letter-spacing:.08em;text-transform:uppercase;color:var(--qsa);text-shadow:0 2px 0 rgba(0,0,0,.6)}
+.o-qsr-line{display:flex;justify-content:center;align-items:baseline;gap:6px;margin-top:3px;white-space:nowrap;font-size:16px;font-weight:600;color:#EAD7AA}
+.o-qsr-who{flex:0 1 auto;min-width:0;max-width:56%;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:calc(17px * var(--fit,1));color:#F7E7C0}
+.o-qsr-count{font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:19px;color:var(--qsa)}
+.o-qsr-shields{display:flex;justify-content:center;align-items:flex-end;gap:6px;height:42px;margin-top:9px}
+.o-qsr-sh{position:relative;flex:none;width:34px;height:40px;clip-path:polygon(0 0,100% 0,100% 45%,92% 70%,50% 100%,8% 70%,0 45%);background:var(--qsa)}
+.o-qsr-sh i{position:absolute;inset:2.5px;clip-path:polygon(0 0,100% 0,100% 45%,92% 70%,50% 100%,8% 70%,0 45%);background:var(--sf)}
+.o-qsr-sh i::before{content:"";position:absolute;inset:0}
+.o-qsr-sh.c0 i::before{background:linear-gradient(135deg,transparent 40%,var(--qsa) 40% 58%,transparent 58%)}
+.o-qsr-sh.c1 i::before{background:linear-gradient(90deg,transparent 40%,var(--qsa) 40% 60%,transparent 60%),linear-gradient(0deg,transparent 52%,var(--qsa) 52% 66%,transparent 66%)}
+.o-qsr-sh.c2 i::before{background:linear-gradient(90deg,transparent 38%,var(--qsa) 38% 62%,transparent 62%)}
+.o-qsr-sh.c3 i::before{background:linear-gradient(0deg,transparent 48%,var(--qsa) 48% 66%,transparent 66%)}
+.o-qsr-sh.c4 i::before{background:radial-gradient(circle at 50% 42%,#FBE3A0 0 4px,var(--qsa) 5px 8px,transparent 9px)}
+.o-qsr-more{align-self:center;margin-left:4px;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:15px;color:var(--qsa)}
+@keyframes qsBanRise{from{transform:translateY(84px)}to{transform:none}}
+@keyframes qsSway{0%,100%{transform:skewX(0deg)}50%{transform:skewX(4deg)}}
+@keyframes qsSlam{0%{opacity:0;transform:translateY(-44px) scale(1.35)}70%{opacity:1;transform:translateY(2px) scale(.96)}100%{opacity:1;transform:none}}
+.playing .o-qsr-plate{animation:qsRise calc(.3s / var(--spd)) ease-out both}
+.playing .o-qsr-ban{animation:qsBanRise calc(.45s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(var(--bd) / var(--spd)) both}
+.playing .o-qsr-flag{animation:qsSway calc(.7s / var(--spd)) ease-in-out calc((var(--bd) + .4s) / var(--spd))}
+.playing .o-qsr-title{animation:qsInk calc(.26s / var(--spd)) ease-out calc(.36s / var(--spd)) both}
+.playing .o-qsr-line{animation:qsInk calc(.26s / var(--spd)) ease-out calc(.46s / var(--spd)) both}
+.playing .o-qsr-sh{animation:qsSlam calc(.2s / var(--spd)) cubic-bezier(.4,0,.3,1) calc(var(--sd) / var(--spd)) both}
+.playing .o-qsr-more{animation:qsPop calc(.26s / var(--spd)) cubic-bezier(.3,1.5,.5,1) calc(var(--sd) / var(--spd)) both}
+
+/* giveaway — Legendary loot: the item card flips over, rays turn behind it */
+.o-qsg{height:212px}
+.o-qsg-rays{position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(255,166,64,.42) 0 7deg,rgba(255,166,64,0) 7deg 20deg);-webkit-mask-image:radial-gradient(circle,#000 0 24%,transparent 66%);mask-image:radial-gradient(circle,#000 0 24%,transparent 66%)}
+.o-qsg-card{position:absolute;left:50%;top:6px;width:290px;height:200px;margin-left:-145px;perspective:900px}
+.o-qsg-flip{position:absolute;inset:0;transform-style:preserve-3d}
+.o-qsg-face{position:absolute;inset:0;overflow:hidden;border-radius:12px;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.o-qsg-back{transform:rotateY(180deg);display:grid;place-items:center;background:repeating-linear-gradient(45deg,#5B1A1A 0 10px,#4A1414 10px 20px);box-shadow:inset 0 0 0 3px var(--qsa),inset 0 0 0 7px #2A0A0A,inset 0 0 0 8px rgba(var(--qsa-rgb),.6)}
+.o-qsg-back i{width:70px;height:70px;transform:rotate(45deg);border:3px solid var(--qsa);box-shadow:inset 0 0 0 6px rgba(var(--qsa-rgb),.25)}
+.o-qsg-front{display:flex;flex-direction:column;align-items:center;padding:14px 18px;text-align:center;background:linear-gradient(170deg,#2C1A10,#160C06);box-shadow:inset 0 0 0 2px #FF9A2E,inset 0 0 0 5px #1A0E06,inset 0 0 0 6px rgba(255,154,46,.55),0 0 26px rgba(255,154,46,.55),0 14px 30px rgba(0,0,0,.6)}
+.o-qsg-rarity{font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:#FF9A2E}
+.o-qsg-gem{position:relative;width:44px;height:44px;margin:8px auto 6px;clip-path:polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%);background:linear-gradient(160deg,#FFF3C4 0%,var(--qsa) 40%,#FF9A2E 70%,#8A4A0A 100%)}
+.o-qsg-gem::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.35) 0 50%,rgba(0,0,0,.18) 50%),linear-gradient(180deg,rgba(255,255,255,.25) 0 38%,transparent 38%)}
+.o-qsg .o-qs-name{max-width:100%;color:#FBE9C4;font-size:calc(23px * var(--fit,1))}
+.o-qsg-type{font-style:italic;font-size:14px;color:#D9B27A}
+.o-qsg-desc{width:100%;margin-top:8px;padding-top:7px;border-top:1px solid rgba(255,154,46,.35);font-size:14px;color:#EAD7AA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-qsg-desc b{color:#FBE9C4;font-weight:600}
+/* The fade and scale sit on the card, the turn on the flip: an opacity animation on the element
+   that keeps the 3D (preserve-3d) flattens it, and then the back never shows. */
+@keyframes qsCardIn{from{opacity:0;transform:translateY(18px) scale(.72)}to{opacity:1;transform:none}}
+@keyframes qsFlip{0%,28%{transform:rotateY(180deg)}82%{transform:rotateY(-10deg)}100%{transform:none}}
+@keyframes qsRaysIn{from{opacity:0;transform:scale(.3) rotate(-60deg)}to{opacity:1;transform:none}}
+@keyframes qsRaysTurn{from{transform:rotate(0deg)}to{transform:rotate(40deg)}}
+.playing .o-qsg-card{animation:qsCardIn calc(.34s / var(--spd)) cubic-bezier(.2,.8,.3,1) both}
+.playing .o-qsg-flip{animation:qsFlip calc(1s / var(--spd)) cubic-bezier(.45,0,.25,1) calc(.12s / var(--spd)) both}
+.playing .o-qsg-rays{animation:qsRaysIn calc(.5s / var(--spd)) ease-out calc(.86s / var(--spd)) both,qsRaysTurn calc(4s / var(--spd)) linear calc(1.36s / var(--spd)) forwards}

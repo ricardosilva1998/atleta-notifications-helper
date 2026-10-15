@@ -1,0 +1,249 @@
+/* ═════════ WESTERN — the wild west ═════════
+   Weathered paper, leather, wood and sheriff gold; Rye on the posters, Special Elite where a machine
+   typed it. Weighty motion: things slap down, nails and stamps land with one blow, dust puffs once,
+   then everything holds still. The accent (sheriff gold by default) is the brass, the badge, the gold
+   and the ribbons. Every text sits on paper, leather or wood, so it reads over any game. Rye reaches
+   .26em below its baseline, so any Rye text that clips (overflow:hidden) carries padding for it. */
+.o-wst{--wsta:var(--a,#E8B04B);--wsta-rgb:var(--a-rgb,232,176,75);--wst-on:var(--a-on,#2A1A0E);--wst-paper:#EAD9B5;--wst-red:#B3261E;--wst-ink:#2A1A0E;--wst-cream:#F7EBCD;--wst-paper-in:inset 0 0 20px rgba(122,74,26,.5),inset 0 0 2px rgba(80,44,14,.65);font-family:"Rye","Rockwell","Georgia",serif;color:var(--wst-ink)}
+.o-wst-paper{background:radial-gradient(120% 110% at 50% 45%,rgba(255,250,232,.5) 0,rgba(255,250,232,0) 60%),radial-gradient(40% 45% at 88% 82%,rgba(156,104,44,.22),rgba(156,104,44,0) 70%),radial-gradient(35% 40% at 10% 16%,rgba(156,104,44,.16),rgba(156,104,44,0) 70%),repeating-linear-gradient(90deg,rgba(120,80,30,.035) 0 1px,rgba(0,0,0,0) 1px 7px),var(--wst-paper);box-shadow:var(--wst-paper-in)}
+.o-wst-name{font-family:"Rye","Rockwell","Georgia",serif;font-weight:400;line-height:1.12;color:var(--wst-ink)}
+.o-wst-cap{font-family:"Special Elite","Courier New",monospace;font-size:11px;line-height:1.25;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;color:rgba(42,26,14,.8)}
+/* A poster headline: sheriff gold with an ink outline and a printed drop. */
+.o-wst-head{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:.14em .18em .22em;margin:-.14em -.18em -.22em;font-family:"Rye","Rockwell","Georgia",serif;font-weight:400;line-height:1;color:var(--wsta);text-shadow:0 -1.5px 0 var(--wst-ink),1.1px -1.1px 0 var(--wst-ink),1.5px 0 0 var(--wst-ink),1.1px 1.1px 0 var(--wst-ink),0 1.5px 0 var(--wst-ink),-1.1px 1.1px 0 var(--wst-ink),-1.5px 0 0 var(--wst-ink),-1.1px -1.1px 0 var(--wst-ink),2px 3px 0 rgba(42,26,14,.45)}
+.o-wst-nail{position:absolute;z-index:3;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:radial-gradient(circle at 36% 32%,#FFF7DA 0 1.3px,var(--wsta) 3.4px,rgba(var(--wsta-rgb),.85) 4.6px,#4A3210 6.5px);box-shadow:0 2px 2px rgba(20,8,0,.55),0 0 0 1px rgba(40,22,8,.5)}
+.o-wst-puff{position:absolute;width:var(--ps,22px);height:var(--ps,22px);margin:calc(var(--ps,22px) / -2) 0 0 calc(var(--ps,22px) / -2);border-radius:50%;background:radial-gradient(circle,rgba(232,208,166,.95) 0,rgba(214,186,140,.55) 42%,rgba(214,186,140,0) 70%);opacity:0;pointer-events:none}
+.o-wst-glint{position:absolute;z-index:4;width:var(--gs,14px);height:var(--gs,14px);margin:calc(var(--gs,14px) / -2) 0 0 calc(var(--gs,14px) / -2);background:#FFFBEA;clip-path:polygon(50% 0,59% 41%,100% 50%,59% 59%,50% 100%,41% 59%,0 50%,41% 41%);opacity:.85;transform:scale(.55) rotate(90deg)}
+/* A rubber stamp in red ink, a little worn. */
+.o-wst-stamp{position:relative;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 9px 3px;border:2.5px solid var(--wst-red);border-radius:5px;color:var(--wst-red);box-shadow:inset 0 0 0 1.5px rgba(234,217,181,.9),inset 0 0 0 3px var(--wst-red);transform:rotate(var(--sr,0deg))}
+.o-wst-stamp::after{content:"";position:absolute;inset:0;background:radial-gradient(circle,rgba(234,217,181,.75) 0 .9px,rgba(234,217,181,0) 1.4px) 0 0/7px 9px,radial-gradient(circle,rgba(234,217,181,.6) 0 .7px,rgba(234,217,181,0) 1.2px) 3px 4px/11px 7px}
+.o-wst-stamp > span{font-family:"Special Elite","Courier New",monospace;font-size:9px;line-height:1.2;letter-spacing:.3em;padding-left:.3em;text-transform:uppercase}
+.o-wst-stamp > b{font-family:"Rye","Rockwell","Georgia",serif;font-weight:400;line-height:1.1;white-space:nowrap}
+@keyframes wstDrop{0%{opacity:0;transform:translateY(-16px)}60%{opacity:1;transform:translateY(3px)}82%{transform:translateY(-1px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes wstPress{from{opacity:0;transform:scale(1.14)}to{opacity:1;transform:scale(1)}}
+@keyframes wstNail{0%{opacity:0;transform:scale(2.4)}60%{opacity:1;transform:scale(.8)}100%{opacity:1;transform:scale(1)}}
+@keyframes wstStamp{0%{opacity:0;transform:rotate(var(--sr,0deg)) scale(1.7)}55%{opacity:1;transform:rotate(var(--sr,0deg)) scale(.94)}78%{transform:rotate(var(--sr,0deg)) scale(1.03)}100%{opacity:1;transform:rotate(var(--sr,0deg)) scale(1)}}
+@keyframes wstPuff{0%{opacity:0;transform:translate(0,0) scale(.3)}25%{opacity:.95}100%{opacity:0;transform:translate(var(--dx,0px),var(--dy,-8px)) scale(1.6)}}
+@keyframes wstGlint{0%{opacity:0;transform:scale(0) rotate(0deg)}45%{opacity:1;transform:scale(1.25) rotate(45deg)}100%{opacity:.85;transform:scale(.55) rotate(90deg)}}
+.playing .o-wst-puff{animation:wstPuff calc(.62s / var(--spd)) cubic-bezier(.2,.7,.3,1) calc(var(--pd,0s) / var(--spd)) both}
+.playing .o-wst-glint{animation:wstGlint calc(.5s / var(--spd)) ease-out calc(var(--gd,0s) / var(--spd)) both}
+
+/* follow — Wanted: the poster slaps onto the wall, one nail, a swing around it, the second nail */
+.o-wstf{height:136px}
+.o-wstf-wallw{position:absolute;left:0;right:0;top:4px;height:128px;filter:drop-shadow(0 10px 12px rgba(0,0,0,.5))}
+.o-wstf-wall{position:absolute;inset:0;clip-path:polygon(.3% 0,98.6% 0,98.6% 25%,99.7% 25%,99.7% 50%,98% 50%,98% 75%,100% 75%,100% 100%,1.6% 100%,1.6% 75%,0 75%,0 50%,2.2% 50%,2.2% 25%,.3% 25%);background:linear-gradient(90deg,rgba(24,10,2,.42),rgba(24,10,2,0) 10%,rgba(24,10,2,0) 90%,rgba(24,10,2,.42)),linear-gradient(180deg,rgba(0,0,0,0) 31px,rgba(30,13,4,.85) 31px 33px,rgba(255,214,160,.16) 33px 34px,rgba(0,0,0,0) 34px 63px,rgba(30,13,4,.85) 63px 65px,rgba(255,214,160,.16) 65px 66px,rgba(0,0,0,0) 66px 95px,rgba(30,13,4,.85) 95px 97px,rgba(255,214,160,.16) 97px 98px,rgba(0,0,0,0) 98px),radial-gradient(14px 5px at 12% 48px,rgba(40,18,6,.5),rgba(40,18,6,0)),radial-gradient(18px 6px at 90% 112px,rgba(40,18,6,.45),rgba(40,18,6,0)),repeating-linear-gradient(180deg,rgba(40,18,6,.14) 0 1px,rgba(0,0,0,0) 1px 5px,rgba(255,226,180,.05) 5px 6px,rgba(0,0,0,0) 6px 11px),linear-gradient(180deg,#8D5B34 0 32px,#7B4E2B 32px 64px,#93613A 64px 96px,#80522E 96px)}
+.o-wstf-pw{position:absolute;left:35px;top:13px;width:350px;height:110px;transform-origin:14px 11px;transform:rotate(-1deg);filter:drop-shadow(0 5px 5px rgba(28,10,0,.55))}
+.o-wstf-poster{position:absolute;inset:0;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:10px 16px 10px 14px;clip-path:polygon(0 1.2%,24% 0,51% 1.4%,77% .2%,100% 1.2%,99.3% 36%,100% 70%,98.8% 100%,64% 98.4%,33% 100%,1.2% 98.6%,.5% 64%)}
+.o-wstf-mug{position:relative;flex:none;width:62px;height:84px;overflow:hidden;background:repeating-linear-gradient(135deg,rgba(92,56,24,.14) 0 1px,rgba(0,0,0,0) 1px 4px),linear-gradient(180deg,#E6D3AB,#CDB386)}
+.o-wstf-mug::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 0 2px var(--wst-ink),inset 0 0 0 4px #EADAB6,inset 0 0 0 5px rgba(42,26,14,.55)}
+.o-wstf-mug > svg{position:absolute;left:5px;bottom:0;display:block;width:52px;height:70px}
+.o-wstf-fig{fill:#3A2513}
+.o-wstf-band{fill:var(--wst-red)}
+.o-wstf-eye{fill:#EFE0BE}
+.o-wstf-txt{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.o-wstf-head{font-size:calc(34px * var(--fit,1));letter-spacing:.06em;text-transform:uppercase}
+.o-wstf-name{width:100%;margin-top:6px;font-size:calc(26px * var(--fit,1))}
+.o-wstf-for{margin-top:6px}
+@keyframes wstWallIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes wstHang{
+  0%{opacity:0;transform:translateY(-6px) rotate(-2.5deg) scale(1.08);animation-timing-function:cubic-bezier(.55,0,1,.45)}
+  20%{opacity:1;transform:translateY(0) rotate(-2.5deg) scale(.985)}
+  26%{transform:translateY(0) rotate(-2.5deg) scale(1.004)}
+  32%,37%{transform:translateY(0) rotate(-2.5deg) scale(1)}
+  40%{transform:translateY(1.5px) rotate(-2.3deg) scale(1)}
+  54%{transform:translateY(0) rotate(1.4deg) scale(1)}
+  67%{transform:translateY(0) rotate(-1.8deg) scale(1)}
+  76%{transform:translateY(0) rotate(-.6deg) scale(1)}
+  81%{transform:translateY(0) rotate(-1deg) scale(1)}
+  84%{transform:translateY(1.5px) rotate(-1deg) scale(1)}
+  90%,100%{opacity:1;transform:translateY(0) rotate(-1deg) scale(1)}
+}
+@keyframes wstTearDown{0%{transform:none}25%{transform:translateY(-4px) rotate(-1deg)}100%{opacity:0;transform:translateY(30px) rotate(3deg)}}
+.playing .o-wstf-wallw{animation:wstWallIn calc(.24s / var(--spd)) ease-out both}
+.playing .o-wstf-pw{animation:wstHang calc(1.15s / var(--spd)) ease-in-out calc(.04s / var(--spd)) both}
+.playing .o-wstf-nail{animation:wstNail calc(.18s / var(--spd)) cubic-bezier(.5,0,.7,1) calc(var(--nd) / var(--spd)) both}
+
+/* subscription — Sheriff badge: the leather patch drops, the star spins in and pins on, the shine follows the tier */
+.o-wsts{height:184px}
+.o-wsts.t1{--fl:.2;--fd:.1;--fl2:.12;--fd2:.08}
+.o-wsts.t2{--fl:.38;--fd:.2;--fl2:.24;--fd2:.16}
+.o-wsts.t3{--fl:.55;--fd:.26;--fl2:.36;--fd2:.2}
+.o-wsts-patch{position:absolute;left:2px;right:2px;top:28px;height:138px;border-radius:22px 16px 24px 18px;background:radial-gradient(circle at 30% 30%,rgba(20,8,0,.16) 0 1px,rgba(20,8,0,0) 1.6px) 0 0/6px 6px,radial-gradient(circle at 70% 60%,rgba(255,220,180,.07) 0 1px,rgba(255,220,180,0) 1.6px) 0 0/9px 7px,radial-gradient(130% 160% at 25% 10%,#8D5833 0%,#6B3E1E 46%,#4A2912 100%);box-shadow:0 14px 28px rgba(0,0,0,.55),inset 0 0 0 1px rgba(20,8,0,.55),inset 0 2px 1px rgba(255,214,170,.2),inset 0 -12px 20px rgba(20,8,0,.35)}
+.o-wsts-patch::before{content:"";position:absolute;inset:7px;border:2px dashed rgba(240,214,170,.5);border-radius:16px 11px 18px 12px}
+.o-wsts-halo{position:absolute;left:-12px;top:-10px;width:192px;height:192px;border-radius:50%;background:radial-gradient(circle,rgba(var(--wsta-rgb),.55) 0,rgba(var(--wsta-rgb),.2) 40%,rgba(var(--wsta-rgb),0) 68%)}
+.o-wsts-bw{position:absolute;left:8px;top:10px;width:152px;height:152px;filter:drop-shadow(0 7px 5px rgba(24,10,0,.55))}
+.o-wsts-spin{position:absolute;inset:0}
+/* The star: twelve facets (light and dark per point) and a raised inner star, all in the accent. */
+.o-wsts-star,.o-wsts-star::before{position:absolute;clip-path:polygon(50% 0,65% 24%,93.3% 25%,80% 50%,93.3% 75%,65% 76%,50% 100%,35% 76%,6.7% 75%,20% 50%,6.7% 25%,35% 24%)}
+.o-wsts-star{inset:0;background:linear-gradient(135deg,rgba(255,255,255,.26),rgba(255,255,255,0) 48%,rgba(40,20,0,.26)),repeating-conic-gradient(from 0deg,rgba(255,255,255,var(--fl,.38)) 0 30deg,rgba(60,30,0,var(--fd,.2)) 30deg 60deg),var(--wsta)}
+.o-wsts-star::before{content:"";inset:17%;background:linear-gradient(315deg,rgba(255,255,255,.24),rgba(255,255,255,0) 50%,rgba(40,20,0,.2)),repeating-conic-gradient(from 0deg,rgba(60,30,0,var(--fd2,.16)) 0 30deg,rgba(255,255,255,var(--fl2,.24)) 30deg 60deg),var(--wsta)}
+.o-wsts-shine{position:absolute;top:-10%;bottom:-10%;left:0;width:42%;background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.8) 50%,rgba(255,255,255,0));transform:translateX(-140%) skewX(-16deg)}
+.o-wsts-ball{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:radial-gradient(circle at 36% 32%,rgba(255,255,255,.9) 0 1.5px,rgba(255,255,255,0) 6px),radial-gradient(circle,rgba(50,24,0,0) 45%,rgba(50,24,0,.42) 100%),var(--wsta);box-shadow:0 0 0 1px rgba(50,24,0,.45)}
+.o-wsts-disc{position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 38% 32%,rgba(255,255,255,.42),rgba(255,255,255,0) 58%),radial-gradient(circle,rgba(50,24,0,0) 62%,rgba(50,24,0,.28) 100%),var(--wsta);color:var(--wst-on);box-shadow:0 0 0 2px rgba(50,24,0,.5),0 0 0 4.5px var(--wsta),0 0 0 6px rgba(50,24,0,.42),inset 0 1px 2px rgba(255,255,255,.4)}
+.o-wsts-num{display:block;line-height:1;font-weight:400;text-shadow:0 1px 0 rgba(255,255,255,.3)}
+.o-wsts-unit{margin-top:3px;font-family:"Special Elite","Courier New",monospace;font-size:8.5px;line-height:1;letter-spacing:.14em;text-transform:uppercase;opacity:.85}
+.o-wsts-txt{position:absolute;left:170px;right:16px;top:28px;height:138px;display:flex;flex-direction:column;justify-content:center}
+.o-wsts-lbl{font-size:calc(19px * var(--fit,1));line-height:1.2;color:var(--wst-cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.1em 0 .2em;margin:-.1em 0 -.2em;text-shadow:0 2px 0 rgba(20,8,0,.55);transform-origin:0 50%}
+.o-wsts-name{margin-top:4px;font-size:calc(25px * var(--fit,1));color:#FFF6DE;text-shadow:0 2px 0 rgba(20,8,0,.6);transform-origin:0 50%}
+.o-wsts-tier{margin-top:8px;color:rgba(247,235,205,.82);transform-origin:0 50%}
+.o-wsts-msg{margin-top:5px;font-family:"Special Elite","Courier New",monospace;font-size:12.5px;line-height:1.3;color:rgba(247,235,205,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transform-origin:0 50%}
+@keyframes wstSpinIn{0%{opacity:0;transform:translate(-26px,-28px) rotate(-420deg) scale(.45)}25%{opacity:1}80%{transform:translate(0,0) rotate(6deg) scale(1.1)}91%{transform:translate(0,0) rotate(-2deg) scale(.96)}100%{opacity:1;transform:translate(0,0) rotate(0deg) scale(1)}}
+@keyframes wstHalo{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
+@keyframes wstSheen{from{transform:translateX(-140%) skewX(-16deg)}to{transform:translateX(280%) skewX(-16deg)}}
+@keyframes wstBadgeOut{0%{transform:none}30%{transform:translateY(0) scale(1.03)}100%{opacity:0;transform:translateY(18px) scale(.92)}}
+.playing .o-wsts-patch{animation:wstDrop calc(.4s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-wsts-spin{animation:wstSpinIn calc(.62s / var(--spd)) cubic-bezier(.25,.75,.35,1) calc(.14s / var(--spd)) both}
+.playing .o-wsts-halo{animation:wstHalo calc(.5s / var(--spd)) ease-out calc(.8s / var(--spd)) both}
+.playing .o-wsts.t2 .o-wsts-shine,.playing .o-wsts.t3 .o-wsts-shine{animation:wstSheen calc(.7s / var(--spd)) cubic-bezier(.4,0,.3,1) calc(1.06s / var(--spd)) both}
+.playing .o-wsts-lbl{animation:wstPress calc(.26s / var(--spd)) ease-out calc(.78s / var(--spd)) both}
+.playing .o-wsts-name{animation:wstPress calc(.26s / var(--spd)) ease-out calc(.88s / var(--spd)) both}
+.playing .o-wsts-tier{animation:wstPress calc(.26s / var(--spd)) ease-out calc(.98s / var(--spd)) both}
+.playing .o-wsts-msg{animation:wstPress calc(.26s / var(--spd)) ease-out calc(1.06s / var(--spd)) both}
+
+/* bits — Gold pan: nuggets tumble in (more for more bits), the pan shakes, the gold glints */
+.o-wstb{height:164px}
+.o-wstb-pan{position:absolute;left:2px;top:52px;width:196px;height:104px;transform-origin:50% 72%}
+.o-wstb-shadow{position:absolute;left:12px;right:12px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.6),rgba(0,0,0,0))}
+.o-wstb-rim{position:absolute;left:0;right:0;top:12px;height:80px;border-radius:50%;background:radial-gradient(70% 80% at 50% 28%,#CFC7B9 0%,#A0988B 38%,#6E675E 72%,#47423B 100%);box-shadow:0 2px 0 #2B2722,inset 0 2px 0 rgba(255,255,255,.42),inset 0 -3px 0 rgba(0,0,0,.35)}
+.o-wstb-bowl{position:absolute;left:18px;right:18px;top:22px;height:58px;border-radius:50%;background:radial-gradient(70% 60% at 50% 72%,#7C756B 0%,#57524A 50%,#36322D 100%);box-shadow:inset 0 7px 10px rgba(0,0,0,.6),inset 0 -2px 0 rgba(255,255,255,.14)}
+.o-wstb-pile{position:absolute;left:18px;top:22px;width:160px;height:58px}
+.o-wstb-lip{position:absolute;left:0;right:0;top:12px;height:80px;border-radius:50%;box-shadow:inset 0 -9px 0 #8F887D,inset 0 -11px 0 rgba(40,36,30,.55);pointer-events:none}
+.o-wstb-nug{position:absolute;left:var(--x);top:var(--y);width:var(--s);height:calc(var(--s) * .8);margin:calc(var(--s) * -.4) 0 0 calc(var(--s) * -.5);border-radius:46% 54% 42% 58% / 56% 48% 52% 44%;background:radial-gradient(circle at 32% 30%,rgba(255,250,225,.95) 0 9%,rgba(255,250,225,0) 32%),radial-gradient(circle at 60% 70%,rgba(80,46,0,0) 28%,rgba(80,46,0,.55) 82%),var(--wsta);box-shadow:inset 0 0 0 1px rgba(90,52,6,.5),0 2px 1px rgba(30,16,0,.45);transform:rotate(var(--r))}
+.o-wstb-nug.k1{border-radius:58% 42% 50% 50% / 46% 58% 42% 54%}
+.o-wstb-nug.k2{border-radius:40% 60% 62% 38% / 52% 44% 56% 48%}
+.o-wstb-card{position:absolute;left:204px;right:2px;top:22px;height:122px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 14px 10px;text-align:center;border-radius:3px;transform:rotate(1.2deg);box-shadow:var(--wst-paper-in),0 10px 18px rgba(0,0,0,.5)}
+.o-wstb-lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.o-wstb-amt{display:flex;align-items:flex-end;justify-content:center;margin-top:4px;line-height:1;color:var(--wst-ink)}
+.o-wstb-plus{display:block;line-height:1}
+.o-wstb-unit{display:block;margin-left:7px;font-size:17px;line-height:1;color:rgba(42,26,14,.78)}
+.o-wstb-name{width:100%;margin-top:7px;font-size:calc(20px * var(--fit,1))}
+@keyframes wstPanIn{0%{opacity:0;transform:translateY(14px) scale(.96)}70%{opacity:1;transform:translateY(-2px) scale(1)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes wstTumble{0%{opacity:0;transform:translate(var(--fx,0px),-110px) rotate(calc(var(--r) - 160deg))}18%{opacity:1}72%{transform:translate(0,2px) rotate(var(--r))}86%{transform:translate(0,-2px) rotate(var(--r))}100%{opacity:1;transform:translate(0,0) rotate(var(--r))}}
+@keyframes wstShake{0%,100%{transform:translateX(0) rotate(0deg)}16%{transform:translateX(-4px) rotate(-3deg)}36%{transform:translateX(4px) rotate(3deg)}56%{transform:translateX(-3px) rotate(-2deg)}76%{transform:translateX(2px) rotate(1deg)}}
+@keyframes wstCardIn{0%{opacity:0;transform:translateY(-16px) rotate(1.2deg)}60%{opacity:1;transform:translateY(3px) rotate(1.2deg)}82%{transform:translateY(-1px) rotate(1.2deg)}100%{opacity:1;transform:translateY(0) rotate(1.2deg)}}
+@keyframes wstPanOut{0%{transform:none}30%{transform:translateY(-5px)}100%{opacity:0;transform:translateY(22px)}}
+.playing .o-wstb-pan{animation:wstPanIn calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) both,wstShake calc(.44s / var(--spd)) ease-in-out calc(var(--sh) / var(--spd))}
+.playing .o-wstb-nug{animation:wstTumble calc(.34s / var(--spd)) ease-in calc(var(--nd) / var(--spd)) both}
+.playing .o-wstb-card{animation:wstCardIn calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.08s / var(--spd)) both}
+
+/* donation — Telegram: the slip feeds out of the telegraph, the message types with STOPs, PAID is stamped */
+.o-wstd{height:210px}
+.o-wstd-dev{position:absolute;left:50%;top:12px;z-index:1;width:330px;height:34px;margin-left:-165px;border-radius:8px;background:repeating-linear-gradient(90deg,rgba(255,220,170,.05) 0 1px,rgba(0,0,0,0) 1px 9px),linear-gradient(180deg,#6A4120,#4A2B13 60%,#3A200D);box-shadow:inset 0 3px 0 rgba(var(--wsta-rgb),.9),inset 0 4px 0 rgba(40,20,0,.45),inset 0 -2px 0 rgba(var(--wsta-rgb),.7),0 8px 14px rgba(0,0,0,.5)}
+.o-wstd-dev::before,.o-wstd-dev::after{content:"";position:absolute;top:12px;width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFF5D2 0 1px,var(--wsta) 3px,#5A3A0E 5px);box-shadow:0 1px 1px rgba(0,0,0,.6)}
+.o-wstd-dev::before{left:10px}
+.o-wstd-dev::after{right:10px}
+.o-wstd-slot{position:absolute;left:26px;right:26px;bottom:3px;height:6px;border-radius:3px;background:#140904;box-shadow:inset 0 1px 2px #000,0 1px 0 rgba(255,220,170,.15)}
+.o-wstd-key{position:absolute;right:36px;top:-11px;width:54px;height:16px}
+.o-wstd-post{position:absolute;right:2px;bottom:0;width:12px;height:10px;border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--wsta),#6A4A12)}
+.o-wstd-lever{position:absolute;right:6px;top:2px;width:44px;height:5px;border-radius:3px;background:linear-gradient(180deg,#FFF0C2,var(--wsta) 45%,#6A4A12);transform-origin:calc(100% - 2px) 50%;box-shadow:0 1px 1px rgba(0,0,0,.5)}
+.o-wstd-knob{position:absolute;left:-6px;top:-5px;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#8A6A4A 0 2px,#2A1A0E 7px);box-shadow:0 2px 2px rgba(0,0,0,.5)}
+.o-wstd-feed{position:absolute;left:50%;top:40px;z-index:2;width:300px;margin-left:-150px;overflow:hidden;filter:drop-shadow(0 8px 8px rgba(0,0,0,.45))}
+.o-wstd-slip{position:relative;box-sizing:border-box;width:300px;padding:8px 14px 11px}
+.o-wstd-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;height:46px}
+.o-wstd-title{flex:1;min-width:0;padding-top:6px}
+.o-wstd-tt{font-size:calc(19px * var(--fit,1));line-height:1.1;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.1em 0 .2em;margin:-.1em 0 -.2em}
+.o-wstd-rule{display:block;height:2px;margin-top:5px;border-top:1.5px solid rgba(42,26,14,.75);border-bottom:1px solid rgba(42,26,14,.45)}
+.o-wstd-rule.wide{margin:5px 0 6px}
+.o-wstd-stamp{--sr:-6deg;flex:none;margin:1px 2px 0 0}
+.o-wstd-from{display:flex;align-items:baseline;gap:9px;min-width:0}
+.o-wstd-from > .o-wst-cap{flex:none}
+.o-wstd-name{flex:1;min-width:0;font-size:calc(23px * var(--fit,1))}
+.o-wstd-msg{font-family:"Special Elite","Courier New",monospace;font-size:13.5px;line-height:16px;letter-spacing:.02em;text-transform:uppercase;color:var(--wst-ink);max-height:64px;overflow:hidden;overflow-wrap:anywhere}
+@keyframes wstFeed{0%{transform:translateY(-100%)}38%{transform:translateY(-56%)}48%{transform:translateY(-52%)}100%{transform:translateY(0)}}
+@keyframes wstTap{0%,100%{transform:rotate(0deg)}45%{transform:rotate(-8deg)}}
+@keyframes wstJolt{0%,100%{transform:translateY(0)}35%{transform:translateY(2px)}}
+@keyframes wstSlipOut{to{opacity:0;transform:translateY(-16px)}}
+.playing .o-wstd-dev{animation:wstDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-wstd-slip{animation:wstFeed calc(.52s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(.14s / var(--spd)) both}
+.playing .o-wstd-lever{animation:wstTap calc(.14s / var(--spd)) ease-in-out calc(.6s / var(--spd)) var(--taps,4)}
+.playing .o-wstd-stamp{animation:wstStamp calc(.3s / var(--spd)) cubic-bezier(.5,0,.6,1) calc(var(--st) / var(--spd)) both}
+.playing .o-wstd-feed{animation:wstJolt calc(.22s / var(--spd)) ease-out calc((var(--st) + .15s) / var(--spd))}
+
+/* raid — Posse: riders gallop in at sunset and pull up in the dust, one per raider up to eight */
+.o-wstr{height:196px}
+.o-wstr-scene{position:absolute;left:0;right:0;top:0;height:116px;overflow:hidden;border-radius:12px;background:linear-gradient(180deg,#F4CC80 0%,#EFA457 40%,#DC6B32 70%,#B44A22 100%);box-shadow:0 12px 24px rgba(0,0,0,.5)}
+.o-wstr-scene::after{content:"";position:absolute;inset:0;z-index:4;border-radius:inherit;box-shadow:inset 0 0 0 3px rgba(42,22,8,.55),inset 0 0 22px rgba(70,24,4,.4);pointer-events:none}
+.o-wstr-sun{position:absolute;left:62%;top:22px;width:58px;height:58px;margin-left:-29px;border-radius:50%;background:radial-gradient(circle,#FFF6DA 0,#FFE3A0 45%,#F7C25E 70%,rgba(247,194,94,0) 72%);box-shadow:0 0 36px 10px rgba(255,214,140,.45)}
+.o-wstr-mesa{position:absolute;left:0;right:0;bottom:28px;height:40px;background:#A2492A;opacity:.92;clip-path:polygon(0 100%,0 52%,6% 52%,8% 18%,20% 18%,23% 50%,33% 56%,35% 100%,54% 100%,56% 46%,59% 14%,71% 14%,74% 46%,78% 62%,100% 62%,100% 100%)}
+.o-wstr-ground{position:absolute;left:0;right:0;bottom:0;height:30px;background:linear-gradient(180deg,#8A3F1E,#5A2810);box-shadow:inset 0 2px 0 rgba(255,200,140,.22)}
+.o-wstr-cactus{position:absolute;right:18px;bottom:22px;display:block;width:22px;height:40px}
+.o-wstr-cactus > path{fill:#3B1B0C}
+.o-wstr-riders{position:absolute;left:0;right:0;bottom:12px;height:56px;z-index:2}
+.o-wstr-rider{position:absolute;bottom:0;left:var(--x);width:46px;height:40px}
+.o-wstr-rider.back{bottom:10px;width:36.8px;height:32px;--rc:#3D1F10}
+.o-wstr-far{position:absolute;bottom:var(--b);left:var(--x);z-index:1;width:17px;height:14px;opacity:.85;--rc:#4A220F}
+.o-wstr-horse{display:block;width:100%;height:100%;overflow:visible;transform-origin:50% 90%}
+.o-wstr-horse > path{fill:var(--rc,#1E0F07)}
+.o-wstr-sign{position:absolute;left:4px;right:4px;top:122px;height:70px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 32px;border-radius:6px;background:repeating-linear-gradient(180deg,rgba(255,220,170,.05) 0 1px,rgba(0,0,0,0) 1px 6px,rgba(20,8,0,.12) 6px 7px,rgba(0,0,0,0) 7px 13px),linear-gradient(180deg,#6A4022,#4C2C14);box-shadow:0 10px 18px rgba(0,0,0,.5),inset 0 0 0 1px rgba(20,8,0,.6),inset 0 2px 0 rgba(255,220,170,.16),inset 0 -6px 12px rgba(20,8,0,.35)}
+.o-wstr-name{width:100%;font-size:calc(23px * var(--fit,1));color:#FFF3D6;text-align:center;text-shadow:0 2px 0 rgba(20,8,0,.6)}
+.o-wstr-line{display:flex;align-items:center;justify-content:center;gap:8px;max-width:100%;margin-top:5px;font-family:"Special Elite","Courier New",monospace;font-size:13px;line-height:1.2;letter-spacing:.14em;text-transform:uppercase;color:rgba(247,235,205,.9);white-space:nowrap}
+.o-wstr-lbl{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.o-wstr-sep{flex:none;width:5px;height:5px;transform:rotate(45deg);background:var(--wsta)}
+.o-wstr-num{flex:none;font-family:"Rye","Rockwell","Georgia",serif;font-weight:400;font-size:21px;letter-spacing:0;color:var(--wsta);text-shadow:0 2px 0 rgba(20,8,0,.7)}
+.o-wstr-unit{flex:none}
+@keyframes wstRideIn{from{transform:translateX(calc(-1 * var(--x) - 80px))}to{transform:translateX(0)}}
+@keyframes wstGallop{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-3px) rotate(-4deg)}}
+@keyframes wstFarIn{from{opacity:0;transform:translateY(6px)}to{opacity:.85;transform:translateY(0)}}
+@keyframes wstRideOff{to{opacity:0;transform:translateX(44px)}}
+.playing .o-wstr-scene{animation:wstDrop calc(.38s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-wstr-sign{animation:wstDrop calc(.38s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.1s / var(--spd)) both}
+.playing .o-wstr-rider{animation:wstRideIn calc(.75s / var(--spd)) cubic-bezier(.2,.6,.35,1) calc(var(--rd) / var(--spd)) both}
+.playing .o-wstr-rider > .o-wstr-horse{animation:wstGallop calc(.19s / var(--spd)) ease-in-out calc(var(--rd) / var(--spd)) 4}
+.playing .o-wstr-far{animation:wstFarIn calc(.5s / var(--spd)) ease-out calc(var(--fd) / var(--spd)) both}
+
+/* giveaway — Saloon doors: the doors rattle, burst open and swing; behind them, the REWARD poster */
+.o-wstg{height:214px}
+.o-wstg-pw{position:absolute;left:65px;top:18px;width:290px;height:178px;filter:drop-shadow(0 10px 12px rgba(0,0,0,.5))}
+.o-wstg-poster{position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 18px 12px;text-align:center;clip-path:polygon(0 1%,30% 0,62% 1.2%,100% .4%,99.4% 40%,100% 78%,99.2% 100%,58% 98.8%,22% 100%,.6% 99%,0 60%)}
+.o-wstg-head{display:flex;align-items:center;justify-content:center;gap:9px;max-width:100%}
+.o-wstg-head::before,.o-wstg-head::after{content:"";flex:none;width:13px;height:13px;background:var(--wst-ink);clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
+.o-wstg-ht{min-width:0;font-size:calc(38px * var(--fit,1));letter-spacing:.06em;text-transform:uppercase}
+.o-wstg-sub{display:flex;align-items:center;gap:8px;width:100%;margin-top:6px}
+.o-wstg-sub::before,.o-wstg-sub::after{content:"";flex:1;border-top:1.5px solid rgba(42,26,14,.45)}
+.o-wstg-name{width:100%;margin-top:4px;font-size:calc(26px * var(--fit,1))}
+.o-wstg-bounty{--sr:-1.5deg;display:flex;align-items:baseline;gap:8px;max-width:100%;box-sizing:border-box;margin-top:9px;padding:5px 22px 6px;background:var(--wsta);color:var(--wst-on);clip-path:polygon(0 0,100% 0,95% 50%,100% 100%,0 100%,5% 50%);transform:rotate(var(--sr))}
+.o-wstg-bounty > .o-wst-cap{flex:none;color:inherit;opacity:.8}
+.o-wstg-prize{min-width:0;font-family:"Rye","Rockwell","Georgia",serif;font-weight:400;font-size:17px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-wstg-door{position:absolute;top:50px;z-index:2;width:194px;height:128px}
+.o-wstg-door.l{left:16px;transform-origin:0 50%;transform:perspective(700px) rotateY(-80deg)}
+.o-wstg-door.r{right:16px;transform-origin:100% 50%;transform:perspective(700px) rotateY(80deg)}
+.o-wstg-leaf{position:absolute;inset:0;background:linear-gradient(90deg,rgba(20,8,0,.3),rgba(20,8,0,0) 10%,rgba(20,8,0,0) 90%,rgba(20,8,0,.35)),repeating-linear-gradient(90deg,rgba(255,220,170,.05) 0 1px,rgba(0,0,0,0) 1px 8px),linear-gradient(180deg,#A06E3E,#7C4D27);clip-path:polygon(0 0,25% 1.5%,50% 6%,75% 13%,100% 24%,100% 100%,0 100%)}
+.o-wstg-door.r .o-wstg-leaf{clip-path:polygon(0 24%,25% 13%,50% 6%,75% 1.5%,100% 0,100% 100%,0 100%)}
+.o-wstg-leaf::before{content:"";position:absolute;left:14px;right:14px;top:44px;bottom:14px;border-radius:2px;background:repeating-linear-gradient(180deg,#9C6A3B 0 5px,#704422 5px 7px,#4A2A12 7px 8px);box-shadow:inset 0 0 0 2px rgba(40,18,4,.6),inset 0 3px 4px rgba(0,0,0,.35)}
+.o-wstg-leaf::after{content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(20,8,0,.35)}
+.o-wstg-hinge{position:absolute;width:9px;height:16px;border-radius:2px;background:linear-gradient(90deg,#6A4A12,var(--wsta) 50%,#FFF0C2);box-shadow:0 1px 1px rgba(0,0,0,.5)}
+.o-wstg-door.l .o-wstg-hinge{left:-2px}
+.o-wstg-door.r .o-wstg-hinge{right:-2px}
+.o-wstg-hinge.t{top:20px}
+.o-wstg-hinge.b{bottom:18px}
+@keyframes wstPop{0%{opacity:0;transform:scale(.86)}55%{opacity:1;transform:scale(1.04)}100%{opacity:1;transform:scale(1)}}
+@keyframes wstDoorL{
+  0%{opacity:0;transform:perspective(700px) rotateY(0deg)}
+  8%{opacity:1;transform:perspective(700px) rotateY(0deg)}
+  15%{transform:perspective(700px) rotateY(-9deg)}
+  22%{transform:perspective(700px) rotateY(-1deg)}
+  28%{transform:perspective(700px) rotateY(-12deg)}
+  33%{transform:perspective(700px) rotateY(0deg);animation-timing-function:cubic-bezier(.15,.85,.35,1)}
+  46%{transform:perspective(700px) rotateY(-88deg)}
+  62%{transform:perspective(700px) rotateY(-72deg)}
+  76%{transform:perspective(700px) rotateY(-85deg)}
+  88%{transform:perspective(700px) rotateY(-78deg)}
+  100%{opacity:1;transform:perspective(700px) rotateY(-80deg)}
+}
+@keyframes wstDoorR{
+  0%{opacity:0;transform:perspective(700px) rotateY(0deg)}
+  8%{opacity:1;transform:perspective(700px) rotateY(0deg)}
+  15%{transform:perspective(700px) rotateY(9deg)}
+  22%{transform:perspective(700px) rotateY(1deg)}
+  28%{transform:perspective(700px) rotateY(12deg)}
+  33%{transform:perspective(700px) rotateY(0deg);animation-timing-function:cubic-bezier(.15,.85,.35,1)}
+  46%{transform:perspective(700px) rotateY(88deg)}
+  62%{transform:perspective(700px) rotateY(72deg)}
+  76%{transform:perspective(700px) rotateY(85deg)}
+  88%{transform:perspective(700px) rotateY(78deg)}
+  100%{opacity:1;transform:perspective(700px) rotateY(80deg)}
+}
+@keyframes wstSaloonOut{0%{transform:none}35%{transform:translateY(0) scale(1.03)}100%{opacity:0;transform:translateY(8px) scale(.88)}}
+.playing .o-wstg-pw{animation:wstPop calc(.38s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.42s / var(--spd)) both}
+.playing .o-wstg-door.l{animation:wstDoorL calc(1.15s / var(--spd)) ease-in-out both}
+.playing .o-wstg-door.r{animation:wstDoorR calc(1.15s / var(--spd)) ease-in-out both}
+.playing .o-wstg-bounty{animation:wstStamp calc(.3s / var(--spd)) cubic-bezier(.5,0,.6,1) calc(.95s / var(--spd)) both}
