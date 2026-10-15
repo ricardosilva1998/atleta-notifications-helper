@@ -35,7 +35,7 @@ function get(urlPath) {
       let text = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { text += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, text }));
+      res.on('end', () => resolve({ status: res.statusCode, text, headers: res.headers }));
     }).on('error', reject);
   });
 }
@@ -359,5 +359,32 @@ describe('whether the alert overlay is open in OBS', () => {
     disable(id);
     await until(() => alerts.ended, 'the stream was ended');
     await until(() => !presence.isOpen(id), 'a stream the server ended no longer counts as open');
+  });
+});
+
+describe('the alert looks, joined (services/alertStyleBundle.js)', () => {
+  const { bundle } = require('../services/alertStyleBundle');
+
+  test('/overlay/objects/styles.js and styles.css answer the joined family files, kept by the browser for a day', async () => {
+    const js = await get('/overlay/objects/styles.js?v=' + bundle().version);
+    assert.equal(js.status, 200);
+    assert.match(js.headers['content-type'], /^application\/javascript/);
+    assert.equal(js.headers['cache-control'], 'public, max-age=86400');
+    assert.equal(js.text, bundle().js);
+    const css = await get('/overlay/objects/styles.css');
+    assert.equal(css.status, 200);
+    assert.match(css.headers['content-type'], /^text\/css/);
+    assert.equal(css.text, bundle().css);
+  });
+
+  test('the overlay page loads the registry, the kit and the joined looks, in that order, at their version', async () => {
+    const { token } = addStreamer();
+    const { text } = await get(`/overlay/${token}`);
+    const v = bundle().version;
+    const order = ['/overlay/objects/index.js', '/overlay/objects/kit.js', `/overlay/objects/styles.js?v=${v}`, '/overlay/placement.js', '/overlay/overlay.js']
+      .map((src) => text.indexOf(`<script src="${src}"></script>`));
+    assert.ok(order.every((i) => i > 0), JSON.stringify(order));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'in that order');
+    assert.ok(text.indexOf(`<link rel="stylesheet" href="/overlay/objects/styles.css?v=${v}">`) > text.indexOf('<link rel="stylesheet" href="/overlay/objects/objects.css">'));
   });
 });

@@ -155,6 +155,8 @@ const accountPage = {
   notificationsByType: ['twitch_live', 'twitch_clip', 'twitch_recap', 'youtube_video', 'youtube_live', 'weekly_digest', 'twitch_milestone', 'other_type'].map((type, i) => ({ type, count: i + 1 })),
 };
 const statsPage = { total: 20, success_count: 18, fail_count: 2, live_count: 5, clip_count: 4, recap_count: 3, milestone_count: 2, youtube_video_count: 3, youtube_live_count: 1, digest_count: 2 };
+// The builder's Style section data, as routes/dashboard.js hands it (an empty catalogue is enough here).
+const STYLE_DATA = JSON.stringify({ defaults: {}, gallery: {}, looks: {}, families: [], sounds: [], fonts: ['System Default'] });
 const PAGE_LOCALS = {
   account: [accountPage, { ...accountPage, streamer: { ...streamer, created_at: null, profile_picture: null, discord_avatar: null }, notificationsOverTime: [], notificationsByType: [], feedbackMsg: undefined }],
   'report-issue': [{ streamer }],
@@ -188,8 +190,8 @@ const PAGE_LOCALS = {
   ],
   'overlay-builder': [
     { streamer, designs: '[]', sponsors: JSON.stringify([{ id: 1, filename: 'a.png', display_name: 'SponsorName', display_duration: 30, enabled: 1, image_scale: 1 }]),
-      eventDefaults: JSON.stringify(EVENT_DEFAULTS), channel: '"SOMESTREAMER"', overlayUrl: 'https://app.test/overlay/tok123', streamThumbnail: 'https://img.test/t.jpg', features: { youtube: true, kick: true } },
-    { streamer, designs: '[]', sponsors: '[]', eventDefaults: JSON.stringify(EVENT_DEFAULTS), channel: '""', overlayUrl: null, streamThumbnail: null, features: { youtube: false } },
+      eventDefaults: JSON.stringify(EVENT_DEFAULTS), stylesVersion: 'abc123def456', styleData: STYLE_DATA, styleFontsHref: 'https://fonts.googleapis.com/css2?family=Kanit&display=swap', channel: '"SOMESTREAMER"', overlayUrl: 'https://app.test/overlay/tok123', streamThumbnail: 'https://img.test/t.jpg', features: { youtube: true, kick: true } },
+    { streamer, designs: '[]', sponsors: '[]', eventDefaults: JSON.stringify(EVENT_DEFAULTS), stylesVersion: 'abc123def456', styleData: STYLE_DATA, styleFontsHref: 'https://fonts.googleapis.com/css2?family=Kanit&display=swap', channel: '""', overlayUrl: null, streamThumbnail: null, features: { youtube: false } },
   ],
   'chatbot-config': [
     chatbotPage,

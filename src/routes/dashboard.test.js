@@ -324,6 +324,9 @@ function addStreamer(over = {}) {
   return Number(info.lastInsertRowid);
 }
 const discordId = (streamerId) => db.getStreamerById(streamerId).discord_user_id;
+// andre_vilela_, for whom the C1 donation look was made (found by his Twitch user id, which is unique)
+const c1Owner = () => db.db.prepare('SELECT id FROM streamers WHERE twitch_user_id = ?').get('632557806')?.id
+  ?? addStreamer({ twitch_username: 'andre_vilela_', twitch_user_id: '632557806' });
 const count = (table, where = '1', ...params) => db.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).get(...params).n;
 const messageOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('msg');
 
@@ -1969,6 +1972,18 @@ describe('the test buttons', () => {
       }
     });
 
+    test('a test from the Overlay Builder (chat: false) plays the alert and posts nothing in Twitch chat', async () => {
+      for (const type of TWITCH_TYPES) {
+        chatCalls.length = 0;
+        const id = addStreamer({ twitch_username: 'somechannel', overlay_enabled: 1 });
+        let res;
+        const events = await overlayDuring(id, async () => { res = await post(`/dashboard/overlay/test/${type}`, id, { body: { chat: false } }); });
+        assert.equal(res.status, 200, type);
+        assert.equal(events.length, 1, `${type}: the alert is played`);
+        assert.deepEqual(chatCalls, [], `${type}: nothing is posted in chat`);
+      }
+    });
+
     test('a sample is not changed by being sent: the next test sends the same alert', async () => {
       const a = addStreamer({ overlay_enabled: 1 });
       const b = addStreamer({ overlay_enabled: 1 });
@@ -2370,7 +2385,7 @@ describe('saving an overlay design', () => {
     assert.equal((await save('raid', { bg_color: '#010203' })).status, 200);
     const [row] = stored();
     assert.equal(row.bg_color, '#010203');
-    assert.equal(row.accent_color, '#8888cc');
+    assert.equal(row.accent_color, '#ff4444', 'the raid\'s own accent, not the follow alert\'s');
     assert.equal(row.username_size, 24);
     assert.equal(row.card_position, 'top-center');
   });
@@ -2460,31 +2475,27 @@ describe('saving an overlay design', () => {
     assert.equal(stored().find((d) => d.event_type === 'follow').style, null, 'the builder cannot choose a style');
   });
 
-  test('a style anywhere in a builder save is ignored, neither stored nor refused: his C1 stays, and nobody else gets one', async () => {
+  test('a style inside the design is ignored, neither stored nor refused: his C1 stays, and nobody else gets one', async () => {
     // The route reads eventType and design; validateOverlayDesign() copies only the fields the builder has controls for,
     // and saveOverlayDesign() writes a fixed list of columns. The save itself goes through: the width proves it.
-    const bodies = {
-      'inside the design': (style, card_width) => ({ eventType: 'donation', design: design({ card_width, style }) }),
-      'beside the design': (style, card_width) => ({ eventType: 'donation', design: design({ card_width }), style }),
-    };
-    const post = (streamer, body) => request('POST', '/dashboard/overlay-builder/save', { streamer, body });
+    // A look named beside the design is the look the builder shows, since the alert styles: the save sets it, an
+    // empty one is the default look and another streamer's private one answers 400 ('the look an alert is drawn in').
+    const post = (streamer, style, card_width) => request('POST', '/dashboard/overlay-builder/save', { streamer, body: { eventType: 'donation', design: design({ card_width, style }) } });
     const donation = (streamer) => stored(streamer).find((d) => d.event_type === 'donation');
     const other = addStreamer();
     db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
     let width = 450;
-    for (const [where, body] of Object.entries(bodies)) {
-      for (const style of [null, 'donation-c1']) {
-        const label = `${where}, style ${style}`;
-        width += 10;
-        assert.equal((await post(id, body(style, width))).status, 200, label);
-        assert.equal(donation(id).card_width, width, `${label}: his save went through`);
-        assert.equal(donation(id).style, 'donation-c1', `${label}: his C1 is as it was`);
+    for (const style of [null, 'donation-c1']) {
+      const label = `inside the design, style ${style}`;
+      width += 10;
+      assert.equal((await post(id, style, width)).status, 200, label);
+      assert.equal(donation(id).card_width, width, `${label}: his save went through`);
+      assert.equal(donation(id).style, 'donation-c1', `${label}: his C1 is as it was`);
 
-        width += 10;
-        assert.equal((await post(other, body(style, width))).status, 200, label);
-        assert.equal(donation(other).card_width, width, `${label}: their save went through`);
-        assert.equal(donation(other).style, null, `${label}: a streamer with no style does not get one`);
-      }
+      width += 10;
+      assert.equal((await post(other, style, width)).status, 200, label);
+      assert.equal(donation(other).card_width, width, `${label}: their save went through`);
+      assert.equal(donation(other).style, null, `${label}: a streamer with no style does not get one`);
     }
   });
 
@@ -2701,6 +2712,98 @@ async function until(check, ms = 1500) {
   }
 }
 
+describe('the look an alert is drawn in (alert styles)', () => {
+  const bus = require('../services/overlayBus');
+  let id;
+  beforeEach(() => { id = addStreamer(); });
+  const save = (eventType, style, design = {}, streamer = id) =>
+    request('POST', '/dashboard/overlay-builder/save', { streamer, body: { eventType, design, style } });
+  const family = (name, streamer = id) => request('POST', '/dashboard/overlay-builder/family', { streamer, body: { family: name } });
+  const rowOf = (eventType, streamer = id) => db.getAllOverlayDesigns(streamer).find((d) => d.event_type === eventType);
+  const listen = () => {
+    const pushed = [];
+    const listener = (event) => pushed.push(event);
+    bus.on(`overlay:${id}`, listener);
+    return { pushed, stop: () => bus.off(`overlay:${id}`, listener) };
+  };
+
+  test('a save stores the look it names with the design, and the open overlay is told', async () => {
+    const overlay = listen();
+    try {
+      const res = await save('follow', 'follow-racing', { style_accent: '#29E0FF', card_width: 600 });
+      assert.deepEqual(res.json(), { ok: true });
+    } finally { overlay.stop(); }
+    assert.equal(rowOf('follow').style, 'follow-racing');
+    assert.equal(rowOf('follow').style_accent, '#29E0FF');
+    assert.equal(rowOf('follow').card_width, 600);
+    assert.equal(overlay.pushed.length, 1);
+    assert.equal(overlay.pushed[0].designs.follow.style, 'follow-racing');
+  });
+
+  test('an empty look is the alert\'s default look', async () => {
+    await save('follow', 'follow-racing');
+    assert.equal((await save('follow', '')).status, 200);
+    assert.equal(rowOf('follow').style, null);
+    assert.equal((await save('giveaway_winner', null)).status, 200);
+    assert.equal(rowOf('giveaway_winner').style, null);
+  });
+
+  test('a look the server does not know, one of another alert, or a look for a YouTube alert answers 400 naming it', async () => {
+    for (const [eventType, style] of [['follow', 'follow-nothing'], ['follow', 'bits-racing'], ['yt_member', 'follow-racing'], ['follow', 5], ['follow', '__proto__']]) {
+      const res = await save(eventType, style);
+      assert.equal(res.status, 400, `${eventType} ${style}`);
+      assert.equal(res.json().field, 'style');
+      assert.equal(res.json().error, t('en', 'overlayBuilder.error.style'));
+    }
+    assert.equal(rowOf('follow'), undefined, 'nothing was saved');
+  });
+
+  test('a look made for one streamer is theirs alone', async () => {
+    const vilela = c1Owner();
+    assert.equal((await save('donation', 'donation-c1', {}, vilela)).status, 200);
+    assert.equal(rowOf('donation', vilela).style, 'donation-c1');
+    const res = await save('donation', 'donation-c1');
+    assert.equal(res.status, 400);
+    assert.equal(res.json().field, 'style');
+  });
+
+  test('another look starts from its own settings, then keeps what the builder sent', async () => {
+    await save('follow', 'follow-samurai', { style_accent: '#29E0FF', screen_effect: 'gold', animation_speed: 1.5 });
+    await save('follow', 'follow-racing', { style_label: 'Pit stop', card_width: 520 });
+    const row = rowOf('follow');
+    assert.deepEqual([row.style, row.style_accent, row.style_label, row.screen_effect, row.animation_speed, row.card_width],
+      ['follow-racing', null, 'Pit stop', 'default', 1, 520]);
+  });
+
+  test('"Use a family for all six alerts" sets its look on each, tells the overlay once, and answers the six rows', async () => {
+    await save('follow', 'follow-racing', { style_accent: '#29E0FF' });
+    const overlay = listen();
+    let res;
+    try { res = await family('samurai'); } finally { overlay.stop(); }
+    assert.equal(res.status, 200);
+    const { ok, designs } = res.json();
+    assert.equal(ok, true);
+    assert.deepEqual(Object.keys(designs).sort(), ['bits', 'donation', 'follow', 'giveaway_winner', 'raid', 'subscription']);
+    assert.deepEqual(Object.fromEntries(Object.entries(designs).map(([type, row]) => [type, row.style])), {
+      follow: 'follow-samurai', subscription: 'subscriber-samurai', bits: 'bits-samurai',
+      donation: 'donation-samurai', raid: 'raid-samurai', giveaway_winner: 'giveaway-samurai',
+    });
+    assert.equal(rowOf('follow').style_accent, null, 'the follow changed look: its settings started again');
+    assert.equal(overlay.pushed.length, 1);
+    assert.equal(overlay.pushed[0].designs.raid.style, 'raid-samurai');
+  });
+
+  test('a family the server does not know answers 400 and changes nothing', async () => {
+    for (const name of ['nope', '', undefined, 5, '__proto__']) {
+      const res = await family(name);
+      assert.equal(res.status, 400, String(name));
+      assert.equal(res.json().field, 'family');
+      assert.equal(res.json().error, t('en', 'overlayBuilder.error.family'));
+    }
+    assert.equal(rowOf('follow'), undefined);
+  });
+});
+
 describe('the overlay builder page and a slow Twitch', () => {
   let id;
   beforeEach(() => { id = addStreamer({ twitch_username: 'somestreamer' }); });
@@ -2752,6 +2855,36 @@ describe('the overlay builder page and a slow Twitch', () => {
     for (const type of ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember', 'timed']) {
       assert.ok(page.text.includes(`"${type}":{`), type);
     }
+  });
+
+  test('hands the Style section each alert\'s gallery, the default looks, the families, sounds and fonts, named in the streamer\'s language', async () => {
+    const { locals } = (await builder()).json();
+    const data = JSON.parse(locals.styleData);
+    assert.deepEqual(Object.keys(data.gallery).sort(), ['bits', 'donation', 'follow', 'giveaway_winner', 'raid', 'subscription']);
+    assert.equal(data.defaults.giveaway_winner, 'giveaway-racing');
+    assert.ok(!data.gallery.donation.some((e) => e.id === 'donation-c1'), 'the C1 is not this streamer\'s');
+    assert.equal(data.looks['follow-racing'].title, t('en', 'overlayBuilder.looks.follow-racing.title'));
+    assert.deepEqual(data.families.slice(0, 2).map((f) => [f.key, f.name]), [['samurai', t('en', 'overlayBuilder.families.samurai.name')], ['racing', t('en', 'overlayBuilder.families.racing.name')]]);
+    assert.ok(data.sounds[0].sounds.some((s) => s.key === 'samuraiBell' && s.name === t('en', 'overlayBuilder.sounds.samuraiBell')));
+    assert.equal(data.fonts[0], 'System Default');
+    assert.match(locals.styleFontsHref, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Noto\+Serif\+JP:wght@700&family=Kanit:[^&]+&family=Barlow\+Condensed:[^&]+&display=swap$/);
+  });
+
+  test('the C1\'s owner finds it first in the donation gallery', async () => {
+    const res = await request('GET', '/dashboard/overlay-builder', { streamer: c1Owner(), json: true });
+    assert.deepEqual(JSON.parse(res.json().locals.styleData).gallery.donation[0], { id: 'donation-c1', family: null, mine: true });
+  });
+
+  test('loads the alert looks the OBS overlay loads: the kit and the joined family files, at their version', async () => {
+    const { bundle } = require('../services/alertStyleBundle');
+    const { locals } = (await builder()).json();
+    assert.equal(locals.stylesVersion, bundle().version);
+    const page = (await request('GET', '/dashboard/overlay-builder', { streamer: id })).text;
+    const order = ['/overlay/objects/index.js', '/overlay/objects/kit.js', `/overlay/objects/styles.js?v=${bundle().version}`, '/overlay/placement.js']
+      .map((src) => page.indexOf(`<script src="${src}"></script>`));
+    assert.ok(order.every((i) => i > 0), JSON.stringify(order));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'in that order');
+    assert.ok(page.includes(`<link rel="stylesheet" href="/overlay/objects/styles.css?v=${bundle().version}">`));
   });
 
   test("hands the page the streamer's Twitch name for the C1's rear window, as JSON for its inline script", async () => {

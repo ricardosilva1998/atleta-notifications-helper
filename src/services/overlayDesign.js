@@ -22,6 +22,9 @@
 // then names the field: not an object, a value of the wrong kind (text where a
 // number goes), or a colour that is not #rrggbb.
 
+// The sounds a look may be given (alert styles): today's, none, and every look's own.
+const { soundKeys } = require('./alertStyles');
+
 const BUILDER_EVENT_TYPES = Object.freeze([
   'follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner',
   'yt_superchat', 'yt_member', 'yt_giftmember', 'timed',
@@ -81,7 +84,7 @@ const font = { kind: 'font' };
 const fontOrNull = { kind: 'font', nullable: true };
 const weight = { kind: 'enum', values: [400, 500, 600, 700, 800] };
 
-// Every field the builder sends. `kind`: hex | font | text | enum | int | number | icon.
+// Every field the builder sends. `kind`: hex | font | text | enum | int | number | icon | sound.
 const FIELD_SPECS = Object.freeze({
   bg_color: hex,
   accent_color: hex,
@@ -93,7 +96,8 @@ const FIELD_SPECS = Object.freeze({
   detail_text: { kind: 'text', max: 300 },
   entrance_animation: { kind: 'enum', values: ['slideDown', 'slideUp', 'slideLeft', 'slideRight', 'zoomIn', 'fadeIn'] },
   car_animation: { kind: 'enum', values: ['zoomLR', 'zoomRL', 'checkered', 'flames', 'sparkles', 'lightning', 'neonSweep', 'equalizer', 'pulse', 'none'] },
-  screen_effect: { kind: 'enum', values: ['default', 'none', 'confetti', 'gold', 'money', 'robots', 'tiremarks'] },
+  // 'default' is the alert's own effect (a look's own, for a look); the last five are fx.js's
+  screen_effect: { kind: 'enum', values: ['default', 'none', 'confetti', 'gold', 'money', 'robots', 'tiremarks', 'smoke', 'checker', 'speed', 'sparks', 'champagne'] },
   animation_speed: { kind: 'number', min: 0.5, max: 2 },
   // The width slider runs 280-900; dragging the card's resize handle allows 200-900.
   card_width: { kind: 'int', min: 200, max: 900 },
@@ -129,6 +133,13 @@ const FIELD_SPECS = Object.freeze({
   shadow_opacity: { kind: 'number', min: 0, max: 1 },
   shadow_blur: { kind: 'int', min: 0, max: 80 },
   shadow_spread: { kind: 'int', min: -20, max: 20 },
+  // A look's own settings (docs/superpowers/specs/2026-10-15-alert-styles-design.md, 4.2): left out,
+  // they are the look's own colour, main text, sound and growing with the amount. The look itself
+  // (`style`) is not a field of the design: it travels next to it and the route checks it.
+  style_accent: hexOrNull,
+  style_label: { kind: 'text', max: 40 },
+  style_sound: { kind: 'sound' },
+  style_grows: { kind: 'enum', values: [0, 1] },
 });
 
 const ICON_MAX_CHARACTERS = 8;
@@ -171,6 +182,10 @@ function normalise(spec, value) {
       const inRange = Math.min(spec.max, Math.max(spec.min, wanted));
       return { value: inRange === 0 ? 0 : inRange }; // never -0
     }
+    case 'sound':
+      // A sound this release does not have (one an older or newer page knew) is the look's own.
+      if (typeof value !== 'string') return INVALID;
+      return soundKeys().includes(value) ? { value } : UNSET;
     case 'icon':
       if (typeof value !== 'string') return INVALID;
       return Array.from(value).length <= ICON_MAX_CHARACTERS && !ICON_FORBIDDEN.test(value) ? { value } : UNSET;

@@ -35,25 +35,86 @@ function alertSeconds(type) {
   return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
 }
 
-// The object an alert renders: the style its saved design names (overlay_designs.style), when
+// The look an alert is drawn in: the style its saved design names (overlay_designs.style), when
 // this page knows that style and it draws this alert type (andre_vilela_'s donation is
-// 'donation-c1'); otherwise the alert's own object; null for the alerts that are legacy cards.
+// 'donation-c1'); otherwise the alert's default look (kit.js DEFAULT_LOOKS: the giveaway's is
+// Racing's Victory lap); otherwise the alert's own object; null for the legacy cards.
 // The builder preview picks with the same rule (previewObjectFor in overlay-builder.ejs).
 function objectFor(type) {
   const design = overlayDesigns[type];
-  const styleId = design && design.style;
   const styles = window.ATLETA_OBJECT_STYLES || {};
-  const styled = styleId ? styles[styleId] : null;
-  if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  const kit = window.ATLETA_KIT;
+  const defaultLook = kit && Object.prototype.hasOwnProperty.call(kit.DEFAULT_LOOKS, type) ? kit.DEFAULT_LOOKS[type] : null;
+  for (const styleId of [design && design.style, defaultLook]) {
+    const styled = styleId && Object.prototype.hasOwnProperty.call(styles, styleId) ? styles[styleId] : null;
+    if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  }
   const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[type];
   return own && own.key === type ? own : null;
 }
 
-// How long an object's exit runs ("0.90s" is 900 ms), never less than the 400 ms every alert
-// has always had, so the five objects keep their pace.
-function exitMs(objectDef) {
+// What a look is handed: the event's data, and for a look of the alert styles its main text and
+// whether it grows with the amount (kit.js lookData). Today's objects and the C1 get the data as before.
+function lookDataFor(look, event) {
+  const data = event.data || {};
+  const kit = window.ATLETA_KIT;
+  return kit && look.family ? kit.lookData(look, data, overlayDesigns[event.type]) : data;
+}
+
+// The alert's look and its markup. A look that throws while drawing is replaced by the alert's own
+// object, or else by its legacy card ({ look: null }), and the overlay says so once per look.
+const brokenLooks = new Set();
+function drawAlert(event) {
+  const look = objectFor(event.type);
+  if (!look) return { look: null, html: null };
+  try {
+    return { look, html: look.render(lookDataFor(look, event)) };
+  } catch (e) {
+    if (!brokenLooks.has(look.key)) {
+      brokenLooks.add(look.key);
+      console.error(`[Overlay] The look ${look.key} could not be drawn (${e && e.message}); the alert's default is shown instead`);
+    }
+  }
+  const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[event.type];
+  if (own && own.key === event.type && own !== look) {
+    try { return { look: own, html: own.render(event.data || {}) }; } catch (e) { /* the legacy card */ }
+  }
+  return { look: null, html: null };
+}
+
+// The variables a look's slot carries (kit.js slotVars): the streamer's colour with its shades, and
+// the speed, for a look that takes them. A look of the alert styles is drawn for 420 px and scaled to
+// the saved width (.alert-pos.look in objects.css); today's objects, the samurai presets among them,
+// and the C1 reflow to it instead, as before. Returns the look's speed.
+function applyLookVars(slot, look, design) {
+  const kit = window.ATLETA_KIT;
+  if (!kit || !look.family) return 1;
+  const vars = kit.slotVars(look, design);
+  Object.keys(vars).forEach((name) => slot.style.setProperty(name, vars[name]));
+  if (!look.preset) {
+    const placement = window.ATLETA_PLACEMENT;
+    const width = placement ? placement.placementOf(design).width : 420;
+    slot.classList.add('look');
+    slot.style.setProperty('--zw', String(Math.round(width / 420 * 1000) / 1000));
+  }
+  return Number(vars['--spd']) || 1;
+}
+
+// How long an alert stays, in ms: the streamer's duration, but a look of the alert styles at least its
+// entrance (`len`: seconds at speed 1, or worked out from the data) plus a second.
+function holdMs(type, look, data, speed) {
+  const base = alertSeconds(type) * 1000;
+  if (!look || look.len == null) return base;
+  const len = Number(typeof look.len === 'function' ? look.len(data) : look.len);
+  return Number.isFinite(len) ? Math.max(base, Math.round((len / speed + 1) * 1000)) : base;
+}
+
+// How long an object's exit runs ("0.90s" is 900 ms) at the look's speed (objects.css runs it for
+// --outdur / --spd: a look at half speed leaves in twice the time), never less than the 400 ms every
+// alert has always had, so the five objects keep their pace.
+function exitMs(objectDef, speed = 1) {
   const seconds = parseFloat(objectDef && objectDef.exit && objectDef.exit.dur);
-  return Number.isFinite(seconds) ? Math.max(400, Math.round(seconds * 1000)) : 400;
+  return Number.isFinite(seconds) ? Math.max(400, Math.round(seconds / speed * 1000)) : 400;
 }
 
 // The timers of the alert on screen and of the queue: dismissing it, removing it,
@@ -91,10 +152,64 @@ function loadDesignFonts(designs) {
     link.href = `https://fonts.googleapis.com/css2?family=${FONT_MAP[f]}&display=swap`;
     document.head.appendChild(link);
   });
+  // The fonts of the looks the designs name, and of the giveaway's default look
+  const kit = window.ATLETA_KIT;
+  const styles = window.ATLETA_OBJECT_STYLES || {};
+  if (!kit) return;
+  Object.values(designs).map((d) => d && d.style).concat(Object.values(kit.DEFAULT_LOOKS)).forEach((styleId) => {
+    const look = styleId && Object.prototype.hasOwnProperty.call(styles, styleId) ? styles[styleId] : null;
+    if (look && look.family) familyFonts(look.family);
+  });
+}
+
+// A look family's Google Fonts (kit.js: each family file lists its own), in one stylesheet asked for
+// once. Resolves when the stylesheet has arrived or failed: only then can the browser wait for a font.
+const familyFontSheets = {};
+function familyFonts(familyKey) {
+  const kit = window.ATLETA_KIT;
+  const family = kit && kit.families[familyKey];
+  if (!family || !family.fonts.length) return Promise.resolve();
+  if (!familyFontSheets[familyKey]) {
+    familyFontSheets[familyKey] = new Promise((resolve) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?' + family.fonts.map((spec) => `family=${spec}`).join('&') + '&display=swap';
+      link.onload = resolve;
+      link.onerror = resolve;
+      document.head.appendChild(link);
+    });
+  }
+  return familyFontSheets[familyKey];
+}
+
+// The first alert in a look waits for its family's fonts, at most 1.5 s, then plays with the
+// fallbacks; after that the family is ready and its alerts play at once. Today's objects, the C1
+// and the cards never wait, nor does a page without the FontFaceSet API.
+const readyFamilies = new Set();
+function whenLookReady(look, then) {
+  const kit = window.ATLETA_KIT;
+  const fonts = document.fonts;
+  if (!look || !look.family || readyFamilies.has(look.family) || !kit || !fonts || typeof fonts.load !== 'function') {
+    then();
+    return;
+  }
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    readyFamilies.add(look.family);
+    then();
+  };
+  alertTimer(start, 1500);
+  familyFonts(look.family)
+    .then(() => Promise.all(kit.fontNames(look.family).map((name) => fonts.load(`700 1em "${name}"`))))
+    .then(start, start);
 }
 
 // Synthesized notification sounds using Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// The looks' sounds (objects/kit.js) play through the same AudioContext, at the streamer's volume.
+if (window.ATLETA_KIT) window.ATLETA_KIT.setAudio(audioCtx, overlayVolume);
 
 // Racing-themed sound synthesis
 function createNoise(duration, vol) {
@@ -372,7 +487,10 @@ function connectSSE() {
 
 connectSSE();
 
+// Counts Clear Alls, so an alert that was waiting for its fonts (whenLookReady) knows it was cleared.
+let alertRun = 0;
 function clearOverlay() {
+  alertRun++;
   queue.length = 0;
   isPlaying = false;
   alertTimers.forEach((id) => clearTimeout(id));
@@ -390,7 +508,8 @@ function playNext() {
   if (event.type === 'redemption') {
     playRedemption(event);
   } else {
-    showNotification(event);
+    const run = alertRun;
+    whenLookReady(objectFor(event.type), () => { if (run === alertRun) showNotification(event); });
   }
 }
 
@@ -427,15 +546,22 @@ function stopCurrentSound() {
 }
 
 function showNotification(event) {
-  const duration = alertSeconds(event.type) * 1000;
-
   // Stop any currently playing sound before starting new one
   stopCurrentSound();
 
-  // Play notification sound — the streamer's custom sound when they set one,
-  // otherwise (or if it fails to play) the synthesized default
+  const drawn = drawAlert(event);
+  const objectDef = drawn.look;
+  const design = overlayDesigns[event.type];
+
+  // Play notification sound — the streamer's custom sound when they set one, otherwise (or if it
+  // fails to play) the look's sound (kit.js soundFor: the design's, else the look's own; today's
+  // synthesized one for today's objects, the C1 and the cards; 'none' is silence)
   if (audioCtx.state === 'suspended') audioCtx.resume();
+  const kit = window.ATLETA_KIT;
+  const soundKey = kit ? kit.soundFor(objectDef, design) : 'today';
   const playDefaultSound = () => {
+    if (soundKey === 'none') return;
+    if (soundKey !== 'today' && kit.playSound(soundKey)) return;
     const playSound = soundEffects[event.type];
     if (playSound) playSound();
   };
@@ -456,7 +582,7 @@ function showNotification(event) {
   // Build the alert. Every alert sits in a slot (.alert-pos) that carries its saved
   // position and width; what is inside animates on its own, so no entrance has to
   // know where it is placed.
-  const objectDef = objectFor(event.type);
+  let speed = 1;
   const cardClass = getCardClass(event.type);
   const isSubLike = event.type === 'subscription' || event.type === 'yt_member';
   const slot = document.createElement('div');
@@ -465,7 +591,8 @@ function showNotification(event) {
 
   if (objectDef) {
     // Objects animate their own children (.playing / .exiting on the slot drive them).
-    slot.innerHTML = buildBannerContent(event);
+    slot.innerHTML = drawn.html;
+    speed = applyLookVars(slot, objectDef, design);
     slot.style.setProperty('--in', objectDef.anim.in);
     slot.style.setProperty('--dur', objectDef.anim.dur);
     slot.style.setProperty('--ease', objectDef.anim.ease);
@@ -479,13 +606,18 @@ function showNotification(event) {
   container.appendChild(slot);
 
   // Saved position and width, for every alert type
-  applyPlacement(slot, overlayDesigns[event.type]);
+  applyPlacement(slot, design);
 
   // Saved colours and text for the legacy cards (the objects style themselves for now)
   if (!objectDef) applyCustomDesign(card, event.type);
 
-  // Spawn full-screen effects — objects carry their own motion
+  // Full-screen effects: a card plays its design's; a look the one its design names or its own
+  // (kit.js effectFor: none for today's objects with no look picked, and for the C1)
   if (!objectDef) spawnEffects(event.type);
+  else {
+    const effect = kit ? kit.effectFor(objectDef, design) : 'none';
+    if (effect !== 'none') spawnEffects(event.type, effect);
+  }
 
   // Dismiss after duration
   alertTimer(() => {
@@ -518,8 +650,8 @@ function showNotification(event) {
     alertTimer(() => {
       slot.remove();
       alertTimer(playNext, 500);
-    }, objectDef ? exitMs(objectDef) : 400);
-  }, duration);
+    }, objectDef ? exitMs(objectDef, speed) : 400);
+  }, holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed));
 }
 
 // ─── Build card HTML per event type ───────────────────────────
@@ -544,13 +676,9 @@ function wrapWithSideIcons(icon, bodyHtml) {
   return `<div class="cup-row"><span class="cup">${safeIcon}</span><div class="card-inner">${bodyHtml}</div><span class="cup">${safeIcon}</span></div>`;
 }
 
+// The legacy top-accent + card-body + car-track card: the YouTube alerts and timed messages, and
+// any alert whose look could not be drawn (drawAlert in showNotification draws the looks).
 function buildBannerContent(event) {
-  // The five Twitch events render from the shared object registry, or from the style their
-  // saved design names (objectFor). Everything else keeps the legacy
-  // top-accent + card-body + car-track card.
-  const objectDef = objectFor(event.type);
-  if (objectDef) return objectDef.render(event.data || {});
-
   const icon = getSideIcon(event.type);
 
   switch (event.type) {
@@ -685,7 +813,8 @@ function buildBannerContent(event) {
 }
 
 // ─── Full-screen effects ───────────────────────────────────────
-function spawnEffects(type) {
+// `chosen`: the effect a look plays (showNotification); a card plays its design's, or its alert's default.
+function spawnEffects(type, chosen) {
   document.querySelectorAll('.screen-effect').forEach(e => e.remove());
 
   const design = overlayDesigns[type] || {};
@@ -695,7 +824,7 @@ function spawnEffects(type) {
   const dir = design.effect_direction || 'down';
 
   // Use custom screen_effect if set, otherwise default per event type
-  let effect = design.screen_effect || 'default';
+  let effect = chosen || design.screen_effect || 'default';
   if (effect === 'default') {
     const defaults = {
       follow: 'tiremarks', subscription: 'confetti', yt_member: 'confetti',
@@ -707,6 +836,12 @@ function spawnEffects(type) {
     effect = defaults[type] || 'none';
   }
   if (effect === 'none') return;
+
+  // The alert looks' five effects (fx.js), drawn the same way in the builder preview
+  if (window.ATLETA_FX && window.ATLETA_FX.KINDS.includes(effect)) {
+    window.ATLETA_FX.spawn(container, effect);
+    return;
+  }
 
   switch (effect) {
     case 'tiremarks':  spawnTireMarks(speed, amount, size, dir);           break;

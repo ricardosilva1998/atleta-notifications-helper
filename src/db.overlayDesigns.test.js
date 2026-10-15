@@ -117,7 +117,7 @@ describe('overlay_designs.style', () => {
     const saved = row();
     assert.equal(saved.style, 'donation-c1');
     assert.equal(saved.card_width, 420);
-    assert.equal(saved.bg_color, '#1a1a3e');
+    assert.equal(saved.bg_color, '#110022', 'the donation\'s own card colour');
   });
 
   test('Reset deletes a design without a style, as before, and does nothing when there is none', () => {
@@ -137,6 +137,105 @@ describe('overlay_designs.style', () => {
   test('getAllOverlayDesigns hands the style to the overlay with the rest of the row', () => {
     db.setOverlayDesignStyle(streamer, 'donation', 'donation-c1');
     assert.equal(db.getAllOverlayDesigns(streamer).find((d) => d.event_type === 'donation').style, 'donation-c1');
+  });
+});
+
+describe('a look\'s settings: style_accent, style_label, style_sound, style_grows (alert styles)', () => {
+  let db;
+  let sql;
+  let streamer;
+  before(() => {
+    const booted = boot(newFile());
+    db = booted.db;
+    sql = db.db;
+    assert.deepEqual(booted.lines.filter((l) => l.includes('[DB migration]')), [], 'a first boot prints no migration error');
+    streamer = addStreamer(sql);
+  });
+  after(() => sql.close());
+  const row = (eventType = 'follow') => sql.prepare('SELECT * FROM overlay_designs WHERE streamer_id = ? AND event_type = ?').get(streamer, eventType);
+  const forget = () => sql.prepare('DELETE FROM overlay_designs WHERE streamer_id = ?').run(streamer);
+  const LOOK = { style_accent: '#29E0FF', style_label: 'Quest accepted', style_sound: 'rcFlyby', style_grows: 0 };
+  const settings = (r) => Object.fromEntries(Object.keys(LOOK).map((c) => [c, r[c]]));
+  const EMPTY = { style_accent: null, style_label: null, style_sound: null, style_grows: null };
+
+  test('are columns of a fresh database, empty (the look\'s own) on a new row', () => {
+    const cols = sql.pragma('table_info(overlay_designs)').map((c) => c.name);
+    for (const c of Object.keys(LOOK)) assert.ok(cols.includes(c), c);
+    db.saveOverlayDesign(streamer, 'follow', {});
+    assert.deepEqual(settings(row()), EMPTY);
+  });
+
+  test('a second boot on the same file adds nothing and prints no migration error', () => {
+    const file = newFile();
+    boot(file).db.db.close();
+    const again = boot(file);
+    assert.deepEqual(again.lines.filter((l) => /\[DB migration\]|Added style_/.test(l)), []);
+    again.db.db.close();
+  });
+
+  test('a save writes the settings it is given and empties the ones it is not', () => {
+    db.saveOverlayDesign(streamer, 'follow', { ...LOOK, card_width: 500 });
+    assert.deepEqual(settings(row()), LOOK);
+    db.saveOverlayDesign(streamer, 'follow', { card_width: 500 });
+    assert.deepEqual(settings(row()), EMPTY);
+  });
+
+  test('picking another look starts it from its own settings; where the alert sits and its colours stay', () => {
+    db.saveOverlayDesign(streamer, 'follow', { ...LOOK, screen_effect: 'gold', animation_speed: 1.5, card_position: 'bot-left', card_width: 560, bg_color: '#123456' });
+    db.setOverlayDesignStyle(streamer, 'follow', 'follow-racing');
+    const r = row();
+    assert.equal(r.style, 'follow-racing');
+    assert.deepEqual(settings(r), EMPTY);
+    assert.deepEqual([r.screen_effect, r.animation_speed], ['default', 1]);
+    assert.deepEqual([r.card_position, r.card_width, r.bg_color], ['bot-left', 560, '#123456']);
+  });
+
+  test('setting the look the alert already has changes nothing', () => {
+    db.saveOverlayDesign(streamer, 'follow', { ...LOOK, screen_effect: 'gold' });
+    db.setOverlayDesignStyle(streamer, 'follow', 'follow-racing');
+    assert.deepEqual(settings(row()), LOOK);
+    assert.equal(row().screen_effect, 'gold');
+  });
+
+  test('Reset keeps the look and empties its settings', () => {
+    db.saveOverlayDesign(streamer, 'follow', { ...LOOK, screen_effect: 'gold' });
+    db.resetOverlayDesign(streamer, 'follow');
+    assert.equal(row().style, 'follow-racing');
+    assert.deepEqual(settings(row()), EMPTY);
+    assert.equal(row().screen_effect, 'default');
+  });
+
+  test('a row the database writes by itself takes the alert\'s own colours, not the follow alert\'s', () => {
+    forget();
+    db.setOverlayDesignStyle(streamer, 'raid', 'raid-racing');
+    assert.deepEqual([row('raid').bg_color, row('raid').accent_color, row('raid').border_color], ['#1c0505', '#ff4444', '#ff4444']);
+    assert.equal(row('raid').event_label, 'Incoming Raid');
+  });
+
+  test('setOverlayDesignStyles sets every alert it is given, resetting only the rows whose look changed', () => {
+    forget();
+    db.setOverlayDesignStyle(streamer, 'follow', 'follow-racing');
+    db.saveOverlayDesign(streamer, 'follow', { ...LOOK });
+    db.setOverlayDesignStyle(streamer, 'bits', 'bits-samurai');
+    db.saveOverlayDesign(streamer, 'bits', { ...LOOK });
+    db.setOverlayDesignStyles(streamer, { follow: 'follow-racing', bits: 'bits-racing', raid: 'raid-racing' });
+    assert.deepEqual(settings(row('follow')), LOOK, 'follow already had the look: kept');
+    assert.equal(row('bits').style, 'bits-racing');
+    assert.deepEqual(settings(row('bits')), EMPTY, 'bits changed look: started from its own settings');
+    assert.equal(row('raid').style, 'raid-racing', 'a row is made where there was none');
+  });
+
+  test('setOverlayDesignStyles is all or nothing', () => {
+    forget();
+    db.setOverlayDesignStyle(streamer, 'follow', 'follow-samurai');
+    sql.exec("CREATE TEMP TRIGGER no_raid BEFORE UPDATE OF style ON overlay_designs WHEN NEW.event_type = 'raid' BEGIN SELECT RAISE(ABORT, 'boom'); END;");
+    try {
+      assert.throws(() => db.setOverlayDesignStyles(streamer, { follow: 'follow-racing', raid: 'raid-racing' }), /boom/);
+    } finally {
+      sql.exec('DROP TRIGGER no_raid');
+    }
+    assert.equal(row('follow').style, 'follow-samurai');
+    assert.equal(row('raid'), undefined);
   });
 });
 

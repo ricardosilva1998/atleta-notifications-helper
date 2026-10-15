@@ -130,7 +130,7 @@ describe('the placement module is shared by the overlay and the builder', () => 
 
   test('the OBS overlay page loads it before overlay.js, and the builder page loads it too', () => {
     const route = read('src', 'routes', 'overlay.js');
-    const page = route.match(/<script src="\/overlay\/objects\/index\.js"><\/script>\s*<script src="\/overlay\/placement\.js"><\/script>\s*<script src="\/overlay\/overlay\.js"><\/script>/);
+    const page = route.match(/<script src="\/overlay\/objects\/index\.js"><\/script>[\s\S]*?<script src="\/overlay\/placement\.js"><\/script>\s*<script src="\/overlay\/overlay\.js"><\/script>/);
     assert.ok(page, 'the overlay page loads placement.js between the registry and overlay.js');
     assert.match(read('src', 'views', 'overlay-builder.ejs'), /<script src="\/overlay\/placement\.js"><\/script>/);
   });

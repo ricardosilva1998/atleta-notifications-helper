@@ -65,6 +65,17 @@ describe('objects.css integrity', () => {
     assert.match(css, /\.o-blade\s*\{/, '.o-blade must exist — shared cut flash');
   });
 
+  test('text on the streamer\'s colour reads --a-on (dark on a light colour), and stays white while no colour is picked', () => {
+    // The follow band and the raid's main banner are drawn in the accent, with their text on it.
+    const onAccent = ['.o-follow .o-name', '.o-follow .o-follow-glyph', '.o-follow .o-meta', '.o-raid .o-raid-cnt', '.o-raid .o-raid-clbl'];
+    for (const selector of onAccent) {
+      const rule = css.match(new RegExp('(?:^|\\n)' + selector.replace(/\./g, '\\.') + '\\{([^}]*)\\}'));
+      assert.ok(rule, `${selector} has a rule`);
+      const colour = (rule[1].match(/(?:^|;)\s*color:([^;]+)/) || [])[1] || '';
+      assert.match(colour, /^(var\(--a-on,#fff\)|rgba\(var\(--a-on-rgb,255,255,255\),\.\d+\))$/i, `${selector}: its colour follows --a-on (it is ${colour})`);
+    }
+  });
+
   test('no object-internal class escapes its .o- prefix', () => {
     // Guards the collision that pinned the byobu frame rail to the wrong edge.
     const generic = ['.rail{', '.rail {', '.panel{', '.panel {', '.seal{', '.seal {'];
@@ -737,5 +748,35 @@ describe('objects.css — the C1 (donation-c1)', () => {
       + lineBox('.o-c1 .o-c1-from', px)
       + gaps + margins;
     assert.ok(need <= room, `the worst case needs ${need}px between the paddings and the board has ${room}px`);
+  });
+});
+
+describe("objects.css — today's samurai red is the streamer's colour (alert styles)", () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+  // The five objects come before the C1, whose paint is the real car's and stays as it is.
+  const five = css.slice(0, css.indexOf('.o-c1{'));
+
+  test('every red of the five reads a colour variable, with today\'s red as the fallback', () => {
+    const fixed = five
+      .replace(/var\(--[a-z-]+,\s*(#[0-9A-Fa-f]{6}|\d+,\d+,\d+)\)/g, '')
+      .replace('--r-red:#D81E26;', '').replace('--r-red-deep:#B50000;', '');
+    const reds = [...fixed.matchAll(/#([0-9A-Fa-f]{6})\b/g)].map((m) => m[1]).filter((hex) => {
+      const v = parseInt(hex, 16), r = v >> 16, g = (v >> 8) & 255, b = v & 255;
+      return r > 40 && r > 1.6 * g && r > 1.6 * b;
+    });
+    assert.deepEqual([...new Set(reds)], [], 'a red that does not follow the streamer\'s colour');
+    assert.ok(!/rgba\(\s*(216,30,38|255,66,71)\s*,/.test(fixed), 'an rgba() red that does not follow it');
+  });
+
+  test('the red itself is the streamer\'s accent, Ronin red until one is picked', () => {
+    assert.match(css, /\.obj\{--r-red:var\(--a,#D81E26\);--r-red-deep:var\(--a-lo,#B50000\)\}/);
+  });
+
+  test('without a picked colour nothing changes: each shade falls back to the colour that was there', () => {
+    for (const [shade, hex] of [['--a-hi', '#F0343C'], ['--a-deep', '#8E0A10'], ['--a-soft', '#C9636A'], ['--a-tint', '#FF6B6B'], ['--a-night', '#5E070C'], ['--a-ink', '#3A0407']]) {
+      assert.ok(css.includes(`var(${shade},${hex})`), `${shade} falls back to ${hex}`);
+    }
   });
 });

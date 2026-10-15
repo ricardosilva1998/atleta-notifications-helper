@@ -1,0 +1,218 @@
+/* ═════════ KAWAII — cute and pastel ═════════
+   Round friends with thick soft ink outlines, blush cheeks and little sparkles. Everything arrives with
+   squash and stretch and a springy overshoot, then sits still. Plates are opaque cream, so the ink text
+   reads over any game; the accent (stickers, hearts, the tea, the gacha machine) is the streamer's colour.
+   The page has no global box-sizing, so this family sets border-box on its own elements only (never on the
+   shared odometer, name or typed-text parts). */
+.o-kwi{--kwia:var(--a,#FF7EB6);--kwia-rgb:var(--a-rgb,255,126,182);--kwi-on:var(--a-on,#4A2B5C);--kwi-cream:#FFF6FB;--kwi-mint:#9FF2D8;--kwi-lilac:#CDB4FF;--kwi-butter:#FFE9A6;--kwi-ink:#5A3E6B;--kwi-blush:#FF9EC4;font-family:"Baloo 2","Nunito","Varela Round",system-ui,sans-serif;font-weight:700;line-height:1.2;color:var(--kwi-ink)}
+.o-kwi,.o-kwi [class*="o-kwi"]{box-sizing:border-box}
+.o-kwi-plate{position:absolute;background:linear-gradient(180deg,#FFFFFF 0,var(--kwi-cream) 55%,#FCEBF6 100%);border:3.5px solid var(--kwi-ink);border-radius:28px;box-shadow:0 4px 0 rgba(90,62,107,.32),0 12px 22px rgba(30,14,44,.34),inset 0 -6px 0 rgba(205,180,255,.3),inset 0 3px 0 #FFFFFF}
+.o-kwi-tag{display:block;max-width:100%;padding:1px 11px 0;border-radius:999px;background:var(--kwia);color:var(--kwi-on);font-weight:800;font-size:13px;line-height:1.5;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 0 0 2.5px #FFFFFF,0 0 0 4px var(--kwi-ink);transform:rotate(var(--sr,0deg))}
+.o-kwi-pill{display:inline-flex;align-items:center;height:27px;padding:1px 9px 0;border-radius:14px;background:var(--kwia);color:var(--kwi-on);box-shadow:0 0 0 2px #FFFFFF,0 0 0 3.5px var(--kwi-ink)}
+.o-kwi-ico{display:block}
+.o-kwi-ico > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-kwi-skin{fill:var(--sk,#FFFFFF);stroke:var(--kwi-ink);stroke-linejoin:round}
+.o-kwi-ln{fill:none;stroke:var(--kwi-ink);stroke-linecap:round;stroke-linejoin:round}
+.o-kwi-eye{fill:var(--kwi-ink)}
+.o-kwi-glint{fill:#FFFFFF}
+.o-kwi-cheek{fill:var(--kwi-blush);opacity:.9}
+.o-kwi-bean{fill:var(--kwi-blush)}
+.o-kwi-nose{fill:#FF7FAF}
+.o-kwi-bow{fill:var(--kwia);stroke:var(--kwi-ink);stroke-linejoin:round}
+.o-kwi-leaf{fill:var(--kwi-mint);stroke:var(--kwi-ink);stroke-linejoin:round}
+.o-kwi-hrt{fill:var(--kwia);stroke:var(--kwi-ink);stroke-width:2;stroke-linejoin:round}
+.o-kwi-shine{fill:none;stroke:#FFFFFF;stroke-width:1.8;stroke-linecap:round;opacity:.85}
+.o-kwi-spk{position:absolute;width:var(--ss,14px);height:var(--ss,14px);transform:rotate(var(--sr,0deg))}
+.o-kwi-spkp{fill:var(--sc,var(--kwi-butter));stroke:var(--kwi-ink);stroke-width:1.6;stroke-linejoin:round}
+@keyframes kwiPop{0%{opacity:0;transform:scale(.3)}45%{opacity:1;transform:scale(1.08,.93)}68%{transform:scale(.96,1.04)}85%{transform:scale(1.015,.985)}100%{opacity:1;transform:none}}
+@keyframes kwiBounceIn{0%{opacity:0;transform:translateY(34px) scale(.9,1.12)}45%{opacity:1;transform:translateY(-8px) scale(.96,1.05)}66%{transform:translateY(0) scale(1.1,.88)}83%{transform:translateY(-2px) scale(.98,1.02)}100%{opacity:1;transform:none}}
+@keyframes kwiTextIn{0%{opacity:0;transform:translateY(9px) scale(.88)}60%{opacity:1;transform:translateY(-2px) scale(1.04)}100%{opacity:1;transform:none}}
+@keyframes kwiPress{0%{opacity:0;transform:scale(1.5) rotate(calc(var(--sr,0deg) - 12deg))}60%{opacity:1;transform:scale(.92) rotate(var(--sr,0deg))}100%{opacity:1;transform:scale(1) rotate(var(--sr,0deg))}}
+@keyframes kwiTwinkle{0%{opacity:0;transform:scale(0) rotate(calc(var(--sr,0deg) - 90deg))}60%{opacity:1;transform:scale(1.3) rotate(calc(var(--sr,0deg) + 8deg))}100%{opacity:1;transform:scale(1) rotate(var(--sr,0deg))}}
+@keyframes kwiBeat{0%,100%{transform:scale(1) rotate(var(--sr,0deg))}35%{transform:scale(1.12) rotate(var(--sr,0deg))}65%{transform:scale(.97) rotate(var(--sr,0deg))}}
+@keyframes kwiExit{0%{opacity:1;transform:none}30%{opacity:1;transform:translateY(4px) scale(1.05,.9)}100%{opacity:0;transform:translateY(-14px) scale(.6,.74)}}
+@keyframes kwiMelt{0%{opacity:1;transform:none}35%{opacity:1;transform:scale(1.07,.88)}100%{opacity:0;transform:scale(1.25,.08)}}
+@keyframes kwiHopOut{0%{opacity:1;transform:none}25%{opacity:1;transform:translateY(4px) scale(1.04,.92)}62%{opacity:.85;transform:translate(26px,-22px) scale(.96,1.05)}100%{opacity:0;transform:translate(52px,2px) scale(.9,.9)}}
+.playing .o-kwi-spk{animation:kwiTwinkle calc(.45s / var(--spd)) ease-out calc(var(--sd,1s) / var(--spd)) both}
+
+/* follow — Paw wave: the cat peeks up inside the bubble, waves, and three hearts float up */
+.o-kwif{height:136px}
+.o-kwif-bub{left:12px;right:12px;top:30px;height:100px;overflow:hidden;border-radius:34px}
+.o-kwif-disc{position:absolute;left:8px;top:6px;width:104px;height:104px;border-radius:50%;background:radial-gradient(circle at 50% 36%,#D9FFF3 0,var(--kwi-mint) 70%);box-shadow:inset 0 0 0 3px rgba(255,255,255,.65)}
+.o-kwif-cat{position:absolute;left:14px;bottom:-14px;width:92px;height:96px;transform-origin:50% 100%}
+.o-kwif-paw{position:absolute;left:96px;bottom:-16px;width:30px;height:58px;transform-origin:50% 100%;transform:translateY(0) rotate(10deg)}
+.o-kwif-cat > svg,.o-kwif-paw > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-kwif-txt{position:absolute;left:134px;right:16px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-kwif-tag{--sr:-3deg;margin-bottom:4px}
+.o-kwif-name{align-self:stretch;font-weight:800;font-size:calc(30px * var(--fit,1));line-height:1.12}
+.o-kwif-did{display:flex;align-items:center;gap:5px;font-weight:700;font-size:18px;line-height:1.2;color:rgba(90,62,107,.8)}
+.o-kwif-mini{flex:none;width:16px;height:15px}
+.o-kwif-heart{position:absolute;transform:rotate(var(--sr))}
+@keyframes kwiPeek{0%{transform:translateY(84px) scale(1,1)}55%{transform:translateY(-7px) scale(.96,1.05)}76%{transform:translateY(2px) scale(1.04,.96)}100%{transform:translateY(0) scale(1,1)}}
+@keyframes kwiWave{0%{transform:translateY(62px) rotate(10deg)}24%{transform:translateY(-4px) rotate(8deg)}32%{transform:translateY(0) rotate(4deg)}48%{transform:translateY(0) rotate(-16deg)}64%{transform:translateY(0) rotate(18deg)}80%{transform:translateY(0) rotate(-10deg)}100%{transform:translateY(0) rotate(10deg)}}
+@keyframes kwiFloat{0%{opacity:0;transform:translate(var(--hx),var(--hy)) scale(.2) rotate(0deg)}25%{opacity:1}65%{transform:translate(calc(var(--hx) * .12),calc(var(--hy) * .12 - 5px)) scale(1.15) rotate(var(--sr))}100%{opacity:1;transform:translate(0,0) scale(1) rotate(var(--sr))}}
+.playing .o-kwif-bub{animation:kwiPop calc(.48s / var(--spd)) ease-out both}
+.playing .o-kwif-cat{animation:kwiPeek calc(.55s / var(--spd)) ease-out calc(.26s / var(--spd)) both}
+.playing .o-kwif-tag{animation:kwiPress calc(.3s / var(--spd)) ease-out calc(.52s / var(--spd)) both}
+.playing .o-kwif-name{animation:kwiTextIn calc(.4s / var(--spd)) ease-out calc(.6s / var(--spd)) both}
+.playing .o-kwif-did{animation:kwiTextIn calc(.36s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-kwif-paw{animation:kwiWave calc(.95s / var(--spd)) ease-in-out calc(.86s / var(--spd)) both}
+.playing .o-kwif-heart{animation:kwiFloat calc(.6s / var(--spd)) ease-out calc(var(--hd) / var(--spd)) both}
+
+/* subscriber — Boba: the text lands, the cup fills, one pearl per month drops in, the straw pops in, the tier sticker lands */
+.o-kwis{height:188px}
+.o-kwis-cup{position:absolute;left:14px;top:18px;width:112px;height:166px;transform-origin:50% 100%}
+.o-kwis-straw{position:absolute;left:58px;top:0;width:15px;height:96px;border:3px solid var(--kwi-ink);border-radius:8px 8px 3px 3px;background:repeating-linear-gradient(135deg,var(--kwi-mint) 0 6px,#FFFFFF 6px 11px);transform-origin:50% 100%;transform:translateY(0) rotate(12deg)}
+.o-kwis-in{position:absolute;left:0;top:46px;width:112px;height:120px;clip-path:polygon(6px 5px,106px 5px,96px 110px,95px 112.6px,93px 114.4px,90px 115.6px,88px 116px,24px 116px,22px 115.6px,19px 114.4px,17px 112.6px,16px 110px);background:linear-gradient(90deg,rgba(255,255,255,.93),rgba(244,238,255,.86) 55%,rgba(255,255,255,.92))}
+.o-kwis-tea{position:absolute;left:0;right:0;bottom:0;height:94px;background:linear-gradient(180deg,rgba(var(--kwia-rgb),.8) 0,var(--kwia) 55%);box-shadow:inset 0 6px 0 rgba(255,255,255,.4);transform-origin:50% 100%}
+.o-kwis-pearl{position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.9) 0 1.8px,rgba(255,255,255,0) 2.4px),#4A2D58;box-shadow:inset -1px -2px 0 rgba(0,0,0,.25);transform-origin:50% 100%}
+.o-kwis-line{position:absolute;left:0;top:46px;width:112px;height:120px;overflow:visible}
+.o-kwis-shine{fill:none;stroke:#FFFFFF;stroke-width:5;stroke-linecap:round;opacity:.6}
+.o-kwis-line .o-kwi-cheek{fill:#FFFFFF;opacity:.5}
+.o-kwis-plate{left:136px;right:12px;top:48px;height:118px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:6px 18px 4px 20px}
+.o-kwis-tag{--sr:-2deg;margin-bottom:5px}
+.o-kwis-name{align-self:stretch;font-weight:800;font-size:calc(28px * var(--fit,1));line-height:1.12}
+.o-kwis-mo{display:flex;align-items:center;gap:8px;margin-top:4px;font-weight:800;font-size:21px;line-height:1.2}
+.o-kwis-tier{position:absolute;right:7px;top:22px;width:56px;height:56px;--sr:12deg;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:3px;border-radius:50%;background:var(--tc);color:var(--kwi-ink);transform:rotate(var(--sr));box-shadow:0 0 0 3px #FFFFFF,0 0 0 5px var(--kwi-ink),0 5px 0 4px rgba(90,62,107,.22)}
+.o-kwis-tl{font-weight:800;font-size:10px;line-height:1;letter-spacing:.1em;text-transform:uppercase}
+.o-kwis-tn{font-weight:800;font-size:24px;line-height:1}
+@keyframes kwiFill{0%{transform:scaleY(0)}75%{transform:scaleY(1.04)}100%{transform:scaleY(1)}}
+@keyframes kwiPearl{0%{transform:translateY(-130px) scale(1,1);animation-timing-function:cubic-bezier(.5,0,1,.6)}60%{transform:translateY(0) scale(1,1)}76%{transform:translateY(0) scale(1.22,.78)}90%{transform:translateY(-3px) scale(.95,1.05)}100%{transform:translateY(0) scale(1,1)}}
+@keyframes kwiStraw{0%{opacity:0;transform:translateY(-54px) rotate(12deg)}35%{opacity:1;transform:translateY(5px) rotate(12deg)}55%{transform:translateY(-3px) rotate(7deg)}75%{transform:translateY(0) rotate(15deg)}100%{opacity:1;transform:translateY(0) rotate(12deg)}}
+.playing .o-kwis-cup{animation:kwiBounceIn calc(.5s / var(--spd)) ease-out both}
+.playing .o-kwis-plate{animation:kwiPop calc(.45s / var(--spd)) ease-out calc(.1s / var(--spd)) both}
+.playing .o-kwis-tag{animation:kwiPress calc(.3s / var(--spd)) ease-out calc(.32s / var(--spd)) both}
+.playing .o-kwis-name{animation:kwiTextIn calc(.4s / var(--spd)) ease-out calc(.4s / var(--spd)) both}
+.playing .o-kwis-mo{animation:kwiTextIn calc(.38s / var(--spd)) ease-out calc(.52s / var(--spd)) both}
+.playing .o-kwis-tea{animation:kwiFill calc(.5s / var(--spd)) ease-out calc(.45s / var(--spd)) both}
+.playing .o-kwis-pearl{animation:kwiPearl calc(.38s / var(--spd)) ease-out calc(var(--pd) / var(--spd)) both}
+.playing .o-kwis-straw{animation:kwiStraw calc(.45s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-kwis-tier{animation:kwiPress calc(.32s / var(--spd)) ease-out calc(var(--td) / var(--spd)) both}
+
+/* bits — Mochi: mochi hop up and squash (more for more bits); the bubble above counts the amount */
+.o-kwib{height:166px;transform-origin:50% 100%}
+.o-kwib-mochi{position:absolute;bottom:4px;display:block;border:3px solid var(--kwi-ink);border-radius:50% 50% 44% 44% / 62% 62% 38% 38%;background:radial-gradient(ellipse at 32% 24%,rgba(255,255,255,.9) 0 12%,rgba(255,255,255,0) 13%),var(--mc);box-shadow:inset -4px -5px 0 rgba(90,62,107,.12),0 3px 0 rgba(90,62,107,.3),0 8px 14px rgba(30,14,44,.28);transform-origin:50% 100%}
+.o-kwib-face{position:absolute;left:50%;top:36%;overflow:visible}
+.o-kwib-bub{left:60px;width:300px;top:12px;height:92px;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 16px 3px;border-radius:30px;text-align:center}
+.o-kwib-bub::before,.o-kwib-bub::after{content:"";position:absolute;left:50%;width:0;height:0;border-style:solid}
+.o-kwib-bub::before{bottom:-17px;margin-left:-13px;border-width:15px 13px 0;border-color:var(--kwi-ink) transparent transparent}
+.o-kwib-bub::after{bottom:-10px;margin-left:-8px;border-width:10px 8px 0;border-color:#EEDAF9 transparent transparent}
+.o-kwib-tagrow{position:absolute;left:0;right:0;top:-15px;display:flex;justify-content:center}
+.o-kwib-tag{--sr:-3deg}
+.o-kwib-amt{display:flex;align-items:center;justify-content:center;font-weight:800;font-size:38px;line-height:1}
+.o-kwib-plus{margin-right:2px;font-size:30px}
+.o-kwib-unit{margin-left:7px;font-size:18px;color:rgba(90,62,107,.75)}
+.o-kwib-from{display:flex;align-items:center;justify-content:center;gap:6px;max-width:100%;margin-top:4px}
+.o-kwib-fr{flex:none;font-weight:700;font-size:15px;color:rgba(90,62,107,.72)}
+.o-kwib-name{min-width:0;font-weight:800;font-size:calc(22px * var(--fit,1));line-height:1.15}
+@keyframes kwiMochi{0%{opacity:0;transform:translateY(10px) scale(.5,.3)}18%{opacity:1;transform:translateY(-26px) scale(.84,1.2)}38%{transform:translateY(-34px) scale(1,1)}58%{transform:translateY(0) scale(1.26,.74)}74%{transform:translateY(-7px) scale(.92,1.08)}88%{transform:translateY(0) scale(1.05,.95)}100%{opacity:1;transform:translateY(0) scale(1,1)}}
+.playing .o-kwib-mochi{animation:kwiMochi calc(.72s / var(--spd)) ease-in-out calc(var(--md) / var(--spd)) both}
+.playing .o-kwib-bub{animation:kwiPop calc(.45s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-kwib-amt{animation:kwiTextIn calc(.4s / var(--spd)) ease-out calc(.45s / var(--spd)) both}
+.playing .o-kwib-tag{animation:kwiPress calc(.3s / var(--spd)) ease-out calc(.6s / var(--spd)) both}
+.playing .o-kwib-from{animation:kwiTextIn calc(.38s / var(--spd)) ease-out calc(.66s / var(--spd)) both}
+
+/* donation — Bunny card: the card pops, the bunny hops in behind it and grabs the edge, the message is written */
+.o-kwid{height:212px;transform-origin:50% 100%}
+.o-kwid-bunny{position:absolute;left:22px;top:0;width:84px;height:90px;transform-origin:50% 100%}
+.o-kwid-bunny > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-kwid-ear{transform-origin:54px 50px}
+.o-kwid-card{left:10px;right:10px;top:70px;display:flex;flex-direction:column;gap:3px;padding:20px 22px 11px;border-radius:26px}
+.o-kwid-msg{font-weight:600;font-size:17px;line-height:21px;max-height:63px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-kwid-sign{display:flex;align-items:center;gap:6px;min-width:0}
+.o-kwid-fr{flex:none;font-weight:700;font-size:15px;color:rgba(90,62,107,.72)}
+.o-kwid-name{min-width:0;font-weight:800;font-size:calc(24px * var(--fit,1));line-height:1.15}
+.o-kwid-solo{padding:22px 22px 14px}
+.o-kwid-solo .o-kwid-name{font-size:calc(30px * var(--fit,1))}
+.o-kwid-sent{font-weight:700;font-size:16px;line-height:1.2;color:rgba(90,62,107,.75)}
+.o-kwid-paw{position:absolute;top:61px;width:22px;height:17px;border:3px solid var(--kwi-ink);border-radius:11px 11px 8px 8px;background:linear-gradient(var(--kwi-ink),var(--kwi-ink)) 5px 4px/2px 7px no-repeat,linear-gradient(var(--kwi-ink),var(--kwi-ink)) 10px 4px/2px 7px no-repeat,#FFFFFF}
+.o-kwid-pawl{left:33px}
+.o-kwid-pawr{left:69px}
+.o-kwid-say{position:absolute;left:112px;top:20px;max-width:190px;--sr:-4deg;padding:2px 13px 1px;border:3px solid var(--kwi-ink);border-radius:16px;background:#FFFFFF;transform:rotate(var(--sr));box-shadow:0 3px 0 rgba(90,62,107,.3)}
+.o-kwid-say::before,.o-kwid-say::after{content:"";position:absolute;top:50%;width:0;height:0;border-style:solid}
+.o-kwid-say::before{left:-14px;margin-top:-7px;border-width:7px 12px 7px 0;border-color:transparent var(--kwi-ink) transparent transparent}
+.o-kwid-say::after{left:-8px;margin-top:-4px;border-width:4px 8px 4px 0;border-color:transparent #FFFFFF transparent transparent}
+.o-kwid-sayt{display:block;font-weight:800;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-kwid-heart{position:absolute;right:6px;top:2px;width:100px;height:92px;--sr:8deg;transform:rotate(var(--sr))}
+.o-kwid-hicon{position:absolute;left:0;top:0;width:100%;height:100%}
+.o-kwid-hrt{fill:var(--kwia);stroke:var(--kwi-ink);stroke-width:4;stroke-linejoin:round}
+.o-kwid-hs{fill:none;stroke:#FFFFFF;stroke-width:4.5;stroke-linecap:round;opacity:.75}
+.o-kwid-amt{position:absolute;left:8px;right:8px;top:30px;text-align:center;font-weight:800;line-height:1;white-space:nowrap;color:var(--kwi-on)}
+@keyframes kwiHopIn{0%{opacity:0;transform:translate(-56px,0) scale(1,1)}8%{opacity:1}24%{transform:translate(-40px,-20px) scale(.93,1.08)}44%{transform:translate(-24px,0) scale(1.12,.88)}64%{transform:translate(-10px,-16px) scale(.95,1.06)}84%{transform:translate(0,0) scale(1.12,.88)}93%{transform:translate(0,-2px) scale(.97,1.03)}100%{opacity:1;transform:translate(0,0) scale(1,1)}}
+@keyframes kwiEar{0%,100%{transform:rotate(0deg)}35%{transform:rotate(26deg)}70%{transform:rotate(-6deg)}}
+@keyframes kwiPaw{0%{opacity:0;transform:translateY(8px) scale(.6)}60%{opacity:1;transform:translateY(-2px) scale(1.08)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes kwiHeartIn{0%{opacity:0;transform:scale(0) rotate(-20deg)}55%{opacity:1;transform:scale(1.14) rotate(14deg)}78%{transform:scale(.95) rotate(var(--sr))}100%{opacity:1;transform:scale(1) rotate(var(--sr))}}
+.playing .o-kwid-card{animation:kwiPop calc(.45s / var(--spd)) ease-out both}
+.playing .o-kwid-heart{animation:kwiHeartIn calc(.48s / var(--spd)) ease-out calc(.45s / var(--spd)) both,kwiBeat calc(.32s / var(--spd)) ease-in-out calc(1.7s / var(--spd)) 2}
+.playing .o-kwid-bunny{animation:kwiHopIn calc(.78s / var(--spd)) ease-in-out calc(.18s / var(--spd)) both}
+.playing .o-kwid-ear{animation:kwiEar calc(.45s / var(--spd)) ease-in-out calc(.92s / var(--spd))}
+.playing .o-kwid-paw{animation:kwiPaw calc(.26s / var(--spd)) ease-out calc(.9s / var(--spd)) both}
+.playing .o-kwid-pawr{animation-delay:calc(.96s / var(--spd))}
+.playing .o-kwid-sign{animation:kwiTextIn calc(.38s / var(--spd)) ease-out calc(.95s / var(--spd)) both}
+.playing .o-kwid-sent{animation:kwiTextIn calc(.36s / var(--spd)) ease-out calc(1.08s / var(--spd)) both}
+.playing .o-kwid-say{animation:kwiPress calc(.32s / var(--spd)) ease-out calc(1.05s / var(--spd)) both}
+
+/* raid — Friend parade: the friends hop in from the left in a line, the leader first, and land one by one */
+.o-kwir{height:200px;transform-origin:50% 100%}
+.o-kwir-plate{left:12px;right:12px;top:6px;height:108px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 22px 4px;border-radius:30px;text-align:center}
+.o-kwir-tag{--sr:-2deg;margin-bottom:3px}
+.o-kwir-name{max-width:100%;font-weight:800;font-size:calc(32px * var(--fit,1));line-height:1.1}
+.o-kwir-cnt{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:3px;font-weight:800;font-size:21px;line-height:1.2}
+.o-kwir-plus{font-size:22px}
+.o-kwir-row{position:absolute;left:0;right:0;top:118px;height:80px}
+.o-kwir-f{position:absolute;display:block}
+.o-kwir-face{display:block;width:100%;height:100%;overflow:visible;transform-origin:50% 100%}
+.o-kwir-more{position:absolute;left:330px;bottom:16px;font-size:15px}
+@keyframes kwiMarch{0%{opacity:0;transform:translateX(var(--px))}12%{opacity:1}100%{opacity:1;transform:translateX(0)}}
+@keyframes kwiHop{0%,100%{transform:translateY(0) scale(1,1)}20%{transform:translateY(-3px) scale(.95,1.05)}50%{transform:translateY(-10px) scale(1,1)}85%{transform:translateY(0) scale(1.06,.94)}}
+@keyframes kwiLand{0%,100%{transform:translateY(0) scale(1,1)}35%{transform:translateY(0) scale(1.16,.84)}70%{transform:translateY(-3px) scale(.96,1.04)}}
+.playing .o-kwir-plate{animation:kwiPop calc(.45s / var(--spd)) ease-out both}
+.playing .o-kwir-tag{animation:kwiPress calc(.3s / var(--spd)) ease-out calc(.2s / var(--spd)) both}
+.playing .o-kwir-name{animation:kwiTextIn calc(.4s / var(--spd)) ease-out calc(.28s / var(--spd)) both}
+.playing .o-kwir-cnt{animation:kwiTextIn calc(.38s / var(--spd)) ease-out calc(.4s / var(--spd)) both}
+.playing .o-kwir-f{animation:kwiMarch calc(var(--pdu) / var(--spd)) linear calc(var(--pd) / var(--spd)) both}
+.playing .o-kwir-face{animation:kwiHop calc(var(--hp) / var(--spd)) ease-in-out calc(var(--pd) / var(--spd)) var(--hn),kwiLand calc(.3s / var(--spd)) ease-out calc(var(--pa) / var(--spd))}
+.playing .o-kwir-more{animation:kwiPop calc(.4s / var(--spd)) ease-out calc(var(--md) / var(--spd)) both}
+
+/* giveaway — Gacha: the knob turns, a capsule rolls out and pops, the winner springs out, the prize swings in */
+.o-kwig{height:216px}
+.o-kwig-mach{position:absolute;left:6px;top:2px;width:136px;height:210px;transform-origin:50% 100%}
+.o-kwig-dome{position:absolute;left:10px;top:0;width:116px;height:116px;overflow:hidden;border:3.5px solid var(--kwi-ink);border-radius:50%;background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.94),rgba(234,242,255,.88) 72%);box-shadow:inset -6px -8px 0 rgba(205,180,255,.32)}
+.o-kwig-dome::after{content:"";position:absolute;left:14px;top:12px;width:24px;height:40px;border-radius:50%;border-left:5px solid rgba(255,255,255,.95);transform:rotate(24deg)}
+.o-kwig-balls{position:absolute;left:0;top:0;width:100%;height:100%}
+.o-kwig-ball{position:absolute;width:26px;height:26px;border:2.5px solid var(--kwi-ink);border-radius:50%;background:radial-gradient(circle at 32% 30%,rgba(255,255,255,.8) 0 2.5px,rgba(255,255,255,0) 3px),linear-gradient(var(--bra,180deg),var(--bc) 0 50%,#FFFFFF 50%)}
+.o-kwig-body{position:absolute;left:2px;top:98px;width:132px;height:112px;border:3.5px solid var(--kwi-ink);border-radius:24px 24px 18px 18px;background:linear-gradient(180deg,rgba(255,255,255,.32) 0 14%,rgba(255,255,255,0) 14%),var(--kwia);box-shadow:0 4px 0 rgba(90,62,107,.32),0 12px 20px rgba(30,14,44,.3),inset 0 -7px 0 rgba(0,0,0,.1)}
+.o-kwig-panel{position:absolute;left:30px;top:8px;width:65px;height:22px;border:2.5px solid var(--kwi-ink);border-radius:11px;background:#FFFFFF}
+.o-kwig-panel > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-kwig-knob{position:absolute;left:43px;top:33px;width:39px;height:39px;border:3.5px solid var(--kwi-ink);border-radius:50%;background:var(--kwi-butter);box-shadow:0 3px 0 rgba(90,62,107,.3)}
+.o-kwig-knob::before{content:"";position:absolute;left:50%;top:50%;box-sizing:border-box;width:28px;height:10px;margin:-5px 0 0 -14px;border:2.5px solid var(--kwi-ink);border-radius:5px;background:#FFFFFF}
+.o-kwig-chute{position:absolute;left:35px;bottom:7px;width:55px;height:23px;border:3px solid var(--kwi-ink);border-radius:11px 11px 6px 6px;background:#3E2A4C;box-shadow:inset 0 5px 0 rgba(0,0,0,.35)}
+.o-kwig-cap{position:absolute;left:156px;top:166px;width:44px;height:44px}
+.o-kwig-capb,.o-kwig-capt{position:absolute;left:0;width:44px;height:23px;border:3px solid var(--kwi-ink)}
+.o-kwig-capb{bottom:0;border-radius:0 0 22px 22px;background:#FFFFFF}
+.o-kwig-capt{top:0;border-radius:22px 22px 0 0;background:radial-gradient(circle at 30% 40%,rgba(255,255,255,.8) 0 3px,rgba(255,255,255,0) 3.5px),var(--kwi-mint);transform-origin:3px 20px;transform:translate(-3px,-7px) rotate(-36deg)}
+.o-kwig-ring{position:absolute;left:156px;top:166px;width:44px;height:44px;border:3px solid var(--kwi-butter);border-radius:50%;opacity:0}
+.o-kwig-plate{left:154px;right:8px;top:22px;height:108px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 16px 4px;border-radius:30px;text-align:center;transform-origin:24px 166px}
+.o-kwig-tag{--sr:-3deg;margin-bottom:5px}
+.o-kwig-name{max-width:100%;font-weight:800;font-size:calc(30px * var(--fit,1));line-height:1.12}
+.o-kwig-prize{position:absolute;left:206px;right:12px;top:146px;height:36px;display:flex;align-items:center;justify-content:center;padding:0 14px 0 24px;border:3px solid var(--kwi-ink);border-radius:12px;background:var(--kwi-mint);box-shadow:0 3px 0 rgba(90,62,107,.3);--sr:-2deg;transform:rotate(var(--sr));transform-origin:50% -16px}
+.o-kwig-prize::before{content:"";position:absolute;left:50%;top:-19px;width:3px;height:16px;margin-left:-1.5px;border-radius:2px;background:var(--kwi-ink)}
+.o-kwig-prize::after{content:"";position:absolute;left:7px;top:50%;box-sizing:border-box;width:10px;height:10px;margin-top:-5px;border:2.5px solid var(--kwi-ink);border-radius:50%;background:#FFFFFF}
+.o-kwig-pt{display:block;min-width:0;max-width:100%;font-weight:800;font-size:15px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes kwiCrank{0%{transform:rotate(0deg)}70%{transform:rotate(385deg)}86%{transform:rotate(352deg)}100%{transform:rotate(360deg)}}
+@keyframes kwiJiggle{0%,100%{transform:translate(0,0) rotate(0deg)}20%{transform:translate(-3px,-5px) rotate(-5deg)}40%{transform:translate(3px,-2px) rotate(4deg)}60%{transform:translate(-2px,-4px) rotate(-3deg)}80%{transform:translate(1px,0) rotate(1deg)}}
+@keyframes kwiRoll{0%{opacity:0;transform:translate(-102px,2px) scale(.5) rotate(0deg)}16%{opacity:1;transform:translate(-92px,2px) scale(.95) rotate(40deg)}46%{transform:translate(-54px,-20px) scale(1) rotate(200deg)}72%{transform:translate(-15px,0) scale(1.1,.9) rotate(320deg)}86%{transform:translate(-4px,-4px) scale(1) rotate(352deg)}100%{opacity:1;transform:translate(0,0) scale(1) rotate(360deg)}}
+@keyframes kwiLid{0%{transform:translate(0,0) rotate(0deg)}45%{transform:translate(-4px,-18px) rotate(-58deg)}75%{transform:translate(-3px,-5px) rotate(-28deg)}100%{transform:translate(-3px,-7px) rotate(-36deg)}}
+@keyframes kwiRing{0%{opacity:0;transform:scale(.4)}12%{opacity:1}100%{opacity:0;transform:scale(2.4)}}
+@keyframes kwiSpring{0%{opacity:0;transform:scale(.08)}50%{opacity:1;transform:scale(1.07)}72%{transform:scale(.97)}88%{transform:scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes kwiSwing{0%{opacity:0;transform:rotate(-28deg)}35%{opacity:1;transform:rotate(12deg)}62%{transform:rotate(-7deg)}82%{transform:rotate(1deg)}100%{opacity:1;transform:rotate(var(--sr))}}
+.playing .o-kwig-mach{animation:kwiBounceIn calc(.45s / var(--spd)) ease-out both}
+.playing .o-kwig-knob{animation:kwiCrank calc(.55s / var(--spd)) ease-in-out calc(.3s / var(--spd)) both}
+.playing .o-kwig-balls{animation:kwiJiggle calc(.45s / var(--spd)) ease-in-out calc(.34s / var(--spd)) both}
+.playing .o-kwig-cap{animation:kwiRoll calc(.42s / var(--spd)) ease-out calc(.76s / var(--spd)) both}
+.playing .o-kwig-capt{animation:kwiLid calc(.3s / var(--spd)) ease-out calc(1.12s / var(--spd)) both}
+.playing .o-kwig-ring{animation:kwiRing calc(.45s / var(--spd)) ease-out calc(1.12s / var(--spd)) both}
+.playing .o-kwig-plate{animation:kwiSpring calc(.46s / var(--spd)) ease-out calc(1.15s / var(--spd)) both}
+.playing .o-kwig-tag{animation:kwiPress calc(.3s / var(--spd)) ease-out calc(1.32s / var(--spd)) both}
+.playing .o-kwig-name{animation:kwiTextIn calc(.4s / var(--spd)) ease-out calc(1.38s / var(--spd)) both}
+.playing .o-kwig-prize{animation:kwiSwing calc(.45s / var(--spd)) ease-out calc(1.55s / var(--spd)) both}
