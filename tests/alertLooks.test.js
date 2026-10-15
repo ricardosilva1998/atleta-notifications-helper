@@ -35,6 +35,7 @@ const PREFIXES = {
   retro: { classes: ['o-ros'], keyframes: ['ros'] },
   graffiti: { classes: ['o-gfi'], keyframes: ['gfi'] },
   kawaii: { classes: ['o-kwi'], keyframes: ['kwi'] },
+  steampunk: { classes: ['o-stm'], keyframes: ['stm'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
