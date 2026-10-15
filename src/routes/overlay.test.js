@@ -364,6 +364,16 @@ describe('the Polls & predictions bar', () => {
     for (const lang of ['xx', '']) assert.match((await get(`/overlay/poll/${token}?lang=${lang}`)).text, /<html lang="en">/);
   });
 
+  test('its page prints the token into its script with < escaped, like every script embed', async () => {
+    const { id } = addStreamer();
+    const token = `tok-</script>-${id}`;
+    db.db.prepare('UPDATE streamers SET overlay_token = ? WHERE id = ?').run(token, id);
+    const page = await get(`/overlay/poll/${encodeURIComponent(token)}`);
+    assert.equal(page.status, 200);
+    assert.ok(page.text.includes(`window.OVERLAY_TOKEN = "tok-\\u003c/script>-${id}";`));
+    assert.ok(!page.text.includes(token), 'the stored token never ends the script');
+  });
+
   test('its stream sends what runs when it opens, then every change on its own channel, and nothing of the alerts', async () => {
     const { id, token } = addStreamer();
     const stream = await openStream(`/overlay/poll/events/${token}`);
@@ -373,5 +383,84 @@ describe('the Polls & predictions bar', () => {
     bus.emit(`poll:${id}`, { type: 'poll-state', poll: { id: 'poll-1' }, prediction: null, serverNow: 1 });
     await until(() => stream.chunks.join('').includes('"poll-1"'), 'a change on poll:<id> reaches the bar');
     assert.ok(!stream.chunks.join('').includes('"follow"'), 'an alert is not the bar\'s');
+  });
+});
+
+// EventSub can lose an end, lock or result event; the bar must not stay on a finished poll at 0:00 or a prediction
+// locked for good. The clock is mocked (setInterval and Date); livePolls' live() and barState() are replaced on the
+// singleton the route reads on every turn of its timer.
+describe('an open Polls & predictions bar asks Twitch again while what it shows may be stale', () => {
+  const { livePolls } = require('../services/livePolls');
+  const NOW = Date.parse('2026-10-15T20:00:00Z');
+  const view = (kind, state, endsAt) => ({ kind, id: `${kind}-1`, title: 'Synthetic', state, endsAt, endedAt: state === 'ended' ? NOW : null });
+
+  // Opens a bar whose barState() answers `bar.state`; live() records the streamer it is asked about and refuses as it
+  // does for a streamer without the permissions (the route must catch it, as it does for the read when the bar opens).
+  async function openBar(t, state) {
+    t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: NOW });
+    const real = { live: livePolls.live, barState: livePolls.barState };
+    t.after(() => Object.assign(livePolls, real));
+    const bar = { state, calls: [] };
+    livePolls.live = (streamerId) => {
+      bar.calls.push(streamerId);
+      return Promise.reject(Object.assign(new Error('needs_reconnect'), { code: 'needs_reconnect' }));
+    };
+    livePolls.barState = () => ({ ...bar.state, serverNow: Date.now() });
+    const { id, token } = addStreamer();
+    bar.id = id;
+    bar.stream = await openStream(`/overlay/poll/events/${token}`);
+    return bar;
+  }
+  // Moves the clock 5 seconds at a time, so each turn of the bar's timer sees its own time.
+  const advance = (t, ms) => { for (let done = 0; done < ms; done += 5000) t.mock.timers.tick(5000); };
+  // OBS disconnects; the server has run its close handler once the bar's bus listener is gone.
+  async function disconnect(bar) {
+    bar.stream.request.destroy();
+    await until(() => bus.listenerCount(`poll:${bar.id}`) === 0, 'the bar\'s bus listener was not removed when OBS disconnected');
+  }
+
+  test('every 5 seconds while a running poll or prediction is past its end, and not before its end', async (t) => {
+    const bar = await openBar(t, { poll: view('poll', 'running', NOW + 15000), prediction: null });
+    assert.deepEqual(bar.calls, [bar.id], 'the read when the bar opens');
+    advance(t, 10000);
+    assert.equal(bar.calls.length, 1, 'a running poll before its end');
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 2, 'at its end');
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 3, 'and every 5 seconds after it');
+    bar.state = { poll: view('poll', 'ended', null), prediction: null };
+    advance(t, 15000);
+    assert.equal(bar.calls.length, 3, 'once a read has found the end');
+    bar.state = { poll: null, prediction: view('prediction', 'running', NOW) };
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 4, 'a running prediction past its end too');
+    assert.ok(bar.calls.every((streamerId) => streamerId === bar.id), 'the bar asks about its own streamer');
+    await disconnect(bar);
+  });
+
+  test('at most once a minute while a prediction stays locked', async (t) => {
+    const bar = await openBar(t, { poll: null, prediction: view('prediction', 'locked', null) });
+    assert.equal(bar.calls.length, 1, 'the read when the bar opens');
+    advance(t, 55000);
+    assert.equal(bar.calls.length, 1, 'not within a minute of the last read');
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 2, 'a minute after it');
+    advance(t, 55000);
+    assert.equal(bar.calls.length, 2);
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 3);
+    await disconnect(bar);
+  });
+
+  test('a bar that OBS closes leaves no bus listener and no timer behind', async (t) => {
+    const bar = await openBar(t, { poll: view('poll', 'running', NOW), prediction: null });
+    assert.equal(bus.listenerCount(`poll:${bar.id}`), 1);
+    assert.equal(bus.listenerCount(`overlay-disabled:${bar.id}`), 1);
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 2, 'the timer asks while the bar is open');
+    await disconnect(bar);
+    assert.equal(bus.listenerCount(`overlay-disabled:${bar.id}`), 0);
+    advance(t, 60000);
+    assert.equal(bar.calls.length, 2, 'no read is asked for once OBS has disconnected');
   });
 });

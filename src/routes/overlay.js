@@ -252,7 +252,12 @@ router.get('/goal/:token', (req, res) => {
 
 // The Polls & predictions bar (an OBS browser source of its own). Its stream says what runs when it opens — read from
 // Twitch when EventSub said nothing lately (after a restart OBS reconnects here) — then every change on the bus
-// channel poll:<streamerId>; it does not follow the alerts' switch.
+// channel poll:<streamerId>; it does not follow the alerts' switch. EventSub can lose an end, lock or result event, so
+// while what the bar shows may be stale it asks livePolls to read Twitch again (live() reads at most once every 5 s per
+// streamer, and what a read finds reaches every open bar on poll:<streamerId>):
+const BAR_OVERDUE_CHECK_MS = 5000; // every 5 s while a running poll or prediction is past its end
+const BAR_LOCKED_CHECK_MS = 60000; // at most once a minute while a prediction stays locked
+
 router.get('/poll/events/:token', (req, res) => {
   const streamer = db.getStreamerByOverlayToken(req.params.token);
   if (!streamer) return res.status(404).send('Invalid overlay token');
@@ -271,12 +276,23 @@ router.get('/poll/events/:token', (req, res) => {
   const heartbeat = setInterval(() => {
     try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
   }, 30000);
+  let askedAt = Date.now(); // the read when the bar opens, below
+  const recheck = setInterval(() => {
+    const now = Date.now();
+    const { poll, prediction } = livePolls.barState(streamer.id);
+    const overdue = [poll, prediction].some((view) => !!view && view.state === 'running' && view.endsAt !== null && view.endsAt <= now);
+    const locked = !!prediction && prediction.state === 'locked';
+    if (!overdue && !(locked && now - askedAt >= BAR_LOCKED_CHECK_MS)) return;
+    askedAt = now;
+    livePolls.live(streamer.id).catch(() => null);
+  }, BAR_OVERDUE_CHECK_MS);
   const channel = `poll:${streamer.id}`;
   bus.on(channel, send);
   endStreamWhenAccountDisabled(streamer.id, req, res);
   holdStream(res);
   req.on('close', () => {
     clearInterval(heartbeat);
+    clearInterval(recheck);
     bus.off(channel, send);
   });
 
@@ -311,7 +327,7 @@ router.get('/poll/:token', (req, res) => {
 </head>
 <body>
   <div id="poll-root"></div>
-  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)}; window.POLL_BAR_TEXTS = ${JSON.stringify(texts).replace(/</g, '\\u003c')};</script>
+  <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token).replace(/</g, '\\u003c')}; window.POLL_BAR_TEXTS = ${JSON.stringify(texts).replace(/</g, '\\u003c')};</script>
   <script src="/overlay/pollModel.js"></script>
   <script src="/overlay/poll.js"></script>
 </body>

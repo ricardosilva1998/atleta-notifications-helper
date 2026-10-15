@@ -83,11 +83,14 @@ describe('what the bar shows', () => {
   });
 
   test('the bar picks as the server does', () => {
+    assert.equal(model.RESULT_MS, rules.BAR_RESULT_MS);
     const cases = [
       { poll: null, prediction: null },
       { poll: view('poll'), prediction: null },
       { poll: null, prediction: view('prediction', { state: 'locked' }) },
       { poll: view('poll'), prediction: view('prediction') },
+      { poll: view('poll'), prediction: view('prediction', { state: 'locked', endsAt: null }) },
+      { poll: view('poll'), prediction: ended('prediction', NOW - 5000) },
       { poll: ended('poll', NOW - 5000), prediction: ended('prediction', NOW - 12000) },
       { poll: ended('poll', NOW - 12000), prediction: null },
     ];
