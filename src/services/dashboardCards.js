@@ -8,10 +8,12 @@
 
 const { DURATIONS, wholeSeconds, volumeOf } = require('./overlaySettings');
 const { sponsorChatIntervalMinutes } = require('./inputLimits');
+const { CHAT_TEXTS: POLL_TEXTS, LIMITS: POLL_LIMITS, POINTS_PER_VOTE, DURATION_CHOICES, TEMPLATES_MAX } = require('./pollRules');
+const { RAID_MIN_VIEWERS, shoutoutLine } = require('./shoutouts');
 
 // The cards in reading order, which is also their order on a phone. The OBS overlay and rewards cards are left out
 // while the overlay features are off; the Multistream card comes last while the relay is set up.
-const ORDER = ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'rewards', 'spotify'];
+const ORDER = ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify'];
 const OVERLAY_CARDS = new Set(['overlay', 'rewards']);
 
 const label = (key, params = {}) => ({ key, params });
@@ -77,6 +79,18 @@ function ago(stored, now) {
   if (hours < 24) return label('nav.timeHours', { n: hours });
   return label('nav.timeDays', { n: Math.floor(hours / 24) });
 }
+
+// The poll bar's OBS link as the cards show it: without its scheme, and masked until Show (its token is a secret).
+function pollBarLink(url) {
+  if (!url) return null;
+  const shown = url.replace(/^https?:\/\//, '');
+  return { url, shown, masked: shown.replace(/\/overlay\/poll\/.*$/, `/overlay/poll/${'•'.repeat(12)}`) };
+}
+
+// A template's time as the card writes it: whole minutes, else seconds.
+const timeLabel = (seconds) => (seconds >= 60 && seconds % 60 === 0
+  ? label('cards.common.minutes', { minutes: seconds / 60 })
+  : label('cards.common.seconds', { seconds }));
 
 function chatbotCard({ streamer, bot }) {
   const on = !!streamer.chatbot_enabled;
@@ -149,7 +163,7 @@ function discordCard({ discord: d }) {
 
 // The seconds and the volume are what the overlay is told: buildOverlayConfig() reads the same stored values through
 // the same two functions, so the card never shows a number the overlay does not play.
-function overlayCard({ streamer, overlay }) {
+function overlayCard({ streamer, overlay, polls }) {
   const on = !!streamer.overlay_enabled;
   const alerts = ALERTS.map((a) => {
     const durationKey = `overlay_${a.column}_duration`;
@@ -177,6 +191,7 @@ function overlayCard({ streamer, overlay }) {
     url: overlay.url || null,
     shown,
     masked: shown ? shown.replace(/\/overlay\/.*$/, `/overlay/${'•'.repeat(12)}`) : null,
+    pollBar: pollBarLink(polls && polls.barUrl),
     alerts,
     volume: Math.round(volumeOf(streamer.overlay_volume) * 100),
     counts: { alerts: nOfM(alerts.filter((a) => a.on).length, alerts.length) },
@@ -288,6 +303,88 @@ function giveawaysCard({ giveaway }) {
   };
 }
 
+// The Polls & predictions card's status line from what runs (livePolls.snapshot()). GET /dashboard/api/polls/live
+// answers it too, so the line follows the live panel.
+function pollsStatus(live, templateCount) {
+  const busy = (view) => !!view && view.state !== 'ended';
+  const poll = live && live.poll;
+  const prediction = live && live.prediction;
+  if (prediction && prediction.state === 'locked') return status('cards.polls.status.locked', 'warn');
+  if (busy(poll) && busy(prediction)) return status('cards.polls.status.bothRunning');
+  if (busy(poll)) return status('cards.polls.status.pollRunning');
+  if (busy(prediction)) return status('cards.polls.status.predictionRunning');
+  if (prediction) return status('cards.polls.status.predictionEnded');
+  if (poll) return status('cards.polls.status.pollEnded');
+  return status('cards.polls.status.ready', 'ok', { count: templateCount });
+}
+
+// The Polls & predictions card: its one setup step (link Twitch; reconnect for the two permissions; Check again after
+// Twitch said the channel is not an Affiliate or Partner), else the templates (▶ off for a kind that runs), what runs on
+// Twitch now (the page script keeps the live panel up to date), the announcements and their six texts, Twitch's limits
+// for the pop-up, and the bar's OBS link with the overlay features.
+function pollsCard({ streamer, polls, pollTemplates, features }) {
+  let setup = null;
+  if (!twitchLinked(streamer)) setup = 'linkTwitch';
+  else if (!polls.hasScope) setup = 'reconnect';
+  else if (streamer.cp_affiliate_status === 'not_affiliate') setup = 'notAffiliate';
+  const live = polls.live || { poll: null, prediction: null, serverNow: null };
+  const busy = (view) => !!view && view.state !== 'ended';
+  let st = pollsStatus(live, pollTemplates.length);
+  if (setup === 'linkTwitch') st = status('cards.polls.status.noTwitch', 'warn');
+  else if (setup === 'reconnect') st = status('cards.polls.status.reconnect', 'warn');
+  else if (setup === 'notAffiliate') st = status('cards.polls.status.notAffiliate', 'warn');
+  const announce = !!streamer.polls_chat_enabled;
+  return {
+    setup,
+    status: st,
+    templates: pollTemplates.map((tpl) => ({
+      id: tpl.id, kind: tpl.kind, title: tpl.title, choices: tpl.choices, durationSeconds: tpl.durationSeconds,
+      pointsPerVote: tpl.pointsPerVote, time: timeLabel(tpl.durationSeconds),
+    })),
+    blocked: { poll: busy(live.poll), prediction: busy(live.prediction) },
+    live,
+    announce,
+    chatNote: announce && !streamer.chatbot_enabled,
+    texts: POLL_TEXTS.map((text) => ({ key: text.key, label: text.label, vars: text.vars, text: streamer[text.key] || '' })),
+    limits: {
+      poll: POLL_LIMITS.poll, prediction: POLL_LIMITS.prediction, pointsPerVote: POINTS_PER_VOTE,
+      durations: DURATION_CHOICES, templatesMax: TEMPLATES_MAX,
+    },
+    bar: features.overlays ? pollBarLink(polls.barUrl) : null,
+    counts: { templates: plain(pollTemplates.length) },
+  };
+}
+
+// The Shoutouts card's example line, filled for a made-up channel.
+const SHOUTOUT_SAMPLE = Object.freeze({ login: 'rivalracer', name: 'RivalRacer', game: 'iRacing', title: 'Night race at Spa' });
+
+// The Shoutouts card: `!so @name` for moderators, the shoutout after a raid and its minimum, and the message (with
+// Test in chat and an example line). Faded while the chatbot is off: the shoutouts are its lines.
+function shoutoutsCard({ streamer }) {
+  const command = !!streamer.shoutout_command_enabled;
+  const raid = !!streamer.shoutout_raid_enabled;
+  const viewers = Number(streamer.shoutout_raid_min_viewers) || 1;
+  let st;
+  if (command && raid) st = status('cards.shoutouts.status.both', 'ok', { viewers });
+  else if (command) st = status('cards.shoutouts.status.command');
+  else if (raid) st = status('cards.shoutouts.status.raid', 'ok', { viewers });
+  else st = status('cards.shoutouts.status.off', 'off');
+  const text = streamer.shoutout_template || '';
+  return {
+    needsChatbot: true,
+    status: st,
+    command,
+    raid,
+    viewers,
+    viewerChoices: choices(RAID_MIN_VIEWERS, viewers),
+    text,
+    vars: ['{name}', '{game}', '{title}', '{link}'],
+    sample: SHOUTOUT_SAMPLE,
+    example: shoutoutLine(text, SHOUTOUT_SAMPLE),
+    counts: {},
+  };
+}
+
 function rewardsCard({ streamer, rewards, rewardsAccess }) {
   const on = !!streamer.cp_rewards_enabled;
   let access = 'ok';
@@ -318,6 +415,7 @@ function multistreamCard({ streamer }) {
 const BUILDERS = {
   chatbot: chatbotCard, discord: discordCard, overlay: overlayCard, commands: commandsCard, sponsors: sponsorsCard,
   donations: donationsCard, protection: protectionCard, giveaways: giveawaysCard, rewards: rewardsCard, spotify: spotifyCard,
+  shoutouts: shoutoutsCard, polls: pollsCard,
   multistream: multistreamCard,
 };
 
@@ -346,4 +444,4 @@ function cardTexts(cards, t) {
   return out;
 }
 
-module.exports = { buildCards, cardTexts, ORDER };
+module.exports = { buildCards, cardTexts, pollsStatus, ORDER };

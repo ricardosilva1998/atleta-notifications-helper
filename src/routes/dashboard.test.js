@@ -69,6 +69,7 @@ const twitchStub = {
     return twitch.users[login] || null;
   },
   hasRedemptionScope: () => true,
+  hasPollsScope: () => false,
   needsBroadcasterReauth: () => false,
 };
 // What the stubbed YouTube API answers; the tests set these.
@@ -3818,7 +3819,8 @@ describe('the dashboard puts Twitch first', () => {
     const html = (await request('GET', '/dashboard', { streamer: linked() })).text;
     const pane = dashboardPane(html, 'twitch');
     assert.deepEqual(twitchCardTitles(html), [t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'), t('en', 'cards.commands.title'),
-      t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'), t('en', 'cards.protection.title'), t('en', 'dashboard.cards.giveaways'), 'Spotify']);
+      t('en', 'cards.shoutouts.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'), t('en', 'cards.protection.title'),
+      t('en', 'dashboard.cards.giveaways'), esc(t('en', 'cards.polls.title')), 'Spotify']);
     assert.ok(pane.indexOf(`Twitch: synthetic_first_${made}`) < pane.indexOf('class="card'), 'the linked channel is above the cards');
   });
 
@@ -3829,8 +3831,9 @@ describe('the dashboard puts Twitch first', () => {
     try {
       const html = (await request('GET', '/dashboard', { streamer: linked({ overlay_token: 'synthetic-token-first-1' }) })).text;
       assert.deepEqual(twitchCardTitles(html), [t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'), t('en', 'dashboard.cards.overlay.title'),
-        t('en', 'cards.commands.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'), t('en', 'cards.protection.title'),
-        t('en', 'dashboard.cards.giveaways'), t('en', 'dashboard.cards.cpRewards'), 'Spotify', t('en', 'dashboard.cards.multistream.title')]);
+        t('en', 'cards.commands.title'), t('en', 'cards.shoutouts.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'),
+        t('en', 'cards.protection.title'), t('en', 'dashboard.cards.giveaways'), esc(t('en', 'cards.polls.title')), t('en', 'dashboard.cards.cpRewards'),
+        'Spotify', t('en', 'dashboard.cards.multistream.title')]);
     } finally {
       multistream.enabled = relay;
     }
@@ -3840,7 +3843,7 @@ describe('the dashboard puts Twitch first', () => {
     const pane = dashboardPane((await request('GET', '/dashboard', { streamer: linked({ chatbot_enabled: 1 }) })).text, 'twitch')
       .replace(/<template\b[\s\S]*?<\/template>/g, ' '); // the pop-ups' own buttons
     const cards = pane.split('<section class="card wc-card').slice(1);
-    assert.equal(cards.length, 10);
+    assert.equal(cards.length, 12);
     for (const card of cards) {
       const title = (card.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/) || [])[1];
       assert.match(card, /<\/h3><span class="wc-status[^"]*" data-status>[^<]+<\/span>/, `${title}: a status line under its title`);
@@ -4838,7 +4841,9 @@ describe('the data of the working cards', () => {
     db.addSponsorMessage(id, 'Partner line', null);
     const l = await locals(id);
     assert.equal(l.wideLayout, true);
-    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'rewards', 'spotify']);
+    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
+    assert.equal(l.cards.polls.setup, 'reconnect', 'Twitch has not given the two permissions yet');
+    assert.equal(l.cards.shoutouts.status.key, 'cards.shoutouts.status.off');
     assert.deepEqual(l.cards.commands.commands.map((c) => c.name), ['discord']);
     assert.deepEqual(l.cards.sponsors.messages.map((m) => m.text), ['Partner line']);
     assert.ok(l.cards.donations.tipUrl.endsWith('/tip/synthetic_wc_1'));
@@ -4885,6 +4890,8 @@ describe('the data of the working cards', () => {
     assert.equal(body.ok, true);
     assert.deepEqual(body.cards.chatbot.status, { text: t('en', 'cards.chatbot.status.off'), tone: 'off' });
     assert.equal(body.cards.chatbot.counts.thankYous, t('en', 'cards.common.nOfM', { on: 6, total: 6 }), 'a new streamer\'s thank-yous are all on');
+    assert.deepEqual(body.cards.polls.status, { text: t('en', 'cards.polls.status.reconnect'), tone: 'warn' });
+    assert.deepEqual(body.cards.shoutouts.status, { text: t('en', 'cards.shoutouts.status.off'), tone: 'off' });
     assert.ok(!('giveaways' in body.cards));
   });
 
@@ -4921,7 +4928,7 @@ describe('the working cards on the page', () => {
 
   test('the cards that need the chatbot fade while it is off and say why', async () => {
     const html = await pane(linkedStreamer({ chatbot_enabled: 0 }));
-    for (const name of ['commands', 'sponsors', 'protection', 'giveaways']) {
+    for (const name of ['commands', 'shoutouts', 'sponsors', 'protection', 'giveaways']) {
       assert.match(html, new RegExp(`class="card wc-card needs-bot[^"]*" id="card-${name}" data-card="${name}" data-needs-chatbot`), name);
     }
     assert.ok(cardOf(html, 'commands').includes(esc(t('en', 'cards.commands.needsChatbot'))));
@@ -4934,8 +4941,9 @@ describe('the working cards on the page', () => {
     const overlay = cardOf(html, 'overlay');
     assert.match(overlay, /<code class="wc-link" data-masked="[^"]*\/overlay\/•{12}" data-shown="[^"]*\/overlay\/synthetic-token-wcp-mask">[^<]*\/overlay\/•{12}<\/code>/);
     assert.match(overlay, /data-copy="[^"]*\/overlay\/synthetic-token-wcp-mask"/);
-    // The token is on the tab exactly twice (data-shown and data-copy): in no text, link or other attribute.
-    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 2);
+    // The token is on the tab exactly four times (data-shown and data-copy of the alerts' link and of the poll bar's,
+    // both in the OBS overlay card; the Polls & predictions card shows the bar's link only once it can start polls).
+    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 4);
     const noLink = cardOf(await pane(linkedStreamer()), 'overlay');
     assert.ok(noLink.includes('action="/dashboard/overlay/generate-token"') && noLink.includes(esc(t('en', 'cards.overlay.createLink'))));
   });
@@ -5032,6 +5040,42 @@ describe('the working cards on the page', () => {
     }).id);
     const rewards = cardOf(await pane(id), 'rewards');
     assert.ok(rewards.includes(`data-reward-id="${reward}" checked`) && rewards.includes(`data-reward-test="${reward}"`));
+  });
+
+  test('the Shoutouts card: its switches and the raid minimum save as settings; the message as typed, with its example and test', async () => {
+    const id = linkedStreamer({ chatbot_enabled: 1, shoutout_command_enabled: 1, shoutout_raid_min_viewers: 10, shoutout_template: '<b>Go</b> {name}' });
+    const card = cardOf(await pane(id), 'shoutouts');
+    assert.match(card, /data-setting="shoutout_command_enabled" checked>/);
+    assert.match(card, /data-setting="shoutout_raid_enabled" >/);
+    assert.match(card, /<select class="wc-select" data-setting="shoutout_raid_min_viewers"[^>]*>[\s\S]*?<option value="10" selected>/);
+    assert.ok(card.includes('&lt;b&gt;Go&lt;/b&gt; {name}') && !card.includes('<b>Go</b>'));
+    assert.ok(card.includes('&lt;b&gt;Go&lt;/b&gt; RivalRacer'), 'the example, as text');
+    assert.ok(card.includes('data-key="shoutout_template"') && card.includes('data-test-line="/dashboard/shoutouts/test"'));
+  });
+
+  test('the Polls & predictions card: Reconnect without the two permissions; once it can, the templates as typed, the switch and the bar\'s link', async () => {
+    const id = linkedStreamer({ overlay_token: 'synthetic-token-wcp-polls', polls_chat_enabled: 0 });
+    db.addPollTemplate(id, { kind: 'poll', title: '<i>Top</i> 5?', choices: ['<b>Yes</b>', 'No 🏁'], durationSeconds: 120, pointsPerVote: null });
+    const before = cardOf(await pane(id), 'polls');
+    assert.ok(before.includes('href="/auth/broadcaster"') && before.includes(esc(t('en', 'cards.polls.setupReconnect'))));
+    assert.ok(!before.includes('Top'), 'no templates before it can start them');
+    const scope = twitchStub.hasPollsScope;
+    twitchStub.hasPollsScope = () => true;
+    try {
+      const card = cardOf(await pane(id), 'polls');
+      assert.ok(card.includes('&lt;i&gt;Top&lt;/i&gt; 5?') && !card.includes('<i>Top</i>'));
+      assert.ok(card.includes('&lt;b&gt;Yes&lt;/b&gt; / No 🏁'));
+      assert.match(card, /data-setting="polls_chat_enabled" >/);
+      assert.match(card, /<code class="wc-link" data-masked="[^"]*\/overlay\/poll\/•{12}" data-shown="[^"]*\/overlay\/poll\/synthetic-token-wcp-polls\?lang=en">/);
+      assert.ok(card.includes('/overlay/poll/synthetic-token-wcp-polls?lang=en"'));
+    } finally {
+      twitchStub.hasPollsScope = scope;
+    }
+  });
+
+  test('the OBS overlay card shows the poll bar\'s link too, masked', async () => {
+    const card = cardOf(await pane(linkedStreamer({ overlay_token: 'synthetic-token-wcp-bar' })), 'overlay');
+    assert.match(card, /data-masked="[^"]*\/overlay\/poll\/•{12}" data-shown="[^"]*\/overlay\/poll\/synthetic-token-wcp-bar\?lang=en"/);
   });
 });
 

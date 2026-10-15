@@ -260,6 +260,11 @@ function sampleCards(data, features) {
     tipGoal: full ? { title: 'zzgoal', current_amount: 101, target_amount: 1000, currency: 'EUR' } : null,
     rewards: full ? [{ id: 1, title: 'zzreward', cost: 500, enabled: 1 }, { id: 2, title: 'zzpaused', cost: 50, enabled: 0 }] : [],
     rewardsAccess: { hasScope: data.hasScope },
+    pollTemplates: full ? [
+      { id: 1, kind: 'poll', title: 'zzpoll', choices: ['zzyes', 'zzno'], durationSeconds: 120, pointsPerVote: null, sortOrder: 1 },
+      { id: 2, kind: 'prediction', title: 'zzpred', choices: ['zzwin', 'zzlose'], durationSeconds: 90, pointsPerVote: null, sortOrder: 2 },
+    ] : [],
+    polls: { hasScope: full, live: { poll: null, prediction: null, serverNow: 0 }, barUrl: data.overlayUrl ? 'https://example.test/overlay/poll/zztoken?lang=en' : null },
     giveaway: data.activeGiveaway ? { id: 3, keyword: 'zzword', prize: 'zzprize', ends_at: '2026-10-14T12:05:00.000Z', winners_count: 2, subs_only: 1, entryCount: 4 } : null,
     spotifyConnected: !!data.streamer.spotify_access_token,
     multistreamAvailable: !!data.multistreamAvailable && !!features.youtube,
@@ -377,10 +382,11 @@ describe('rendered with each message as its key, no English is left on the page'
 
 describe('while the overlay features are off, the pages say nothing about the overlays', () => {
   // The wording that says a text is about the overlays. Left out: the multistream card, which names OBS because the
-  // relay is fed from it, and the layout's own site description (common.siteDescription, the link preview in
-  // header.ejs), which is not a text of these pages.
+  // relay is fed from it, the layout's own site description (common.siteDescription, the link preview in
+  // header.ejs), which is not a text of these pages, and the polls card's extra votes, which spend Twitch's channel
+  // points in Twitch's own poll box (cards.polls.extraVotes).
   const ABOUT_OVERLAYS = /overlay|\bOBS\b|browser source|vtuber|channel point|tip goal|goal bar|progress bar/i;
-  const NOT_ABOUT_OVERLAYS = /^(?:dashboard\.cards\.multistream\.|common\.siteDescription$)/;
+  const NOT_ABOUT_OVERLAYS = /^(?:dashboard\.cards\.multistream\.|common\.siteDescription$|cards\.polls\.extraVotes$)/;
 
   // Every key a page asks t() for while it renders one sample.
   async function keysAsked(page, data) {

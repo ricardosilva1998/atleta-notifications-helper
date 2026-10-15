@@ -203,6 +203,7 @@ describe('starting', () => {
     assert.deepEqual(helix.calls, [['createPoll', id, poll]]);
     assert.equal(res.json().live.poll.title, 'Top 5 finish?');
     assert.equal(res.json().live.poll.state, 'running');
+    assert.deepEqual(res.json().live.status, { text: t('en', 'cards.polls.status.pollRunning'), tone: 'ok' });
     assert.deepEqual(said, [[id, 'Poll: Top 5 finish? — vote now! (2:00 to vote)']]);
   });
 
@@ -319,6 +320,7 @@ describe('the live view', () => {
     assert.deepEqual(body.poll.options.map((o) => o.percent), [75, 25]);
     assert.equal(body.prediction, null);
     assert.equal(typeof body.serverNow, 'number');
+    assert.deepEqual(body.status, { text: t('en', 'cards.polls.status.pollRunning'), tone: 'ok' });
   });
 
   test('a logged-out request is sent to the login page', async () => {

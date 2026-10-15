@@ -31,6 +31,10 @@ function input(over = {}) {
     cmd_followage_enabled: 1, mod_link_protection_enabled: 1, sponsor_send_chat: 1, sponsor_chat_interval_minutes: 15,
     paypal_email: 'tips@example.test', donation_page_enabled: 1, donation_currency: 'EUR',
     cp_rewards_enabled: 1, cp_affiliate_status: 'ok', multistream_enabled: 0,
+    polls_chat_enabled: 1, poll_start_template: 'Poll: {title}', poll_end_template: 'Closed: {winner}',
+    prediction_start_template: 'Prediction: {title}', prediction_lock_template: 'Locked: {title}', prediction_end_template: '{outcome} wins',
+    prediction_cancel_template: '', shoutout_command_enabled: 1, shoutout_raid_enabled: 1, shoutout_raid_min_viewers: 5,
+    shoutout_template: 'Go check out {name}! They were last streaming {game}: {link}',
     ...(over.streamer || {}),
   };
   return {
@@ -51,6 +55,8 @@ function input(over = {}) {
     giveaway: null,
     spotifyConnected: true,
     multistreamAvailable: false,
+    pollTemplates: [],
+    polls: { hasScope: true, live: { poll: null, prediction: null, serverNow: Date.parse('2026-10-14T12:00:00Z') }, barUrl: 'https://atleta.example/overlay/poll/synthetic-token?lang=en' },
     ...over,
     streamer,
   };
@@ -59,15 +65,15 @@ const build = (over) => buildCards(input(over));
 const keyOf = (status) => status && status.key;
 
 describe('the cards and their order', () => {
-  test('ten cards in reading order while the overlay features are on', () => {
-    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'rewards', 'spotify']);
+  test('twelve cards in reading order while the overlay features are on', () => {
+    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
     assert.deepEqual(build().order, ORDER);
     assert.equal(build().chatbotOn, true);
   });
 
   test('without the overlay features the OBS overlay and rewards cards are left out; Multistream comes last while the relay is set up', () => {
     const off = build({ features: { overlays: false } });
-    assert.deepEqual(off.order, ['chatbot', 'discord', 'commands', 'sponsors', 'donations', 'protection', 'giveaways', 'spotify']);
+    assert.deepEqual(off.order, ['chatbot', 'discord', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'spotify']);
     assert.equal(off.overlay, undefined);
     assert.equal(off.rewards, undefined);
     const relay = build({ multistreamAvailable: true, streamer: { multistream_enabled: 1 } });
@@ -207,6 +213,14 @@ describe('OBS overlay', () => {
     assert.equal(seconds('overlay_follow_duration', 0), 1, 'follow stored 0: one second');
     assert.equal(seconds('overlay_sub_duration', 8.5), 8, 'sub stored 8.5: whole seconds, 8');
     assert.equal(seconds('overlay_sub_duration', null), 10, 'sub stored nothing: its own default, 10');
+  });
+
+  test('the poll bar\'s OBS link is there too, masked', () => {
+    assert.deepEqual(build().overlay.pollBar, {
+      url: 'https://atleta.example/overlay/poll/synthetic-token?lang=en',
+      shown: 'atleta.example/overlay/poll/synthetic-token?lang=en',
+      masked: `atleta.example/overlay/poll/${'•'.repeat(12)}`,
+    });
   });
 });
 
@@ -373,11 +387,103 @@ describe('Spotify', () => {
   });
 });
 
+describe('Polls & predictions', () => {
+  const NOW = Date.parse('2026-10-14T12:00:00Z');
+  const tpl = (over = {}) => ({ id: 1, kind: 'poll', title: 'Top 5?', choices: ['Yes', 'No'], durationSeconds: 120, pointsPerVote: null, sortOrder: 1, ...over });
+  const view = (kind, over = {}) => ({ kind, id: `${kind}-1`, title: 'x', state: 'running', startedAt: NOW, endsAt: NOW + 60000, endedAt: null, result: null, options: [], total: 0, users: 0, ...over });
+  const polls = (live, over = {}) => ({ polls: { hasScope: true, live: { poll: null, prediction: null, serverNow: NOW, ...live }, barUrl: 'https://atleta.example/overlay/poll/synthetic-token?lang=en', ...over } });
+
+  test('its one setup step: link Twitch, reconnect for the two permissions, or Check again after Twitch said not an Affiliate', () => {
+    const noTwitch = build({ streamer: { twitch_user_id: null } }).polls;
+    assert.equal(noTwitch.setup, 'linkTwitch');
+    assert.deepEqual(noTwitch.status, { key: 'cards.polls.status.noTwitch', params: {}, tone: 'warn' });
+    const reconnect = build(polls({}, { hasScope: false })).polls;
+    assert.equal(reconnect.setup, 'reconnect');
+    assert.deepEqual(reconnect.status, { key: 'cards.polls.status.reconnect', params: {}, tone: 'warn' });
+    const notAffiliate = build({ streamer: { cp_affiliate_status: 'not_affiliate' } }).polls;
+    assert.equal(notAffiliate.setup, 'notAffiliate');
+    assert.deepEqual(notAffiliate.status, { key: 'cards.polls.status.notAffiliate', params: {}, tone: 'warn' });
+  });
+
+  test('ready: the templates with their choices and time; the status counts them', () => {
+    const card = build({ pollTemplates: [tpl(), tpl({ id: 2, kind: 'prediction', title: 'Clean lap?', choices: ['Clean', 'Chaos'], durationSeconds: 30 })] }).polls;
+    assert.equal(card.setup, null);
+    assert.deepEqual(card.status, { key: 'cards.polls.status.ready', params: { count: 2 }, tone: 'ok' });
+    assert.deepEqual(card.templates.map((x) => [x.id, x.kind, x.title, x.choices, x.time]), [
+      [1, 'poll', 'Top 5?', ['Yes', 'No'], { key: 'cards.common.minutes', params: { minutes: 2 } }],
+      [2, 'prediction', 'Clean lap?', ['Clean', 'Chaos'], { key: 'cards.common.seconds', params: { seconds: 30 } }],
+    ]);
+    assert.deepEqual(card.blocked, { poll: false, prediction: false });
+    assert.deepEqual(card.counts.templates, { text: '2' });
+  });
+
+  test('what runs on Twitch: the status, and the ▶ of a kind that runs (or waits for its winner) is off', () => {
+    const status = (live) => build(polls(live)).polls.status.key;
+    assert.equal(status({ poll: view('poll') }), 'cards.polls.status.pollRunning');
+    assert.equal(status({ prediction: view('prediction') }), 'cards.polls.status.predictionRunning');
+    assert.equal(status({ poll: view('poll'), prediction: view('prediction') }), 'cards.polls.status.bothRunning');
+    assert.equal(status({ prediction: view('prediction', { state: 'locked' }) }), 'cards.polls.status.locked');
+    assert.equal(status({ prediction: view('prediction', { state: 'ended', endedAt: NOW }) }), 'cards.polls.status.predictionEnded');
+    assert.equal(status({ poll: view('poll', { state: 'ended', endedAt: NOW }) }), 'cards.polls.status.pollEnded');
+    const card = build(polls({ prediction: view('prediction', { state: 'locked' }) })).polls;
+    assert.deepEqual(card.blocked, { poll: false, prediction: true });
+    assert.equal(card.status.tone, 'warn');
+    assert.equal(card.live.prediction.state, 'locked', 'the live panel starts from it');
+  });
+
+  test('the announcements: the switch, the six texts with their variables, and a note while the chatbot is off', () => {
+    const card = build().polls;
+    assert.equal(card.announce, true);
+    assert.equal(card.chatNote, false);
+    assert.deepEqual(card.texts.map((x) => [x.key, x.text]), [
+      ['poll_start_template', 'Poll: {title}'], ['poll_end_template', 'Closed: {winner}'], ['prediction_start_template', 'Prediction: {title}'],
+      ['prediction_lock_template', 'Locked: {title}'], ['prediction_end_template', '{outcome} wins'], ['prediction_cancel_template', ''],
+    ]);
+    assert.deepEqual(card.texts[1].vars, ['{title}', '{winner}', '{percent}', '{votes}']);
+    assert.equal(build({ streamer: { chatbot_enabled: 0 } }).polls.chatNote, true);
+    assert.equal(build({ streamer: { chatbot_enabled: 0, polls_chat_enabled: 0 } }).polls.chatNote, false);
+  });
+
+  test('the pop-up gets Twitch\'s limits; the bar\'s OBS link is masked, and only there with the overlay features', () => {
+    const card = build().polls;
+    assert.deepEqual(card.limits.poll, { titleMax: 60, choiceMax: 25, minChoices: 2, maxChoices: 5, minSeconds: 15, maxSeconds: 1800 });
+    assert.deepEqual(card.limits.durations.prediction, [60, 120, 300, 600, 1800]);
+    assert.equal(card.limits.templatesMax, 20);
+    assert.deepEqual(card.bar, {
+      url: 'https://atleta.example/overlay/poll/synthetic-token?lang=en',
+      shown: 'atleta.example/overlay/poll/synthetic-token?lang=en',
+      masked: `atleta.example/overlay/poll/${'•'.repeat(12)}`,
+    });
+    assert.equal(build({ features: { overlays: false } }).polls.bar, null);
+    assert.equal(build(polls({}, { barUrl: null })).polls.bar, null);
+  });
+});
+
+describe('Shoutouts', () => {
+  test('the status names what is on; the card needs the chatbot', () => {
+    const status = (over) => build({ streamer: over }).shoutouts.status;
+    assert.deepEqual(status({}), { key: 'cards.shoutouts.status.both', params: { viewers: 5 }, tone: 'ok' });
+    assert.deepEqual(status({ shoutout_raid_enabled: 0 }), { key: 'cards.shoutouts.status.command', params: {}, tone: 'ok' });
+    assert.deepEqual(status({ shoutout_command_enabled: 0 }), { key: 'cards.shoutouts.status.raid', params: { viewers: 5 }, tone: 'ok' });
+    assert.deepEqual(status({ shoutout_command_enabled: 0, shoutout_raid_enabled: 0 }), { key: 'cards.shoutouts.status.off', params: {}, tone: 'off' });
+    assert.equal(build().shoutouts.needsChatbot, true);
+  });
+
+  test('the raid minimum offers the card\'s choices (a value saved elsewhere among them); the message, its variables and an example', () => {
+    const card = build().shoutouts;
+    assert.deepEqual(card.viewerChoices, [1, 2, 5, 10, 25, 50, 100]);
+    assert.deepEqual(build({ streamer: { shoutout_raid_min_viewers: 3 } }).shoutouts.viewerChoices, [1, 2, 3, 5, 10, 25, 50, 100]);
+    assert.deepEqual(card.vars, ['{name}', '{game}', '{title}', '{link}']);
+    assert.equal(card.text, 'Go check out {name}! They were last streaming {game}: {link}');
+    assert.equal(card.example, 'Go check out RivalRacer! They were last streaming iRacing: https://twitch.tv/rivalracer');
+  });
+});
+
 describe('cardTexts', () => {
   test('translates each status and count, gives plain counts as they are, and leaves the giveaway card to the page', () => {
     const t = (key, params) => `${key}${params && Object.keys(params).length ? JSON.stringify(params) : ''}`;
     const texts = cardTexts(build({ commands: [{ id: 1, command: 'discord', response: 'x', cooldown: 5 }] }), t);
-    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'commands', 'sponsors', 'donations', 'protection', 'rewards', 'spotify']);
+    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'polls', 'rewards', 'spotify']);
     assert.deepEqual(texts.chatbot, { status: { text: 'cards.chatbot.status.online{"channel":"synthetic_channel"}', tone: 'ok' }, counts: { thankYous: 'cards.common.nOfM{"on":5,"total":6}' } });
     assert.deepEqual(texts.commands.counts, { commands: '1', builtins: 'cards.common.nOfM{"on":1,"total":13}' });
     assert.deepEqual(texts.spotify, { status: { text: 'dashboard.status.connected', tone: 'ok' }, counts: {} });

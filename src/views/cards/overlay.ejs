@@ -19,6 +19,14 @@
     <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></span><div><%= t('cards.overlay.createLinkHint') %></div></div>
     <form method="POST" action="/dashboard/overlay/generate-token" class="wc-inline-form"><button type="submit" class="btn btn-primary wc-btn block"><%= t('cards.overlay.createLink') %></button></form>
     <% } %>
+    <% if (card.pollBar) { %>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.polls.bar') %></span></div>
+    <div class="wc-linkbox">
+      <code class="wc-link" data-masked="<%= card.pollBar.masked %>" data-shown="<%= card.pollBar.shown %>"><%= card.pollBar.masked %></code>
+      <button type="button" class="btn btn-secondary wc-btn" data-reveal aria-pressed="false" title="<%= t('cards.overlay.reveal') %>" aria-label="<%= t('cards.overlay.reveal') %>"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button>
+      <button type="button" class="btn btn-secondary wc-btn" data-copy="<%= card.pollBar.url %>"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label><%= t('dashboard.copy') %></span></button>
+    </div>
+    <% } %>
     <div class="wc-sec"><span class="wc-label"><%= t('cards.overlay.alerts') %></span><span class="wc-count" data-count="alerts"><%= t(card.counts.alerts.key, card.counts.alerts.params) %></span></div>
     <div class="wc-list<%= card.on ? '' : ' wc-dim' %>" data-dim-with="overlay_enabled">
       <% for (const a of card.alerts) { %>

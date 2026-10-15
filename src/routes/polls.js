@@ -12,6 +12,7 @@ const rules = require('../services/pollRules');
 const twitchPolls = require('../services/twitchPolls');
 const { livePolls } = require('../services/livePolls');
 const { hasPollsScope } = require('../services/twitch');
+const { pollsStatus } = require('../services/dashboardCards');
 
 const router = express.Router();
 
@@ -30,6 +31,12 @@ function needsPermissions(req, res, next) {
   refuse(res, 'needs_reconnect');
 }
 
+// What runs, as the card shows it: the views and the card's status line.
+function liveAnswer(req, res, live) {
+  const st = pollsStatus(live, db.countPollTemplates(req.streamer.id));
+  return { ...live, status: { text: res.locals.t(st.key, st.params), tone: st.tone } };
+}
+
 // One of the card's Twitch buttons: Twitch's answer is shown at once and announced once (`phase`), and the card gets
 // the live state back. A refusal answers its code; Twitch's message is logged, never shown.
 async function act(req, res, kind, phase, call) {
@@ -40,7 +47,7 @@ async function act(req, res, kind, phase, call) {
     console.warn(`[Polls] Twitch refused a ${kind} ${phase} for streamer ${req.streamer.id}: ${err.message}`);
     return refuse(res, err.code, kind);
   }
-  res.json({ ok: true, live: livePolls.snapshot(req.streamer.id) });
+  res.json({ ok: true, live: liveAnswer(req, res, livePolls.snapshot(req.streamer.id)) });
 }
 
 // ── Templates ──
@@ -124,12 +131,14 @@ router.post('/api/predictions/cancel', needsPermissions, async (req, res) => {
 
 // What the card shows: the running and just-ended poll and prediction (titles, choices, votes, points, times).
 router.get('/api/polls/live', needsPermissions, async (req, res) => {
+  let live;
   try {
-    res.json({ ok: true, ...(await livePolls.live(req.streamer.id)) });
+    live = await livePolls.live(req.streamer.id);
   } catch (err) {
     if (err && err.code === 'needs_reconnect') return refuse(res, 'needs_reconnect');
     throw err;
   }
+  res.json({ ok: true, ...liveAnswer(req, res, live) });
 });
 
 // "Check again" on the card that says Twitch refused for not being an Affiliate or Partner: that answer (the flag the

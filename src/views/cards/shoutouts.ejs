@@ -1,0 +1,26 @@
+<%# The Shoutouts card (dashboardCards.js shoutoutsCard()): `!so @name` for the broadcaster and moderators, the shoutout
+    after a raid of at least N viewers, and the message: edited in the thank-you messages' pop-up, tried with Test in chat
+    (a shoutout for the streamer's own channel, POST /dashboard/shoutouts/test), shown with an example line. Faded while
+    the chatbot is off: the shoutouts are its lines. %>
+<section class="card wc-card<%= cards.chatbotOn ? '' : ' needs-bot' %>" id="card-shoutouts" data-card="shoutouts" data-needs-chatbot aria-labelledby="card-shoutouts-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(244,114,182,0.14); color: #f472b6"><svg class="i" aria-hidden="true"><use href="#i-at"/></svg></div>
+    <div><h3 class="wc-title" id="card-shoutouts-title"><%= t('cards.shoutouts.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg><%= t('cards.shoutouts.needsChatbot') %></div>
+  <div class="wc-body">
+    <div class="wc-switches">
+      <div class="wc-sw<%= card.command ? ' is-on' : '' %>"><span><code>!so @name</code><small><%= t('cards.shoutouts.commandHint') %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('cards.shoutouts.command') %>" data-setting="shoutout_command_enabled" <%= card.command ? 'checked' : '' %>><span class="slider"></span></label></div>
+      <div class="wc-sw<%= card.raid ? ' is-on' : '' %>"><span><%= t('cards.shoutouts.raid') %><small><%= t('cards.shoutouts.raidHint') %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('cards.shoutouts.raid') %>" data-setting="shoutout_raid_enabled" <%= card.raid ? 'checked' : '' %>><span class="slider"></span></label></div>
+    </div>
+    <div class="wc-setrow"><span><%= t('cards.shoutouts.raidFrom') %></span><select class="wc-select" data-setting="shoutout_raid_min_viewers" aria-label="<%= t('cards.shoutouts.raidFrom') %>"><% for (const v of card.viewerChoices) { %><option value="<%= v %>"<%= v === card.viewers ? ' selected' : '' %>><%= v === 1 ? t('cards.shoutouts.oneViewer') : t('cards.shoutouts.viewers', { count: v }) %></option><% } %></select></div>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.shoutouts.message') %></span><button type="button" class="btn btn-secondary wc-btn xs" data-test-line="/dashboard/shoutouts/test"><%= t('chatbot.events.testInChat') %></button></div>
+    <div class="wc-row">
+      <span class="txt" data-text><%= card.text %></span>
+      <button type="button" class="wc-ib" data-edit="thankyou" data-key="shoutout_template" data-test-url="/dashboard/shoutouts/test" data-vars="<%= card.vars.join(' ') %>" data-value="<%= card.text %>" data-title="<%= t('cards.shoutouts.editTitle') %>" title="<%= t('cards.shoutouts.edit') %>" aria-label="<%= t('cards.shoutouts.edit') %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+    </div>
+    <p class="wc-hint" data-example data-sample="<%= JSON.stringify(card.sample) %>"><%= t('cards.shoutouts.example', { line: card.example }) %></p>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+</section>

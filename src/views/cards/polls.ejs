@@ -1,0 +1,102 @@
+<%# The Polls & predictions card (dashboardCards.js pollsCard()): Twitch's own polls and predictions, started from saved
+    templates (or once, unsaved, from the pop-up) and followed live: public/js/dashboard-polls.js draws the live panel
+    from data-live and keeps it and the status line up to date (GET /dashboard/api/polls/live). The chat announcements
+    and their six texts, and the bar's OBS link with the overlay features. Before it works, its one setup step: link
+    Twitch, reconnect for the two permissions, or Check again after Twitch said the channel is not an Affiliate. What
+    streamers typed and what Twitch sent is printed as text. %>
+<section class="card wc-card" id="card-polls" data-card="polls" aria-labelledby="card-polls-title" data-live="<%= JSON.stringify(card.live) %>" data-limits="<%= JSON.stringify(card.limits) %>">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(56,189,248,0.14); color: #38bdf8"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-polls-title"><%= t('cards.polls.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-body">
+  <% if (card.setup === 'linkTwitch') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-twitch"/></svg></span><div><%= t('cards.polls.setupLink') %></div></div>
+    <a href="/auth/twitch" class="btn btn-primary wc-btn block"><%= t('dashboard.linkTwitch') %></a>
+  <% } else if (card.setup === 'reconnect') { %>
+    <p class="wc-hint"><%= t('cards.polls.setupReconnect') %></p>
+    <a href="/auth/broadcaster" class="btn btn-primary wc-btn block"><svg class="i sm" aria-hidden="true"><use href="#i-twitch"/></svg><%= t('dashboard.reconnectTwitch') %></a>
+  <% } else if (card.setup === 'notAffiliate') { %>
+    <p class="wc-hint"><%= t('cards.polls.setupAffiliate') %></p>
+    <button type="button" class="btn btn-secondary wc-btn block" data-polls-recheck><%= t('cards.protection.checkAgain') %></button>
+  <% } else { %>
+    <div class="wc-live-polls" data-polls-live></div>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.polls.templates') %></span><span class="wc-count" data-count="templates"><%= card.counts.templates.text %></span><button type="button" class="btn btn-primary wc-btn xs" data-add="poll-template" data-title="<%= t('cards.polls.newTitle') %>"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg><%= t('cards.polls.new') %></button></div>
+    <div class="wc-list" id="wc-poll-templates" data-list="templates">
+      <% for (const tpl of card.templates) { const blocked = card.blocked[tpl.kind]; %>
+      <div class="wc-row" data-row data-id="<%= tpl.id %>" data-template="<%= JSON.stringify({ kind: tpl.kind, title: tpl.title, choices: tpl.choices, durationSeconds: tpl.durationSeconds, pointsPerVote: tpl.pointsPerVote }) %>">
+        <span class="lp-kind<%= tpl.kind === 'prediction' ? ' pred' : '' %>" data-field="kind"><%= t(tpl.kind === 'prediction' ? 'cards.polls.kindPredictionShort' : 'cards.polls.kindPoll') %></span>
+        <span class="nm" data-field="title"><%= tpl.title %></span>
+        <span class="txt" data-field="summary"><%= tpl.choices.join(' / ') %> · <%= t(tpl.time.key, tpl.time.params) %></span>
+        <button type="button" class="wc-ib play" data-start="<%= tpl.kind %>"<%= blocked ? ' disabled' : '' %> title="<%= t(blocked ? (tpl.kind === 'prediction' ? 'cards.polls.predictionRunningHint' : 'cards.polls.pollRunningHint') : 'cards.polls.start') %>" aria-label="<%= t('cards.polls.start') %>: <%= tpl.title %>"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button type="button" class="wc-ib" data-edit="poll-template" data-title="<%= t('cards.polls.editTitle') %>" title="<%= t('cards.polls.edit') %>" aria-label="<%= t('cards.polls.edit') %>: <%= tpl.title %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="poll-template" title="<%= t('cards.polls.delete') %>" aria-label="<%= t('cards.polls.delete') %>: <%= tpl.title %>"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      <% } %>
+    </div>
+    <p class="wc-hint" data-empty="templates"<%= card.templates.length ? ' hidden' : '' %>><%= t('cards.polls.none') %></p>
+    <div class="wc-setrow">
+      <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('cards.polls.announce') %>" data-setting="polls_chat_enabled" <%= card.announce ? 'checked' : '' %>><span class="slider"></span></label>
+      <span><%= t('cards.polls.announce') %></span>
+      <button type="button" class="wc-linkbtn" data-edit="poll-texts" data-title="<%= t('cards.polls.chatMessages') %>"><%= t('cards.polls.chatMessages') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></button>
+    </div>
+    <p class="wc-hint" data-polls-chat-note<%= card.chatNote ? '' : ' hidden' %>><%= t('cards.polls.needsChatbot') %></p>
+    <% if (card.bar) { %>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.polls.bar') %></span></div>
+    <div class="wc-linkbox">
+      <code class="wc-link" data-masked="<%= card.bar.masked %>" data-shown="<%= card.bar.shown %>"><%= card.bar.masked %></code>
+      <button type="button" class="btn btn-secondary wc-btn" data-reveal aria-pressed="false" title="<%= t('cards.overlay.reveal') %>" aria-label="<%= t('cards.overlay.reveal') %>"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button>
+      <button type="button" class="btn btn-secondary wc-btn" data-copy="<%= card.bar.url %>"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label><%= t('dashboard.copy') %></span></button>
+    </div>
+    <% } %>
+  <% } %>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <% if (!card.setup) { %>
+  <template id="tpl-poll-template">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <div class="wc-seg" role="radiogroup" aria-label="<%= t('cards.polls.type') %>">
+        <button type="button" role="radio" aria-checked="true" data-kind="poll"><%= t('cards.polls.kindPoll') %></button>
+        <button type="button" role="radio" aria-checked="false" data-kind="prediction"><%= t('cards.polls.kindPrediction') %></button>
+      </div>
+      <label class="wc-field"><span><%= t('cards.polls.question') %> <em data-left-for="title"></em></span><input class="wc-input" data-field="title" autocomplete="off"></label>
+      <div class="wc-field"><span><span data-label-for="poll"><%= t('cards.polls.choices') %></span><span data-label-for="prediction" hidden><%= t('cards.polls.outcomes') %></span></span>
+        <div class="wc-choices" data-choices></div>
+        <button type="button" class="wc-more" data-add-choice><%= t('cards.polls.addChoice') %></button>
+      </div>
+      <div class="wc-fields">
+        <label class="wc-field"><span><%= t('cards.polls.time') %></span><select class="wc-select" data-field="durationSeconds"></select></label>
+        <div class="wc-field" data-poll-only><span><%= t('cards.polls.extraVotes') %></span><label class="pill-toggle mini"><input type="checkbox" role="switch" data-field="pointsOn" aria-label="<%= t('cards.polls.extraVotes') %>"><span class="slider"></span></label></div>
+        <label class="wc-field" data-poll-only data-points-field hidden><span><%= t('cards.polls.pointsPerVote') %></span><input class="wc-input" type="number" min="1" max="1000000" step="1" data-field="pointsPerVote"></label>
+      </div>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn wc-left" data-start-once><%= t('cards.polls.startOnce') %></button><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+  <template id="tpl-poll-choice">
+    <div class="wc-choice"><input class="wc-input" data-choice autocomplete="off" aria-label="<%= t('cards.polls.choices') %>"><em class="wc-left-count" data-left></em><button type="button" class="wc-ib" data-remove-choice title="<%= t('cards.polls.removeChoice') %>" aria-label="<%= t('cards.polls.removeChoice') %>"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+  </template>
+  <template id="tpl-poll-template-row">
+    <div class="wc-row" data-row>
+      <span class="lp-kind" data-field="kind"></span><span class="nm" data-field="title"></span><span class="txt" data-field="summary"></span>
+      <button type="button" class="wc-ib play" data-start title="<%= t('cards.polls.start') %>" aria-label="<%= t('cards.polls.start') %>"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" class="wc-ib" data-edit="poll-template" data-title="<%= t('cards.polls.editTitle') %>" title="<%= t('cards.polls.edit') %>" aria-label="<%= t('cards.polls.edit') %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      <button type="button" class="wc-ib" data-delete="poll-template" title="<%= t('cards.polls.delete') %>" aria-label="<%= t('cards.polls.delete') %>"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+    </div>
+  </template>
+  <template id="tpl-poll-texts">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <p class="wc-hint"><%= t('cards.polls.textsHint') %></p>
+      <% for (const text of card.texts) { %>
+      <label class="wc-field"><span><%= t(text.label) %></span><textarea data-text-key="<%= text.key %>" data-vars="<%= text.vars.join(' ') %>" maxlength="500" rows="2"><%= text.text %></textarea></label>
+      <% } %>
+      <div class="wc-vars"><span><%= t('cards.chatbot.insert') %></span><span data-vars></span></div>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+  <% } %>
+</section>

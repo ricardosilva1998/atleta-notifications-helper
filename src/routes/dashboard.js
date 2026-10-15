@@ -356,10 +356,11 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
 
 // Everything the Twitch tab's working cards show; services/dashboardCards.js decides each card's state from it.
 // `discord` is discordNotificationsCard()'s result. Only our own tables and the bot's caches are read.
-function gatherCards(req, discord) {
+function gatherCards(req, discord, lang) {
   const s = req.streamer;
   const { chatManager } = require('../services/twitchChat');
-  const { hasRedemptionScope } = require('../services/twitch');
+  const { hasRedemptionScope, hasPollsScope } = require('../services/twitch');
+  const { livePolls } = require('../services/livePolls');
   const giveaway = db.getActiveGiveaway(s.id);
   return buildCards({
     streamer: s,
@@ -377,6 +378,13 @@ function gatherCards(req, discord) {
     tipGoal: db.getActiveTipGoal(s.id),
     rewards: db.getRewards(s.id).filter((r) => !isPendingDelete(r)),
     rewardsAccess: { hasScope: hasRedemptionScope(s) },
+    pollTemplates: db.getPollTemplates(s.id),
+    polls: {
+      hasScope: hasPollsScope(s),
+      live: livePolls.snapshot(s.id),
+      // The bar's texts follow the dashboard's language when the link is copied.
+      barUrl: s.overlay_token ? `${config.app.url}/overlay/poll/${s.overlay_token}?lang=${encodeURIComponent(lang || 'en')}` : null,
+    },
     giveaway: giveaway ? { ...giveaway, entryCount: db.getEntryCount(giveaway.id) } : null,
     spotifyConnected: !!s.spotify_access_token,
     multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
@@ -442,7 +450,7 @@ router.get('/', async (req, res) => {
 
   const discordNotifications = discordNotificationsCard(req.streamer,
     enrichedGuilds.map((g, i) => ({ ...g, ...serverViews[i] })), { needsReauth });
-  const cards = gatherCards(req, discordNotifications);
+  const cards = gatherCards(req, discordNotifications, res.locals.lang);
 
   res.render('dashboard', {
     streamer: req.streamer,
@@ -477,7 +485,7 @@ router.get('/api/cards', (req, res) => {
     };
   });
   const discord = discordNotificationsCard(req.streamer, servers, { needsReauth: needsBroadcasterReauth(req.streamer) });
-  res.json({ ok: true, cards: cardTexts(gatherCards(req, discord), res.locals.t) });
+  res.json({ ok: true, cards: cardTexts(gatherCards(req, discord, res.locals.lang), res.locals.t) });
 });
 
 // Disconnect Spotify (the Spotify card): the stored tokens are cleared, so !song answers that Spotify is not
