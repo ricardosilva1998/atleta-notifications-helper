@@ -22,6 +22,7 @@ const PREFIXES = {
   samurai: { classes: ['o-omi'], keyframes: ['omi', 'exOmi'] },
   racing: { classes: ['o-rc'], keyframes: ['rc'] },
   grandprix: { classes: ['o-gp'], keyframes: ['gp'] },
+  cockpit: { classes: ['o-ck'], keyframes: ['ck'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
