@@ -271,8 +271,8 @@ After the deploy:
   has no overlay test, so the owner's check is the read-only query above. The test plays on every overlay he
   has open (the preview on that page, and OBS if it is open) and, while his chatbot and its donation thank-you
   are on, also posts his donation thank-you in his Twitch chat, filled with the test values (`BigSponsor`,
-  25 USD, `Keep racing!`: "BigSponsor donated 25! Keep racing!" with the default text), with nothing to mark it
-  as a test. It needs the OBS overlay switch on (it answers `overlay_off` otherwise).
+  25 USD, `Keep racing!`; with the default text, for example, "BigSponsor donated 25! Keep racing!", but his own
+  thank-you text is what is posted), with nothing to mark it as a test. It needs the OBS overlay switch on (it answers `overlay_off` otherwise).
 
 Switching it off (back to the standard donation alert, the folding screen) is plain SQL, run in the container
 with a `busy_timeout` so it waits for the app's own writes instead of failing:
@@ -282,9 +282,10 @@ cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db
 ```
 
 It must print `changes: 1`. An overlay that is already open picks it up after a builder save or a reconnect.
-To switch it back on, run the same command with `SET style = 'donation-c1'`. If it prints `changes: 0`, he has
-no donation design row (the builder's Reset deletes a design that has no style): have him save his Donation
-design once in the Overlay Builder, which writes the row, and run the command again.
+To switch it back on, run the same command with `SET style = 'donation-c1'`. If it prints `changes: 0`, either
+his Twitch user id is no longer `632557806` (run the read-only check above) or he has no donation design row
+(the builder's Reset deletes a design that has no style): in the second case, have him save his Donation design
+once in the Overlay Builder, which writes the row, and run the command again.
 
 Never switch it by loading `src/db.js` in a second process (`require('/app/src/db.js')`): loading it runs every
 boot migration against the live database while the app is using it.
