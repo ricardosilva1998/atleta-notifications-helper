@@ -31,6 +31,15 @@
   function withLook(design, previousStyle, nextStyle) {
     return (previousStyle || null) === (nextStyle || null) ? copy(design) : startLook(design);
   }
+  // After "Use <family> for all six alerts": an alert's working design takes the look the server
+  // stored and that look's settings (started afresh there), and keeps what the streamer edited and
+  // has not saved yet. An alert whose tab was never opened is the stored row.
+  function lookApplied(working, row) {
+    var out = copy(working || row), k;
+    out.style = row.style;
+    for (k in LOOK_SETTINGS) out[k] = row[k];
+    return out;
+  }
 
   // The look the page shows for an alert: the one picked or saved, else the alert's default look
   // (the server's DEFAULT_STYLES, services/alertStyles.js); null for the tabs without looks.
@@ -86,7 +95,7 @@
   }
 
   var CORE = {
-    STYLED_ALERTS: STYLED_ALERTS, isStyled: isStyled, withLook: withLook, shownStyle: shownStyle, untouched: untouched,
+    STYLED_ALERTS: STYLED_ALERTS, isStyled: isStyled, withLook: withLook, lookApplied: lookApplied, shownStyle: shownStyle, untouched: untouched,
     controlsFor: controlsFor, orderGallery: orderGallery, filterGallery: filterGallery, savePayload: savePayload,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CORE;

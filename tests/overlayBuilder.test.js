@@ -223,6 +223,12 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
 describe('the Style section (alert styles)', () => {
   const vm = require('node:vm');
 
+  test('"Use <family> for all six" keeps every tab\'s unsaved edits: only the look and its settings come from the server', () => {
+    const source = functionSource('useStyleFamily');
+    assert.match(source, /workingDesigns\[type\] = STYLE_CORE\.lookApplied\(/);
+    assert.ok(!source.includes('workingDesigns[type] = Object.assign({}, EVENT_DEFAULTS[type], row)'), 'the saved row no longer replaces the working design');
+  });
+
   test('opens the six alerts\' tabs, above the card controls it replaces', () => {
     const style = builder.indexOf('id="section-style"');
     assert.ok(style > 0 && style < builder.indexOf('id="section-theme"'));

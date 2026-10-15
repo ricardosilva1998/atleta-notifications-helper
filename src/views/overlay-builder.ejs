@@ -2537,7 +2537,8 @@ async function useStyleFamily() {
       const row = data.designs[type];
       SAVED_DESIGNS[type] = row;
       SAVED_STYLES[type] = ALERT_STYLES[type] = row.style;
-      workingDesigns[type] = Object.assign({}, EVENT_DEFAULTS[type], row);
+      // Only the look and its settings change: what was edited on any tab and not saved stays.
+      workingDesigns[type] = STYLE_CORE.lookApplied(workingDesigns[type], Object.assign({}, EVENT_DEFAULTS[type], row));
     });
     setControlValues(workingDesigns[currentType]);
     renderedObjectType = null;

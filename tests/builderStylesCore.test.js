@@ -37,6 +37,23 @@ describe('picking another look', () => {
   });
 });
 
+describe('"Use <family> for all six alerts"', () => {
+  const LOOK_RESET = { style_accent: null, style_label: null, style_sound: null, style_grows: null, screen_effect: 'default', animation_speed: 1 };
+
+  test('an alert takes the stored look and its settings, and keeps what the streamer edited and has not saved', () => {
+    const working = { card_position: 'bot-right', card_width: 600, accent_color: '#123456', style: 'follow-samurai', style_accent: '#29E0FF', style_label: 'Hi', screen_effect: 'confetti', animation_speed: 1.5 };
+    const row = Object.assign({ card_position: 'top-left', card_width: 420, accent_color: '#E8202A', style: 'follow-racing' }, LOOK_RESET);
+    const out = core.lookApplied(working, row);
+    assert.deepEqual(out, Object.assign({ card_position: 'bot-right', card_width: 600, accent_color: '#123456', style: 'follow-racing' }, LOOK_RESET));
+    assert.equal(working.style, 'follow-samurai', 'the working design is not changed in place');
+  });
+
+  test('an alert whose tab was never opened is the stored row', () => {
+    const row = Object.assign({ card_position: 'top-left', style: 'raid-racing' }, LOOK_RESET);
+    assert.deepEqual(core.lookApplied(undefined, row), row);
+  });
+});
+
 describe('the look the page shows', () => {
   test('the one picked or saved, else the alert\'s default look; nothing for the other tabs', () => {
     assert.equal(core.shownStyle('follow', { follow: 'follow-racing' }, DEFAULT_STYLES), 'follow-racing');
