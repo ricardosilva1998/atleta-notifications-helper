@@ -284,14 +284,15 @@ const chatManager = {
   },
 
   // Whether the bot is a moderator in the streamer's channel, as Twitch last told it (when the bot joined the
-  // channel or spoke there): true, false, or null while the bot is not in that channel.
+  // channel or spoke there): true, false, or null while the bot is not in that channel or Twitch has told it nothing
+  // there yet (tmi.js keeps an empty state for a channel the bot sends a line to before Twitch has answered).
   moderatorStatus(streamerId) {
     if (!client) return null;
     const streamer = db.getStreamerById(streamerId);
     const login = streamer && streamer.twitch_username ? streamer.twitch_username.toLowerCase() : null;
     if (!login || channelMap.get(login) !== streamerId) return null;
     const state = client.userstate && client.userstate[`#${login}`];
-    if (!state) return null;
+    if (!state || !['mod', 'user-type', 'badges'].some((tag) => Object.prototype.hasOwnProperty.call(state, tag))) return null;
     const badges = state.badges || {};
     return state.mod === true || state.mod === '1' || state['user-type'] === 'mod'
       || Object.prototype.hasOwnProperty.call(badges, 'moderator')
@@ -300,8 +301,8 @@ const chatManager = {
 
   // Asks Twitch again (the Chat protection card's Check again): the bot leaves the streamer's channel and
   // joins it again, which makes Twitch tell it its state there. Nothing is posted in chat. Resolves with
-  // moderatorStatus(), or null when the chatbot is off (also when it was switched off while the bot was
-  // leaving: it then stays out) or the join does not complete in time.
+  // moderatorStatus(), also when the join is reported as failed (what Twitch said by then, if anything), or null
+  // when the chatbot is off (also when it was switched off while the bot was leaving: it then stays out).
   async recheckModerator(streamerId, { timeoutMs = 5000 } = {}) {
     if (!client) return null;
     const login = channelToJoin(streamerId);
@@ -316,7 +317,9 @@ const chatManager = {
     } catch (e) {
       // tmi.js rejects with plain text ('No response from Twitch.'), withTimeout() with an Error.
       console.error(`[Chat] Rejoining #${login} failed:`, e && e.message ? e.message : e);
-      return null;
+      // tmi.js also rejects a rejoin it did not recognise as one: after a line went to the channel while the bot was
+      // out of it, Twitch's answer no longer counts as the join, though the bot is back and that answer is its state.
+      return this.moderatorStatus(streamerId);
     }
     return this.moderatorStatus(streamerId);
   },

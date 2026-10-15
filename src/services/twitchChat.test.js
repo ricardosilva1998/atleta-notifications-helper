@@ -602,6 +602,29 @@ describe('whether the bot is a moderator in a streamer\'s channel', () => {
     assert.equal(chatManager.moderatorStatus(1), true);
   });
 
+  // tmi.js 1.8.5 keeps an empty state for a channel the bot sends a line to before Twitch has told it anything there
+  // (client.js, _sendMessage): a line sent between the part and the rejoin of Check again leaves one. It says nothing yet.
+  test('the empty state tmi.js keeps for a channel the bot spoke in before Twitch answered is unknown, not "not a moderator"', () => {
+    tmiClient.userstate['#somestreamer'] = {};
+    assert.equal(chatManager.moderatorStatus(1), null);
+  });
+
+  // With that empty state there, the rejoin's USERSTATE replaces it but no longer counts as the join, so tmi.js rejects
+  // the join's promise although the bot is back in the channel and Twitch has told it its state.
+  test('a rejoin that tmi.js reports as failed answers what Twitch told the bot meanwhile', async () => {
+    tmiClient.join = (channel) => {
+      tmiClient.joins.push(channel);
+      tmiClient.userstate[`#${channel}`] = { mod: true, 'user-type': 'mod', badges: { moderator: '1' } };
+      return Promise.reject('No response from Twitch.');
+    };
+    assert.equal(await chatManager.recheckModerator(1), true);
+    tmiClient.join = (channel) => {
+      tmiClient.userstate[`#${channel}`] = {}; // only the empty state: Twitch has said nothing yet
+      return Promise.reject('No response from Twitch.');
+    };
+    assert.equal(await chatManager.recheckModerator(1), null);
+  });
+
   test('is unknown while the bot is not in the channel; checking again does nothing while the chatbot is off', async () => {
     chatManager.stopForStreamer(1);
     assert.equal(chatManager.moderatorStatus(1), null);
