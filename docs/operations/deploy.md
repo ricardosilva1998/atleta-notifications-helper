@@ -290,6 +290,27 @@ once in the Overlay Builder, which writes the row, and run the command again.
 Never switch it by loading `src/db.js` in a second process (`require('/app/src/db.js')`): loading it runs every
 boot migration against the live database while the app is using it.
 
+Since the alert styles (release A), Vilela (or anyone signed in as him) can also change it in the Overlay Builder:
+the C1 is the first look of his Donation tab's Style gallery, marked "Made for you", and picking another look and
+saving changes it (the SQL above still works). A builder page opened before release A sends no look with its save,
+so the stored look stays.
+
 Going back to an earlier release is a plain revert (older code never reads `style`), but older code's save
 writes the whole row again and would drop the style; after coming back, set it again with the command above
 (`SET style = 'donation-c1'`).
+
+## Alert styles (release A)
+
+What changes when it deploys:
+- Four columns are added to `overlay_designs` (`style_accent`, `style_label`, `style_sound`, `style_grows`); the boot log shows `[DB] Added style_… to overlay_designs` four times, once. Nothing stored is rewritten.
+- The giveaway winner alert becomes Racing's Victory lap for every streamer (decided). Its saved colours, text and screen effect carry over; it plays the look's fanfare unless the streamer uploaded a sound.
+- Every other alert stays exactly as it is until its streamer picks a look in the Overlay Builder's Style section.
+- The overlay page and the builder load `/overlay/objects/kit.js`, `/overlay/objects/styles.js?v=…` and `.css`, and `/overlay/fx.js`/`fx.css`. An open OBS source reloads itself when the server restarts.
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and the boot log shows the four `Added style_…` lines.
+2. In the Overlay Builder, the Style section opens each of the six alert tabs. Pick Racing's Fly-by for the follow, save, and press Test: OBS plays it.
+3. Pick a colour far from the look's own (cyan on a red look) and test again: the change is obvious.
+4. andre_vilela_'s donation still shows the C1, first in his gallery as "Made for you".
+
+Rolling back is safe: older code ignores the four columns, and a style id it does not know (`follow-racing`) draws the alert's own object.
