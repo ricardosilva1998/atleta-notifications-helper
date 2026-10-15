@@ -302,7 +302,8 @@ as `window.ATLETA_CHANNEL`; a streamer without a linked Twitch account gets plai
 themselves in the Overlay Builder's style gallery once the alert-styles release ships. Until then, once the
 release that added `donation-c1-channel` is live (before it, the overlay does not know the look and plays the
 standard donation alert), give it to a streamer who asks, naming them by their Twitch login. First, read only:
-their row, and their donation design with its current look (`style` null is the standard donation alert):
+their row, and their donation design with its current look (`style` null is the standard donation alert; with
+`card_width` null too, they have no donation design yet):
 
 ```bash
 cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT s.id, s.twitch_username, o.style, o.card_width, o.card_position FROM streamers s LEFT JOIN overlay_designs o ON o.streamer_id = s.id AND o.event_type = 'donation' WHERE lower(s.twitch_username) = lower('their_login')"
@@ -324,4 +325,4 @@ read-only query shows which). To give them the standard donation alert back:
 cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE overlay_designs SET style = NULL WHERE event_type = 'donation' AND streamer_id = (SELECT id FROM streamers WHERE lower(twitch_username) = lower('their_login')) AND style = 'donation-c1-channel'"
 ```
 
-Neither command needs a deploy.
+None of these commands needs a deploy.

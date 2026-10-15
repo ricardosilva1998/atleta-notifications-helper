@@ -619,6 +619,11 @@ describe('styles — the C1 any streamer can pick, with their own name on it (do
     assert.deepEqual(lettering(draw('ABCDEFGHIJKLMNOP')), { attrs: SQUEEZED, text: 'ABCDEFGHIJKLMNOP' }, 'sixteen characters are shown whole');
   });
 
+  test("the width table was measured at the decal's font, size and spacing: changing them means measuring it again", () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+    assert.match(css, /\.o-c1 \.o-c1-decal\{font-family:var\(--o-cond\);font-weight:700;font-size:7\.5px;letter-spacing:\.9px;/);
+  });
+
   test('a character the width table does not hold counts as the widest, so it never overruns the glass', () => {
     assert.deepEqual(lettering(draw('ÉÉÉÉÉ')), { attrs: SQUEEZED, text: 'ÉÉÉÉÉ' }, 'five unknown characters are wider than 29 units');
   });
