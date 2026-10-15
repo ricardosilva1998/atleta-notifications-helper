@@ -1,9 +1,9 @@
 <header class="hero">
   <div class="wrap">
     <div>
-      <p class="eyebrow">Overlay builder · proposal 4 · 15 October 2026</p>
+      <p class="eyebrow">Overlay builder · proposal 5 · 15 October 2026</p>
       <h1>Alert styles</h1>
-      <p class="lede">Each alert gets a gallery of finished looks. Today’s looks stay as presets, so nobody’s overlay changes until a streamer picks something new. The <b>racing cards</b> come back for all six alerts, rebuilt as night-race graphics; <b>Grand Prix</b>, <b>Cockpit</b> and <b>Arcade</b> add racing flavours; and thirteen families have nothing to do with racing: <b>Quest</b>, <b>Comic</b>, <b>Cozy</b>, <b>Cosmos</b>, <b>Glass</b>, <b>Spooky</b>, <b>Cyber</b>, <b>Western</b>, <b>Retro OS</b>, <b>Graffiti</b>, <b>Kawaii</b>, <b>Steampunk</b> and <b>Frost</b>. On top of any look a streamer can add a screen effect and a sound, and some looks grow with the amount.</p>
+      <p class="lede">Each alert gets a gallery of finished looks. Today’s looks stay as presets, so nobody’s overlay changes until a streamer picks something new. The <b>racing cards</b> come back for all six alerts, rebuilt as night-race graphics; <b>Grand Prix</b>, <b>Cockpit</b> and <b>Arcade</b> add racing flavours; and twenty-one families have nothing to do with racing: <b>Quest</b>, <b>Comic</b>, <b>Cozy</b>, <b>Cosmos</b>, <b>Glass</b>, <b>Spooky</b>, <b>Cyber</b>, <b>Western</b>, <b>Retro OS</b>, <b>Graffiti</b>, <b>Kawaii</b>, <b>Steampunk</b>, <b>Frost</b>, and new in this proposal <b>Neon Sign</b>, <b>Deep Sea</b>, <b>Music</b>, <b>Stadium</b>, <b>Fireworks</b>, <b>Dino</b>, <b>UFO</b> and <b>Breaking News</b>. Every look takes the streamer’s colour, today’s samurai looks included: try the colour swatches. On top of any look a streamer can add a screen effect and a sound, and some looks grow with the amount.</p>
       <p class="facts-line" id="facts-line"></p>
     </div>
     <div class="stage-box">
@@ -131,20 +131,20 @@
           <li>The OBS link stays the same, and a newly saved style reaches an open overlay without a reload.</li>
         </ul></div>
         <div class="card"><h3>Decided</h3><ul>
-          <li><b>Build all three new families:</b> Grand Prix, Cockpit and Arcade, 18 looks.</li>
+          <li><b>All 18 families of proposal 4 are kept</b>, and the spec describes how they ship: release A is the system with Samurai and Racing, then B (Spooky, Grand Prix, Cockpit, Arcade) before Halloween, C, and D before December.</li>
           <li><b>The racing cards come back for all six alerts, improved:</b> <code>follow-racing</code> to <code>giveaway-racing</code>. The giveaway’s card is improved in place; a streamer’s saved colours and texts carry over.</li>
-          <li><b>Quest, Comic, Cozy, Cosmos and Glass</b> stay as they are.</li>
-          <li><b>The omikuji joins the samurai family</b> as its giveaway, unless you’d rather leave it out.</li>
+          <li><b>Every look’s colour is the streamer’s to pick</b>, the samurai looks and the omikuji included.</li>
+          <li><b>The plan for release A is written</b> and was run end to end before it was written.</li>
         </ul></div>
         <div class="card"><h3>New in this proposal</h3><ul>
-          <li><b>Racing, redone:</b> a headlight streak flies past and leaves a carbon panel behind it; then a race number, nitro, a sponsor decal, headlights and a victory lap. Still every colour, font and text editable, and still today’s colours by default.</li>
-          <li><b>Quest, tidied:</b> one move at a time and nothing blurred in. The scrolls show their writing as they open, the XP bar fills before the level-up, the raid’s banners rise from behind the board, the decree’s rod and parchment move together, and the loot card really turns over.</li>
-          <li><b>Eight more families with nothing to do with racing:</b> Spooky (playful Halloween), Cyber (neon cyberpunk), Western, Retro OS (a 90s desktop), Graffiti, Kawaii (cute pastel), Steampunk and Frost (winter and festive), 48 looks.</li>
+          <li><b>Eight more families, 48 looks:</b> Neon Sign (tubes and bulbs on a brick wall), Deep Sea (bubbles, a pearl, a school of fish, a message in a bottle, dolphins, jellyfish), Music (a record, an equalizer, a bass drop, a tape deck, a crowd, a gold record), Stadium (a jumbotron, a season ticket, a goal, a sponsor board, a crowd wave, a trophy lift), Fireworks, Dino, UFO and Breaking News.</li>
+          <li><b>Each of them was built to the colour rule:</b> your colour paints the main thing in every look (the neon tubes, the pearl, the record, the fireworks, the saucer’s beam, the news bar), and text on it stays readable.</li>
+          <li><b>The samurai looks and the omikuji now follow the colour too.</b> Every shade of their red reads your colour; with no colour picked they are exactly today’s.</li>
           <li><b>Pick the ones to keep.</b> Each family ships on its own, so any of them can wait for a later release.</li>
         </ul></div>
         <div class="card"><h3>Found while preparing this</h3><ul id="found-list">
           <li><b>Today’s giveaway card has no look of its own.</b> Its colours come only from a design saved in the builder. Without one it is see-through, with a black label and border (checked against <code>overlay.css</code>). The improved <code>giveaway-racing</code> always has its colours.</li>
-          <li><b>The samurai looks are fixed to Ronin red.</b> They could take a colour the same way the new families do, as a later step.</li>
+          <li><b>A Reset, or one family for all six alerts, would have given Racing the follow alert’s colours</b> (the database filled a new row with the follow’s navy and lavender). The plan fixes it: such a row takes the alert’s own colours.</li>
           <li><b>The overlay page sizes every box with its padding inside</b> (<code>box-sizing: border-box</code> in <code>overlay.css</code>). This page now does the same, so what you see here is what OBS draws; the families drawn the other way say so in their own styles and look exactly as before.</li>
         </ul></div>
       </div>

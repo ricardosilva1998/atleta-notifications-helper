@@ -1,4 +1,4 @@
-# Alert styles proposal (version 4): the reference for every look
+# Alert styles proposal (version 7): the reference for every look
 
 The proposal page the owner approved on 2026-10-15, with its source. The design is
 `../../2026-10-15-alert-styles-design.md`; every look here is the reference for the code in
@@ -9,7 +9,8 @@ The proposal page the owner approved on 2026-10-15, with its source. The design 
 - `parts/`: the source the page is built from.
   - `fam/<key>.js` and `fam/<key>.css`: one family each (racing, qs Quest, cm Comic, cz Cozy, cs Cosmos,
     gl Glass, spk Spooky, cyb Cyber, wst Western, ros Retro OS, gfi Graffiti, kwi Kawaii, stm Steampunk,
-    fro Frost).
+    fro Frost, and from proposal 5 neo Neon Sign, sea Deep Sea, mus Music, std Stadium, fwk Fireworks, dno Dino,
+    ufo UFO, nws Breaking News).
   - `90-core.js` and `40-styles.css`: the shared helpers, Grand Prix, Cockpit, Arcade and the omikuji.
   - `30-samurai.css` and `80-samurai.js`: copies of today's five objects (`public/overlay/objects/`).
   - `20-page.css`, `70-body.html` and `99-ui.js`: the page around the looks, which is not part of the overlay.

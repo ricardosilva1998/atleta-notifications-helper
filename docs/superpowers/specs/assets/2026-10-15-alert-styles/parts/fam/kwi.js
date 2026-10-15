@@ -191,7 +191,7 @@
   // 50 bits → 3 mochi, 500 → 5, 10,000 → 8 (never fewer than 2 or more than 9).
   function mochiCount(n) { return Math.max(2, Math.min(9, Math.round(Math.log10(n + 1) * 2 - 0.5))); }
   function mochiLen(count) { return Math.max(1.52, 0.1 + (count - 1) * 0.075 + 0.77); }
-  var MOCHI_COLOURS = ['#FFFFFF', 'var(--kwia)', 'var(--kwi-mint)', 'var(--kwi-lilac)', 'var(--kwi-butter)', '#FFD3E6'];
+  var MOCHI_COLOURS = ['#FFFFFF', 'var(--kwia)', 'var(--a-tint,var(--kwi-mint))', 'var(--a-soft,var(--kwi-lilac))', 'var(--a-hi,var(--kwi-butter))', 'var(--a-tint,#FFD3E6)'];
 
   add({
     id: 'bits-kawaii', alert: 'bits', fam: 'kwi', isNew: true, title: 'Mochi', amount: 'Grows with the amount',
@@ -255,7 +255,7 @@
   });
 
   /* ── raid — Friend parade ── */
-  var FRIEND_SKINS = ['#FFFFFF', '#FFE9A6', '#E2D4FF', '#C6F6E6', '#FFD6E8', '#FFE1CC'];
+  var FRIEND_SKINS = ['#FFFFFF', 'var(--a-tint,#FFE9A6)', 'var(--a-soft,#E2D4FF)', 'var(--a-hi,#C6F6E6)', 'var(--a-tint,#FFD6E8)', 'var(--a-soft,#FFE1CC)'];
   // A little chibi friend (viewBox 40 × 48): cat, bunny, bear, a bow, a sprout or a curl, then the face.
   function friend(kind, mood) {
     var before = '', after = '';

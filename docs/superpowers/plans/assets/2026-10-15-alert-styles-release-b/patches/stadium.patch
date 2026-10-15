@@ -1,0 +1,31 @@
+diff --git a/public/overlay/objects/styles/stadium.js b/public/overlay/objects/styles/stadium.js
+index 4812f2e..2e663a6 100644
+--- a/public/overlay/objects/styles/stadium.js
++++ b/public/overlay/objects/styles/stadium.js
+@@ -188,10 +188,10 @@
+   // 50 bits: a small burst and three camera flashes in the crowd; 500: the full burst and six; 1,000 or more: the biggest and ten.
+   function shot(n) { var lvl = n >= 1000 ? 2 : n >= 100 ? 1 : 0; return { bs: [0.78, 1, 1.28][lvl], ds: [0.82, 1, 1.18][lvl], flashes: [3, 6, 10][lvl] }; }
+   K.register({
+-    key: 'bits-stadium', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-stadium', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'stdBits', fx: 'confetti', anim: hold('1.5s'), exit: OFF, len: 1.6,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), s = shot(n), r = rng(hash(d.username + n)), flashes = '', i;
++      var n = intOf(d.amount != null ? d.amount : d.bits), sized = K.sizeOf(d, 'bits'), s = shot(sized), r = rng(hash(d.username + sized)), flashes = '', i;
+       for (i = 0; i < s.flashes; i++) flashes += '<i class="o-stdb-fl" style="left:' + n1(8 + r() * 184) + 'px;top:' + n1(5 + r() * 20) + 'px;--fd:' + (0.68 + i * 0.045).toFixed(3) + 's"></i>';
+       // The amount fits the board: Bebas digits are about .4em wide and a comma about .19em.
+       var text = '+' + fmt(n), wem = Array.from(text).reduce(function (w, c) { return w + (c === ',' ? 0.21 : 0.42); }, 0);
+@@ -236,11 +236,11 @@
+     return list;
+   }
+   K.register({
+-    key: 'raid-stadium', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-stadium', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'stdRaid', fx: 'none', anim: hold('1.5s'), exit: SINK, len: 1.6,
+     render: function (d) {
+       var v = intOf(d.viewers), secs = '';
+-      wave(v).forEach(function (s) {
++      wave(K.sizeOf(d, 'raid')).forEach(function (s) {
+         secs += '<div class="o-stdr-sec"><div class="o-stdr-fans" style="--wd:' + s.wd.toFixed(3) + 's">' + (s.lit ? '<i class="o-stdr-cards"></i>' : '') + '</div></div>';
+       });
+       return '<div class="obj o-std o-stdr"><div class="o-stdr-arena"><i class="o-stdr-roof"></i>'

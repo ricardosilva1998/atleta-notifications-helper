@@ -1,0 +1,50 @@
+diff --git a/public/overlay/objects/styles/music.js b/public/overlay/objects/styles/music.js
+index 99e3827..631ada3 100644
+--- a/public/overlay/objects/styles/music.js
++++ b/public/overlay/objects/styles/music.js
+@@ -143,12 +143,12 @@
+     });
+   }
+   K.register({
+-    key: 'subscriber-music', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'subscriber-music', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'musSub', fx: 'none', anim: hold('1.6s'), exit: exitOf('musPowerOff', '0.34s'),
+     len: function (d) { return 1.64 + (Number(tierOf(d)) - 1) * 0.12; },
+     render: function (d) {
+-      var months = Math.max(1, intOf(d.months)), tier = tierOf(d), r = rng(hash(d.username + '|' + months)), cols = '', hz = '', stars = '';
+-      eqBands(months, r).forEach(function (c, i) {
++      var months = Math.max(1, intOf(d.months)), level = Math.max(1, intOf(K.sizeOf(d, 'months'))), tier = tierOf(d), r = rng(hash(d.username + '|' + level)), cols = '', hz = '', stars = '';
++      eqBands(level, r).forEach(function (c, i) {
+         var top = segTop(c.lit + 1);
+         cols += '<div class="o-muss-col" style="left:' + i * 25 + 'px;--r:' + segTop(c.lit) + 'px;--p:' + segTop(c.peak) + 'px;--dp:' + segTop(c.dip) + 'px;--bp:' + segTop(c.bump) + 'px;--cd:' + (0.26 + i * 0.02).toFixed(2) + 's">'
+           + '<i class="o-muss-lit"></i>'
+@@ -180,11 +180,11 @@
+     return P;
+   }
+   K.register({
+-    key: 'bits-music', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-music', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'musBits', fx: 'sparks', anim: hold('1.4s'), exit: exitOf('musDropOut', '0.38s'),
+-    len: function (d) { return bitsPlan(intOf(d.amount != null ? d.amount : d.bits)).len; },
++    len: function (d) { return bitsPlan(intOf(K.sizeOf(d, 'bits'))).len; },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), P = bitsPlan(n), num = fmt(n), leds = '', i;
++      var n = intOf(d.amount != null ? d.amount : d.bits), P = bitsPlan(intOf(K.sizeOf(d, 'bits'))), num = fmt(n), leds = '', i;
+       // The plate is 172px inside: "+" and the number get what the unit leaves (132px), at most 44px tall.
+       var size = Math.max(24, Math.min(44, Math.floor(132 / (0.486 + odoEm(num))))), lift = Math.max(0, 0.136 * size - 3.4).toFixed(1);
+       function cab(side) {
+@@ -291,11 +291,11 @@
+   }
+   var CANS = [46, 128, 210, 292, 374], BEAM_REST = [-26, -12, 0, 12, 26];
+   K.register({
+-    key: 'raid-music', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-music', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'musRaid', fx: 'smoke', anim: hold('1.5s'), exit: exitOf('musLightsOut', '0.4s'),
+-    len: function (d) { return crowdPlan(intOf(d.viewers), rng(hash(d.username + '|' + intOf(d.viewers)))).len; },
++    len: function (d) { var size = intOf(K.sizeOf(d, 'raid')); return crowdPlan(size, rng(hash(d.username + '|' + size))).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), r = rng(hash(d.username + '|' + v)), plan = crowdPlan(v, r), beams = '', cans = '', rows = '', hands = '', k;
++      var v = intOf(d.viewers), size = intOf(K.sizeOf(d, 'raid')), r = rng(hash(d.username + '|' + size)), plan = crowdPlan(size, r), beams = '', cans = '', rows = '', hands = '', k;
+       CANS.forEach(function (x, i) {
+         var rest = BEAM_REST[i];
+         beams += '<i class="o-musr-beam" style="left:' + x + 'px;--ba:' + rest + 'deg;--b0:' + (rest + 30) + 'deg;--b1:' + (rest - 18) + 'deg;--bd:' + (0.3 + i * 0.04).toFixed(2) + 's"></i>';

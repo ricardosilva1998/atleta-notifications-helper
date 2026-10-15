@@ -1,0 +1,179 @@
+/* ═════════ FIREWORKS — a night sky celebration ═════════
+   A night-blue sky with a few stars and a dark town along the bottom; rockets climb on white-gold
+   trails, a beat of silence, then the shell bursts. The accent (gold by default) is the burst itself:
+   every trail, every star, the glow in its heart, the willow streams, the name written in light, and the
+   pills and plaque that carry text in --fwk-on. The sky, the town and the rocket trails keep their own
+   colours. A shell (.o-fwk-b) is one SVG: each ray holds one dash that the group's stroke-dashoffset
+   runs out from the centre, and the stars scale out with it; then the sparks droop and dim a little and
+   the sky holds still. Pacifico for names, Josefin Sans for everything else. */
+.o-fwk{--fwka:var(--a,#FFC94A);--fwka-rgb:var(--a-rgb,255,201,74);--fwk-on:var(--a-on,#1A1204);--fwk-cream:#FFF6E3;font-family:"Josefin Sans","Avenir Next","Century Gothic",system-ui,sans-serif;font-weight:700;line-height:1.2;color:var(--fwk-cream)}
+.o-fwk-sky{position:absolute;overflow:hidden;border-radius:18px;background:radial-gradient(1.3px 1.3px at 12px 16px,rgba(255,255,255,.9) 50%,rgba(255,255,255,0) 100%) 0 0/104px 76px,radial-gradient(1px 1px at 61px 47px,rgba(255,255,255,.6) 50%,rgba(255,255,255,0) 100%) 0 0/104px 76px,radial-gradient(1.1px 1.1px at 86px 9px,rgba(255,236,200,.75) 50%,rgba(255,236,200,0) 100%) 0 0/104px 76px,radial-gradient(1px 1px at 33px 63px,rgba(200,220,255,.55) 50%,rgba(200,220,255,0) 100%) 0 0/104px 76px,radial-gradient(130% 75% at 50% 122%,rgba(var(--fwka-rgb),.26),rgba(var(--fwka-rgb),0) 62%),linear-gradient(180deg,#060C22 0%,#0A1534 55%,#122047 100%);box-shadow:0 14px 28px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.07),inset 0 1px 0 rgba(255,255,255,.1)}
+/* The town: a roofline with two spires and four lit windows; rockets launch from behind it. */
+.o-fwk-town{position:absolute;left:0;right:0;bottom:0;z-index:2;display:block;height:16px;background:radial-gradient(1.2px 1.6px at 9% 74%,#FFD98A 60%,rgba(255,217,138,0) 100%),radial-gradient(1.2px 1.6px at 31% 82%,#FFD98A 60%,rgba(255,217,138,0) 100%),radial-gradient(1.2px 1.6px at 59% 74%,#FFE7B0 60%,rgba(255,231,176,0) 100%),radial-gradient(1.2px 1.6px at 81% 80%,#FFD98A 60%,rgba(255,217,138,0) 100%),linear-gradient(180deg,#0B1226,#03060E);clip-path:polygon(0 100%,0 56%,3% 56%,3% 34%,7% 34%,7% 52%,11% 52%,11% 26%,13% 6%,15% 26%,15% 48%,21% 48%,21% 62%,26% 62%,26% 38%,32% 38%,32% 58%,37% 58%,37% 28%,41% 28%,41% 52%,46% 52%,46% 42%,52% 42%,52% 64%,57% 64%,57% 30%,62% 30%,62% 54%,67% 54%,67% 40%,70% 14%,73% 40%,73% 60%,78% 60%,78% 34%,84% 34%,84% 52%,89% 52%,89% 28%,93% 28%,93% 56%,97% 56%,97% 46%,100% 46%,100% 100%)}
+/* A rocket: a white-gold head on a trail that fades towards the launch point. */
+.o-fwk-rk{position:absolute;display:block;width:3px;border-radius:2px;opacity:0;background:linear-gradient(180deg,#FFF8E2 0,rgba(255,226,160,.85) 8px,rgba(255,200,120,.3) 45%,rgba(255,200,120,0) 100%)}
+.o-fwk-rk::before{content:"";position:absolute;left:-2px;top:-3px;width:7px;height:7px;border-radius:50%;background:#FFFBEF;box-shadow:0 0 6px 2px rgba(255,226,160,.9)}
+/* A shell: the accent glow in its heart (::before), a white flash when it breaks (::after), the trails and the stars. */
+.o-fwk-b{position:absolute;display:block;transform:translateY(4px) scale(1)}
+.o-fwk-b > svg{position:absolute;left:0;top:0;display:block;width:100%;height:100%;overflow:visible}
+.o-fwk-b::before,.o-fwk-b::after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.o-fwk-b::before{left:18%;top:18%;right:18%;bottom:18%;background:radial-gradient(closest-side,rgba(var(--fwka-rgb),.5),rgba(var(--fwka-rgb),.16) 55%,rgba(var(--fwka-rgb),0))}
+.o-fwk-b::after{left:28%;top:28%;right:28%;bottom:28%;background:radial-gradient(closest-side,#FFFFFF,rgba(255,246,220,.8) 35%,rgba(255,246,220,0));opacity:0}
+.o-fwk-tr{fill:none;stroke:var(--fwka);stroke-linecap:round;stroke-dasharray:32 200;stroke-dashoffset:-68;opacity:.72}
+.o-fwk-tr.w{stroke:#FFE9B8}
+.o-fwk-st{transform-box:view-box;transform-origin:50% 50%;transform:translateY(2px) scale(1)}
+.o-fwk-s1{fill:var(--fwka)}
+.o-fwk-s2{fill:#FFFDF2}
+.o-fwk-s3{fill:#FFEBC0}
+.o-fwk-cap{display:block;max-width:100%;font-family:"Josefin Sans","Avenir Next","Century Gothic",system-ui,sans-serif;font-weight:700;font-size:11.5px;line-height:1.3;letter-spacing:.24em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,236,200,.88)}
+.o-fwk-name{font-family:"Pacifico","Segoe Script","Brush Script MT",cursive;font-weight:400;line-height:1.3;color:var(--fwk-cream);text-shadow:0 2px 0 rgba(3,6,20,.7);filter:drop-shadow(0 0 7px rgba(var(--fwka-rgb),.55))}
+.o-fwk-plate{position:absolute;border-radius:14px;background:linear-gradient(180deg,rgba(18,28,62,.97),rgba(8,14,36,.97));box-shadow:0 12px 24px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.08),inset 0 2px 0 rgba(var(--fwka-rgb),.7)}
+.o-fwk-star{display:block;clip-path:polygon(50% 0,57.6% 31.5%,85.4% 14.6%,68.5% 42.4%,100% 50%,68.5% 57.6%,85.4% 85.4%,57.6% 68.5%,50% 100%,42.4% 68.5%,14.6% 85.4%,31.5% 57.6%,0 50%,31.5% 42.4%,14.6% 14.6%,42.4% 31.5%)}
+@keyframes fwkSkyIn{0%{opacity:0;transform:translateY(8px) scale(.985)}100%{opacity:1;transform:none}}
+@keyframes fwkRise{0%{opacity:0;transform:translateY(7px)}100%{opacity:1;transform:none}}
+@keyframes fwkPop{0%{opacity:0;transform:scale(.35)}60%{opacity:1;transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
+@keyframes fwkShow{0%{opacity:0}100%{opacity:1}}
+@keyframes fwkLaunch{0%{opacity:0;transform:translateY(var(--rise))}10%{opacity:1}86%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(0)}}
+@keyframes fwkBurst{0%{opacity:0;transform:translateY(0) scale(.82)}6%{opacity:1}30%{transform:translateY(0) scale(1)}100%{opacity:1;transform:translateY(4px) scale(1)}}
+@keyframes fwkFlash{0%{opacity:0;transform:scale(.4)}14%{opacity:1;transform:scale(1.3)}100%{opacity:0;transform:scale(1.7)}}
+@keyframes fwkRun{0%{stroke-dashoffset:32;opacity:1}62%{stroke-dashoffset:-68;opacity:1}100%{stroke-dashoffset:-68;opacity:.72}}
+@keyframes fwkStars{0%{opacity:0;transform:translateY(0) scale(0)}8%{opacity:1}62%{transform:translateY(0) scale(1)}100%{opacity:1;transform:translateY(2px) scale(1)}}
+@keyframes fwkTwinkle{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes fwkFall{0%{opacity:1;transform:none}25%{opacity:1;transform:translateY(-3px)}100%{opacity:0;transform:translateY(18px)}}
+@keyframes fwkFlashOut{0%{opacity:1;transform:none;filter:brightness(1)}30%{opacity:1;transform:scale(1.01);filter:brightness(1.6)}100%{opacity:0;transform:scale(.96);filter:brightness(1)}}
+.playing .o-fwk-rk{animation:fwkLaunch calc(var(--rd) / var(--spd)) cubic-bezier(.3,.5,.45,1) calc(var(--lt) / var(--spd)) both}
+.playing .o-fwk-b{animation:fwkBurst calc(1.1s / var(--spd)) cubic-bezier(.2,.75,.3,1) calc(var(--bt) / var(--spd)) both}
+.playing .o-fwk-b::after{animation:fwkFlash calc(.42s / var(--spd)) ease-out calc(var(--bt) / var(--spd)) both}
+.playing .o-fwk-tr{animation:fwkRun calc(1s / var(--spd)) cubic-bezier(.12,.7,.3,1) calc(var(--bt) / var(--spd)) both}
+.playing .o-fwk-st{animation:fwkStars calc(1s / var(--spd)) cubic-bezier(.12,.7,.3,1) calc(var(--bt) / var(--spd)) both}
+.playing .o-fwk-b.tw .o-fwk-s2{animation:fwkTwinkle calc(.16s / var(--spd)) steps(1,end) calc((var(--bt) + .66s) / var(--spd)) 3 both}
+
+/* follow — Sparkler: the sparkler lights at the start of the name and writes it in light, sparks flying off its tip */
+.o-fwkf{height:124px}
+.o-fwkf-sky{left:0;right:0;top:8px;height:108px}
+.o-fwkf-txt{position:absolute;left:26px;right:72px;top:0;bottom:0;z-index:3;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-fwkf-lbl{margin:0 0 2px 2px}
+.o-fwkf-write{position:relative;max-width:100%}
+.o-fwkf-name{font-size:calc(36px * var(--fit,1));color:var(--fwka);text-shadow:0 0 1px #FFFFFF,0 0 1px #FFFFFF;filter:drop-shadow(0 0 6px rgba(var(--fwka-rgb),.9))}
+.o-fwkf-pen{position:absolute;left:0;right:0;top:0;bottom:0}
+.o-fwkf-tip{position:absolute;right:-16px;top:62%;width:0;height:0}
+.o-fwkf-wire{position:absolute;left:0;top:-1.5px;display:block;width:70px;height:3px;border-radius:2px;transform-origin:0 50%;transform:rotate(54deg);background:linear-gradient(90deg,#2E2620 0,#5A4C40 9%,#8E7F6E 11%,#A79886 38%,#9AA1AE 40%,#6F7684 100%)}
+.o-fwkf-flame{position:absolute;left:-16px;top:-16px;display:block;width:32px;height:32px;border-radius:50%;background:radial-gradient(circle,#FFFFFF 0 12%,rgba(255,246,214,.95) 20%,rgba(var(--fwka-rgb),.8) 38%,rgba(var(--fwka-rgb),0) 70%)}
+.o-fwkf-star{position:absolute;left:4px;top:4px;width:24px;height:24px;background:radial-gradient(circle,#FFFFFF 0 16%,var(--fwka) 52%)}
+.o-fwkf-spk{position:absolute;left:-1.5px;top:-1.5px;display:block;width:3px;height:3px;border-radius:50%;background:#FFF6D8;box-shadow:0 0 3px 1px rgba(var(--fwka-rgb),.95);opacity:0}
+@keyframes fwkWrite{0%{clip-path:inset(-45% 100% -45% 0)}92%{clip-path:inset(-45% 0% -45% -14%)}100%{clip-path:inset(-45% -14% -45% -14%)}}
+@keyframes fwkPen{0%{transform:translateX(-100%)}92%,100%{transform:translateX(0)}}
+@keyframes fwkIgnite{0%{opacity:0;transform:scale(.2)}55%{opacity:1;transform:scale(1.35)}100%{opacity:1;transform:scale(1)}}
+@keyframes fwkWobble{0%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}70%{transform:translateY(3px)}}
+@keyframes fwkSpark{0%{opacity:0;transform:translate(0,0) scale(1)}8%{opacity:1}70%{opacity:1;transform:translate(var(--sx),var(--sy)) scale(.8)}100%{opacity:0;transform:translate(var(--sx),calc(var(--sy) + 7px)) scale(.4)}}
+@keyframes fwkFadeUp{0%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-12px)}}
+.playing .o-fwkf-sky{animation:fwkSkyIn calc(.32s / var(--spd)) cubic-bezier(.2,.7,.3,1) both}
+.playing .o-fwkf-lbl{animation:fwkRise calc(.3s / var(--spd)) ease-out calc(.16s / var(--spd)) both}
+.playing .o-fwkf-tip{animation:fwkShow calc(.12s / var(--spd)) linear calc(.3s / var(--spd)) both,fwkWobble calc(.16s / var(--spd)) ease-in-out calc(.44s / var(--spd)) var(--wn) both}
+.playing .o-fwkf-flame{animation:fwkIgnite calc(.22s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-fwkf-pen{animation:fwkPen calc(var(--wd) / var(--spd)) linear calc(.44s / var(--spd)) both}
+.playing .o-fwkf-name{animation:fwkWrite calc(var(--wd) / var(--spd)) linear calc(.44s / var(--spd)) both}
+.playing .o-fwkf-spk{animation:fwkSpark calc(var(--sd) / var(--spd)) ease-out calc(var(--sl) / var(--spd)) var(--sn) both}
+
+/* subscription — Countdown: 3, 2, 1, a rocket climbs and the shell bursts around the months; one burst per tier */
+.o-fwks{height:184px}
+.o-fwks-sky{left:0;right:0;top:0;height:184px}
+.o-fwks-cd{position:absolute;left:46px;top:50px;z-index:3;display:flex;align-items:center;justify-content:center;width:88px;height:68px;font-weight:700;font-size:62px;line-height:1;color:var(--fwk-cream);text-shadow:0 0 14px rgba(var(--fwka-rgb),.9),0 3px 0 rgba(3,6,20,.6);opacity:0}
+.o-fwks-disc{position:absolute;left:56px;top:50px;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;width:68px;height:68px;padding-top:3px;border-radius:50%;background:radial-gradient(circle at 50% 36%,#1B2A5E,#0A1230 72%);box-shadow:0 0 0 2px var(--fwka),0 0 16px 3px rgba(var(--fwka-rgb),.6),inset 0 0 12px rgba(var(--fwka-rgb),.35)}
+.o-fwks-num{display:block;font-weight:700;line-height:1;color:#FFFFFF;filter:drop-shadow(0 0 8px rgba(var(--fwka-rgb),.85))}
+.o-fwks-unit{display:block;margin-top:3px;padding-left:.18em;font-size:8.5px;line-height:1;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,236,200,.85)}
+.o-fwks-txt{position:absolute;left:186px;right:16px;top:8px;bottom:22px;z-index:3;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-fwks-lbl{margin-bottom:1px}
+.o-fwks-name{align-self:stretch;font-size:calc(28px * var(--fit,1))}
+.o-fwks-tier{display:flex;align-items:center;gap:8px;margin-top:5px}
+.o-fwks-tier > .o-fwk-cap{flex:none}
+.o-fwks-pips{display:flex;gap:4px}
+.o-fwks-pip{width:16px;height:16px;background:rgba(255,255,255,.18)}
+.o-fwks-pip.on{background:radial-gradient(circle,#FFFFFF 0 14%,var(--fwka) 44%)}
+.o-fwks-msg{align-self:stretch;margin-top:6px;font-weight:600;font-size:12.5px;line-height:1.3;color:rgba(255,240,214,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes fwkTick{0%{opacity:0;transform:scale(1.7)}28%{opacity:1;transform:scale(1)}72%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.7)}}
+@keyframes fwkPip{0%{opacity:.35;transform:scale(.7) rotate(-30deg)}55%{opacity:1;transform:scale(1.4) rotate(10deg)}100%{opacity:1;transform:scale(1) rotate(0deg)}}
+.playing .o-fwks-sky{animation:fwkSkyIn calc(.34s / var(--spd)) cubic-bezier(.2,.7,.3,1) both}
+.playing .o-fwks-txt{animation:fwkRise calc(.34s / var(--spd)) ease-out calc(.12s / var(--spd)) both}
+.playing .o-fwks-cd{animation:fwkTick calc(.3s / var(--spd)) ease-out calc(var(--cd) / var(--spd)) both}
+.playing .o-fwks-disc{animation:fwkPop calc(.4s / var(--spd)) ease-out calc(1.18s / var(--spd)) both}
+.playing .o-fwks-pip.on{animation:fwkPip calc(.34s / var(--spd)) ease-out calc(var(--pd) / var(--spd)) both}
+
+/* bits — Volley: rockets climb from the middle outwards and burst, more and bigger for more bits; the amount glows in the smoke */
+.o-fwkb{height:164px}
+.o-fwkb-sky{left:0;right:0;top:0;height:164px}
+.o-fwkb-smoke{position:absolute;left:56px;right:56px;top:72px;z-index:1;display:block;height:80px;border-radius:50%;background:radial-gradient(42% 60% at 28% 56%,rgba(44,52,86,.85),rgba(44,52,86,0)),radial-gradient(42% 62% at 72% 50%,rgba(44,52,86,.85),rgba(44,52,86,0)),radial-gradient(50% 70% at 50% 46%,rgba(var(--fwka-rgb),.24),rgba(var(--fwka-rgb),0)),radial-gradient(closest-side,rgba(20,28,58,.94),rgba(20,28,58,.66) 62%,rgba(20,28,58,0))}
+.o-fwkb-amt{position:absolute;left:0;right:0;top:80px;z-index:3;display:flex;align-items:flex-end;justify-content:center;font-weight:700;line-height:1;color:#FFF8EA;text-shadow:0 0 10px rgba(var(--fwka-rgb),.95),0 0 26px rgba(var(--fwka-rgb),.6),0 2px 0 rgba(3,6,20,.6)}
+.o-fwkb-plus{display:block;margin-right:3px;line-height:1}
+/* The odometer clips every digit, so its glow comes from a drop-shadow, not the text-shadow the rest of the line has. */
+.o-fwkb-amt > .o-odo{text-shadow:none;filter:drop-shadow(0 2px 0 rgba(3,6,20,.6)) drop-shadow(0 0 10px rgba(var(--fwka-rgb),.95)) drop-shadow(0 0 22px rgba(var(--fwka-rgb),.55))}
+.o-fwkb-unit{display:block;margin:0 0 .2em 8px;font-size:15px;line-height:1;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,236,200,.92)}
+.o-fwkb-who{position:absolute;left:28px;right:28px;top:122px;z-index:3;display:flex;align-items:center;justify-content:center;gap:9px}
+.o-fwkb-by{flex:none;max-width:45%}
+.o-fwkb-name{min-width:0;font-size:calc(21px * var(--fit,1))}
+@keyframes fwkSmoke{0%{opacity:0;transform:scale(.7,.5)}100%{opacity:1;transform:none}}
+@keyframes fwkGlowIn{0%{opacity:0;transform:scale(.92);text-shadow:0 0 0 rgba(var(--fwka-rgb),0),0 0 0 rgba(var(--fwka-rgb),0),0 2px 0 rgba(3,6,20,0)}45%{opacity:1;transform:scale(1.04);text-shadow:0 0 16px rgba(var(--fwka-rgb),1),0 0 42px rgba(var(--fwka-rgb),.9),0 2px 0 rgba(3,6,20,.6)}100%{opacity:1;transform:none;text-shadow:0 0 10px rgba(var(--fwka-rgb),.95),0 0 26px rgba(var(--fwka-rgb),.6),0 2px 0 rgba(3,6,20,.6)}}
+.playing .o-fwkb-sky{animation:fwkSkyIn calc(.34s / var(--spd)) cubic-bezier(.2,.7,.3,1) both}
+.playing .o-fwkb-smoke{animation:fwkSmoke calc(.6s / var(--spd)) ease-out calc(var(--sm) / var(--spd)) both}
+.playing .o-fwkb-amt{animation:fwkGlowIn calc(.55s / var(--spd)) ease-out calc(var(--gt) / var(--spd)) both}
+.playing .o-fwkb-who{animation:fwkRise calc(.32s / var(--spd)) ease-out calc((var(--gt) + .18s) / var(--spd)) both}
+
+/* donation — Big shell: one big shell climbs, pauses and bursts into the amount; the message lands on a plate below */
+.o-fwkd{height:212px}
+.o-fwkd-sky{left:0;right:0;top:0;height:120px}
+.o-fwkd-puff{position:absolute;left:116px;top:22px;z-index:3;display:block;width:188px;height:72px;border-radius:50%;background:radial-gradient(closest-side,rgba(6,10,28,.84),rgba(6,10,28,.56) 55%,rgba(6,10,28,0))}
+.o-fwkd-amt{position:absolute;left:0;right:0;top:30px;z-index:4;display:flex;align-items:center;justify-content:center;height:56px;font-weight:700;line-height:1;color:#FFFFFF;filter:drop-shadow(0 2px 0 rgba(3,6,20,.8)) drop-shadow(0 0 12px rgba(var(--fwka-rgb),.9))}
+.o-fwkd-plate{left:8px;right:8px;top:126px;height:84px;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:14px 18px 6px}
+.o-fwkd-plate.solo{align-items:center;padding-top:12px}
+.o-fwkd-msg{max-height:34px;overflow:hidden;overflow-wrap:anywhere;font-weight:600;font-size:13.5px;line-height:17px;color:#F4EEDD;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.o-fwkd-from{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+.o-fwkd-from > .o-fwk-cap{flex:none}
+.o-fwkd-name{min-width:0;font-size:calc(20px * var(--fit,1))}
+.o-fwkd-plate.solo .o-fwkd-name{font-size:calc(27px * var(--fit,1))}
+.o-fwkd-tag{position:absolute;left:0;right:0;top:116px;z-index:5;display:flex;justify-content:center}
+.o-fwkd-tt{display:block;max-width:240px;padding:4px 14px 2px 17px;border-radius:999px;background:var(--fwka);color:var(--fwk-on);font-size:11px;line-height:1.3;letter-spacing:.2em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 0 0 2px rgba(6,10,28,.9),0 0 14px rgba(var(--fwka-rgb),.6)}
+.playing .o-fwkd-sky{animation:fwkSkyIn calc(.34s / var(--spd)) cubic-bezier(.2,.7,.3,1) both}
+.playing .o-fwkd-puff{animation:fwkShow calc(.3s / var(--spd)) ease-out calc(.7s / var(--spd)) both}
+.playing .o-fwkd-amt{animation:fwkPop calc(.42s / var(--spd)) ease-out calc(.7s / var(--spd)) both}
+.playing .o-fwkd-plate{animation:fwkRise calc(.36s / var(--spd)) ease-out calc(.92s / var(--spd)) both}
+.playing .o-fwkd-tag{animation:fwkPop calc(.34s / var(--spd)) ease-out calc(1.08s / var(--spd)) both}
+.playing .o-fwkd-msg{animation:fwkShow calc(.35s / var(--spd)) ease-out calc(1.1s / var(--spd)) both}
+.playing .o-fwkd-from{animation:fwkRise calc(.32s / var(--spd)) ease-out calc(1.22s / var(--spd)) both}
+
+/* raid — Barrage: a line of shells launches left to right, one per raider up to twelve, and bursts across the sky */
+.o-fwkr{height:202px}
+.o-fwkr-sky{left:0;right:0;top:0;height:134px}
+.o-fwkr-plate{left:6px;right:6px;top:140px;height:60px;display:flex;flex-direction:column;justify-content:center;padding:6px 18px 4px}
+.o-fwkr-row{display:flex;align-items:center;gap:9px;min-width:0}
+.o-fwkr-name{flex:0 1 auto;min-width:0;font-size:calc(25px * var(--fit,1))}
+.o-fwkr-cnt{flex:none;display:inline-flex;align-items:flex-start;padding:5px 11px 2px;border-radius:999px;background:var(--fwka);color:var(--fwk-on);font-weight:700;font-size:20px;line-height:1;box-shadow:0 0 14px rgba(var(--fwka-rgb),.55)}
+.o-fwkr-plus{display:block;margin-right:1px;line-height:1}
+.o-fwkr-unit{flex:none}
+.playing .o-fwkr-sky{animation:fwkSkyIn calc(.34s / var(--spd)) cubic-bezier(.2,.7,.3,1) both}
+.playing .o-fwkr-plate{animation:fwkRise calc(.34s / var(--spd)) ease-out calc(.14s / var(--spd)) both}
+.playing .o-fwkr-cnt{animation:fwkPop calc(.36s / var(--spd)) ease-out calc(.42s / var(--spd)) both}
+
+/* giveaway — Grand finale: a rocket climbs and breaks into a willow; its streams fall away on both sides and frame the winner */
+.o-fwkg{height:216px}
+.o-fwkg-sky{left:0;right:0;top:0;height:216px;border-radius:20px}
+.o-fwkg-wil{position:absolute;left:0;top:0;display:block;width:420px;height:216px;overflow:visible;transform:translateY(3px)}
+.o-fwkg-glo,.o-fwkg-st{fill:none;stroke:var(--fwka);stroke-linecap:round;stroke-dasharray:100 200;stroke-dashoffset:0}
+.o-fwkg-glo{stroke-width:6;opacity:.22}
+.o-fwkg-st{stroke-width:2;opacity:.95}
+.o-fwkg-gl{position:absolute;display:block;width:4px;height:4px;border-radius:50%;background:#FFF4D2;box-shadow:0 0 4px 1px rgba(var(--fwka-rgb),.9);opacity:.65;transform:translateY(6px) scale(1)}
+.o-fwkg-txt{position:absolute;left:100px;right:100px;top:62px;height:68px;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.o-fwkg-name{align-self:stretch;font-size:calc(32px * var(--fit,1))}
+.o-fwkg-pw{position:absolute;left:90px;right:90px;top:140px;z-index:3;display:flex;justify-content:center}
+.o-fwkg-prize{display:flex;align-items:center;gap:8px;max-width:100%;height:30px;padding:3px 16px 0;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,0) 55%),var(--fwka);color:var(--fwk-on);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.35),0 6px 14px rgba(0,0,0,.45),0 0 18px rgba(var(--fwka-rgb),.45)}
+.o-fwkg-pk{flex:none;font-size:10.5px;line-height:1;letter-spacing:.2em;text-transform:uppercase;opacity:.75}
+.o-fwkg-pv{min-width:0;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes fwkDraw{0%{stroke-dashoffset:100}100%{stroke-dashoffset:0}}
+@keyframes fwkDroop{0%{transform:translateY(0)}100%{transform:translateY(3px)}}
+@keyframes fwkGlitter{0%{opacity:0;transform:translateY(-3px) scale(.4)}25%{opacity:1;transform:translateY(0) scale(1.5)}100%{opacity:.65;transform:translateY(6px) scale(1)}}
+.playing .o-fwkg-sky{animation:fwkSkyIn calc(.34s / var(--spd)) cubic-bezier(.2,.7,.3,1) both}
+.playing .o-fwkg-glo,.playing .o-fwkg-st{animation:fwkDraw calc(.85s / var(--spd)) cubic-bezier(.3,.55,.4,1) calc(.72s / var(--spd)) both}
+.playing .o-fwkg-wil{animation:fwkDroop calc(.6s / var(--spd)) ease-in-out calc(1.45s / var(--spd)) both}
+.playing .o-fwkg-gl{animation:fwkGlitter calc(.6s / var(--spd)) ease-out calc(var(--gd) / var(--spd)) both}
+.playing .o-fwkg-lbl{animation:fwkRise calc(.32s / var(--spd)) ease-out calc(.92s / var(--spd)) both}
+.playing .o-fwkg-name{animation:fwkRise calc(.4s / var(--spd)) ease-out calc(1.02s / var(--spd)) both}
+.playing .o-fwkg-prize{animation:fwkPop calc(.36s / var(--spd)) ease-out calc(1.36s / var(--spd)) both}

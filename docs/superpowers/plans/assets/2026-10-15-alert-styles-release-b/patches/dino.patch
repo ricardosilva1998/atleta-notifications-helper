@@ -1,0 +1,36 @@
+diff --git a/public/overlay/objects/styles/dino.js b/public/overlay/objects/styles/dino.js
+index b88c189..ed8a8ba 100644
+--- a/public/overlay/objects/styles/dino.js
++++ b/public/overlay/objects/styles/dino.js
+@@ -226,12 +226,12 @@
+     + '<path class="o-dno-dk" d="M14 7.5H21L11 18.8Z"/><path class="o-dnob-facet" d="M1 7.5H21M8 7.5L11 18.8L14 7.5"/></svg>';
+ 
+   K.register({
+-    key: 'bits-dino', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-dino', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'dnoBits', fx: 'sparks', anim: hold('1.5s'), exit: exit('dnoQuakeOut', '0.45s'),
+-    len: function (d) { return Math.max(1.6, 0.74 + (gemCount(intOf(d.amount != null ? d.amount : d.bits)) - 1) * 0.035 + 0.64); },
++    len: function (d) { return Math.max(1.6, 0.74 + (gemCount(intOf(K.sizeOf(d, 'bits'))) - 1) * 0.035 + 0.64); },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), count = gemCount(n), r = rng(hash(d.username + n)), gems = '', i;
+-      var size = n >= 1000 ? 22 : 20, front = Math.ceil(count / 2);
++      var n = intOf(d.amount != null ? d.amount : d.bits), drawn = intOf(K.sizeOf(d, 'bits')), count = gemCount(drawn), r = rng(hash(d.username + drawn)), gems = '', i;
++      var size = drawn >= 1000 ? 22 : 20, front = Math.ceil(count / 2);
+       for (i = 0; i < count; i++) {
+         var row = i < front ? 0 : 1, k = row ? i - front : i, inRow = row ? count - front : front;
+         var gx = 24 + (k + 0.5 + (row ? 0.5 : 0)) * (176 / Math.max(inRow, 1)) + (r() - 0.5) * 8;
+@@ -311,11 +311,11 @@
+   }
+ 
+   K.register({
+-    key: 'raid-dino', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-dino', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'dnoRaid', fx: 'smoke', anim: hold('1.4s'), exit: exit('dnoRunOut', '0.45s'),
+-    len: function (d) { return herd(intOf(d.viewers)).len; },
++    len: function (d) { return herd(intOf(K.sizeOf(d, 'raid'))).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), q = herd(v), n = q.n, sp = n > 1 ? Math.min(48, 330 / (n - 1)) : 0, dinos = '', far = '', dust = [], i;
++      var v = intOf(d.viewers), q = herd(intOf(K.sizeOf(d, 'raid'))), n = q.n, sp = n > 1 ? Math.min(48, 330 / (n - 1)) : 0, dinos = '', far = '', dust = [], i;
+       for (i = 0; i < n; i++) {
+         var back = i % 2 === 1, w = back ? 44 : 56, cx = 214 + ((n - 1) / 2 - i) * sp, rd = 0.3 + i * 0.07;
+         dinos += '<div class="o-dnor-dino' + (back ? ' o-dnor-back' : '') + '" style="left:' + Math.round(cx - w / 2) + 'px;--x:' + Math.round(cx + w / 2) + 'px;--rd:' + rd.toFixed(2) + 's"><div class="o-dnor-bob">' + runner(back) + '</div></div>';

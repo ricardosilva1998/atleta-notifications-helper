@@ -1,0 +1,125 @@
+diff --git a/public/overlay/objects/styles/comic.css b/public/overlay/objects/styles/comic.css
+index 16d765b..b13e9a0 100644
+--- a/public/overlay/objects/styles/comic.css
++++ b/public/overlay/objects/styles/comic.css
+@@ -10,10 +10,10 @@
+ .o-cm-cap{background:var(--cm-y);border:3px solid var(--cm-ink);box-shadow:3px 3px 0 var(--cm-ink);padding:4px 10px;font-size:12px;line-height:1.2;letter-spacing:.05em;text-transform:uppercase;color:var(--cm-ink);transform:rotate(var(--rot,0deg))}
+ .o-cm-bubble{position:relative;background:#fff;border:3px solid var(--cm-ink);border-radius:22px;box-shadow:4px 4px 0 var(--cm-ink);padding:8px 14px 9px;color:var(--cm-ink)}
+ .o-cm-burst{position:absolute}
+-.o-cm-burst .k,.o-cm-burst .f{position:absolute}
+-.o-cm-burst .k{inset:0;background:var(--cm-ink)}
+-.o-cm-burst .f{inset:6px 9px;background:radial-gradient(circle,var(--cm-y) 0 24%,var(--cma) 66%)}
+-.o-cm-burst .f::after{content:"";position:absolute;inset:0;background:radial-gradient(rgba(17,17,17,.24) 1.4px,transparent 1.9px) 0 0/8px 8px}
++.o-cm-burst .o-cm-k,.o-cm-burst .o-cm-f{position:absolute}
++.o-cm-burst .o-cm-k{inset:0;background:var(--cm-ink)}
++.o-cm-burst .o-cm-f{inset:6px 9px;background:radial-gradient(circle,var(--cm-y) 0 24%,var(--cma) 66%)}
++.o-cm-burst .o-cm-f::after{content:"";position:absolute;inset:0;background:radial-gradient(rgba(17,17,17,.24) 1.4px,transparent 1.9px) 0 0/8px 8px}
+ @keyframes cmSlam{0%{transform:scale(1.7) rotate(calc(var(--rot,0deg) - 6deg));opacity:0}45%{transform:scale(.92) rotate(var(--rot,0deg));opacity:1}70%{transform:scale(1.04) rotate(calc(var(--rot,0deg) - 1.5deg))}100%{transform:rotate(var(--rot,0deg));opacity:1}}
+ @keyframes cmSfx{0%{transform:scale(2.6) rotate(var(--rot,0deg));opacity:0}45%{transform:scale(.86) rotate(var(--rot,0deg));opacity:1}70%{transform:scale(1.08) rotate(var(--rot,0deg))}100%{transform:rotate(var(--rot,0deg));opacity:1}}
+ @keyframes cmPop{0%{transform:scale(0) rotate(calc(var(--rot,0deg) - 30deg))}60%{transform:scale(1.18) rotate(calc(var(--rot,0deg) + 6deg))}80%{transform:scale(.94) rotate(var(--rot,0deg))}100%{transform:rotate(var(--rot,0deg))}}
+@@ -65,9 +65,9 @@
+ .o-cmb-coins{position:absolute;left:95px;top:80px;z-index:3;width:0;height:0}
+ .o-cmb-coin{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFF6A8 0 24%,#FFD21F 25% 62%,#D99A00 63%);border:2.5px solid var(--cm-ink);opacity:0}
+ .o-cmb-sign{position:absolute;left:170px;right:10px;top:20px;height:86px}
+-.o-cmb-sign .k,.o-cmb-sign .f{position:absolute}
+-.o-cmb-sign .k{inset:0;background:var(--cm-ink)}
+-.o-cmb-sign .f{inset:5px 8px;background:radial-gradient(rgba(255,255,255,.14) 1.4px,transparent 1.9px) 0 0/8px 8px,linear-gradient(160deg,#3C78FF,var(--cm-b) 60%,#1440C8)}
++.o-cmb-sign .o-cm-k,.o-cmb-sign .o-cm-f{position:absolute}
++.o-cmb-sign .o-cm-k{inset:0;background:var(--cm-ink)}
++.o-cmb-sign .o-cm-f{inset:5px 8px;background:radial-gradient(rgba(255,255,255,.14) 1.4px,transparent 1.9px) 0 0/8px 8px,linear-gradient(160deg,#3C78FF,var(--cm-b) 60%,#1440C8)}
+ .o-cmb-amt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font-family:"Bangers","Impact",system-ui,sans-serif;font-weight:400;font-size:44px;line-height:1;letter-spacing:.03em;color:#fff;text-shadow:var(--cm-line)}
+ .o-cmb-amt small{font-family:"Comic Neue","Comic Sans MS",system-ui,sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--cm-y);text-shadow:none}
+ .o-cmb-cap{position:absolute;left:186px;right:26px;top:116px;display:flex;align-items:baseline;gap:6px;text-transform:none;letter-spacing:0;font-size:13px}
+@@ -115,12 +115,12 @@
+ .o-cmr-count{position:relative;font-size:34px;color:#fff;text-shadow:var(--cm-line)}
+ .o-cmr-lbl{position:relative;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#fff}
+ .o-cmr-heroes{position:relative;display:flex;gap:2px;height:18px}
+-.o-cmr-heroes i{display:block;width:11px;height:17px}
++.o-cmr-heroes .o-cmr-hero{display:block;width:11px;height:17px}
+ .o-cmr-heroes svg{display:block;width:100%;height:100%;fill:var(--cm-y);stroke:var(--cm-ink);stroke-width:1.1}
+ @keyframes cmSpeed{from{transform:translateX(-30%)}to{transform:none}}
+ .playing .o-cmr-p{animation:cmSlam calc(.38s / var(--spd)) cubic-bezier(.2,.9,.3,1.1) calc(var(--pd) / var(--spd)) both}
+ .playing .o-cmr-speed{animation:cmSpeed calc(.5s / var(--spd)) linear calc(.22s / var(--spd)) both}
+-.playing .o-cmr-heroes i{animation:cmPop calc(.26s / var(--spd)) cubic-bezier(.3,1.5,.5,1) calc((.74s + var(--hi) * .05s) / var(--spd)) both}
++.playing .o-cmr-heroes .o-cmr-hero{animation:cmPop calc(.26s / var(--spd)) cubic-bezier(.3,1.5,.5,1) calc((.74s + var(--hi) * .05s) / var(--spd)) both}
+ 
+ /* giveaway — WINNER! */
+ .o-cmg{height:208px}
+@@ -128,7 +128,7 @@
+ .o-cmg-rays{position:absolute;left:-40%;top:-80%;width:180%;height:260%;background:repeating-conic-gradient(from 0deg at 50% 50%,var(--cm-y) 0 9deg,var(--cma) 9deg 18deg)}
+ .o-cmg-dots{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.55),rgba(255,255,255,0) 55%),radial-gradient(rgba(17,17,17,.2) 1.4px,transparent 1.9px) 0 0/8px 8px}
+ .o-cmg-stars{position:absolute;left:14px;right:14px;top:6px;height:150px;z-index:2;pointer-events:none}
+-.o-cmg-stars i{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;transform:scale(var(--ss))}
++.o-cmg-stars .o-cmg-star{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;transform:scale(var(--ss))}
+ .o-cmg-stars svg{display:block;width:100%;height:100%;fill:#fff;stroke:var(--cm-ink);stroke-width:2.4;stroke-linejoin:round}
+ .o-cmg-title{position:absolute;left:0;right:0;top:16px;z-index:2;text-align:center;font-size:64px;color:#fff;text-shadow:var(--cm-line),3px 3px 0 var(--cm-b),4px 4px 0 var(--cm-b),5px 5px 0 var(--cm-b),6px 6px 0 var(--cm-b),7px 7px 0 var(--cm-ink),8px 8px 0 var(--cm-ink)}
+ .o-cmg-ribbon{position:absolute;left:44px;right:44px;top:96px;height:46px;z-index:3;filter:drop-shadow(0 3px 0 #111) drop-shadow(0 -3px 0 #111) drop-shadow(3px 0 0 #111) drop-shadow(-3px 0 0 #111) drop-shadow(4px 4px 0 #111)}
+@@ -144,4 +144,4 @@
+ .playing .o-cmg-title{animation:cmSfx calc(.42s / var(--spd)) cubic-bezier(.2,.9,.3,1.1) calc(.26s / var(--spd)) both}
+ .playing .o-cmg-ribbon{animation:cmUnfurl calc(.36s / var(--spd)) cubic-bezier(.3,1.2,.5,1) calc(.6s / var(--spd)) both}
+ .playing .o-cmg-cap{animation:cmRise calc(.34s / var(--spd)) cubic-bezier(.3,1.3,.5,1) calc(.94s / var(--spd)) both}
+-.playing .o-cmg-stars i{animation:cmStar calc(.3s / var(--spd)) cubic-bezier(.3,1.4,.5,1) calc(var(--sd) / var(--spd)) both}
++.playing .o-cmg-stars .o-cmg-star{animation:cmStar calc(.3s / var(--spd)) cubic-bezier(.3,1.4,.5,1) calc(var(--sd) / var(--spd)) both}
+diff --git a/public/overlay/objects/styles/comic.js b/public/overlay/objects/styles/comic.js
+index cf79563..4b89079 100644
+--- a/public/overlay/objects/styles/comic.js
++++ b/public/overlay/objects/styles/comic.js
+@@ -45,7 +45,7 @@
+     return 'polygon(' + pts.join(',') + ')';
+   }
+   function cmBurstEl(cls, clip) {
+-    return '<div class="o-cm-burst ' + cls + '"><i class="k" style="clip-path:' + clip + '"></i><i class="f" style="clip-path:' + clip + '"></i></div>';
++    return '<div class="o-cm-burst ' + cls + '"><i class="o-cm-k" style="clip-path:' + clip + '"></i><i class="o-cm-f" style="clip-path:' + clip + '"></i></div>';
+   }
+ 
+   SOUNDS.cmFollow = function () {
+@@ -108,11 +108,11 @@
+   });
+ 
+   K.register({
+-    key: 'bits-comic', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-comic', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'cmBits', fx: 'none', anim: hold('1.2s'), exit: CM_EXIT, len: 1.3,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), lvl = n >= 1000 ? 3 : n >= 100 ? 2 : 1;
+-      var count = [0, 3, 6, 10][lvl], r = rng(hash(d.username + n)), coins = '';
++      var n = intOf(d.amount != null ? d.amount : d.bits), sized = K.sizeOf(d, 'bits'), lvl = sized >= 1000 ? 3 : sized >= 100 ? 2 : 1;
++      var count = [0, 3, 6, 10][lvl], r = rng(hash(d.username + sized)), coins = '';
+       for (var i = 0; i < count; i++) {
+         var a = (-170 + r() * 160) * Math.PI / 180, dist = 60 + r() * 65;
+         coins += '<i class="o-cmb-coin" style="--dx:' + (Math.cos(a) * dist).toFixed(0) + 'px;--dy:' + (Math.sin(a) * dist).toFixed(0) + 'px;--cd:' + (0.22 + i * 0.045).toFixed(2) + 's"></i>';
+@@ -121,7 +121,7 @@
+       return '<div class="obj o-cm o-cmb lvl-' + lvl + '">' + cmBurstEl('o-cmb-burst', cmBurst(14, 0.64, hash(d.username + 'bam')))
+         + '<div class="o-cm-sfx o-cmb-sfx" style="--rot:-8deg">' + label(d, 'BAM!') + '</div>'
+         + '<div class="o-cmb-coins">' + coins + '</div>'
+-        + '<div class="o-cmb-sign"><i class="k" style="clip-path:' + zig + '"></i><i class="f" style="clip-path:' + zig + '"></i>'
++        + '<div class="o-cmb-sign"><i class="o-cm-k" style="clip-path:' + zig + '"></i><i class="o-cm-f" style="clip-path:' + zig + '"></i>'
+         + '<div class="o-cmb-amt">' + odo(fmt(n), 0.42, 0.65) + '<small>bits</small></div></div>'
+         + '<div class="o-cm-cap o-cmb-cap" style="--rot:-2deg"><span>from</span>' + nm('o-cmb-name', d.username, 12) + '</div>'
+         + (lvl === 3 ? '<div class="o-cm-sfx o-cmb-extra" style="--rot:6deg">KA-CHING!</div>' : '')
+@@ -141,12 +141,12 @@
+   });
+ 
+   K.register({
+-    key: 'raid-comic', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-comic', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'cmRaid', fx: 'none', anim: hold('1.3s'), exit: CM_EXIT,
+-    len: function (d) { return 1.0 + Math.min(8, intOf(d.viewers)) * 0.05; },
++    len: function (d) { return 1.0 + Math.min(8, K.sizeOf(d, 'raid')) * 0.05; },
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 8), heroes = '';
+-      for (var i = 0; i < n; i++) heroes += '<i style="--hi:' + i + '">' + CM_HERO + '</i>';
++      var v = intOf(d.viewers), n = Math.min(K.sizeOf(d, 'raid'), 8), heroes = '';
++      for (var i = 0; i < n; i++) heroes += '<i class="o-cmr-hero" style="--hi:' + i + '">' + CM_HERO + '</i>';
+       return '<div class="obj o-cm o-cmr">'
+         + '<div class="o-cmr-p p1" style="--rot:-2deg;--pd:0s"><i class="o-cmr-rays"></i><div class="o-cm-sfx o-cmr-alarm">' + label(d, 'Incoming!') + '</div></div>'
+         + '<div class="o-cmr-p p2" style="--rot:1deg;--pd:.22s"><i class="o-cmr-speed"></i>' + nm('o-cmr-name', d.username, 8) + '<span class="o-cmr-is">is raiding!</span></div>'
+@@ -161,7 +161,7 @@
+     render: function (d) {
+       var r = rng(hash(d.username + 'win')), stars = '';
+       for (var i = 0; i < 7; i++) {
+-        stars += '<i style="left:' + (6 + r() * 88).toFixed(0) + '%;top:' + (8 + r() * 56).toFixed(0) + '%;--sd:' + (0.9 + i * 0.06).toFixed(2) + 's;--ss:' + (0.6 + r() * 0.6).toFixed(2) + '">' + CM_STAR + '</i>';
++        stars += '<i class="o-cmg-star" style="left:' + (6 + r() * 88).toFixed(0) + '%;top:' + (8 + r() * 56).toFixed(0) + '%;--sd:' + (0.9 + i * 0.06).toFixed(2) + 's;--ss:' + (0.6 + r() * 0.6).toFixed(2) + '">' + CM_STAR + '</i>';
+       }
+       return '<div class="obj o-cm o-cmg"><div class="o-cmg-splash"><i class="o-cmg-rays"></i><i class="o-cmg-dots"></i></div>'
+         + '<div class="o-cmg-stars">' + stars + '</div>'

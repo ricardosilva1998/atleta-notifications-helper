@@ -21,6 +21,30 @@ const OBJECTS_CSS = fs.readFileSync(path.join(OBJECTS_DIR, 'objects.css'), 'utf8
 const PREFIXES = {
   samurai: { classes: ['o-omi'], keyframes: ['omi', 'exOmi'] },
   racing: { classes: ['o-rc'], keyframes: ['rc'] },
+  grandprix: { classes: ['o-gp'], keyframes: ['gp'] },
+  cockpit: { classes: ['o-ck'], keyframes: ['ck'] },
+  arcade: { classes: ['o-ar'], keyframes: ['ar'] },
+  quest: { classes: ['o-qs'], keyframes: ['qs'] },
+  comic: { classes: ['o-cm'], keyframes: ['cm'] },
+  cozy: { classes: ['o-cz'], keyframes: ['cz'] },
+  cosmos: { classes: ['o-cs'], keyframes: ['cs'] },
+  glass: { classes: ['o-gl'], keyframes: ['gl'] },
+  spooky: { classes: ['o-spk'], keyframes: ['spk'] },
+  cyber: { classes: ['o-cyb'], keyframes: ['cyb'] },
+  western: { classes: ['o-wst'], keyframes: ['wst'] },
+  retro: { classes: ['o-ros'], keyframes: ['ros'] },
+  graffiti: { classes: ['o-gfi'], keyframes: ['gfi'] },
+  kawaii: { classes: ['o-kwi'], keyframes: ['kwi'] },
+  steampunk: { classes: ['o-stm'], keyframes: ['stm'] },
+  frost: { classes: ['o-fro'], keyframes: ['fro'] },
+  neon: { classes: ['o-neo'], keyframes: ['neo'] },
+  deepsea: { classes: ['o-sea'], keyframes: ['sea'] },
+  music: { classes: ['o-mus'], keyframes: ['mus'] },
+  stadium: { classes: ['o-std'], keyframes: ['std'] },
+  fireworks: { classes: ['o-fwk'], keyframes: ['fwk'] },
+  dino: { classes: ['o-dno'], keyframes: ['dno'] },
+  ufo: { classes: ['o-ufo'], keyframes: ['ufo'] },
+  news: { classes: ['o-nws'], keyframes: ['nws'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
@@ -86,6 +110,37 @@ describe('every look', () => {
       assert.equal(typeof look.fx, 'string', `${look.key}: fx`);
       assert.ok(look.controls && 'colour' in look.controls, `${look.key}: controls`);
       assert.ok(look.controls.colour, `${look.key}: every look takes the streamer's colour`);
+    }
+  });
+
+  test('every family has six looks, one for each alert', () => {
+    for (const family of [...new Set(looks.map((look) => look.family))]) {
+      assert.deepEqual(looks.filter((look) => look.family === family).map((look) => look.eventType).sort(), [...K.ALERTS].sort(), family);
+    }
+  });
+
+  test('a look\'s own screen effect is one the overlay plays', () => {
+    const { FIELD_SPECS } = require('../src/services/overlayDesign.js');
+    const playable = FIELD_SPECS.screen_effect.values.filter((value) => value !== 'default');
+    for (const look of looks) assert.ok(playable.includes(look.fx), `${look.key}: ${look.fx}`);
+  });
+
+  test('a look offers "grows with the amount" exactly when its picture is sized through K.sizeOf()', () => {
+    // sizeOf() gives the middle picture while the switch is off; the text keeps the real number.
+    for (const look of looks.filter((l) => !l.preset)) {
+      const sized = /\bsizeOf\(/.test(String(look.render) + String(look.len));
+      assert.equal(!!look.grows, sized, `${look.key}: grows is ${!!look.grows} but its picture ${sized ? 'is' : 'is not'} sized through sizeOf()`);
+    }
+  });
+
+  test('a look offers its main text exactly when it draws it', () => {
+    // The builder hides the control and kit.lookData() passes no style_label for a look without it. The
+    // drawn text is read without the markup: a look may set its text one letter at a time (Graffiti's stencil).
+    const MARK = 'QXMAINTEXT';
+    for (const look of looks.filter((l) => !l.preset)) {
+      const html = look.render(Object.assign({ username: 'ApexAndre', label: MARK }, SAMPLES[look.eventType][1]));
+      const draws = html.replace(/<[^>]*>/g, '').includes(MARK);
+      assert.equal(!!look.controls.label, draws, `${look.key}: offers the main text ${!!look.controls.label}, draws it ${draws}`);
     }
   });
 
@@ -196,6 +251,15 @@ describe('every family stylesheet', () => {
       }
     });
 
+    test(`${file}: no rule sets the same property twice (the second one silently wins)`, () => {
+      const plain = rules.replace(/@keyframes[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+      for (const [, selector, body] of plain.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const props = splitTop(body, ';').map((d) => d.split(':')[0].trim()).filter((name) => name && !name.startsWith('--'));
+        const twice = props.find((name, i) => props.indexOf(name) !== i);
+        assert.ok(!twice, `${file}: ${selector.trim()} sets ${twice} twice`);
+      }
+    });
+
     test(`${file}: every look takes the streamer's colour on its own parts`, () => {
       // The accent tokens: --a itself and every family token defined from it (--rca:var(--a,…)).
       const tokens = new Set(['a', 'r-red', ...[...rules.matchAll(/--([\w-]+):var\(--a\b/g)].map((m) => m[1])]);
@@ -239,5 +303,16 @@ describe('Racing keeps today\'s defaults', () => {
     const lit = (d) => (K.styles['bits-racing'].render(d).match(/o-rcb-seg on/g) || []).length;
     assert.equal(lit({ username: 'A', amount: 10000, grows: false }), lit({ username: 'A', amount: 500 }));
     assert.ok(lit({ username: 'A', amount: 10000 }) > lit({ username: 'A', amount: 500 }));
+  });
+});
+
+describe('text drawn on the streamer\'s colour reads --a-on (dark on a light colour), white while none is picked', () => {
+  const css = fs.readFileSync(path.join(STYLES_DIR, 'grandprix.css'), 'utf8');
+  const rule = (selector) => (css.match(new RegExp('(?:^|\\n)' + selector.replace(/\./g, '\\.') + '\\{([^}]*)\\}')) || [])[1] || '';
+  test('Grand Prix: the timing tower\'s header and own row, the radio\'s amount and the winner\'s step', () => {
+    for (const selector of ['.o-gps-head', '.o-gps-row.me', '.o-gpd-amt']) {
+      assert.match(rule(selector), /(^|;)color:var\(--a-on,#fff\)/, selector);
+    }
+    assert.match(rule('.o-gpg-step.p1'), /(^|;)color:rgba\(var\(--a-on-rgb,255,255,255\),\.85\)/, '.o-gpg-step.p1');
   });
 });

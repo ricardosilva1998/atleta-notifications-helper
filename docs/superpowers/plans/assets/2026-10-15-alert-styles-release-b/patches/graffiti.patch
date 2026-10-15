@@ -1,0 +1,35 @@
+diff --git a/public/overlay/objects/styles/graffiti.js b/public/overlay/objects/styles/graffiti.js
+index e4c6d3a..13f60e8 100644
+--- a/public/overlay/objects/styles/graffiti.js
++++ b/public/overlay/objects/styles/graffiti.js
+@@ -202,12 +202,12 @@
+   });
+ 
+   K.register({
+-    key: 'bits-graffiti', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-graffiti', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'gfiBits', fx: 'none', anim: hold('1.6s'), exit: GFI_EXIT, len: 1.75,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), lg = Math.log10(n + 1);
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), lg = Math.log10(size + 1);
+       var count = Math.max(2, Math.min(12, Math.round(-1.6 + lg * 2.9)));
+-      var r = rng(hash(d.username + n)), step = Math.min(0.14, 0.62 / count), span = Math.min(300, 60 + count * 30);
++      var r = rng(hash(d.username + size)), step = Math.min(0.14, 0.62 / count), span = Math.min(300, 60 + count * 30);
+       var cols = ['var(--gfia)', 'var(--gfi-lime)', 'var(--gfi-blue)', '#F2F2F2'], splats = '', drips = '', i;
+       for (i = 0; i < count; i++) {
+         var x = 26 + (i + 0.5) / count * span + (r() - 0.5) * 36, y = 32 + r() * 88;
+@@ -243,11 +243,11 @@
+   var GFI_SLOTS = [[46, 50], [374, 50], [40, 98], [380, 98], [50, 146], [370, 146], [128, 174], [292, 174], [210, 180]];
+ 
+   K.register({
+-    key: 'raid-graffiti', eventType: 'raid', family: FAMILY, controls: CONTROLS_NO_TEXT, grows: false,
++    key: 'raid-graffiti', eventType: 'raid', family: FAMILY, controls: CONTROLS_NO_TEXT, grows: true,
+     sound: 'gfiRaid', fx: 'none', anim: hold('1.6s'), exit: GFI_EXIT,
+-    len: function (d) { var n = Math.min(9, intOf(d.viewers)); return Math.max(1.6, n ? 1.2 + (n - 1) * 0.09 : 0); },
++    len: function (d) { var n = Math.min(9, intOf(K.sizeOf(d, 'raid'))); return Math.max(1.6, n ? 1.2 + (n - 1) * 0.09 : 0); },
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 9), r = rng(hash(d.username + v)), words = GFI_CREW.slice(), crew = '', i;
++      var v = intOf(d.viewers), size = intOf(K.sizeOf(d, 'raid')), n = Math.min(size, 9), r = rng(hash(d.username + size)), words = GFI_CREW.slice(), crew = '', i;
+       for (i = words.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), w = words[i]; words[i] = words[j]; words[j] = w; }
+       var cols = ['#FFFFFF', 'var(--gfi-lime)', 'var(--gfia)', '#5C9BFF'];
+       for (i = 0; i < n; i++) {

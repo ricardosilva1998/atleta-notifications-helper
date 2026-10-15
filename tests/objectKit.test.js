@@ -46,6 +46,14 @@ describe('helpers', () => {
   });
 });
 
+describe('wide characters', () => {
+  test('isWide() is shared: the families that fit names by width (Cyber, UFO) measure with it', () => {
+    assert.equal(K.isWide('中'.codePointAt(0)), true);
+    assert.equal(K.isWide('😀'.codePointAt(0)), true);
+    assert.equal(K.isWide('A'.codePointAt(0)), false);
+  });
+});
+
 describe('the streamer\'s colour', () => {
   test('gives the colour, its numbers, the text colour on it and its shades', () => {
     assert.equal(K.accentVars('#d81e26'),

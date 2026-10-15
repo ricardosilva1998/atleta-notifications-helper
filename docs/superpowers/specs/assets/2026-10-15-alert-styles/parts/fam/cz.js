@@ -101,7 +101,7 @@ add({
   len: function (d) { return 0.42 + czStarCount(intOf(d.amount != null ? d.amount : d.bits)) * 0.06 + 0.65; },
   render: function (d) {
     var n = intOf(d.amount != null ? d.amount : d.bits), count = czStarCount(n), r = rng(hash(d.username + n)), stars = '', i;
-    var cols = ['#FFD45C', '#7FD9A8', '#A98BFF', '#FF8FAB', '#FFB86B'];
+    var cols = ['var(--a-hi,#FFD45C)', 'var(--a,#7FD9A8)', 'var(--a-tint,#A98BFF)', 'var(--a-lo,#FF8FAB)', 'var(--a-soft,#FFB86B)'];   // shades of the streamer's colour (five pastels by default)
     for (i = 0; i < count; i++) {
       stars += '<i class="o-czb-star" style="--x:' + (4 + (i % 4) * 22 + r() * 6).toFixed(0) + '%;--y:' + (3 + Math.floor(i / 4) * 15 + r() * 5).toFixed(0)
         + 'px;--s:' + (15 + Math.round(r() * 7)) + 'px;--c:' + cols[i % cols.length] + ';--r:' + Math.round(r() * 70 - 35) + 'deg;--sd:' + (0.42 + i * 0.06).toFixed(2) + 's"></i>';
@@ -140,7 +140,7 @@ add({
   len: function (d) { return 0.35 + Math.min(8, intOf(d.viewers)) * 0.12 + 0.9; },
   render: function (d) {
     var v = intOf(d.viewers), n = Math.min(v, 8), sp = n ? Math.min(70, 340 / n) : 0, boats = '', i;
-    var cols = ['var(--cza)', '#FFFDF8', '#FFE7A3', '#BFF0D4', '#FFC9D6', '#E7D3B5', '#C9B8FF', '#FFFDF8'];
+    var cols = ['var(--cza)', 'var(--a-tint,#FFFDF8)', 'var(--a-hi,#FFE7A3)', 'var(--a-soft,#BFF0D4)', 'var(--a-tint,#FFC9D6)', 'var(--a-lo,#E7D3B5)', 'var(--a-soft,#C9B8FF)', 'var(--a-tint,#FFFDF8)'];   // shades of the streamer's colour (pastel paper by default)
     for (i = 0; i < n; i++) {
       var cx = 210 + ((n - 1) / 2 - i) * sp;
       boats += '<div class="o-czr-boat" style="--bx:' + (cx - 23).toFixed(0) + 'px;--bc:' + cols[i % cols.length] + ';--bd:' + (0.35 + i * 0.12).toFixed(2) + 's">'

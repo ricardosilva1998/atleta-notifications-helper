@@ -1,0 +1,38 @@
+diff --git a/public/overlay/objects/styles/deepsea.js b/public/overlay/objects/styles/deepsea.js
+index d8c5e72..14c31c7 100644
+--- a/public/overlay/objects/styles/deepsea.js
++++ b/public/overlay/objects/styles/deepsea.js
+@@ -232,14 +232,14 @@
+   }
+ 
+   K.register({
+-    key: 'bits-deepsea', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-deepsea', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'seaBits', fx: 'none', anim: hold('1.5s'), exit: EXIT_SINK,
+-    len: function (d) { return Math.max(1.5, schoolPlan(intOf(d.amount != null ? d.amount : d.bits)).len); },
++    len: function (d) { return Math.max(1.5, schoolPlan(K.sizeOf(d, 'bits')).len); },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits);
++      var n = intOf(d.amount != null ? d.amount : d.bits), sized = K.sizeOf(d, 'bits');
+       var wem = 0.55 + Array.from(fmt(n)).reduce(function (w, c) { return w + (c === ',' ? 0.26 : 0.57); }, 0) + 0.8;
+       var size = Math.max(26, Math.min(46, Math.floor(200 / wem)));
+-      return '<div class="obj o-sea o-seab"><div class="o-sea-water o-seab-water"><i class="o-seab-halo"></i>' + school(n, hash(d.username + n))
++      return '<div class="obj o-sea o-seab"><div class="o-sea-water o-seab-water"><i class="o-seab-halo"></i>' + school(sized, hash(d.username + sized))
+         + '<div class="o-seab-txt"><div class="o-sea-tag o-seab-tag">' + label(d, 'Thank you!') + '</div>'
+         + '<div class="o-seab-amt" style="font-size:' + size + 'px"><span class="o-seab-plus">+</span>' + odo(fmt(n), 0.5, 0.9) + '<span class="o-seab-unit">bits</span></div>'
+         + '<div class="o-seab-from"><span class="o-sea-cap">from</span>' + nm('o-seab-name o-sea-name', d.username, 11) + '</div></div></div></div>';
+@@ -285,11 +285,11 @@
+   }
+ 
+   K.register({
+-    key: 'raid-deepsea', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-deepsea', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'seaRaid', fx: 'none', anim: hold('1.5s'), exit: EXIT_DRIFT,
+-    len: function (d) { return pod(intOf(d.viewers)).len; },
++    len: function (d) { return pod(K.sizeOf(d, 'raid')).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), p = pod(v), dol = '', spl = '';
++      var v = intOf(d.viewers), p = pod(K.sizeOf(d, 'raid')), dol = '', spl = '';
+       p.list.forEach(function (o) {
+         dol += '<div class="o-sear-dol" style="left:' + n1(o.x) + 'px;top:' + o.y + 'px;--ya:' + (SURF + 2 - o.y) + 'px;--yb:' + (SURF - 30 - o.y) + 'px;--yc:' + (SURF + 4 - o.y) + 'px;--dd:' + o.t.toFixed(2) + 's">'
+           + '<div class="o-sear-dy"><div class="o-sea-fish o-sear-dr">' + DOLPHIN + '</div></div></div>';

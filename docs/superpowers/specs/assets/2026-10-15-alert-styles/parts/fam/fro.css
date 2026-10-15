@@ -5,7 +5,7 @@
    wood stay put. Every animation runs once and then the alert holds still. */
 .o-fro{--froa:var(--a,#8ED8FF);--froa-rgb:var(--a-rgb,142,216,255);--fro-navy:#0E1A33;--fro-snow:#F4F9FF;--fro-pine:#1F6B4A;--fro-berry:#C8234A;--fro-gold:#F2C14E;--fro-muted:rgba(226,238,255,.84);font-family:"Quicksand","Nunito",system-ui,sans-serif;font-weight:700;color:var(--fro-snow)}
 /* The frosted plate: navy glass with an icy edge and frost ferns in the two lower corners. */
-.o-fro-plate{position:absolute;z-index:0;border-radius:16px;background:radial-gradient(130% 80% at 50% 0%,rgba(var(--froa-rgb),.18),rgba(var(--froa-rgb),0) 62%),linear-gradient(180deg,rgba(27,49,92,.97),rgba(14,26,51,.97) 72%);box-shadow:inset 0 0 0 1.5px rgba(var(--froa-rgb),.5),inset 0 0 18px rgba(var(--froa-rgb),.14),0 0 18px rgba(var(--froa-rgb),.22),0 12px 24px rgba(3,8,20,.5)}
+.o-fro-plate{position:absolute;z-index:0;border-radius:16px;background:radial-gradient(130% 80% at 50% 0%,rgba(var(--froa-rgb),.18),rgba(var(--froa-rgb),0) 62%),linear-gradient(180deg,var(--a-night,rgba(27,49,92,.97)),var(--a-ink,rgba(14,26,51,.97)) 72%);box-shadow:inset 0 0 0 1.5px rgba(var(--froa-rgb),.5),inset 0 0 18px rgba(var(--froa-rgb),.14),0 0 18px rgba(var(--froa-rgb),.22),0 12px 24px rgba(3,8,20,.5)}
 .o-fro-plate::before,.o-fro-plate::after{content:"";position:absolute;bottom:3px;z-index:-1;width:54px;height:54px;pointer-events:none;opacity:.5;background:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M2 62L26 38M10 54V47M10 54H17M18 46V39M18 46H25M2 62L8 26M5 44L1 40M5 44L9 40M7 34L3 31M7 34L11 31M2 62L38 56M15 60L20 56M15 60L20 63M27 58L32 54M27 58L32 61' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 0 0/100% 100% no-repeat}
 .o-fro-plate::before{left:3px}
 .o-fro-plate::after{right:3px;transform:scaleX(-1)}
@@ -28,7 +28,7 @@
 /* follow — Snow globe: it lands, shakes, the snow swirls and settles, the name appears inside */
 .o-frof{height:140px}
 .o-frof-globe{position:absolute;left:50%;top:0;width:352px;height:140px;margin-left:-176px;transform-origin:50% 100%}
-.o-frof-glass{position:absolute;left:14px;right:14px;top:2px;height:100px;overflow:hidden;border-radius:162px 162px 16px 16px/82px 82px 16px 16px;background:radial-gradient(ellipse 60% 70% at 50% 100%,rgba(var(--froa-rgb),.42),rgba(var(--froa-rgb),0) 72%),linear-gradient(180deg,#1C3764 0%,#122542 55%,#0E1A33 100%);box-shadow:0 0 22px rgba(var(--froa-rgb),.32),0 10px 20px rgba(3,8,20,.45)}
+.o-frof-glass{position:absolute;left:14px;right:14px;top:2px;height:100px;overflow:hidden;border-radius:162px 162px 16px 16px/82px 82px 16px 16px;background:radial-gradient(ellipse 60% 70% at 50% 100%,rgba(var(--froa-rgb),.42),rgba(var(--froa-rgb),0) 72%),linear-gradient(180deg,var(--a-deep,#1C3764) 0%,var(--a-night,#122542) 55%,var(--a-ink,#0E1A33) 100%);box-shadow:0 0 22px rgba(var(--froa-rgb),.32),0 10px 20px rgba(3,8,20,.45)}
 .o-frof-ground{position:absolute;left:-18px;right:-18px;bottom:-30px;height:58px;border-radius:50%;background:radial-gradient(ellipse 60% 55% at 50% 30%,#FFFFFF,#DCEBFA 70%,#BBD5F0);box-shadow:0 -3px 10px rgba(255,255,255,.3)}
 .o-frof-tree{position:absolute}
 .o-frof-tl{left:26px;bottom:16px;width:30px;height:40px}
@@ -104,6 +104,7 @@
 .o-frob{height:168px}
 .o-frob-plate{left:196px;right:0;top:24px;height:134px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:20px 16px 10px 20px}
 .o-frob-amt{display:flex;align-items:center;gap:7px;line-height:1;color:#FFFFFF;text-shadow:0 0 16px rgba(var(--froa-rgb),.6),0 2px 3px rgba(3,8,20,.7)}
+.o-frob-amt .o-odo{text-shadow:none;filter:drop-shadow(0 0 16px rgba(var(--froa-rgb),.6)) drop-shadow(0 2px 3px rgba(3,8,20,.7))}
 .o-frob-num{font-weight:700;line-height:1}
 .o-frob-unit{font-size:16px;letter-spacing:.04em;color:var(--froa)}
 .o-frob-name{font-size:calc(24px * var(--fit,1))}
@@ -183,6 +184,7 @@
 .o-fror-line{display:flex;align-items:center;gap:10px;min-width:0}
 .o-fror-name{flex:0 1 auto;min-width:0}
 .o-fror-cnt{flex:none;display:flex;align-items:center;gap:5px;font-size:18px;white-space:nowrap;color:var(--froa);text-shadow:0 0 10px rgba(var(--froa-rgb),.5),0 1px 2px rgba(3,8,20,.85)}
+.o-fror-cnt .o-odo{text-shadow:none;filter:drop-shadow(0 0 10px rgba(var(--froa-rgb),.5)) drop-shadow(0 1px 2px rgba(3,8,20,.85))}
 .o-fror-cn{font-size:22px;color:#FFFFFF}
 @keyframes froMoonUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @keyframes froGlide{from{transform:translate(var(--gx),24px)}to{transform:none}}
@@ -204,10 +206,10 @@
 .o-frog-aur{position:absolute;left:-14%;width:128%;opacity:var(--ao);transform-origin:50% 100%;background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 7px,rgba(255,255,255,.1) 7px 9px,rgba(255,255,255,0) 9px 15px),linear-gradient(0deg,rgba(var(--c1),0) 0%,rgba(var(--c1),.9) 14%,rgba(var(--c2),.45) 46%,rgba(var(--c3),.18) 76%,rgba(var(--c3),0) 100%)}
 .o-frog-ridge{position:absolute;left:0;right:0;bottom:6px;height:30px;background:linear-gradient(180deg,#0A1A30,#050E1C)}
 .o-frog-snowline{position:absolute;left:-10px;right:-10px;bottom:-4px;height:14px;border-radius:50% 50% 0 0/100% 100% 0 0;background:linear-gradient(180deg,#EAF3FF,#BFD6EE)}
-.o-frog-halo{position:absolute;left:50%;top:44px;z-index:1;width:340px;height:76px;margin-left:-170px;border-radius:50%;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(150,255,215,.2),rgba(var(--froa-rgb),.08) 60%,rgba(var(--froa-rgb),0) 100%)}
+.o-frog-halo{position:absolute;left:50%;top:44px;z-index:1;width:340px;height:76px;margin-left:-170px;border-radius:50%;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(var(--a-rgb,150,255,215),.2),rgba(var(--froa-rgb),.08) 60%,rgba(var(--froa-rgb),0) 100%)}
 .o-frog-txt{position:absolute;left:18px;right:18px;top:20px;z-index:2;text-align:center}
 .o-frog-lbl{font-size:24px}
-.o-frog-name{margin-top:4px;font-size:calc(34px * var(--fit,1));text-shadow:0 0 18px rgba(130,255,205,.55),0 0 34px rgba(var(--froa-rgb),.45),0 2px 4px rgba(3,8,20,.85)}
+.o-frog-name{margin-top:4px;font-size:calc(34px * var(--fit,1));text-shadow:0 0 18px rgba(var(--a-rgb,130,255,205),.55),0 0 34px rgba(var(--froa-rgb),.45),0 2px 4px rgba(3,8,20,.85)}
 .o-frog-fl{position:absolute;z-index:2;width:var(--fs);height:var(--fs);margin:calc(var(--fs) / -2) 0 0 calc(var(--fs) / -2);opacity:var(--o,.85)}
 .o-frog-prize{left:50%;top:150px;z-index:1;width:300px;height:58px;margin-left:-150px;display:flex;align-items:center;justify-content:center;gap:9px;padding:12px 18px 4px}
 .o-frog-gift{flex:none;width:26px;height:24px;overflow:visible}

@@ -1,0 +1,69 @@
+diff --git a/public/overlay/objects/styles/steampunk.js b/public/overlay/objects/styles/steampunk.js
+index 07ebc81..0de4293 100644
+--- a/public/overlay/objects/styles/steampunk.js
++++ b/public/overlay/objects/styles/steampunk.js
+@@ -157,13 +157,13 @@
+     return s + '<circle class="o-stms-pin" cx="' + pin[0] + '" cy="' + pin[1] + '" r="2.4"/><text class="o-stms-unit" x="0" y="47">MONTHS</text></svg>';
+   })();
+   K.register({
+-    key: 'subscriber-steampunk', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'subscriber-steampunk', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'stmSub', fx: 'smoke', anim: hold('1.8s'), exit: EXIT, len: 1.85,
+     render: function (d) {
+-      var months = Math.max(1, intOf(d.months)), tier = Math.max(1, Math.min(3, intOf(d.tier) || 1)), pinned = months > 24, lamps = '';
++      var months = Math.max(1, intOf(d.months)), gauge = Math.max(1, K.sizeOf(d, 'months')), tier = Math.max(1, Math.min(3, intOf(d.tier) || 1)), pinned = gauge > 24, lamps = '';
+       for (var i = 0; i < 3; i++) lamps += '<i class="o-stms-lamp' + (i < tier ? ' o-stms-on' : '') + '" style="--ld:' + (1.36 + i * 0.12).toFixed(2) + 's"></i>';
+       var heading = months > 1 ? 'Resubscribed · ' + months + ' months' : 'New subscriber';
+-      return '<div class="obj o-stm o-stms' + (pinned ? ' o-stms-pinned' : '') + '" style="--ang:' + n1(pinned ? 125 : gaugeAngle(months)) + 'deg">'
++      return '<div class="obj o-stm o-stms' + (pinned ? ' o-stms-pinned' : '') + '" style="--ang:' + n1(pinned ? 125 : gaugeAngle(gauge)) + 'deg">'
+         + '<div class="o-stm-plate o-stms-plate">' + glint(1.62)
+         + '<div class="o-stm-kick o-stms-kick">' + label(d, heading) + '</div>' + nm('o-stm-name o-stms-name', d.username, 11)
+         + '<div class="o-stms-tier"><span class="o-stm-type">Tier ' + tier + '</span>' + lamps + '</div>'
+@@ -179,16 +179,16 @@
+ 
+   /* bits — Coin press. 50 bits strike 3 coins, 500 strike 6, 10,000 strike 10; the strokes speed up so
+      the whole run takes about a second. */
+-  function coinPlan(d) {
+-    var n = intOf(d.amount != null ? d.amount : d.bits), N = Math.max(2, Math.min(10, Math.round(3 * Math.log10(n + 1) - 2)));
+-    return { n: n, N: N, T: Math.min(0.22, 1.1 / N), S: 0.36 };
++  function coinPlan(size) {
++    var N = Math.max(2, Math.min(10, Math.round(3 * Math.log10(size + 1) - 2)));
++    return { N: N, T: Math.min(0.22, 1.1 / N), S: 0.36 };
+   }
+   K.register({
+-    key: 'bits-steampunk', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-steampunk', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'stmBits', fx: 'sparks', anim: hold('1.6s'), exit: EXIT,
+-    len: function (d) { var c = coinPlan(d); return c.S + c.N * c.T + 0.5; },
++    len: function (d) { var c = coinPlan(K.sizeOf(d, 'bits')); return c.S + c.N * c.T + 0.5; },
+     render: function (d) {
+-      var c = coinPlan(d), n = c.n, N = c.N, T = c.T, S = c.S, end = S + N * T, coins = '', i;
++      var c = coinPlan(K.sizeOf(d, 'bits')), n = intOf(d.amount != null ? d.amount : d.bits), N = c.N, T = c.T, S = c.S, end = S + N * T, coins = '', i;
+       for (i = 0; i < N; i++) {
+         var cx = 150 + Math.floor(i / 4) * 44, top = 138 - (i % 4) * 5;
+         coins += '<i class="o-stmb-coin" style="left:' + (cx - 15) + 'px;top:' + top + 'px;--fx:' + (63 - cx) + 'px;--fy:' + (120 - top) + 'px;--cd:' + (S + (i + 0.38) * T).toFixed(2) + 's"></i>';
+@@ -246,19 +246,19 @@
+     + '<path class="o-stmr-seam" d="M24 3.6C21.5 9 21.5 17 24 22.4M37 2V24M50 3.2C52.5 9 52.5 17 50 22.8M11.5 13H62.5"/>'
+     + '<path class="o-stmr-hi" d="M21 6.2C29 3.8 45 3.8 55 7"/>'
+     + '<circle class="o-stmr-lit" cx="34.5" cy="29.5" r="1.1"/><circle class="o-stmr-lit" cx="39.5" cy="29.5" r="1.1"/></svg>';
+-  function fleetPlan(d) { var v = intOf(d.viewers), n = Math.max(1, Math.min(6, v)); return { v: v, n: n, end: 0.6 + (n - 1) * 0.08 + 0.85 }; }
++  function fleetPlan(size) { var n = Math.max(1, Math.min(6, size)); return { n: n, end: 0.6 + (n - 1) * 0.08 + 0.85 }; }
+   K.register({
+-    key: 'raid-steampunk', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-steampunk', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'stmRaid', fx: 'none', anim: hold('1.6s'), exit: EXIT,
+-    len: function (d) { return fleetPlan(d).end; },
++    len: function (d) { return fleetPlan(K.sizeOf(d, 'raid')).end; },
+     render: function (d) {
+-      var f = fleetPlan(d), v = f.v, ships = '', far = '', i;
++      var size = K.sizeOf(d, 'raid'), f = fleetPlan(size), v = intOf(d.viewers), ships = '', far = '', i;
+       for (i = 0; i < f.n; i++) {
+         var p = FLEET[i], s = p[2], sd = 0.6 + (i === 0 ? f.n - 1 : i - 1) * 0.08, su = 0.8 + (1 - s) * 0.3;
+         ships += '<div class="o-stmr-ship" style="left:' + n1(p[0] - 32 * s) + 'px;top:' + n1(p[1] - 17 * s) + 'px;width:' + n1(64 * s) + 'px;height:' + n1(34 * s) + 'px;--c:' + FLEET_COLS[i] + ';--sd:' + sd.toFixed(2) + 's;--su:' + su.toFixed(2) + 's">'
+           + '<div class="o-stmr-bob">' + SHIP + '<i class="o-stmr-prop"></i></div></div>';
+       }
+-      var extra = v > 6 ? Math.min(12, Math.round(4 * Math.log10(v / 6) + 2)) : 0, r = rng(hash(d.username + v));
++      var extra = size > 6 ? Math.min(12, Math.round(4 * Math.log10(size / 6) + 2)) : 0, r = rng(hash(d.username + size));
+       for (i = 0; i < extra; i++) far += '<i class="o-stmr-far" style="left:' + (22 + r() * 328).toFixed(0) + 'px;top:' + (54 + r() * 20).toFixed(0) + 'px;--fd:' + (1.2 + i * 0.04).toFixed(2) + 's"></i>';
+       return '<div class="obj o-stm o-stmr"><div class="o-stmr-port"><div class="o-stmr-sky">' + far
+         + '<i class="o-stmr-cloud" style="left:-24px;top:68px;width:170px;height:60px"></i><i class="o-stmr-cloud" style="left:118px;top:76px;width:190px;height:56px"></i>'

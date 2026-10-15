@@ -347,3 +347,26 @@ After the deploy (while no streamer is live):
 4. andre_vilela_'s donation still shows the C1, first in his gallery as "Made for you"; another streamer's donation gallery shows "C1 with your name", with their Twitch name on the rear window.
 
 Rolling back is safe: older code ignores the four columns, and a style id it does not know (`follow-racing`) draws the alert's own object.
+
+## Alert styles (release B)
+
+What changes when it deploys:
+- The Overlay Builder's gallery gets the other 24 families (144 looks): Grand Prix, Cockpit, Arcade, Quest, Comic,
+  Cozy, Cosmos, Glass, Spooky, Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk, Frost, Neon Sign, Deep Sea,
+  Music, Stadium, Fireworks, Dino, UFO and Breaking News. "Use <family> for all six" offers each of them.
+- Nothing stored changes: no column, no migration, no look anyone picked. Every alert stays as it is until its
+  streamer picks one of the new looks.
+- The joined family files grow to about 1.1 MB (about 240 KB as Cloudflare compresses them); an open OBS source
+  fetches them again once, after the server restarts. The builder loads every family's fonts in one stylesheet
+  (44 fonts).
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and `/overlay/objects/styles.js` registers 26 families.
+2. In the Overlay Builder, the gallery of each alert shows the 26 families. Pick Spooky's Treat bucket for the bits,
+   save, and press Test: OBS plays it.
+3. Pick a cyan colour on a new look and test again: its main parts follow the colour.
+4. Turn "Grows with the amount" off on that look and test a big cheer: the middle picture, the real number.
+
+Rolling back is safe: older code does not know the new looks and draws the alert's own object (release A's rule).
+Until a streamer who picked one picks a look the older code knows, the builder refuses to save that alert.
+

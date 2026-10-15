@@ -1,0 +1,37 @@
+diff --git a/public/overlay/objects/styles/retro.js b/public/overlay/objects/styles/retro.js
+index bcce6d9..da44cbf 100644
+--- a/public/overlay/objects/styles/retro.js
++++ b/public/overlay/objects/styles/retro.js
+@@ -135,13 +135,13 @@
+     return { c: c, gap: gap, end: 0.38 + (c - 1) * gap + 0.5 };
+   }
+   K.register({
+-    key: 'bits-retro', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-retro', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'rosBits', fx: 'none', anim: hold('1.4s'), exit: ROS_MIN,
+-    len: function (d) { return rosCopy(intOf(d.amount != null ? d.amount : d.bits)).end + 0.1; },
++    len: function (d) { return rosCopy(K.sizeOf(d, 'bits')).end + 0.1; },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), T = rosCopy(n), pages = '', sheets = '', i;
++      var n = intOf(d.amount != null ? d.amount : d.bits), sized = K.sizeOf(d, 'bits'), T = rosCopy(sized), pages = '', sheets = '', i;
+       for (i = 0; i < T.c; i++) pages += '<i class="o-rosb-pg o-rosb-paper" style="--pd:' + (0.38 + i * T.gap).toFixed(2) + 's"></i>';
+-      var stack = n >= 1000 ? 3 : n >= 100 ? 2 : 1, spots = [[5, 3, -8], [12, 1, 4], [17, 4, 11]];
++      var stack = sized >= 1000 ? 3 : sized >= 100 ? 2 : 1, spots = [[5, 3, -8], [12, 1, 4], [17, 4, 11]];
+       for (i = 0; i < stack; i++) {
+         var lands = 0.38 + Math.floor((i + 1) * (T.c - 1) / stack) * T.gap + 0.46;
+         sheets += '<i class="o-rosb-pg o-rosb-sheet" style="left:' + spots[i][0] + 'px;top:' + spots[i][1] + 'px;--sr:' + spots[i][2] + 'deg;--sd:' + lands.toFixed(2) + 's"></i>';
+@@ -181,11 +181,11 @@
+   var RAID_STEP = 0.075;
+   function rosRaid(v) { var n = Math.max(1, Math.min(10, v)); return { n: n, front: 0.12 + (n - 1) * RAID_STEP }; }
+   K.register({
+-    key: 'raid-retro', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-retro', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'rosRaid', fx: 'none', anim: hold('1.2s'), exit: ROS_CLOSE,
+-    len: function (d) { return rosRaid(intOf(d.viewers)).front + 0.82; },
++    len: function (d) { return rosRaid(K.sizeOf(d, 'raid')).front + 0.82; },
+     render: function (d) {
+-      var v = intOf(d.viewers), R = rosRaid(v), n = R.n, W = 300, H = 124, DX = 12, DY = 8;
++      var v = intOf(d.viewers), R = rosRaid(K.sizeOf(d, 'raid')), n = R.n, W = 300, H = 124, DX = 12, DY = 8;
+       var left0 = Math.round((420 - (W + (n - 1) * DX)) / 2), wins = '', i;
+       for (i = 0; i < n - 1; i++) {
+         wins += '<div class="o-ros-win o-rosr-win o-rosr-back" style="left:' + (left0 + i * DX) + 'px;top:' + (2 + i * DY) + 'px;--wd:' + (0.12 + i * RAID_STEP).toFixed(3) + 's">'

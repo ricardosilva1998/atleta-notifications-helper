@@ -334,11 +334,11 @@
         fl += flake('o-frog-fl', 'left:' + (spots[i][0] + (r() - 0.5) * 14).toFixed(0) + 'px;top:' + (spots[i][1] + (r() - 0.5) * 10).toFixed(0) + 'px;--fs:' + (10 + r() * 8).toFixed(0)
           + 'px;--o:' + (0.6 + r() * 0.3).toFixed(2) + ';--fd:' + (0.3 + i * 0.05).toFixed(2) + 's;--du:' + (1.0 + r() * 0.15).toFixed(2) + 's');
       }
-      // Three curtains: [top, height, edge %, wave %, three colours (rgb), opacity, delay]. The accent is in two of them.
+      // Three curtains: [top, height, edge %, wave %, three colours (rgb), opacity, delay]. The green and blue bands are the accent once a colour is picked.
       var aur = [
-        ['6px', '96px', 82, 12, '110,255,190', 'var(--froa-rgb)', '170,130,255', 0.8, 0.22],
+        ['6px', '96px', 82, 12, 'var(--a-rgb,110,255,190)', 'var(--froa-rgb)', '170,130,255', 0.8, 0.22],
         ['0px', '82px', 76, 14, 'var(--froa-rgb)', '170,130,255', '255,120,200', 0.5, 0.34],
-        ['20px', '86px', 86, 9, '120,255,210', '90,200,255', '160,120,255', 0.6, 0.44],
+        ['20px', '86px', 86, 9, 'var(--a-rgb,120,255,210)', 'var(--a-rgb,90,200,255)', '160,120,255', 0.6, 0.44],
       ].map(function (a) {
         return '<i class="o-frog-aur" style="top:' + a[0] + ';height:' + a[1] + ';clip-path:' + wave(r, a[2], a[3]) + ';--c1:' + a[4] + ';--c2:' + a[5] + ';--c3:' + a[6] + ';--ao:' + a[7] + ';--ad:' + a[8] + 's"></i>';
       }).join('');

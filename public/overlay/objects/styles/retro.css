@@ -1,0 +1,183 @@
+/* ═════════ RETRO OS — a 90s desktop ═════════
+   Grey windows with 2px bevels (white top-left, dark grey bottom-right) and a navy title bar that runs
+   into the streamer's colour; the accent is also the progress blocks and the highlighted amount. VT323
+   for what a window says, a Tahoma-like UI font for the chrome. Motion is snappy: the old zoom-rectangle
+   outline steps open and the window is simply there; buttons press, bars fill block by block, the
+   hourglass turns. The windows are opaque grey, so everything reads over any game. */
+.o-ros{--rosa:var(--a,#3A6EA5);--ros-on:var(--a-on,#FFFFFF);--ros-navy:#0A246A;--ros-face:#C0C0C0;--ros-teal:#008080;
+  --ros-up:inset -1px -1px #0A0A0A,inset 1px 1px #DFDFDF,inset -2px -2px #808080,inset 2px 2px #FFFFFF;
+  --ros-raised:inset -1px -1px #0A0A0A,inset 1px 1px #FFFFFF,inset -2px -2px #808080,inset 2px 2px #DFDFDF;
+  --ros-sunk:inset 1px 1px #808080,inset -1px -1px #FFFFFF,inset 2px 2px #0A0A0A,inset -2px -2px #DFDFDF;
+  --ros-px:"VT323","Lucida Console","Courier New",monospace;
+  font-family:Tahoma,Verdana,"Segoe UI",sans-serif;font-size:12px;line-height:1.2;color:#000}
+
+/* Windows, title bars, buttons */
+.o-ros-wrap{position:absolute}
+.o-ros-win{position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;padding:3px;background:var(--ros-face);box-shadow:var(--ros-up),5px 5px 0 rgba(0,0,0,.4)}
+.o-ros-bar{position:relative;flex:none;display:flex;align-items:center;gap:4px;height:22px;box-sizing:border-box;padding:0 3px 0 4px;background:linear-gradient(90deg,var(--ros-navy),var(--rosa));color:#FFFFFF;font-weight:700;font-size:13px;line-height:1;white-space:nowrap;text-shadow:1px 1px 0 rgba(0,0,0,.3)}
+.o-ros-bi,.o-ros-bt,.o-ros-tbs{position:relative}
+.o-ros-bi{flex:none;display:block;width:16px;height:16px}
+.o-ros-bi svg{display:block;width:16px;height:16px}
+.o-ros-bt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;padding:2px 0}
+.o-ros-tbs{flex:none;display:flex}
+.o-ros-tb{display:flex;align-items:center;justify-content:center;width:18px;height:16px;box-sizing:border-box;padding-top:1px;background:var(--ros-face);box-shadow:var(--ros-raised)}
+.o-ros-tbx{margin-left:2px}
+.o-ros-tb svg{display:block;fill:#000}
+/* An inactive window's bar; its ::before is the active bar, shown while the window still has focus. */
+.o-ros-idle{background:linear-gradient(90deg,#808080,#B5B5B5);color:#D4D0C8;text-shadow:none}
+.o-ros-idle::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--ros-navy),var(--rosa));opacity:0}
+.o-ros-btn{flex:none;display:flex;align-items:center;justify-content:center;width:80px;height:24px;box-sizing:border-box;background:var(--ros-face);box-shadow:0 0 0 1px rgba(10,10,10,0),var(--ros-raised);font-size:12px;line-height:1;color:#000}
+.o-ros-btnt{display:block;padding:3px 9px;border:1px dotted rgba(0,0,0,0)}
+.o-ros-def{box-shadow:0 0 0 1px #0A0A0A,var(--ros-raised)}
+.o-ros-def .o-ros-btnt{border-color:#000}
+.o-ros-off .o-ros-btnt{color:#808080;text-shadow:1px 1px 0 #FFFFFF}
+.o-ros-field{box-sizing:border-box;background:#FFFFFF;box-shadow:var(--ros-sunk)}
+.o-ros-prog{box-sizing:border-box;height:20px;padding:3px;background:var(--ros-face);box-shadow:inset 1px 1px #808080,inset -1px -1px #FFFFFF}
+.o-ros-fill{display:block;height:100%;background:repeating-linear-gradient(90deg,var(--rosa) 0 8px,rgba(0,0,0,0) 8px 10px)}
+.o-ros-sep{display:block;flex:none;margin:0 8px;border-top:1px solid #808080;border-bottom:1px solid #FFFFFF}
+.o-ros-radio{position:relative;flex:none;display:block;width:12px;height:12px;border-radius:50%;background:#FFFFFF;box-shadow:inset 1px 1px #808080,inset -1px -1px #FFFFFF,inset 2px 2px #0A0A0A,inset -2px -2px #DFDFDF}
+.o-ros-on::after{content:"";position:absolute;left:4px;top:4px;width:4px;height:4px;border-radius:50%;background:#000}
+.o-ros-icon{flex:none;display:block;width:34px;height:34px}
+.o-ros-icon svg{display:block;width:34px;height:34px;overflow:visible}
+.o-ros-name{font-family:var(--ros-px);font-weight:400;line-height:1;color:#000}
+.o-ros-cur{position:absolute;z-index:8;display:block;width:18px;height:28px;filter:drop-shadow(1px 1px 0 rgba(0,0,0,.45))}
+.o-ros-cur svg{display:block;width:18px;height:28px;overflow:visible}
+.o-ros-arrow{fill:#FFFFFF;stroke:#000;stroke-width:1;stroke-linejoin:miter}
+.o-ros-hgg{fill:#FFFFFF;stroke:#000;stroke-width:1}
+.o-ros-flab{fill:var(--rosa)}
+/* The zoom rectangle: each outline is drawn at its own scale (the border is divided by the scale, so it
+   stays 2px) and shown for one frame, smallest first, as the old window manager drew it. */
+.o-ros-zoom{position:absolute;inset:0;z-index:6;pointer-events:none}
+.o-ros-zr{position:absolute;inset:0;box-sizing:border-box;border:calc(2px / var(--s)) solid #0A0A0A;box-shadow:0 0 0 calc(1px / var(--s)) rgba(255,255,255,.85),inset 0 0 0 calc(1px / var(--s)) rgba(255,255,255,.85);transform-origin:var(--zo);transform:scale(var(--s));opacity:0}
+
+@keyframes rosFlick{0%,100%{opacity:0}1%,99%{opacity:1}}
+@keyframes rosShow{from{opacity:0}to{opacity:1}}
+@keyframes rosPop{0%{opacity:0;transform:scale(.9)}1%{opacity:1}60%{transform:scale(1.015)}100%{opacity:1;transform:none}}
+@keyframes rosPress{0%,18%,72%,100%{box-shadow:0 0 0 1px #0A0A0A,var(--ros-raised)}20%,70%{box-shadow:0 0 0 1px #0A0A0A,var(--ros-sunk)}}
+@keyframes rosPressT{0%,18%,72%,100%{transform:none}20%,70%{transform:translate(1px,1px)}}
+@keyframes rosFill{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes rosLive{0%,99%{opacity:1}100%{opacity:0}}
+@keyframes rosLiveT{0%,99%{color:#FFFFFF}100%{color:#D4D0C8}}
+@keyframes rosMin{0%{opacity:1;transform:none}99%{opacity:1}100%{opacity:0;transform:translate(-34%,38%) scale(.1)}}
+@keyframes rosClose{0%{opacity:1;transform:none}99%{opacity:1}100%{opacity:0;transform:scale(.1)}}
+.playing .o-ros-zr{animation:rosFlick calc(.055s / var(--spd)) linear calc(var(--zt) / var(--spd)) both}
+
+/* follow — New window */
+.o-rosf{height:138px}
+.o-rosf-wrap{left:24px;top:3px;width:372px;height:128px}
+.o-rosf-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 14px 8px 12px}
+.o-rosf-row{align-self:stretch;display:flex;align-items:center;gap:12px;height:54px;min-width:0}
+.o-rosf-txt{flex:1;min-width:0}
+.o-rosf-name{font-size:calc(32px * var(--fit,1))}
+.o-rosf-sub{font-family:var(--ros-px);font-size:22px;line-height:1}
+.o-rosf-cur{left:228px;top:110px}
+@keyframes rosGlide{0%{opacity:0;transform:translate(136px,-58px)}1%{opacity:1}100%{opacity:1;transform:none}}
+.playing .o-rosf-win{animation:rosShow calc(.01s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-rosf-cur{animation:rosGlide calc(.5s / var(--spd)) cubic-bezier(.3,.7,.3,1) calc(.42s / var(--spd)) both}
+.playing .o-rosf-ok{animation:rosPress calc(.26s / var(--spd)) linear calc(1s / var(--spd)) both}
+.playing .o-rosf-ok .o-ros-btnt{animation:rosPressT calc(.26s / var(--spd)) linear calc(1s / var(--spd)) both}
+
+/* subscriber — Installer */
+.o-ross{height:186px}
+.o-ross-wrap{left:6px;top:3px;width:408px;height:176px}
+.o-ross-page{flex:none;display:flex;height:106px;box-sizing:border-box;padding:8px 10px 0 8px}
+.o-ross-art{position:relative;flex:none;width:84px;height:98px;overflow:hidden;background:linear-gradient(160deg,#1AA9A9 0%,var(--ros-teal) 46%,#00474A 100%);box-shadow:inset 1px 1px #808080,inset -1px -1px #FFFFFF}
+.o-ross-art::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.07) 0 1px,rgba(255,255,255,0) 1px 3px)}
+.o-ross-art svg{position:absolute;left:20px;top:24px;width:44px;height:44px;filter:drop-shadow(3px 3px 0 rgba(0,0,0,.35))}
+.o-ross-main{flex:1;min-width:0;display:flex;flex-direction:column;padding-left:12px}
+.o-ross-head{font-weight:700;font-size:12px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-ross-name{margin-top:4px;font-size:calc(30px * var(--fit,1))}
+.o-ross-prow{display:flex;align-items:center;margin-top:6px}
+.o-ross-prog{flex:none;width:206px}
+.o-ross-mo{flex:none;display:flex;align-items:flex-start;gap:.4em;margin-left:10px;font-family:var(--ros-px);font-size:22px;line-height:1;white-space:nowrap}
+.o-ross-type{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;line-height:13px;white-space:nowrap}
+.o-ross-opt{display:flex;align-items:center;gap:4px}
+.o-ross-btns{flex:1;display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:0 10px}
+.o-ross-hg{left:292px;top:94px;opacity:0}
+@keyframes rosHg{0%{opacity:0;transform:none}1%{opacity:1;transform:none}26%{transform:none}36%{transform:rotate(180deg)}62%{transform:rotate(180deg)}72%{transform:rotate(360deg)}99%{opacity:1;transform:rotate(360deg)}100%{opacity:0;transform:rotate(360deg)}}
+@keyframes rosDefOn{from{box-shadow:0 0 0 1px rgba(10,10,10,0),var(--ros-raised)}to{box-shadow:0 0 0 1px #0A0A0A,var(--ros-raised)}}
+@keyframes rosEnable{from{color:#808080;text-shadow:1px 1px 0 #FFFFFF;border-color:rgba(0,0,0,0)}to{color:#000;text-shadow:1px 1px 0 rgba(255,255,255,0);border-color:#000}}
+.playing .o-ross-win{animation:rosShow calc(.01s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-ross-hg{animation:rosHg calc(1.22s / var(--spd)) linear calc(.24s / var(--spd)) both}
+.playing .o-ross-prog .o-ros-fill{animation:rosFill calc(1.1s / var(--spd)) steps(20) calc(.32s / var(--spd)) both}
+.playing .o-ross-fin{animation:rosDefOn calc(.01s / var(--spd)) linear calc(1.46s / var(--spd)) both}
+.playing .o-ross-fin .o-ros-btnt{animation:rosEnable calc(.01s / var(--spd)) linear calc(1.46s / var(--spd)) both}
+
+/* bits — File copy */
+.o-rosb{height:166px}
+.o-rosb-wrap{left:18px;top:3px;width:384px;height:156px}
+.o-rosb-body{flex:1;min-height:0;display:flex;flex-direction:column;padding:6px 12px 4px}
+.o-rosb-lane{position:relative;flex:none;height:38px}
+.o-rosb-src,.o-rosb-dst{position:absolute;top:8px;display:block;width:34px;height:28px}
+.o-rosb-src{left:6px}
+.o-rosb-dst{right:6px}
+.o-rosb-fold{position:absolute;left:0;top:0;display:block;width:34px;height:28px}
+.o-rosb-src svg,.o-rosb-fold svg{display:block;width:34px;height:28px}
+.o-rosb-pg{position:absolute;display:block;width:13px;height:16px;box-sizing:border-box;background:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0 3px,#9AA0AE 3px 4px) 3px 3px/7px 10px no-repeat,#FFFFFF;box-shadow:inset 0 0 0 1px #000}
+.o-rosb-sheet{transform:rotate(var(--sr))}
+.o-rosb-paper{left:16px;top:12px;z-index:2;opacity:0}
+.o-rosb-copy{display:flex;align-items:flex-start;gap:.4em;font-family:var(--ros-px);font-size:26px;line-height:1;white-space:nowrap}
+.o-rosb-from{display:flex;align-items:baseline;gap:6px;min-width:0}
+.o-rosb-fw{flex:none;font-size:12px}
+.o-rosb-name{flex:1;min-width:0;font-size:calc(26px * var(--fit,1))}
+.o-rosb-prow{display:flex;align-items:center;margin-top:6px}
+.o-rosb-prog{flex:none;width:306px}
+.o-rosb-pct{flex:1;text-align:right;font-family:var(--ros-px);font-size:22px;line-height:1}
+@keyframes rosFly{0%{opacity:0;transform:translate(0,4px) rotate(-12deg)}10%{opacity:1}25%{transform:translate(75px,-5px) rotate(-6deg)}50%{transform:translate(150px,-10px) rotate(2deg)}75%{transform:translate(225px,-5px) rotate(8deg)}90%{opacity:1}100%{opacity:0;transform:translate(300px,2px) rotate(14deg)}}
+.playing .o-rosb-win{animation:rosShow calc(.01s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-rosb-paper{animation:rosFly calc(.5s / var(--spd)) linear calc(var(--pd) / var(--spd)) both}
+.playing .o-rosb-sheet{animation:rosShow calc(.01s / var(--spd)) linear calc(var(--sd) / var(--spd)) both}
+.playing .o-rosb-prog .o-ros-fill{animation:rosFill calc(var(--run) / var(--spd)) steps(30) calc(.38s / var(--spd)) both}
+.playing .o-rosb-pct{animation:rosShow calc(.01s / var(--spd)) linear calc(var(--done) / var(--spd)) both}
+
+/* donation — New mail */
+.o-rosd{padding:3px 0 7px}
+.o-rosd-wrap{position:relative;width:404px;margin:0 auto}
+.o-rosd-win{position:relative}
+.o-rosd-menu{flex:none;display:flex;align-items:center;gap:14px;height:18px;padding:0 6px;font-size:12px;line-height:1}
+.o-rosd-body{display:flex;flex-direction:column;gap:6px;padding:4px 8px 8px}
+.o-rosd-head{display:flex;align-items:center;gap:10px;height:56px}
+.o-rosd-env{position:relative;flex:none;width:52px;height:52px;overflow:hidden;background:var(--ros-teal);box-shadow:inset 1px 1px #808080,inset -1px -1px #FFFFFF}
+.o-rosd-env svg{position:absolute;left:7px;top:13px;width:38px;height:28px;filter:drop-shadow(2px 2px 0 rgba(0,0,0,.35))}
+.o-rosd-fields{flex:1;min-width:0;display:grid;grid-template-columns:54px minmax(0,1fr);row-gap:4px;align-items:center}
+.o-rosd-k{font-size:12px}
+.o-rosd-f{display:flex;align-items:center;min-width:0;height:26px;padding:0 6px;overflow:hidden;font-family:var(--ros-px);font-size:24px;line-height:1;white-space:nowrap}
+.o-rosd-name{flex:1;min-width:0;font-size:calc(24px * var(--fit,1))}
+.o-rosd-amt{flex:none;padding:0 3px;background:var(--rosa);color:var(--ros-on)}
+.o-rosd-st{flex:none;margin-left:.4em}
+.o-rosd-msg{padding:5px 8px 6px}
+.o-rosd-mt{font-family:var(--ros-px);font-size:22px;line-height:22px;max-height:66px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+@keyframes rosBounce{0%{opacity:0;transform:translateY(-40px);animation-timing-function:cubic-bezier(.5,0,1,.6)}12%{opacity:1}36%{transform:none;animation-timing-function:cubic-bezier(0,.4,.5,1)}54%{transform:translateY(-14px);animation-timing-function:cubic-bezier(.5,0,1,.6)}72%{transform:none;animation-timing-function:cubic-bezier(0,.4,.5,1)}84%{transform:translateY(-5px);animation-timing-function:cubic-bezier(.5,0,1,.6)}96%,100%{opacity:1;transform:none}}
+.playing .o-rosd-win{animation:rosShow calc(.01s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-rosd-env svg{animation:rosBounce calc(.72s / var(--spd)) linear calc(.26s / var(--spd)) both}
+.playing .o-rosd-name{animation:rosShow calc(.01s / var(--spd)) linear calc(.48s / var(--spd)) both}
+.playing .o-rosd-amt,.playing .o-rosd-st{animation:rosShow calc(.01s / var(--spd)) linear calc(.62s / var(--spd)) both}
+
+/* raid — Error cascade */
+.o-rosr-win{right:auto;bottom:auto;width:300px;height:124px}
+.o-rosr-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:7px 10px 8px}
+.o-rosr-row{align-self:stretch;display:flex;align-items:center;gap:10px;height:50px;min-width:0}
+.o-rosr-txt{flex:1;min-width:0}
+.o-rosr-count{display:flex;align-items:flex-start;gap:.4em;font-family:var(--ros-px);font-size:22px;line-height:1;white-space:nowrap}
+.o-rosr-name{font-size:calc(28px * var(--fit,1))}
+.playing .o-rosr-win{animation:rosPop calc(.12s / var(--spd)) ease-out calc(var(--wd) / var(--spd)) both}
+.playing .o-rosr-back .o-ros-idle::before{animation:rosLive calc(.075s / var(--spd)) linear calc(var(--wd) / var(--spd)) both}
+
+/* giveaway — Card cascade */
+.o-rosg{height:217px}
+.o-rosg-wrap{left:6px;top:3px;width:408px;height:208px}
+.o-rosg-felt{position:relative;flex:1;min-height:0;overflow:hidden;background:radial-gradient(130% 110% at 50% 20%,#0C9696 0%,var(--ros-teal) 55%,#006262 100%)}
+.o-rosg-c{position:absolute;display:block;width:26px;height:36px;box-sizing:border-box;padding:3px 0 0 4px;border-radius:3px;background:var(--pip) 50% 17px/12px 12px no-repeat,#FFFFFF;box-shadow:inset 0 0 0 1px #000;font-family:Tahoma,Verdana,sans-serif;font-style:normal;font-weight:700;font-size:11px;line-height:1}
+.o-rosg-h{--pip:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 15'%3E%3Cpath d='M8 15C3 10.6 0 7.8 0 4.6 0 2 2 0 4.4 0 6 0 7.3.9 8 2.2 8.7.9 10 0 11.6 0 14 0 16 2 16 4.6 16 7.8 13 10.6 8 15Z' fill='%23D40000'/%3E%3C/svg%3E");color:#D40000}
+.o-rosg-d{--pip:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L14.5 8 8 16 1.5 8Z' fill='%23D40000'/%3E%3C/svg%3E");color:#D40000}
+.o-rosg-s{--pip:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C6.2 3 0 5.6 0 9.6 0 11.8 1.6 13.2 3.6 13.2 5 13.2 6.2 12.5 7 11.5L6 16h4L9 11.5c.8 1 2 1.7 3.4 1.7 2 0 3.6-1.4 3.6-3.6C16 5.6 9.8 3 8 0Z' fill='%23111111'/%3E%3C/svg%3E");color:#111}
+.o-rosg-k{--pip:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='%23111111'%3E%3Ccircle cx='8' cy='4.2' r='3.7'/%3E%3Ccircle cx='4' cy='9.2' r='3.7'/%3E%3Ccircle cx='12' cy='9.2' r='3.7'/%3E%3Cpath d='M7 8h2l1.2 8H5.8Z'/%3E%3C/g%3E%3C/svg%3E");color:#111}
+.o-rosg-dlg{left:67px;top:8px;right:auto;bottom:auto;z-index:3;width:268px;height:96px}
+.o-rosg-dbody{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:4px 12px 6px}
+.o-rosg-name{max-width:100%;font-size:calc(34px * var(--fit,1));text-align:center}
+.o-rosg-prize{max-width:100%;font-size:12px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.playing .o-rosg-win{animation:rosShow calc(.01s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-rosg-bar{animation:rosLiveT calc(1.2s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-rosg-bar::before{animation:rosLive calc(1.2s / var(--spd)) linear calc(.22s / var(--spd)) both}
+.playing .o-rosg-tr{animation:rosShow calc(.01s / var(--spd)) linear calc(var(--cd) / var(--spd)) both}
+.playing .o-rosg-dlg{animation:rosPop calc(.14s / var(--spd)) ease-out calc(1.42s / var(--spd)) both}

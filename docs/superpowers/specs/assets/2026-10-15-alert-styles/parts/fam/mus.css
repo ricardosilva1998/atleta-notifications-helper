@@ -1,0 +1,339 @@
+/* ═════════ MUSIC — stage and DJ booth ═════════
+   Black and grey hardware (a turntable, a rack equalizer, speakers, a tape deck, a stage, a frame) lit by
+   the streamer's colour: the record labels and the LED ring, the EQ bars, the speakers' LED rings, the
+   cassette label, the stage wash and beams and the framed record are the accent, and text on the accent
+   uses --mus-on. Everything lands on the beat (120 bpm): a deck or a plate drops on the downbeat and
+   bounces once, the lights switch on, the text drops in on the next beats, then the alert holds still.
+   Righteous for names and numbers, Bebas Neue for the small caps. Numbers that roll (the shared odometer)
+   glow through a drop-shadow on their parent, because its digit boxes would clip a blurred text-shadow. */
+.o-mus{--musa:var(--a,#9B5CFF);--musa-rgb:var(--a-rgb,155,92,255);--mus-on:var(--a-on,#0B0B12);--mus-text:#F6F5FB;--mus-dim:rgba(232,230,244,.64);font-family:"Righteous","Varela Round",system-ui,sans-serif;font-weight:400;line-height:1.15;color:var(--mus-text)}
+/* Hardware: matte black with a fine brushed grain and a lit top edge. */
+.o-mus-deck{position:absolute;border-radius:16px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.016) 0 1px,rgba(0,0,0,0) 1px 3px),linear-gradient(180deg,#2A2B33 0,#1B1C22 48%,#121318 100%);box-shadow:0 14px 28px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.15),inset 0 0 0 1px rgba(255,255,255,.05),inset 0 -2px 0 rgba(0,0,0,.45)}
+/* The text plate: near-opaque, so the white text reads over any game. */
+.o-mus-plate{position:absolute;border-radius:14px;background:linear-gradient(180deg,#1F2027,#121318);box-shadow:0 12px 24px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+.o-mus-cap{font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-weight:400;line-height:1;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+.o-mus-name{font-family:"Righteous","Varela Round",system-ui,sans-serif;font-weight:400;line-height:1.12;color:#FFFFFF;text-shadow:0 2px 0 rgba(0,0,0,.5)}
+/* An LED tag in the accent. Bebas Neue sits high in its line box, so the top padding centres the caps. */
+.o-mus-pill{display:inline-flex;align-items:center;gap:7px;max-width:100%;height:21px;padding:2px 9px 0 11px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,0) 60%),var(--musa);color:var(--mus-on);box-shadow:0 0 14px rgba(var(--musa-rgb),.5),inset 0 0 0 1px rgba(255,255,255,.2);font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-weight:400;font-size:15px;line-height:1;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.o-mus-pt{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;padding:.12em 0;margin:-.12em 0}
+.o-mus-glint{position:absolute;z-index:4;width:var(--gs,14px);height:var(--gs,14px);margin:calc(var(--gs,14px) / -2) 0 0 calc(var(--gs,14px) / -2);background:#FFFFFF;clip-path:polygon(50% 0,59% 41%,100% 50%,59% 59%,50% 100%,41% 59%,0 50%,41% 41%);opacity:.85;transform:scale(.55) rotate(90deg)}
+@keyframes musDrop{0%{opacity:0;transform:translateY(-18px)}55%{opacity:1;transform:translateY(3px)}78%{transform:translateY(-1px)}100%{opacity:1;transform:none}}
+@keyframes musLand{0%{opacity:0;transform:translateY(-9px)}60%{opacity:1;transform:translateY(2px)}100%{opacity:1;transform:none}}
+@keyframes musPop{0%{opacity:0;transform:scale(.6)}55%{opacity:1;transform:scale(1.06)}80%{transform:scale(.98)}100%{opacity:1;transform:none}}
+@keyframes musFlick{0%{opacity:0}12%{opacity:1}24%{opacity:.2}38%{opacity:1}50%{opacity:.55}62%,100%{opacity:1}}
+@keyframes musOn{from{opacity:.2}to{opacity:1}}
+@keyframes musRipple{0%{opacity:0;transform:scale(.3)}15%{opacity:1}100%{opacity:0;transform:scale(var(--ws,2.6))}}
+@keyframes musTwinkle{0%{opacity:0;transform:scale(0) rotate(0deg)}45%{opacity:1;transform:scale(1.25) rotate(45deg)}100%{opacity:.85;transform:scale(.55) rotate(90deg)}}
+/* Exits: a record scratch, a power-off, a drop, an eject, the lights going out, the frame taken down. */
+@keyframes musScratch{0%{transform:none}30%{transform:translateX(8px)}100%{opacity:0;transform:translateX(-56px) skewX(12deg)}}
+@keyframes musPowerOff{0%{transform:none}55%{opacity:1;transform:scale(1.02,.05)}100%{opacity:0;transform:scale(.3,.03)}}
+@keyframes musDropOut{0%{transform:none}25%{transform:translateY(-4px)}100%{opacity:0;transform:translateY(26px) scale(.96)}}
+@keyframes musEject{0%{transform:none}30%{transform:translateY(3px)}100%{opacity:0;transform:translateY(-22px)}}
+@keyframes musLightsOut{0%{opacity:1}14%{opacity:.3}28%{opacity:1}100%{opacity:0;transform:translateY(10px)}}
+@keyframes musFrameOut{0%{transform:none}30%{transform:scale(1.02)}100%{opacity:0;transform:translateY(12px) scale(.9)}}
+.playing .o-mus-glint{animation:musTwinkle calc(.45s / var(--spd)) ease-out calc(var(--gd,0s) / var(--spd)) both}
+
+/* follow — Needle drop: the deck drops, the record spins up, the arm swings over, the needle drops, the lights come on */
+.o-musf{height:136px}
+.o-musf-deck{left:0;right:0;top:4px;height:128px}
+.o-musf-glow{position:absolute;left:0;top:0;width:150px;height:128px;background:radial-gradient(circle at 66px 64px,rgba(var(--musa-rgb),.45) 0,rgba(var(--musa-rgb),.16) 56px,rgba(var(--musa-rgb),0) 80px)}
+.o-musf-plat{position:absolute;left:3px;top:1px;width:126px;height:126px;border-radius:50%;background:radial-gradient(circle,#0D0D11 0 59.5px,#585962 61px,#2B2C33 62.5px,#1A1B20 63px);box-shadow:0 6px 12px rgba(0,0,0,.55)}
+/* The LED ring: forty dots in the accent around the platter, lit when the needle drops. */
+.o-musf-leds{position:absolute;left:5.5px;top:3.5px;width:121px;height:121px;border-radius:50%;background:repeating-conic-gradient(from 0deg,var(--musa) 0 3.6deg,rgba(0,0,0,0) 3.6deg 9deg);box-shadow:0 0 16px 1px rgba(var(--musa-rgb),.6)}
+.o-musf-rec,.o-musf-sheen{position:absolute;left:10px;top:8px;width:112px;height:112px;border-radius:50%}
+.o-musf-rec{background:radial-gradient(circle,rgba(0,0,0,0) 0 28.5px,#2C2C35 29px 31px,rgba(0,0,0,0) 31.5px),repeating-radial-gradient(circle,#15151B 0 1.15px,#202029 1.15px 2.3px);box-shadow:0 0 0 1px #060608,inset 0 0 0 2.5px #0E0E12,0 3px 8px rgba(0,0,0,.6)}
+/* The light on the grooves stays where it is while the record turns: one white, one in the accent. */
+.o-musf-sheen{background:conic-gradient(from 200deg,rgba(255,255,255,0) 0deg,rgba(255,255,255,.14) 20deg,rgba(255,255,255,0) 42deg,rgba(255,255,255,0) 180deg,rgba(var(--musa-rgb),.5) 200deg,rgba(var(--musa-rgb),0) 224deg,rgba(255,255,255,0) 360deg)}
+.o-musf-lab{position:absolute;left:39px;top:37px;width:54px;height:54px;border-radius:50%;background:radial-gradient(circle,#0B0B0F 0 3px,rgba(0,0,0,0) 3.5px),radial-gradient(circle,rgba(0,0,0,0) 0 19.5px,rgba(0,0,0,.24) 20px 21px,rgba(0,0,0,0) 21.5px),radial-gradient(circle,rgba(255,255,255,.2) 0,rgba(255,255,255,0) 70%),var(--musa);box-shadow:0 0 0 1px rgba(0,0,0,.5),inset 0 0 0 1.5px rgba(255,255,255,.16)}
+.o-musf-lab::before{content:"";position:absolute;left:14px;top:9px;width:26px;height:8px;background:linear-gradient(var(--mus-on),var(--mus-on)) 0 0/26px 2.5px no-repeat,linear-gradient(var(--mus-on),var(--mus-on)) 5px 5px/16px 2px no-repeat;opacity:.5}
+.o-musf-lab::after{content:"";position:absolute;left:24px;top:39px;width:6px;height:6px;border-radius:50%;background:var(--mus-on);opacity:.45}
+.o-musf-pin{position:absolute;left:62.5px;top:60.5px;width:7px;height:7px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#F4F4F8,#8A8B95 60%,#4A4B53);box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.o-musf-ripple{position:absolute;left:93.3px;top:78.1px;width:22px;height:22px;border:2px solid var(--musa);border-radius:50%;opacity:0;box-shadow:0 0 8px rgba(var(--musa-rgb),.8)}
+.o-musf-base{position:absolute;left:125px;top:7px;width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 42% 36%,#50515A 0,#2A2B32 55%,#18191E 100%);box-shadow:0 3px 6px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.14)}
+/* The tonearm turns about its pivot (9px, 9px); at 28° the stylus sits in the outer grooves. */
+.o-musf-arm{position:absolute;left:131px;top:13px;width:18px;height:100px;transform-origin:9px 9px;transform:rotate(28deg)}
+.o-musf-cw{position:absolute;left:3px;top:-14px;width:12px;height:16px;border-radius:3px;background:linear-gradient(90deg,#4B4C55,#C4C5CE 45%,#3A3B42);box-shadow:0 2px 3px rgba(0,0,0,.5)}
+.o-musf-tube{position:absolute;left:7px;top:9px;width:4px;height:72px;border-radius:2px;background:linear-gradient(90deg,#77787F,#F1F1F5 45%,#5E5F67);box-shadow:2px 3px 3px rgba(0,0,0,.45)}
+.o-musf-head{position:absolute;left:3px;top:77px;width:12px;height:17px;border-radius:3px;background:linear-gradient(180deg,#4A4B54,#1C1D22);box-shadow:1px 3px 4px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18)}
+.o-musf-head::after{content:"";position:absolute;left:4px;top:3px;width:4px;height:4px;border-radius:50%;background:var(--musa);box-shadow:0 0 5px var(--musa)}
+.o-musf-cap{position:absolute;left:0;top:0;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#E6E6EC,#8C8D96 55%,#45464E);box-shadow:0 2px 3px rgba(0,0,0,.5)}
+.o-musf-txt{position:absolute;left:170px;right:16px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-musf-eq{display:flex;align-items:flex-end;gap:2px;flex:none;height:11px;margin-top:-2px}
+.o-musf-bar{display:block;width:3px;height:11px;border-radius:1px;background:var(--mus-on);transform-origin:50% 100%;transform:scaleY(var(--h))}
+.o-musf-name{align-self:stretch;margin-top:7px;font-size:calc(28px * var(--fit,1))}
+.o-musf-sub{margin-top:6px;font-size:15px;letter-spacing:.22em;color:var(--mus-dim)}
+@keyframes musSpinUp{from{transform:rotate(-720deg)}to{transform:rotate(0deg)}}
+@keyframes musArm{0%{transform:rotate(-6deg)}62%{transform:rotate(31deg)}80%{transform:rotate(27deg)}100%{transform:rotate(28deg)}}
+@keyframes musCue{0%{transform:scale(1)}18%,80%{transform:scale(1.2)}100%{transform:scale(1)}}
+@keyframes musLeds{0%{opacity:.18}18%{opacity:1}32%{opacity:.4}50%,100%{opacity:1}}
+@keyframes musBar{0%,100%{transform:scaleY(var(--h))}35%{transform:scaleY(1)}70%{transform:scaleY(.3)}}
+@keyframes musBarB{0%,100%{transform:scaleY(var(--h))}35%{transform:scaleY(.35)}70%{transform:scaleY(1)}}
+.playing .o-musf-deck{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-musf-rec,.playing .o-musf-lab{animation:musSpinUp calc(1.25s / var(--spd)) cubic-bezier(.55,0,.4,1) calc(.2s / var(--spd)) both}
+.playing .o-musf-arm{animation:musArm calc(.44s / var(--spd)) ease-in-out calc(.46s / var(--spd)) both}
+.playing .o-musf-head{animation:musCue calc(.54s / var(--spd)) ease-in-out calc(.44s / var(--spd)) both}
+.playing .o-musf-ripple{animation:musRipple calc(.55s / var(--spd)) ease-out calc(.96s / var(--spd)) both}
+.playing .o-musf-leds{animation:musLeds calc(.42s / var(--spd)) linear calc(.96s / var(--spd)) both}
+.playing .o-musf-glow{animation:musOn calc(.36s / var(--spd)) ease-out calc(.96s / var(--spd)) both}
+.playing .o-musf-tag{animation:musFlick calc(.34s / var(--spd)) linear calc(1s / var(--spd)) both}
+.playing .o-musf-name{animation:musLand calc(.38s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1.08s / var(--spd)) both}
+.playing .o-musf-sub{animation:musLand calc(.34s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1.2s / var(--spd)) both}
+.playing .o-musf-bar{animation:musBar calc(.25s / var(--spd)) ease-in-out calc(1.3s / var(--spd)) 3}
+.playing .o-musf-bb{animation:musBarB calc(.25s / var(--spd)) ease-in-out calc(1.3s / var(--spd)) 3}
+
+/* subscriber — Equalizer: the rack drops, the bars jump and settle at the months' level, the plate lands, the stars light */
+.o-muss{height:186px}
+.o-muss-rack{left:0;right:0;top:2px;height:112px}
+.o-muss-ear{position:absolute;top:0;width:18px;height:112px;background:linear-gradient(90deg,#383941,#25262C)}
+.o-muss-el{left:0;border-radius:16px 0 0 16px;box-shadow:inset -1px 0 0 rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.12)}
+.o-muss-er{right:0;border-radius:0 16px 16px 0;box-shadow:inset 1px 0 0 rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.12)}
+.o-muss-ear::before,.o-muss-ear::after{content:"";position:absolute;left:5px;width:8px;height:13px;border-radius:4px;background:#08080A;box-shadow:inset 0 1px 1px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.1)}
+.o-muss-ear::before{top:16px}
+.o-muss-ear::after{bottom:16px}
+.o-muss-scr{position:absolute;left:28px;top:9px;width:262px;height:96px;border-radius:8px;background:radial-gradient(90% 70% at 50% 100%,rgba(var(--musa-rgb),.16),rgba(var(--musa-rgb),0) 75%),#0A0A0E;box-shadow:inset 0 2px 6px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07)}
+.o-muss-eq{position:absolute;left:9px;top:7px;width:244px;height:78px}
+/* A band: ten dim segments, and over them the lit ones in the accent, clipped at the band's level
+   (--r at rest); the top of a tall band runs white-hot. The peak segment rides above it. */
+.o-muss-col{position:absolute;top:0;width:19px;height:78px;background:repeating-linear-gradient(0deg,rgba(var(--musa-rgb),.16) 0 6px,rgba(0,0,0,0) 6px 8px)}
+.o-muss-lit{position:absolute;left:0;top:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 6px,#0A0A0E 6px 8px),linear-gradient(0deg,rgba(255,255,255,0) 0 50%,rgba(255,255,255,.45) 100%),var(--musa);clip-path:inset(var(--r) 0 0 0)}
+.o-muss-pk{position:absolute;left:0;width:19px;height:3px;border-radius:1px;background:#FFFFFF;box-shadow:0 0 6px rgba(var(--musa-rgb),.95)}
+.o-muss-hzrow{position:absolute;left:9px;top:87px;width:244px;height:8px}
+.o-muss-hz{position:absolute;top:0;width:19px;font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-size:8.5px;line-height:1;letter-spacing:.04em;text-align:center;white-space:nowrap;color:rgba(255,255,255,.38)}
+.o-muss-lcd{position:absolute;left:300px;top:9px;width:92px;height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;background:radial-gradient(circle at 50% 42%,rgba(var(--musa-rgb),.28),rgba(var(--musa-rgb),0) 70%),#08080B;box-shadow:inset 0 2px 6px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07)}
+.o-muss-num{display:block;font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-weight:400;line-height:1;color:#FFFFFF;filter:drop-shadow(0 0 4px var(--musa)) drop-shadow(0 0 10px rgba(var(--musa-rgb),.75))}
+.o-muss-unit{margin-top:-5px;padding-left:.3em;font-size:12px;letter-spacing:.3em;color:var(--mus-dim)}
+.o-muss-plate{left:0;right:0;top:120px;height:64px;display:flex;align-items:center;gap:14px;padding:0 20px 0 18px}
+.o-muss-who{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start}
+.o-muss-name{align-self:stretch;margin-top:3px;font-size:calc(25px * var(--fit,1))}
+.o-muss-tier{flex:none;display:flex;flex-direction:column;align-items:center}
+.o-muss-stars{display:flex;gap:3px;filter:drop-shadow(0 0 4px rgba(var(--musa-rgb),.7))}
+.o-muss-star{position:relative;display:block;width:21px;height:20px;clip-path:polygon(50% 0,61.8% 35.3%,100% 38.2%,69.1% 61.8%,79.4% 100%,50% 76.4%,20.6% 100%,30.9% 61.8%,0 38.2%,38.2% 35.3%);background:rgba(255,255,255,.14)}
+.o-muss-sf{position:absolute;left:0;top:0;width:100%;height:100%;background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,0) 60%),var(--musa)}
+.o-muss-tl{margin-top:6px;padding-left:.24em;font-size:12px;letter-spacing:.24em;color:var(--mus-dim)}
+@keyframes musEq{
+  0%{clip-path:inset(78px 0 0 0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}
+  32%{clip-path:inset(var(--p) 0 0 0);animation-timing-function:cubic-bezier(.5,0,.8,.5)}
+  56%{clip-path:inset(var(--dp) 0 0 0);animation-timing-function:ease-out}
+  76%{clip-path:inset(var(--bp) 0 0 0);animation-timing-function:ease-in-out}
+  100%{clip-path:inset(var(--r) 0 0 0)}
+}
+@keyframes musPk{0%{opacity:0;transform:translateY(var(--k0));animation-timing-function:cubic-bezier(.2,.8,.3,1)}30%{opacity:1;transform:translateY(var(--k1))}58%{transform:translateY(var(--k1));animation-timing-function:ease-in}100%{opacity:1;transform:none}}
+@keyframes musStar{0%{opacity:0;transform:scale(0)}55%{opacity:1;transform:scale(1.35)}100%{opacity:1;transform:none}}
+.playing .o-muss-rack{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-muss-lit{animation:musEq calc(.95s / var(--spd)) linear calc(var(--cd) / var(--spd)) both}
+.playing .o-muss-pk{animation:musPk calc(1.05s / var(--spd)) linear calc(var(--cd) / var(--spd)) both}
+.playing .o-muss-unit{animation:musFlick calc(.3s / var(--spd)) linear calc(.36s / var(--spd)) both}
+.playing .o-muss-plate{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.86s / var(--spd)) both}
+.playing .o-muss-tag{animation:musFlick calc(.3s / var(--spd)) linear calc(1.02s / var(--spd)) both}
+.playing .o-muss-name{animation:musLand calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1.08s / var(--spd)) both}
+.playing .o-muss-tl{animation:musLand calc(.3s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1.16s / var(--spd)) both}
+.playing .o-muss-sf{animation:musStar calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(var(--sd) / var(--spd)) both}
+
+/* bits — Bass drop: the speakers drop, the bass hits on the downbeat, the cones pump and rings of light ripple out */
+.o-musb{height:162px}
+.o-musb-rig{position:absolute;left:0;top:0;width:100%;height:100%}
+.o-musb-cab{position:absolute;top:4px;width:104px;height:154px;border-radius:12px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.014) 0 1px,rgba(0,0,0,0) 1px 3px),linear-gradient(180deg,#25262D,#15161B);box-shadow:0 12px 22px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.6),inset 0 0 0 1.5px rgba(255,255,255,.05),inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.4)}
+.o-musb-l{left:0}
+.o-musb-r{left:316px}
+/* The tweeter and the woofer each sit in an LED ring in the accent. */
+.o-musb-tw{position:absolute;left:35px;top:15px;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 46% 42%,#E2E2E8 0 2px,#9FA0A9 4.5px,#46474F 7.5px,#1C1D22 9px,#2D2E35 12.5px,#101014 15px,#3A3B43 16.5px,#26272D 17px);box-shadow:0 0 0 2px var(--musa),0 0 10px 1px rgba(var(--musa-rgb),.65)}
+.o-musb-woof{position:absolute;left:8px;top:58px;width:88px;height:88px;border-radius:50%;background:radial-gradient(circle,#0C0C10 0 38px,#46474F 39.5px,#2A2B31 42px,#17181D 44px);box-shadow:0 0 0 3px var(--musa),0 0 18px 4px rgba(var(--musa-rgb),.55)}
+/* The cone, its dust cap lit in the accent and the LED ring's light caught in the paper. */
+.o-musb-cone{position:absolute;left:14px;top:64px;width:76px;height:76px;border-radius:50%;background:radial-gradient(circle at 44% 40%,rgba(255,255,255,.8) 0 1.5px,rgba(255,255,255,0) 6px),radial-gradient(circle,var(--musa) 0 10px,rgba(0,0,0,.45) 11px,rgba(0,0,0,0) 12.5px),radial-gradient(circle at 47% 43%,#3A3B42 0 12px,#222329 22px,#2C2D34 30px,#1A1B20 34.5px,#3C3D45 36.5px,#24252B 38px);box-shadow:inset 0 2px 5px rgba(0,0,0,.55),inset 0 0 16px rgba(var(--musa-rgb),.32)}
+/* The rings' layer: 24px wider than the alert on each side and no taller, so a ring never passes its bottom edge. */
+.o-musb-waves{position:absolute;left:-24px;top:0;width:468px;height:162px;overflow:hidden;pointer-events:none}
+.o-musb-wave{position:absolute;top:62px;width:88px;height:88px;border:3px solid var(--musa);border-radius:50%;opacity:0;box-shadow:0 0 10px rgba(var(--musa-rgb),.7),inset 0 0 10px rgba(var(--musa-rgb),.45)}
+.o-musb-wl{left:32px}
+.o-musb-wr{left:348px}
+.o-musb-plate{left:112px;top:12px;width:196px;height:138px;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 12px;text-align:center}
+.o-musb-amt{display:flex;align-items:flex-end;margin-top:8px;line-height:1;color:#FFFFFF;filter:drop-shadow(0 0 7px rgba(var(--musa-rgb),.9))}
+.o-musb-plus{display:block;line-height:1}
+.o-musb-unit{display:block;margin-left:6px;font-size:17px;color:var(--mus-dim)}
+.o-musb-vu{display:flex;gap:3px;margin-top:10px}
+.o-musb-led{display:block;width:11px;height:6px;border-radius:1.5px;background:rgba(255,255,255,.09)}
+.o-musb-on{background:var(--musa);box-shadow:0 0 6px rgba(var(--musa-rgb),.85)}
+.o-musb-from{display:flex;align-items:baseline;justify-content:center;gap:5px;max-width:100%;margin-top:10px}
+.o-musb-fr{flex:none;font-size:12px;color:var(--mus-dim)}
+.o-musb-name{min-width:0;font-size:calc(18px * var(--fit,1))}
+@keyframes musPump{0%{transform:scale(1)}14%{transform:scale(1.1)}45%{transform:scale(.96)}75%,100%{transform:scale(1)}}
+@keyframes musShake{0%,100%{transform:none}20%{transform:translate(-3px,2px)}40%{transform:translate(3px,-2px)}60%{transform:translate(-2px,1px)}80%{transform:translate(1px,0)}}
+@keyframes musLedOn{0%{background:rgba(255,255,255,.09);box-shadow:none}1%{background:#FFFFFF;box-shadow:0 0 10px #FFFFFF}100%{background:var(--musa);box-shadow:0 0 6px rgba(var(--musa-rgb),.85)}}
+.playing .o-musb-l{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-musb-r{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.06s / var(--spd)) both}
+.playing .o-musb-plate{animation:musPop calc(.32s / var(--spd)) ease-out calc(.18s / var(--spd)) both}
+.playing .o-musb-tag{animation:musFlick calc(.3s / var(--spd)) linear calc(.3s / var(--spd)) both}
+.playing .o-musb-cone{animation:musPump calc(.25s / var(--spd)) ease-out calc(.5s / var(--spd)) var(--pn,2)}
+.playing .o-musb-wave{animation:musRipple calc(.7s / var(--spd)) cubic-bezier(.2,.7,.3,1) calc(var(--wd) / var(--spd)) both}
+.playing .o-musb-big .o-musb-rig{animation:musShake calc(.3s / var(--spd)) linear calc(.5s / var(--spd))}
+.playing .o-musb-led.o-musb-on{animation:musLedOn calc(.3s / var(--spd)) ease-out calc(var(--ld) / var(--spd)) both}
+.playing .o-musb-from{animation:musLand calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.92s / var(--spd)) both}
+
+/* donation — Request line: the deck drops, a cassette slides in with a clunk, ON AIR lights, the reels turn, the title is written in */
+.o-musd{height:212px}
+.o-musd-deck{left:0;right:0;top:2px;height:208px}
+.o-musd-bay{position:absolute;left:12px;top:12px;width:316px;height:184px;overflow:hidden;border-radius:10px;background:#08080B;box-shadow:inset 0 3px 8px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.08)}
+.o-musd-tape{position:absolute;left:7px;top:7px;width:302px;height:170px;border-radius:9px;background:linear-gradient(180deg,#2B2C34,#1A1B21);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.09),inset 0 -3px 0 rgba(0,0,0,.4),0 4px 10px rgba(0,0,0,.6)}
+.o-musd-screws{position:absolute;left:0;top:0;width:100%;height:100%;background:radial-gradient(circle at 5px 5px,#A9AAB3 0 1.2px,#55565E 2.2px,rgba(0,0,0,0) 2.8px),radial-gradient(circle at 297px 5px,#A9AAB3 0 1.2px,#55565E 2.2px,rgba(0,0,0,0) 2.8px),radial-gradient(circle at 8px 162px,#A9AAB3 0 1.4px,#55565E 2.4px,rgba(0,0,0,0) 3px),radial-gradient(circle at 294px 162px,#A9AAB3 0 1.4px,#55565E 2.4px,rgba(0,0,0,0) 3px)}
+/* The label is the accent: a printed band with the side, the title and the amount, a paper strip for
+   the track title, and a band around the window onto the reels. */
+.o-musd-label{position:absolute;left:10px;top:9px;width:282px;height:128px;overflow:hidden;border-radius:6px;background:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,0) 22%,rgba(0,0,0,0) 80%,rgba(0,0,0,.12)),var(--musa);box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
+.o-musd-top{position:absolute;left:0;top:0;width:100%;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--mus-on)}
+.o-musd-side{flex:none;display:flex;align-items:center;justify-content:center;width:18px;height:18px;padding-top:2px;border:1.5px solid currentColor;border-radius:4px;font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-size:14px;line-height:1}
+.o-musd-title{flex:1;min-width:0;padding:2px 0 .12em;margin:0 0 -.12em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-size:15px;line-height:1;letter-spacing:.16em;text-transform:uppercase}
+.o-musd-amt{flex:none;font-family:"Righteous","Varela Round",system-ui,sans-serif;line-height:1;white-space:nowrap}
+.o-musd-strip{position:absolute;left:8px;right:8px;top:29px;height:64px;display:flex;flex-direction:column;padding:5px 9px 4px;border-radius:3px;background:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0 15px,rgba(40,40,70,.11) 15px 16px) 0 4px,#F6F3EA;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14),inset 0 1px 2px rgba(0,0,0,.12);color:#18181F}
+.o-musd-msg{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-height:32px;overflow:hidden;overflow-wrap:anywhere;font-family:"Righteous","Varela Round",system-ui,sans-serif;font-size:13px;line-height:16px}
+.o-musd-sm{font-size:12px;line-height:15px;max-height:30px}
+.o-musd-xs{-webkit-line-clamp:3;font-size:11px;line-height:12.6px;max-height:38px}
+.o-musd-by{display:flex;align-items:baseline;gap:5px;min-width:0;margin-top:auto}
+.o-musd-dash{flex:none;font-size:14px;line-height:1}
+.o-musd-name{flex:1;min-width:0;font-family:"Righteous","Varela Round",system-ui,sans-serif;font-size:calc(15px * var(--fit,1));line-height:1.12}
+.o-musd-solo{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;height:100%}
+.o-musd-fr{font-size:12px;letter-spacing:.2em;color:rgba(24,24,31,.62)}
+.o-musd-sname{align-self:stretch;margin-top:3px;font-family:"Righteous","Varela Round",system-ui,sans-serif;font-size:calc(24px * var(--fit,1));line-height:1.12}
+.o-musd-band{position:absolute;left:0;top:93px;width:100%;height:35px}
+.o-musd-band::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;background:linear-gradient(var(--mus-on),var(--mus-on)) 12px 12px/58px 2px no-repeat,linear-gradient(var(--mus-on),var(--mus-on)) 12px 19px/58px 2px no-repeat,linear-gradient(var(--mus-on),var(--mus-on)) 212px 12px/58px 2px no-repeat,linear-gradient(var(--mus-on),var(--mus-on)) 212px 19px/58px 2px no-repeat;opacity:.3}
+.o-musd-win{position:absolute;left:76px;top:3px;width:130px;height:28px;overflow:hidden;border-radius:7px;background:linear-gradient(180deg,#141419,#0B0B0F);box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.45),inset 0 2px 4px rgba(0,0,0,.7)}
+.o-musd-win::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;background:linear-gradient(115deg,rgba(255,255,255,0) 0 35%,rgba(255,255,255,.14) 35% 44%,rgba(255,255,255,0) 44%)}
+.o-musd-pack{position:absolute;border-radius:50%;background:radial-gradient(circle,#2A1C13 0 9px,#5E4130 9.5px,#4A3224 70%,#3A271B)}
+.o-musd-pl{left:6px;top:-6px;width:40px;height:40px}
+.o-musd-pr{left:90px;top:0;width:28px;height:28px}
+.o-musd-hub{position:absolute;top:5px;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle,#D9D9E1 0 2px,rgba(0,0,0,0) 2.5px),radial-gradient(circle,rgba(0,0,0,0) 0 5.5px,#D9D9E1 6px),repeating-conic-gradient(from 0deg,#D9D9E1 0 16deg,#1A1B20 16deg 60deg)}
+.o-musd-hl{left:17px}
+.o-musd-hr{left:95px}
+.o-musd-foot{position:absolute;left:58px;top:142px;width:186px;height:28px;clip-path:polygon(7% 0,93% 0,100% 100%,0 100%);background:radial-gradient(circle at 40px 15px,#060608 0 4px,rgba(0,0,0,0) 4.5px),radial-gradient(circle at 146px 15px,#060608 0 4px,rgba(0,0,0,0) 4.5px),linear-gradient(180deg,#34353D,#25262C)}
+.o-musd-glass{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:10px;background:linear-gradient(118deg,rgba(255,255,255,0) 0 58%,rgba(255,255,255,.06) 58% 68%,rgba(255,255,255,0) 68%);box-shadow:inset 0 0 0 2px rgba(255,255,255,.04)}
+.o-musd-sweep{position:absolute;left:0;top:-20px;width:70px;height:224px;opacity:0;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.24) 50%,rgba(255,255,255,0));transform:translateX(400px) skewX(-18deg)}
+.o-musd-air{position:absolute;left:338px;top:12px;width:70px;height:26px;display:flex;align-items:center;justify-content:center;padding:2px 0 0 .16em;border-radius:6px;background:var(--musa);color:var(--mus-on);box-shadow:0 0 16px rgba(var(--musa-rgb),.7),inset 0 0 0 1px rgba(255,255,255,.25);font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-size:15px;line-height:1;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+.o-musd-well{position:absolute;left:338px;top:46px;width:70px;height:112px;border-radius:8px;background:#0A0A0E;box-shadow:inset 0 2px 6px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07)}
+.o-musd-vu{position:absolute;top:6px;width:16px;height:94px;background:repeating-linear-gradient(0deg,rgba(var(--musa-rgb),.16) 0 6px,rgba(0,0,0,0) 6px 8px)}
+.o-musd-l{left:14px}
+.o-musd-r{left:40px}
+.o-musd-vul{position:absolute;left:0;top:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 6px,#0A0A0E 6px 8px),linear-gradient(0deg,rgba(255,255,255,0) 0 60%,rgba(255,255,255,.4) 100%),var(--musa);clip-path:inset(var(--r) 0 0 0)}
+.o-musd-ch{position:absolute;top:102px;width:16px;text-align:center;font-size:9px;letter-spacing:0;color:rgba(255,255,255,.4)}
+.o-musd-cl{left:14px}
+.o-musd-cr{left:40px}
+.o-musd-btn{position:absolute;top:166px;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#45464F,#22232A 70%);box-shadow:0 2px 0 #0B0B0E,0 3px 6px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.14)}
+.o-musd-btn::after{content:"";position:absolute;left:50%;top:50%}
+.o-musd-play{left:342px;background:radial-gradient(circle at 40% 35%,rgba(255,255,255,.35),rgba(255,255,255,0) 60%),var(--musa);box-shadow:0 2px 0 rgba(0,0,0,.6),0 0 14px rgba(var(--musa-rgb),.7),inset 0 1px 0 rgba(255,255,255,.3)}
+.o-musd-play::after{width:10px;height:12px;margin:-6px 0 0 -4px;background:var(--mus-on);clip-path:polygon(0 0,100% 50%,0 100%)}
+.o-musd-stop{left:376px}
+.o-musd-stop::after{width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:1px;background:rgba(255,255,255,.5)}
+@keyframes musInsert{0%{transform:translateY(-184px)}70%{transform:translateY(3px)}86%{transform:translateY(-1px)}100%{transform:none}}
+@keyframes musClunk{0%,100%{transform:none}35%{transform:translateY(2px)}}
+@keyframes musSweep{0%{opacity:1;transform:translateX(-140px) skewX(-18deg)}100%{opacity:1;transform:translateX(400px) skewX(-18deg)}}
+@keyframes musAir{
+  0%{background:#2A2B32;color:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  20%{background:var(--musa);color:var(--mus-on);box-shadow:0 0 16px rgba(var(--musa-rgb),.7),inset 0 0 0 1px rgba(255,255,255,.25)}
+  34%{background:#2A2B32;color:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  50%,100%{background:var(--musa);color:var(--mus-on);box-shadow:0 0 16px rgba(var(--musa-rgb),.7),inset 0 0 0 1px rgba(255,255,255,.25)}
+}
+@keyframes musPress{0%{transform:scale(1);filter:brightness(.4)}40%{transform:scale(.86);filter:brightness(.4)}100%{transform:none;filter:none}}
+@keyframes musReel{from{transform:rotate(-600deg)}to{transform:rotate(0deg)}}
+@keyframes musVu{0%{clip-path:inset(94px 0 0 0)}20%{clip-path:inset(var(--v1) 0 0 0)}40%{clip-path:inset(var(--v2) 0 0 0)}60%{clip-path:inset(var(--v3) 0 0 0)}80%{clip-path:inset(var(--v4) 0 0 0)}100%{clip-path:inset(var(--r) 0 0 0)}}
+.playing .o-musd-deck{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) both,musClunk calc(.2s / var(--spd)) ease-out calc(.5s / var(--spd))}
+.playing .o-musd-tape{animation:musInsert calc(.4s / var(--spd)) cubic-bezier(.45,0,.4,1) calc(.14s / var(--spd)) both}
+.playing .o-musd-sweep{animation:musSweep calc(.5s / var(--spd)) ease-in-out calc(.56s / var(--spd)) both}
+.playing .o-musd-air{animation:musAir calc(.42s / var(--spd)) steps(1,end) calc(.6s / var(--spd)) both}
+.playing .o-musd-play{animation:musPress calc(.24s / var(--spd)) ease-out calc(.56s / var(--spd)) both}
+.playing .o-musd-hub{animation:musReel calc(1.5s / var(--spd)) cubic-bezier(.35,.1,.4,1) calc(.62s / var(--spd)) both}
+.playing .o-musd-vul{animation:musVu calc(1s / var(--spd)) ease-in-out calc(.62s / var(--spd)) both}
+.playing .o-musd-by{animation:musLand calc(.3s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(var(--bd) / var(--spd)) both}
+.playing .o-musd-solo{animation:musLand calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.82s / var(--spd)) both}
+
+/* raid — Crowd: the stage lights come on and sweep, the crowd fills in, one raised hand per raider (up to 14) */
+.o-musr{height:200px}
+.o-musr-stage{position:absolute;left:0;right:0;top:0;height:130px;overflow:hidden;border-radius:14px;background:linear-gradient(180deg,#07070B 0,#0E0E16 55%,#14131E 100%);box-shadow:0 12px 24px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+/* The stage wash behind the crowd and the beams from the truss are the accent. */
+.o-musr-wash{position:absolute;left:0;top:0;width:100%;height:100%;background:radial-gradient(110% 85% at 50% 108%,rgba(var(--musa-rgb),.9) 0,rgba(var(--musa-rgb),.38) 44%,rgba(var(--musa-rgb),0) 74%),radial-gradient(70% 45% at 50% 14%,rgba(var(--musa-rgb),.22),rgba(var(--musa-rgb),0) 70%)}
+.o-musr-beam{position:absolute;top:14px;width:120px;height:150px;margin-left:-60px;transform-origin:50% 0;transform:rotate(var(--ba));clip-path:polygon(46% 0,54% 0,100% 100%,0 100%);background:linear-gradient(90deg,rgba(255,255,255,0) 38%,rgba(255,255,255,.16) 50%,rgba(255,255,255,0) 62%),linear-gradient(180deg,rgba(var(--musa-rgb),.75) 0,rgba(var(--musa-rgb),.3) 45%,rgba(var(--musa-rgb),0) 92%)}
+.o-musr-truss{position:absolute;left:0;top:0;width:100%;height:13px;background:linear-gradient(#5A5B64,#5A5B64) 0 0/100% 2px no-repeat,linear-gradient(#5A5B64,#5A5B64) 0 11px/100% 2px no-repeat,repeating-linear-gradient(60deg,rgba(0,0,0,0) 0 5px,#3F4048 5px 6.5px,rgba(0,0,0,0) 6.5px 11px),#16161C;box-shadow:0 2px 4px rgba(0,0,0,.6)}
+.o-musr-can{position:absolute;top:9px;width:16px;height:12px;margin-left:-8px;border-radius:3px 3px 5px 5px;background:linear-gradient(180deg,#3C3D45,#1C1D22);box-shadow:0 2px 3px rgba(0,0,0,.6)}
+.o-musr-can::after{content:"";position:absolute;left:3px;bottom:-2px;width:10px;height:4px;border-radius:50%;background:#FFFFFF;box-shadow:0 0 6px 2px var(--musa)}
+/* The crowd: silhouettes with a rim of stage light along their tops (a drop-shadow lifted 1.5px). */
+.o-musr-row{position:absolute;left:0;bottom:0;display:block;width:420px;overflow:visible}
+.o-musr-k0{height:44px;filter:drop-shadow(0 -1.2px 0 rgba(var(--musa-rgb),.55))}
+.o-musr-k1{height:40px;filter:drop-shadow(0 -1.4px 0 rgba(var(--musa-rgb),.7))}
+.o-musr-k2{height:34px;filter:drop-shadow(0 -1.6px 0 rgba(var(--musa-rgb),.9))}
+.o-musr-k0 > path{fill:#110F1A}
+.o-musr-k1 > path{fill:#0A0910}
+.o-musr-k2 > path{fill:#040406}
+.o-musr-hands{position:absolute;left:0;top:0;width:100%;height:100%;filter:drop-shadow(0 -1.5px 0 rgba(var(--musa-rgb),.85))}
+.o-musr-hand{position:absolute;bottom:6px;display:block;width:24px;height:52px;margin-left:-12px;transform-origin:50% 100%;transform:translateY(var(--hy)) rotate(var(--hr)) scale(var(--hs))}
+.o-musr-hand > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-musr-sil{fill:#060609}
+.o-musr-scr{fill:#EEF3FF}
+.o-musr-plate{left:0;right:0;top:136px;height:64px;display:flex;flex-direction:column;justify-content:center;padding:8px 20px 5px}
+.o-musr-tag{position:absolute;left:16px;top:-11px}
+.o-musr-name{width:100%;font-size:calc(25px * var(--fit,1))}
+.o-musr-line{display:flex;align-items:center;gap:7px;margin-top:2px;white-space:nowrap}
+.o-musr-w{font-size:17px;color:var(--mus-dim)}
+.o-musr-num{display:block;font-size:21px;line-height:1;color:#FFFFFF;filter:drop-shadow(0 0 6px rgba(var(--musa-rgb),.95))}
+@keyframes musWash{0%{opacity:.12}22%{opacity:1}36%{opacity:.55}100%{opacity:1}}
+@keyframes musBeam{0%{transform:rotate(var(--b0))}48%{transform:rotate(var(--b1))}100%{transform:rotate(var(--ba))}}
+@keyframes musRise{0%{opacity:0;transform:translateY(30px)}35%{opacity:1}75%{transform:translateY(-2px)}100%{opacity:1;transform:none}}
+@keyframes musHand{
+  0%{opacity:0;transform:translateY(calc(var(--hy) + 34px)) rotate(var(--hr)) scale(var(--hs))}
+  30%{opacity:1}
+  60%{transform:translateY(calc(var(--hy) - 4px)) rotate(calc(var(--hr) - 9deg)) scale(var(--hs))}
+  82%{transform:translateY(calc(var(--hy) + 1px)) rotate(calc(var(--hr) + 5deg)) scale(var(--hs))}
+  100%{opacity:1;transform:translateY(var(--hy)) rotate(var(--hr)) scale(var(--hs))}
+}
+.playing .o-musr-stage{animation:musDrop calc(.38s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-musr-wash{animation:musWash calc(.6s / var(--spd)) ease-out calc(.22s / var(--spd)) both}
+.playing .o-musr-beam{animation:musFlick calc(.3s / var(--spd)) linear calc(var(--bd) / var(--spd)) both,musBeam calc(1.1s / var(--spd)) ease-in-out calc(.3s / var(--spd)) both}
+.playing .o-musr-k0{animation:musRise calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.32s / var(--spd)) both}
+.playing .o-musr-k1{animation:musRise calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.42s / var(--spd)) both}
+.playing .o-musr-k2{animation:musRise calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.52s / var(--spd)) both}
+.playing .o-musr-hand{animation:musHand calc(.44s / var(--spd)) ease-out calc(var(--hd) / var(--spd)) both}
+.playing .o-musr-plate{animation:musDrop calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.58s / var(--spd)) both}
+.playing .o-musr-tag{animation:musPop calc(.3s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-musr-name{animation:musLand calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.8s / var(--spd)) both}
+.playing .o-musr-line{animation:musLand calc(.36s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.9s / var(--spd)) both}
+
+/* giveaway — Gold record: the frame drops, a record in the accent spins in and lands under a spotlight, the plaque is engraved */
+.o-musg{height:216px}
+.o-musg-frame{position:absolute;left:0;right:0;top:2px;height:212px;border-radius:8px;background:linear-gradient(135deg,#2E2F37 0,#16161B 38%,#0B0B0E 100%);box-shadow:0 16px 30px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.2),inset 0 0 0 1px rgba(255,255,255,.07),inset 0 0 0 7px rgba(0,0,0,.25),inset 0 -2px 0 rgba(0,0,0,.6)}
+.o-musg-mat{position:absolute;left:12px;top:12px;right:12px;bottom:12px;overflow:hidden;border-radius:3px;background:linear-gradient(180deg,#141419,#0B0B0F);box-shadow:inset 0 3px 8px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.09)}
+.o-musg-spot{position:absolute;left:0;top:0;width:100%;height:100%;background:radial-gradient(circle at 96px 94px,rgba(var(--musa-rgb),.45) 0,rgba(var(--musa-rgb),.15) 74px,rgba(var(--musa-rgb),0) 132px)}
+.o-musg-disc{position:absolute;left:18px;top:16px;width:156px;height:156px}
+.o-musg-vinyl,.o-musg-sheen{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%}
+/* The record is the accent, with grooves, three track gaps and a darker rim; its sheen stays still while it turns. */
+.o-musg-vinyl{background:radial-gradient(circle,rgba(0,0,0,0) 0 31px,rgba(0,0,0,.32) 31.5px 33px,rgba(0,0,0,0) 33.5px 45.5px,rgba(0,0,0,.22) 46px 47px,rgba(0,0,0,0) 47.5px 60.5px,rgba(0,0,0,.22) 61px 62px,rgba(0,0,0,0) 62.5px 72px,rgba(0,0,0,.3) 76px,rgba(0,0,0,.5) 78px),repeating-radial-gradient(circle,rgba(0,0,0,.16) 0 1px,rgba(255,255,255,.08) 1px 2.4px),var(--musa);box-shadow:0 8px 16px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.5)}
+.o-musg-sheen{background:conic-gradient(from 20deg,rgba(255,255,255,.55) 0deg,rgba(255,255,255,0) 34deg,rgba(0,0,0,.24) 90deg,rgba(255,255,255,0) 146deg,rgba(255,255,255,.5) 180deg,rgba(255,255,255,0) 214deg,rgba(0,0,0,.24) 270deg,rgba(255,255,255,0) 326deg,rgba(255,255,255,.55) 360deg);opacity:.8}
+.o-musg-lab{position:absolute;left:49px;top:49px;width:58px;height:58px;border-radius:50%;background:radial-gradient(circle,#0A0A0D 0 3px,rgba(0,0,0,0) 3.5px),radial-gradient(circle,rgba(255,255,255,.1) 0,rgba(255,255,255,0) 70%),#16161B;box-shadow:0 0 0 2px var(--musa),0 0 0 3.5px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.08)}
+.o-musg-lab::before{content:"";position:absolute;left:22px;top:7px;width:14px;height:13px;background:var(--musa);clip-path:polygon(50% 0,61.8% 35.3%,100% 38.2%,69.1% 61.8%,79.4% 100%,50% 76.4%,20.6% 100%,30.9% 61.8%,0 38.2%,38.2% 35.3%)}
+.o-musg-lt{position:absolute;left:0;right:0;top:37px;padding-left:.26em;font-family:"Bebas Neue","Oswald","Arial Narrow",sans-serif;font-size:8px;line-height:1;letter-spacing:.26em;text-align:center;text-transform:uppercase;color:rgba(255,255,255,.72)}
+/* The plaque: brushed metal, engraved in dark ink with a light edge below each stroke. */
+.o-musg-plaque{position:absolute;left:188px;top:28px;width:194px;height:132px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 10px;text-align:center;border-radius:4px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.07) 0 1px,rgba(0,0,0,.035) 1px 2px),linear-gradient(180deg,#D6D7DE 0,#AAABB4 50%,#C4C5CD 100%);box-shadow:0 4px 10px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.7),inset 0 0 0 1px rgba(0,0,0,.25),inset 0 -2px 0 rgba(0,0,0,.15);color:#202128}
+.o-musg-plaque::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;background:radial-gradient(circle at 8px 8px,#F2F2F5 0 1px,#7C7D86 2.2px,rgba(0,0,0,0) 2.8px),radial-gradient(circle at calc(100% - 8px) 8px,#F2F2F5 0 1px,#7C7D86 2.2px,rgba(0,0,0,0) 2.8px),radial-gradient(circle at 8px calc(100% - 8px),#F2F2F5 0 1px,#7C7D86 2.2px,rgba(0,0,0,0) 2.8px),radial-gradient(circle at calc(100% - 8px) calc(100% - 8px),#F2F2F5 0 1px,#7C7D86 2.2px,rgba(0,0,0,0) 2.8px)}
+.o-musg-eng{position:relative;max-width:100%}
+.o-musg-lbl{max-width:100%;padding:.12em 0 .12em .24em;margin:-.12em 0;overflow:hidden;text-overflow:ellipsis;font-size:14px;letter-spacing:.24em;color:#383944;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+.o-musg-rule{position:relative;display:block;width:54px;height:3px;margin:8px 0 7px;border-radius:2px;background:var(--musa);box-shadow:0 1px 0 rgba(255,255,255,.55)}
+.o-musg-e2w{position:relative;width:max-content;max-width:100%}
+.o-musg-name{width:100%;font-family:"Righteous","Varela Round",system-ui,sans-serif;font-size:calc(22px * var(--fit,1));line-height:1.12;color:#1E1F26;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+/* The engraving tool: a spark that rides the edge of the reveal across the name. */
+.o-musg-track{position:absolute;left:0;top:0;display:block;width:100%;height:100%;opacity:0}
+.o-musg-tool{position:absolute;right:-8px;top:50%;display:block;width:16px;height:16px;margin-top:-8px;filter:drop-shadow(0 0 3px var(--musa)) drop-shadow(0 0 2px rgba(0,0,0,.35))}
+.o-musg-tool::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;background:#FFFFFF;clip-path:polygon(50% 0,59% 41%,100% 50%,59% 59%,50% 100%,41% 59%,0 50%,41% 41%)}
+.o-musg-prize{display:flex;align-items:center;justify-content:center;gap:7px;max-width:100%;margin-top:9px;font-size:15px;letter-spacing:.12em;color:#383944;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+.o-musg-pk{flex:none;padding:3px 6px 1px;border-radius:3px;background:var(--musa);color:var(--mus-on);font-size:12px;letter-spacing:.14em;text-shadow:none}
+.o-musg-pv{min-width:0;overflow:hidden;text-overflow:ellipsis;padding:.12em 0;margin:-.12em 0}
+.o-musg-glass{position:absolute;left:0;top:0;width:100%;height:100%;background:linear-gradient(115deg,rgba(255,255,255,0) 0 62%,rgba(255,255,255,.05) 62% 70%,rgba(255,255,255,0) 70%)}
+.o-musg-sweep{position:absolute;left:0;top:-30px;width:80px;height:250px;opacity:0;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.16) 50%,rgba(255,255,255,0));transform:translateX(460px) skewX(-20deg)}
+@keyframes musRollIn{0%{transform:translateX(-200px)}74%{transform:translateX(6px)}88%{transform:translateX(-2px)}100%{transform:none}}
+@keyframes musSpinIn{from{transform:rotate(-600deg)}to{transform:rotate(0deg)}}
+@keyframes musEngrave{from{clip-path:inset(-40% 100% -40% -6%)}to{clip-path:inset(-40% -6% -40% -6%)}}
+@keyframes musTrack{0%{opacity:0;transform:translateX(-100%)}2%{opacity:1}90%{opacity:1;transform:translateX(-4%)}100%{opacity:0;transform:none}}
+@keyframes musGrow{from{transform:scaleX(0)}to{transform:none}}
+@keyframes musSweepG{0%{opacity:1;transform:translateX(-150px) skewX(-20deg)}100%{opacity:1;transform:translateX(460px) skewX(-20deg)}}
+.playing .o-musg-frame{animation:musDrop calc(.38s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-musg-spot{animation:musOn calc(.4s / var(--spd)) ease-out calc(.76s / var(--spd)) both}
+.playing .o-musg-disc{animation:musRollIn calc(.6s / var(--spd)) cubic-bezier(.25,.7,.35,1) calc(.28s / var(--spd)) both}
+.playing .o-musg-vinyl,.playing .o-musg-lab{animation:musSpinIn calc(.6s / var(--spd)) cubic-bezier(.25,.6,.35,1) calc(.28s / var(--spd)) both}
+.playing .o-musg-e1{animation:musEngrave calc(.28s / var(--spd)) linear calc(.92s / var(--spd)) both}
+.playing .o-musg-rule{animation:musGrow calc(.24s / var(--spd)) ease-out calc(1.1s / var(--spd)) both}
+.playing .o-musg-e2{animation:musEngrave calc(.42s / var(--spd)) linear calc(1.16s / var(--spd)) both}
+.playing .o-musg-track{animation:musTrack calc(.42s / var(--spd)) linear calc(1.16s / var(--spd)) both}
+.playing .o-musg-e3{animation:musEngrave calc(.32s / var(--spd)) linear calc(1.56s / var(--spd)) both}
+.playing .o-musg-sweep{animation:musSweepG calc(.6s / var(--spd)) ease-in-out calc(1.62s / var(--spd)) both}

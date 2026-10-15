@@ -1,0 +1,66 @@
+diff --git a/public/overlay/objects/styles/kawaii.js b/public/overlay/objects/styles/kawaii.js
+index b0be3e3..4ffd1ad 100644
+--- a/public/overlay/objects/styles/kawaii.js
++++ b/public/overlay/objects/styles/kawaii.js
+@@ -167,11 +167,11 @@
+   var TIER_COLOURS = { '1': 'var(--kwi-mint)', '2': 'var(--kwi-lilac)', '3': 'var(--kwi-butter)' };
+ 
+   K.register({
+-    key: 'subscriber-kawaii', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'subscriber-kawaii', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'kwiSub', fx: 'none', anim: hold('1.7s'), exit: KWI_EXIT,
+-    len: function (d) { return bobaTimes(Math.max(1, intOf(d.months))).len; },
++    len: function (d) { return bobaTimes(Math.max(1, intOf(K.sizeOf(d, 'months')))).len; },
+     render: function (d) {
+-      var months = Math.max(1, intOf(d.months)), T = bobaTimes(months), r = rng(hash(d.username + months)), pearls = '';
++      var months = Math.max(1, intOf(d.months)), size = Math.max(1, intOf(K.sizeOf(d, 'months'))), T = bobaTimes(size), r = rng(hash(d.username + size)), pearls = '';
+       for (var i = 0; i < T.n; i++) {
+         var row = Math.floor(i / 4), col = i % 4, inRow = Math.min(4, T.n - row * 4);
+         var x = 25 + (col + (4 - inRow) / 2) * 15 + (row % 2 ? 4 : 0) + (r() * 3 - 1.5), y = 7 + row * 11 + (r() * 2 - 1);
+@@ -199,11 +199,11 @@
+   var MOCHI_COLOURS = ['#FFFFFF', 'var(--kwia)', 'var(--a-tint,var(--kwi-mint))', 'var(--a-soft,var(--kwi-lilac))', 'var(--a-hi,var(--kwi-butter))', 'var(--a-tint,#FFD3E6)'];
+ 
+   K.register({
+-    key: 'bits-kawaii', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-kawaii', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'kwiBits', fx: 'none', anim: hold('1.4s'), exit: KWI_MELT,
+-    len: function (d) { return mochiLen(mochiCount(intOf(d.amount != null ? d.amount : d.bits))); },
++    len: function (d) { return mochiLen(mochiCount(intOf(K.sizeOf(d, 'bits')))); },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), count = mochiCount(n), r = rng(hash(d.username + n));
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), count = mochiCount(size), r = rng(hash(d.username + size));
+       var sp = Math.min(56, 330 / Math.max(1, count - 1)), order = shuffled(count, r), first = Math.floor(r() * MOCHI_COLOURS.length), mochi = '';
+       for (var i = 0; i < count; i++) {
+         var w = 48 + Math.round(r() * 14), h = Math.round(w * 0.8), cx = 210 + (i - (count - 1) / 2) * sp;
+@@ -213,7 +213,7 @@
+           + '<svg class="o-kwib-face" viewBox="0 0 40 20" style="width:' + fw + 'px;height:' + Math.round(fw / 2) + 'px;margin-left:-' + Math.round(fw / 2) + 'px" aria-hidden="true">'
+           + face(20, 7, 1, mood[0], mood[1]) + '</svg></i>';
+       }
+-      var lvl = n >= 1000 ? 3 : n >= 100 ? 2 : 1;
++      var lvl = size >= 1000 ? 3 : size >= 100 ? 2 : 1;
+       var sparks = [[38, 20, 16, -10, 'var(--kwi-butter)', 0.9], [368, 6, 18, 12, 'var(--kwi-mint)', 0.98], [374, 70, 12, 30, 'var(--kwi-butter)', 1.06]].slice(0, lvl)
+         .map(function (s) { return spark(s[0], s[1], s[2], s[3], s[4], s[5]); }).join('');
+       return '<div class="obj o-kwi o-kwib">' + mochi
+@@ -286,17 +286,18 @@
+   }
+ 
+   K.register({
+-    key: 'raid-kawaii', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-kawaii', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'kwiRaid', fx: 'none', anim: hold('1.6s'), exit: KWI_HOP,
+-    len: function (d) { return parade(intOf(d.viewers)).len; },
++    len: function (d) { return parade(intOf(K.sizeOf(d, 'raid'))).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), plan = parade(v), r = rng(hash(d.username + v)), k0 = Math.floor(r() * 6), s0 = Math.floor(r() * 6), crowd = '';
++      var v = intOf(d.viewers), size = intOf(K.sizeOf(d, 'raid')), plan = parade(size), r = rng(hash(d.username + size)), k0 = Math.floor(r() * 6), s0 = Math.floor(r() * 6), crowd = '';
+       plan.items.forEach(function (it, i) {
+         crowd += '<i class="o-kwir-f" style="left:' + n1(it.cx - plan.fs / 2) + 'px;bottom:' + (i % 2 ? 9 : 5) + 'px;width:' + n1(plan.fs) + 'px;height:' + n1(plan.fs * 1.2)
+           + 'px;--sk:' + FRIEND_SKINS[(i * 5 + s0) % 6] + ';--px:' + n1(-it.dist) + 'px;--pd:' + it.dep.toFixed(3) + 's;--pdu:' + it.dur.toFixed(3) + 's;--hn:' + it.hops
+           + ';--hp:' + (it.dur / it.hops).toFixed(3) + 's;--pa:' + it.arr.toFixed(3) + 's">' + friend((i + k0) % 6, MOODS[(i + s0) % MOODS.length]) + '</i>';
+       });
+-      if (plan.more) crowd += '<b class="o-kwi-tag o-kwir-more" style="--md:' + (plan.last - 0.04).toFixed(2) + 's">+' + fmt(v - plan.n) + '</b>';
++      // The tag counts the raiders left out of the parade; with "grows with the amount" off, the middle parade can hold them all.
++      if (plan.more && v > plan.n) crowd += '<b class="o-kwi-tag o-kwir-more" style="--md:' + (plan.last - 0.04).toFixed(2) + 's">+' + fmt(v - plan.n) + '</b>';
+       return '<div class="obj o-kwi o-kwir"><div class="o-kwi-plate o-kwir-plate"><div class="o-kwi-tag o-kwir-tag">' + label(d, 'Raid party!') + '</div>'
+         + nm('o-kwir-name', d.username, 17)
+         + '<div class="o-kwir-cnt"><span class="o-kwir-plus">+</span><span class="o-kwi-pill">' + odo(fmt(v), 0.45, 0.75) + '</span><span class="o-kwir-fr">' + (v === 1 ? 'friend' : 'friends') + '</span></div></div>'

@@ -1,0 +1,54 @@
+diff --git a/public/overlay/objects/styles/frost.js b/public/overlay/objects/styles/frost.js
+index f527dea..7b9d76f 100644
+--- a/public/overlay/objects/styles/frost.js
++++ b/public/overlay/objects/styles/frost.js
+@@ -244,12 +244,12 @@
+   });
+ 
+   K.register({
+-    key: 'bits-frost', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-frost', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'froBits', fx: 'none', anim: hold('1.6s'),
+     exit: { out: 'froExitSlide', dur: '0.42s', ease: 'cubic-bezier(.5,0,.9,.4)' },
+-    len: function (d) { var c = giftCount(intOf(d.amount != null ? d.amount : d.bits)); return Math.max(1.4, 0.28 + (c - 1) * 0.11 + 0.36 + 0.5); },
++    len: function (d) { var c = giftCount(K.sizeOf(d, 'bits')); return Math.max(1.4, 0.28 + (c - 1) * 0.11 + 0.36 + 0.5); },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), c = giftCount(n), boxes = '', top = 0, i;
++      var n = intOf(d.amount != null ? d.amount : d.bits), c = giftCount(K.sizeOf(d, 'bits')), boxes = '', top = 0, i;
+       for (i = 0; i < c; i++) {
+         var b = BOXES[i], w = WRAPS[i];
+         if (b[1] + b[3] > BOXES[top][1] + BOXES[top][3]) top = i;
+@@ -271,13 +271,13 @@
+   });
+ 
+   K.register({
+-    key: 'donation-frost', eventType: 'donation', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'donation-frost', eventType: 'donation', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'froDonation', fx: 'none', anim: hold('1.6s'),
+     exit: { out: 'froExitFog', dur: '0.45s', ease: 'cubic-bezier(.4,0,.8,.4)' },
+     len: 1.7,
+     render: function (d) {
+       var amt = money(d.amount, d.currency), alen = Array.from(amt).length, afs = alen <= 6 ? 32 : alen === 7 ? 28 : alen === 8 ? 25 : 22;
+-      var mc = mallowCount(Number(d.amount) || 0), mm = '', i;
++      var mc = mallowCount(K.sizeOf(d, 'donation')), mm = '', i;
+       for (i = 0; i < mc; i++) {
+         var m = MALLOWS[i];
+         mm += '<i class="o-frod-mm" style="left:' + m[0] + 'px;bottom:' + m[1] + 'px;--r:' + m[2] + 'deg;--mc:' + (i % 2 ? '#FFDCEA' : '#EEEAF6') + ';--md:' + (0.9 + i * 0.08).toFixed(2) + 's"></i>';
+@@ -296,14 +296,14 @@
+   });
+ 
+   K.register({
+-    key: 'raid-frost', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-frost', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'froRaid', fx: 'none', anim: hold('1.6s'),
+     exit: { out: 'froExitFly', dur: '0.45s', ease: 'cubic-bezier(.5,0,.9,.4)' }, len: 1.7,
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.max(1, Math.min(8, v)), t = team(n);
++      var v = intOf(d.viewers), size = K.sizeOf(d, 'raid'), n = Math.max(1, Math.min(8, size)), t = team(n);
+       // The team stops in front of the moon (its centre is at x 284), never past the sky's edges.
+       var left = Math.round(Math.max(12, Math.min(420 - 12 - t.W, 284 - t.W / 2 + 30))), top = Math.round(58 - t.H / 2), g = left + t.W + 24;
+-      var r = rng(hash(d.username + v)), cols = ['#F2C14E', '#FFFFFF', 'var(--froa)'], sp = '', i;
++      var r = rng(hash(d.username + size)), cols = ['#F2C14E', '#FFFFFF', 'var(--froa)'], sp = '', i;
+       // The sparkle trail follows the path the sleigh flew in on (it glides up 24px over the whole way), with a
+       // slight swoosh, so it stays above the snowy hills; each sparkle lights up as the sleigh passes it.
+       var x0 = left - 4, y0 = top + t.sy + 18, x2 = -12, y2 = y0 + 24 * (x0 - x2) / g, x1 = (x0 + x2) / 2, y1 = (y0 + y2) / 2 + 7;

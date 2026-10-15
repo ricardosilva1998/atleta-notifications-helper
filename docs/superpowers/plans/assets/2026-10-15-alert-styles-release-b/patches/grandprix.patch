@@ -1,0 +1,155 @@
+diff --git a/public/overlay/objects/styles/grandprix.css b/public/overlay/objects/styles/grandprix.css
+index 243000b..3c30e5a 100644
+--- a/public/overlay/objects/styles/grandprix.css
++++ b/public/overlay/objects/styles/grandprix.css
+@@ -19,17 +19,17 @@
+ .o-gpf-gantry::before{left:34px}
+ .o-gpf-gantry::after{right:34px}
+ .o-gpf-pod{display:flex;flex-direction:column;gap:4px;padding:4px 7px;border-radius:5px;background:#08090C;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+-.o-gpf-pod i{display:block;width:12px;height:12px;border-radius:50%;background:#2A0B10;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
++.o-gpf-lamp{display:block;width:12px;height:12px;border-radius:50%;background:#2A0B10;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+ .o-gpf-plate{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;align-items:center;padding:6px 32px 0 22px;overflow:hidden;clip-path:polygon(0 0,100% 0,calc(100% - 20px) 100%,0 100%)}
+ /* A picked colour tints the plate from the left (no colour picked: --a-rgb is unset, so nothing is drawn) */
+ .o-gpf-plate::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(var(--a-rgb),.5),rgba(var(--a-rgb),.12) 45%,rgba(var(--a-rgb),0) 75%);pointer-events:none}
+ .o-gpf-txt{position:relative;z-index:1;min-width:0;flex:1}
+ .o-gpf-txt .o-gp-label{margin-bottom:2px}
+ .o-gpf-streaks{position:absolute;inset:0;pointer-events:none}
+-.o-gpf-streaks i{position:absolute;right:-20px;height:2px;width:200px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7));opacity:0}
+-.o-gpf-streaks i:nth-child(1){top:28%;--sd:1.26s}
+-.o-gpf-streaks i:nth-child(2){top:52%;width:260px;--sd:1.30s}
+-.o-gpf-streaks i:nth-child(3){top:76%;width:150px;--sd:1.34s}
++.o-gpf-streak{position:absolute;right:-20px;height:2px;width:200px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7));opacity:0}
++.o-gpf-streak:nth-child(1){top:28%;--sd:1.26s}
++.o-gpf-streak:nth-child(2){top:52%;width:260px;--sd:1.30s}
++.o-gpf-streak:nth-child(3){top:76%;width:150px;--sd:1.34s}
+ @keyframes gpfDrop{from{transform:translateY(-140%);opacity:0}to{transform:none;opacity:1}}
+ @keyframes gpfDim{from{opacity:1}to{opacity:.62}}
+ @keyframes gpfOn{from{background:#2A0B10;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}to{background:#FF2D2D;box-shadow:0 0 12px 3px rgba(255,45,45,.75),inset 0 0 0 1px rgba(255,255,255,.4)}}
+@@ -38,9 +38,9 @@
+ @keyframes gpfStreak{0%{transform:translateX(0) scaleX(.3);opacity:0}25%{opacity:.85}100%{transform:translateX(-420px) scaleX(1);opacity:0}}
+ @keyframes gpfName{from{opacity:0;letter-spacing:.3em;filter:blur(5px)}to{opacity:1;letter-spacing:.01em;filter:blur(0)}}
+ .playing .o-gpf-gantry{animation:gpfDrop calc(.22s / var(--spd)) cubic-bezier(.2,.8,.2,1) both,gpfDim calc(.5s / var(--spd)) ease-out calc(1.6s / var(--spd)) forwards}
+-.playing .o-gpf-pod i{animation:gpfOn calc(.05s / var(--spd)) linear calc(var(--on) / var(--spd)) both,gpfOff calc(.08s / var(--spd)) linear calc(1.22s / var(--spd)) forwards}
++.playing .o-gpf-lamp{animation:gpfOn calc(.05s / var(--spd)) linear calc(var(--on) / var(--spd)) both,gpfOff calc(.08s / var(--spd)) linear calc(1.22s / var(--spd)) forwards}
+ .playing .o-gpf-plate{animation:gpfLaunch calc(.38s / var(--spd)) cubic-bezier(.1,.9,.2,1) calc(1.24s / var(--spd)) both}
+-.playing .o-gpf-streaks i{animation:gpfStreak calc(.55s / var(--spd)) cubic-bezier(.2,.6,.3,1) calc(var(--sd) / var(--spd)) both}
++.playing .o-gpf-streak{animation:gpfStreak calc(.55s / var(--spd)) cubic-bezier(.2,.6,.3,1) calc(var(--sd) / var(--spd)) both}
+ .playing .o-gpf .o-gp-name{animation:gpfName calc(.34s / var(--spd)) cubic-bezier(.2,.7,.2,1) calc(1.34s / var(--spd)) both}
+ .playing .o-gpf .o-gp-label{animation:gpRise calc(.26s / var(--spd)) ease-out calc(1.46s / var(--spd)) both}
+ 
+@@ -85,7 +85,7 @@
+ .o-gpb-amt small{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.7)}
+ .o-gpb-sectors{position:absolute;left:0;right:0;bottom:0;height:32px;display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+ .o-gpb-s{display:flex;align-items:center;gap:7px;padding:0 9px;background:#101118;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 10px 20px rgba(0,0,0,.4);font-weight:700;font-size:11px;letter-spacing:.12em;color:rgba(255,255,255,.75)}
+-.o-gpb-s i{flex:1;height:8px;background:var(--sc);transform-origin:left;box-shadow:0 0 10px var(--sc)}
++.o-gpb-bar{flex:1;height:8px;background:var(--sc);transform-origin:left;box-shadow:0 0 10px var(--sc)}
+ .o-gpb.lvl-big .o-gpb-top{box-shadow:0 0 0 2px var(--gp-purple),0 0 28px rgba(var(--a-rgb,165,75,255),.55),0 14px 30px rgba(0,0,0,.55)}
+ .o-gpb.lvl-big .o-gpb-amt{color:#EBDBFF;text-shadow:0 0 18px rgba(var(--a-rgb,165,75,255),.85)}
+ .o-gpb.lvl-big .o-gpb-amt .o-odo{text-shadow:none;filter:drop-shadow(0 0 18px rgba(var(--a-rgb,165,75,255),.85))}
+@@ -93,7 +93,7 @@
+ @keyframes gpbFlash{from{filter:brightness(2.4)}to{filter:none}}
+ .playing .o-gpb-top{animation:gpWipe calc(.26s / var(--spd)) cubic-bezier(.3,0,.2,1) both}
+ .playing .o-gpb-sectors{animation:gpWipe calc(.26s / var(--spd)) cubic-bezier(.3,0,.2,1) calc(.12s / var(--spd)) both}
+-.playing .o-gpb-s i{animation:gpbFill calc(.22s / var(--spd)) cubic-bezier(.4,0,.2,1) calc(var(--sd) / var(--spd)) both}
++.playing .o-gpb-bar{animation:gpbFill calc(.22s / var(--spd)) cubic-bezier(.4,0,.2,1) calc(var(--sd) / var(--spd)) both}
+ .playing .o-gpb-s{animation:gpbFlash calc(.3s / var(--spd)) ease-out calc((var(--sd) + .2s) / var(--spd))}
+ .playing .o-gpb .o-gp-name{animation:gpRise calc(.24s / var(--spd)) ease-out calc(.24s / var(--spd)) both}
+ .playing .o-gpb .o-gp-label{animation:gpRise calc(.24s / var(--spd)) ease-out calc(1.08s / var(--spd)) both}
+@@ -106,7 +106,7 @@
+ .o-gpd-amt{font-weight:900;font-size:20px;line-height:1;padding:6px 10px 5px;background:var(--gpa);letter-spacing:.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+ .o-gpd .o-gp-name{font-size:calc(24px * var(--fit,1))}
+ .o-gpd-wave{display:flex;align-items:center;gap:3px;height:26px}
+-.o-gpd-wave i{flex:1;max-width:5px;height:100%;border-radius:2px;background:linear-gradient(180deg,#fff,rgba(var(--gpa-rgb),.95));transform:scaleY(.12)}
++.o-gpd-bar{flex:1;max-width:5px;height:100%;border-radius:2px;background:linear-gradient(180deg,#fff,rgba(var(--gpa-rgb),.95));transform:scaleY(.12)}
+ .o-gpd-msg{font-size:15px;line-height:1.35;font-weight:600;color:rgba(255,255,255,.92);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+ @keyframes gpdWave{from{transform:scaleY(.12)}to{transform:scaleY(var(--h))}}
+ @keyframes gpdPop{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:none;opacity:1}}
+@@ -114,14 +114,14 @@
+ .playing .o-gpd-radio{animation:gpRise calc(.24s / var(--spd)) ease-out calc(.18s / var(--spd)) both}
+ .playing .o-gpd .o-gp-name{animation:gpRise calc(.24s / var(--spd)) ease-out calc(.26s / var(--spd)) both}
+ .playing .o-gpd-amt{animation:gpdPop calc(.3s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.34s / var(--spd)) both}
+-.playing .o-gpd-wave i{animation:gpdWave calc(var(--wdur) / var(--spd)) ease-in-out calc(var(--wd) / var(--spd)) var(--wi) alternate both}
++.playing .o-gpd-bar{animation:gpdWave calc(var(--wdur) / var(--spd)) ease-in-out calc(var(--wd) / var(--spd)) var(--wi) alternate both}
+ 
+ /* raid — Red flag */
+ .o-gpr-head{position:relative;z-index:2;height:50px;display:flex;align-items:center;gap:14px;padding:0 16px 0 14px;background:linear-gradient(180deg,var(--a-hi,#F0141E),var(--a-lo,#B4000A));box-shadow:0 10px 24px rgba(0,0,0,.5);color:var(--a-on,#fff)}
+ .o-gpr-flag{position:relative;flex:none;width:56px;height:34px}
+ .o-gpr-flag::before{content:"";position:absolute;left:0;top:-5px;bottom:-9px;width:3px;border-radius:2px;background:#ECECEC}
+-.o-gpr-flag i{position:absolute;top:0;left:calc(3px + var(--i) * 6.5px);width:7px;height:30px;background:var(--a-tint,#FF3B3B);transform-origin:0 50%;box-shadow:inset -1px 0 0 rgba(0,0,0,.16)}
+-.o-gpr-flag i:nth-child(odd){background:var(--a-hi,#F22B2B)}
++.o-gpr-strip{position:absolute;top:0;left:calc(3px + var(--i) * 6.5px);width:7px;height:30px;background:var(--a-tint,#FF3B3B);transform-origin:0 50%;box-shadow:inset -1px 0 0 rgba(0,0,0,.16)}
++.o-gpr-strip:nth-child(odd){background:var(--a-hi,#F22B2B)}
+ .o-gpr-headtxt{display:flex;flex-direction:column;gap:3px;line-height:1}
+ .o-gpr-headtxt small{font-weight:600;font-size:10px;letter-spacing:.32em;text-transform:uppercase;color:var(--a-on,rgba(255,255,255,.85));opacity:.88}
+ .o-gpr-headtxt b{font-weight:900;font-size:26px;letter-spacing:.06em;text-transform:uppercase}
+@@ -140,7 +140,7 @@
+ @keyframes gprCar{from{transform:translateX(-460px)}to{transform:none}}
+ .playing .o-gpr-head{animation:gprSlam calc(.28s / var(--spd)) cubic-bezier(.3,0,.2,1) both}
+ .playing .o-gpr-flash{animation:gprFlash calc(.7s / var(--spd)) linear calc(.18s / var(--spd)) both}
+-.playing .o-gpr-flag i{animation:gprWave calc(.5s / var(--spd)) ease-in-out calc((.2s - var(--i) * .07s) / var(--spd)) 6}
++.playing .o-gpr-strip{animation:gprWave calc(.5s / var(--spd)) ease-in-out calc((.2s - var(--i) * .07s) / var(--spd)) 6}
+ .playing .o-gpr-body{animation:gprOpen calc(.3s / var(--spd)) cubic-bezier(.3,0,.2,1) calc(.34s / var(--spd)) both}
+ .playing .o-gpr-body > *{animation:gpRise calc(.24s / var(--spd)) ease-out calc((.5s + var(--k,0) * .07s) / var(--spd)) both}
+ .playing .o-gpr-car{animation:gprCar calc(.55s / var(--spd)) cubic-bezier(.2,.7,.2,1) calc((.8s + var(--ci) * .07s) / var(--spd)) both}
+diff --git a/public/overlay/objects/styles/grandprix.js b/public/overlay/objects/styles/grandprix.js
+index 0b4bd25..50e3964 100644
+--- a/public/overlay/objects/styles/grandprix.js
++++ b/public/overlay/objects/styles/grandprix.js
+@@ -33,9 +33,9 @@
+     sound: 'lights', fx: 'speed', anim: hold('1.8s'), exit: GP_EXIT, len: 1.8,
+     render: function (d) {
+       var pods = '';
+-      for (var i = 0; i < 5; i++) pods += '<div class="o-gpf-pod" style="--on:' + (0.26 + i * 0.16).toFixed(2) + 's"><i></i><i></i></div>';
++      for (var i = 0; i < 5; i++) pods += '<div class="o-gpf-pod" style="--on:' + (0.26 + i * 0.16).toFixed(2) + 's"><i class="o-gpf-lamp"></i><i class="o-gpf-lamp"></i></div>';
+       return '<div class="obj o-gp o-gpf"><div class="o-gpf-gantry">' + pods + '</div>'
+-        + '<div class="o-gp-plate o-gpf-plate"><i class="o-gp-stripe"></i><div class="o-gpf-streaks"><i></i><i></i><i></i></div>'
++        + '<div class="o-gp-plate o-gpf-plate"><i class="o-gp-stripe"></i><div class="o-gpf-streaks"><i class="o-gpf-streak"></i><i class="o-gpf-streak"></i><i class="o-gpf-streak"></i></div>'
+         + '<div class="o-gpf-txt"><div class="o-gp-label sq">' + label(d, 'New follower') + '</div>' + nm('o-gp-name', d.username, 20) + '</div></div></div>';
+     },
+   });
+@@ -60,14 +60,14 @@
+     },
+   });
+   K.register({
+-    key: 'bits-grandprix', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-grandprix', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'sectors', fx: 'sparks', anim: hold('1.3s'), exit: GP_EXIT, len: 1.4,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), lvl = n >= 1000 ? 'big' : n >= 100 ? 'medium' : 'small';
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), lvl = size >= 1000 ? 'big' : size >= 100 ? 'medium' : 'small';
+       var C = { y: 'var(--gp-yellow)', g: 'var(--gp-green)', p: 'var(--gp-purple)' };
+       var sets = { small: ['y', 'g', 'g'], medium: ['g', 'g', 'p'], big: ['p', 'p', 'p'] }[lvl];
+       var cap = { small: ['Personal best', C.g], medium: ['Fastest sector', C.p], big: ['Purple lap', C.p] }[lvl];
+-      var sectors = sets.map(function (k, i) { return '<div class="o-gpb-s" style="--sc:' + C[k] + ';--sd:' + (0.32 + i * 0.26).toFixed(2) + 's"><span>S' + (i + 1) + '</span><i></i></div>'; }).join('');
++      var sectors = sets.map(function (k, i) { return '<div class="o-gpb-s" style="--sc:' + C[k] + ';--sd:' + (0.32 + i * 0.26).toFixed(2) + 's"><span>S' + (i + 1) + '</span><i class="o-gpb-bar"></i></div>'; }).join('');
+       return '<div class="obj o-gp o-gpb lvl-' + lvl + '"><div class="o-gp-plate o-gpb-top"><i class="o-gp-stripe"></i>'
+         + '<div class="o-gpb-who"><div class="o-gp-label">' + label(d, 'Bits') + ' · <b style="color:' + cap[1] + '">' + cap[0] + '</b></div>' + nm('o-gp-name', d.username, 12) + '</div>'
+         + '<div class="o-gpb-amt">' + odo(fmt(n), 0.3, 0.82) + '<small>bits</small></div></div>'
+@@ -84,7 +84,7 @@
+       var msg = typed(text, 0.58, per, 160), r = rng(hash(d.username + d.amount)), bars = '';
+       for (var i = 0; i < 40; i++) {
+         var dur = 0.14 + r() * 0.12, wi = 2 * Math.max(1, Math.round(T / (2 * dur)));
+-        bars += '<i style="--h:' + (0.3 + r() * 0.7).toFixed(2) + ';--wdur:' + dur.toFixed(2) + 's;--wd:' + (0.5 + r() * 0.1).toFixed(2) + 's;--wi:' + wi + '"></i>';
++        bars += '<i class="o-gpd-bar" style="--h:' + (0.3 + r() * 0.7).toFixed(2) + ';--wdur:' + dur.toFixed(2) + 's;--wd:' + (0.5 + r() * 0.1).toFixed(2) + 's;--wi:' + wi + '"></i>';
+       }
+       return '<div class="obj o-gp o-gpd"><div class="o-gp-plate o-gpd-box"><i class="o-gp-stripe"></i>'
+         + '<div class="o-gpd-head"><span class="o-gpd-radio">' + label(d, 'Team radio') + '</span><span class="o-gpd-amt">' + esc(money(d.amount, d.currency)) + '</span></div>'
+@@ -95,14 +95,14 @@
+     },
+   });
+   K.register({
+-    key: 'raid-grandprix', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-grandprix', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'raceControl', fx: 'smoke', anim: hold('1.4s'), exit: GP_EXIT,
+-    len: function (d) { return 1.4 + Math.min(12, intOf(d.viewers)) * 0.07; },
++    len: function (d) { return 1.4 + Math.min(12, intOf(K.sizeOf(d, 'raid'))) * 0.07; },
+     render: function (d) {
+-      var v = intOf(d.viewers), shown = Math.min(v, 12), cars = '', strips = '';
++      var v = intOf(d.viewers), shown = Math.min(intOf(K.sizeOf(d, 'raid')), 12), cars = '', strips = '';
+       var pal = ['var(--gpa)', '#FFFFFF', '#FFD12B', '#2EC5FF', '#FF8A1E', '#2BD46C', '#B9B9C6', '#FF4FA3'];
+       for (var i = 0; i < shown; i++) cars += '<i class="o-gpr-car" style="--ci:' + i + ';--cc:' + pal[i % pal.length] + '"></i>';
+-      for (var s = 0; s < 8; s++) strips += '<i style="--i:' + s + '"></i>';
++      for (var s = 0; s < 8; s++) strips += '<i class="o-gpr-strip" style="--i:' + s + '"></i>';
+       return '<div class="obj o-gp o-gpr"><div class="o-gpr-flash"></div>'
+         + '<div class="o-gpr-head"><div class="o-gpr-flag">' + strips + '</div><div class="o-gpr-headtxt"><small>Race control</small><b>Red flag</b></div></div>'
+         + '<div class="o-gp-plate o-gpr-body">'

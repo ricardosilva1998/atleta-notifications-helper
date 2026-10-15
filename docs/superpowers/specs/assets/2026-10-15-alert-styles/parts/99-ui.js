@@ -170,10 +170,20 @@ var LIVERIES = [
   { key: 'violet', name: 'Twitch violet', hex: '#9146FF' },
 ];
 function hexRgb(h) { var v = parseInt(h.slice(1), 16); return ((v >> 16) & 255) + ',' + ((v >> 8) & 255) + ',' + (v & 255); }
+/* The colour and its shades, as the OBS overlay sets them (objects/kit.js accentVars): today's samurai
+   looks read the shades, with today's reds as the fallbacks. */
+function accentShades(hex) {
+  var c = hexRgb(hex).split(',').map(Number);
+  function mix(to, t) { return '#' + c.map(function (x, i) { return ('0' + Math.round(x + (to[i] - x) * t).toString(16).toUpperCase()).slice(-2); }).join(''); }
+  var W = [255, 255, 255], K = [0, 0, 0];
+  return { '--a': hex, '--a-rgb': c.join(','), '--a-on': onColour(hex), '--a-on-rgb': hexRgb(onColour(hex)), '--a-hi': mix(W, .18), '--a-lo': mix(K, .2), '--a-deep': mix(K, .45),
+    '--a-night': mix(K, .72), '--a-ink': mix(K, .86), '--a-soft': mix([242, 230, 230], .5), '--a-tint': mix(W, .38) };
+}
+var SHADE_NAMES = ['--a', '--a-rgb', '--a-on', '--a-on-rgb', '--a-hi', '--a-lo', '--a-deep', '--a-night', '--a-ink', '--a-soft', '--a-tint'];
 function applyLivery() {
   var l = LIVERIES.find(function (x) { return x.key === state.livery; }), b = document.body.style;
-  if (!l || !l.hex) { b.removeProperty('--a'); b.removeProperty('--a-rgb'); b.removeProperty('--a-on'); }
-  else { b.setProperty('--a', l.hex); b.setProperty('--a-rgb', hexRgb(l.hex)); b.setProperty('--a-on', onColour(l.hex)); }
+  if (!l || !l.hex) SHADE_NAMES.forEach(function (n) { b.removeProperty(n); });
+  else { var v = accentShades(l.hex); SHADE_NAMES.forEach(function (n) { b.setProperty(n, v[n]); }); }
   document.querySelectorAll('[data-livery]').forEach(function (s) { s.setAttribute('aria-pressed', String(s.dataset.livery === state.livery)); });
 }
 function swatchHtml() {
@@ -366,7 +376,8 @@ var bmCanvas = document.getElementById('bm-canvas');
 new ResizeObserver(function () { bmCanvas.style.setProperty('--k', Math.min(1.3, bmCanvas.clientWidth / 460).toFixed(4)); }).observe(bmCanvas);
 function bmSel() { return byId(bm.sel[bm.alert]) || pickable(bm.alert)[0]; }
 function canLabel(p) { return !!(p.isNew || p.edit); }
-function canColour(p) { return !!(p.edit || (p.isNew && p.fam !== 'samurai')); }
+// Every look takes the streamer's colour (today's samurai looks and the omikuji included); the old giveaway card does not.
+function canColour(p) { return !p.before; }
 function bmData(p) { var d = sample(p.alert); if (canLabel(p) && bm.labels[p.id]) d.label = bm.labels[p.id]; return d; }
 function options(map, chosen) { return Object.keys(map).map(function (k) { return '<option value="' + k + '"' + (k === chosen ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join(''); }
 function bmRender(play) {

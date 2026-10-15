@@ -37,6 +37,9 @@ timed messages and the separate OBS sources (sponsors, tip goal, VTuber, iRacing
   Spooky, Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk and Frost. That is 108 looks (Appendix A).
 - Every look's colour is customizable by the streamer, today's samurai looks and the omikuji included (given with
   the spec's approval).
+- Later the same day, eight more families joined in proposal 5, every look in the streamer's colour: Neon Sign,
+  Deep Sea, Music, Stadium, Fireworks, Dino, UFO and Breaking News. That makes 26 families and 156 looks
+  (Appendix A). After release A went live, the owner chose to ship all 24 remaining families at once (8).
 
 ## 3. Goals and non-goals
 
@@ -341,9 +344,12 @@ other.
   - the columns, the catalogue, the kit and the joined files;
   - the overlay and builder changes, the sound and effect layers, and the translations;
   - the Samurai presets with the omikuji, and Racing with the giveaway improved in place.
-- **B — before Halloween (31 October):** Spooky, Grand Prix, Cockpit and Arcade.
-- **C:** Quest, Comic, Cozy, Cosmos and Glass.
-- **D — before December:** Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk and Frost.
+- **B — every other family at once** (decided 15 October, after release A went live): Grand Prix, Cockpit,
+  Arcade, Quest, Comic, Cozy, Cosmos, Glass, Spooky, Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk, Frost,
+  Neon Sign, Deep Sea, Music, Stadium, Fireworks, Dino, UFO and Breaking News: 24 families, 144 looks. It
+  replaces the three releases first planned (B before Halloween: Spooky, Grand Prix, Cockpit and Arcade; C: Quest,
+  Comic, Cozy, Cosmos and Glass; D before December: Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk and
+  Frost).
 
 Each release follows `docs/operations/deploy.md`: deploy while no streamer is live. An open OBS source reloads by
 itself when the server's version changes.
@@ -352,16 +358,16 @@ itself when the server's version changes.
 
 - **OBS's browser** is an older Chromium. The looks avoid what it lacks, but 3D (`preserve-3d`), animated
   `clip-path`, `-webkit-text-stroke`, masks and conic gradients need the check in OBS (7).
-- **Size:** about 650 KB of family code (around 110 KB compressed), loaded once per browser source and then
-  cached.
-- **Translation:** about 400 new texts in six languages, machine-translated like the rest, wanting a native
-  read-through.
-- **Seasonal families:** Spooky and Frost are worth shipping in season (8).
+- **Size:** with all 26 families, about 1.1 MB of family code (around 240 KB compressed, as Cloudflare sends
+  it), loaded once per browser source and version, then cached.
+- **Translation:** about 400 new texts in six languages for release A, and 480 more for release B,
+  machine-translated like the rest, wanting a native read-through.
+- **Seasonal families:** Spooky and Frost ship with release B, before Halloween and the winter.
 - **Long messages:** some donation looks type the message one character at a time, about 110 elements at most.
   Cozy and Grand Prix already do this.
 - **The giveaway changes for everyone on release A** (decided). Its saved colours and text carry over.
 
-## Appendix A — the 108 looks
+## Appendix A — the 156 looks
 
 "Grows with" names the number the picture shows. Sounds and effects are each look's defaults. Today's five keep
 today's sound and, as today, no screen effect.
@@ -476,3 +482,51 @@ today's sound and, as today, no screen effect.
 | Frost | `fro` | Donation | `donation-frost` | Hot cocoa | Grows with the amount | Cocoa pour and chime | None |
 | Frost | `fro` | Raid | `raid-frost` | Sleigh parade | Grows with the viewers | Sleigh bells | None |
 | Frost | `fro` | Giveaway | `giveaway-frost` | Northern lights | – | Aurora shimmer | Confetti |
+| Neon Sign | `neo` | Follow | `follow-neon` | Open sign | – | Neon buzz | None |
+| Neon Sign | `neo` | Subscriber | `subscriber-neon` | Motel sign | Months on the sign | Bulb chase and buzz | None |
+| Neon Sign | `neo` | Bits | `bits-neon` | Diner counter | Grows with the amount | Bulbs and a diner bell | Titanium sparks |
+| Neon Sign | `neo` | Donation | `donation-neon` | Billboard | – | Breaker, buzz and light box | None |
+| Neon Sign | `neo` | Raid | `raid-neon` | Street of signs | Grows with the viewers | A street of buzzes | None |
+| Neon Sign | `neo` | Giveaway | `giveaway-neon` | Marquee | – | Marquee chase and ta-da | Confetti |
+| Deep Sea | `sea` | Follow | `follow-deepsea` | Bubble up | – | Bubbles and a pop | None |
+| Deep Sea | `sea` | Subscriber | `subscriber-deepsea` | Pearl | Months on the pearl | Clam and shimmer | None |
+| Deep Sea | `sea` | Bits | `bits-deepsea` | School of fish | Grows with the amount | Swirling school | None |
+| Deep Sea | `sea` | Donation | `donation-deepsea` | Message in a bottle | – | Cork pop and scroll | None |
+| Deep Sea | `sea` | Raid | `raid-deepsea` | Pod | Grows with the viewers | Dolphin calls and splashes | None |
+| Deep Sea | `sea` | Giveaway | `giveaway-deepsea` | Jellyfish glow | – | Jellyfish glow | None |
+| Music | `mus` | Follow | `follow-music` | Needle drop | – | Needle drop and crackle | None |
+| Music | `mus` | Subscriber | `subscriber-music` | Equalizer | Months as the level | EQ sweep and chimes | None |
+| Music | `mus` | Bits | `bits-music` | Bass drop | Grows with the amount | Sub bass drop | Titanium sparks |
+| Music | `mus` | Donation | `donation-music` | Request line | – | Cassette clunk and jingle | None |
+| Music | `mus` | Raid | `raid-music` | Crowd | Grows with the viewers | Crowd cheer | Tyre smoke |
+| Music | `mus` | Giveaway | `giveaway-music` | Gold record | – | Record whoosh and fanfare | Confetti |
+| Stadium | `std` | Follow | `follow-stadium` | Jumbotron | – | Big screen and flash | None |
+| Stadium | `std` | Subscriber | `subscriber-stadium` | Season ticket | Months as the season | Turnstile and ticket | None |
+| Stadium | `std` | Bits | `bits-stadium` | Goal! | Grows with the amount | Kick, net and crowd roar | Confetti |
+| Stadium | `std` | Donation | `donation-stadium` | Sponsor board | – | Stadium PA chime | None |
+| Stadium | `std` | Raid | `raid-stadium` | Crowd wave | Grows with the viewers | Crowd wave and organ | None |
+| Stadium | `std` | Giveaway | `giveaway-stadium` | Trophy lift | – | Floodlights and fanfare | Champagne |
+| Fireworks | `fwk` | Follow | `follow-fireworks` | Sparkler | – | Sparkler fizz | None |
+| Fireworks | `fwk` | Subscriber | `subscriber-fireworks` | Countdown | Months in the burst | Countdown and boom | None |
+| Fireworks | `fwk` | Bits | `bits-fireworks` | Volley | Grows with the amount | Rocket volley | Titanium sparks |
+| Fireworks | `fwk` | Donation | `donation-fireworks` | Big shell | Grows with the amount | Big shell | None |
+| Fireworks | `fwk` | Raid | `raid-fireworks` | Barrage | Grows with the viewers | Barrage | None |
+| Fireworks | `fwk` | Giveaway | `giveaway-fireworks` | Grand finale | – | Willow and fanfare | Confetti |
+| Dino | `dno` | Follow | `follow-dino` | Footprints | – | Big stomps and a chirp | None |
+| Dino | `dno` | Subscriber | `subscriber-dino` | Egg hatch | Months on the egg | Egg crack and peep | Confetti |
+| Dino | `dno` | Bits | `bits-dino` | Volcano | Grows with the amount | Rumble and gem shower | Titanium sparks |
+| Dino | `dno` | Donation | `donation-dino` | Fossil dig | – | Brush strokes and a chime | None |
+| Dino | `dno` | Raid | `raid-dino` | Stampede | Grows with the viewers | Stampede | Tyre smoke |
+| Dino | `dno` | Giveaway | `giveaway-dino` | Amber | – | Drip and shimmer | Confetti |
+| UFO | `ufo` | Follow | `follow-ufo` | Beam up | – | Saucer hum and beam | None |
+| UFO | `ufo` | Subscriber | `subscriber-ufo` | Crop circle | Months in the field | Whirr and crop chime | None |
+| UFO | `ufo` | Bits | `bits-ufo` | Cow lift | Grows with the amount | Beam bloops and a moo | None |
+| UFO | `ufo` | Donation | `donation-ufo` | Transmission | – | Alien transmission | None |
+| UFO | `ufo` | Raid | `raid-ufo` | Invasion | Grows with the viewers | Fleet hum | None |
+| UFO | `ufo` | Giveaway | `giveaway-ufo` | Mothership | – | Mothership fanfare | Confetti |
+| Breaking News | `nws` | Follow | `follow-news` | Breaking | – | Breaking news sting | None |
+| Breaking News | `nws` | Subscriber | `subscriber-news` | Extra! Extra! | Months in the headline | Spinning paper and slap | None |
+| Breaking News | `nws` | Bits | `bits-news` | Market ticker | Grows with the amount | Market blips and bell | None |
+| Breaking News | `nws` | Donation | `donation-news` | Live report | – | Live cue and chime | None |
+| Breaking News | `nws` | Raid | `raid-news` | Weather map | Grows with the viewers | Wind and thunder | None |
+| Breaking News | `nws` | Giveaway | `giveaway-news` | Front page | – | Printing press | Confetti |

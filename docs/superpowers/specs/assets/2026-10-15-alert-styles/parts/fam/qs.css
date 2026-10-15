@@ -31,6 +31,8 @@
 .o-qsf-paper{position:absolute;left:16px;right:16px;top:10px;bottom:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;box-shadow:inset 0 0 16px rgba(120,76,24,.5),inset 0 0 2px rgba(80,50,15,.6),0 10px 24px rgba(0,0,0,.55)}
 .o-qsf-in{position:relative;z-index:1;min-width:0;max-width:100%;padding:0 28px}
 .o-qsf-in .o-qs-kicker{margin-bottom:3px}
+/* The name on the scroll is inked in a dark shade of the streamer's colour (the family's ink by default). */
+.o-qsf-in .o-qs-name{color:var(--a-deep,var(--qs-ink))}
 .o-qsf-line{position:relative;font-style:italic;font-weight:500;font-size:15px;line-height:1.2;color:#5B3A1E;margin-top:2px}
 .o-qsf-glint{position:absolute;top:-20%;bottom:-20%;left:-90px;width:70px;z-index:2;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,240,190,.8),transparent);transform:skewX(-18deg);opacity:0}
 .o-qsf-half{position:absolute;top:0;bottom:0;width:50%;z-index:3;pointer-events:none}
@@ -132,7 +134,7 @@
 .o-qsd-rod::after{right:-8px}
 .o-qsd-sheet{position:relative;margin:-6px 18px 0}
 .o-qsd-paper{position:relative;padding:20px 26px 29px;text-align:center;box-shadow:inset 0 0 18px rgba(120,76,24,.5),0 12px 26px rgba(0,0,0,.55)}
-.o-qsd-amt{position:relative;margin-top:6px;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:38px;line-height:1.05;color:#8A5A0C;text-shadow:0 1px 0 rgba(255,246,216,.9),0 0 16px rgba(var(--qsa-rgb),.45)}
+.o-qsd-amt{position:relative;margin-top:6px;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:38px;line-height:1.05;color:var(--a-deep,#8A5A0C);text-shadow:0 1px 0 rgba(255,246,216,.9),0 0 16px rgba(var(--qsa-rgb),.45)}
 .o-qsd-by{position:relative;margin-top:2px;font-style:italic;font-size:14px;color:#5B3A1E}
 .o-qsd .o-qs-name{font-size:calc(22px * var(--fit,1))}
 .o-qsd-msg{position:relative;margin:8px 56px 0;font-style:italic;font-weight:500;font-size:15px;line-height:1.3;color:#3A2410;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
@@ -195,19 +197,19 @@
 
 /* giveaway — Legendary loot: the item card flips over, rays turn behind it */
 .o-qsg{height:212px}
-.o-qsg-rays{position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(255,166,64,.42) 0 7deg,rgba(255,166,64,0) 7deg 20deg);-webkit-mask-image:radial-gradient(circle,#000 0 24%,transparent 66%);mask-image:radial-gradient(circle,#000 0 24%,transparent 66%)}
+.o-qsg-rays{position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(var(--a-rgb,255,166,64),.42) 0 7deg,rgba(var(--a-rgb,255,166,64),0) 7deg 20deg);-webkit-mask-image:radial-gradient(circle,#000 0 24%,transparent 66%);mask-image:radial-gradient(circle,#000 0 24%,transparent 66%)}
 .o-qsg-card{position:absolute;left:50%;top:6px;width:290px;height:200px;margin-left:-145px;perspective:900px}
 .o-qsg-flip{position:absolute;inset:0;transform-style:preserve-3d}
 .o-qsg-face{position:absolute;inset:0;overflow:hidden;border-radius:12px;-webkit-backface-visibility:hidden;backface-visibility:hidden}
 .o-qsg-back{transform:rotateY(180deg);display:grid;place-items:center;background:repeating-linear-gradient(45deg,#5B1A1A 0 10px,#4A1414 10px 20px);box-shadow:inset 0 0 0 3px var(--qsa),inset 0 0 0 7px #2A0A0A,inset 0 0 0 8px rgba(var(--qsa-rgb),.6)}
 .o-qsg-back i{width:70px;height:70px;transform:rotate(45deg);border:3px solid var(--qsa);box-shadow:inset 0 0 0 6px rgba(var(--qsa-rgb),.25)}
-.o-qsg-front{display:flex;flex-direction:column;align-items:center;padding:14px 18px;text-align:center;background:linear-gradient(170deg,#2C1A10,#160C06);box-shadow:inset 0 0 0 2px #FF9A2E,inset 0 0 0 5px #1A0E06,inset 0 0 0 6px rgba(255,154,46,.55),0 0 26px rgba(255,154,46,.55),0 14px 30px rgba(0,0,0,.6)}
-.o-qsg-rarity{font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:#FF9A2E}
+.o-qsg-front{display:flex;flex-direction:column;align-items:center;padding:14px 18px;text-align:center;background:linear-gradient(170deg,#2C1A10,#160C06);box-shadow:inset 0 0 0 2px var(--a,#FF9A2E),inset 0 0 0 5px #1A0E06,inset 0 0 0 6px rgba(var(--a-rgb,255,154,46),.55),0 0 26px rgba(var(--a-rgb,255,154,46),.55),0 14px 30px rgba(0,0,0,.6)}
+.o-qsg-rarity{font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--a,#FF9A2E)}
 .o-qsg-gem{position:relative;width:44px;height:44px;margin:8px auto 6px;clip-path:polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%);background:linear-gradient(160deg,#FFF3C4 0%,var(--qsa) 40%,#FF9A2E 70%,#8A4A0A 100%)}
 .o-qsg-gem::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.35) 0 50%,rgba(0,0,0,.18) 50%),linear-gradient(180deg,rgba(255,255,255,.25) 0 38%,transparent 38%)}
 .o-qsg .o-qs-name{max-width:100%;color:#FBE9C4;font-size:calc(23px * var(--fit,1))}
 .o-qsg-type{font-style:italic;font-size:14px;color:#D9B27A}
-.o-qsg-desc{width:100%;margin-top:8px;padding-top:7px;border-top:1px solid rgba(255,154,46,.35);font-size:14px;color:#EAD7AA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-qsg-desc{width:100%;margin-top:8px;padding-top:7px;border-top:1px solid rgba(var(--a-rgb,255,154,46),.35);font-size:14px;color:#EAD7AA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .o-qsg-desc b{color:#FBE9C4;font-weight:600}
 /* The fade and scale sit on the card, the turn on the flip: an opacity animation on the element
    that keeps the 3D (preserve-3d) flattens it, and then the back never shows. */
