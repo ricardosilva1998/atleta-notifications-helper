@@ -529,3 +529,85 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
     for (const name of classes) assert.ok(name === 'obj' || name === 'o-mesh' || name.startsWith('o-c1'), name);
   });
 });
+
+describe('objects.css — the C1 (donation-c1)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const defined = new Set([...css.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map((m) => m[1]));
+  const rule = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css);
+    assert.ok(m, `rule ${selector} exists`);
+    return m[1];
+  };
+
+  test('every keyframe the C1 names or plays is defined', () => {
+    const c1 = OBJECTS.STYLES['donation-c1'];
+    for (const name of [c1.anim.in, c1.exit.out]) assert.ok(defined.has(name), name);
+    const played = new Set([...bare.matchAll(/\bc1[A-Z][A-Za-z]*\b/g)].map((m) => m[0]));
+    assert.ok(played.size >= 16, 'the C1 has its own keyframes');
+    for (const name of played) assert.ok(defined.has(name), `${name} is played but not defined`);
+  });
+
+  test('every C1 selector is under .o-c1, so none of its classes can collide with the builder page', () => {
+    const selectors = [...bare.matchAll(/(^|\})\s*([^{}@]+)\{/g)].map((m) => m[2].trim()).filter((s) => /o-c1/.test(s));
+    assert.ok(selectors.length > 20);
+    for (const selector of selectors) {
+      for (const part of selector.split(',')) assert.match(part.trim(), /^(\.(playing|exiting) )?\.o-c1\b/, part.trim());
+    }
+  });
+
+  test('the car drives in and out across the whole OBS source, whatever its size', () => {
+    assert.ok(!/--fw\s*:/.test(rule('.o-c1')), '.o-c1 declares no --fw, so a parent (the builder preview) can set it');
+    assert.ok(css.includes('@keyframes c1Arrive{from{transform:translateX(calc(-1 * var(--fw, 100vw)))}to{transform:translateX(0)}}'));
+    assert.ok(css.includes('@keyframes c1Leave{from{transform:translateX(0)}to{transform:translateX(var(--fw, 100vw))}}'));
+  });
+
+  test('its exit outranks the shared .exiting .obj * that stops every other animation', () => {
+    assert.match(css, /\n\.exiting \.o-c1 \.o-c1-rig\{animation:c1Leave /);
+    assert.match(css, /\n\.exiting \.o-c1 \.o-c1-spin\{animation:c1SpinOut /);
+  });
+
+  test('the name stays on one line, cut with an ellipsis; the message has two lines at most', () => {
+    const from = rule('.o-c1 .o-c1-from');
+    assert.match(from, /white-space:\s*nowrap/);
+    assert.match(from, /overflow:\s*hidden/);
+    assert.match(from, /text-overflow:\s*ellipsis/);
+    assert.match(rule('.o-c1 .o-c1-msg'), /-webkit-line-clamp:\s*2/);
+    assert.match(rule('.o-c1 .o-c1-amt'), /white-space:\s*nowrap/);
+  });
+
+  test('the car takes 39 % of the alert, at most 230px, and the board the rest less the hitch', () => {
+    assert.match(rule('.o-c1'), /--o-c1-cw:\s*min\(39%,\s*230px\)/);
+    assert.match(rule('.o-c1 .o-c1-car'), /width:\s*var\(--o-c1-cw\)/);
+    assert.match(rule('.o-c1 .o-c1-trailer'), /width:\s*calc\(100% - var\(--o-c1-cw\) - 14px\)/);
+    assert.match(rule('.o-c1 .o-c1-board'), /box-sizing:\s*border-box/);
+  });
+
+  test('the message and the name are never squeezed: a flex item that clips would shrink below its lines', () => {
+    assert.match(rule('.o-c1 .o-c1-msg'), /(?:^|;)flex:\s*none/);
+    assert.match(rule('.o-c1 .o-c1-from'), /(?:^|;)flex:\s*none/);
+  });
+
+  test('the board holds its worst case in its 126px: the 46px amount, two message lines and the name', () => {
+    const num = (text, re, what) => { const m = re.exec(text); assert.ok(m, `${what} is declared`); return Number(m[1]); };
+    const optional = (text, re) => { const m = re.exec(text); return m ? Number(m[1]) : 0; };
+    const lineBox = (selector, size) => {
+      const body = rule(selector);
+      return num(body, size, `${selector} font-size`) * num(body, /(?:^|;)line-height:\s*([\d.]+)(?:;|$)/, `${selector} line-height`);
+    };
+    const board = rule('.o-c1 .o-c1-board');
+    const room = num(board, /(?:^|;)height:\s*([\d.]+)px/, 'the board height')
+      - num(board, /(?:^|;)padding:\s*([\d.]+)px\s+[\d.]+px\s+[\d.]+px/, 'the top padding')
+      - num(board, /(?:^|;)padding:\s*[\d.]+px\s+[\d.]+px\s+([\d.]+)px/, 'the bottom padding');
+    const gaps = 3 * num(board, /(?:^|;)gap:\s*([\d.]+)px/, 'the gap');
+    const margins = ['.o-c1 .o-c1-amt', '.o-c1 .o-c1-from'].reduce((sum, s) => sum + optional(rule(s), /(?:^|;)margin-top:\s*([\d.]+)px/), 0);
+    const px = /(?:^|;)font-size:\s*([\d.]+)px/;
+    const need = lineBox('.o-c1 .o-c1-head', px)
+      + lineBox('.o-c1 .o-c1-amt', /(?:^|;)font-size:\s*calc\(([\d.]+)px/)
+      + 2 * lineBox('.o-c1 .o-c1-msg', px)
+      + lineBox('.o-c1 .o-c1-from', px)
+      + gaps + margins;
+    assert.ok(need <= room, `the worst case needs ${need}px between the paddings and the board has ${room}px`);
+  });
+});
