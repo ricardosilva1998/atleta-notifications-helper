@@ -486,6 +486,8 @@
     #preview-object-host {
       position: relative;
       width: 420px;
+      /* How far a car drives in and out (the C1 style): the preview screen is the 1920px canvas, scaled */
+      --fw: 1920px;
     }
     .preview-alert-card .top-accent {
       height: 3px; border-radius: 16px 16px 0 0;
@@ -1215,6 +1217,11 @@ function copyBuilderUrl(id, btn) {
 const SAVED_DESIGNS = {};
 const SERVER_DESIGNS = <%- designs %>;
 SERVER_DESIGNS.forEach(d => { SAVED_DESIGNS[d.event_type] = d; });
+// Each alert's stored style (overlay_designs.style; andre_vilela_'s donation is 'donation-c1').
+// Kept apart from workingDesigns: Reset and Discard rebuild those from the defaults, and the
+// server keeps the style through both, so the preview must too. The builder never sends it.
+const ALERT_STYLES = {};
+SERVER_DESIGNS.forEach(d => { if (d.style) ALERT_STYLES[d.event_type] = d.style; });
 
 // Default side icons per event type (null = no icon)
 const DEFAULT_SIDE_ICONS = {
@@ -1425,6 +1432,17 @@ const PREVIEW_DATA = {
   raid:         { username: 'GridWalker', viewers: 42 },
 };
 
+// The object an alert's preview draws: the same rule as objectFor() in public/overlay/overlay.js,
+// reading the stored styles. null for the alerts that are legacy cards.
+function previewObjectFor(type) {
+  const styleId = ALERT_STYLES[type];
+  const styles = window.ATLETA_OBJECT_STYLES || {};
+  const styled = styleId ? styles[styleId] : null;
+  if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[type];
+  return own && own.key === type ? own : null;
+}
+
 // The five object event types take only their position and width from a saved
 // design for now (colours and animations are not styled yet), so their colour,
 // text, icon and animation controls are hidden rather than left live and inert.
@@ -1432,7 +1450,7 @@ const PREVIEW_DATA = {
 // in the preview all apply to the real alert. Border radius does not (an object
 // has its own shape), so that one slider is hidden.
 function syncPhase1Controls() {
-  const isObject = !!(window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType]);
+  const isObject = !!previewObjectFor(currentType);
   const notice = document.getElementById('phase1-notice');
   if (notice) notice.style.display = isObject ? '' : 'none';
   ['section-theme', 'section-text', 'section-sideicon', 'section-animation'].forEach(id => {
@@ -1445,7 +1463,7 @@ function syncPhase1Controls() {
 
 function updatePreview() {
   syncPhase1Controls();
-  const objDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[currentType];
+  const objDef = previewObjectFor(currentType);
   const objHost = document.getElementById('preview-object-host');
   const legacyCard = document.getElementById('preview-card');
   if (objDef) {

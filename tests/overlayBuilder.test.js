@@ -119,3 +119,45 @@ describe('the font picker', () => {
     assert.match(functionSource('buildFontGallery'), /div\.dataset\.font = f\.name;/);
   });
 });
+
+describe("an alert's saved style (andre_vilela_'s C1)", () => {
+  const vm = require('node:vm');
+  const OBJECTS = require('../public/overlay/objects/index.js');
+
+  // previewObjectFor on its own, in a page that has the registry and the given stored styles.
+  function pick(type, alertStyles) {
+    const context = vm.createContext({ window: { ATLETA_OBJECTS: OBJECTS, ATLETA_OBJECT_STYLES: OBJECTS.STYLES }, ALERT_STYLES: alertStyles });
+    vm.runInContext(functionSource('previewObjectFor'), context);
+    return vm.runInContext(`previewObjectFor(${JSON.stringify(type)})`, context);
+  }
+
+  test('the preview draws the object the overlay would: the C1 for a donation styled donation-c1', () => {
+    assert.equal(pick('donation', { donation: 'donation-c1' }).key, 'donation-c1');
+    assert.equal(pick('donation', {}).key, 'donation');
+    assert.equal(pick('follow', { follow: 'donation-c1' }).key, 'follow', 'a style for another alert is ignored');
+    assert.equal(pick('donation', { donation: 'donation-gp' }).key, 'donation', 'so is an unknown one');
+    assert.equal(pick('donation', { donation: '__proto__' }).key, 'donation');
+    assert.equal(pick('giveaway_winner', {}), null, 'a legacy card has no object');
+  });
+
+  test('the stored styles are read once from the server\'s designs, apart from the working copy', () => {
+    assert.match(builder, /const ALERT_STYLES = \{\};\s*SERVER_DESIGNS\.forEach\(d => \{ if \(d\.style\) ALERT_STYLES\[d\.event_type\] = d\.style; \}\);/);
+  });
+
+  test('the preview and the controls use that pick, never the alert\'s own object directly', () => {
+    assert.match(functionSource('updatePreview'), /const objDef = previewObjectFor\(currentType\);/);
+    assert.match(functionSource('syncPhase1Controls'), /previewObjectFor\(currentType\)/);
+    assert.ok(!/ATLETA_OBJECTS\[currentType\]/.test(builder), 'no lookup skips the style');
+  });
+
+  test('Reset and Discard leave the stored style alone (the server keeps it), and no save sends one', () => {
+    for (const name of ['resetCurrentDesign', 'discardChanges', 'saveCurrentDesign']) {
+      assert.ok(!functionSource(name).includes('ALERT_STYLES'), name);
+    }
+    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')), 'the saved payload has no style');
+  });
+
+  test('the car drives in from the edge of the preview screen (the 1920px canvas, scaled)', () => {
+    assert.match(builder, /#preview-object-host \{[^}]*--fw: 1920px;/);
+  });
+});
