@@ -1,0 +1,144 @@
+diff --git a/public/overlay/objects/styles/arcade.css b/public/overlay/objects/styles/arcade.css
+index e181482..af8b75f 100644
+--- a/public/overlay/objects/styles/arcade.css
++++ b/public/overlay/objects/styles/arcade.css
+@@ -22,11 +22,11 @@
+ .o-arf-plate > :not(.o-arf-lines){position:relative;z-index:1;max-width:100%}
+ .o-arf-lbl{color:var(--ar-c)}
+ .o-arf-lines{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+-.o-arf-lines i{position:absolute;right:0;height:3px;background:#fff;box-shadow:0 0 6px #fff;opacity:0}
++.o-arf-line{position:absolute;right:0;height:3px;background:#fff;box-shadow:0 0 6px #fff;opacity:0}
+ @keyframes arfLine{0%{transform:translateX(160px) scaleX(.3);opacity:0}25%{opacity:.85}100%{transform:translateX(-520px) scaleX(1);opacity:0}}
+-.playing .o-arf-lines i{animation:arfLine calc(.5s / var(--spd)) linear calc(var(--ld) / var(--spd)) both}
++.playing .o-arf-line{animation:arfLine calc(.5s / var(--spd)) linear calc(var(--ld) / var(--spd)) both}
+ .playing .o-arf-title{animation:arZoom calc(.46s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.1s / var(--spd)) both,arHue calc(.5s / var(--spd)) linear calc(.62s / var(--spd)) 2}
+-.playing .o-arf-lbl{animation:arIn .01s linear calc(.5s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(.52s / var(--spd)) 4}
++.playing .o-arf-lbl{animation:arIn calc(.01s / var(--spd)) linear calc(.5s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(.52s / var(--spd)) 4}
+ 
+ /* subscriber — Stage clear */
+ .o-ars{height:176px}
+@@ -47,8 +47,8 @@
+ .playing .o-ars-sun{animation:arsSun calc(.6s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.2s / var(--spd)) both}
+ .playing .o-ars-grid{animation:arsGrid calc(.22s / var(--spd)) linear calc(.1s / var(--spd)) 12}
+ .playing .o-ars-stage{animation:arZoom calc(.46s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.5s / var(--spd)) both,arHue calc(.6s / var(--spd)) linear calc(1s / var(--spd))}
+-.playing .o-ars-sub{animation:arIn .01s linear calc(.86s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(.88s / var(--spd)) 4}
+-.playing .o-ars-band{animation:arIn .01s linear calc(1s / var(--spd)) both}
++.playing .o-ars-sub{animation:arIn calc(.01s / var(--spd)) linear calc(.86s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(.88s / var(--spd)) 4}
++.playing .o-ars-band{animation:arIn calc(.01s / var(--spd)) linear calc(1s / var(--spd)) both}
+ 
+ /* bits — Bonus! */
+ .o-arb{height:132px}
+@@ -67,16 +67,16 @@
+ @keyframes arbCoin{0%{opacity:0;transform:translate(0,0) scaleX(1)}8%{opacity:1}25%{transform:translate(calc(var(--cx) * .3),var(--cy)) scaleX(.2)}50%{transform:translate(calc(var(--cx) * .6),calc(var(--cy) * 1.2)) scaleX(1)}75%{transform:translate(calc(var(--cx) * .85),calc(var(--cy) * .6)) scaleX(.2)}100%{opacity:0;transform:translate(var(--cx),60px) scaleX(1)}}
+ .playing .o-arb-plus{animation:arbPlus calc(.42s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.18s / var(--spd)) both,arHue calc(.5s / var(--spd)) linear calc(.7s / var(--spd)) 2}
+ .playing .o-arb-coin{animation:arbCoin calc(.9s / var(--spd)) linear calc(var(--cd) / var(--spd)) both}
+-.playing .o-arb-bonus{animation:arIn .01s linear calc(.9s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(.92s / var(--spd)) 5}
+-.playing .o-arb.lvl-big .o-arb-bonus{animation:arIn .01s linear calc(.9s / var(--spd)) both,arTxtHue calc(.5s / var(--spd)) linear calc(.92s / var(--spd)) 6}
+-.playing .o-arb .o-ar-name{animation:arIn .01s linear calc(.62s / var(--spd)) both}
++.playing .o-arb-bonus{animation:arIn calc(.01s / var(--spd)) linear calc(.9s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(.92s / var(--spd)) 5}
++.playing .o-arb.lvl-big .o-arb-bonus{animation:arIn calc(.01s / var(--spd)) linear calc(.9s / var(--spd)) both,arTxtHue calc(.5s / var(--spd)) linear calc(.92s / var(--spd)) 6}
++.playing .o-arb .o-ar-name{animation:arIn calc(.01s / var(--spd)) linear calc(.62s / var(--spd)) both}
+ 
+ /* donation — New record! */
+ .o-ard{height:192px}
+ .o-ard-title{position:absolute;left:0;right:0;top:0;z-index:4;text-align:center;font-size:38px}
+ .o-ard-plate{position:absolute;left:8px;right:8px;top:30px;bottom:8px;padding:22px 12px 10px}
+ .o-ard-head{position:relative;z-index:1;display:grid;grid-template-columns:44px 1fr auto;gap:8px;margin-bottom:6px;color:var(--ar-c);font-size:8px}
+-.o-ard-head span:last-child{text-align:right}
++.o-ard-col:last-child{text-align:right}
+ .o-ard-rows{position:relative;z-index:1;height:66px;overflow:hidden}
+ .o-ard-rank{position:absolute;left:0;top:calc(var(--r) * 22px);width:44px;height:20px;font-size:9px;line-height:20px;color:var(--ar-y)}
+ .o-ard-row{position:absolute;left:52px;right:0;top:calc(var(--r) * 22px);height:20px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 5px;font-size:10px;line-height:20px}
+@@ -111,10 +111,10 @@
+ @keyframes arrCar{from{transform:translateX(-440px)}to{transform:none}}
+ .playing .o-arr-haz{animation:arrHaz calc(.25s / var(--spd)) linear 10}
+ .playing .o-arr-warn{animation:arZoom calc(.4s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.08s / var(--spd)) both,arBlink calc(.2s / var(--spd)) steps(1) calc(.5s / var(--spd)) 4}
+-.playing .o-arr-sub{animation:arIn .01s linear calc(.62s / var(--spd)) both}
+-.playing .o-arr .o-ar-name{animation:arIn .01s linear calc(.74s / var(--spd)) both}
++.playing .o-arr-sub{animation:arIn calc(.01s / var(--spd)) linear calc(.62s / var(--spd)) both}
++.playing .o-arr .o-ar-name{animation:arIn calc(.01s / var(--spd)) linear calc(.74s / var(--spd)) both}
+ .playing .o-arr-car{animation:arrCar calc(.6s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc((.85s + var(--ci) * .08s) / var(--spd)) both}
+-.playing .o-arr-count{animation:arIn .01s linear calc(.9s / var(--spd)) both}
++.playing .o-arr-count{animation:arIn calc(.01s / var(--spd)) linear calc(.9s / var(--spd)) both}
+ 
+ /* giveaway — Winner! */
+ .o-arg{height:192px}
+@@ -125,13 +125,13 @@
+ .o-arg-lbl{color:var(--ar-c)}
+ .o-arg-prize{color:var(--ar-y);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .o-arg-conf{position:absolute;inset:0;z-index:4;overflow:hidden;pointer-events:none}
+-.o-arg-conf i{position:absolute;top:-10px;left:var(--x);width:6px;height:6px;background:var(--cc);opacity:0}
++.o-arg-piece{position:absolute;top:-10px;left:var(--x);width:6px;height:6px;background:var(--cc);opacity:0}
+ @keyframes argBurst{from{transform:scale(0) rotate(0deg);opacity:0}to{transform:rotate(90deg);opacity:1}}
+ @keyframes argSpin{from{transform:rotate(90deg)}to{transform:rotate(450deg)}}
+ @keyframes argConf{0%{opacity:0;transform:translateY(0) rotate(0deg)}10%{opacity:1}100%{opacity:0;transform:translateY(210px) rotate(var(--rot))}}
+ .playing .o-arg-burst{animation:argBurst calc(.5s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.1s / var(--spd)) both,argSpin calc(9s / var(--spd)) linear calc(.6s / var(--spd)) 2}
+ .playing .o-arg-title{animation:arZoom calc(.5s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.18s / var(--spd)) both,arHue calc(.6s / var(--spd)) linear calc(.75s / var(--spd)) 3}
+ .playing .o-arg-plate{animation:arPop calc(.24s / var(--spd)) steps(4) calc(.4s / var(--spd)) both}
+-.playing .o-arg-lbl{animation:arIn .01s linear calc(.62s / var(--spd)) both}
+-.playing .o-arg-prize{animation:arIn .01s linear calc(1.2s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(1.22s / var(--spd)) 3}
+-.playing .o-arg-conf i{animation:argConf calc(var(--du) / var(--spd)) steps(12) calc(var(--dd) / var(--spd)) both}
++.playing .o-arg-lbl{animation:arIn calc(.01s / var(--spd)) linear calc(.62s / var(--spd)) both}
++.playing .o-arg-prize{animation:arIn calc(.01s / var(--spd)) linear calc(1.2s / var(--spd)) both,arBlink calc(.16s / var(--spd)) steps(1) calc(1.22s / var(--spd)) 3}
++.playing .o-arg-piece{animation:argConf calc(var(--du) / var(--spd)) steps(12) calc(var(--dd) / var(--spd)) both}
+diff --git a/public/overlay/objects/styles/arcade.js b/public/overlay/objects/styles/arcade.js
+index 9a39122..f614e63 100644
+--- a/public/overlay/objects/styles/arcade.js
++++ b/public/overlay/objects/styles/arcade.js
+@@ -34,7 +34,7 @@
+     len: function (d) { return 0.7 + Array.from(d.username || '').length * 0.045; },
+     render: function (d) {
+       var t = typed(d.username, 0.62, 0.045, 40), lines = '', widths = [120, 180, 90, 150, 110], tops = [20, 36, 54, 70, 86];
+-      for (var i = 0; i < 5; i++) lines += '<i style="top:' + tops[i] + '%;width:' + widths[i] + 'px;--ld:' + (0.05 + i * 0.05).toFixed(2) + 's"></i>';
++      for (var i = 0; i < 5; i++) lines += '<i class="o-arf-line" style="top:' + tops[i] + '%;width:' + widths[i] + 'px;--ld:' + (0.05 + i * 0.05).toFixed(2) + 's"></i>';
+       return '<div class="obj o-ar o-arf"><div class="o-arf-title o-ar-chrome">CHECKPOINT!</div>'
+         + '<div class="o-ar-plate o-ar-scan o-arf-plate"><div class="o-arf-lines">' + lines + '</div>'
+         + '<div class="o-ar-px o-arf-lbl">' + label(d, 'New racer joined') + '</div>'
+@@ -56,11 +56,11 @@
+     },
+   });
+   K.register({
+-    key: 'bits-arcade', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-arcade', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'coins', fx: 'confetti', anim: AR_IN, exit: AR_EXIT, len: 1.4,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), lvl = n >= 1000 ? 'big' : n >= 100 ? 'medium' : 'small';
+-      var count = { small: 4, medium: 7, big: 12 }[lvl], r = rng(hash(d.username + n)), coins = '';
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), lvl = size >= 1000 ? 'big' : size >= 100 ? 'medium' : 'small';
++      var count = { small: 4, medium: 7, big: 12 }[lvl], r = rng(hash(d.username + size)), coins = '';
+       for (var i = 0; i < count; i++) coins += '<i class="o-arb-coin" style="--cx:' + (-70 + r() * 260).toFixed(0) + 'px;--cy:' + (-40 - r() * 50).toFixed(0) + 'px;--cd:' + (0.3 + i * 0.06).toFixed(2) + 's"></i>';
+       return '<div class="obj o-ar o-arb lvl-' + lvl + '"><div class="o-arb-plus o-ar-chrome">+' + fmt(n) + '</div>'
+         + '<div class="o-ar-plate o-ar-scan o-arb-plate"><div class="o-arb-cred"><span class="o-ar-px">Credits</span><b>' + odo(String(n).padStart(6, '0'), 0.3, 0.75) + '</b></div>'
+@@ -76,7 +76,7 @@
+       var amt = Number(d.amount) || 0, n = Array.from(d.message || '').length;
+       var t = typed(d.message || '', 1.15, Math.min(0.03, 1.6 / Math.max(1, n)), 120);
+       return '<div class="obj o-ar o-ard"><div class="o-ard-title o-ar-chrome">NEW RECORD!</div>'
+-        + '<div class="o-ar-plate o-ar-scan o-ard-plate"><div class="o-ard-head o-ar-px"><span>Rank</span><span>Name</span><span>Score</span></div>'
++        + '<div class="o-ar-plate o-ar-scan o-ard-plate"><div class="o-ard-head o-ar-px"><span class="o-ard-col">Rank</span><span class="o-ard-col">Name</span><span class="o-ard-col">Score</span></div>'
+         + '<div class="o-ard-rows"><span class="o-ard-rank" style="--r:0">1ST</span><span class="o-ard-rank" style="--r:1">2ND</span><span class="o-ard-rank" style="--r:2">3RD</span>'
+         + '<div class="o-ard-row ghost" style="--r:1"><span>ACE</span><span>' + esc(money((amt * 0.8).toFixed(2), d.currency)) + '</span></div>'
+         + '<div class="o-ard-row ghost" style="--r:2"><span>JET</span><span>' + esc(money((amt * 0.45).toFixed(2), d.currency)) + '</span></div>'
+@@ -86,11 +86,11 @@
+     },
+   });
+   K.register({
+-    key: 'raid-arcade', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-arcade', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'siren', fx: 'none', anim: { in: 'arrShake', dur: '0.5s', ease: 'linear' }, exit: AR_EXIT,
+-    len: function (d) { return 1.5 + Math.min(10, intOf(d.viewers)) * 0.08; },
++    len: function (d) { return 1.5 + Math.min(10, intOf(K.sizeOf(d, 'raid'))) * 0.08; },
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 10), cars = '';
++      var v = intOf(d.viewers), n = Math.min(intOf(K.sizeOf(d, 'raid')), 10), cars = '';
+       for (var i = 0; i < n; i++) cars += '<i class="o-arr-car" style="--ci:' + i + ';--cn:' + n + ';--cc:' + AR_PAL[i % AR_PAL.length] + '"></i>';
+       return '<div class="obj o-ar o-arr"><div class="o-arr-haz t"></div>'
+         + '<div class="o-ar-plate o-ar-scan o-arr-plate"><div class="o-arr-warn o-ar-chrome">WARNING!</div>'
+@@ -107,7 +107,7 @@
+     len: function (d) { return 1.3 + Array.from(d.username || '').length * 0.045; },
+     render: function (d) {
+       var t = typed(d.username, 0.66, 0.045, 40), r = rng(hash(d.username)), conf = '';
+-      for (var i = 0; i < 18; i++) conf += '<i style="--x:' + (r() * 100).toFixed(0) + '%;--cc:' + AR_PAL[i % AR_PAL.length] + ';--rot:' + (180 + r() * 540).toFixed(0) + 'deg;--du:' + (1.1 + r() * 0.8).toFixed(2) + 's;--dd:' + (0.5 + r() * 0.6).toFixed(2) + 's"></i>';
++      for (var i = 0; i < 18; i++) conf += '<i class="o-arg-piece" style="--x:' + (r() * 100).toFixed(0) + '%;--cc:' + AR_PAL[i % AR_PAL.length] + ';--rot:' + (180 + r() * 540).toFixed(0) + 'deg;--du:' + (1.1 + r() * 0.8).toFixed(2) + 's;--dd:' + (0.5 + r() * 0.6).toFixed(2) + 's"></i>';
+       return '<div class="obj o-ar o-arg"><div class="o-arg-burst"></div><div class="o-arg-title o-ar-chrome">WINNER!</div>'
+         + '<div class="o-ar-plate o-ar-scan o-arg-plate"><div class="o-ar-px o-arg-lbl">' + label(d, 'Giveaway · player 1') + '</div>'
+         + '<div class="o-ar-name o-typed" style="' + fitStyle(d.username, 22) + t.style + '">' + t.html + '</div>'

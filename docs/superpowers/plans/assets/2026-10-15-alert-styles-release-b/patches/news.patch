@@ -1,0 +1,32 @@
+diff --git a/public/overlay/objects/styles/news.js b/public/overlay/objects/styles/news.js
+index 337f0b8..d3b9c50 100644
+--- a/public/overlay/objects/styles/news.js
++++ b/public/overlay/objects/styles/news.js
+@@ -177,10 +177,10 @@
+ 
+   /* ── bits — Market ticker ── */
+   K.register({
+-    key: 'bits-news', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-news', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'nwsBits', fx: 'none', anim: hold('1.8s'), exit: WIPE_OUT, len: 1.85,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), c = chart(n, hash(d.username + n));
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = K.sizeOf(d, 'bits'), c = chart(size, hash(d.username + size));
+       var line = 'M' + c.pts.map(function (p) { return f1(p[0]) + ' ' + f1(p[1]); }).join('L');
+       return '<div class="obj o-nws o-nwsb"><div class="o-nwsb-panel o-nws-navy">'
+         + '<div class="o-nwsb-head"><div class="o-nwsb-chip o-nws-acc"><span class="o-nws-clip">' + label(d, n >= 1000 ? 'Record high' : 'Cheer index') + '</span></div>'
+@@ -216,11 +216,11 @@
+ 
+   /* ── raid — Weather map ── */
+   K.register({
+-    key: 'raid-news', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-news', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'nwsRaid', fx: 'none', anim: hold('1.8s'), exit: WIPE_OUT, len: 1.8,
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 12), r = rng(hash(d.username + v)), clouds = '';
+-      var cw = n <= 4 ? 44 : n <= 8 ? 40 : 36, ri = Math.min(0.88, 0.36 + Math.log10(v + 1) * 0.17);
++      var v = intOf(d.viewers), size = K.sizeOf(d, 'raid'), n = Math.min(size, 12), r = rng(hash(d.username + size)), clouds = '';
++      var cw = n <= 4 ? 44 : n <= 8 ? 40 : 36, ri = Math.min(0.88, 0.36 + Math.log10(size + 1) * 0.17);
+       for (var i = 0; i < n; i++) {
+         var col = CELLS[i] % 4, row = Math.floor(CELLS[i] / 4);
+         var cx = 44 + col * 64 + (r() - 0.5) * 16, cy = 27 + row * 34 + (r() - 0.5) * 8;

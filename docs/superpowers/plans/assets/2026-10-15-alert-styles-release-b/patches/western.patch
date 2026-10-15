@@ -1,0 +1,43 @@
+diff --git a/public/overlay/objects/styles/western.js b/public/overlay/objects/styles/western.js
+index c334520..1960311 100644
+--- a/public/overlay/objects/styles/western.js
++++ b/public/overlay/objects/styles/western.js
+@@ -190,11 +190,11 @@
+ 
+   /* ── bits — Gold pan ── */
+   K.register({
+-    key: 'bits-western', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-western', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'wstBits', fx: 'sparks', anim: hold('1.6s'), exit: exit('wstPanOut', '0.42s'),
+-    len: function (d) { return pour(intOf(d.amount != null ? d.amount : d.bits)).len; },
++    len: function (d) { return pour(intOf(K.sizeOf(d, 'bits'))).len; },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), p = pour(n), r = rng(hash(d.username + n)), spots = [], left = p.count, i;
++      var n = intOf(d.amount != null ? d.amount : d.bits), heap = intOf(K.sizeOf(d, 'bits')), p = pour(heap), r = rng(hash(d.username + heap)), spots = [], left = p.count, i;
+       // Rows of the heap inside the pan: [how many fit, height, half width]; each row fills from the middle out.
+       [[7, 50, 56], [6, 41, 45], [5, 32, 34]].forEach(function (row) {
+         var k = Math.min(row[0], left), sp = (2 * row[2]) / (row[0] - 1), order = [], j;
+@@ -206,7 +206,7 @@
+       if (p.lode) spots.push([80, 23, 1]);
+       var nuggets = '', shine = [];
+       for (i = 0; i < spots.length; i++) {
+-        var big = spots[i][2], s = big ? 27 : 15 + r() * 5 + (n >= 1000 ? 2 : 0);
++        var big = spots[i][2], s = big ? 27 : 15 + r() * 5 + (heap >= 1000 ? 2 : 0);
+         var x = spots[i][0] + (big ? 0 : (r() - 0.5) * 5), y = spots[i][1] + (big ? 0 : (r() - 0.5) * 3);
+         nuggets += '<i class="o-wstb-nug k' + (i % 3) + '" style="--x:' + x.toFixed(1) + 'px;--y:' + y.toFixed(1) + 'px;--s:' + s.toFixed(1) + 'px;--r:' + Math.round(r() * 80 - 40)
+           + 'deg;--fx:' + Math.round((r() - 0.5) * 30) + 'px;--nd:' + (0.25 + i * p.st).toFixed(3) + 's"></i>';
+@@ -246,11 +246,11 @@
+ 
+   /* ── raid — Posse ── */
+   K.register({
+-    key: 'raid-western', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-western', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'wstRaid', fx: 'smoke', anim: hold('1.4s'), exit: exit('wstRideOff', '0.45s'),
+-    len: function (d) { return posse(intOf(d.viewers)).len; },
++    len: function (d) { return posse(intOf(K.sizeOf(d, 'raid'))).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), q = posse(v), n = q.n, sp = n > 1 ? Math.min(46, 300 / (n - 1)) : 0, riders = '', far = '', puffs = [], i;
++      var v = intOf(d.viewers), q = posse(intOf(K.sizeOf(d, 'raid'))), n = q.n, sp = n > 1 ? Math.min(46, 300 / (n - 1)) : 0, riders = '', far = '', puffs = [], i;
+       for (i = 0; i < n; i++) {
+         var back = i % 2 === 1, w = back ? 36.8 : 46, cx = 210 + ((n - 1) / 2 - i) * sp, rd = 0.3 + i * 0.07;
+         riders += '<div class="o-wstr-rider' + (back ? ' back' : '') + '" style="--x:' + Math.round(cx - w / 2) + 'px;--rd:' + rd.toFixed(2) + 's">' + RIDER + '</div>';

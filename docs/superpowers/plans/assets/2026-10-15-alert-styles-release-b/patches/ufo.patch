@@ -1,0 +1,34 @@
+diff --git a/public/overlay/objects/styles/ufo.js b/public/overlay/objects/styles/ufo.js
+index d151433..2b55f9d 100644
+--- a/public/overlay/objects/styles/ufo.js
++++ b/public/overlay/objects/styles/ufo.js
+@@ -224,11 +224,11 @@
+   }
+ 
+   K.register({
+-    key: 'bits-ufo', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-ufo', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'ufoBits', fx: 'none', anim: hold('1.5s'), exit: UFO_SUCK,
+-    len: function (d) { return Math.max(1.4, 0.72 + (cowCount(intOf(d.amount != null ? d.amount : d.bits)) - 1) * 0.11 + 0.64); },
++    len: function (d) { return Math.max(1.4, 0.72 + (cowCount(K.sizeOf(d, 'bits')) - 1) * 0.11 + 0.64); },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), c = cowCount(n), cows = '';
++      var n = intOf(d.amount != null ? d.amount : d.bits), c = cowCount(K.sizeOf(d, 'bits')), cows = '';
+       for (var i = 0; i < c; i++) {
+         var s = COW_SLOTS[i], w = s[3], h = Math.round(w * 30 / 44);
+         cows += '<i class="o-ufob-cow" style="left:' + n1(s[0] - w / 2) + 'px;top:' + n1(s[1] - h / 2) + 'px;width:' + w + 'px;height:' + h
+@@ -332,11 +332,11 @@
+   }
+ 
+   K.register({
+-    key: 'raid-ufo', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-ufo', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'ufoRaid', fx: 'none', anim: hold('1.5s'), exit: UFO_ZIP,
+-    len: function (d) { return fleet(intOf(d.viewers)).len; },
++    len: function (d) { return fleet(K.sizeOf(d, 'raid')).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), f = fleet(v), ships = '', far = '', bd = '--bd:' + (f.land - 0.04).toFixed(2) + 's';
++      var v = intOf(d.viewers), f = fleet(K.sizeOf(d, 'raid')), ships = '', far = '', bd = '--bd:' + (f.land - 0.04).toFixed(2) + 's';
+       f.order.forEach(function (s, i) {
+         var p = SLOTS[s], w = p[2], h = w * 64 / 120;
+         ships += '<div class="o-ufo-sau o-ufor-ship" style="left:' + n1(p[0] - w / 2) + 'px;top:' + n1(p[1] - h / 2) + 'px;width:' + w + 'px;height:' + n1(h)

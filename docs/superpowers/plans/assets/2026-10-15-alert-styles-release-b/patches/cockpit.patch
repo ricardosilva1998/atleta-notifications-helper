@@ -1,0 +1,202 @@
+diff --git a/public/overlay/objects/styles/cockpit.css b/public/overlay/objects/styles/cockpit.css
+index 83cc9ce..bdc6c0e 100644
+--- a/public/overlay/objects/styles/cockpit.css
++++ b/public/overlay/objects/styles/cockpit.css
+@@ -23,8 +23,8 @@
+ .o-ckf-gear{position:relative;flex:none;width:54px;height:58px;border-radius:10px;background:#06080B;box-shadow:inset 0 0 0 2px rgba(var(--cka-rgb),.6),0 0 14px rgba(var(--cka-rgb),.18);display:grid;place-items:center;overflow:hidden;font-family:"Share Tech Mono",ui-monospace,monospace;font-size:44px;line-height:1;color:#fff}
+ /* A picked colour lights the gear box from inside (no colour picked: nothing is drawn) */
+ .o-ckf-gear::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 62%,rgba(var(--a-rgb),.55),rgba(var(--a-rgb),0) 72%);pointer-events:none}
+-.o-ckf-gear span{position:relative;grid-area:1 / 1;margin-top:9px}
+-.o-ckf-gear .n{opacity:0}
++.o-ckf-gear .o-ckf-gv{position:relative;grid-area:1 / 1;margin-top:9px}
++.o-ckf-gear .o-ckf-n{opacity:0}
+ .o-ckf-gear small{position:absolute;top:5px;left:0;right:0;text-align:center;font-family:"Chakra Petch",sans-serif;font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(234,246,255,.5)}
+ .o-ckf-txt{flex:1;min-width:0}
+ .o-ckf-txt .o-ck-lbl{margin-bottom:5px;color:var(--cka)}
+@@ -33,8 +33,8 @@
+ @keyframes ckfGlow{from{box-shadow:inset 0 0 0 2px #fff,0 0 30px rgba(var(--cka-rgb),.95)}to{box-shadow:inset 0 0 0 2px rgba(var(--cka-rgb),.6),0 0 14px rgba(var(--cka-rgb),.18)}}
+ .playing .o-ckf .o-ck-led{animation:ckLedOn calc(.03s / var(--spd)) linear calc((.3s + var(--li) * .036s) / var(--spd)) both,ckLedBlue calc(.26s / var(--spd)) linear calc(.86s / var(--spd)) forwards,ckLedOff calc(.04s / var(--spd)) linear calc((1.14s + (14 - var(--li)) * .02s) / var(--spd)) forwards}
+ .playing .o-ckf .o-ck-led.idle{animation:ckLedOn calc(.03s / var(--spd)) linear calc((.3s + var(--li) * .036s) / var(--spd)) both,ckLedBlue calc(.26s / var(--spd)) linear calc(.86s / var(--spd)) forwards,ckLedOn calc(.04s / var(--spd)) linear calc(1.12s / var(--spd)) forwards}
+-.playing .o-ckf-gear .n{animation:ckfOut calc(.12s / var(--spd)) ease-in calc(.88s / var(--spd)) both}
+-.playing .o-ckf-gear .g{animation:ckfIn calc(.22s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.9s / var(--spd)) both}
++.playing .o-ckf-gear .o-ckf-n{animation:ckfOut calc(.12s / var(--spd)) ease-in calc(.88s / var(--spd)) both}
++.playing .o-ckf-gear .o-ckf-g{animation:ckfIn calc(.22s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.9s / var(--spd)) both}
+ .playing .o-ckf-gear{animation:ckfGlow calc(.5s / var(--spd)) ease-out calc(.9s / var(--spd))}
+ .playing .o-ckf .o-ck-lbl{animation:ckFade calc(.2s / var(--spd)) ease-out calc(.98s / var(--spd)) both}
+ .playing .o-ckf .o-ck-name{animation:ckScan calc(.3s / var(--spd)) steps(10) calc(1.04s / var(--spd)) both}
+@@ -47,9 +47,9 @@
+ .o-cks-delta{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+ .o-cks-dhead{display:flex;justify-content:space-between;align-items:center}
+ .o-cks-time{position:relative;width:78px;height:20px;font-family:"Share Tech Mono",ui-monospace,monospace;font-size:20px;line-height:20px;text-align:right}
+-.o-cks-time span{position:absolute;right:0;top:0}
+-.o-cks-time .pos{color:var(--ck-r);opacity:0}
+-.o-cks-time .neg{color:var(--ck-g);text-shadow:0 0 10px rgba(54,242,106,.45)}
++.o-cks-time .o-cks-tv{position:absolute;right:0;top:0}
++.o-cks-time .o-cks-pos{color:var(--ck-r);opacity:0}
++.o-cks-time .o-cks-neg{color:var(--ck-g);text-shadow:0 0 10px rgba(54,242,106,.45)}
+ .o-cks-bar{position:relative;height:10px;border-radius:5px;background:#10141A;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);overflow:hidden}
+ .o-cks-bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:rgba(255,255,255,.75)}
+ .o-cks-red,.o-cks-green{position:absolute;top:0;bottom:0}
+@@ -64,9 +64,9 @@
+ @keyframes cksPB{from{clip-path:inset(0 50% 0 50%)}to{clip-path:inset(0 0 0 0)}}
+ @keyframes cksBlink{0%,49%{opacity:1}50%,100%{opacity:.3}}
+ .playing .o-cks-red{animation:cksRed calc(.62s / var(--spd)) ease-in-out calc(.24s / var(--spd)) both}
+-.playing .o-cks-time .pos{animation:cksPos calc(.62s / var(--spd)) linear calc(.24s / var(--spd)) both}
++.playing .o-cks-time .o-cks-pos{animation:cksPos calc(.62s / var(--spd)) linear calc(.24s / var(--spd)) both}
+ .playing .o-cks-green{animation:cksGreen calc(.22s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.86s / var(--spd)) both}
+-.playing .o-cks-time .neg{animation:ckFade .01s linear calc(.86s / var(--spd)) both}
++.playing .o-cks-time .o-cks-neg{animation:ckFade calc(.01s / var(--spd)) linear calc(.86s / var(--spd)) both}
+ .playing .o-cks-pb{animation:cksPB calc(.24s / var(--spd)) cubic-bezier(.3,0,.2,1) calc(1.02s / var(--spd)) both,cksBlink calc(.16s / var(--spd)) steps(1) calc(1.26s / var(--spd)) 4}
+ .playing .o-cks-who .o-ck-lbl{animation:ckFade calc(.2s / var(--spd)) ease-out calc(1.14s / var(--spd)) both}
+ .playing .o-cks-who .o-ck-name{animation:ckScan calc(.3s / var(--spd)) steps(10) calc(1.2s / var(--spd)) both}
+@@ -78,8 +78,8 @@
+ .o-ckb-arc{fill:none;stroke:#1C2129;stroke-width:9;stroke-linecap:round}
+ .o-ckb-red{fill:none;stroke:rgba(255,59,59,.55);stroke-width:9}
+ .o-ckb-fill{fill:none;stroke:var(--cka);stroke-width:9;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:var(--off,100)}
+-.o-ckb-gauge line.mj{stroke:rgba(234,246,255,.72);stroke-width:1.6}
+-.o-ckb-gauge line.mn{stroke:rgba(234,246,255,.28);stroke-width:1}
++.o-ckb-gauge line.o-ckb-mj{stroke:rgba(234,246,255,.72);stroke-width:1.6}
++.o-ckb-gauge line.o-ckb-mn{stroke:rgba(234,246,255,.28);stroke-width:1}
+ .o-ckb-gauge text{font-family:"Share Tech Mono",ui-monospace,monospace;font-size:9px;fill:rgba(234,246,255,.62);text-anchor:middle;dominant-baseline:central}
+ .o-ckb-needle{position:absolute;left:60.5px;top:12px;width:3px;height:50px;border-radius:2px;background:linear-gradient(180deg,#FFD0C2,#FF3B2A 40%,#C61616);transform-origin:50% 100%;transform:rotate(var(--ang));box-shadow:0 0 8px rgba(255,59,42,.8)}
+ .o-ckb-hub{position:absolute;left:54px;top:54px;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#5A616D,#16191F);box-shadow:0 0 0 2px #0A0C10}
+@@ -100,7 +100,7 @@
+ .playing .o-ckb.limiter .o-ckb-needle{animation:ckbSweep calc(.8s / var(--spd)) cubic-bezier(.3,.1,.2,1) calc(.32s / var(--spd)) both,ckbLim calc(.07s / var(--spd)) linear calc(1.12s / var(--spd)) 10 forwards}
+ .playing .o-ckb-fill{animation:ckbFill calc(.8s / var(--spd)) cubic-bezier(.3,.1,.2,1) calc(.32s / var(--spd)) both}
+ .playing .o-ckb.limiter .o-ckb-red{animation:ckbRed calc(.14s / var(--spd)) linear calc(1.12s / var(--spd)) 5}
+-.playing .o-ckb.limiter .o-ckb-lim{animation:ckFade .01s linear calc(1.12s / var(--spd)) both,ckbBlink calc(.14s / var(--spd)) steps(1) calc(1.13s / var(--spd)) 5}
++.playing .o-ckb.limiter .o-ckb-lim{animation:ckFade calc(.01s / var(--spd)) linear calc(1.12s / var(--spd)) both,ckbBlink calc(.14s / var(--spd)) steps(1) calc(1.13s / var(--spd)) 5}
+ .playing .o-ckb-info > *{animation:ckFade calc(.2s / var(--spd)) ease-out calc((.36s + var(--k,0) * .08s) / var(--spd)) both}
+ 
+ /* donation — Pit stop */
+@@ -108,8 +108,8 @@
+ .o-ckd-top > .o-ck-lbl{color:var(--cka)}
+ .o-ckd-fuel{display:flex;align-items:center;gap:6px}
+ .o-ckd-cells{display:flex;gap:2px}
+-.o-ckd-cells i{width:7px;height:14px;border-radius:2px;background:var(--ck-off);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+-.o-ckd-cells i.lit{background:var(--c);box-shadow:0 0 6px var(--c)}
++.o-ckd-cell{width:7px;height:14px;border-radius:2px;background:var(--ck-off);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
++.o-ckd-cell.o-ck-lit{background:var(--c);box-shadow:0 0 6px var(--c)}
+ .o-ckd-timer{margin-left:auto;display:flex;align-items:baseline;gap:2px;font-family:"Share Tech Mono",ui-monospace,monospace;font-size:22px;line-height:1;color:#fff}
+ .o-ckd-timer small{font-size:12px;color:rgba(234,246,255,.6)}
+ .o-ckd-main{position:relative;display:flex;align-items:center;gap:16px;padding:6px 16px 8px 18px}
+@@ -132,7 +132,7 @@
+ @keyframes ckdGo{0%{opacity:0;transform:scaleX(.6)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0}}
+ .playing .o-ckd-car{animation:ckdArrive calc(.36s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.2s / var(--spd)) both}
+ .playing .o-ckd-tyre{animation:ckdTyre calc(.2s / var(--spd)) ease-out calc(var(--td) / var(--spd)) both}
+-.playing .o-ckd-cells i.lit{animation:ckLedOn calc(.04s / var(--spd)) linear calc((.36s + var(--fi) * .06s) / var(--spd)) both}
++.playing .o-ckd-cell.o-ck-lit{animation:ckLedOn calc(.04s / var(--spd)) linear calc((.36s + var(--fi) * .06s) / var(--spd)) both}
+ .playing .o-ckd-go{animation:ckdGo calc(.55s / var(--spd)) ease-out calc(.96s / var(--spd)) both}
+ .playing .o-ckd-amt{animation:ckPop calc(.3s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(1.36s / var(--spd)) both}
+ .playing .o-ckd-info > :not(.o-ckd-amt){animation:ckFade calc(.2s / var(--spd)) ease-out calc(1.44s / var(--spd)) both}
+@@ -174,9 +174,9 @@
+ .o-ckg-p1 b{font-family:"Share Tech Mono",ui-monospace,monospace;font-weight:400;font-size:30px;line-height:1;color:var(--a,#FFD12B);text-shadow:0 0 12px rgba(var(--a-rgb,255,209,43),.6)}
+ .o-ckg-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+ .o-ckg-flag{position:relative;height:12px}
+-.o-ckg-flag span{position:absolute;left:0;top:0;white-space:nowrap}
+-.o-ckg-flag .last{opacity:0;color:var(--ck-y)}
+-.o-ckg-flag .fin{color:var(--cka)}
++.o-ckg-flag .o-ckg-ft{position:absolute;left:0;top:0;white-space:nowrap}
++.o-ckg-flag .o-ckg-last{opacity:0;color:var(--ck-y)}
++.o-ckg-flag .o-ckg-fin{color:var(--cka)}
+ .o-ckg-prize{font-size:12px;letter-spacing:.06em;color:rgba(234,246,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .o-ckg-prize .o-ck-lbl{margin-right:6px}
+ @keyframes ckgScroll{from{background-position:0 0}to{background-position:-180px 0}}
+@@ -184,8 +184,8 @@
+ @keyframes ckgLast{0%,100%{opacity:0}10%,85%{opacity:1}}
+ .playing .o-ckg-checks{animation:ckgScroll calc(1.6s / var(--spd)) linear calc(.2s / var(--spd)) both}
+ .playing .o-ckg .o-ck-led{animation:ckgParty calc(.9s / var(--spd)) linear calc((.95s + var(--li) * .045s) / var(--spd)) both}
+-.playing .o-ckg-flag .last{animation:ckgLast calc(.6s / var(--spd)) linear calc(.32s / var(--spd)) both}
+-.playing .o-ckg-flag .fin{animation:ckFade .01s linear calc(.94s / var(--spd)) both}
++.playing .o-ckg-flag .o-ckg-last{animation:ckgLast calc(.6s / var(--spd)) linear calc(.32s / var(--spd)) both}
++.playing .o-ckg-flag .o-ckg-fin{animation:ckFade calc(.01s / var(--spd)) linear calc(.94s / var(--spd)) both}
+ .playing .o-ckg-p1{animation:ckPop calc(.3s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.96s / var(--spd)) both}
+ .playing .o-ckg .o-ck-name{animation:ckScan calc(.3s / var(--spd)) steps(10) calc(1.06s / var(--spd)) both}
+ .playing .o-ckg-prize{animation:ckFade calc(.24s / var(--spd)) ease-out calc(1.26s / var(--spd)) both}
+diff --git a/public/overlay/objects/styles/cockpit.js b/public/overlay/objects/styles/cockpit.js
+index a526458..cf06944 100644
+--- a/public/overlay/objects/styles/cockpit.js
++++ b/public/overlay/objects/styles/cockpit.js
+@@ -24,7 +24,7 @@
+     var s = pt(-120, R), e = pt(120, R), rz = pt(84, R), ticks = '', labels = '';
+     for (var k = 0; k <= 20; k++) {
+       var phi = -120 + 12 * k, major = k % 2 === 0, a = pt(phi, major ? 34 : 37), b = pt(phi, 41);
+-      ticks += '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '" class="' + (major ? 'mj' : 'mn') + '"/>';
++      ticks += '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '" class="' + (major ? 'o-ckb-mj' : 'o-ckb-mn') + '"/>';
+       if (k % 4 === 0) { var l = pt(phi, 26); labels += '<text x="' + l[0] + '" y="' + l[1] + '">' + (k / 2) + '</text>'; }
+     }
+     var arc = 'M' + s[0] + ' ' + s[1] + ' A' + R + ' ' + R + ' 0 1 1 ' + e[0] + ' ' + e[1];
+@@ -48,7 +48,7 @@
+       var leds = '';
+       for (var i = 0; i < 15; i++) leds += '<i class="o-ck-led' + (i < 3 ? ' idle lit' : '') + '" style="--li:' + i + ';--c:' + ledColour(i) + '"></i>';
+       return '<div class="obj o-ck o-ckf"><div class="o-ck-dash"><div class="o-ck-glass"><div class="o-ck-leds">' + leds + '</div>'
+-        + '<div class="o-ckf-row"><div class="o-ckf-gear"><small>Gear</small><span class="n">N</span><span class="g">1</span></div>'
++        + '<div class="o-ckf-row"><div class="o-ckf-gear"><small>Gear</small><span class="o-ckf-gv o-ckf-n">N</span><span class="o-ckf-gv o-ckf-g">1</span></div>'
+         + '<div class="o-ckf-txt"><div class="o-ck-lbl">' + label(d, 'New follower') + '</div>' + nm('o-ck-name', d.username, 19) + '</div></div>'
+         + '</div></div></div>';
+     },
+@@ -63,7 +63,7 @@
+       var heading = months > 1 ? 'Resubscribed · ' + months + ' months' : 'New subscriber';
+       return '<div class="obj o-ck o-cks"><div class="o-ck-dash"><div class="o-ck-glass">'
+         + '<div class="o-cks-top"><div class="o-cks-box"><span class="o-ck-lbl">Lap</span><b>' + odo(String(months).padStart(2, '0'), 0.3, 0.7) + '</b></div>'
+-        + '<div class="o-cks-delta"><div class="o-cks-dhead"><span class="o-ck-lbl">Delta</span><span class="o-cks-time"><span class="pos">+' + pos + '</span><span class="neg">-' + neg + '</span></span></div>'
++        + '<div class="o-cks-delta"><div class="o-cks-dhead"><span class="o-ck-lbl">Delta</span><span class="o-cks-time"><span class="o-cks-tv o-cks-pos">+' + pos + '</span><span class="o-cks-tv o-cks-neg">-' + neg + '</span></span></div>'
+         + '<div class="o-cks-bar"><i class="o-cks-red"></i><i class="o-cks-green" style="--gw:' + gw + '%"></i></div></div>'
+         + '<div class="o-cks-box"><span class="o-ck-lbl">Map</span><b>T' + esc(d.tier || '1') + '</b></div></div>'
+         + '<div class="o-cks-pb">Personal best</div>'
+@@ -72,11 +72,12 @@
+     },
+   });
+   K.register({
+-    key: 'bits-cockpit', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-cockpit', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'limiter', fx: 'sparks', anim: CK_IN, exit: CK_EXIT, len: 1.5,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits);
+-      var raw = 2 + 2.2 * Math.log10(n + 1), rpm = Math.min(10, raw), lim = raw >= 10;
++      // The gauge, its rpm reading and the limiter are the picture (sizeOf); the odometer shows the real amount.
++      var n = intOf(d.amount != null ? d.amount : d.bits), sized = K.sizeOf(d, 'bits');
++      var raw = 2 + 2.2 * Math.log10(sized + 1), rpm = Math.min(10, raw), lim = raw >= 10;
+       var ang = (-120 + rpm * 24).toFixed(1), off = (100 - rpm * 10).toFixed(1);
+       return '<div class="obj o-ck o-ckb' + (lim ? ' limiter' : '') + '" style="--ang:' + ang + 'deg;--off:' + off + '"><div class="o-ck-dash"><div class="o-ck-glass o-ckb-glass">'
+         + '<div class="o-ckb-gauge">' + GAUGE + '<div class="o-ckb-needle"></div><div class="o-ckb-hub"></div><div class="o-ckb-x">×1000 rpm</div></div>'
+@@ -87,13 +88,14 @@
+     },
+   });
+   K.register({
+-    key: 'donation-cockpit', eventType: 'donation', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'donation-cockpit', eventType: 'donation', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'wheelgun', fx: 'smoke', anim: CK_IN, exit: CK_EXIT, len: 1.8,
+     render: function (d) {
+-      var amt = Number(d.amount) || 0, lg = Math.log10(Math.max(1, amt));
++      // The fuel cells and the stop time are the picture (sizeOf); the amount line shows the real donation.
++      var amt = K.sizeOf(d, 'donation'), lg = Math.log10(Math.max(1, amt));
+       var stop = Math.max(1.8, Math.min(4.0, 4.2 - lg * 1.1)).toFixed(1);
+       var fuel = Math.max(2, Math.min(10, Math.round(2 + lg * 3))), cells = '', tyres = '';
+-      for (var i = 0; i < 10; i++) cells += '<i class="' + (i < fuel ? 'lit' : '') + '" style="--fi:' + i + ';--c:var(--cka)"></i>';
++      for (var i = 0; i < 10; i++) cells += '<i class="o-ckd-cell' + (i < fuel ? ' o-ck-lit' : '') + '" style="--fi:' + i + ';--c:var(--cka)"></i>';
+       ['fl', 'fr', 'rl', 'rr'].forEach(function (k, j) { tyres += '<i class="o-ckd-tyre ' + k + '" style="--td:' + (0.42 + j * 0.08).toFixed(2) + 's"></i>'; });
+       return '<div class="obj o-ck o-ckd"><div class="o-ck-dash"><div class="o-ck-glass">'
+         + '<div class="o-ckd-top"><span class="o-ck-lbl">' + label(d, 'Pit stop') + '</span><span class="o-ckd-fuel"><span class="o-ck-lbl">Fuel</span><span class="o-ckd-cells">' + cells + '</span></span>'
+@@ -106,10 +108,10 @@
+     },
+   });
+   K.register({
+-    key: 'raid-cockpit', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-cockpit', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'spotter', fx: 'none', anim: CK_IN, exit: CK_EXIT, len: 1.6,
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 22), r = rng(hash(d.username + v)), blips = '';
++      var v = intOf(d.viewers), sized = K.sizeOf(d, 'raid'), n = Math.min(sized, 22), r = rng(hash(d.username + sized)), blips = '';
+       for (var i = 0; i < n; i++) {
+         var th = r() * 360, rad = 16 + r() * 34;
+         var x = rad * Math.sin(th * Math.PI / 180), y = -rad * Math.cos(th * Math.PI / 180);
+@@ -130,7 +132,7 @@
+       for (var i = 0; i < 15; i++) leds += '<i class="o-ck-led lit" style="--li:' + i + ';--c:' + (i % 2 ? '#FFD12B' : 'var(--cka)') + '"></i>';
+       return '<div class="obj o-ck o-ckg"><div class="o-ck-dash"><div class="o-ck-glass"><div class="o-ckg-checks"></div><div class="o-ck-leds">' + leds + '</div>'
+         + '<div class="o-ckg-row"><div class="o-ckg-p1"><small>Pos</small><b>P1</b></div>'
+-        + '<div class="o-ckg-txt"><div class="o-ckg-flag o-ck-lbl"><span class="last">Last lap</span><span class="fin">' + label(d, 'Finish · giveaway winner') + '</span></div>'
++        + '<div class="o-ckg-txt"><div class="o-ckg-flag o-ck-lbl"><span class="o-ckg-ft o-ckg-last">Last lap</span><span class="o-ckg-ft o-ckg-fin">' + label(d, 'Finish · giveaway winner') + '</span></div>'
+         + nm('o-ck-name', d.username, 17)
+         + (d.prize ? '<div class="o-ckg-prize"><span class="o-ck-lbl">Prize</span>' + esc(d.prize) + '</div>' : '')
+         + '</div></div></div></div></div>';

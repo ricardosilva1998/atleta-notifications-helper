@@ -1,0 +1,92 @@
+diff --git a/public/overlay/objects/styles/cyber.css b/public/overlay/objects/styles/cyber.css
+index 8d5e919..f19dbd3 100644
+--- a/public/overlay/objects/styles/cyber.css
++++ b/public/overlay/objects/styles/cyber.css
+@@ -69,7 +69,7 @@
+ .playing .o-cybf-beam{animation:cybBeam calc(.28s / var(--spd)) linear calc(.32s / var(--spd)) both}
+ .playing .o-cybf-shk{animation:cybUnlock calc(.2s / var(--spd)) ease-out calc(.62s / var(--spd)) both}
+ .playing .o-cybf-micro{animation:cybFlick calc(.24s / var(--spd)) steps(1,end) calc(.34s / var(--spd)) both}
+-.playing .o-cybf .o-cybf-name > .o-ch{animation:chIn .01s linear calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both,cybInv calc(var(--tper) * 1.8 / var(--spd)) steps(1,end) calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both}
++.playing .o-cybf .o-cybf-name > .o-ch{animation:chIn calc(.01s / var(--spd)) linear calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both,cybInv calc(var(--tper) * 1.8 / var(--spd)) steps(1,end) calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both}
+ .playing .o-cybf-conn{animation:cybFlick calc(.2s / var(--spd)) steps(1,end) calc(var(--cd) / var(--spd)) both}
+ .playing .o-cybf-cur{animation:cybBlink calc(.9s / var(--spd)) steps(1,end) calc(var(--cd) / var(--spd)) both}
+ 
+@@ -173,7 +173,7 @@
+ .playing .o-cybd-box{animation:cybBox calc(.2s / var(--spd)) ease-out calc(.66s / var(--spd)) both}
+ .playing .o-cybd-enc.a{animation:cybEncA calc(var(--de) / var(--spd)) linear both}
+ .playing .o-cybd-enc.b{animation:cybEncB calc(.09s / var(--spd)) steps(1,end) calc(.7s / var(--spd)) 3 both}
+-.playing .o-cybd .o-cybd-msg > .o-ch{animation:chIn .01s linear calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both,cybInv calc(var(--tper) * 2 / var(--spd)) steps(1,end) calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both}
++.playing .o-cybd .o-cybd-msg > .o-ch{animation:chIn calc(.01s / var(--spd)) linear calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both,cybInv calc(var(--tper) * 2 / var(--spd)) steps(1,end) calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both}
+ .playing .o-cybd-stat{animation:cybFlick calc(.2s / var(--spd)) steps(1,end) calc(.72s / var(--spd)) both}
+ .playing .o-cybd-ing{animation:cybUntil calc(var(--de) / var(--spd)) steps(1,end) both}
+ .playing .o-cybd-ok{animation:cybAfter calc(var(--de) / var(--spd)) steps(1,end) both}
+diff --git a/public/overlay/objects/styles/cyber.js b/public/overlay/objects/styles/cyber.js
+index 006eec6..5aa96c4 100644
+--- a/public/overlay/objects/styles/cyber.js
++++ b/public/overlay/objects/styles/cyber.js
+@@ -122,6 +122,15 @@
+   // The amount's last column locks at this time; one column a tenth of a second after the other.
+   function bitsLast(d) { var digits = fmt(bitsOf(d)).replace(/[^0-9]/g, '').length; return 0.9 + Math.max(0, digits - 1) * 0.1; }
+   function rainCol(r, len) { var s = ''; for (var i = 0; i < len; i++) s += (i ? '<br>' : '') + HEX.charAt(Math.floor(r() * 16)); return s; }
++  // How many random digits the strip of the amount's digit column `di` falls through before it locks.
++  function stripLen(di) { return Math.max(6, Math.round((0.9 + di * 0.1 - 0.38) / 0.055)); }
++  // The rain draws from the alert's random stream after the digit strips. For a picture drawn at `sized`
++  // it starts where the strips of that amount leave the stream, so it is that amount's own rain.
++  function rainRng(name, sized) {
++    var r = rng(hash(name + sized)), digits = fmt(sized).replace(/[^0-9]/g, '').length;
++    for (var di = 0; di < digits; di++) for (var j = stripLen(di); j > 0; j--) r();
++    return r;
++  }
+ 
+   K.register({
+     key: 'follow-cyber', eventType: 'follow', family: FAMILY, controls: CONTROLS, grows: false,
+@@ -161,25 +170,26 @@
+   });
+ 
+   K.register({
+-    key: 'bits-cyber', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-cyber', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'cybBits', fx: 'sparks', anim: hold('1.6s'), exit: EXIT,
+     len: function (d) { return bitsLast(d) + 0.5; },
+     render: function (d) {
+-      var n = bitsOf(d), chars = Array.from(fmt(n)), r = rng(hash(d.username + n)), last = bitsLast(d);
++      // The digit cells are the real amount; the rain (how many columns, where, its colour) is the picture.
++      var n = bitsOf(d), sized = K.sizeOf(d, 'bits'), chars = Array.from(fmt(n)), r = rng(hash(d.username + n)), last = bitsLast(d);
+       var digits = chars.filter(isDigit).length, size = digits > 5 ? Math.max(28, Math.round(44 * 5 / digits)) : 44, cells = '', di = 0, i;
+       chars.forEach(function (c) {
+         if (!isDigit(c)) { cells += '<span class="o-cybb-sep">' + esc(c) + '</span>'; return; }
+-        var lock = 0.9 + di * 0.1, k = Math.max(6, Math.round((lock - 0.38) / 0.055)), strip = '<b class="o-cybb-f">' + c + '</b>';
++        var lock = 0.9 + di * 0.1, k = stripLen(di), strip = '<b class="o-cybb-f">' + c + '</b>';
+         for (var j = 0; j < k; j++) strip += '<br>' + Math.floor(r() * 10);
+         cells += '<span class="o-cybb-cell" style="--ld:' + lock.toFixed(2) + 's"><span class="o-cybb-strip" style="--k:' + k + ';--fd:' + (lock - 0.38).toFixed(2) + 's">' + strip + '</span></span>';
+         di++;
+       });
+-      var cols = Math.max(5, Math.min(14, Math.round(3 + Math.log10(n + 1) * 2.6))), rain = '';
++      var cols = Math.max(5, Math.min(14, Math.round(3 + Math.log10(sized + 1) * 2.6))), rain = '', rr = rainRng(d.username, sized);
+       for (i = 0; i < cols; i++) {
+-        rain += '<span class="o-cybb-rain" style="left:' + ((i + 0.5) * 100 / cols).toFixed(1) + '%;--ro:' + Math.round(-r() * 60) + 'px;--rs:' + (5 + Math.floor(r() * 4))
+-          + ';--rd:' + (0.3 + r() * 0.35).toFixed(2) + 's">' + rainCol(r, 12) + '</span>';
++        rain += '<span class="o-cybb-rain" style="left:' + ((i + 0.5) * 100 / cols).toFixed(1) + '%;--ro:' + Math.round(-rr() * 60) + 'px;--rs:' + (5 + Math.floor(rr() * 4))
++          + ';--rd:' + (0.3 + rr() * 0.35).toFixed(2) + 's">' + rainCol(rr, 12) + '</span>';
+       }
+-      return '<div class="obj o-cyb o-cybb' + (n >= 1000 ? ' o-cybb-big' : '') + '" style="--ul:' + (last + 0.1).toFixed(2) + 's;--wd:' + (last + 0.16).toFixed(2) + 's">'
++      return '<div class="obj o-cyb o-cybb' + (sized >= 1000 ? ' o-cybb-big' : '') + '" style="--ul:' + (last + 0.1).toFixed(2) + 's;--wd:' + (last + 0.16).toFixed(2) + 's">'
+         + panel('o-cybb-panel', hash(d.username) + 7)
+         + '<div class="o-cybb-head"><span class="o-cyb-micro o-cybb-lbl">' + label(d, 'Incoming bits') + '</span><span class="o-cyb-micro o-cybb-rx">Uplink ' + hex4(d.username + n) + '</span></div>'
+         + '<div class="o-cybb-field"><div class="o-cybb-rainbox">' + rain + '</div>'
+@@ -208,11 +218,12 @@
+   });
+ 
+   K.register({
+-    key: 'raid-cyber', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-cyber', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'cybRaid', fx: 'speed', anim: hold('1.6s'), exit: EXIT,
+-    len: function (d) { return Math.max(1.7, 0.62 + Math.min(16, intOf(d.viewers)) * 0.05 + 0.3); },
++    len: function (d) { return Math.max(1.7, 0.62 + Math.min(16, K.sizeOf(d, 'raid')) * 0.05 + 0.3); },
+     render: function (d) {
+-      var v = intOf(d.viewers), lit = Math.min(v, 16), r = rng(hash(d.username + v)), list = [], nodes = '', x, y;
++      // The grid and its "n of 16 nodes lit" caption are the picture (sizeOf); the count shows the real viewers.
++      var v = intOf(d.viewers), sized = K.sizeOf(d, 'raid'), lit = Math.min(sized, 16), r = rng(hash(d.username + sized)), list = [], nodes = '', x, y;
+       // The breach spreads from one corner: the nodes light in order of distance from it, with a little noise.
+       var sx = r() < 0.5 ? 0 : 3, sy = r() < 0.5 ? 0 : 3;
+       for (y = 0; y < 4; y++) for (x = 0; x < 4; x++) list.push({ x: x, y: y, k: Math.sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy)) + r() * 1.2 });

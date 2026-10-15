@@ -1,0 +1,34 @@
+diff --git a/public/overlay/objects/styles/spooky.js b/public/overlay/objects/styles/spooky.js
+index 16e7872..49ee30c 100644
+--- a/public/overlay/objects/styles/spooky.js
++++ b/public/overlay/objects/styles/spooky.js
+@@ -163,11 +163,11 @@
+     return idx.sort(function (a, b) { return Math.abs(a - mid) - Math.abs(b - mid) || a - b; });
+   }
+   K.register({
+-    key: 'bits-spooky', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-spooky', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'spkBits', fx: 'none', anim: hold('1.6s'), exit: EXIT,
+-    len: function (d) { return glowAt(candyCount(intOf(d.amount != null ? d.amount : d.bits))) + 0.6; },
++    len: function (d) { return glowAt(candyCount(intOf(K.sizeOf(d, 'bits')))) + 0.6; },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), count = candyCount(n), r = rng(hash(d.username + n)), candies = '', i = 0, row;
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), count = candyCount(size), r = rng(hash(d.username + size)), candies = '', i = 0, row;
+       for (row = 0; row < ROWS.length && i < count; row++) {
+         var slots = ROWS[row], order = middleOut(slots).slice(0, Math.min(slots, count - i));
+         for (var k = 0; k < order.length; k++, i++) {
+@@ -212,11 +212,11 @@
+     [12, -72, 20], [82, -14, 22], [-30, 70, 20], [52, 66, 22], [84, -62, 18], [-54, -16, 18]];
+   var MOON_X = 312, MOON_Y = 96;
+   K.register({
+-    key: 'raid-spooky', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-spooky', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'spkRaid', fx: 'none', anim: hold('1.5s'), exit: FLY,
+-    len: function (d) { var n = Math.min(12, intOf(d.viewers)); return n ? 0.62 + (n - 1) * 0.06 + 0.65 : 1.2; },
++    len: function (d) { var n = Math.min(12, intOf(K.sizeOf(d, 'raid'))); return n ? 0.62 + (n - 1) * 0.06 + 0.65 : 1.2; },
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 12), r = rng(hash(d.username + v)), bats = '', i;
++      var v = intOf(d.viewers), size = intOf(K.sizeOf(d, 'raid')), n = Math.min(size, 12), r = rng(hash(d.username + size)), bats = '', i;
+       for (i = 0; i < n; i++) {
+         var s = SPOTS[i], cx = MOON_X + s[0], cy = MOON_Y + s[1], w = s[2];
+         var sx = 160 - cx + (r() * 20 - 10), sy = 100 - cy + (r() * 16 - 8);

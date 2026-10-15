@@ -1,0 +1,94 @@
+diff --git a/public/overlay/objects/styles/glass.css b/public/overlay/objects/styles/glass.css
+index ba9ec7a..7d3a87c 100644
+--- a/public/overlay/objects/styles/glass.css
++++ b/public/overlay/objects/styles/glass.css
+@@ -58,9 +58,9 @@
+ .o-glb-from{display:flex;gap:5px;min-width:0}
+ .o-glb-from b{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .o-glb-bar{position:absolute;left:22px;right:22px;bottom:11px;height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+-.o-glb-bar i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,rgba(var(--gla-rgb),.55),var(--gla));transform-origin:left;box-shadow:0 0 10px rgba(var(--gla-rgb),.7)}
++.o-glb-bar .o-glb-fill{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,rgba(var(--gla-rgb),.55),var(--gla));transform-origin:left;box-shadow:0 0 10px rgba(var(--gla-rgb),.7)}
+ @keyframes glGrow{from{transform:scaleX(0)}to{transform:none}}
+-.playing .o-glb-bar i{animation:glGrow calc(.95s / var(--spd)) cubic-bezier(.2,.8,.2,1) calc(.3s / var(--spd)) both}
++.playing .o-glb-bar .o-glb-fill{animation:glGrow calc(.95s / var(--spd)) cubic-bezier(.2,.8,.2,1) calc(.3s / var(--spd)) both}
+ 
+ /* donation — Receipt */
+ .o-gld{--glt:.2s}
+@@ -72,12 +72,12 @@
+ .o-gld-amt{font-weight:800;font-size:40px;line-height:1.05;letter-spacing:-.02em;color:var(--gl-text);font-variant-numeric:tabular-nums;white-space:nowrap}
+ .o-gld-from{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .o-gld-msg{position:relative;margin-top:4px;padding-left:12px;font-weight:500;font-size:14px;line-height:1.45;color:rgba(245,247,250,.86);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+-.o-gld-msg i{position:absolute;left:0;top:3px;bottom:3px;width:2px;border-radius:1px;background:var(--gla);transform-origin:top}
++.o-gld-msg .o-gld-line{position:absolute;left:0;top:3px;bottom:3px;width:2px;border-radius:1px;background:var(--gla);transform-origin:top}
+ @keyframes glDraw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+ @keyframes glLine{from{transform:scaleY(0)}to{transform:none}}
+ .playing .o-gld-cc{animation:glDraw calc(.5s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+ .playing .o-gld-ck{animation:glDraw calc(.36s / var(--spd)) ease-out calc(.66s / var(--spd)) both}
+-.playing .o-gld-msg i{animation:glLine calc(.4s / var(--spd)) cubic-bezier(.2,.8,.2,1) calc(.5s / var(--spd)) both}
++.playing .o-gld-msg .o-gld-line{animation:glLine calc(.4s / var(--spd)) cubic-bezier(.2,.8,.2,1) calc(.5s / var(--spd)) both}
+ 
+ /* raid — Wave */
+ .o-glr{--glt:.2s}
+diff --git a/public/overlay/objects/styles/glass.js b/public/overlay/objects/styles/glass.js
+index 6a3b4a9..0a91619 100644
+--- a/public/overlay/objects/styles/glass.js
++++ b/public/overlay/objects/styles/glass.js
+@@ -46,11 +46,11 @@
+   });
+ 
+   K.register({
+-    key: 'subscriber-glass', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'subscriber-glass', eventType: 'subscription', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'glSub', fx: 'none', anim: hold('1.3s'), exit: GL_EXIT, len: 1.3,
+     render: function (d) {
+-      var months = Math.max(1, intOf(d.months)), full = months >= 12;
+-      var off = (100 - Math.min(months, 12) / 12 * 100).toFixed(1);
++      var months = Math.max(1, intOf(d.months)), ring = Math.max(1, K.sizeOf(d, 'months')), full = ring >= 12;
++      var off = (100 - Math.min(ring, 12) / 12 * 100).toFixed(1);
+       return '<div class="obj o-gl o-gls"><div class="o-gl-panel o-gls-card"><i class="o-gl-sheen" style="--sh:1s"></i>'
+         + '<div class="o-gls-ring' + (full ? ' o-gls-full' : '') + '" style="--off:' + off + '">'
+         + '<svg viewBox="0 0 84 84" aria-hidden="true"><circle class="o-gls-rt" cx="42" cy="42" r="36" pathLength="100"/><circle class="o-gls-rp" cx="42" cy="42" r="36" pathLength="100"/></svg>'
+@@ -64,16 +64,16 @@
+   });
+ 
+   K.register({
+-    key: 'bits-glass', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-glass', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'glBits', fx: 'none', anim: hold('1.2s'), exit: GL_EXIT, len: 1.3,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits);
+-      var w = Math.max(6, Math.min(100, Math.log10(n + 1) / 4 * 100)).toFixed(0);
+-      return '<div class="obj o-gl o-glb' + (n >= 1000 ? ' o-glb-big' : '') + '"><div class="o-gl-panel o-glb-card"><i class="o-gl-sheen" style="--sh:1s"></i>'
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = K.sizeOf(d, 'bits');
++      var w = Math.max(6, Math.min(100, Math.log10(size + 1) / 4 * 100)).toFixed(0);
++      return '<div class="obj o-gl o-glb' + (size >= 1000 ? ' o-glb-big' : '') + '"><div class="o-gl-panel o-glb-card"><i class="o-gl-sheen" style="--sh:1s"></i>'
+         + '<div class="o-gl-lbl o-gl-in" style="--k:0">' + label(d, 'Bits') + '</div>'
+         + '<div class="o-glb-num o-gl-in" style="--k:1">' + odo(fmt(n), 0.25, 0.85) + '<span>bits</span></div>'
+         + '<div class="o-gl-muted o-glb-from o-gl-in" style="--k:2"><span>from</span><b>' + esc(d.username) + '</b></div>'
+-        + '<div class="o-glb-bar"><i style="width:' + w + '%"></i></div>'
++        + '<div class="o-glb-bar"><i class="o-glb-fill" style="width:' + w + '%"></i></div>'
+         + '</div></div>';
+     },
+   });
+@@ -86,17 +86,17 @@
+         + '<div class="o-gld-top o-gl-in" style="--k:0"><span class="o-gl-lbl">' + label(d, 'Donation') + '</span>' + GL_CHECK + '</div>'
+         + '<div class="o-gld-amt o-gl-in" style="--k:1">' + esc(money(d.amount, d.currency)) + '</div>'
+         + '<div class="o-gl-muted o-gld-from o-gl-in" style="--k:2">from <b>' + esc(d.username) + '</b></div>'
+-        + (d.message ? '<div class="o-gld-msg o-gl-in" style="--k:3"><i></i>“' + esc(d.message) + '”</div>' : '')
++        + (d.message ? '<div class="o-gld-msg o-gl-in" style="--k:3"><i class="o-gld-line"></i>“' + esc(d.message) + '”</div>' : '')
+         + '</div></div>';
+     },
+   });
+ 
+   K.register({
+-    key: 'raid-glass', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-glass', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'glRaid', fx: 'none', anim: hold('1s'), exit: GL_EXIT,
+-    len: function (d) { return 0.8 + Math.min(12, intOf(d.viewers)) * 0.05; },
++    len: function (d) { return 0.8 + Math.min(12, K.sizeOf(d, 'raid')) * 0.05; },
+     render: function (d) {
+-      var v = intOf(d.viewers), shown = Math.min(v, 12), r = rng(hash(d.username + v)), crowd = '';
++      var v = intOf(d.viewers), size = K.sizeOf(d, 'raid'), shown = Math.min(size, 12), r = rng(hash(d.username + size)), crowd = '';
+       for (var i = 0; i < shown; i++) {
+         var h = Math.floor(r() * 360);
+         crowd += '<i class="o-glr-av" style="--i:' + i + ';--h1:' + h + ';--h2:' + ((h + 40) % 360) + '"></i>';
