@@ -1434,15 +1434,20 @@ const PREVIEW_DATA = {
   bits:         { username: 'TurboTina', amount: 500 },
   donation:     { username: 'PitBoss92', amount: '25.00', currency: 'EUR' },
   raid:         { username: 'GridWalker', viewers: 42 },
+  giveaway_winner: { username: 'LuckyViewer42', prize: 'Season pass' },
 };
 
-// The object an alert's preview draws: the same rule as objectFor() in public/overlay/overlay.js,
-// reading the stored styles. null for the alerts that are legacy cards.
+// The look an alert's preview draws: the same rule as objectFor() in public/overlay/overlay.js,
+// reading the look the page shows (ALERT_STYLES): that look, else the alert's default look (the
+// giveaway's is Racing's Victory lap), else its own object; null for the legacy cards.
 function previewObjectFor(type) {
-  const styleId = ALERT_STYLES[type];
   const styles = window.ATLETA_OBJECT_STYLES || {};
-  const styled = styleId ? styles[styleId] : null;
-  if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  const kit = window.ATLETA_KIT;
+  const defaultLook = kit && Object.prototype.hasOwnProperty.call(kit.DEFAULT_LOOKS, type) ? kit.DEFAULT_LOOKS[type] : null;
+  for (const styleId of [ALERT_STYLES[type], defaultLook]) {
+    const styled = styleId && Object.prototype.hasOwnProperty.call(styles, styleId) ? styles[styleId] : null;
+    if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  }
   const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[type];
   return own && own.key === type ? own : null;
 }
