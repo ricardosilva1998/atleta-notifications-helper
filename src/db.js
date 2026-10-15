@@ -3316,42 +3316,39 @@ function saveOverlayDesign(streamerId, eventType, design) {
     shadow_spread: design.shadow_spread != null ? design.shadow_spread : 0,
     shadow_opacity: design.shadow_opacity != null ? design.shadow_opacity : 0.6,
   };
+  // An upsert: on the (streamer_id, event_type) conflict only the columns listed here are
+  // written, so the ones the builder does not send (style, design_version) keep their values.
+  // INSERT OR REPLACE used to delete the row and insert a new one, resetting those to their
+  // defaults: a save that only moved andre_vilela_'s C1 would have turned it back into the
+  // folding screen.
+  const columns = Object.keys(row);
   db.prepare(`
-    INSERT OR REPLACE INTO overlay_designs
-      (streamer_id, event_type, bg_color, accent_color, border_color, text_color,
-       font_family, username_size, event_label, detail_text, entrance_animation,
-       car_animation, screen_effect, animation_speed, card_width, card_position,
-       card_custom_x, card_custom_y, border_radius, card_image_scale, sponsor_animation,
-       label_font_family, label_font_size, label_font_weight, label_color,
-       username_font_family, username_font_weight, username_color,
-       detail_font_family, detail_font_size, detail_font_weight, detail_color,
-       text_align, card_side_icon, effect_amount, effect_size, effect_direction,
-       bg_opacity, gradient_direction, border_thickness, border_opacity,
-       glow_enabled, glow_intensity, glow_color,
-       shadow_color, shadow_blur, shadow_spread, shadow_opacity)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    streamerId, eventType,
-    row.bg_color, row.accent_color, row.border_color, row.text_color,
-    row.font_family, row.username_size, row.event_label, row.detail_text,
-    row.entrance_animation, row.car_animation, row.screen_effect,
-    row.animation_speed, row.card_width, row.card_position,
-    row.card_custom_x, row.card_custom_y, row.border_radius,
-    row.card_image_scale, row.sponsor_animation,
-    row.label_font_family, row.label_font_size, row.label_font_weight, row.label_color,
-    row.username_font_family, row.username_font_weight, row.username_color,
-    row.detail_font_family, row.detail_font_size, row.detail_font_weight, row.detail_color,
-    row.text_align, row.card_side_icon,
-    row.effect_amount, row.effect_size, row.effect_direction,
-    row.bg_opacity, row.gradient_direction, row.border_thickness, row.border_opacity,
-    row.glow_enabled, row.glow_intensity, row.glow_color,
-    row.shadow_color, row.shadow_blur, row.shadow_spread, row.shadow_opacity,
-  );
+    INSERT INTO overlay_designs (streamer_id, event_type, ${columns.join(', ')})
+    VALUES (?, ?, ${columns.map(() => '?').join(', ')})
+    ON CONFLICT(streamer_id, event_type) DO UPDATE SET ${columns.map((c) => `${c} = excluded.${c}`).join(', ')}
+  `).run(streamerId, eventType, ...columns.map((c) => row[c]));
 }
 
 function deleteOverlayDesign(streamerId, eventType) {
   db.prepare('DELETE FROM overlay_designs WHERE streamer_id = ? AND event_type = ?')
     .run(streamerId, eventType);
+}
+
+// Reset in the builder: the alert's design back to the defaults. A row that carries a style
+// keeps it (andre_vilela_'s C1 survives a Reset); a row without one is deleted, as before.
+function resetOverlayDesign(streamerId, eventType) {
+  const row = db.prepare('SELECT style FROM overlay_designs WHERE streamer_id = ? AND event_type = ?').get(streamerId, eventType);
+  if (row && row.style) saveOverlayDesign(streamerId, eventType, {});
+  else deleteOverlayDesign(streamerId, eventType);
+}
+
+// The style an alert is drawn in (overlay_designs.style; null: its own look). Writes the
+// default design first when the streamer never saved one for this alert, so the row exists.
+function setOverlayDesignStyle(streamerId, eventType, style) {
+  db.transaction(() => {
+    if (!getOverlayDesign(streamerId, eventType)) saveOverlayDesign(streamerId, eventType, {});
+    db.prepare('UPDATE overlay_designs SET style = ? WHERE streamer_id = ? AND event_type = ?').run(style, streamerId, eventType);
+  })();
 }
 
 function getIracingOverlaySettings(streamerId) {
@@ -3997,6 +3994,16 @@ try {
       AND event_type IN ('follow','subscription','bits','donation','raid')`).run();
   if (info.changes > 0) console.log(`[DB] Marked ${info.changes} overlay_designs rows as design_version=1`);
 } catch (e) { _migrationLog('design_version backfill', e); }
+
+// Migration: the style an alert is drawn in (overlay_designs.style). NULL is the alert's own
+// look; 'donation-c1' is andre_vilela_'s C1 (switched on below). A save and Reset keep it.
+try {
+  const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
+  if (!cols.includes('style')) {
+    db.exec('ALTER TABLE overlay_designs ADD COLUMN style TEXT');
+    console.log('[DB] Added style to overlay_designs');
+  }
+} catch (e) { _migrationLog('overlay_designs.style', e); }
 
 // Migration: last failed post into a claimed server (see recordDeliveryError),
 // shown on the server's settings page.
@@ -5724,6 +5731,8 @@ module.exports = {
   getAllOverlayDesigns,
   saveOverlayDesign,
   deleteOverlayDesign,
+  resetOverlayDesign,
+  setOverlayDesignStyle,
   getSponsorImages,
   getEnabledSponsorImages,
   addSponsorImage,

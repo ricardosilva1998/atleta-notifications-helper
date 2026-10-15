@@ -2448,6 +2448,35 @@ describe('saving an overlay design', () => {
     assert.deepEqual(res.json(), { ok: true });
     assert.deepEqual(stored().map((d) => d.event_type), ['raid']);
   });
+
+  test('a save keeps the alert\'s style, from a page that knows none and from one that posts one', async () => {
+    db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
+    // A builder tab opened before the switch-on posts no style at all.
+    assert.equal((await save('donation', design({ card_width: 560 }))).status, 200);
+    const donation = stored().find((d) => d.event_type === 'donation');
+    assert.equal(donation.style, 'donation-c1', 'moving the C1 keeps it');
+    assert.equal(donation.card_width, 560);
+    assert.equal((await save('follow', design({ style: 'donation-c1' }))).status, 200);
+    assert.equal(stored().find((d) => d.event_type === 'follow').style, null, 'the builder cannot choose a style');
+  });
+
+  test('Reset keeps the alert\'s style, and the open overlay is told', async () => {
+    db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
+    await save('donation', design({ card_width: 600 }));
+    const pushed = [];
+    const listener = (event) => pushed.push(event);
+    bus.on(`overlay:${id}`, listener);
+    try {
+      const res = await request('POST', '/dashboard/overlay-builder/reset', { streamer: id, body: { eventType: 'donation' } });
+      assert.deepEqual(res.json(), { ok: true });
+    } finally {
+      bus.off(`overlay:${id}`, listener);
+    }
+    const donation = stored().find((d) => d.event_type === 'donation');
+    assert.equal(donation.style, 'donation-c1');
+    assert.equal(donation.card_width, 420);
+    assert.equal(pushed.at(-1).designs.donation.style, 'donation-c1');
+  });
 });
 
 // ── YouTube chatbot: errors are codes, not text from the URL (N22) ───────
