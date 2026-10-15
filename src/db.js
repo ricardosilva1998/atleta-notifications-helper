@@ -4005,6 +4005,19 @@ try {
   }
 } catch (e) { _migrationLog('overlay_designs.style', e); }
 
+// andre_vilela_ asked for the C1 billboard trailer as his donation alert
+// (docs/superpowers/specs/2026-10-15-vilela-c1-donation-design.md): switched on once. He is
+// found by his Twitch user id, never by a row number; a database without him (CI, a fresh
+// development copy) records it as done and changes nothing.
+// To switch it off: setOverlayDesignStyle(<his streamer id>, 'donation', null).
+const ANDRE_VILELA_TWITCH_USER_ID = '632557806';
+_runOnce('c1_donation_for_andre_vilela', () => {
+  const vilela = db.prepare('SELECT id FROM streamers WHERE twitch_user_id = ?').get(ANDRE_VILELA_TWITCH_USER_ID);
+  if (!vilela) return;
+  setOverlayDesignStyle(vilela.id, 'donation', 'donation-c1');
+  console.log('[DB] The C1 donation alert is on for andre_vilela_');
+});
+
 // Migration: last failed post into a claimed server (see recordDeliveryError),
 // shown on the server's settings page.
 try {

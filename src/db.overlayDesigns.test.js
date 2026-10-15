@@ -137,3 +137,60 @@ describe('overlay_designs.style', () => {
     assert.equal(db.getAllOverlayDesigns(streamer).find((d) => d.event_type === 'donation').style, 'donation-c1');
   });
 });
+
+describe('the one-time switch-on of andre_vilela_\'s C1', () => {
+  const ANDRE = '632557806';
+  const MIGRATION = 'c1_donation_for_andre_vilela';
+
+  test('a database without him records it as done and changes nothing', () => {
+    const booted = boot(newFile());
+    const sql = booted.db.db;
+    assert.ok(sql.prepare('SELECT 1 FROM data_migrations WHERE name = ?').get(MIGRATION));
+    assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM overlay_designs').get().n, 0);
+    assert.ok(!booted.lines.some((l) => l.includes('C1 donation alert')));
+    sql.close();
+  });
+
+  test('his donation alert becomes the C1 at the next boot, once, and nobody else\'s does', () => {
+    const file = newFile();
+    // A database from before this release: him, another streamer, and the switch-on not run yet.
+    let booted = boot(file);
+    let sql = booted.db.db;
+    const vilela = addStreamer(sql, { twitch_user_id: ANDRE, twitch_username: 'andre_vilela_' });
+    const other = addStreamer(sql);
+    booted.db.saveOverlayDesign(other, 'donation', {});
+    sql.prepare('DELETE FROM data_migrations WHERE name = ?').run(MIGRATION);
+    sql.close();
+
+    booted = boot(file);
+    sql = booted.db.db;
+    const style = (streamerId) => (sql.prepare('SELECT style FROM overlay_designs WHERE streamer_id = ? AND event_type = ?').get(streamerId, 'donation') || {}).style;
+    assert.equal(style(vilela), 'donation-c1', 'his donation design was written, with the C1');
+    assert.equal(style(other), null);
+    assert.equal(booted.lines.filter((l) => l.includes('[DB] The C1 donation alert is on for andre_vilela_')).length, 1);
+    assert.deepEqual(booted.lines.filter((l) => l.includes('[DB migration]')), []);
+
+    // Switched off by hand afterwards: a later boot does not switch it on again.
+    booted.db.setOverlayDesignStyle(vilela, 'donation', null);
+    sql.close();
+    booted = boot(file);
+    sql = booted.db.db;
+    assert.equal(style(vilela), null);
+    sql.close();
+  });
+
+  test('a donation design he saved before keeps its position and width', () => {
+    const file = newFile();
+    let booted = boot(file);
+    let sql = booted.db.db;
+    const vilela = addStreamer(sql, { twitch_user_id: ANDRE });
+    booted.db.saveOverlayDesign(vilela, 'donation', { card_width: 520, card_position: 'bot-right' });
+    sql.prepare('DELETE FROM data_migrations WHERE name = ?').run(MIGRATION);
+    sql.close();
+    booted = boot(file);
+    sql = booted.db.db;
+    const saved = sql.prepare('SELECT * FROM overlay_designs WHERE streamer_id = ? AND event_type = ?').get(vilela, 'donation');
+    assert.deepEqual([saved.style, saved.card_width, saved.card_position], ['donation-c1', 520, 'bot-right']);
+    sql.close();
+  });
+});
