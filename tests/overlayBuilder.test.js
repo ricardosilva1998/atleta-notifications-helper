@@ -143,6 +143,7 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
 
   test('the stored styles are read once from the server\'s designs, apart from the working copy', () => {
     assert.match(builder, /const ALERT_STYLES = \{\};\s*SERVER_DESIGNS\.forEach\(d => \{ if \(d\.style\) ALERT_STYLES\[d\.event_type\] = d\.style; \}\);/);
+    assert.match(builder, /const SAVED_STYLES = Object\.assign\(\{\}, ALERT_STYLES\);/, 'and kept as saved, apart from the look the page shows');
   });
 
   test('the preview and the controls use that pick, never the alert\'s own object directly', () => {
@@ -151,11 +152,11 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     assert.ok(!/ATLETA_OBJECTS\[currentType\]/.test(builder), 'no lookup skips the style');
   });
 
-  test('Reset and Discard leave the stored style alone (the server keeps it), and no save sends one', () => {
-    for (const name of ['resetCurrentDesign', 'discardChanges', 'saveCurrentDesign']) {
-      assert.ok(!functionSource(name).includes('ALERT_STYLES'), name);
-    }
-    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')), 'the saved payload has no style');
+  test('a save sends the look the page shows next to the design; Discard and Reset put back the saved look', () => {
+    assert.match(functionSource('saveCurrentDesign'), /STYLE_CORE\.savePayload\(currentType, design, style\)/);
+    assert.match(functionSource('saveCurrentDesign'), /SAVED_STYLES\[currentType\] = ALERT_STYLES\[currentType\] = style/);
+    for (const name of ['discardChanges', 'resetCurrentDesign']) assert.match(functionSource(name), /restoreSavedLook\(currentType\)/, name);
+    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')), 'the look travels next to the design, not in it');
   });
 
   test('the car drives in from the edge of the preview screen (the 1920px canvas, scaled)', () => {
@@ -216,5 +217,64 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     assert.equal(pickPreview(looks, 'giveaway_winner', undefined).key, 'giveaway-racing');
     assert.equal(pickOverlay(looks, 'giveaway_winner', undefined).key, 'giveaway-racing');
     assert.equal(pickPreview(looks, 'follow', undefined), OBJECTS.follow, 'the five keep today\'s object');
+  });
+});
+
+describe('the Style section (alert styles)', () => {
+  const vm = require('node:vm');
+
+  test('opens the six alerts\' tabs, above the card controls it replaces', () => {
+    const style = builder.indexOf('id="section-style"');
+    assert.ok(style > 0 && style < builder.indexOf('id="section-theme"'));
+    assert.ok(!builder.includes('phase1-notice'), 'the notice saying colours would come back is gone: they are here');
+  });
+
+  test('a control the look does not take is really hidden (its row\'s display rule does not win over [hidden])', () => {
+    assert.match(builder, /#section-style \[hidden\] \{ display: none; \}/);
+  });
+
+  test('the page loads the core and every family\'s fonts in one stylesheet', () => {
+    assert.match(builder, /<script src="\/js\/builder-styles-core\.js"><\/script>/);
+    assert.match(builder, /<link rel="stylesheet" href="<%= styleFontsHref %>">/);
+  });
+
+  test('an alert nobody has restyled is shown with its look\'s own settings', () => {
+    assert.match(builder, /STYLE_CORE\.STYLED_ALERTS\.forEach\(t => \{ workingDesigns\[t\] = STYLE_CORE\.untouched\(t, workingDesigns\[t\], SAVED_STYLES\[t\]\); \}\);/);
+  });
+
+  test('a picked look starts from its own settings and is drawn again', () => {
+    const src = functionSource('pickLook');
+    assert.match(src, /STYLE_CORE\.withLook\(getControlValues\(\), previous, id\)/);
+    assert.match(src, /renderedObjectType = null/);
+  });
+
+  test('the controls write the fields the save sends, and mirror today\'s hidden controls', () => {
+    const src = functionSource('initStyleControls');
+    for (const [id, mirror] of [['style-speed', 'ctrl-animation-speed'], ['style-effect', 'ctrl-screen-effect'], ['style-racing-card', 'ctrl-bg-color'], ['style-racing-accent', 'ctrl-accent-color']]) {
+      assert.ok(src.includes(`'${id}'`) && src.includes(`'${mirror}'`), `${id} -> ${mirror}`);
+    }
+    const values = functionSource('getControlValues');
+    for (const field of ['style_accent', 'style_label', 'style_sound', 'style_grows']) assert.ok(values.includes(`${field}:`), field);
+  });
+
+  test('the preview draws a look with its design, as OBS does, and scales a look of the styles to the width', () => {
+    const K = require('../public/overlay/objects/kit.js');
+    require('../public/overlay/objects/styles/samurai.js');
+    require('../public/overlay/objects/styles/racing.js');
+    const context = vm.createContext({ window: { ATLETA_KIT: K } });
+    vm.runInContext(functionSource('lookHtml') + functionSource('sizeLookHost'), context);
+    const html = vm.runInContext(`lookHtml(window.ATLETA_KIT.styles['follow-racing'], { event_label: 'Pit crew!' }, { username: 'ApexAndre' })`, context);
+    assert.match(html, />Pit crew!</, 'Racing\'s main text is the design\'s event_label');
+    assert.equal(vm.runInContext(`lookHtml({ key: 'x', family: 'samurai', render() { throw new Error('boom'); } }, {}, {})`, context), null, 'a look that throws draws nothing');
+    const host = { classes: new Set(), props: {} };
+    host.classList = { toggle: (c, on) => (on ? host.classes.add(c) : host.classes.delete(c)) };
+    host.style = { setProperty: (n, v) => { host.props[n] = v; }, removeProperty: (n) => { delete host.props[n]; } };
+    context.host = host;
+    vm.runInContext(`sizeLookHost(host, window.ATLETA_KIT.styles['raid-racing'], 630)`, context);
+    assert.ok(host.classes.has('look'));
+    assert.equal(host.props['--zw'], '1.5');
+    vm.runInContext(`sizeLookHost(host, window.ATLETA_KIT.styles['raid-samurai'], 630)`, context);
+    assert.ok(!host.classes.has('look'), 'today\'s looks reflow');
+    assert.match(builder, /#preview-object-host\.look > \.obj \{ width: 420px; zoom: var\(--zw, 1\); \}/);
   });
 });

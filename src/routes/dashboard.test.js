@@ -324,6 +324,9 @@ function addStreamer(over = {}) {
   return Number(info.lastInsertRowid);
 }
 const discordId = (streamerId) => db.getStreamerById(streamerId).discord_user_id;
+// andre_vilela_, for whom the C1 donation look was made (found by his Twitch user id, which is unique)
+const c1Owner = () => db.db.prepare('SELECT id FROM streamers WHERE twitch_user_id = ?').get('632557806')?.id
+  ?? addStreamer({ twitch_username: 'andre_vilela_', twitch_user_id: '632557806' });
 const count = (table, where = '1', ...params) => db.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).get(...params).n;
 const messageOf = (res) => new URL(res.headers.location, 'http://x').searchParams.get('msg');
 
@@ -2744,7 +2747,7 @@ describe('the look an alert is drawn in (alert styles)', () => {
   });
 
   test('a look made for one streamer is theirs alone', async () => {
-    const vilela = addStreamer({ twitch_user_id: '632557806' });
+    const vilela = c1Owner();
     assert.equal((await save('donation', 'donation-c1', {}, vilela)).status, 200);
     assert.equal(rowOf('donation', vilela).style, 'donation-c1');
     const res = await save('donation', 'donation-c1');
@@ -2840,6 +2843,24 @@ describe('the overlay builder page and a slow Twitch', () => {
     for (const type of ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember', 'timed']) {
       assert.ok(page.text.includes(`"${type}":{`), type);
     }
+  });
+
+  test('hands the Style section each alert\'s gallery, the default looks, the families, sounds and fonts, named in the streamer\'s language', async () => {
+    const { locals } = (await builder()).json();
+    const data = JSON.parse(locals.styleData);
+    assert.deepEqual(Object.keys(data.gallery).sort(), ['bits', 'donation', 'follow', 'giveaway_winner', 'raid', 'subscription']);
+    assert.equal(data.defaults.giveaway_winner, 'giveaway-racing');
+    assert.ok(!data.gallery.donation.some((e) => e.id === 'donation-c1'), 'the C1 is not this streamer\'s');
+    assert.equal(data.looks['follow-racing'].title, t('en', 'overlayBuilder.looks.follow-racing.title'));
+    assert.deepEqual(data.families.slice(0, 2).map((f) => [f.key, f.name]), [['samurai', t('en', 'overlayBuilder.families.samurai.name')], ['racing', t('en', 'overlayBuilder.families.racing.name')]]);
+    assert.ok(data.sounds[0].sounds.some((s) => s.key === 'samuraiBell' && s.name === t('en', 'overlayBuilder.sounds.samuraiBell')));
+    assert.equal(data.fonts[0], 'System Default');
+    assert.match(locals.styleFontsHref, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Noto\+Serif\+JP:wght@700&family=Kanit:[^&]+&family=Barlow\+Condensed:[^&]+&display=swap$/);
+  });
+
+  test('the C1\'s owner finds it first in the donation gallery', async () => {
+    const res = await request('GET', '/dashboard/overlay-builder', { streamer: c1Owner(), json: true });
+    assert.deepEqual(JSON.parse(res.json().locals.styleData).gallery.donation[0], { id: 'donation-c1', family: null, mine: true });
   });
 
   test('loads the alert looks the OBS overlay loads: the kit and the joined family files, at their version', async () => {

@@ -219,7 +219,7 @@ describe('numbers match the builder\'s controls', () => {
     const controls = {
       username_size: ['ctrl-username-size', 'modal-username-size'], card_width: ['ctrl-card-width'], border_radius: ['ctrl-border-radius'],
       label_font_size: ['modal-label-size'], detail_font_size: ['modal-detail-size'],
-      animation_speed: ['ctrl-animation-speed', 'modal-animation-speed'], effect_amount: ['ctrl-effect-amount', 'modal-effect-amount'],
+      animation_speed: ['ctrl-animation-speed', 'modal-animation-speed', 'style-speed'], effect_amount: ['ctrl-effect-amount', 'modal-effect-amount'],
       effect_size: ['ctrl-effect-size', 'modal-effect-size'], bg_opacity: ['modal-bg-opacity'], border_opacity: ['modal-border-opacity'],
       glow_intensity: ['modal-glow-intensity'], shadow_opacity: ['modal-shadow-opacity'], border_thickness: ['modal-border-thickness'],
       shadow_blur: ['modal-shadow-blur'], shadow_spread: ['modal-shadow-spread'],
@@ -280,7 +280,7 @@ describe('drop-down choices', () => {
   test('match the options the builder offers', () => {
     for (const id of ['ctrl-entrance-animation', 'modal-entrance-animation']) same(FIELD_SPECS.entrance_animation.values, optionsOf(id));
     for (const id of ['ctrl-car-animation', 'modal-car-animation']) same(FIELD_SPECS.car_animation.values, optionsOf(id));
-    for (const id of ['ctrl-screen-effect', 'modal-screen-effect']) same(FIELD_SPECS.screen_effect.values, optionsOf(id));
+    for (const id of ['ctrl-screen-effect', 'modal-screen-effect', 'style-effect']) same(FIELD_SPECS.screen_effect.values, optionsOf(id));
     for (const id of ['ctrl-effect-direction', 'modal-effect-direction']) same(FIELD_SPECS.effect_direction.values, optionsOf(id));
     same(FIELD_SPECS.sponsor_animation.values, optionsOf('ctrl-sponsor-animation'));
     same(FIELD_SPECS.gradient_direction.values, optionsOf('modal-gradient-direction'));
@@ -374,6 +374,10 @@ describe('the builder\'s free-text inputs stop where the server cuts', () => {
   test('the label is held to 100 characters where it is typed, the detail text to 300', () => {
     for (const id of ['ctrl-event-label', 'modal-event-label']) assert.equal(maxlengthOf(id), FIELD_SPECS.event_label.max, id);
     for (const id of ['ctrl-detail-text', 'modal-detail-text']) assert.equal(maxlengthOf(id), FIELD_SPECS.detail_text.max, id);
+  });
+
+  test('the look\'s main text is held to 40 characters where it is typed', () => {
+    assert.equal(maxlengthOf('style-label'), FIELD_SPECS.style_label.max);
   });
 
   test('every free-text input of the builder has one, so the server\'s cut is never silent', () => {

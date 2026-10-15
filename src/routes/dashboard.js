@@ -28,9 +28,9 @@ const {
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction, parseSwitch } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
-const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
+const { EVENT_DEFAULTS, OVERLAY_FONTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
-const { canUseStyle, familyStyles } = require('../services/alertStyles');
+const { ALERTS: STYLED_ALERTS, DEFAULT_STYLES, canUseStyle, familyStyles, galleryFor, familyKeys, soundGroups, fontsOf } = require('../services/alertStyles');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
@@ -2662,6 +2662,27 @@ router.delete('/giveaways/:id', (req, res) => {
 
 // --- Overlay Builder ---
 
+// What the builder's Style section is handed (alert styles): each alert's gallery (a look made for
+// this streamer first), the default looks, the families and the sounds in the gallery's order, every
+// name in the streamer's language, and the fonts Racing's name can take. The page has every family's
+// code (styles.js), so it draws the looks itself.
+function builderStyleData(streamer, t) {
+  const gallery = {};
+  const looks = {};
+  for (const type of STYLED_ALERTS) {
+    gallery[type] = galleryFor(type, streamer);
+    for (const { id } of gallery[type]) looks[id] = { title: t(`overlayBuilder.looks.${id}.title`), desc: t(`overlayBuilder.looks.${id}.desc`) };
+  }
+  return {
+    defaults: DEFAULT_STYLES,
+    gallery,
+    looks,
+    families: familyKeys().map((key) => ({ key, name: t(`overlayBuilder.families.${key}.name`), desc: t(`overlayBuilder.families.${key}.desc`) })),
+    sounds: soundGroups().map(({ family, sounds }) => ({ family, sounds: sounds.map((key) => ({ key, name: t(`overlayBuilder.sounds.${key}`) })) })),
+    fonts: OVERLAY_FONTS,
+  };
+}
+
 router.get('/overlay-builder', overlayPage, async (req, res) => {
   const designs = db.getAllOverlayDesigns(req.streamer.id);
   const overlayUrl = req.streamer.overlay_token
@@ -2684,6 +2705,9 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
     eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
     // The joined alert looks' version (services/alertStyleBundle.js), as the OBS overlay asks for them
     stylesVersion: alertStyleBundle().version,
+    // The Style section, and every family's fonts in one stylesheet
+    styleData: JSON.stringify(builderStyleData(req.streamer, res.locals.t)).replace(/</g, '\\u003c'),
+    styleFontsHref: 'https://fonts.googleapis.com/css2?' + fontsOf(familyKeys()).map((spec) => `family=${spec}`).join('&') + '&display=swap',
     overlayUrl,
     streamThumbnail
   });
