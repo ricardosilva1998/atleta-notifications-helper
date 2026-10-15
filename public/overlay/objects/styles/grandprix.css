@@ -47,13 +47,13 @@
 /* subscriber — Timing tower */
 .o-gps{height:156px}
 .o-gps-tower{position:absolute;left:0;top:0;width:134px;height:156px;background:linear-gradient(180deg,#1C1E29,#121319);box-shadow:0 14px 30px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.07);overflow:hidden}
-.o-gps-head{height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:var(--gpa);font-weight:700;font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+.o-gps-head{height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:var(--gpa);color:var(--a-on,#fff);font-weight:700;font-size:11px;letter-spacing:.18em;text-transform:uppercase}
 .o-gps-head b{font-weight:900;font-size:16px;letter-spacing:.02em}
 .o-gps-pos{position:absolute;left:4px;top:calc(32px + var(--p) * 24px);width:22px;height:22px;display:grid;place-items:center;font-weight:700;font-size:12px;background:#0A0B0F}
 .o-gps-row{position:absolute;left:28px;right:4px;top:calc(32px + var(--slot) * 24px);height:22px;display:flex;align-items:center;gap:7px;background:#1F2230;overflow:hidden}
 .o-gps-row::before{content:"";flex:none;width:3px;height:100%;background:var(--tc,#555)}
 .o-gps-row.ghost::after{content:"";height:6px;border-radius:3px;width:var(--w,40px);background:rgba(255,255,255,.16)}
-.o-gps-row.me{z-index:2;padding-right:4px;background:linear-gradient(90deg,rgba(var(--gpa-rgb),1),rgba(var(--gpa-rgb),.7));font-weight:900;font-size:14px;letter-spacing:.1em}
+.o-gps-row.me{z-index:2;padding-right:4px;background:linear-gradient(90deg,rgba(var(--gpa-rgb),1),rgba(var(--gpa-rgb),.7));color:var(--a-on,#fff);font-weight:900;font-size:14px;letter-spacing:.1em}
 .o-gps-row.me::before{background:#fff}
 .o-gps-row.me::after{content:"";position:absolute;inset:0;background:var(--gp-purple);opacity:0}
 .o-gps-code{position:relative;z-index:1;flex:1}
@@ -103,7 +103,7 @@
 .o-gpd-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .o-gpd-radio{display:flex;align-items:center;gap:8px;font-weight:700;font-size:12px;letter-spacing:.26em;text-transform:uppercase}
 .o-gpd-radio::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--gpa);box-shadow:0 0 8px var(--gpa)}
-.o-gpd-amt{font-weight:900;font-size:20px;line-height:1;padding:6px 10px 5px;background:var(--gpa);letter-spacing:.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.o-gpd-amt{font-weight:900;font-size:20px;line-height:1;padding:6px 10px 5px;background:var(--gpa);color:var(--a-on,#fff);letter-spacing:.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
 .o-gpd .o-gp-name{font-size:calc(24px * var(--fit,1))}
 .o-gpd-wave{display:flex;align-items:center;gap:3px;height:26px}
 .o-gpd-bar{flex:1;max-width:5px;height:100%;border-radius:2px;background:linear-gradient(180deg,#fff,rgba(var(--gpa-rgb),.95));transform:scaleY(.12)}
@@ -153,7 +153,7 @@
 .o-gpg-winner .o-gp-name{font-size:calc(26px * var(--fit,1))}
 .o-gpg-podium{position:absolute;left:0;right:0;top:100px;height:66px;display:flex;justify-content:center;align-items:flex-end;gap:4px;overflow:hidden}
 .o-gpg-step{display:flex;justify-content:center;padding-top:6px;background:linear-gradient(180deg,#2A2D3C,#15161E);box-shadow:inset 0 1px 0 rgba(255,255,255,.12);font-weight:900;line-height:1;color:rgba(255,255,255,.85)}
-.o-gpg-step.p1{position:relative;z-index:0;width:132px;height:62px;font-size:30px;box-shadow:inset 0 3px 0 var(--gpa),inset 0 1px 0 rgba(255,255,255,.12)}
+.o-gpg-step.p1{position:relative;z-index:0;width:132px;height:62px;font-size:30px;color:rgba(var(--a-on-rgb,255,255,255),.85);box-shadow:inset 0 3px 0 var(--gpa),inset 0 1px 0 rgba(255,255,255,.12)}
 /* A picked colour fills the winner's step (no colour picked: nothing is drawn) */
 .o-gpg-step.p1::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(var(--a-rgb),.78),rgba(var(--a-rgb),.18))}
 .o-gpg-step.p2{width:100px;height:44px;font-size:22px}

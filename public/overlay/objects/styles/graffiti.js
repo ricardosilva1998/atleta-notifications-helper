@@ -154,7 +154,7 @@
   };
 
   K.register({
-    key: 'follow-graffiti', eventType: 'follow', family: FAMILY, controls: CONTROLS_NO_TEXT, grows: false,
+    key: 'follow-graffiti', eventType: 'follow', family: FAMILY, controls: CONTROLS, grows: false,
     sound: 'gfiFollow', fx: 'none', anim: hold('1.5s'), exit: GFI_EXIT, len: 1.5,
     render: function (d) {
       return '<div class="obj o-gfi o-gfif"><i class="o-gfi-wall"></i><div class="o-gfif-in">'
@@ -243,7 +243,7 @@
   var GFI_SLOTS = [[46, 50], [374, 50], [40, 98], [380, 98], [50, 146], [370, 146], [128, 174], [292, 174], [210, 180]];
 
   K.register({
-    key: 'raid-graffiti', eventType: 'raid', family: FAMILY, controls: CONTROLS_NO_TEXT, grows: true,
+    key: 'raid-graffiti', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
     sound: 'gfiRaid', fx: 'none', anim: hold('1.6s'), exit: GFI_EXIT,
     len: function (d) { var n = Math.min(9, intOf(K.sizeOf(d, 'raid'))); return Math.max(1.6, n ? 1.2 + (n - 1) * 0.09 : 0); },
     render: function (d) {
@@ -273,7 +273,7 @@
     + '<path class="o-gfig-shine" d="M24 56L20 36M50 50L66 29"/></svg>';
 
   K.register({
-    key: 'giveaway-graffiti', eventType: 'giveaway_winner', family: FAMILY, controls: CONTROLS_NO_TEXT, grows: false,
+    key: 'giveaway-graffiti', eventType: 'giveaway_winner', family: FAMILY, controls: CONTROLS, grows: false,
     sound: 'gfiGiveaway', fx: 'confetti', anim: hold('1.9s'), exit: GFI_EXIT, len: 1.95,
     render: function (d) {
       var r = rng(hash(d.username + 'crown')), sparks = '', drips = '';

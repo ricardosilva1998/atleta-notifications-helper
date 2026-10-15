@@ -133,6 +133,17 @@ describe('every look', () => {
     }
   });
 
+  test('a look offers its main text exactly when it draws it', () => {
+    // The builder hides the control and kit.lookData() passes no style_label for a look without it. The
+    // drawn text is read without the markup: a look may set its text one letter at a time (Graffiti's stencil).
+    const MARK = 'QXMAINTEXT';
+    for (const look of looks.filter((l) => !l.preset)) {
+      const html = look.render(Object.assign({ username: 'ApexAndre', label: MARK }, SAMPLES[look.eventType][1]));
+      const draws = html.replace(/<[^>]*>/g, '').includes(MARK);
+      assert.equal(!!look.controls.label, draws, `${look.key}: offers the main text ${!!look.controls.label}, draws it ${draws}`);
+    }
+  });
+
   for (const look of looks) {
     test(`${look.key} renders every sample, and escapes what was typed`, () => {
       for (const sample of SAMPLES[look.eventType]) {
@@ -240,6 +251,15 @@ describe('every family stylesheet', () => {
       }
     });
 
+    test(`${file}: no rule sets the same property twice (the second one silently wins)`, () => {
+      const plain = rules.replace(/@keyframes[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+      for (const [, selector, body] of plain.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const props = splitTop(body, ';').map((d) => d.split(':')[0].trim()).filter((name) => name && !name.startsWith('--'));
+        const twice = props.find((name, i) => props.indexOf(name) !== i);
+        assert.ok(!twice, `${file}: ${selector.trim()} sets ${twice} twice`);
+      }
+    });
+
     test(`${file}: every look takes the streamer's colour on its own parts`, () => {
       // The accent tokens: --a itself and every family token defined from it (--rca:var(--a,…)).
       const tokens = new Set(['a', 'r-red', ...[...rules.matchAll(/--([\w-]+):var\(--a\b/g)].map((m) => m[1])]);
@@ -283,5 +303,16 @@ describe('Racing keeps today\'s defaults', () => {
     const lit = (d) => (K.styles['bits-racing'].render(d).match(/o-rcb-seg on/g) || []).length;
     assert.equal(lit({ username: 'A', amount: 10000, grows: false }), lit({ username: 'A', amount: 500 }));
     assert.ok(lit({ username: 'A', amount: 10000 }) > lit({ username: 'A', amount: 500 }));
+  });
+});
+
+describe('text drawn on the streamer\'s colour reads --a-on (dark on a light colour), white while none is picked', () => {
+  const css = fs.readFileSync(path.join(STYLES_DIR, 'grandprix.css'), 'utf8');
+  const rule = (selector) => (css.match(new RegExp('(?:^|\\n)' + selector.replace(/\./g, '\\.') + '\\{([^}]*)\\}')) || [])[1] || '';
+  test('Grand Prix: the timing tower\'s header and own row, the radio\'s amount and the winner\'s step', () => {
+    for (const selector of ['.o-gps-head', '.o-gps-row.me', '.o-gpd-amt']) {
+      assert.match(rule(selector), /(^|;)color:var\(--a-on,#fff\)/, selector);
+    }
+    assert.match(rule('.o-gpg-step.p1'), /(^|;)color:rgba\(var\(--a-on-rgb,255,255,255\),\.85\)/, '.o-gpg-step.p1');
   });
 });
