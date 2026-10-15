@@ -2,7 +2,9 @@
 
 /**
  * Alert object registry — the single source of truth for the five Twitch
- * alert objects. Consumed by BOTH render paths:
+ * alert objects, and for the styles an alert can be drawn in instead
+ * (STYLES, today donation-c1: andre_vilela_'s C1). Consumed by BOTH render
+ * paths:
  *   1. public/overlay/overlay.js        (the real OBS overlay)
  *   2. src/views/overlay-builder.ejs    (the builder's live preview)
  *

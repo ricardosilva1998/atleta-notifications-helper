@@ -235,3 +235,25 @@ sounds, alerts, tips or giveaways), and no sponsor message was longer than 500 c
   regardless).
 - **Back:** the overlay settings page, the Overlay Builder, the Channel Point Rewards page and the tip goals
   on the donations page, with the settings saved before.
+
+## Vilela's C1 donation alert
+
+Before:
+
+1. Vilela (andre_vilela_) is not live.
+2. Read only, in production: his `twitch_user_id` is `632557806` (the switch-on finds him by it).
+
+After the deploy:
+
+- The boot log shows `[DB] Added style to overlay_designs` and, once,
+  `[DB] The C1 donation alert is on for andre_vilela_`. Neither appears again on later boots.
+- Read only: his donation design has `style = 'donation-c1'`.
+- He, or the owner, presses **Preview Alert → Donation** on the overlay settings page and sees the C1 in OBS.
+
+Switching it off (the folding screen again): `db.setOverlayDesignStyle(<his streamer id>, 'donation', null)`,
+or the same `UPDATE overlay_designs SET style = NULL …`; an overlay that is already open picks it up after a
+builder save or a reconnect.
+
+Going back to an earlier release is a plain revert (older code never reads `style`), but older code's save
+writes the whole row again and would drop the style; after coming back, set it again with
+`setOverlayDesignStyle(<his streamer id>, 'donation', 'donation-c1')`.
