@@ -1695,7 +1695,7 @@
   "cards.polls.error.duration": "Choisissez une durée de {{min}} à {{max}} secondes.",
   "cards.polls.error.points": "Les votes supplémentaires coûtent de {{min}} à {{max}} points de chaîne.",
   "cards.polls.error.tooMany": "Vous avez déjà {{max}} modèles. Supprimez-en un d'abord.",
-  "cards.polls.error.running": "Il y en a déjà un en cours sur Twitch. Mettez-y fin d'abord.",
+  "cards.polls.error.running": "Terminez d'abord ce qui est déjà en cours sur Twitch.",
   "cards.polls.error.notAffiliate": "Twitch réserve les sondages et les prédictions aux affiliés et aux partenaires.",
   "cards.polls.error.reconnect": "Reconnectez Twitch pour utiliser les sondages et les prédictions.",
   "cards.polls.error.twitchFailed": "Twitch n'a pas répondu. Réessayez dans un instant.",

@@ -1796,7 +1796,7 @@
   "pollbar.votes": "{{count}} Stimmen",
   "pollbar.pointsViewers": "{{points}} Punkte · {{viewers}} Zuschauer",
   "pollbar.pollFoot": "{{count}} Stimmen · über die Umfrage im Chat abstimmen",
-  "pollbar.predictionFoot": "{{count}} Punkte im Einsatz",
+  "pollbar.predictionFoot": "{{count}} Punkte gesetzt",
   "pollbar.winners": "{{viewers}} Zuschauer teilen sich {{points}} Punkte",
   "pollbar.tie": "Gleichstand",
   "pollbar.noVotes": "Keine Stimmen",
