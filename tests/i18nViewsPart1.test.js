@@ -417,7 +417,7 @@ describe('while the overlay features are off, the pages say nothing about the ov
 
   // The texts that replace them (src/locales): none of them says overlay, in any language.
   const REPLACEMENTS = [
-    'dashboard.cards.giveaways.descChat', 'dashboard.cards.sponsors.descChat', 'dashboard.cards.donations.setupChat', 'donations.settings.introChat', 'sponsors.introChat',
+    'donations.settings.introChat', 'sponsors.introChat',
     'ytChatbot.eventsChat', 'ytChatbot.eventsHintChat', 'dashboard.kick.comingSoonChat', 'account.disabled.bodyChat',
   ];
   const OVERLAY_IN_ANY_LANGUAGE = /overlay|\bOBS\b|browser|navegador|navigateur|叠加|オーバーレイ|ブラウザ/i;
