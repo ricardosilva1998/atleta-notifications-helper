@@ -27,6 +27,7 @@ const PREFIXES = {
   quest: { classes: ['o-qs'], keyframes: ['qs'] },
   comic: { classes: ['o-cm'], keyframes: ['cm'] },
   cozy: { classes: ['o-cz'], keyframes: ['cz'] },
+  cosmos: { classes: ['o-cs'], keyframes: ['cs'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
