@@ -25,6 +25,7 @@ const PREFIXES = {
   cockpit: { classes: ['o-ck'], keyframes: ['ck'] },
   arcade: { classes: ['o-ar'], keyframes: ['ar'] },
   quest: { classes: ['o-qs'], keyframes: ['qs'] },
+  comic: { classes: ['o-cm'], keyframes: ['cm'] },
 };
 // Classes a look may use from objects.css (shared parts and the samurai name plaque).
 const SHARED = new Set(['obj', 'playing', 'exiting', 'alert-pos', 'look', 'o-nm', 'o-nm-t', 'o-odo', 'o-odo-d', 'o-odo-s', 'o-odo-strip',
