@@ -1952,6 +1952,7 @@ const STREAMER_OWNED_ROWS = [
   ['channel_point_redemptions', 'streamer_id = ?'],
   ['channel_point_rewards', 'streamer_id = ?'],
   ['chat_commands', 'streamer_id = ?'],
+  ['poll_templates', 'streamer_id = ?'],
   ['custom_overlays', 'streamer_id = ?'],
   ['overlay_designs', 'streamer_id = ?'],
   ['overlay_designs_v0_backup', 'streamer_id = ?'],
@@ -3085,6 +3086,75 @@ function deleteChatCommand(id, streamerId) {
   return db.prepare('DELETE FROM chat_commands WHERE id = ? AND streamer_id = ?').run(id, streamerId).changes > 0;
 }
 
+// ── The Polls & predictions card's templates ──
+
+// A poll_templates row as the card and the routes read it; a row whose choices cannot be read has none.
+function pollTemplateOf(row) {
+  if (!row) return null;
+  let choices = [];
+  try {
+    const parsed = JSON.parse(row.choices);
+    if (Array.isArray(parsed)) choices = parsed.map(String);
+  } catch (e) { /* written by hand: no choices */ }
+  return {
+    id: row.id, kind: row.kind, title: row.title, choices, durationSeconds: row.duration_seconds,
+    pointsPerVote: row.points_per_vote ?? null, sortOrder: row.sort_order,
+  };
+}
+
+function getPollTemplates(streamerId) {
+  return db.prepare('SELECT * FROM poll_templates WHERE streamer_id = ? ORDER BY sort_order, id').all(streamerId).map(pollTemplateOf);
+}
+
+function getPollTemplate(id, streamerId) {
+  return pollTemplateOf(db.prepare('SELECT * FROM poll_templates WHERE id = ? AND streamer_id = ?').get(id, streamerId));
+}
+
+function countPollTemplates(streamerId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM poll_templates WHERE streamer_id = ?').get(streamerId).n;
+}
+
+// `value` is pollRules.checkPollInput()'s: { kind, title, choices, durationSeconds, pointsPerVote }. A new template goes
+// last.
+function addPollTemplate(streamerId, value) {
+  const info = db.prepare(`
+    INSERT INTO poll_templates (streamer_id, kind, title, choices, duration_seconds, points_per_vote, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM poll_templates WHERE streamer_id = ?))
+  `).run(streamerId, value.kind, value.title, JSON.stringify(value.choices), value.durationSeconds, value.pointsPerVote, streamerId);
+  return getPollTemplate(Number(info.lastInsertRowid), streamerId);
+}
+
+// False when the template is not the streamer's (or is gone).
+function updatePollTemplate(id, streamerId, value) {
+  return db.prepare('UPDATE poll_templates SET kind = ?, title = ?, choices = ?, duration_seconds = ?, points_per_vote = ? WHERE id = ? AND streamer_id = ?')
+    .run(value.kind, value.title, JSON.stringify(value.choices), value.durationSeconds, value.pointsPerVote, id, streamerId).changes > 0;
+}
+
+function deletePollTemplate(id, streamerId) {
+  return db.prepare('DELETE FROM poll_templates WHERE id = ? AND streamer_id = ?').run(id, streamerId).changes > 0;
+}
+
+// The two cards' settings (POST /dashboard/settings): each writer writes only its own columns.
+const POLLS_COLUMNS = new Set([
+  'polls_chat_enabled', 'poll_start_template', 'poll_end_template', 'prediction_start_template',
+  'prediction_lock_template', 'prediction_end_template', 'prediction_cancel_template',
+]);
+const SHOUTOUT_COLUMNS = new Set(['shoutout_command_enabled', 'shoutout_raid_enabled', 'shoutout_raid_min_viewers', 'shoutout_template']);
+
+function updateStreamerColumns(allowed, streamerId, fields) {
+  const names = Object.keys(fields).filter((name) => allowed.has(name));
+  if (names.length === 0) return;
+  db.prepare(`UPDATE streamers SET ${names.map((name) => `${name} = ?`).join(', ')} WHERE id = ?`).run(...names.map((name) => fields[name]), streamerId);
+}
+
+function updatePollSettings(streamerId, fields) {
+  updateStreamerColumns(POLLS_COLUMNS, streamerId, fields);
+}
+
+function updateShoutoutSettings(streamerId, fields) {
+  updateStreamerColumns(SHOUTOUT_COLUMNS, streamerId, fields);
+}
+
 const CHATBOT_COLUMNS = new Set([
   'chatbot_enabled',
   'chat_follow_enabled', 'chat_sub_enabled', 'chat_giftsub_enabled',
@@ -3967,6 +4037,56 @@ try {
     console.log('[DB] Added cp_last_sync_at column to streamers');
   }
 } catch (e) { _migrationLog('cp_last_sync_at', e); }
+
+// The Polls & predictions and Shoutouts cards (2026-10-15): the bot's lines about polls and predictions (each may be
+// emptied: an empty text posts nothing), and the shoutouts' switches, raid minimum and text. Existing rows get the
+// defaults (SQLite fills an added column's DEFAULT in).
+{
+  const POLL_AND_SHOUTOUT_COLUMNS = [
+    ['polls_chat_enabled', 'INTEGER DEFAULT 1'],
+    ['poll_start_template', "TEXT DEFAULT 'Poll: {title} — vote now! ({time} to vote)'"],
+    ['poll_end_template', "TEXT DEFAULT 'Poll closed: {winner} won with {percent}% of the votes.'"],
+    ['prediction_start_template', "TEXT DEFAULT 'Prediction: {title} — place your channel points! ({time} to predict)'"],
+    ['prediction_lock_template', "TEXT DEFAULT 'Predictions are locked for \"{title}\". Good luck!'"],
+    ['prediction_end_template', "TEXT DEFAULT '{outcome} wins! {winners} viewers share {points} channel points.'"],
+    ['prediction_cancel_template', "TEXT DEFAULT 'Prediction cancelled: \"{title}\". Everyone gets their channel points back.'"],
+    ['shoutout_command_enabled', 'INTEGER DEFAULT 0'],
+    ['shoutout_raid_enabled', 'INTEGER DEFAULT 0'],
+    ['shoutout_raid_min_viewers', 'INTEGER DEFAULT 1'],
+    ['shoutout_template', "TEXT DEFAULT 'Go check out {name}! They were last streaming {game}: {link}'"],
+  ];
+  let cols = [];
+  try {
+    cols = db.pragma('table_info(streamers)').map((c) => c.name);
+  } catch (e) { _migrationLog('poll_and_shoutout_columns', e); }
+  for (const [name, definition] of POLL_AND_SHOUTOUT_COLUMNS) {
+    if (cols.includes(name)) continue;
+    try {
+      db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${definition}`);
+      console.log(`[DB] Added ${name} column to streamers`);
+    } catch (e) { _migrationLog(name, e); }
+  }
+}
+
+// The Polls & predictions card's saved templates (at most 20 per streamer, routes/polls.js). `choices` is a JSON array
+// of texts; `points_per_vote` is empty when a poll has no channel-points voting.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS poll_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      choices TEXT NOT NULL,
+      duration_seconds INTEGER NOT NULL,
+      points_per_vote INTEGER,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_poll_templates_streamer ON poll_templates(streamer_id)');
+} catch (e) { _migrationLog('poll_templates', e); }
 
 // Migration: version overlay designs and snapshot v0 before the object rollout.
 // Phase 1 objects ignore saved style columns, so nothing is overwritten here —
@@ -5708,6 +5828,14 @@ module.exports = {
   addChatCommand,
   updateChatCommand,
   deleteChatCommand,
+  getPollTemplates,
+  getPollTemplate,
+  countPollTemplates,
+  addPollTemplate,
+  updatePollTemplate,
+  deletePollTemplate,
+  updatePollSettings,
+  updateShoutoutSettings,
   updateChatbotConfig,
   updateBuiltinCommands,
   updateModerationConfig,
