@@ -235,3 +235,61 @@ sounds, alerts, tips or giveaways), and no sponsor message was longer than 500 c
   regardless).
 - **Back:** the overlay settings page, the Overlay Builder, the Channel Point Rewards page and the tip goals
   on the donations page, with the settings saved before.
+
+## Vilela's C1 donation alert
+
+Run the checks and the switch inside the running service: open a shell with `railway ssh` and work from `/app`,
+as `backup-restore.md` does for its copy in the container. The image has no `sqlite3` program (the `Dockerfile`
+adds only `python3 make g++` to `node:24-slim`), so the commands below use Node and `better-sqlite3`, which the
+app already ships, and take their SQL as the last argument. The read-only ones open `data/bot.db` with
+`{ readonly: true }`, so they cannot change it.
+
+Before:
+
+1. Vilela (andre_vilela_) is not live.
+2. Read only, in production: his `twitch_user_id` is `632557806` (the switch-on finds him by it). This prints
+   one row with `twitch_username` `andre_vilela_` and the width and position of his donation design (note
+   them: the C1 keeps them):
+
+   ```bash
+   cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT s.id, s.twitch_username, o.card_width, o.card_position, o.card_custom_x, o.card_custom_y FROM streamers s LEFT JOIN overlay_designs o ON o.streamer_id = s.id AND o.event_type = 'donation' WHERE s.twitch_user_id = '632557806'"
+   ```
+
+After the deploy:
+
+- The boot log shows `[DB] Added style to overlay_designs` and, once,
+  `[DB] The C1 donation alert is on for andre_vilela_`. Neither appears again on later boots.
+- Read only: his donation design has `style = 'donation-c1'`, with the width and position noted above:
+
+  ```bash
+  cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT o.style, o.card_width, o.card_position, o.card_custom_x, o.card_custom_y FROM overlay_designs o JOIN streamers s ON s.id = o.streamer_id WHERE s.twitch_user_id = '632557806' AND o.event_type = 'donation'"
+  ```
+
+- To see it, Vilela presses **Preview Alert** on the Donation card of the overlay settings page
+  (`/dashboard/overlay`), signed in as himself and off stream. The owner cannot press it for him: the test route
+  (`POST /dashboard/overlay/test/:eventType`) acts only on the signed-in streamer's overlays, and the admin panel
+  has no overlay test, so the owner's check is the read-only query above. The test plays on every overlay he
+  has open (the preview on that page, and OBS if it is open) and, while his chatbot and its donation thank-you
+  are on, also posts his donation thank-you in his Twitch chat, filled with the test values (`BigSponsor`,
+  25 USD, `Keep racing!`; with the default text, for example, "BigSponsor donated 25! Keep racing!", but his own
+  thank-you text is what is posted), with nothing to mark it as a test. It needs the OBS overlay switch on (it answers `overlay_off` otherwise).
+
+Switching it off (back to the standard donation alert, the folding screen) is plain SQL, run in the container
+with a `busy_timeout` so it waits for the app's own writes instead of failing:
+
+```bash
+cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE overlay_designs SET style = NULL WHERE event_type = 'donation' AND streamer_id = (SELECT id FROM streamers WHERE twitch_user_id = '632557806')"
+```
+
+It must print `changes: 1`. An overlay that is already open picks it up after a builder save or a reconnect.
+To switch it back on, run the same command with `SET style = 'donation-c1'`. If it prints `changes: 0`, either
+his Twitch user id is no longer `632557806` (run the read-only check above) or he has no donation design row
+(the builder's Reset deletes a design that has no style): in the second case, have him save his Donation design
+once in the Overlay Builder, which writes the row, and run the command again.
+
+Never switch it by loading `src/db.js` in a second process (`require('/app/src/db.js')`): loading it runs every
+boot migration against the live database while the app is using it.
+
+Going back to an earlier release is a plain revert (older code never reads `style`), but older code's save
+writes the whole row again and would drop the style; after coming back, set it again with the command above
+(`SET style = 'donation-c1'`).

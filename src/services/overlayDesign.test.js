@@ -105,6 +105,13 @@ describe('a design the builder sends', () => {
     assert.equal({}.polluted, undefined);
   });
 
+  test('a style in it is dropped: the builder cannot choose the look an alert is drawn in', () => {
+    assert.ok(!Object.prototype.hasOwnProperty.call(FIELD_SPECS, 'style'), 'a style is set by the owner, never by a save');
+    const result = validateOverlayDesign(builderPayload({ style: 'donation-c1' }), 'donation');
+    assert.equal(result.ok, true);
+    assert.ok(!('style' in result.design));
+  });
+
   test('a design that is not an object is refused', () => {
     for (const bad of [undefined, null, 5, true, [], [builderPayload()], 'not json', '{"bg_color":', '[]', '5', 'null']) {
       assert.deepEqual(validateOverlayDesign(bad), { ok: false, field: 'design' }, String(bad));

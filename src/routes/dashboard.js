@@ -2714,7 +2714,8 @@ router.post('/overlay-builder/reset', (req, res) => {
   if (!isBuilderEventType(eventType)) {
     return res.status(400).json({ ok: false, error: res.locals.t('overlayBuilder.error.eventType') });
   }
-  db.deleteOverlayDesign(req.streamer.id, eventType);
+  // Back to the defaults; a style the owner set (andre_vilela_'s C1) is kept
+  db.resetOverlayDesign(req.streamer.id, eventType);
 
   // Push updated designs to running overlay
   const bus = require('../services/overlayBus');

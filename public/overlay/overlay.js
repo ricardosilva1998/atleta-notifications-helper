@@ -35,6 +35,27 @@ function alertSeconds(type) {
   return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
 }
 
+// The object an alert renders: the style its saved design names (overlay_designs.style), when
+// this page knows that style and it draws this alert type (andre_vilela_'s donation is
+// 'donation-c1'); otherwise the alert's own object; null for the alerts that are legacy cards.
+// The builder preview picks with the same rule (previewObjectFor in overlay-builder.ejs).
+function objectFor(type) {
+  const design = overlayDesigns[type];
+  const styleId = design && design.style;
+  const styles = window.ATLETA_OBJECT_STYLES || {};
+  const styled = styleId ? styles[styleId] : null;
+  if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[type];
+  return own && own.key === type ? own : null;
+}
+
+// How long an object's exit runs ("0.90s" is 900 ms), never less than the 400 ms every alert
+// has always had, so the five objects keep their pace.
+function exitMs(objectDef) {
+  const seconds = parseFloat(objectDef && objectDef.exit && objectDef.exit.dur);
+  return Number.isFinite(seconds) ? Math.max(400, Math.round(seconds * 1000)) : 400;
+}
+
 // The timers of the alert on screen and of the queue: dismissing it, removing it,
 // and starting the next one. Clear All cancels every one of them, so a cleared
 // alert cannot start "the next one" later, on top of an alert that began after the clear.
@@ -435,7 +456,7 @@ function showNotification(event) {
   // Build the alert. Every alert sits in a slot (.alert-pos) that carries its saved
   // position and width; what is inside animates on its own, so no entrance has to
   // know where it is placed.
-  const objectDef = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[event.type];
+  const objectDef = objectFor(event.type);
   const cardClass = getCardClass(event.type);
   const isSubLike = event.type === 'subscription' || event.type === 'yt_member';
   const slot = document.createElement('div');
@@ -493,10 +514,11 @@ function showNotification(event) {
       card.style.transition = 'opacity 0.3s ease-in';
       card.style.opacity = '0';
     }
+    // An object leaves once its own exit has run (the C1 drives off for 0.9 s); a card fades out in 0.3 s
     alertTimer(() => {
       slot.remove();
       alertTimer(playNext, 500);
-    }, 400);
+    }, objectDef ? exitMs(objectDef) : 400);
   }, duration);
 }
 
@@ -523,12 +545,11 @@ function wrapWithSideIcons(icon, bodyHtml) {
 }
 
 function buildBannerContent(event) {
-  // The five Twitch events render from the shared object registry.
-  // Everything else keeps the legacy top-accent + card-body + car-track card.
-  const objects = window.ATLETA_OBJECTS;
-  if (objects && objects[event.type]) {
-    return objects[event.type].render(event.data || {});
-  }
+  // The five Twitch events render from the shared object registry, or from the style their
+  // saved design names (objectFor). Everything else keeps the legacy
+  // top-accent + card-body + car-track card.
+  const objectDef = objectFor(event.type);
+  if (objectDef) return objectDef.render(event.data || {});
 
   const icon = getSideIcon(event.type);
 
