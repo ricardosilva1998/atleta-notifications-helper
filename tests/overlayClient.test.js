@@ -813,4 +813,32 @@ describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
     overlay.clock.advance(1 + 500);
     assert.match(overlay.slots()[0].innerHTML, /class="obj o-don"/);
   });
+
+  test('a donor name and message made of markup are shown as text, by the OBS page\'s own escape', () => {
+    // overlay.js declares its own DOM-based esc() (it does not escape quotes), and on the real page it replaces the
+    // registry's: both scripts share one global scope. loadOverlay() runs them in one context, so this is the escape
+    // the C1 really uses in OBS. All of the C1's donor text is element content, where that is enough.
+    const NAME = '<img src=x onerror=alert(1)>"Q"\'S\'&A';
+    const MESSAGE = '<script>alert(1)</script>';
+    const decode = (text) => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    // Every tag with its attribute names and the values blanked: a donor's text must not add a tag or an attribute.
+    const shape = (html) => [...html.matchAll(/<([a-zA-Z][^<>]*)>/g)].map((m) => m[1].replace(/"[^"]*"/g, '""')).join('\n');
+    const play = (username, message) => {
+      const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1' }) } });
+      overlay.send({ type: 'donation', data: { username, amount: 25, currency: 'USD', message } });
+      return overlay.slots()[0].innerHTML;
+    };
+
+    const html = play(NAME, MESSAGE);
+    assert.match(html, /^<div class="obj o-c1">/, 'it is the C1');
+    assert.ok(!html.includes('<img') && !html.includes('<script'), 'no raw markup from the donor');
+    assert.equal(shape(html), shape(play('RacerDan', 'Keep racing!')), 'the same tags and attributes as for an ordinary donor');
+
+    const from = /<div class="o-c1-from">([^]*?)<\/div>/.exec(html)[1];
+    const message = /<div class="o-c1-msg">([^]*?)<\/div>/.exec(html)[1];
+    assert.ok(!/[<>]/.test(from) && !/[<>]/.test(message), 'the donor\'s text holds no angle bracket');
+    assert.ok(from.includes('&lt;img src=x onerror=alert(1)&gt;') && from.includes('&amp;A'), 'the name is escaped');
+    assert.equal(decode(from), NAME, 'and reads back as the donor typed it');
+    assert.equal(decode(message), `"${MESSAGE}"`, 'so does the message, between its quotes');
+  });
 });

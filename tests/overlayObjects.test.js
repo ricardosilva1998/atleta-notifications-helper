@@ -12,18 +12,33 @@ describe('object registry contract', () => {
     assert.deepEqual(Object.keys(OBJECTS).sort(), [...KEYS].sort());
   });
 
+  // The shape every object and every style has. exitMs() in overlay.js reads exit.dur as seconds
+  // (parseFloat), so a duration written as "900ms" would hold the alert queue for 15 minutes.
+  function assertTimedObject(label, o) {
+    assert.equal(typeof o.render, 'function', `${label}: render must be a function`);
+    for (const phase of ['anim', 'exit']) {
+      assert.ok(o[phase], `${label}: missing ${phase}`);
+      assert.match(o[phase].dur, /^\d+(\.\d+)?s$/, `${label}: ${phase}.dur must be like "0.40s"`);
+      assert.equal(typeof o[phase].ease, 'string', `${label}: ${phase}.ease must be a string`);
+    }
+    assert.equal(typeof o.anim.in, 'string', `${label}: anim.in must name a keyframe`);
+    assert.equal(typeof o.exit.out, 'string', `${label}: exit.out must name a keyframe`);
+  }
+
   test('every object has a render function and timing metadata', () => {
     for (const k of KEYS) {
-      const o = OBJECTS[k];
-      assert.equal(o.key, k, `${k}: key must match its registry slot`);
-      assert.equal(typeof o.render, 'function', `${k}: render must be a function`);
-      for (const phase of ['anim', 'exit']) {
-        assert.ok(o[phase], `${k}: missing ${phase}`);
-        assert.match(o[phase].dur, /^\d+(\.\d+)?s$/, `${k}: ${phase}.dur must be like "0.40s"`);
-        assert.equal(typeof o[phase].ease, 'string', `${k}: ${phase}.ease must be a string`);
-      }
-      assert.equal(typeof o.anim.in, 'string', `${k}: anim.in must name a keyframe`);
-      assert.equal(typeof o.exit.out, 'string', `${k}: exit.out must name a keyframe`);
+      assert.equal(OBJECTS[k].key, k, `${k}: key must match its registry slot`);
+      assertTimedObject(k, OBJECTS[k]);
+    }
+  });
+
+  test('every style has the same shape, is filed under its own id and names the alert it draws', () => {
+    const styles = Object.entries(OBJECTS.STYLES);
+    assert.ok(styles.length >= 1, 'there is at least one style');
+    for (const [id, style] of styles) {
+      assert.equal(style.key, id, `${id}: key must match its STYLES slot (objectFor() compares them)`);
+      assert.equal(typeof style.eventType, 'string', `${id}: eventType names the alert it draws`);
+      assertTimedObject(id, style);
     }
   });
 });
@@ -472,11 +487,29 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
   test('the car is the traced C1: its outline, both wheels, the name and the number', () => {
     const html = tip();
     assert.match(html, /<svg class="o-c1-svg" viewBox="0 0 320 140"/);
-    assert.ok(html.includes('M30,108L27,108C24.5,107.5 23.4,104 23.2,98'), 'the body outline measured from the reference');
     assert.match(html, /class="o-c1-wheel o-c1-rear" transform="translate\(57 108\.5\)"/);
     assert.match(html, /class="o-c1-wheel o-c1-front" transform="translate\(249 108\.5\)"/);
     assert.match(html, /class="o-c1-decal"[^>]*>VILELA</);
     assert.match(html, /class="o-c1-num"[^>]*>1</);
+  });
+
+  test('the traced outline, the glass and the wheel wells are the committed prototype\'s, character for character, and the render prints them', () => {
+    // The drawing was measured from a real C1 once (see the comment above C1_BODY): a path edited by accident
+    // anywhere along its length must fail here, not only at its first characters.
+    const prototype = fs.readFileSync(path.join(__dirname, '..', 'docs', 'superpowers', 'specs', 'assets', '2026-10-15-vilela-c1-donation-prototype.html'), 'utf8');
+    const registry = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
+    const paths = (source, declaration) => Object.fromEntries([...source.matchAll(declaration)].map((m) => [m[1], m[2]]));
+    const fromPrototype = paths(prototype, /const (BODY|DOOR_GLASS|QUARTER_GLASS|WELLS) = '([^']*)';/g);
+    const fromRegistry = paths(registry, /var C1_(BODY|DOOR_GLASS|QUARTER_GLASS|WELLS) = '([^']*)';/g);
+    const names = ['BODY', 'DOOR_GLASS', 'QUARTER_GLASS', 'WELLS'];
+    assert.deepEqual(Object.keys(fromPrototype).sort(), [...names].sort(), 'the prototype declares the four paths');
+    assert.deepEqual(Object.keys(fromRegistry).sort(), [...names].sort(), 'the registry declares the four paths');
+    const html = tip();
+    for (const name of names) {
+      assert.ok(fromPrototype[name].length > 50, `${name} is a whole path, not a stub`);
+      assert.equal(fromRegistry[name], fromPrototype[name], `C1_${name} is the prototype's ${name}`);
+      assert.ok(html.includes(`d="${fromPrototype[name]}"`), `the render draws ${name}`);
+    }
   });
 
   test('prints the board: Sponsor, the amount, the message in quotes and the name', () => {
@@ -508,6 +541,16 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
 
   test('an amount in a long currency format is set smaller too (CA$1,250.00)', () => {
     assert.ok(tip({ amount: '1250', currency: 'CAD' }).includes('<div class="o-c1-amt" style="--afit:0.64">CA$1,250.00</div>'));
+  });
+
+  test('the amount is set smaller from its 8th character: 7 characters ($100.00) stay at full size, 8 (CA$25.00) get 7/8', () => {
+    const amount = (html) => /<div class="o-c1-amt"([^>]*)>([^<]*)<\/div>/.exec(html);
+    const seven = amount(tip({ amount: '100', currency: 'USD' }));
+    assert.equal(seven[2], '$100.00', 'seven characters');
+    assert.equal(seven[1], '', 'the board holds seven at 46px: no --afit');
+    const eight = amount(tip({ amount: '25', currency: 'CAD' }));
+    assert.equal(eight[2], 'CA$25.00', 'eight characters');
+    assert.equal(eight[1], ' style="--afit:0.88"', '7 / 8 = 0.875, written with two decimals');
   });
 
   test('renders the dashboard test donation (src/routes/dashboard.js) in its currency', () => {
@@ -558,7 +601,13 @@ describe('objects.css — the C1 (donation-c1)', () => {
   });
 
   test('the car drives in and out across the whole OBS source, whatever its size', () => {
-    assert.ok(!/--fw\s*:/.test(rule('.o-c1')), '.o-c1 declares no --fw, so a parent (the builder preview) can set it');
+    // A --fw declared on any element inside the builder preview's host would shadow the host's own (1920px).
+    const header = css.indexOf('/* ══ 06 styles');
+    assert.ok(header >= 0, 'the C1 section has its header comment');
+    const nextHeader = css.indexOf('/* ══ ', header + 1);
+    const section = css.slice(header, nextHeader === -1 ? undefined : nextHeader).replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(section.includes('.o-c1{') && section.includes('.exiting .o-c1 .o-c1-rig{'), 'the slice runs from the first C1 rule to the last');
+    assert.ok(!/--fw\s*:/.test(section), 'no rule in the C1 section declares --fw, so a parent (the builder preview) can set it');
     assert.ok(css.includes('@keyframes c1Arrive{from{transform:translateX(calc(-1 * var(--fw, 100vw)))}to{transform:translateX(0)}}'));
     assert.ok(css.includes('@keyframes c1Leave{from{transform:translateX(0)}to{transform:translateX(var(--fw, 100vw))}}'));
   });

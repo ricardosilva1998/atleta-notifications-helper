@@ -96,12 +96,14 @@ describe('overlay_designs.style', () => {
   });
 
   test('a save keeps design_version too (INSERT OR REPLACE used to reset it to 0)', () => {
+    db.saveOverlayDesign(streamer, 'donation', {});
     sql.prepare('UPDATE overlay_designs SET design_version = 1 WHERE streamer_id = ? AND event_type = ?').run(streamer, 'donation');
     db.saveOverlayDesign(streamer, 'donation', { card_width: 500 });
     assert.equal(row().design_version, 1);
   });
 
   test('one row per streamer and alert, updated in place', () => {
+    db.saveOverlayDesign(streamer, 'donation', {});
     const id = row().id;
     db.saveOverlayDesign(streamer, 'donation', { card_width: 480 });
     assert.equal(row().id, id, 'the row is updated, not deleted and inserted again');
@@ -179,18 +181,25 @@ describe('the one-time switch-on of andre_vilela_\'s C1', () => {
     sql.close();
   });
 
-  test('a donation design he saved before keeps its position and width', () => {
+  test('a donation design he saved before keeps its position and width, when one boot adds the style column and switches him on (production\'s order)', () => {
     const file = newFile();
     let booted = boot(file);
     let sql = booted.db.db;
     const vilela = addStreamer(sql, { twitch_user_id: ANDRE });
     booted.db.saveOverlayDesign(vilela, 'donation', { card_width: 520, card_position: 'bot-right' });
+    // Production's database predates both the column and the switch-on: take them away again, so the next boot
+    // does both in one load, the way the deploy will.
+    sql.exec('ALTER TABLE overlay_designs DROP COLUMN style');
+    assert.ok(!sql.pragma('table_info(overlay_designs)').some((c) => c.name === 'style'), 'the database has no style column');
     sql.prepare('DELETE FROM data_migrations WHERE name = ?').run(MIGRATION);
     sql.close();
     booted = boot(file);
     sql = booted.db.db;
     const saved = sql.prepare('SELECT * FROM overlay_designs WHERE streamer_id = ? AND event_type = ?').get(vilela, 'donation');
     assert.deepEqual([saved.style, saved.card_width, saved.card_position], ['donation-c1', 520, 'bot-right']);
+    assert.equal(booted.lines.filter((l) => l.includes('[DB] Added style to overlay_designs')).length, 1);
+    assert.equal(booted.lines.filter((l) => l.includes('[DB] The C1 donation alert is on for andre_vilela_')).length, 1);
+    assert.deepEqual(booted.lines.filter((l) => l.includes('[DB migration]')), []);
     sql.close();
   });
 });

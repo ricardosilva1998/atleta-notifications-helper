@@ -2460,9 +2460,39 @@ describe('saving an overlay design', () => {
     assert.equal(stored().find((d) => d.event_type === 'follow').style, null, 'the builder cannot choose a style');
   });
 
+  test('a style anywhere in a builder save is ignored, neither stored nor refused: his C1 stays, and nobody else gets one', async () => {
+    // The route reads eventType and design; validateOverlayDesign() copies only the fields the builder has controls for,
+    // and saveOverlayDesign() writes a fixed list of columns. The save itself goes through: the width proves it.
+    const bodies = {
+      'inside the design': (style, card_width) => ({ eventType: 'donation', design: design({ card_width, style }) }),
+      'beside the design': (style, card_width) => ({ eventType: 'donation', design: design({ card_width }), style }),
+    };
+    const post = (streamer, body) => request('POST', '/dashboard/overlay-builder/save', { streamer, body });
+    const donation = (streamer) => stored(streamer).find((d) => d.event_type === 'donation');
+    const other = addStreamer();
+    db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
+    let width = 450;
+    for (const [where, body] of Object.entries(bodies)) {
+      for (const style of [null, 'donation-c1']) {
+        const label = `${where}, style ${style}`;
+        width += 10;
+        assert.equal((await post(id, body(style, width))).status, 200, label);
+        assert.equal(donation(id).card_width, width, `${label}: his save went through`);
+        assert.equal(donation(id).style, 'donation-c1', `${label}: his C1 is as it was`);
+
+        width += 10;
+        assert.equal((await post(other, body(style, width))).status, 200, label);
+        assert.equal(donation(other).card_width, width, `${label}: their save went through`);
+        assert.equal(donation(other).style, null, `${label}: a streamer with no style does not get one`);
+      }
+    }
+  });
+
   test('Reset keeps the alert\'s style, and the open overlay is told', async () => {
     db.setOverlayDesignStyle(id, 'donation', 'donation-c1');
-    await save('donation', design({ card_width: 600 }));
+    const saved = await save('donation', design({ card_width: 600 }));
+    assert.equal(saved.status, 200, 'the save worked, so the Reset below has a design to put back');
+    assert.equal(stored().find((d) => d.event_type === 'donation').card_width, 600, 'and it stored the width');
     const pushed = [];
     const listener = (event) => pushed.push(event);
     bus.on(`overlay:${id}`, listener);
