@@ -824,6 +824,37 @@ function toggleStats(guildId) {
     moderatorYes: t('cards.protection.moderatorYes', { bot: cards.protection.botName }),
     moderatorNo: t('cards.protection.moderatorNo', { bot: cards.protection.botName }),
     moderatorUnknown: t('cards.protection.moderatorUnknown'),
+    shoutoutExample: t('cards.shoutouts.example', { line: '{{line}}' }),
+    polls: {
+      kindPoll: t('cards.polls.kindPoll'),
+      kindPrediction: t('cards.polls.kindPrediction'),
+      kindPredictionShort: t('cards.polls.kindPredictionShort'),
+      start: t('cards.polls.start'),
+      started: t('cards.polls.started'),
+      pollRunningHint: t('cards.polls.pollRunningHint'),
+      predictionRunningHint: t('cards.polls.predictionRunningHint'),
+      edit: t('cards.polls.edit'),
+      delete: t('cards.polls.delete'),
+      confirmDelete: t('cards.polls.confirmDelete', { title: '{{title}}' }),
+      left: t('cards.polls.left', { count: '{{count}}' }),
+      minutes: t('cards.common.minutes', { minutes: '{{minutes}}' }),
+      seconds: t('cards.common.seconds', { seconds: '{{seconds}}' }),
+      locked: t('cards.polls.locked'),
+      votes: t('cards.polls.votes', { count: '{{count}}' }),
+      pointsShort: t('cards.polls.pointsShort', { points: '{{points}}', viewers: '{{viewers}}' }),
+      totalPoints: t('cards.polls.totalPoints', { count: '{{count}}' }),
+      endNow: t('cards.polls.endNow'),
+      lockNow: t('cards.polls.lockNow'),
+      cancelRefund: t('cards.polls.cancelRefund'),
+      confirmCancel: t('cards.polls.confirmCancel'),
+      whoWon: t('cards.polls.whoWon'),
+      outcomeWon: t('cards.polls.outcomeWon', { outcome: '{{outcome}}' }),
+      resultPollWon: t('cards.polls.result.pollWon', { winner: '{{winner}}', percent: '{{percent}}', votes: '{{votes}}' }),
+      resultTie: t('cards.polls.result.tie', { winner: '{{winner}}' }),
+      resultNone: t('cards.polls.result.none'),
+      resultPredictionWon: t('cards.polls.result.predictionWon', { outcome: '{{outcome}}', winners: '{{winners}}', points: '{{points}}' }),
+      resultCancelled: t('cards.polls.result.cancelled'),
+    },
     giveaway: {
       running: t('cards.giveaways.status.running'),
       picked: t('cards.giveaways.status.picked'),
@@ -851,6 +882,8 @@ function toggleStats(guildId) {
 <script>window.ATLETA_CARD_TEXTS = <%- JSON.stringify(_cardTexts).replace(/</g, '\\u003c') %>;</script>
 <script src="/js/dashboard-cards-core.js"></script>
 <script src="/js/dashboard-cards.js"></script>
+<script src="/overlay/pollModel.js"></script>
+<script src="/js/dashboard-polls.js"></script>
 
 <script>
   const tabs = document.querySelectorAll('.tab-btn');

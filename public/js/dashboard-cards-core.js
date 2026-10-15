@@ -99,7 +99,36 @@
     return Date.parse(/[zZ]$|[+-]\d\d:?\d\d$/.test(text) ? text : `${text.replace(' ', 'T')}Z`);
   }
 
-  const CARDS = { rowSpan, fill, readAnswer, createLatestQueue, formatLeft, parseUtc };
+  // ── The Polls & predictions card (public/js/dashboard-polls.js); P is its texts table ──
+
+  // A template's or a time choice's time: whole minutes, else seconds.
+  function pollTime(seconds, P) {
+    return seconds >= 60 && seconds % 60 === 0 ? fill(P.minutes, { minutes: seconds / 60 }) : fill(P.seconds, { seconds });
+  }
+
+  // A template's row: its choices, then its time ("Yes / No · 2 min").
+  function templateSummary(template, P) {
+    return `${(template.choices || []).join(' / ')} · ${pollTime(Number(template.durationSeconds) || 0, P)}`;
+  }
+
+  // The card's line for a poll or prediction that ended (shown 30 seconds), or ''.
+  function pollResultLine(view, P, locale) {
+    if (!view || view.state !== 'ended') return '';
+    const number = (n) => Number(n || 0).toLocaleString(locale || 'en');
+    const won = (view.options || []).filter((option) => option.won);
+    if (view.result === 'canceled') return fill(P.resultCancelled, {});
+    if (won.length === 0) return fill(P.resultNone, {});
+    if (view.kind === 'prediction') return fill(P.resultPredictionWon, { outcome: won[0].title, winners: number(won[0].users), points: number(view.total) });
+    if (view.result === 'tie') return fill(P.resultTie, { winner: won.map((option) => option.title).join(' / ') });
+    return fill(P.resultPollWon, { winner: won[0].title, percent: won[0].percent, votes: number(won[0].votes) });
+  }
+
+  // How long the card waits before it asks what runs again: 2 s while something runs or just ended, else 10 s.
+  function pollsRefreshMs(live) {
+    return live && (live.poll || live.prediction) ? 2000 : 10000;
+  }
+
+  const CARDS = { rowSpan, fill, readAnswer, createLatestQueue, formatLeft, parseUtc, pollTime, templateSummary, pollResultLine, pollsRefreshMs };
   if (typeof module !== 'undefined' && module.exports) module.exports = CARDS;
   if (typeof window !== 'undefined') window.ATLETA_CARDS = CARDS;
 })();

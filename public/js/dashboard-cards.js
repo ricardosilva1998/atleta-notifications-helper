@@ -415,16 +415,19 @@
         chip.addEventListener('click', () => insertAtCursor(area, name));
         vars.appendChild(chip);
       }
-      // Posts the saved message in the streamer's chat with example values (the chatbot page's test). The route posts
-      // the saved text, so while the box holds another one (spaces around it aside: a save trims them) the pop-up asks
-      // to save first instead.
+      // Posts the saved message in the streamer's chat: with example values for a thank-you (the chatbot page's test),
+      // or through the route the button names (data-test-url: the shoutout's). The route posts the saved text, so while
+      // the box holds another one (spaces around it aside: a save trims them) the pop-up asks to save first instead. A
+      // message without a test has no button.
       const test = $('[data-chat-test]', editor);
+      const testUrl = button.dataset.testUrl || (button.dataset.event ? '/dashboard/chatbot/test/' + encodeURIComponent(button.dataset.event) : '');
+      test.hidden = !testUrl;
       test.addEventListener('click', async () => {
         if (area.value.trim() !== (button.dataset.value || '').trim()) {
           dialogMessage(editor, T.saveFirst);
           return;
         }
-        const answer = await call('POST', '/dashboard/chatbot/test/' + encodeURIComponent(button.dataset.event));
+        const answer = await call('POST', testUrl);
         if (answer.ok) {
           clearDialogMessage(editor);
           flash(test, T.sentToChat);
@@ -440,10 +443,35 @@
       }
       button.dataset.value = answer.data.value;
       $('[data-text]', row).textContent = answer.data.value;
+      showExample(card, answer.data.value);
       clearMessage(card);
       showSaved(card);
       return true;
     });
+  });
+
+  // A card's example line (data-example, the Shoutouts card): the saved text filled in for its made-up channel
+  // (data-sample), as the bot fills a shoutout.
+  function showExample(card, text) {
+    const box = card && $('[data-example]', card);
+    if (!box) return;
+    let sample = {};
+    try { sample = JSON.parse(box.dataset.sample || '{}'); } catch (e) { sample = {}; }
+    const values = { name: sample.name, game: sample.game, title: sample.title, link: 'https://twitch.tv/' + (sample.login || '') };
+    const line = String(text || '').replace(/\{(\w+)\}/g, (all, key) => (values[key] !== undefined ? values[key] : all));
+    box.textContent = core.fill(T.shoutoutExample, { line });
+  }
+
+  // A Test in chat button of its own (data-test-line names the route: the Shoutouts card's).
+  onClick('[data-test-line]', async (button) => {
+    const card = button.closest('.wc-card');
+    const answer = await call('POST', button.dataset.testLine, {});
+    if (!answer.ok) {
+      showMessage(card, answer);
+      return;
+    }
+    clearMessage(card);
+    flash(button, T.sentToChat);
   });
 
   // ── Commands ──
@@ -941,6 +969,12 @@
   }
   const giveawayCard = document.getElementById('card-giveaways');
   if (giveawayCard) setupGiveaway(giveawayCard);
+
+  // The helpers the Polls & predictions card's script (public/js/dashboard-polls.js) builds on.
+  window.ATLETA_CARD_UI = Object.freeze({
+    T, core, $, $$, call, onClick, announce, showMessage, clearMessage, showSaved, refreshSoon, repack,
+    openEditor, closeEditor, dialogMessage, insertAtCursor, nextVisibleRow, focusAfterDelete,
+  });
 
   // ── Start ──
   $$('[data-setting]', grid).forEach(queueFor);

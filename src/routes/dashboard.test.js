@@ -3550,7 +3550,10 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
   // Words that say a page is about the overlays.
   const OVERLAY_WORDS = /overlay|vtuber|browser source|\bOBS\b|channel point|experimental/i;
   const noOverlays = (html, label) => {
-    const page = html.replace(/<style\b[\s\S]*?<\/style>/gi, ' '); // class names in a stylesheet are not what a streamer reads
+    const page = html
+      .replace(/<style\b[\s\S]*?<\/style>/gi, ' ') // class names in a stylesheet are not what a streamer reads
+      // nor the file the polls card's script draws its live panel with (the poll bar's model): a script, not a link
+      .replace('<script src="/overlay/pollModel.js"></script>', ' ');
     assert.ok(!INTO_OVERLAYS.test(page), `${label}: a link into the overlays: ${page.match(INTO_OVERLAYS)}`);
     const word = page.match(OVERLAY_WORDS);
     assert.ok(!word, `${label}: talks about the overlays: ${word && page.slice(Math.max(0, word.index - 60), word.index + 60).replace(/\s+/g, ' ')}`);
@@ -5128,6 +5131,12 @@ describe('the working cards\' script', () => {
     assert.equal(T.giveaway.confirmEnd, t('en', 'giveaways.confirm.close'), 'End without a winner asks what the giveaways page asks');
     assert.equal(T.confirmEndGoal, t('en', 'donations.goal.endConfirm'), 'End the goal asks what the donations page asks');
     assert.equal(T.saveFirst, t('en', 'cards.chatbot.saveFirst'), 'a thank-you test with an unsaved text asks to save first');
+    const modelTag = html.indexOf('<script src="/overlay/pollModel.js"></script>');
+    const pollsTag = html.indexOf('<script src="/js/dashboard-polls.js"></script>');
+    assert.ok(scriptTag < modelTag && modelTag < pollsTag, 'the polls card\'s script comes after the cards\' script and the bar\'s model');
+    assert.equal(T.polls.endNow, t('en', 'cards.polls.endNow'));
+    assert.equal(T.polls.outcomeWon, t('en', 'cards.polls.outcomeWon', { outcome: '{{outcome}}' }), 'a text with a field the script fills');
+    assert.equal(T.shoutoutExample, t('en', 'cards.shoutouts.example', { line: '{{line}}' }));
   });
 
   test('the overlay texts only while the overlay features are on', async () => {
@@ -5151,7 +5160,8 @@ describe('the working cards\' script', () => {
     features.overlays = true;
     try {
       const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
-      const source = realFs.readFileSync(path.join(SRC, '..', 'public', 'js', 'dashboard-cards.js'), 'utf8');
+      const source = ['dashboard-cards.js', 'dashboard-polls.js']
+        .map((name) => realFs.readFileSync(path.join(SRC, '..', 'public', 'js', name), 'utf8')).join('\n');
       const reads = new Set();
       for (const [, name, sub] of source.matchAll(/\bT\.(\w+)(?:\.(\w+))?/g)) {
         reads.add(name);

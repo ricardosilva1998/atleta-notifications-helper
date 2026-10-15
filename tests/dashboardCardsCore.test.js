@@ -137,10 +137,44 @@ describe('the giveaway clock', () => {
   });
 });
 
+describe('the Polls & predictions card', () => {
+  const P = {
+    minutes: '{{minutes}} min', seconds: '{{seconds}} s',
+    resultPollWon: '{{winner}} won with {{percent}}% of the votes ({{votes}})', resultTie: 'Tie: {{winner}}', resultNone: 'Nobody voted',
+    resultPredictionWon: '{{outcome}} wins — {{winners}} viewers share {{points}} points',
+    resultCancelled: 'Cancelled — everyone got their points back',
+  };
+  const ended = (kind, result, options, total = 0) => ({ kind, state: 'ended', result, options, total });
+
+  test('a template\'s time and its row', () => {
+    assert.equal(core.pollTime(120, P), '2 min');
+    assert.equal(core.pollTime(30, P), '30 s');
+    assert.equal(core.pollTime(90, P), '90 s');
+    assert.equal(core.templateSummary({ choices: ['Yes', 'No'], durationSeconds: 300 }, P), 'Yes / No · 5 min');
+  });
+
+  test('the line of what ended: the winner, a tie, nobody, the prediction\'s winners, a cancel; nothing while it runs', () => {
+    assert.equal(core.pollResultLine(ended('poll', 'won', [{ title: 'Yes', percent: 64, votes: 1048, won: true }, { title: 'No', percent: 36, votes: 27 }]), P, 'en'), 'Yes won with 64% of the votes (1,048)');
+    assert.equal(core.pollResultLine(ended('poll', 'tie', [{ title: 'A', won: true }, { title: 'B', won: true }]), P, 'en'), 'Tie: A / B');
+    assert.equal(core.pollResultLine(ended('poll', 'none', [{ title: 'A' }, { title: 'B' }]), P, 'en'), 'Nobody voted');
+    assert.equal(core.pollResultLine(ended('prediction', 'won', [{ title: 'Clean', users: 18, won: true }, { title: 'Chaos', users: 9 }], 17500), P, 'en'), 'Clean wins — 18 viewers share 17,500 points');
+    assert.equal(core.pollResultLine(ended('prediction', 'canceled', [{ title: 'Clean' }]), P, 'en'), 'Cancelled — everyone got their points back');
+    assert.equal(core.pollResultLine({ kind: 'poll', state: 'running', options: [] }, P, 'en'), '');
+    assert.equal(core.pollResultLine(null, P, 'en'), '');
+  });
+
+  test('it asks again every 2 seconds while something runs or just ended, else every 10', () => {
+    assert.equal(core.pollsRefreshMs({ poll: { state: 'running' }, prediction: null }), 2000);
+    assert.equal(core.pollsRefreshMs({ poll: null, prediction: { state: 'ended' } }), 2000);
+    assert.equal(core.pollsRefreshMs({ poll: null, prediction: null }), 10000);
+    assert.equal(core.pollsRefreshMs(null), 10000);
+  });
+});
+
 describe('the browser files', () => {
   // CI's node --check covers src/ only, and these two are served as they are: a slip in either (the page script
   // grows by hundreds of lines) would stop every switch from saving while the rest of the suite stays green.
-  for (const name of ['dashboard-cards-core.js', 'dashboard-cards.js']) {
+  for (const name of ['dashboard-cards-core.js', 'dashboard-cards.js', 'dashboard-polls.js']) {
     test(`${name} compiles`, () => {
       const file = path.join(__dirname, '..', 'public', 'js', name);
       assert.doesNotThrow(() => new vm.Script(fs.readFileSync(file, 'utf8'), { filename: file }));
