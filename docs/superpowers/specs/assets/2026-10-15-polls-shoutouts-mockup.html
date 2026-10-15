@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<!-- Mockup for docs/superpowers/specs/2026-10-15-polls-shoutouts-design.md: the dashboard rendered from the repository views (2026-10-15, synthetic data) with the two new cards and the on-stream bar added as mockup markup. Static: nothing is saved. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+
+  <title>Dashboard</title>
+  <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
+  
+  <meta property="og:title" content="Atleta — Personal Helper">
+  
+  <meta property="og:description" content="Free all-in-one streaming toolkit — Discord notifications, a Twitch chatbot, chat moderation, giveaways and PayPal tips for streamers.">
+  <meta property="og:image" content="/app-icon/honest_graphic-running-athlete-9715727.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0c0d14;
+      --bg-surface: #141520;
+      --bg-elevated: #1a1b2e;
+      --bg-hover: #1f2037;
+      --border: rgba(255,255,255,0.06);
+      --border-focus: rgba(145,70,255,0.4);
+      --text-primary: #e8e6f0;
+      --text-secondary: #8b8a9e;
+      --text-muted: #5c5b6e;
+      --accent: #9146ff;
+      --accent-glow: rgba(145,70,255,0.15);
+      --accent-hover: #a56bff;
+      --discord: #5865F2;
+      --success: #3ecf8e;
+      --success-bg: rgba(62,207,142,0.1);
+      --danger: #f04438;
+      --danger-bg: rgba(240,68,56,0.1);
+      --warning: #f79009;
+      --warning-bg: rgba(247,144,9,0.1);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --font-display: 'Outfit', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
+      --shadow-elevated: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px var(--border);
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); letter-spacing: -0.02em; }
+
+    a { color: var(--accent); text-decoration: none; transition: color var(--transition); }
+    a:hover { color: var(--accent-hover); text-decoration: none; }
+    a.btn:hover { color: white; }
+    a.btn-secondary:hover { color: var(--text-primary); }
+    a.btn-success:hover { color: #0c0d14; }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
+
+    .animate-in { animation: fadeUp 0.4s ease-out both; }
+    .animate-in-delay-1 { animation-delay: 0.05s; }
+    .animate-in-delay-2 { animation-delay: 0.1s; }
+    .animate-in-delay-3 { animation-delay: 0.15s; }
+    .animate-in-delay-4 { animation-delay: 0.2s; }
+
+    /* Navigation */
+    .nav {
+      background: rgba(20,21,32,0.8);
+      backdrop-filter: blur(20px) saturate(1.2);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-left { display: flex; align-items: center; gap: 12px; }
+    .nav-brand {
+      font-family: var(--font-display);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.01em;
+    }
+    .nav-brand:hover { color: var(--text-primary); }
+    .nav-brand img { width: 26px; height: 26px; border-radius: 7px; }
+    .hamburger {
+      display: flex; flex-direction: column; justify-content: center; gap: 5px;
+      width: 36px; height: 36px; padding: 8px; border: none;
+      background: transparent; cursor: pointer; border-radius: var(--radius-sm);
+      transition: background var(--transition);
+    }
+    .hamburger:hover { background: var(--bg-hover); }
+    .hamburger span {
+      display: block; width: 100%; height: 1.5px;
+      background: var(--text-secondary); border-radius: 2px;
+      transition: background var(--transition);
+    }
+    .hamburger:hover span { background: var(--text-primary); }
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+    .nav-user { display: flex; align-items: center; gap: 10px; }
+    .nav-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 2px solid var(--border);
+      transition: border-color var(--transition);
+    }
+    .nav-avatar:hover { border-color: var(--accent); }
+    .nav-username {
+      font-family: var(--font-display);
+      font-size: 13px; color: var(--text-primary); font-weight: 500;
+    }
+    .nav-logout {
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: var(--radius-sm);
+      background: transparent; color: var(--text-muted); border: none;
+      cursor: pointer; font-size: 14px; text-decoration: none;
+      transition: all var(--transition);
+    }
+    .nav-logout:hover { background: var(--danger-bg); color: var(--danger); }
+    .nav-login {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 16px; border-radius: var(--radius-sm);
+      background: var(--discord); color: white;
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600;
+      transition: all var(--transition);
+    }
+    .nav-login:hover { opacity: 0.9; color: white; transform: translateY(-1px); }
+    .nav-login svg { width: 16px; height: 16px; fill: white; }
+    .nav-user-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      transition: background var(--transition); text-decoration: none; color: var(--text-primary);
+    }
+    .nav-user-link:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .nav-notif-btn {
+      position: relative; display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: var(--radius-sm); background: none;
+      border: none; cursor: pointer; color: var(--text-muted); transition: all var(--transition);
+    }
+    .nav-notif-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .nav-notif-badge {
+      position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px;
+      background: #f04438; color: #fff; font-size: 10px; font-weight: 700;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      padding: 0 4px; line-height: 1;
+    }
+    .nav-notif-dropdown {
+      display: none; position: absolute; top: 100%; right: 0; margin-top: 8px;
+      width: 320px; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); z-index: 200;
+      overflow: hidden;
+    }
+    .nav-notif-dropdown.open { display: block; }
+    .nav-notif-header {
+      padding: 12px 16px; font-size: 13px; font-weight: 700;
+      border-bottom: 1px solid var(--border); color: var(--text-primary);
+    }
+    .nav-notif-item {
+      padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    .nav-notif-item:hover { background: rgba(255,255,255,0.03); }
+    .nav-notif-empty {
+      padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 13px;
+    }
+
+    /* Sidebar */
+    .sidebar-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      z-index: 200; animation: fadeIn 0.2s ease;
+    }
+    .sidebar-overlay.active { display: block; }
+    .sidebar {
+      position: fixed; top: 0; left: 0; width: 280px; height: 100%;
+      background: var(--bg-surface); z-index: 300;
+      transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .sidebar.active { transform: translateX(0); }
+    .sidebar-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-display);
+      font-size: 17px; font-weight: 700; color: var(--text-primary);
+    }
+    .sidebar-header-brand img { width: 26px; height: 26px; border-radius: 7px; }
+    .sidebar-close {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 20px; cursor: pointer; padding: 4px; line-height: 1;
+      border-radius: var(--radius-sm); transition: all var(--transition);
+    }
+    .sidebar-close:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+    .sidebar-link {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 20px; color: var(--text-secondary);
+      font-family: var(--font-display);
+      font-size: 14px; font-weight: 500;
+      transition: all var(--transition); border-left: 2px solid transparent;
+    }
+    .sidebar-link:hover {
+      background: var(--bg-hover); color: var(--text-primary);
+      border-left-color: var(--accent);
+    }
+    /* Logout is a form (a POST), its button drawn like the links. */
+    .sidebar-logout { margin: 0; }
+    button.sidebar-link { width: 100%; background: none; border: 0; border-left: 2px solid transparent; line-height: inherit; text-align: left; cursor: pointer; }
+    .sidebar-link svg, .sidebar-link i[data-lucide] { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.7; }
+    .sidebar-link svg { fill: currentColor; }
+    .sidebar-link:hover svg { opacity: 1; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 8px 20px; }
+    .sidebar-section {
+      padding: 16px 20px 6px;
+      font-family: var(--font-display);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--text-muted); font-weight: 600;
+    }
+    .sidebar-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-muted);
+    }
+
+    /* Container */
+    .container {
+      max-width: 920px; margin: 0 auto; padding: 32px 24px;
+    }
+    /* The dashboard's working cards fill a wide window (routes/dashboard.js passes wideLayout). */
+    .container.container-wide { max-width: 1760px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 20px; border-radius: var(--radius-sm);
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border: none; color: white;
+      transition: all var(--transition);
+      text-decoration: none;
+    }
+    .btn:hover { transform: translateY(-1px); text-decoration: none; }
+    .btn:active { transform: translateY(0); }
+    .btn-primary {
+      background: var(--accent);
+      box-shadow: 0 0 0 1px rgba(145,70,255,0.3), 0 2px 8px rgba(145,70,255,0.2);
+    }
+    .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 0 0 1px rgba(145,70,255,0.4), 0 4px 16px rgba(145,70,255,0.3); }
+    .btn-discord {
+      background: var(--discord);
+      box-shadow: 0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(88,101,242,0.2);
+    }
+    .btn-discord:hover { box-shadow: 0 0 0 1px rgba(88,101,242,0.4), 0 4px 16px rgba(88,101,242,0.3); }
+    .btn-success {
+      background: var(--success);
+      color: #0c0d14;
+      box-shadow: 0 0 0 1px rgba(62,207,142,0.3);
+    }
+    .btn-success:hover { box-shadow: 0 0 0 1px rgba(62,207,142,0.4), 0 4px 16px rgba(62,207,142,0.2); }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover { box-shadow: 0 4px 16px rgba(240,68,56,0.3); }
+    .btn-secondary {
+      background: var(--bg-elevated); color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.1); }
+
+    /* Cards */
+    .card {
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .card:hover { border-color: rgba(255,255,255,0.08); }
+    .card h3 {
+      margin-bottom: 12px; font-size: 16px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    /* Forms */
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block; margin-bottom: 8px;
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    }
+    .form-group select, .form-group input, .form-group textarea {
+      width: 100%; padding: 10px 14px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 14px;
+      transition: all var(--transition);
+      outline: none;
+    }
+    .form-group select:focus, .form-group input:focus, .form-group textarea:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-group textarea { min-height: 120px; resize: vertical; }
+    .form-group select { cursor: pointer; }
+
+    /* Toggle */
+    .toggle { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .toggle input[type="checkbox"] {
+      width: 18px; height: 18px; accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .toggle label { cursor: pointer; font-family: var(--font-display); font-weight: 500; }
+
+    /* Alerts */
+    .alert {
+      padding: 12px 16px; border-radius: var(--radius-sm);
+      margin-bottom: 16px; font-size: 14px;
+      animation: fadeUp 0.3s ease-out;
+    }
+    .alert-success {
+      background: var(--success-bg);
+      border: 1px solid rgba(62,207,142,0.2);
+      color: var(--success);
+    }
+    .alert-info {
+      background: var(--accent-glow);
+      border: 1px solid rgba(145,70,255,0.2);
+      color: var(--accent-hover);
+    }
+    .alert-warning {
+      background: var(--warning-bg);
+      border: 1px solid rgba(247,144,9,0.2);
+      color: var(--warning);
+    }
+    .alert-danger {
+      background: var(--danger-bg);
+      border: 1px solid rgba(240,68,56,0.2);
+      color: var(--danger);
+    }
+
+    /* Guild Cards */
+    .guild-list { display: grid; gap: 12px; }
+    .guild-card { display: flex; align-items: center; gap: 16px; }
+    .guild-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--bg-elevated);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-size: 18px; font-weight: 700; color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .guild-icon img { width: 44px; height: 44px; border-radius: 12px; }
+    .guild-info { flex: 1; min-width: 0; }
+    .guild-info h4 {
+      font-size: 14px; font-weight: 600; margin-bottom: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .guild-info p { font-size: 12px; color: var(--text-secondary); }
+
+    /* Status indicators */
+    .status-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      margin-right: 6px; position: relative;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.offline { background: var(--text-muted); }
+
+    /* Section */
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    /* Tutorial */
+    .step { margin-bottom: 32px; }
+    .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .step-number {
+      flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent); color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 700; font-size: 14px;
+    }
+    .step-content { max-width: 700px; margin: 0 auto; }
+    .step-content h3 { margin-bottom: 8px; font-size: 16px; }
+    .step-content p, .step-content li { color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
+    .step-content ul, .step-content ol { padding-left: 20px; margin-top: 6px; }
+    .step-content code {
+      background: var(--bg-elevated); padding: 2px 8px; border-radius: 4px;
+      font-size: 13px; color: var(--accent-hover);
+      border: 1px solid var(--border);
+    }
+    .tip {
+      background: var(--accent-glow);
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin: 12px 0; font-size: 14px; color: var(--text-secondary);
+    }
+
+    /* Features grid */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px; margin-bottom: 32px;
+    }
+
+    /* Screenshot */
+    .screenshot {
+      margin: 12px 0; border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--bg-surface);
+      padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px;
+    }
+    .screenshot .icon { font-size: 28px; margin-bottom: 8px; }
+    .screenshot .label { color: var(--text-secondary); font-weight: 600; margin-bottom: 4px; }
+    .screenshot img {
+      max-width: 100%; border-radius: var(--radius-sm);
+      display: block; margin: 0 auto;
+      cursor: pointer; transition: all var(--transition);
+    }
+    .screenshot img:hover { opacity: 0.85; transform: scale(1.01); }
+
+    /* Lightbox */
+    .lightbox {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92); z-index: 1000; cursor: pointer;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+    .lightbox.active { display: flex; }
+    .lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius-md); cursor: default; }
+    .lightbox-close {
+      position: fixed; top: 16px; right: 24px; color: white;
+      font-size: 28px; cursor: pointer; z-index: 1001;
+      font-weight: 300; line-height: 1;
+      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; transition: background var(--transition);
+    }
+    .lightbox-close:hover { background: rgba(255,255,255,0.1); }
+
+    /* Badge */
+    .badge {
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 3px 10px; border-radius: 20px;
+      text-transform: uppercase;
+    }
+    /* .badge-tier {
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: white;
+    } */
+    .badge-popular {
+      background: linear-gradient(135deg, var(--accent), #c026d3);
+      color: white;
+    }
+
+    /* Stat card with tooltip */
+    .stat-card {
+      background: var(--bg-base); border-radius: var(--radius-sm);
+      padding: 10px 12px; border: 1px solid var(--border);
+      position: relative; cursor: default;
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .stat-card:hover { border-color: rgba(255,255,255,0.12); background: var(--bg-elevated); }
+    .stat-value {
+      font-size: 18px; font-weight: 700; font-family: var(--font-display);
+    }
+    .stat-label {
+      font-size: 10px; color: var(--text-muted); margin-top: 2px;
+    }
+    .stat-tooltip {
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%); background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 14px; font-size: 12px; color: var(--text-secondary);
+      line-height: 1.5; white-space: nowrap; z-index: 50;
+      box-shadow: var(--shadow-elevated); pointer-events: none;
+    }
+    .stat-tooltip::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%); border: 5px solid transparent;
+      border-top-color: var(--border);
+    }
+    .stat-card:hover .stat-tooltip { display: block; }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex; gap: 4px; margin-bottom: 24px; padding: 4px;
+      background: var(--bg-surface); border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      flex: 1; padding: 10px 16px; border: none; background: transparent;
+      color: var(--text-secondary); font-family: var(--font-display);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border-radius: var(--radius-sm); transition: all var(--transition);
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .tab-btn svg { flex-shrink: 0; }
+    .tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .tab-btn.active { color: white; }
+    .tab-twitch.active { background: #9146ff; }
+    .tab-youtube.active { background: #ff0000; }
+    .tab-discord.active { background: #5865F2; }
+    .tab-instagram.active { background: #E1306C; }
+    .tab-tiktok.active { background: #010101; color: white; }
+    .tab-twitter.active { background: #1DA1F2; }
+    .tab-iracing.active { background: #1a1a2e; }
+    .tab-settings.active { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); }
+    .admin-tab-stats.active { background: #3498db; }
+    .admin-tab-users.active { background: #9146ff; }
+    .admin-tab-issues.active { background: #f79009; }
+    .admin-tab-feedback.active { background: #3ecf8e; color: #0c0d14; }
+    .admin-tab-discounts.active { background: #e74c3c; }
+    .admin-tab-testing.active { background: #8b5cf6; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeUp 0.3s ease-out; }
+
+    /* User dropdown */
+    .user-dropdown-wrapper { position: relative; }
+    .user-dropdown-trigger {
+      cursor: pointer; display: flex; align-items: center; gap: 10px;
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      transition: background var(--transition);
+    }
+    .user-dropdown-trigger:hover { background: var(--bg-hover); }
+    .user-dropdown-chevron { transition: transform var(--transition); }
+    .user-dropdown-trigger.open .user-dropdown-chevron { transform: rotate(180deg); }
+    .user-dropdown {
+      display: none; position: absolute; top: calc(100% + 8px); right: 0;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--radius-md); min-width: 220px; padding: 8px 0;
+      box-shadow: var(--shadow-elevated); z-index: 150;
+      animation: fadeUp 0.15s ease-out;
+    }
+    .user-dropdown.active { display: block; }
+    .user-dropdown-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+      color: var(--text-secondary); font-size: 13px; font-family: var(--font-display);
+      font-weight: 500; transition: all var(--transition); text-decoration: none; cursor: pointer;
+    }
+    .user-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .user-dropdown-item svg { width: 16px; height: 16px; fill: currentColor; opacity: 0.7; }
+    .user-dropdown-item:hover svg { opacity: 1; }
+    .user-dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .user-dropdown-label {
+      padding: 8px 16px 4px; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--text-muted); font-family: var(--font-display); font-weight: 600;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container { padding: 20px 16px; }
+      .nav { padding: 0 16px; }
+      .guild-card { flex-wrap: wrap; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .pricing-grid { }
+    @media (max-width: 900px) { .pricing-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+    @media (max-width: 520px) { .pricing-grid { grid-template-columns: 1fr !important; } }
+  </style>
+<style>
+/* Mockup-only styles for the new pieces (the implementation puts the card's in views/cards/_style.ejs and the bar's in public/overlay/poll.css). */
+.lp-kind { font: 700 10px var(--font-display); letter-spacing: .6px; text-transform: uppercase; color: #38bdf8; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 2px 7px; border-radius: 999px; flex: none; }
+.lp-kind.pred { color: #c084fc; background: rgba(192,132,252,0.12); border-color: rgba(192,132,252,0.32); }
+.wc-row .lp-kind { margin-right: 2px; }
+.wc-ib.play { color: var(--success); }
+.wc-ib[disabled] { opacity: .35; cursor: not-allowed; }
+.wc-live-poll { background: var(--bg-elevated); border: 1px solid rgba(56,189,248,0.25); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.wc-live-poll.pred { border-color: rgba(192,132,252,0.3); }
+.lp-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lp-top b { font: 700 14px var(--font-display); color: var(--text-primary); overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.lp-left { font: 700 13px var(--font-display); color: var(--success); background: rgba(62,207,142,0.1); padding: 2px 8px; border-radius: 999px; flex: none; }
+.lp-lock { font: 700 12px var(--font-display); color: var(--warning); background: var(--warning-bg); padding: 2px 8px; border-radius: 999px; flex: none; }
+.lp-opt { display: grid; grid-template-columns: minmax(56px, 30%) 1fr 40px; grid-template-areas: 'nm bar pc' 'nm ct ct'; align-items: center; column-gap: 8px; font-size: 13px; }
+.lp-opt .nm { grid-area: nm; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-opt .bar { grid-area: bar; height: 10px; background: var(--bg-base); border-radius: 99px; overflow: hidden; }
+.lp-opt .bar i { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #9146ff); border-radius: 99px; }
+.lp-opt.lead .bar i { background: linear-gradient(90deg, #3ecf8e, #38bdf8); }
+.lp-opt.blue .bar i { background: linear-gradient(90deg, #387aff, #38bdf8); }
+.lp-opt.pink .bar i { background: linear-gradient(90deg, #f5009b, #f472b6); }
+.lp-opt .pc { grid-area: pc; font: 700 13px var(--font-display); color: var(--text-primary); text-align: right; }
+.lp-opt .ct { grid-area: ct; font-size: 11.5px; color: var(--text-muted); }
+.lp-foot, .lp-pick { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.lp-foot > span:first-child, .lp-pick > span:first-child { margin-right: auto; }
+.lp-pick > span:first-child { color: var(--warning); font-weight: 700; }
+.wc-btn.wc-danger { color: var(--danger); }
+.mock-note { margin: 36px 0 12px; font: 700 18px var(--font-display); color: var(--text-primary); }
+.mock-sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; }
+.mock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.mock-stage { margin-top: 36px; padding: 24px; border-radius: 16px; background: radial-gradient(circle at 20% 20%, #2b3a55, #10131c 60%), #10131c; border: 1px solid var(--border); }
+.mock-stage h2 { font: 700 18px var(--font-display); color: var(--text-primary); margin-bottom: 6px; }
+.mock-stage p { color: var(--text-secondary); font-size: 13px; margin-bottom: 18px; }
+.mock-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 520px)); gap: 20px; }
+.pb { position: relative; overflow: hidden; background: rgba(12,13,20,0.9); border: 1px solid rgba(56,189,248,0.35); border-radius: 14px; padding: 16px 16px 12px; font-family: var(--font-display); box-shadow: 0 10px 30px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 10px; }
+.pb.pred { border-color: rgba(192,132,252,0.4); }
+.pb-flag { position: absolute; inset: 0 0 auto 0; height: 5px; background: repeating-linear-gradient(90deg, #fff 0 8px, #111 8px 16px); opacity: .85; }
+.pb-head { display: flex; align-items: center; gap: 10px; }
+.pb-kind { font: 800 11px var(--font-display); letter-spacing: 1px; text-transform: uppercase; color: #0c0d14; background: #38bdf8; padding: 3px 8px; border-radius: 6px; }
+.pb.pred .pb-kind { background: #c084fc; }
+.pb-title { font: 800 18px var(--font-display); color: #fff; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pb-left { font: 800 16px var(--font-display); color: #3ecf8e; }
+.pb-lock { font: 800 12px var(--font-display); color: #f79009; border: 1px solid rgba(247,144,9,0.5); padding: 2px 8px; border-radius: 6px; }
+.pb-win { font: 800 12px var(--font-display); color: #3ecf8e; border: 1px solid rgba(62,207,142,0.5); padding: 2px 8px; border-radius: 6px; }
+.pb-opt { display: flex; flex-direction: column; gap: 4px; }
+.pb-line { display: flex; justify-content: space-between; font: 700 14px var(--font-display); color: #e8e6f0; }
+.pb-bar { height: 12px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; }
+.pb-bar i { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #9146ff); border-radius: 99px; }
+.pb-opt.lead .pb-bar i { background: linear-gradient(90deg, #3ecf8e, #38bdf8); }
+.pb-opt.blue .pb-bar i { background: linear-gradient(90deg, #387aff, #38bdf8); }
+.pb-opt.pink .pb-bar i { background: linear-gradient(90deg, #f5009b, #f472b6); }
+.pb-opt.won .pb-line { color: #3ecf8e; }
+.pb-opt.lost { opacity: .45; }
+.pb-extra { font: 500 12px var(--font-body); color: #8b8a9e; }
+.pb-foot { font: 600 12px var(--font-body); color: #8b8a9e; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-poll" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
+</svg>
+  <!-- Sidebar overlay -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-header-brand">
+        <img src="/app-icon/honest_graphic-running-athlete-9715727.png" alt="">
+        Atleta
+      </div>
+      <button class="sidebar-close" onclick="closeSidebar()">&times;</button>
+    </div>
+    <div class="sidebar-nav">
+      <div class="sidebar-section">Navigation</div>
+
+      <a href="/dashboard" class="sidebar-link">
+        <i data-lucide="tv"></i>
+        Streamer
+      </a>
+      
+      
+      <a href="/racing" class="sidebar-link">
+        <i data-lucide="car"></i>
+        Racing
+      </a>
+      
+      
+
+      <a href="/tutorial" class="sidebar-link">
+        <i data-lucide="book-open"></i>
+        Setup Guide
+      </a>
+      <a href="/donate" class="sidebar-link">
+        <i data-lucide="heart"></i>
+        Buy me a coffee
+      </a>
+
+      
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Support</div>
+        <a href="/dashboard/report" class="sidebar-link">
+          <i data-lucide="alert-circle"></i>
+          Report an Issue
+        </a>
+      
+
+      
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section">Account</div>
+        <form method="POST" action="/auth/logout" class="sidebar-logout">
+          <button type="submit" class="sidebar-link">
+            <i data-lucide="log-out"></i>
+            Logout
+          </button>
+        </form>
+      
+    </div>
+    <div class="sidebar-footer">
+      Atleta Personal Helper
+    </div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-left">
+      <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <a href="/" class="nav-brand"><img src="/app-icon/honest_graphic-running-athlete-9715727.png" alt="">Atleta</a>
+    </div>
+    <div class="nav-right">
+      
+      
+      
+      
+      
+        <a href="/dashboard/account" class="nav-user-link">
+          
+          
+            <div class="nav-avatar" style="background: var(--accent); display: flex; align-items: center; justify-content: center; color: white; font-family: var(--font-display); font-weight: 700; font-size: 13px;">?</div>
+          
+          <span class="nav-username"></span>
+        </a>
+      
+    </div>
+  </nav>
+  <div class="container container-wide">
+
+  <!-- Lightbox overlay -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+  <script>
+    document.addEventListener('click', function(e) {
+      if (e.target.matches('.screenshot img')) {
+        document.getElementById('lightbox-img').src = e.target.src;
+        document.getElementById('lightbox').classList.add('active');
+      }
+    });
+    function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('active');
+      document.getElementById('sidebar-overlay').classList.toggle('active');
+    }
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('active');
+      document.getElementById('sidebar-overlay').classList.remove('active');
+    }
+    function toggleNotifDropdown(e) {
+      e.stopPropagation();
+      var dd = document.getElementById('notif-dropdown');
+      if (dd) dd.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+      var dd = document.getElementById('notif-dropdown');
+      if (dd && !dd.parentElement.contains(e.target)) dd.classList.remove('open');
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { closeLightbox(); closeSidebar(); var dd = document.getElementById('notif-dropdown'); if (dd) dd.classList.remove('open'); }
+    });
+    function toggleUserMenu() {
+      const dropdown = document.getElementById('user-dropdown');
+      const trigger = document.getElementById('user-dropdown-trigger');
+      dropdown.classList.toggle('active');
+      trigger.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.user-dropdown-wrapper')) {
+        document.getElementById('user-dropdown')?.classList.remove('active');
+        document.getElementById('user-dropdown-trigger')?.classList.remove('open');
+      }
+    });
+  </script>
+
+
+
+<script>
+  // Names the tab to open before the tab bar is drawn: the one picked last time if the page has it, else the first.
+  (function () {
+    var tabs = ["twitch","discord"];
+    var saved = null;
+    try { saved = localStorage.getItem('dashboard_tab'); } catch (e) { /* storage refused: the first tab */ }
+    document.documentElement.setAttribute('data-dashboard-tab', tabs.indexOf(saved) >= 0 ? saved : tabs[0]);
+  })();
+</script>
+
+<style>
+  /* The open tab is the one <html data-dashboard-tab> names (set by the script above, and by switchTab() at the
+     end of the page); without that script (no JavaScript) the Twitch tab shows. */
+  html[data-dashboard-tab="twitch"] #tab-twitch,
+  html[data-dashboard-tab="discord"] #tab-discord,
+  html[data-dashboard-tab="youtube"] #tab-youtube,
+  html[data-dashboard-tab="kick"] #tab-kick,
+  html[data-dashboard-tab="experimental"] #tab-experimental,
+  html[data-dashboard-tab="admin"] #tab-admin,
+  html:not([data-dashboard-tab]) #tab-twitch { display: block; animation: fadeUp 0.3s ease-out; }
+  html[data-dashboard-tab="twitch"] .tab-btn.tab-twitch { background: #9146ff; color: white; }
+  html[data-dashboard-tab="discord"] .tab-btn.tab-discord { background: #5865F2; color: white; }
+  html[data-dashboard-tab="youtube"] .tab-btn.tab-youtube { background: #ff0000; color: white; }
+  html[data-dashboard-tab="kick"] .tab-btn.tab-kick { background: #53fc18; color: #000; }
+  html[data-dashboard-tab="experimental"] .tab-btn.tab-experimental { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+  html[data-dashboard-tab="admin"] .tab-btn.tab-admin { background: #e74c3c; color: white; }
+  /* On a narrow screen the tab bar scrolls sideways, not the page */
+  .dash-tabs { overflow-x: auto; }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px;" class="animate-in">
+  <div style="display: flex; align-items: center; gap: 12px;">
+    <h2 style="font-size: 24px; font-weight: 700;">Dashboard</h2>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Platform Tabs -->
+<div class="tab-bar dash-tabs animate-in animate-in-delay-1">
+  <button class="tab-btn tab-twitch" data-tab="twitch">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></svg>
+    Twitch
+  </button>
+  <button class="tab-btn tab-discord" data-tab="discord">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.9 5a19.5 19.5 0 0 0-4.8-1.5 14.6 14.6 0 0 0-.6 1.3 18 18 0 0 0-5 0A14 14 0 0 0 7.9 3.5 19.5 19.5 0 0 0 3.1 5 20.6 20.6 0 0 0 .5 17.6a19.6 19.6 0 0 0 6 3 14.8 14.8 0 0 0 1.3-2 12.7 12.7 0 0 1-2-.9l.5-.4a14 14 0 0 0 11.9 0l.5.4a12.7 12.7 0 0 1-2 .9 14.8 14.8 0 0 0 1.3 2 19.6 19.6 0 0 0 6-3A20.6 20.6 0 0 0 21 5z"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/></svg>
+    Discord
+  </button>
+  
+  
+  
+  
+  
+</div>
+
+<div class="tab-content" id="tab-discord">
+
+<div class="animate-in animate-in-delay-2" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+  <h3 class="section-title" style="margin: 0; line-height: 1;">
+    Your Servers
+  </h3>
+  <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 8px; border-radius: 6px; background: var(--accent); color: white; font-size: 12px; font-weight: 700; font-family: var(--font-display); vertical-align: middle;">0</span>
+  <a href="#" target="_blank" rel="noopener" class="btn btn-discord" style="padding: 8px 16px; font-size: 13px; margin-left: auto;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add Bot to Server
+  </a>
+</div>
+
+
+  <div class="card animate-in animate-in-delay-3" style="text-align: center; padding: 48px 24px;">
+    <div style="width: 56px; height: 56px; border-radius: 16px; background: var(--bg-elevated); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 14px;">No servers yet. Add the bot to a Discord server to get started.</p>
+    <a href="#" target="_blank" rel="noopener" class="btn btn-discord">Add Bot to Server</a>
+  </div>
+
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;">
+  
+</div>
+
+
+
+</div><!-- end tab-discord -->
+
+<div class="tab-content" id="tab-twitch">
+  
+<style>
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg.i.sm { width: 14px; height: 14px; }
+
+  /* The switch, as on the chatbot settings page */
+  .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .pill-toggle input { opacity: 0; width: 0; height: 0; }
+  .pill-toggle .slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg-elevated); border-radius: 24px; border: 1px solid var(--border); transition: 0.3s; }
+  .pill-toggle .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+  .pill-toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .pill-toggle input:checked + .slider:before { transform: translateX(20px); }
+  .pill-toggle input:focus-visible + .slider { box-shadow: 0 0 0 3px rgba(145,70,255,.35); }
+  .pill-toggle.mini { width: 34px; height: 19px; }
+  .pill-toggle.mini .slider:before { height: 13px; width: 13px; }
+  .pill-toggle.mini input:checked + .slider:before { transform: translateX(15px); }
+
+  /* The top: the Twitch account, then the last 7 days */
+  .dash-top { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .dash-top .stats-strip { align-self: stretch; }
+  .dash-acct-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dash-acct { padding: 8px 16px; font-size: 13px; flex: none; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+  span.dash-acct { cursor: default; }
+  .stats-strip { display: grid; grid-template-columns: auto repeat(6, 1fr); align-items: center; gap: 8px; padding: 12px 16px; margin: 0; }
+  .stats-strip .cap { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); padding-right: 8px; border-right: 1px solid var(--border); }
+  .stats-strip .s { text-align: center; }
+  .stats-strip .n { font: 800 18px var(--font-display); }
+  .stats-strip .l { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* The cards: as many columns as the window holds. The page script packs them (.packed: 2 px rows, each card
+     spanning its own height, public/js/dashboard-cards.js); without it they stay a plain grid. */
+  .wc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
+  .wc-grid.packed { grid-auto-rows: 2px; row-gap: 0; grid-auto-flow: row dense; }
+  .wc-grid.packed > .wc-card { margin-bottom: 12px; }
+  .wc-card [hidden], dialog.wc-dialog [hidden] { display: none !important; }
+
+  /* A card: head (icon, title, status, main switch), body (sections), message, foot (links left, Saved right) */
+  .wc-card { padding: 20px 22px; margin: 0; display: flex; flex-direction: column; gap: 16px; position: relative; min-width: 0; }
+  .wc-head { display: flex; align-items: center; gap: 12px; }
+  .wc-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .wc-title { font: 700 16px var(--font-display); margin: 0; line-height: 1.2; }
+  .wc-status { font-size: 12px; font-weight: 600; color: var(--success); overflow-wrap: anywhere; }
+  .wc-status.off { color: var(--text-muted); }
+  .wc-status.warn { color: var(--warning); }
+  .wc-head .pill-toggle { margin-left: auto; }
+  .wc-body { display: flex; flex-direction: column; gap: 10px; transition: opacity .2s; }
+  .wc-sec { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-top: 2px; }
+  .wc-sec:first-child { margin-top: 0; }
+  .wc-label { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+  .wc-count { font-size: 12px; color: var(--text-muted); }
+  .wc-sec > .btn, .wc-sec > .wc-link-sm, .wc-sec > .wc-count:last-child { margin-left: auto; }
+  .wc-list { display: flex; flex-direction: column; gap: 6px; transition: opacity .2s; }
+  .wc-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 6px 0 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; min-width: 0; transition: opacity .2s; }
+  .wc-row.is-off .nm, .wc-row.is-off .txt { opacity: .45; }
+  .wc-row .nm { font-weight: 600; color: var(--text-primary); flex: 0 1 auto; min-width: 76px; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wc-row code.nm { font: 600 12.5px ui-monospace, Menlo, monospace; color: var(--accent-hover); min-width: 0; }
+  .wc-row .txt { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .wc-row .when { color: var(--text-muted); font-size: 12px; flex: none; padding-right: 6px; }
+  .wc-row .amt { font: 700 13px var(--font-display); color: var(--success); flex: none; }
+  .wc-row.hidden { display: none; }
+  .wc-list.show-all > .wc-row.hidden { display: flex; }
+  .wc-ib { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; flex: none; background: none; border: none; }
+  .wc-ib:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .wc-ib.done { color: var(--success); }
+  .wc-more { background: none; border: none; color: var(--text-secondary); font: 600 12px var(--font-body); cursor: pointer; padding: 0; text-align: left; align-self: flex-start; }
+  .wc-more:hover { color: var(--text-primary); }
+  .wc-input, .wc-select { padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font: 500 13px var(--font-body); min-width: 0; }
+  .wc-select { font: 600 13px var(--font-display); cursor: pointer; }
+  .wc-select.sm { padding: 5px 8px; font-size: 12px; }
+  .wc-input:focus, .wc-select:focus, .wc-editor textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(145,70,255,.12); }
+  .wc-btn { padding: 8px 14px; font-size: 12px; }
+  .wc-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .wc-btn.xs { padding: 5px 11px; font-size: 12px; gap: 5px; }
+  .wc-btn.block { width: 100%; padding: 10px 14px; }
+  .wc-setrow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+  .wc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; padding-top: 12px; border-top: 1px solid var(--border); margin-top: auto; }
+  .wc-foot a, .wc-link-sm, .wc-linkbtn { color: var(--text-secondary); text-decoration: none; font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .wc-foot a:hover, .wc-link-sm:hover, .wc-linkbtn:hover { color: var(--text-primary); }
+  .wc-linkbtn { background: none; border: none; padding: 0; font-family: var(--font-body); }
+  .wc-inline-form { margin: 0; }
+  .wc-saved { margin-left: auto; color: var(--success); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .25s; }
+  .wc-saved.show { opacity: 1; }
+  .wc-msg { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 12.5px; line-height: 1.45; color: var(--danger); background: var(--danger-bg); border-radius: 10px; padding: 8px 12px; }
+  .wc-msg.info { color: var(--text-secondary); background: var(--bg-elevated); }
+  .wc-msg a { color: inherit; font-weight: 600; text-decoration: underline; }
+  .wc-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* Building blocks */
+  .wc-linkbox { display: flex; gap: 8px; align-items: center; transition: opacity .2s; }
+  .wc-link { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; font: 500 12px ui-monospace, Menlo, monospace; color: var(--text-secondary); overflow: hidden; white-space: normal; overflow-wrap: anywhere; }
+  .wc-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .wc-sw { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-secondary); min-width: 0; }
+  .wc-sw.is-on { color: var(--text-primary); }
+  .wc-sw > span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; -webkit-hyphens: auto; hyphens: auto; }
+  .wc-sw small { font-size: 11px; font-weight: 500; color: var(--text-muted); overflow-wrap: anywhere; }
+  .wc-sw small.warn { color: var(--warning); }
+  .wc-server { display: flex; flex-direction: column; gap: 10px; }
+  .wc-server-name { display: flex; align-items: center; gap: 8px; font: 700 13px var(--font-display); min-width: 0; }
+  .wc-server-name .av { width: 22px; height: 22px; border-radius: 6px; background: #5865F2; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; flex: none; }
+  .wc-server-name .sn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wc-server-name .wc-off-tag { font-size: 11px; color: var(--text-muted); font-weight: 600; flex: none; }
+  .wc-server-name .wc-link-sm { margin-left: auto; flex: none; }
+  .wc-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wc-pill { font: 600 12px ui-monospace, Menlo, monospace; color: var(--accent-hover); background: rgba(145,70,255,0.12); border: 1px solid rgba(145,70,255,0.3); padding: 3px 9px; border-radius: 999px; }
+  .wc-pill.none { font-family: var(--font-body); color: var(--text-muted); background: none; border-style: dashed; }
+  .wc-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .wc-chip { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-secondary); font: 600 12.5px ui-monospace, Menlo, monospace; cursor: pointer; user-select: none; min-width: 0; text-align: left; }
+  .wc-chip.on { background: rgba(145,70,255,0.14); border-color: rgba(145,70,255,0.45); color: var(--text-primary); }
+  .wc-chip .tick { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--text-muted); display: flex; align-items: center; justify-content: center; flex: none; color: transparent; font-size: 11px; line-height: 1; }
+  .wc-chip.on .tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .wc-note { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; background: var(--warning-bg); border: 1px solid rgba(247,144,9,0.25); color: var(--text-secondary); border-radius: 10px; padding: 9px 10px 9px 12px; font-size: 12.5px; }
+  .wc-note > span { flex: 1 1 180px; min-width: 0; }
+  .wc-note code { color: var(--text-primary); background: rgba(255,255,255,.06); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+  .wc-note a { color: var(--warning); text-decoration: underline; }
+  .wc-hint { font-size: 12px; color: var(--text-muted); margin: 0; }
+  .wc-hint code, .wc-text code { color: var(--text-primary); }
+  .wc-text { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 0; }
+  .wc-alert select { margin-left: auto; }
+  .wc-volume { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px; padding: 2px 2px 0; }
+  .wc-volume input[type=range] { flex: 1; accent-color: var(--accent); }
+  .wc-volume .v { width: 38px; text-align: right; font: 600 12px var(--font-display); color: var(--text-primary); }
+  .wc-goal { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .wc-goal .top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+  .wc-goal .top b { color: var(--text-primary); overflow-wrap: anywhere; }
+  .wc-goal .top span { margin-left: auto; font: 700 13px var(--font-display); color: var(--text-primary); }
+  .wc-goal .top em { font-style: normal; color: var(--text-muted); font-weight: 500; }
+  .wc-progress { height: 8px; background: var(--bg-base); border-radius: 99px; overflow: hidden; }
+  .wc-progress > span { display: block; height: 100%; background: linear-gradient(90deg, #9146ff, #3ecf8e); border-radius: 99px; }
+  .wc-fields { display: flex; gap: 10px; align-items: flex-end; }
+  .wc-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .wc-field > span:first-child { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+  .wc-field > span:first-child em { text-transform: none; font-style: normal; font-weight: 500; }
+  .wc-field.grow { flex: 1; }
+  .wc-field .pill-toggle { margin: 7px 0; }
+  .wc-prefixed { display: flex; align-items: center; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding-left: 10px; }
+  .wc-prefixed b { color: var(--text-muted); font-weight: 600; }
+  .wc-prefixed .wc-input { border: none; background: none; padding-left: 2px; width: 100%; }
+  .wc-empty { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px dashed var(--border); border-radius: 10px; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+  .wc-empty .big { width: 36px; height: 36px; border-radius: 10px; background: rgba(145,70,255,0.12); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; flex: none; }
+  .wc-needs { display: none; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-secondary); background: var(--bg-elevated); border: 1px dashed rgba(145,70,255,0.4); border-radius: 10px; padding: 8px 12px; }
+  .wc-card.needs-bot .wc-needs { display: flex; }
+  .wc-card.needs-bot .wc-body { opacity: .35; pointer-events: none; }
+  .wc-dim { opacity: .45; }
+  .wc-gw-form { display: flex; flex-direction: column; gap: 12px; }
+  .wc-gw-live { display: none; flex-direction: column; gap: 10px; }
+  .wc-card.gw-running .wc-gw-live { display: flex; }
+  .wc-card.gw-running .wc-gw-form { display: none; }
+  .wc-gw-how { color: var(--text-primary); font-weight: 600; }
+  .wc-gw-how code { color: var(--accent-hover); }
+  .wc-gw-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .wc-gw-stats div { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 8px; text-align: center; }
+  .wc-gw-stats b { display: block; font: 800 18px var(--font-display); }
+  .wc-gw-stats span { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .wc-winner { display: none; align-items: center; gap: 8px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35); border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 13px; }
+  .wc-winner.show { display: flex; }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: none; animation: pulse-red 1.4s infinite; }
+  @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(240,68,56,.6); } 70% { box-shadow: 0 0 0 8px rgba(240,68,56,0); } 100% { box-shadow: 0 0 0 0 rgba(240,68,56,0); } }
+  .wc-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .wc-left { margin-right: auto; }
+  .wc-danger { color: var(--danger); }
+
+  /* The pop-up editor */
+  dialog.wc-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 18px; margin: auto; border: 1px solid rgba(145,70,255,0.4); border-radius: 14px; background: var(--bg-surface); color: var(--text-primary); }
+  dialog.wc-dialog::backdrop { background: rgba(5,5,10,.65); }
+  .wc-editor { display: flex; flex-direction: column; gap: 10px; }
+  .wc-editor h4 { margin: 0; font: 700 15px var(--font-display); }
+  .wc-editor textarea { width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font: 500 13px/1.5 var(--font-body); box-sizing: border-box; }
+  .wc-vars { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+  .wc-vars .wc-var { background: var(--bg-elevated); padding: 2px 7px; border-radius: 6px; cursor: pointer; color: var(--text-secondary); border: none; font: 500 11px ui-monospace, Menlo, monospace; }
+  .wc-vars .wc-var:hover { color: var(--text-primary); }
+
+  @media (max-width: 760px) {
+    .stats-strip { grid-template-columns: repeat(3, 1fr); row-gap: 10px; }
+    .stats-strip .cap { grid-column: 1 / -1; border-right: none; padding: 0; }
+  }
+  @media (max-width: 420px) {
+    .wc-switches { grid-template-columns: minmax(0, 1fr); }
+    .wc-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .wc-row .nm { min-width: 0; }
+    .wc-fields { flex-wrap: wrap; }
+  }
+</style>
+
+  
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+  <symbol id="i-mega" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></symbol>
+  <symbol id="i-dollar" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></symbol>
+  <symbol id="i-twitch" viewBox="0 0 24 24"><path d="M21 2H3v16h5v4l4-4h5l4-4V2zM11 11V7M16 11V7"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></symbol>
+</svg>
+
+
+  
+  <div class="dash-top">
+    <div class="dash-acct-row">
+      
+        <span class="btn btn-secondary dash-acct"><svg class="i sm" aria-hidden="true" style="color: var(--success)"><use href="#i-check"/></svg>Twitch: racer_example</span>
+      
+      
+      
+      
+    </div>
+    
+    <div class="card stats-strip">
+      <div class="cap">Last 7 Days</div>
+      <div class="s"><div class="n" style="color:#9146ff">14</div><div class="l">Follows</div></div>
+      <div class="s"><div class="n" style="color:#00ff88">3</div><div class="l">Subs</div></div>
+      <div class="s"><div class="n" style="color:#ffd60a">2</div><div class="l">Bits</div></div>
+      <div class="s"><div class="n" style="color:#e040fb">1</div><div class="l">Donations</div></div>
+      <div class="s"><div class="n" style="color:#ff5c5c">1</div><div class="l">Raids</div></div>
+      <div class="s"><div class="n" style="color:#00ff88">5</div><div class="l">Gift Subs</div></div>
+    </div>
+    
+  </div>
+
+  
+  <div class="wc-grid" id="wc-grid">
+    
+<section class="card wc-card" id="card-chatbot" data-card="chatbot" aria-labelledby="card-chatbot-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(145,71,255,0.15); color: #9146ff"><svg class="i" aria-hidden="true"><use href="#i-chat"/></svg></div>
+    <div><h3 class="wc-title" id="card-chatbot-title">Chatbot</h3><span class="wc-status" data-status>Online in #racer_example</span></div>
+    <label class="pill-toggle" title="Chatbot on or off"><input type="checkbox" role="switch" aria-label="Chatbot on or off" data-setting="chatbot_enabled" checked><span class="slider"></span></label>
+  </div>
+  <div class="wc-body">
+  
+    <div class="wc-sec"><span class="wc-label">Thank-you messages</span><span class="wc-count" data-count="thankYous">6 of 6 on</span></div>
+    <div class="wc-list" data-dim-with="chatbot_enabled">
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Follows" data-setting="chat_follow_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Follows</span>
+        <span class="txt" data-text>Welcome to the pit crew, {username}!</span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="chat_follow_template" data-event="follow" data-vars="{username}" data-value="Welcome to the pit crew, {username}!" data-title="Thank-you message: Follows" title="Change the message" aria-label="Change the message: Follows"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Subs" data-setting="chat_sub_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Subs</span>
+        <span class="txt" data-text>{username} just joined the team!</span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="chat_sub_template" data-event="sub" data-vars="{username} {tier} {months} {message}" data-value="{username} just joined the team!" data-title="Thank-you message: Subs" title="Change the message" aria-label="Change the message: Subs"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Gift subs" data-setting="chat_giftsub_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Gift subs</span>
+        <span class="txt" data-text>No message: nothing is posted</span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="chat_giftsub_template" data-event="giftsub" data-vars="{username} {amount} {tier}" data-value="" data-title="Thank-you message: Gift subs" title="Change the message" aria-label="Change the message: Gift subs"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Bits" data-setting="chat_bits_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Bits</span>
+        <span class="txt" data-text>No message: nothing is posted</span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="chat_bits_template" data-event="bits" data-vars="{username} {amount} {message}" data-value="" data-title="Thank-you message: Bits" title="Change the message" aria-label="Change the message: Bits"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Donations" data-setting="chat_donation_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Donations</span>
+        <span class="txt" data-text>No message: nothing is posted</span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="chat_donation_template" data-event="donation" data-vars="{username} {amount} {currency} {message}" data-value="" data-title="Thank-you message: Donations" title="Change the message" aria-label="Change the message: Donations"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Raids" data-setting="chat_raid_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Raids</span>
+        <span class="txt" data-text>{username} is raiding with {viewers} racers!</span>
+        <button type="button" class="wc-ib" data-edit="thankyou" data-key="chat_raid_template" data-event="raid" data-vars="{username} {viewers}" data-value="{username} is raiding with {viewers} racers!" data-title="Thank-you message: Raids" title="Change the message" aria-label="Change the message: Raids"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      </div>
+      
+    </div>
+  
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/chatbot">All chatbot settings <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+  <template id="tpl-thankyou">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <textarea data-field="text" maxlength="500" rows="3" aria-labelledby="wc-dialog-title"></textarea>
+      <div class="wc-vars"><span>Insert:</span><span data-vars></span></div>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn wc-left" data-chat-test>Test in chat</button><button type="button" class="btn btn-secondary wc-btn" data-cancel>Cancel</button><button type="button" class="btn btn-primary wc-btn" data-save>Save</button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+</section>
+
+<section class="card wc-card" id="card-discord" data-card="discord" aria-labelledby="card-discord-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(88,101,242,0.15); color: #5865F2"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg></div>
+    <div><h3 class="wc-title" id="card-discord-title">Discord notifications</h3><span class="wc-status" data-status>Your streams are announced</span></div>
+  </div>
+  <div class="wc-body">
+  
+    
+    <div class="wc-server" data-guild="1">
+      <div class="wc-server-name"><span class="av" aria-hidden="true">R</span><span class="sn">Racing Club</span><a class="wc-link-sm" href="/dashboard/guild/1">Channels <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+      <div class="wc-switches">
+        
+        <div class="wc-sw is-on"><span>Go-live posts<small class="">in #go-live</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Go-live posts · Racing Club" data-setting="notify_live" data-guild-id="1" data-fix-href="/dashboard/guild/1?tab=twitch" checked><span class="slider"></span></label></div>
+        
+        <div class="wc-sw is-on"><span>Clips<small class="">in #clips</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Clips · Racing Club" data-setting="notify_clips" data-guild-id="1" data-fix-href="/dashboard/guild/1?tab=twitch" checked><span class="slider"></span></label></div>
+        
+        <div class="wc-sw is-on"><span>Stream recaps<small class="">after each stream</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Stream recaps · Racing Club" data-setting="recap_enabled" data-guild-id="1" data-fix-href="/dashboard/guild/1?tab=twitch" checked><span class="slider"></span></label></div>
+        
+        <div class="wc-sw is-on"><span>Milestones<small class="">follower and sub goals</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Milestones · Racing Club" data-setting="milestones_enabled" data-guild-id="1" data-fix-href="/dashboard/guild/1?tab=twitch" checked><span class="slider"></span></label></div>
+        
+        <div class="wc-sw"><span>Weekly highlights<small class="">every Monday</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Weekly highlights · Racing Club" data-setting="weekly_highlights_enabled" data-guild-id="1" data-fix-href="/dashboard/guild/1?tab=twitch" ><span class="slider"></span></label></div>
+        
+        <div class="wc-sw is-on"><span>Sub roles<small class="">a role for your subs</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Sub roles · Racing Club" data-setting="sub_sync_enabled" data-guild-id="1" data-fix-href="/dashboard/guild/1?tab=discord" checked><span class="slider"></span></label></div>
+        
+      </div>
+    </div>
+    
+    
+  
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  
+  <div class="wc-foot">
+    <a href="/dashboard/guild/1?tab=discord">Welcome message <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a>
+    <a href="#tab-discord" data-open-tab="discord">Add a server <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a>
+    <span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span>
+  </div>
+  
+</section>
+
+<section class="card wc-card" id="card-overlay" data-card="overlay" aria-labelledby="card-overlay-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(224,64,251,0.13); color: #e040fb"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></div>
+    <div><h3 class="wc-title" id="card-overlay-title">OBS Overlay</h3><span class="wc-status" data-status>Alerts show on stream · open in OBS</span></div>
+    <label class="pill-toggle" title="Alerts on or off"><input type="checkbox" role="switch" aria-label="Alerts on or off" data-setting="overlay_enabled" checked><span class="slider"></span></label>
+  </div>
+  <div class="wc-body">
+    <div class="wc-sec"><span class="wc-label">Browser source for OBS</span></div>
+    
+    <div class="wc-linkbox">
+      <code class="wc-link" data-masked="atletanotifications.com/overlay/••••••••••••" data-shown="atletanotifications.com/overlay/mock-token-0123456789abcdef">atletanotifications.com/overlay/••••••••••••</code>
+      <button type="button" class="btn btn-secondary wc-btn" data-reveal aria-pressed="false" title="Show the link (keep it off stream)" aria-label="Show the link (keep it off stream)"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button>
+      <button type="button" class="btn btn-secondary wc-btn" data-copy="https://atletanotifications.com/overlay/mock-token-0123456789abcdef"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label>Copy</span></button>
+    </div>
+    
+    <div class="wc-sec"><span class="wc-label">Alerts</span><span class="wc-count" data-count="alerts">6 of 6 on</span></div>
+    <div class="wc-list" data-dim-with="overlay_enabled">
+      
+      <div class="wc-row wc-alert">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Follows" data-setting="overlay_follow_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Follows</span>
+        <select class="wc-select sm" data-setting="overlay_follow_duration" aria-label="Seconds on screen: Follows"><option value="5">5 s</option><option value="8" selected>8 s</option><option value="10">10 s</option><option value="12">12 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select>
+        <button type="button" class="wc-ib" data-alert-test="follow" title="Show a test alert in OBS" aria-label="Show a test alert in OBS: Follows"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+      <div class="wc-row wc-alert">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Subs" data-setting="overlay_sub_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Subs</span>
+        <select class="wc-select sm" data-setting="overlay_sub_duration" aria-label="Seconds on screen: Subs"><option value="5">5 s</option><option value="8">8 s</option><option value="10" selected>10 s</option><option value="12">12 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select>
+        <button type="button" class="wc-ib" data-alert-test="subscription" title="Show a test alert in OBS" aria-label="Show a test alert in OBS: Subs"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+      <div class="wc-row wc-alert">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Bits" data-setting="overlay_bits_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Bits</span>
+        <select class="wc-select sm" data-setting="overlay_bits_duration" aria-label="Seconds on screen: Bits"><option value="5">5 s</option><option value="8">8 s</option><option value="10" selected>10 s</option><option value="12">12 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select>
+        <button type="button" class="wc-ib" data-alert-test="bits" title="Show a test alert in OBS" aria-label="Show a test alert in OBS: Bits"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+      <div class="wc-row wc-alert">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Donations" data-setting="overlay_donation_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Donations</span>
+        <select class="wc-select sm" data-setting="overlay_donation_duration" aria-label="Seconds on screen: Donations"><option value="5">5 s</option><option value="8">8 s</option><option value="10">10 s</option><option value="12" selected>12 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select>
+        <button type="button" class="wc-ib" data-alert-test="donation" title="Show a test alert in OBS" aria-label="Show a test alert in OBS: Donations"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+      <div class="wc-row wc-alert">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Raids" data-setting="overlay_raid_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Raids</span>
+        <select class="wc-select sm" data-setting="overlay_raid_duration" aria-label="Seconds on screen: Raids"><option value="5">5 s</option><option value="8">8 s</option><option value="10" selected>10 s</option><option value="12">12 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select>
+        <button type="button" class="wc-ib" data-alert-test="raid" title="Show a test alert in OBS" aria-label="Show a test alert in OBS: Raids"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+      <div class="wc-row wc-alert">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Giveaway winner" data-setting="overlay_giveaway_enabled" checked><span class="slider"></span></label>
+        <span class="nm">Giveaway winner</span>
+        <select class="wc-select sm" data-setting="overlay_giveaway_duration" aria-label="Seconds on screen: Giveaway winner"><option value="5">5 s</option><option value="8">8 s</option><option value="10" selected>10 s</option><option value="12">12 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option></select>
+        <button type="button" class="wc-ib" data-alert-test="giveaway_winner" title="Show a test alert in OBS" aria-label="Show a test alert in OBS: Giveaway winner"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+    </div>
+    <div class="wc-volume"><svg class="i sm" aria-hidden="true"><use href="#i-vol"/></svg>Volume<input type="range" min="0" max="100" step="1" value="70" data-setting="overlay_volume" data-scale="100" aria-label="Volume"><span class="v" data-volume-label>70%</span></div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/overlay-builder">Look and position <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/overlay">Sounds <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section>
+
+<section class="card wc-card" id="card-commands" data-card="commands" data-needs-chatbot aria-labelledby="card-commands-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(0,200,180,0.13); color: #2dd4bf"><svg class="i" aria-hidden="true"><use href="#i-term"/></svg></div>
+    <div><h3 class="wc-title" id="card-commands-title">Commands</h3><span class="wc-status" data-status>Commands: 4 · built-ins on: 2</span></div>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg>Turn the chatbot on to use commands.</div>
+  <div class="wc-body">
+    <div class="wc-sec"><span class="wc-label">Your commands</span><span class="wc-count" data-count="commands">4</span><button type="button" class="btn btn-primary wc-btn xs" data-add="command" data-title="New command"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>Add</button></div>
+    <div class="wc-list" id="wc-commands" data-list="commands">
+      
+      <div class="wc-row" data-row data-id="1" data-name="discord" data-response="Join us at discord.gg/example" data-cooldown="10">
+        <code class="nm">!<span data-field="name">discord</span></code><span class="txt" data-field="response">Join us at discord.gg/example</span>
+        <button type="button" class="wc-ib" data-edit="command" data-title="Edit !discord" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="command" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      
+      <div class="wc-row" data-row data-id="2" data-name="setup" data-response="Fanatec DD Pro, Heusinkveld pedals" data-cooldown="10">
+        <code class="nm">!<span data-field="name">setup</span></code><span class="txt" data-field="response">Fanatec DD Pro, Heusinkveld pedals</span>
+        <button type="button" class="wc-ib" data-edit="command" data-title="Edit !setup" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="command" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      
+      <div class="wc-row" data-row data-id="3" data-name="schedule" data-response="Mon, Wed, Fri at 21:00" data-cooldown="10">
+        <code class="nm">!<span data-field="name">schedule</span></code><span class="txt" data-field="response">Mon, Wed, Fri at 21:00</span>
+        <button type="button" class="wc-ib" data-edit="command" data-title="Edit !schedule" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="command" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      
+      <div class="wc-row" data-row data-id="4" data-name="sim" data-response="iRacing tonight" data-cooldown="10">
+        <code class="nm">!<span data-field="name">sim</span></code><span class="txt" data-field="response">iRacing tonight</span>
+        <button type="button" class="wc-ib" data-edit="command" data-title="Edit !sim" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="command" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      
+    </div>
+    <p class="wc-hint" data-empty="commands" hidden>No commands yet. Add one, like !discord or !socials.</p>
+    
+    <div class="wc-sec"><span class="wc-label">Built-in commands</span><span class="wc-count" data-count="builtins">2 of 13 on</span><button type="button" class="btn btn-secondary wc-btn xs" data-edit="builtins" data-title="Built-in commands">Choose</button></div>
+    <div class="wc-pills">
+      <code class="wc-pill" data-builtin="cmd_followage_enabled" data-name="!followage">!followage</code><code class="wc-pill" data-builtin="cmd_subage_enabled" data-name="!subage" hidden>!subage</code><code class="wc-pill" data-builtin="cmd_uptime_enabled" data-name="!uptime">!uptime</code><code class="wc-pill" data-builtin="cmd_accountage_enabled" data-name="!accountage" hidden>!accountage</code><code class="wc-pill" data-builtin="cmd_8ball_enabled" data-name="!8ball" hidden>!8ball</code><code class="wc-pill" data-builtin="cmd_roll_enabled" data-name="!roll" hidden>!roll</code><code class="wc-pill" data-builtin="cmd_hug_enabled" data-name="!hug" hidden>!hug</code><code class="wc-pill" data-builtin="cmd_slap_enabled" data-name="!slap" hidden>!slap</code><code class="wc-pill" data-builtin="cmd_love_enabled" data-name="!love" hidden>!love</code><code class="wc-pill" data-builtin="cmd_rps_enabled" data-name="!rps" hidden>!rps</code><code class="wc-pill" data-builtin="cmd_coinflip_enabled" data-name="!coinflip" hidden>!coinflip</code><code class="wc-pill" data-builtin="cmd_quote_enabled" data-name="!quote" hidden>!quote</code><code class="wc-pill" data-builtin="cmd_roast_enabled" data-name="!roast" hidden>!roast</code>
+      <span class="wc-pill none" data-builtins-none hidden>none on</span>
+    </div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/chatbot?tab=commands">All command settings <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+  <template id="tpl-command">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <div class="wc-fields">
+        <label class="wc-field grow"><span>Command</span><span class="wc-prefixed"><b aria-hidden="true">!</b><input class="wc-input" data-field="command" maxlength="50" autocomplete="off" spellcheck="false"></span></label>
+        <label class="wc-field"><span>Cooldown</span><select class="wc-select" data-field="cooldown"><option value="5">5 s</option><option value="10">10 s</option><option value="15">15 s</option><option value="30">30 s</option><option value="60">60 s</option><option value="120">120 s</option><option value="300">300 s</option><option value="600">600 s</option><option value="1800">1800 s</option><option value="3600">3600 s</option></select></label>
+      </div>
+      <label class="wc-field"><span>The bot answers</span><textarea data-field="response" maxlength="500" rows="3" placeholder="What the bot says in chat"></textarea></label>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel>Cancel</button><button type="button" class="btn btn-primary wc-btn" data-save>Save</button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+  <template id="tpl-command-row">
+    <div class="wc-row" data-row>
+      <code class="nm">!<span data-field="name"></span></code><span class="txt" data-field="response"></span>
+      <button type="button" class="wc-ib" data-edit="command" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      <button type="button" class="wc-ib" data-delete="command" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+    </div>
+  </template>
+  <template id="tpl-builtins">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <p class="wc-hint">Pick the ones your chat can use.</p>
+      <div class="wc-chips" data-chips></div>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel>Cancel</button><button type="button" class="btn btn-primary wc-btn" data-save>Save</button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+</section>
+<section class="card wc-card" id="card-shoutouts" data-needs-chatbot aria-labelledby="card-shoutouts-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(244,114,182,0.14); color: #f472b6"><svg class="i" aria-hidden="true"><use href="#i-at"/></svg></div>
+    <div><h3 class="wc-title" id="card-shoutouts-title">Shoutouts</h3><span class="wc-status">On: !so for mods · after raids from 5 viewers</span></div>
+  </div>
+  <div class="wc-body">
+    <div class="wc-switches">
+      <label class="wc-sw is-on"><span><code>!so @name</code><small>broadcaster and moderators</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="!so for moderators" checked><span class="slider"></span></label></label>
+      <label class="wc-sw is-on"><span>After a raid<small>after the raid thank-you</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="After a raid" checked><span class="slider"></span></label></label>
+    </div>
+    <div class="wc-setrow"><span>Raid shoutout from</span><select class="wc-select" aria-label="Minimum raid size"><option>1 viewer</option><option>2 viewers</option><option selected>5 viewers</option><option>10 viewers</option><option>25 viewers</option><option>50 viewers</option><option>100 viewers</option></select></div>
+    <div class="wc-sec"><span class="wc-label">Message</span><button type="button" class="btn btn-secondary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg>Test in chat</button></div>
+    <div class="wc-row"><span class="txt">Go check out {name}! They were last streaming {game}: {link}</span><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button></div>
+    <p class="wc-hint">In chat: “Go check out SpeedyMara! They were last streaming iRacing: https://twitch.tv/speedymara”</p>
+  </div>
+  <div class="wc-foot"><span class="wc-saved" aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section>
+
+<section class="card wc-card" id="card-sponsors" data-card="sponsors" data-needs-chatbot aria-labelledby="card-sponsors-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(255,152,0,0.13); color: #ff9800"><svg class="i" aria-hidden="true"><use href="#i-mega"/></svg></div>
+    <div><h3 class="wc-title" id="card-sponsors-title">Sponsor Messages</h3><span class="wc-status" data-status>Posting one every 15 min · messages: 2</span></div>
+    <label class="pill-toggle" title="Sponsor messages on or off"><input type="checkbox" role="switch" aria-label="Sponsor messages on or off" data-setting="sponsor_send_chat" checked><span class="slider"></span></label>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg>Turn the chatbot on to post sponsor messages.</div>
+  <div class="wc-body">
+    <div class="wc-setrow"><span>Post one in chat every</span><select class="wc-select" data-setting="sponsor_chat_interval_minutes" aria-label="Post one in chat every"><option value="5">5 min</option><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option><option value="60">60 min</option></select></div>
+    <div class="wc-sec"><span class="wc-label">Messages</span><span class="wc-count" data-count="messages">2</span><button type="button" class="btn btn-primary wc-btn xs" data-add="sponsor" data-title="New sponsor message"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>Add</button></div>
+    <div class="wc-list" id="wc-sponsors" data-list="sponsors" data-dim-with="sponsor_send_chat">
+      
+      <div class="wc-row" data-row data-id="1" data-text="Thanks to our partner!" data-url="">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Thanks to our partner!" data-setting="sponsor_message_enabled" data-id="1" checked><span class="slider"></span></label>
+        <span class="txt" data-field="text">Thanks to our partner!</span>
+        <button type="button" class="wc-ib" data-edit="sponsor" data-title="Edit sponsor message" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="sponsor" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      
+      <div class="wc-row" data-row data-id="2" data-text="Use code RACER for 10% off" data-url="">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Use code RACER for 10% off" data-setting="sponsor_message_enabled" data-id="2" checked><span class="slider"></span></label>
+        <span class="txt" data-field="text">Use code RACER for 10% off</span>
+        <button type="button" class="wc-ib" data-edit="sponsor" data-title="Edit sponsor message" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="wc-ib" data-delete="sponsor" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      
+    </div>
+    <p class="wc-hint" data-empty="sponsors" hidden>No messages yet. Add one to thank a partner in chat.</p>
+    
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/timed-notifications">All sponsor message settings <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/overlay-builder?tab=timed">Sponsor images on stream <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+  <template id="tpl-sponsor">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <label class="wc-field"><span>Message</span><textarea data-field="message_text" maxlength="500" rows="3"></textarea></label>
+      <label class="wc-field"><span>Link (optional)</span><input class="wc-input" data-field="url" type="url" maxlength="500" placeholder="https://..."></label>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel>Cancel</button><button type="button" class="btn btn-primary wc-btn" data-save>Save</button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+  <template id="tpl-sponsor-row">
+    <div class="wc-row" data-row>
+      <label class="pill-toggle mini"><input type="checkbox" role="switch" data-setting="sponsor_message_enabled" checked><span class="slider"></span></label>
+      <span class="txt" data-field="text"></span>
+      <button type="button" class="wc-ib" data-edit="sponsor" data-title="Edit sponsor message" title="Edit" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button>
+      <button type="button" class="wc-ib" data-delete="sponsor" title="Delete" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
+    </div>
+  </template>
+</section>
+
+
+<section class="card wc-card" id="card-donations" data-card="donations" aria-labelledby="card-donations-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(0,112,186,0.15); color: #3b9eff"><svg class="i" aria-hidden="true"><use href="#i-dollar"/></svg></div>
+    <div><h3 class="wc-title" id="card-donations-title">Donations</h3><span class="wc-status" data-status>Tip page on · tips in 90 days: 6</span></div>
+    <label class="pill-toggle" title="Tip page on or off"><input type="checkbox" role="switch" aria-label="Tip page on or off" data-setting="donation_page_enabled" data-fix-href="/dashboard/donations" checked><span class="slider"></span></label>
+  </div>
+  <div class="wc-body">
+  
+    
+    <div class="wc-linkbox" data-dim-with="donation_page_enabled">
+      <code class="wc-link">atletanotifications.com/tip/racer_example</code>
+      <button type="button" class="btn btn-secondary wc-btn" data-copy="https://atletanotifications.com/tip/racer_example"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label>Copy</span></button>
+      <a class="btn btn-secondary wc-btn" href="https://atletanotifications.com/tip/racer_example" target="_blank" rel="noopener" title="Open the tip page" aria-label="Open the tip page"><svg class="i sm" aria-hidden="true"><use href="#i-ext"/></svg></a>
+    </div>
+    
+    
+    <div class="wc-sec"><span class="wc-label">Tip goal</span><button type="button" class="btn btn-secondary wc-btn xs" data-edit="goal" data-title="Tip goal"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg><span data-goal-button>Edit</span></button></div>
+    <div class="wc-goal" data-goal data-title="New wheel" data-current="180" data-target="500" data-currency="EUR">
+      <div class="top"><b data-goal-title>New wheel</b><em>on stream as a bar</em><span data-goal-amount>€180.00 of €500.00</span></div>
+      <div class="wc-progress"><span data-goal-bar style="width: 36%"></span></div>
+    </div>
+    <p class="wc-hint" data-goal-none hidden>No goal running.</p>
+    
+    <div class="wc-sec"><span class="wc-label">Latest tips</span><a class="wc-link-sm" href="/dashboard/donations/history">History <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+    
+    <div class="wc-list">
+      
+      <div class="wc-row"><span class="amt">€5.00</span><span class="txt">Maria: “Great race!”</span><span class="when">20m ago</span></div>
+      
+    </div>
+    
+  
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/donations">PayPal and currency <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+  
+  <template id="tpl-goal">
+    <div class="wc-editor">
+      <h4 id="wc-dialog-title" data-title></h4>
+      <div class="wc-fields">
+        <label class="wc-field grow"><span>Goal</span><input class="wc-input" data-field="title" maxlength="60"></label>
+        <label class="wc-field"><span>Target</span><input class="wc-input" data-field="target_amount" type="number" min="1" step="0.01" inputmode="decimal"></label>
+      </div>
+      <p class="wc-hint" data-goal-hint></p>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn wc-left wc-danger" data-goal-end>End the goal</button><button type="button" class="btn btn-secondary wc-btn" data-cancel>Cancel</button><button type="button" class="btn btn-primary wc-btn" data-save>Save</button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+  
+</section>
+
+<section class="card wc-card" id="card-protection" data-card="protection" data-needs-chatbot aria-labelledby="card-protection-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(240,68,56,0.13); color: #f04438"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg></div>
+    <div><h3 class="wc-title" id="card-protection-title">Chat protection</h3><span class="wc-status" data-status>Filters on: 2 of 6</span></div>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg>Turn the chatbot on to protect your chat.</div>
+  <div class="wc-body">
+    
+    <div class="wc-note" data-mod-note hidden>
+      <svg class="i sm" aria-hidden="true" style="color: var(--warning)"><use href="#i-warn"/></svg>
+      <span>Make atletaalerts a moderator: type <code>/mod atletaalerts</code> in your chat.</span>
+      <button type="button" class="btn btn-secondary wc-btn xs" data-copy="/mod atletaalerts"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label>Copy</span></button>
+      <button type="button" class="btn btn-secondary wc-btn xs" data-check-moderator>Check again</button>
+    </div>
+    
+    <div class="wc-switches">
+      
+      <div class="wc-sw is-on"><span>Link protection<small>no links without !permit</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Link protection" data-setting="mod_link_protection_enabled" checked><span class="slider"></span></label></div>
+      
+      <div class="wc-sw"><span>Banned words<small>words: 12</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Banned words" data-setting="mod_banned_words_enabled" ><span class="slider"></span></label></div>
+      
+      <div class="wc-sw is-on"><span>Caps<small>shouting in capitals</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Caps" data-setting="mod_caps_enabled" checked><span class="slider"></span></label></div>
+      
+      <div class="wc-sw"><span>Emote spam<small>too many emotes</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Emote spam" data-setting="mod_emote_spam_enabled" ><span class="slider"></span></label></div>
+      
+      <div class="wc-sw"><span>Repetition<small>the same message again</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Repetition" data-setting="mod_repetition_enabled" ><span class="slider"></span></label></div>
+      
+      <div class="wc-sw"><span>Symbol spam<small>rows of symbols</small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Symbol spam" data-setting="mod_symbol_spam_enabled" ><span class="slider"></span></label></div>
+      
+    </div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/chatbot/mod-log">Moderation log · this week: 3 <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/chatbot?tab=moderation">Fine-tune <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section>
+
+
+<section class="card wc-card" id="card-giveaways" data-card="giveaways" data-needs-chatbot aria-labelledby="card-giveaways-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(245,158,11,0.15); color: #f59e0b"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg></div>
+    <div><h3 class="wc-title" id="card-giveaways-title">Giveaways</h3><span class="wc-status off" data-status>No giveaway running</span></div>
+  </div>
+  <div class="wc-needs"><svg class="i sm" aria-hidden="true"><use href="#i-chat"/></svg>Turn the chatbot on to run giveaways.</div>
+  <div class="wc-body">
+    <form class="wc-gw-form" data-giveaway-form>
+      <div class="wc-fields">
+        <label class="wc-field"><span>Keyword</span><span class="wc-prefixed"><b aria-hidden="true">!</b><input class="wc-input" name="keyword" value="gw" maxlength="25" autocomplete="off" spellcheck="false" required></span></label>
+        <label class="wc-field grow"><span>Prize <em>(optional)</em></span><input class="wc-input" name="prize" maxlength="100" placeholder="e.g. a Steam key"></label>
+      </div>
+      <div class="wc-fields">
+        <label class="wc-field grow"><span>Ends</span><select class="wc-select" name="duration_seconds"><option value="">when I pick</option><option value="60">after 1 min</option><option value="300" selected>after 5 min</option><option value="600">after 10 min</option><option value="1800">after 30 min</option></select></label>
+        <label class="wc-field"><span>Winners</span><select class="wc-select" name="winners_count"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option></select></label>
+        <label class="wc-field"><span>Subs only</span><span class="pill-toggle mini"><input type="checkbox" role="switch" name="subs_only" aria-label="Subs only"><span class="slider"></span></span></label>
+      </div>
+      <button type="submit" class="btn btn-primary wc-btn block"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg>Start giveaway</button>
+    </form>
+    <div class="wc-gw-live" data-giveaway-live data-giveaway-id="" data-keyword="" data-ends-at="" data-winners="1" data-entries="0">
+      <div class="wc-setrow wc-gw-how"><span class="pulse-dot" aria-hidden="true"></span><span>Viewers type <code data-gw-keyword>!</code> in chat to enter</span></div>
+      <div class="wc-gw-stats"><div><b data-gw-entries>0</b><span>Entries</span></div><div><b data-gw-left>–</b><span>Left</span></div><div><b data-gw-winners>1</b><span>Winners</span></div></div>
+      <div class="wc-winner" data-gw-winner role="status"></div>
+      <button type="button" class="btn btn-primary wc-btn block" data-gw-pick>Pick a winner</button>
+      <button type="button" class="btn btn-secondary wc-btn block" data-gw-end>End without a winner</button>
+    </div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/giveaways">Past giveaways <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+</section>
+<section class="card wc-card" id="card-polls" aria-labelledby="card-polls-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(56,189,248,0.14); color: #38bdf8"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-polls-title">Polls &amp; predictions</h3><span class="wc-status">Poll and prediction running</span></div>
+  </div>
+  <div class="wc-body">
+    <div class="wc-live-poll">
+      <div class="lp-top"><span class="lp-kind">Poll</span><b>Top 5 finish today?</b><span class="lp-left">1:24</span></div>
+      <div class="lp-opt lead"><span class="nm">Yes</span><span class="bar"><i style="width:64%"></i></span><span class="pc">64%</span><span class="ct">48 votes</span></div>
+      <div class="lp-opt"><span class="nm">No</span><span class="bar"><i style="width:36%"></i></span><span class="pc">36%</span><span class="ct">27 votes</span></div>
+      <div class="lp-foot"><span>75 votes</span><button type="button" class="btn btn-secondary wc-btn xs">End now</button></div>
+    </div>
+    <div class="wc-live-poll pred">
+      <div class="lp-top"><span class="lp-kind pred">Prediction</span><b>Clean first lap?</b><span class="lp-left">0:42</span></div>
+      <div class="lp-opt blue"><span class="nm">Clean</span><span class="bar"><i style="width:71%"></i></span><span class="pc">71%</span><span class="ct">12,400 pts · 18</span></div>
+      <div class="lp-opt pink"><span class="nm">Chaos</span><span class="bar"><i style="width:29%"></i></span><span class="pc">29%</span><span class="ct">5,100 pts · 9</span></div>
+      <div class="lp-foot"><span>17,500 points</span><button type="button" class="btn btn-secondary wc-btn xs">Lock now</button><button type="button" class="btn btn-secondary wc-btn xs wc-danger">Cancel and refund</button></div>
+    </div>
+    <div class="wc-sec"><span class="wc-label">Templates</span><span class="wc-count">4</span><button type="button" class="btn btn-primary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>New</button></div>
+    <div class="wc-list">
+      
+      <div class="wc-row"><span class="lp-kind ">Poll</span><span class="nm">Top 5 finish today?</span><span class="txt">Yes / No · 2 min</span><button type="button" class="wc-ib play" disabled title="A poll is already running" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind pred">Pred.</span><span class="nm">Clean first lap?</span><span class="txt">Clean / Chaos · 1 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind ">Poll</span><span class="nm">Which car next?</span><span class="txt">GT3 / LMP2 / F4 · 3 min</span><button type="button" class="wc-ib play" disabled title="A poll is already running" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind pred">Pred.</span><span class="nm">Podium tonight?</span><span class="txt">Yes / No · 5 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+    </div>
+    <div class="wc-setrow"><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Announce in chat" checked><span class="slider"></span></label><span>Announce in chat</span><a class="wc-link-sm" href="#">Chat messages <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+    <div class="wc-sec"><span class="wc-label">On-stream bar (OBS)</span></div>
+    <div class="wc-linkbox"><code class="wc-link">atletanotifications.com/overlay/poll/••••••••••••</code><button type="button" class="btn btn-secondary wc-btn xs" aria-label="Show"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button><button type="button" class="btn btn-secondary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button></div></div>
+  <div class="wc-foot"><span class="wc-saved" aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section>
+
+<section class="card wc-card" id="card-rewards" data-card="rewards" aria-labelledby="card-rewards-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(145,70,255,0.15); color: #b18cff"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg></div>
+    <div><h3 class="wc-title" id="card-rewards-title">Channel Point Rewards</h3><span class="wc-status" data-status>On · rewards: 2</span></div>
+    <label class="pill-toggle" title="Rewards on or off"><input type="checkbox" role="switch" aria-label="Rewards on or off" data-setting="cp_rewards_enabled" checked><span class="slider"></span></label>
+  </div>
+  <div class="wc-body">
+  
+    <div class="wc-list" data-dim-with="cp_rewards_enabled">
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Hydrate" data-reward-id="1" checked><span class="slider"></span></label>
+        <span class="nm">Hydrate</span><span class="txt">100 points</span>
+        <button type="button" class="wc-ib" data-reward-test="1" title="Play it on stream" aria-label="Play it on stream: Hydrate"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+      <div class="wc-row">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Pit stop sound" data-reward-id="2" checked><span class="slider"></span></label>
+        <span class="nm">Pit stop sound</span><span class="txt">250 points</span>
+        <button type="button" class="wc-ib" data-reward-test="2" title="Play it on stream" aria-label="Play it on stream: Pit stop sound"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      
+    </div>
+  
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/redemptions">Rewards and redemption history <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section>
+
+<section class="card wc-card" id="card-spotify" data-card="spotify" aria-labelledby="card-spotify-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(29,185,84,0.13); color: #1db954"><svg class="i" aria-hidden="true"><use href="#i-music"/></svg></div>
+    <div><h3 class="wc-title" id="card-spotify-title">Spotify</h3><span class="wc-status" data-status>Connected</span></div>
+  </div>
+  <div class="wc-body">
+    
+    <p class="wc-text">Spotify connected — viewers can type <code>!song</code> to see what you&#39;re listening to.</p>
+    
+  </div>
+  
+  <div class="wc-foot"><form method="POST" action="/dashboard/spotify/disconnect" class="wc-inline-form"><button type="submit" class="wc-linkbtn">Disconnect</button></form></div>
+  
+</section>
+
+  </div>
+  
+  <h2 class="mock-note">Polls &amp; predictions card: the other states (mockup only)</h2>
+  <p class="mock-sub">Ready with templates; a locked prediction waiting for its winner; just ended (shown 30 seconds); not set up (permissions missing).</p>
+  <div class="mock-grid"><section class="card wc-card" id="card-polls-ready" aria-labelledby="card-polls-ready-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(56,189,248,0.14); color: #38bdf8"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-polls-ready-title">Polls &amp; predictions</h3><span class="wc-status">Ready · 4 templates</span></div>
+  </div>
+  <div class="wc-body">
+    <div class="wc-sec"><span class="wc-label">Templates</span><span class="wc-count">4</span><button type="button" class="btn btn-primary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>New</button></div>
+    <div class="wc-list">
+      
+      <div class="wc-row"><span class="lp-kind ">Poll</span><span class="nm">Top 5 finish today?</span><span class="txt">Yes / No · 2 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind pred">Pred.</span><span class="nm">Clean first lap?</span><span class="txt">Clean / Chaos · 1 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind ">Poll</span><span class="nm">Which car next?</span><span class="txt">GT3 / LMP2 / F4 · 3 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind pred">Pred.</span><span class="nm">Podium tonight?</span><span class="txt">Yes / No · 5 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+    </div>
+    <div class="wc-setrow"><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Announce in chat" checked><span class="slider"></span></label><span>Announce in chat</span><a class="wc-link-sm" href="#">Chat messages <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+    <div class="wc-sec"><span class="wc-label">On-stream bar (OBS)</span></div>
+    <div class="wc-linkbox"><code class="wc-link">atletanotifications.com/overlay/poll/••••••••••••</code><button type="button" class="btn btn-secondary wc-btn xs" aria-label="Show"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button><button type="button" class="btn btn-secondary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button></div></div>
+  <div class="wc-foot"><span class="wc-saved" aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section><section class="card wc-card" id="card-polls-locked" aria-labelledby="card-polls-locked-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(56,189,248,0.14); color: #38bdf8"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-polls-locked-title">Polls &amp; predictions</h3><span class="wc-status warn">Locked — pick the winner</span></div>
+  </div>
+  <div class="wc-body">
+    <div class="wc-live-poll pred">
+      <div class="lp-top"><span class="lp-kind pred">Prediction</span><b>Clean first lap?</b><span class="lp-lock">Locked</span></div>
+      <div class="lp-opt blue"><span class="nm">Clean</span><span class="bar"><i style="width:71%"></i></span><span class="pc">71%</span><span class="ct">12,400 pts · 18</span></div>
+      <div class="lp-opt pink"><span class="nm">Chaos</span><span class="bar"><i style="width:29%"></i></span><span class="pc">29%</span><span class="ct">5,100 pts · 9</span></div>
+      <div class="lp-pick"><span>Who won?</span><button type="button" class="btn btn-primary wc-btn xs">Clean won</button><button type="button" class="btn btn-primary wc-btn xs">Chaos won</button></div>
+      <div class="lp-foot"><span>17,500 points</span><button type="button" class="btn btn-secondary wc-btn xs wc-danger">Cancel and refund</button></div>
+    </div></div>
+  <div class="wc-foot"><span class="wc-saved" aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section><section class="card wc-card" id="card-polls-ended" aria-labelledby="card-polls-ended-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(56,189,248,0.14); color: #38bdf8"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-polls-ended-title">Polls &amp; predictions</h3><span class="wc-status">Prediction ended</span></div>
+  </div>
+  <div class="wc-body">
+    <div class="wc-winner show"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Clean wins — 18 viewers share 17,500 channel points</div>
+    <div class="wc-sec"><span class="wc-label">Templates</span><span class="wc-count">4</span><button type="button" class="btn btn-primary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>New</button></div>
+    <div class="wc-list">
+      
+      <div class="wc-row"><span class="lp-kind ">Poll</span><span class="nm">Top 5 finish today?</span><span class="txt">Yes / No · 2 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind pred">Pred.</span><span class="nm">Clean first lap?</span><span class="txt">Clean / Chaos · 1 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind ">Poll</span><span class="nm">Which car next?</span><span class="txt">GT3 / LMP2 / F4 · 3 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+      <div class="wc-row"><span class="lp-kind pred">Pred.</span><span class="nm">Podium tonight?</span><span class="txt">Yes / No · 5 min</span><button type="button" class="wc-ib play" aria-label="Start"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button><button type="button" class="wc-ib" aria-label="Edit"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg></button><button type="button" class="wc-ib" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>
+    </div>
+    <div class="wc-setrow"><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="Announce in chat" checked><span class="slider"></span></label><span>Announce in chat</span><a class="wc-link-sm" href="#">Chat messages <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+    <div class="wc-sec"><span class="wc-label">On-stream bar (OBS)</span></div>
+    <div class="wc-linkbox"><code class="wc-link">atletanotifications.com/overlay/poll/••••••••••••</code><button type="button" class="btn btn-secondary wc-btn xs" aria-label="Show"><svg class="i sm" aria-hidden="true"><use href="#i-eye"/></svg></button><button type="button" class="btn btn-secondary wc-btn xs"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button></div></div>
+  <div class="wc-foot"><span class="wc-saved" aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section><section class="card wc-card" id="card-polls-setup" aria-labelledby="card-polls-setup-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(56,189,248,0.14); color: #38bdf8"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-polls-setup-title">Polls &amp; predictions</h3><span class="wc-status warn">Reconnect Twitch to use polls &amp; predictions</span></div>
+  </div>
+  <div class="wc-body">
+    <p class="wc-hint">Twitch needs your OK once before Atleta can start polls and predictions for you.</p>
+    <a class="btn btn-primary wc-btn block" href="#"><svg class="i sm" aria-hidden="true"><use href="#i-twitch"/></svg>Reconnect Twitch</a></div>
+  <div class="wc-foot"><span class="wc-saved" aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Saved</span></div>
+</section></div>
+  
+<section class="mock-stage" aria-label="On-stream bar">
+  <h2>On-stream bar (OBS browser source <code>/overlay/poll/&lt;token&gt;</code>)</h2>
+  <p>Transparent outside the panel; it fills the source's width. Shown while a poll or prediction runs and for 10 seconds after its end; empty otherwise.</p>
+  <div class="mock-shots">
+    <div class="pb"><div class="pb-flag"></div><div class="pb-head"><span class="pb-kind">Poll</span><span class="pb-title">Top 5 finish today?</span><span class="pb-left">1:24</span></div>
+      <div class="pb-opt lead"><div class="pb-line"><span class="pb-nm">Yes</span><span class="pb-pc">64%</span></div><div class="pb-bar"><i style="width:64%"></i></div><div class="pb-extra">48 votes</div></div><div class="pb-opt"><div class="pb-line"><span class="pb-nm">No</span><span class="pb-pc">36%</span></div><div class="pb-bar"><i style="width:36%"></i></div><div class="pb-extra">27 votes</div></div><div class="pb-foot">75 votes · vote in chat’s poll box</div></div>
+    <div class="pb pred"><div class="pb-flag"></div><div class="pb-head"><span class="pb-kind">Prediction</span><span class="pb-title">Clean first lap?</span><span class="pb-lock">Locked</span></div>
+      <div class="pb-opt blue"><div class="pb-line"><span class="pb-nm">Clean</span><span class="pb-pc">71%</span></div><div class="pb-bar"><i style="width:71%"></i></div><div class="pb-extra">12,400 points · 18 viewers</div></div><div class="pb-opt pink"><div class="pb-line"><span class="pb-nm">Chaos</span><span class="pb-pc">29%</span></div><div class="pb-bar"><i style="width:29%"></i></div><div class="pb-extra">5,100 points · 9 viewers</div></div><div class="pb-foot">17,500 points at stake</div></div>
+    <div class="pb pred"><div class="pb-flag"></div><div class="pb-head"><span class="pb-kind">Prediction</span><span class="pb-title">Clean first lap?</span><span class="pb-win">Result</span></div>
+      <div class="pb-opt blue won"><div class="pb-line"><span class="pb-nm">Clean ✓</span><span class="pb-pc">71%</span></div><div class="pb-bar"><i style="width:71%"></i></div><div class="pb-extra">18 viewers share 17,500 points</div></div><div class="pb-opt pink lost"><div class="pb-line"><span class="pb-nm">Chaos</span><span class="pb-pc">29%</span></div><div class="pb-bar"><i style="width:29%"></i></div></div></div>
+  </div>
+</section>
+<div class="wc-live" id="wc-live" aria-live="polite"></div>
+  <dialog class="wc-dialog" id="wc-dialog" aria-labelledby="wc-dialog-title"></dialog>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+<script>
+function toggleStats(guildId) {
+  var panel = document.getElementById('stats-' + guildId);
+  var btn = document.getElementById('stats-btn-' + guildId);
+  var isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  btn.style.background = isOpen ? '' : 'var(--accent)';
+  btn.style.color = isOpen ? '' : 'white';
+}
+</script>
+
+<style>
+  @media (max-width: 640px) {
+    .stat-tooltip { display: none !important; }
+  }
+  @media (max-width: 520px) {
+    div[style*="grid-template-columns: repeat(4, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    div[style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    div[style*="grid-template-columns: repeat(2, 1fr)"] { grid-template-columns: minmax(0, 1fr) !important; }
+    /* A server of the Discord tab: its buttons on a line of their own, under the name; three count tiles in one row */
+    .dash-server-head { flex-wrap: wrap; }
+    .dash-server-actions { flex-basis: 100%; }
+    .dash-server-actions > * { flex: 1; justify-content: center; }
+    .dash-server-meta { flex-wrap: wrap; row-gap: 2px; }
+    .dash-summary[style*="repeat(3, 1fr)"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  }
+</style>
+
+
+
+<script>window.ATLETA_CARD_TEXTS = {"saved":"Saved","copy":"Copy","copied":"Copied!","copyFailed":"Copy it by hand","showAll":"Show all ({{count}})","showFewer":"Show fewer","seconds":"{{seconds}} s","edit":"Edit","sessionEnded":"Your session ended. Reload the page to go on.","network":"Can't reach the server. Check your connection and try again.","failed":"That didn't work. Try again in a moment.","fixIt":"Set it up","sentToChat":"Sent to your chat","saveFirst":"Save the message first, then test it.","commandEditTitle":"Edit !{{name}}","confirmDeleteCommand":"Delete !{{name}}?","confirmDeleteSponsor":"Delete this sponsor message?","moderatorYes":"atletaalerts is a moderator in your chat.","moderatorNo":"Twitch still says atletaalerts is not a moderator. Type the command in your chat, then check again.","moderatorUnknown":"The bot is not in your chat right now. Switch the chatbot on, then check again.","giveaway":{"running":"Giveaway running","picked":"Winner picked","none":"No giveaway running","winner":"Winner: {{names}}","nobody":"Nobody entered","pick":"Pick a winner","pickAgain":"Pick again","end":"End without a winner","done":"Done","confirmEnd":"Close this giveaway without picking a winner?"},"alertSent":"Test alert sent to your OBS overlay","rewardPlayed":"Playing it on your overlay","startGoal":"Start a tip goal","goalAmount":"{{raised}} of {{target}}","goalHint":"Raised so far: {{raised}}. Only tips in {{currency}} count.","confirmEndGoal":"End this goal? The progress bar will be hidden from the overlay."};</script>
+
+
+
+<script>
+  const tabs = document.querySelectorAll('.tab-btn');
+  const panes = document.querySelectorAll('.tab-content');
+  // Shows a tab: <html data-dashboard-tab> (the styles at the top show its button and pane) and the marks on them.
+  function switchTab(tabName) {
+    document.documentElement.setAttribute('data-dashboard-tab', tabName);
+    tabs.forEach(t => {
+      const open = t.dataset.tab === tabName;
+      t.classList.toggle('active', open);
+      if (open) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current');
+    });
+    panes.forEach(p => p.classList.toggle('active', p.id === 'tab-' + tabName));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => {
+    switchTab(t.dataset.tab);
+    try { localStorage.setItem('dashboard_tab', t.dataset.tab); } catch (e) { /* storage refused: not remembered */ }
+  }));
+  // The tab the script above the tab bar opened: the one picked last time, or Twitch
+  switchTab(document.documentElement.getAttribute('data-dashboard-tab') || 'twitch');
+</script>
+
+  </div>
+  <script>if(typeof lucide!=='undefined')lucide.createIcons();</script>
+</body>
+</html>
+
