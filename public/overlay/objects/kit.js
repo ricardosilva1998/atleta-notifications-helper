@@ -131,12 +131,13 @@
   function toHex(rgb) { return '#' + rgb.map(function (c) { return ('0' + c.toString(16).toUpperCase()).slice(-2); }).join(''); }
   var WHITE = [255, 255, 255], BLACK = [0, 0, 0], MUTED = [242, 230, 230];
   // The variables a slot carries for a streamer's colour: the colour, its numbers, the text colour
-  // that reads on it, and shades worked out from it. Today's samurai looks read every shade with
-  // today's red as the fallback (objects.css), so a slot without these looks exactly as it did.
+  // that reads on it (also as numbers, for translucent text), and shades worked out from it. Today's
+  // samurai looks read every one with today's colours as the fallback (objects.css), so a slot without
+  // these looks exactly as it did.
   function accentVars(value) {
     if (typeof value !== 'string' || !HEX_COLOUR.test(value)) return '';
-    var base = value.toUpperCase(), c = rgbOf(base);
-    return '--a:' + base + ';--a-rgb:' + c.join(',') + ';--a-on:' + onColour(base)
+    var base = value.toUpperCase(), c = rgbOf(base), on = onColour(base);
+    return '--a:' + base + ';--a-rgb:' + c.join(',') + ';--a-on:' + on + ';--a-on-rgb:' + rgbOf(on).join(',')
       + ';--a-hi:' + toHex(mix(c, WHITE, 0.18)) + ';--a-lo:' + toHex(mix(c, BLACK, 0.2))
       + ';--a-deep:' + toHex(mix(c, BLACK, 0.45)) + ';--a-night:' + toHex(mix(c, BLACK, 0.72))
       + ';--a-ink:' + toHex(mix(c, BLACK, 0.86)) + ';--a-soft:' + toHex(mix(c, MUTED, 0.5))

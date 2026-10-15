@@ -56,10 +56,10 @@
 .o-follow .o-follow-hatch{position:absolute;left:0;top:0;bottom:0;width:66px;transform:none;background:repeating-linear-gradient(112deg,rgba(0,0,0,.34) 0 10px,transparent 10px 20px);background-size:24px 24px}
 .o-follow .o-mesh{position:absolute;inset:0;transform:none;background:var(--o-hex);opacity:.9;pointer-events:none}
 .o-follow .o-follow-scar{position:absolute;top:-20%;bottom:-20%;left:50%;width:2px;transform:rotate(22deg);background:rgba(255,255,255,.95);box-shadow:0 0 12px 2px rgba(255,255,255,.7);opacity:0;z-index:3}
-.o-follow .o-follow-glyph{font-weight:800;font-size:26px;line-height:1;color:rgba(255,255,255,.9);z-index:1}
+.o-follow .o-follow-glyph{font-weight:800;font-size:26px;line-height:1;color:rgba(var(--a-on-rgb,255,255,255),.9);z-index:1}
 .o-follow .o-follow-txt{z-index:1;min-width:0}
-.o-follow .o-name{color:#fff;font-size:calc(22px * var(--fit,1))}
-.o-follow .o-meta{color:rgba(255,255,255,.82);margin-top:4px}
+.o-follow .o-name{color:var(--a-on,#fff);font-size:calc(22px * var(--fit,1))}
+.o-follow .o-meta{color:rgba(var(--a-on-rgb,255,255,255),.82);margin-top:4px}
 @keyframes scarFade{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
 
 /* ── 02 subscription — torii gate + gaku name plaque ─────── */
@@ -177,8 +177,8 @@
   background:linear-gradient(168deg,var(--a-hi,#F0343C),var(--r-red) 40%,var(--a-lo,#A50F16));
 }
 .o-raid .o-raid-ban.main .o-mesh{position:absolute;inset:0;background:var(--o-hex);opacity:.85;pointer-events:none}
-.o-raid .o-raid-cnt{white-space:nowrap;font-weight:800;font-size:46px;line-height:1;color:#fff;letter-spacing:-.045em;font-variant-numeric:tabular-nums;text-align:center;margin-top:22px;text-shadow:0 3px 10px rgba(0,0,0,.5)}
-.o-raid .o-raid-clbl{font-family:var(--o-cond);font-weight:700;font-size:9.5px;letter-spacing:.24em;color:rgba(255,255,255,.82);text-transform:uppercase;text-align:center;margin-top:4px}
+.o-raid .o-raid-cnt{white-space:nowrap;font-weight:800;font-size:46px;line-height:1;color:var(--a-on,#fff);letter-spacing:-.045em;font-variant-numeric:tabular-nums;text-align:center;margin-top:22px;text-shadow:0 3px 10px rgba(0,0,0,.5)}
+.o-raid .o-raid-clbl{font-family:var(--o-cond);font-weight:700;font-size:9.5px;letter-spacing:.24em;color:rgba(var(--a-on-rgb,255,255,255),.82);text-transform:uppercase;text-align:center;margin-top:4px}
 .o-raid .o-raid-plaque{
   position:absolute;left:8%;right:8%;bottom:0;
   background:linear-gradient(160deg,#141C26,#070B10);

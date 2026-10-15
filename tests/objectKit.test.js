@@ -49,12 +49,13 @@ describe('helpers', () => {
 describe('the streamer\'s colour', () => {
   test('gives the colour, its numbers, the text colour on it and its shades', () => {
     assert.equal(K.accentVars('#d81e26'),
-      '--a:#D81E26;--a-rgb:216,30,38;--a-on:#FFFFFF;--a-hi:#DF474D;--a-lo:#AD181E;--a-deep:#771115;--a-night:#3C080B;--a-ink:#1E0405;--a-soft:#E58286;--a-tint:#E77478;');
+      '--a:#D81E26;--a-rgb:216,30,38;--a-on:#FFFFFF;--a-on-rgb:255,255,255;--a-hi:#DF474D;--a-lo:#AD181E;--a-deep:#771115;--a-night:#3C080B;--a-ink:#1E0405;--a-soft:#E58286;--a-tint:#E77478;');
   });
 
-  test('dark text on a light colour, white text on a dark one', () => {
-    assert.match(K.accentVars('#FFFFFF'), /--a-on:#0B0B12;/);
-    assert.match(K.accentVars('#000000'), /--a-on:#FFFFFF;/);
+  test('dark text on a light colour, white text on a dark one, also as numbers for translucent text', () => {
+    assert.match(K.accentVars('#FFFFFF'), /--a-on:#0B0B12;--a-on-rgb:11,11,18;/);
+    assert.match(K.accentVars('#FFC21A'), /--a-on:#0B0B12;--a-on-rgb:11,11,18;/);
+    assert.match(K.accentVars('#000000'), /--a-on:#FFFFFF;--a-on-rgb:255,255,255;/);
   });
 
   test('nothing for a value that is not #rrggbb', () => {

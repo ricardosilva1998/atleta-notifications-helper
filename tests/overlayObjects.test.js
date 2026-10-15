@@ -65,6 +65,17 @@ describe('objects.css integrity', () => {
     assert.match(css, /\.o-blade\s*\{/, '.o-blade must exist — shared cut flash');
   });
 
+  test('text on the streamer\'s colour reads --a-on (dark on a light colour), and stays white while no colour is picked', () => {
+    // The follow band and the raid's main banner are drawn in the accent, with their text on it.
+    const onAccent = ['.o-follow .o-name', '.o-follow .o-follow-glyph', '.o-follow .o-meta', '.o-raid .o-raid-cnt', '.o-raid .o-raid-clbl'];
+    for (const selector of onAccent) {
+      const rule = css.match(new RegExp('(?:^|\\n)' + selector.replace(/\./g, '\\.') + '\\{([^}]*)\\}'));
+      assert.ok(rule, `${selector} has a rule`);
+      const colour = (rule[1].match(/(?:^|;)\s*color:([^;]+)/) || [])[1] || '';
+      assert.match(colour, /^(var\(--a-on,#fff\)|rgba\(var\(--a-on-rgb,255,255,255\),\.\d+\))$/i, `${selector}: its colour follows --a-on (it is ${colour})`);
+    }
+  });
+
   test('no object-internal class escapes its .o- prefix', () => {
     // Guards the collision that pinned the byobu frame rail to the wrong edge.
     const generic = ['.rail{', '.rail {', '.panel{', '.panel {', '.seal{', '.seal {'];
