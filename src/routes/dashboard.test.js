@@ -4784,3 +4784,32 @@ describe('the working cards on the page', () => {
     assert.ok(rewards.includes(`data-reward-id="${reward}" checked`) && rewards.includes(`data-reward-test="${reward}"`));
   });
 });
+
+// ── The working cards' script ────────────────────────────────────────────
+
+describe('the working cards\' script', () => {
+  const table = (page) => JSON.parse(page.match(/window\.ATLETA_CARD_TEXTS = (.*);<\/script>/)[1]);
+
+  test('the page loads its texts, then the helpers, then the script', async () => {
+    const html = (await request('GET', '/dashboard', { streamer: addStreamer() })).text;
+    const texts = html.indexOf('window.ATLETA_CARD_TEXTS = ');
+    const coreTag = html.indexOf('<script src="/js/dashboard-cards-core.js"></script>');
+    const scriptTag = html.indexOf('<script src="/js/dashboard-cards.js"></script>');
+    assert.ok(texts > 0 && texts < coreTag && coreTag < scriptTag);
+    const T = table(html);
+    assert.equal(T.showAll, t('en', 'cards.common.showAll', { count: '{{count}}' }), 'a text with a field the script fills');
+    assert.equal(T.giveaway.pickAgain, t('en', 'cards.giveaways.pickAgain'));
+  });
+
+  test('the overlay texts only while the overlay features are on', async () => {
+    const { features } = require('../config');
+    assert.ok('alertSent' in table((await request('GET', '/dashboard', { streamer: addStreamer() })).text));
+    features.overlays = false;
+    try {
+      const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
+      for (const key of ['alertSent', 'rewardPlayed', 'startGoal', 'goalAmount', 'goalHint']) assert.ok(!(key in T), key);
+    } finally {
+      features.overlays = true;
+    }
+  });
+});

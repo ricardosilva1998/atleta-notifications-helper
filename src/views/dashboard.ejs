@@ -800,6 +800,55 @@ function toggleStats(guildId) {
   }
 </style>
 
+<%# The working cards' script (public/js/dashboard-cards.js) takes its texts from this table; a text with {{fields}}
+    is filled in by the script. The overlay texts are left out while the overlay features are off. %>
+<%
+  const _cardTexts = {
+    saved: t('cards.common.saved'),
+    copy: t('dashboard.copy'),
+    copied: t('dashboard.copied'),
+    copyFailed: t('cards.common.copyFailed'),
+    showAll: t('cards.common.showAll', { count: '{{count}}' }),
+    showFewer: t('cards.common.showFewer'),
+    seconds: t('cards.common.seconds', { seconds: '{{seconds}}' }),
+    edit: t('cards.common.edit'),
+    sessionEnded: t('cards.common.sessionEnded'),
+    network: t('cards.common.network'),
+    failed: t('cards.common.failed'),
+    fixIt: t('cards.common.fixIt'),
+    sentToChat: t('cards.chatbot.sentToChat'),
+    commandEditTitle: t('cards.commands.editTitle', { name: '{{name}}' }),
+    confirmDeleteCommand: t('cards.commands.confirmDelete', { name: '{{name}}' }),
+    confirmDeleteSponsor: t('cards.sponsors.confirmDelete'),
+    moderatorYes: t('cards.protection.moderatorYes', { bot: cards.protection.botName }),
+    moderatorNo: t('cards.protection.moderatorNo', { bot: cards.protection.botName }),
+    moderatorUnknown: t('cards.protection.moderatorUnknown'),
+    giveaway: {
+      running: t('cards.giveaways.status.running'),
+      picked: t('cards.giveaways.status.picked'),
+      none: t('cards.giveaways.status.none'),
+      winner: t('cards.giveaways.winner', { names: '{{names}}' }),
+      nobody: t('cards.giveaways.nobody'),
+      pick: t('cards.giveaways.pick'),
+      pickAgain: t('cards.giveaways.pickAgain'),
+      end: t('cards.giveaways.end'),
+      done: t('cards.giveaways.done'),
+    },
+  };
+  if (features.overlays) {
+    Object.assign(_cardTexts, {
+      alertSent: t('cards.overlay.alertSent'),
+      rewardPlayed: t('cards.rewards.played'),
+      startGoal: t('cards.donations.startGoal'),
+      goalAmount: t('cards.donations.goalAmount', { raised: '{{raised}}', target: '{{target}}' }),
+      goalHint: t('cards.donations.goalHint', { raised: '{{raised}}', currency: '{{currency}}' }),
+    });
+  }
+%>
+<script>window.ATLETA_CARD_TEXTS = <%- JSON.stringify(_cardTexts).replace(/</g, '\\u003c') %>;</script>
+<script src="/js/dashboard-cards-core.js"></script>
+<script src="/js/dashboard-cards.js"></script>
+
 <script>
   const tabs = document.querySelectorAll('.tab-btn');
   const panes = document.querySelectorAll('.tab-content');
