@@ -2867,7 +2867,13 @@ describe('the overlay builder page and a slow Twitch', () => {
     assert.deepEqual(data.families.slice(0, 2).map((f) => [f.key, f.name]), [['samurai', t('en', 'overlayBuilder.families.samurai.name')], ['racing', t('en', 'overlayBuilder.families.racing.name')]]);
     assert.ok(data.sounds[0].sounds.some((s) => s.key === 'samuraiBell' && s.name === t('en', 'overlayBuilder.sounds.samuraiBell')));
     assert.equal(data.fonts[0], 'System Default');
-    assert.match(locals.styleFontsHref, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Noto\+Serif\+JP:wght@700&family=Kanit:[^&]+&family=Barlow\+Condensed:[^&]+&display=swap$/);
+    // One stylesheet with every family's fonts, each font once, today's first: the gallery draws every family.
+    const { familyKeys, fontsOf } = require('../services/alertStyles');
+    assert.match(locals.styleFontsHref, /^https:\/\/fonts\.googleapis\.com\/css2\?family=.+&display=swap$/);
+    const specs = locals.styleFontsHref.replace(/^[^?]+\?/, '').replace(/&display=swap$/, '').split('&').map((part) => part.replace(/^family=/, ''));
+    assert.deepEqual(specs.slice(0, 3).map((spec) => spec.split(':')[0]), ['Noto+Serif+JP', 'Kanit', 'Barlow+Condensed']);
+    assert.equal(new Set(specs.map((spec) => spec.split(':')[0])).size, specs.length, 'each font once');
+    for (const key of familyKeys()) for (const font of fontsOf([key])) assert.ok(specs.includes(font), `${key}: ${font}`);
   });
 
   test('the C1\'s owner finds it first in the donation gallery', async () => {

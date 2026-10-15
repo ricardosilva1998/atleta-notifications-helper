@@ -89,6 +89,26 @@ describe('every look', () => {
     }
   });
 
+  test('every family has six looks, one for each alert', () => {
+    for (const family of [...new Set(looks.map((look) => look.family))]) {
+      assert.deepEqual(looks.filter((look) => look.family === family).map((look) => look.eventType).sort(), [...K.ALERTS].sort(), family);
+    }
+  });
+
+  test('a look\'s own screen effect is one the overlay plays', () => {
+    const { FIELD_SPECS } = require('../src/services/overlayDesign.js');
+    const playable = FIELD_SPECS.screen_effect.values.filter((value) => value !== 'default');
+    for (const look of looks) assert.ok(playable.includes(look.fx), `${look.key}: ${look.fx}`);
+  });
+
+  test('a look offers "grows with the amount" exactly when its picture is sized through K.sizeOf()', () => {
+    // sizeOf() gives the middle picture while the switch is off; the text keeps the real number.
+    for (const look of looks.filter((l) => !l.preset)) {
+      const sized = /\bsizeOf\(/.test(String(look.render) + String(look.len));
+      assert.equal(!!look.grows, sized, `${look.key}: grows is ${!!look.grows} but its picture ${sized ? 'is' : 'is not'} sized through sizeOf()`);
+    }
+  });
+
   for (const look of looks) {
     test(`${look.key} renders every sample, and escapes what was typed`, () => {
       for (const sample of SAMPLES[look.eventType]) {
