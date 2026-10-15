@@ -1063,3 +1063,66 @@ describe('the screen effect and the sound of a look (alert styles)', () => {
     assert.equal(effects(overlay, 'fx-smoke'), 20);
   });
 });
+
+describe('the fonts of the looks (alert styles)', () => {
+  const giveaway = () => ({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Season pass' } });
+  const fontLinks = (overlay) => overlay.sandbox.document.head.children.filter((c) => /fonts\.googleapis\.com/.test(c.href || ''));
+  // A browser's FontFaceSet: load() resolves when the test says so.
+  const fontSet = () => {
+    const waiting = [];
+    return { waiting, load: () => new Promise((resolve) => waiting.push(resolve)) };
+  };
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  test('each family a design names, and the giveaway\'s default look, is asked for once, on connecting and on each update', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing' }) } });
+    assert.equal(fontLinks(overlay).length, 1, 'Racing once: the follow\'s look and the giveaway\'s default');
+    assert.match(fontLinks(overlay)[0].href, /family=Kanit:ital,wght@0,800;0,900;1,800;1,900&family=Barlow\+Condensed:[^&]+&display=swap$/);
+    overlay.send({ type: 'config-update', designs: { giveaway_winner: design({ style: 'giveaway-samurai' }) } });
+    overlay.send({ type: 'config-update', designs: { giveaway_winner: design({ style: 'giveaway-samurai' }) } });
+    assert.equal(fontLinks(overlay).length, 2);
+    assert.match(fontLinks(overlay)[1].href, /family=Noto\+Serif\+JP:wght@700&display=swap$/);
+  });
+
+  test('the first alert in a look waits for its fonts, at most 1.5 s, then plays with the fallbacks', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.sandbox.document.fonts = fontSet();
+    overlay.send(giveaway());
+    assert.equal(overlay.slots().length, 0, 'waiting for Kanit');
+    overlay.clock.advance(1499);
+    assert.equal(overlay.slots().length, 0);
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 1);
+  });
+
+  test('fonts that arrive in time start it at once, and the next alert in that look does not wait', async () => {
+    const overlay = loadOverlay({ styles: true });
+    const fonts = fontSet();
+    overlay.sandbox.document.fonts = fonts;
+    overlay.send(giveaway());
+    fontLinks(overlay)[0].onload();
+    await settle();
+    fonts.waiting.forEach((resolve) => resolve([]));
+    await settle();
+    assert.equal(overlay.slots().length, 1, 'before the 1.5 s were up');
+    overlay.send({ type: 'clear' });
+    overlay.send(giveaway());
+    assert.equal(overlay.slots().length, 1, 'at once');
+  });
+
+  test('Clear All while a first alert waits for its fonts: it never shows', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.sandbox.document.fonts = fontSet();
+    overlay.send(giveaway());
+    overlay.send({ type: 'clear' });
+    overlay.clock.advance(5000);
+    assert.equal(overlay.slots().length, 0);
+  });
+
+  test('today\'s objects and the cards never wait', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.sandbox.document.fonts = fontSet();
+    overlay.send(follow());
+    assert.equal(overlay.slots().length, 1);
+  });
+});

@@ -151,6 +151,58 @@ function loadDesignFonts(designs) {
     link.href = `https://fonts.googleapis.com/css2?family=${FONT_MAP[f]}&display=swap`;
     document.head.appendChild(link);
   });
+  // The fonts of the looks the designs name, and of the giveaway's default look
+  const kit = window.ATLETA_KIT;
+  const styles = window.ATLETA_OBJECT_STYLES || {};
+  if (!kit) return;
+  Object.values(designs).map((d) => d && d.style).concat(Object.values(kit.DEFAULT_LOOKS)).forEach((styleId) => {
+    const look = styleId && Object.prototype.hasOwnProperty.call(styles, styleId) ? styles[styleId] : null;
+    if (look && look.family) familyFonts(look.family);
+  });
+}
+
+// A look family's Google Fonts (kit.js: each family file lists its own), in one stylesheet asked for
+// once. Resolves when the stylesheet has arrived or failed: only then can the browser wait for a font.
+const familyFontSheets = {};
+function familyFonts(familyKey) {
+  const kit = window.ATLETA_KIT;
+  const family = kit && kit.families[familyKey];
+  if (!family || !family.fonts.length) return Promise.resolve();
+  if (!familyFontSheets[familyKey]) {
+    familyFontSheets[familyKey] = new Promise((resolve) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?' + family.fonts.map((spec) => `family=${spec}`).join('&') + '&display=swap';
+      link.onload = resolve;
+      link.onerror = resolve;
+      document.head.appendChild(link);
+    });
+  }
+  return familyFontSheets[familyKey];
+}
+
+// The first alert in a look waits for its family's fonts, at most 1.5 s, then plays with the
+// fallbacks; after that the family is ready and its alerts play at once. Today's objects, the C1
+// and the cards never wait, nor does a page without the FontFaceSet API.
+const readyFamilies = new Set();
+function whenLookReady(look, then) {
+  const kit = window.ATLETA_KIT;
+  const fonts = document.fonts;
+  if (!look || !look.family || readyFamilies.has(look.family) || !kit || !fonts || typeof fonts.load !== 'function') {
+    then();
+    return;
+  }
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    readyFamilies.add(look.family);
+    then();
+  };
+  alertTimer(start, 1500);
+  familyFonts(look.family)
+    .then(() => Promise.all(kit.fontNames(look.family).map((name) => fonts.load(`700 1em "${name}"`))))
+    .then(start, start);
 }
 
 // Synthesized notification sounds using Web Audio API
@@ -434,7 +486,10 @@ function connectSSE() {
 
 connectSSE();
 
+// Counts Clear Alls, so an alert that was waiting for its fonts (whenLookReady) knows it was cleared.
+let alertRun = 0;
 function clearOverlay() {
+  alertRun++;
   queue.length = 0;
   isPlaying = false;
   alertTimers.forEach((id) => clearTimeout(id));
@@ -452,7 +507,8 @@ function playNext() {
   if (event.type === 'redemption') {
     playRedemption(event);
   } else {
-    showNotification(event);
+    const run = alertRun;
+    whenLookReady(objectFor(event.type), () => { if (run === alertRun) showNotification(event); });
   }
 }
 
