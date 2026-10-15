@@ -710,3 +710,105 @@ describe('"Solid (no gradient)" on a card', () => {
     for (const missing of [undefined, null, '']) assert.match(backgroundFor(missing), /^linear-gradient\(160deg, /, String(missing));
   });
 });
+
+// ── Styles: andre_vilela_'s C1 donation alert ───────────────────────────
+
+describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
+  const tip = { type: 'donation', data: { username: 'PitBoss92', amount: 25, currency: 'EUR', message: 'Keep racing!' } };
+
+  test('a donation whose design names donation-c1 is the C1, played like every object', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1' }) } });
+    overlay.send(tip);
+    const [slot] = overlay.slots();
+    assert.match(slot.innerHTML, /^<div class="obj o-c1">/);
+    assert.ok(slot.classList.contains('playing'));
+    assert.equal(slot.style.properties['--in'], 'hold');
+    assert.equal(slot.style.properties['--dur'], '1.25s');
+  });
+
+  test('without a style the donation is the folding screen, as for everyone else', () => {
+    const overlay = loadOverlay({ designs: { donation: design() } });
+    overlay.send(tip);
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-don"/);
+  });
+
+  test('a style the page does not know, or one that draws another alert, leaves the alert its own object', () => {
+    const cases = [
+      ['donation', tip.data, 'o-don', ['donation-gp', '__proto__', 'constructor', 'toString']],
+      ['follow', { username: 'RacerDan' }, 'o-follow', ['donation-c1', '__proto__']],
+    ];
+    for (const [type, data, own, styles] of cases) {
+      for (const style of styles) {
+        const overlay = loadOverlay({ designs: { [type]: design({ style }) } });
+        overlay.send({ type, data });
+        assert.match(overlay.slots()[0].innerHTML, new RegExp(`class="obj ${own}"`), `${type} with style ${style}`);
+      }
+    }
+  });
+
+  test('the C1 sits where his donation alert is saved, at its width', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1', card_position: 'bot-right', card_width: 520 }) } });
+    overlay.send(tip);
+    const [slot] = overlay.slots();
+    assert.deepEqual(placed(slot), POSITION_STYLES['bot-right']);
+    assert.equal(slot.style.width, '520px');
+  });
+
+  test('a style pushed while the overlay is open applies to the next donation, with no reload', () => {
+    const overlay = loadOverlay();
+    overlay.send({ type: 'config-update', designs: { donation: design({ style: 'donation-c1' }) } });
+    overlay.send(tip);
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-c1"/);
+    assert.equal(overlay.sandbox.reloaded, false);
+  });
+
+  test('the C1 stays on screen for its whole 0.9 s exit, and the next alert waits for it', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1' }) } });
+    overlay.send(tip);
+    overlay.send(follow('Next'));
+    overlay.clock.advance(6000); // the donation's 6 s in baseConfig
+    const [slot] = overlay.slots();
+    assert.ok(slot.classList.contains('exiting'));
+    assert.equal(slot.style.properties['--out'], 'hold');
+    assert.equal(slot.style.properties['--outdur'], '0.90s');
+    overlay.clock.advance(899);
+    assert.equal(overlay.slots().length, 1, 'still driving off');
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 0);
+    overlay.clock.advance(499);
+    assert.equal(overlay.slots().length, 0, 'then the half-second gap');
+    overlay.clock.advance(1);
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-follow"/);
+  });
+
+  test('the folding screen still leaves after 400 ms', () => {
+    const overlay = loadOverlay({ designs: { donation: design() } });
+    overlay.send(tip);
+    overlay.clock.advance(6000 + 399);
+    assert.equal(overlay.slots().length, 1);
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 0);
+  });
+
+  test('Clear All while the C1 drives off removes it at once, and nothing it scheduled comes back', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1' }) } });
+    overlay.send(tip);
+    overlay.send(follow('Queued'));
+    overlay.clock.advance(6000 + 300); // 0.3 s into its exit
+    overlay.send({ type: 'clear' });
+    assert.equal(overlay.slots().length, 0);
+    overlay.clock.advance(5000);
+    assert.equal(overlay.slots().length, 0, 'its removal and next-alert timers went with it');
+  });
+
+  test('a style switched off while a C1 is on screen: that one still drives off in 0.9 s, the next donation is the folding screen', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1' }) } });
+    overlay.send(tip);
+    overlay.send(tip);
+    overlay.send({ type: 'config-update', designs: { donation: design() } });
+    overlay.clock.advance(6000 + 899);
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-c1"/, 'the alert on screen keeps the exit it started with');
+    overlay.clock.advance(1 + 500);
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-don"/);
+  });
+});
