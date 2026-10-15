@@ -1767,6 +1767,7 @@
   "cards.shoutouts.edit": "Edit the message",
   "cards.shoutouts.editTitle": "Shoutout message",
   "cards.shoutouts.example": "In chat: “{{line}}”",
+  "cards.polls.status.readyOne": "Ready · 1 template",
   "pollbar.poll": "Poll",
   "pollbar.prediction": "Prediction",
   "pollbar.locked": "Locked",

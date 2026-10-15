@@ -91,7 +91,7 @@
       <h4 id="wc-dialog-title" data-title></h4>
       <p class="wc-hint"><%= t('cards.polls.textsHint') %></p>
       <% for (const text of card.texts) { %>
-      <label class="wc-field"><span><%= t(text.label) %></span><textarea data-text-key="<%= text.key %>" data-vars="<%= text.vars.join(' ') %>" maxlength="500" rows="2"><%= text.text %></textarea></label>
+      <label class="wc-field"><span><%= t(text.label) %></span><textarea data-text-key="<%= text.key %>" data-text-vars="<%= text.vars.join(' ') %>" maxlength="500" rows="2"><%= text.text %></textarea></label>
       <% } %>
       <div class="wc-vars"><span><%= t('cards.chatbot.insert') %></span><span data-vars></span></div>
       <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>

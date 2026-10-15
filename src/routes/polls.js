@@ -12,7 +12,7 @@ const rules = require('../services/pollRules');
 const twitchPolls = require('../services/twitchPolls');
 const { livePolls } = require('../services/livePolls');
 const { hasPollsScope } = require('../services/twitch');
-const { pollsStatus } = require('../services/dashboardCards');
+const { pollsStatus, pollsSetup } = require('../services/dashboardCards');
 
 const router = express.Router();
 
@@ -31,9 +31,11 @@ function needsPermissions(req, res, next) {
   refuse(res, 'needs_reconnect');
 }
 
-// What runs, as the card shows it: the views and the card's status line.
+// What runs, as the card shows it: the views and the card's status line, by the card's own rule (its setup step
+// first, so after Twitch's not-Affiliate refusal the line keeps saying so).
 function liveAnswer(req, res, live) {
-  const st = pollsStatus(live, db.countPollTemplates(req.streamer.id));
+  const setup = pollsSetup(req.streamer, hasPollsScope(req.streamer));
+  const st = pollsStatus(live, db.countPollTemplates(req.streamer.id), setup);
   return { ...live, status: { text: res.locals.t(st.key, st.params), tone: st.tone } };
 }
 

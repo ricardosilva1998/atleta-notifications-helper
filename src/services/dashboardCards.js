@@ -303,10 +303,28 @@ function giveawaysCard({ giveaway }) {
   };
 }
 
-// The Polls & predictions card's status line from what runs (livePolls.snapshot()). GET /dashboard/api/polls/live
-// answers it too, so the line follows the live panel.
-function pollsStatus(live, templateCount) {
-  const busy = (view) => !!view && view.state !== 'ended';
+// A poll or prediction that keeps its kind busy on Twitch: running, or locked and waiting for its winner.
+const busy = (view) => !!view && view.state !== 'ended';
+
+// The Polls & predictions card's one setup step, from the streamer's row and whether Twitch gave the two permissions:
+// link Twitch, reconnect, or Check again after Twitch said the channel is not an Affiliate or Partner; null once the
+// card can start polls. routes/polls.js asks it too, so the live answers' status line is the card's.
+function pollsSetup(streamer, hasScope) {
+  if (!twitchLinked(streamer)) return 'linkTwitch';
+  if (!hasScope) return 'reconnect';
+  if (streamer.cp_affiliate_status === 'not_affiliate') return 'notAffiliate';
+  return null;
+}
+const POLLS_SETUP_STATUS = Object.freeze({
+  linkTwitch: 'cards.polls.status.noTwitch',
+  reconnect: 'cards.polls.status.reconnect',
+  notAffiliate: 'cards.polls.status.notAffiliate',
+});
+
+// The Polls & predictions card's status line: its setup step while it has one (pollsSetup()), else what runs
+// (livePolls.snapshot()). GET /dashboard/api/polls/live answers it too, so the line follows the live panel.
+function pollsStatus(live, templateCount, setup = null) {
+  if (setup) return status(POLLS_SETUP_STATUS[setup], 'warn');
   const poll = live && live.poll;
   const prediction = live && live.prediction;
   if (prediction && prediction.state === 'locked') return status('cards.polls.status.locked', 'warn');
@@ -315,28 +333,20 @@ function pollsStatus(live, templateCount) {
   if (busy(prediction)) return status('cards.polls.status.predictionRunning');
   if (prediction) return status('cards.polls.status.predictionEnded');
   if (poll) return status('cards.polls.status.pollEnded');
+  if (templateCount === 1) return status('cards.polls.status.readyOne');
   return status('cards.polls.status.ready', 'ok', { count: templateCount });
 }
 
-// The Polls & predictions card: its one setup step (link Twitch; reconnect for the two permissions; Check again after
-// Twitch said the channel is not an Affiliate or Partner), else the templates (▶ off for a kind that runs), what runs on
-// Twitch now (the page script keeps the live panel up to date), the announcements and their six texts, Twitch's limits
-// for the pop-up, and the bar's OBS link with the overlay features.
+// The Polls & predictions card: its one setup step (pollsSetup()), else the templates (▶ off for a kind that runs),
+// what runs on Twitch now (the page script keeps the live panel up to date), the announcements and their six texts,
+// Twitch's limits for the pop-up, and the bar's OBS link with the overlay features.
 function pollsCard({ streamer, polls, pollTemplates, features }) {
-  let setup = null;
-  if (!twitchLinked(streamer)) setup = 'linkTwitch';
-  else if (!polls.hasScope) setup = 'reconnect';
-  else if (streamer.cp_affiliate_status === 'not_affiliate') setup = 'notAffiliate';
+  const setup = pollsSetup(streamer, polls.hasScope);
   const live = polls.live || { poll: null, prediction: null, serverNow: null };
-  const busy = (view) => !!view && view.state !== 'ended';
-  let st = pollsStatus(live, pollTemplates.length);
-  if (setup === 'linkTwitch') st = status('cards.polls.status.noTwitch', 'warn');
-  else if (setup === 'reconnect') st = status('cards.polls.status.reconnect', 'warn');
-  else if (setup === 'notAffiliate') st = status('cards.polls.status.notAffiliate', 'warn');
   const announce = !!streamer.polls_chat_enabled;
   return {
     setup,
-    status: st,
+    status: pollsStatus(live, pollTemplates.length, setup),
     templates: pollTemplates.map((tpl) => ({
       id: tpl.id, kind: tpl.kind, title: tpl.title, choices: tpl.choices, durationSeconds: tpl.durationSeconds,
       pointsPerVote: tpl.pointsPerVote, time: timeLabel(tpl.durationSeconds),
@@ -444,4 +454,4 @@ function cardTexts(cards, t) {
   return out;
 }
 
-module.exports = { buildCards, cardTexts, pollsStatus, ORDER };
+module.exports = { buildCards, cardTexts, pollsStatus, pollsSetup, ORDER };

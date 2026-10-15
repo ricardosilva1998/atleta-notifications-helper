@@ -5,7 +5,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildCards, cardTexts, ORDER } = require('./dashboardCards');
+const { buildCards, cardTexts, pollsStatus, pollsSetup, ORDER } = require('./dashboardCards');
 
 const G1 = '600000000000000001';
 const G2 = '600000000000000002';
@@ -415,6 +415,7 @@ describe('Polls & predictions', () => {
     ]);
     assert.deepEqual(card.blocked, { poll: false, prediction: false });
     assert.deepEqual(card.counts.templates, { text: '2' });
+    assert.deepEqual(build({ pollTemplates: [tpl()] }).polls.status, { key: 'cards.polls.status.readyOne', params: {}, tone: 'ok' }, 'one template: "1 template"');
   });
 
   test('what runs on Twitch: the status, and the ▶ of a kind that runs (or waits for its winner) is off', () => {
@@ -429,6 +430,24 @@ describe('Polls & predictions', () => {
     assert.deepEqual(card.blocked, { poll: false, prediction: true });
     assert.equal(card.status.tone, 'warn');
     assert.equal(card.live.prediction.state, 'locked', 'the live panel starts from it');
+  });
+
+  test('a poll running beside a prediction that waits for its winner: the line asks for the winner, and both ▶ are off', () => {
+    const card = build(polls({ poll: view('poll'), prediction: view('prediction', { state: 'locked' }) })).polls;
+    assert.deepEqual(card.status, { key: 'cards.polls.status.locked', params: {}, tone: 'warn' });
+    assert.deepEqual(card.blocked, { poll: true, prediction: true });
+  });
+
+  test('one rule for the status line (the live answers use it too): the setup step while there is one, whatever runs', () => {
+    const linked = { twitch_user_id: '1001', twitch_username: 'synthetic_channel' };
+    assert.deepEqual([
+      pollsSetup({ twitch_user_id: null }, true), pollsSetup(linked, false),
+      pollsSetup({ ...linked, cp_affiliate_status: 'not_affiliate' }, true), pollsSetup(linked, true),
+    ], ['linkTwitch', 'reconnect', 'notAffiliate', null]);
+    const running = { poll: view('poll'), prediction: null, serverNow: NOW };
+    assert.deepEqual(pollsStatus(running, 2, 'notAffiliate'), { key: 'cards.polls.status.notAffiliate', params: {}, tone: 'warn' });
+    assert.deepEqual(pollsStatus(running, 2, null), { key: 'cards.polls.status.pollRunning', params: {}, tone: 'ok' });
+    assert.deepEqual(pollsStatus(running, 2), { key: 'cards.polls.status.pollRunning', params: {}, tone: 'ok' }, 'no setup step given');
   });
 
   test('the announcements: the switch, the six texts with their variables, and a note while the chatbot is off', () => {
@@ -447,6 +466,7 @@ describe('Polls & predictions', () => {
   test('the pop-up gets Twitch\'s limits; the bar\'s OBS link is masked, and only there with the overlay features', () => {
     const card = build().polls;
     assert.deepEqual(card.limits.poll, { titleMax: 60, choiceMax: 25, minChoices: 2, maxChoices: 5, minSeconds: 15, maxSeconds: 1800 });
+    assert.deepEqual(card.limits.prediction, { titleMax: 45, choiceMax: 25, minChoices: 2, maxChoices: 10, minSeconds: 30, maxSeconds: 1800 });
     assert.deepEqual(card.limits.durations.prediction, [60, 120, 300, 600, 1800]);
     assert.equal(card.limits.templatesMax, 20);
     assert.deepEqual(card.bar, {

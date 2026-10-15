@@ -5073,6 +5073,38 @@ describe('the working cards on the page', () => {
     }
   });
 
+  test('the Polls & predictions card after Twitch said the channel is not an Affiliate: its one step, Check again, and no templates', async () => {
+    const id = linkedStreamer({ cp_affiliate_status: 'not_affiliate' });
+    db.addPollTemplate(id, { kind: 'poll', title: 'Synthetic podium?', choices: ['Yes', 'No'], durationSeconds: 60, pointsPerVote: null });
+    const scope = twitchStub.hasPollsScope;
+    twitchStub.hasPollsScope = () => true;
+    try {
+      const card = cardOf(await pane(id), 'polls');
+      assert.ok(card.includes(esc(t('en', 'cards.polls.status.notAffiliate'))), 'its status line');
+      assert.ok(card.includes(esc(t('en', 'cards.polls.setupAffiliate'))));
+      assert.match(card, new RegExp(`<button type="button" class="btn btn-secondary wc-btn block" data-polls-recheck>${esc(t('en', 'cards.protection.checkAgain'))}</button>`));
+      assert.ok(!card.includes('Synthetic podium?') && !card.includes('data-start') && !card.includes('<template'), 'no templates, no ▶ and no pop-ups');
+    } finally {
+      twitchStub.hasPollsScope = scope;
+    }
+  });
+
+  test('the chat messages pop-up: each text box names its variables in data-text-vars; its one [data-vars] is the row the chips go in', async () => {
+    const { CHAT_TEXTS } = require('../services/pollRules');
+    const scope = twitchStub.hasPollsScope;
+    twitchStub.hasPollsScope = () => true;
+    try {
+      const html = await pane(linkedStreamer());
+      const popup = (html.match(/<template id="tpl-poll-texts">([\s\S]*?)<\/template>/) || [])[1];
+      assert.ok(popup, 'the pop-up is on the page');
+      assert.deepEqual(popup.match(/<[^>]*\sdata-vars\b[^>]*>/g), ['<span data-vars>'], 'the chips row, and nothing before it');
+      const boxes = (popup.match(/<textarea\b[^>]*>/g) || []).map((box) => [(box.match(/\sdata-text-key="([^"]*)"/) || [])[1], (box.match(/\sdata-text-vars="([^"]*)"/) || [])[1]]);
+      assert.deepEqual(boxes, CHAT_TEXTS.map((text) => [text.key, text.vars.join(' ')]));
+    } finally {
+      twitchStub.hasPollsScope = scope;
+    }
+  });
+
   test('the OBS overlay card shows the poll bar\'s link too, masked', async () => {
     const card = cardOf(await pane(linkedStreamer({ overlay_token: 'synthetic-token-wcp-bar' })), 'overlay');
     assert.match(card, /data-masked="[^"]*\/overlay\/poll\/•{12}" data-shown="[^"]*\/overlay\/poll\/synthetic-token-wcp-bar\?lang=en"/);

@@ -150,7 +150,7 @@ const SCOPES = 'channel:read:subscriptions channel:manage:polls channel:manage:p
 let counter = 0;
 function addStreamer(over = {}) {
   const n = ++counter;
-  const cols = { discord_user_id: `73000000000000${String(n).padStart(4, '0')}`, discord_username: `polls${n}`, twitch_user_id: `90${n}`, broadcaster_scopes: SCOPES, ...over };
+  const cols = { discord_user_id: `73000000000000${String(n).padStart(4, '0')}`, discord_username: `polls${n}`, twitch_user_id: `90${n}`, twitch_username: `synthetic_polls_${n}`, broadcaster_scopes: SCOPES, ...over };
   const names = Object.keys(cols);
   return Number(db.db.prepare(`INSERT INTO streamers (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map((k) => cols[k])).lastInsertRowid);
 }
@@ -321,6 +321,14 @@ describe('the live view', () => {
     assert.equal(body.prediction, null);
     assert.equal(typeof body.serverNow, 'number');
     assert.deepEqual(body.status, { text: t('en', 'cards.polls.status.pollRunning'), tone: 'ok' });
+  });
+
+  test('a streamer Twitch called not an Affiliate gets the card\'s status line, its one step, not "Ready"', async () => {
+    const id = addStreamer({ cp_affiliate_status: 'not_affiliate' });
+    db.addPollTemplate(id, poll);
+    const res = await request('GET', '/dashboard/api/polls/live', { streamer: id });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json().status, { text: t('en', 'cards.polls.status.notAffiliate'), tone: 'warn' });
   });
 
   test('a logged-out request is sent to the login page', async () => {
