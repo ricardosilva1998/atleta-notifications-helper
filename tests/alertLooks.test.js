@@ -53,6 +53,25 @@ function splitTop(text, separator) {
   return parts;
 }
 
+// The classes of the elements holding a rolling number's digit cells (.o-odo-d), above its .o-odo.
+// The cells clip to one digit, so a blurred text-shadow the digits inherit from one of these is cut
+// into boxes; the glow belongs on the number as a drop-shadow, which is drawn after the clip.
+const VOID = new Set(['area', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+function digitHolders(html) {
+  const stack = [], holders = new Set();
+  for (const [, close, tag, attrs] of html.matchAll(/<(\/?)([a-z][a-z0-9]*)\b([^>]*)>/gi)) {
+    if (close) { const at = stack.map((e) => e.tag).lastIndexOf(tag); if (at >= 0) stack.length = at; continue; }
+    if (attrs.endsWith('/') || VOID.has(tag)) continue;
+    const classes = ((attrs.match(/\bclass="([^"]*)"/) || [])[1] || '').split(/\s+/).filter(Boolean);
+    if (classes.includes('o-odo-d')) {
+      const odo = stack.map((e) => e.classes.includes('o-odo')).lastIndexOf(true);
+      stack.slice(0, odo < 0 ? stack.length : odo).forEach((e) => e.classes.forEach((c) => holders.add(c)));
+    }
+    stack.push({ tag, classes });
+  }
+  return holders;
+}
+
 describe('every look', () => {
   test('is registered for the six alerts, with its timing and its defaults', () => {
     assert.ok(looks.length > 0);
@@ -89,6 +108,11 @@ describe('every look', () => {
 });
 
 describe('every family stylesheet', () => {
+  test('the digit-glow check finds the rolling digits (bits-racing holds them in .o-rcb-n)', () => {
+    const html = K.styles['bits-racing'].render(Object.assign({ username: 'ApexAndre' }, SAMPLES.bits[1]));
+    assert.ok(digitHolders(html).has('o-rcb-n'));
+  });
+
   for (const file of FILES.filter((f) => f.endsWith('.css'))) {
     const family = file.replace(/\.css$/, '');
     const css = fs.readFileSync(path.join(STYLES_DIR, file), 'utf8');
@@ -133,6 +157,43 @@ describe('every family stylesheet', () => {
       for (const feature of [':has(', 'color-mix(', '@container', '@property', 'backdrop-filter']) assert.ok(!rules.includes(feature), `${file}: ${feature}`);
       const selectors = rules.match(/[^{}]+(?=\{)/g) || [];
       for (const s of selectors) assert.ok(!/(^|[\s,])\.[\w-]+\s+(i|span|div)\b/.test(s), `${file}: ${s.trim()} reaches inside other parts`);
+    });
+
+    test(`${file}: a rolling number's glow is a drop-shadow on its .o-odo, never a text-shadow its clipped digits inherit`, () => {
+      const vars = Object.fromEntries([...rules.matchAll(/--([\w-]+):([^;}]+)/g)].map((m) => [m[1], m[2].trim()]));
+      const resolve = (value) => { for (let i = 0; i < 5; i++) value = value.replace(/var\(--([\w-]+)\)/g, (m, name) => vars[name] || m); return value; };
+      // A text-shadow with a blur: any layer whose third length is above 0.
+      const blurred = (value) => resolve(value).trim() !== 'none' && splitTop(resolve(value), ',').some((layer) => {
+        const lengths = splitTop(layer, ' ').filter((w) => /^-?(\d*\.)?\d+(px|em|rem)?$/.test(w));
+        return parseFloat(lengths[2] || '0') > 0;
+      });
+      const keyframes = {};
+      for (const m of rules.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}/g)) keyframes[m[1]] = m[2];
+      const plain = rules.replace(/@keyframes[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+      const list = [...plain.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({ sels: splitTop(sel, ','), body }));
+      const subject = (sel) => (sel.trim().split(/[\s>+~]+/).pop().match(/\.[\w-]+/g) || []).map((c) => c.slice(1));
+      const shadowOf = (body) => (body.match(/(?:^|;)\s*text-shadow:([^;]+)/) || [])[1];
+      const animatesGlow = (body) => {
+        const animation = (body.match(/animation:([^;]+)/) || [])[1];
+        return !!animation && splitTop(animation, ',').some((part) => {
+          const frames = keyframes[splitTop(part.trim(), ' ')[0]];
+          return !!frames && [...frames.matchAll(/text-shadow:([^;}]+)/g)].some((m) => blurred(m[1]));
+        });
+      };
+      const holders = new Set(looks.filter((l) => l.family === family).flatMap((look) => SAMPLES[look.eventType]
+        .flatMap((sample) => [...digitHolders(look.render(Object.assign({ username: 'ApexAndre' }, sample)))])));
+      for (const { sels, body } of list) {
+        const shadow = shadowOf(body);
+        if (!((shadow !== undefined && blurred(shadow)) || animatesGlow(body))) continue;
+        for (const sel of sels) {
+          assert.ok(!subject(sel).some((c) => ['o-odo', 'o-odo-d', 'o-odo-strip'].includes(c)), `${file}: ${sel.trim()} gives the rolling digits a blurred text-shadow`);
+          for (const holder of subject(sel).filter((c) => holders.has(c))) {
+            const reset = list.some((r) => shadowOf(r.body) !== undefined && !blurred(shadowOf(r.body)) && r.sels.some((s) => subject(s).includes('o-odo')
+              && new RegExp('\\.' + holder + '(?![\\w-])').test(s.trim().replace(/\.o-odo$/, ''))));
+            assert.ok(reset, `${file}: .${holder} gives the rolling digits a blurred text-shadow, which their clipped cells cut into boxes: add "${sel.trim()} .o-odo{text-shadow:none;filter:drop-shadow(…)}"`);
+          }
+        }
+      }
     });
 
     test(`${file}: every look takes the streamer's colour on its own parts`, () => {
