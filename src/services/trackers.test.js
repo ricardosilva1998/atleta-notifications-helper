@@ -123,6 +123,24 @@ describe('the trackers', () => {
     assert.equal(setup().tr.values(id).latest_follower, null);
   });
 
+  test('one tracker\'s value alone: a stored one is read back without working out the top tipper', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const login = db.getStreamerById(id).twitch_username.toLowerCase();
+    const w = setup();
+    w.tr.onEvent(id, { type: 'follow', data: { username: 'Solo' } });
+    const stateRows = () => db.db.prepare('SELECT COUNT(*) AS n FROM channel_state WHERE twitch_username = ?').get(login).n;
+    assert.deepEqual(w.tr.valueOf(id, 'latest_follower'), { name: 'Solo' });
+    assert.equal(w.tr.valueOf(id, 'latest_raid'), null);
+    assert.equal(stateRows(), 0, 'no channel_state lookup for a stored tracker');
+    db.setTrackerValue(id, 'latest_bits', 'not json {');
+    assert.equal(w.tr.valueOf(id, 'latest_bits'), null);
+    assert.equal(w.tr.valueOf(id, 'latest_hug'), null);
+
+    addTip(id, 'Bob', 7, 'EUR');
+    assert.deepEqual(w.tr.valueOf(id, 'top_tipper'), { name: 'Bob', amount: 7, currency: 'EUR' });
+    assert.deepEqual(w.tr.valueOf(id, 'top_tipper'), w.tr.topTipper(id));
+  });
+
   test('a tip in any currency is the latest tip; the top tipper follows', () => {
     const id = addStreamer({ donation_currency: 'EUR' });
     const w = setup();

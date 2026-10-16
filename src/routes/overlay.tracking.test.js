@@ -285,6 +285,18 @@ describe('a tracker\'s stream', () => {
     assert.deepEqual(stream.messages()[1], { type: 'tracker', tracker: 'latest_bits', value: null });
   });
 
+  test('a stored tracker\'s source works out only its own value (no top-tipper lookup)', async () => {
+    const { id, token } = addStreamer();
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run(`OwnChan${id}`, id);
+    const stateRows = () => db.db.prepare('SELECT COUNT(*) AS n FROM channel_state WHERE twitch_username = ?').get(`ownchan${id}`).n;
+    const stream = await openStream(`/overlay/tracker/latest_sub/events/${token}`);
+    await until(() => stream.messages().length >= 2, 'config and value');
+    assert.equal(stateRows(), 0, 'the top tipper (which reads channel_state) was not worked out');
+    const top = await openStream(`/overlay/tracker/top_tipper/events/${token}`);
+    await until(() => top.messages().length >= 2, 'config and value');
+    assert.equal(stateRows(), 1, 'the top tipper source does work it out');
+  });
+
   test('the top tipper is worked out when the source opens', async () => {
     const { id, token } = addStreamer();
     db.logDonation(id, { source: 'paypal', external_id: `order-${id}`, donor_name: 'Generous', amount: 12, currency: 'EUR' });

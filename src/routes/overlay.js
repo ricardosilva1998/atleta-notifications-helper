@@ -411,7 +411,7 @@ router.get('/tracker/:tracker/events/:token', (req, res) => {
 
   const first = [{ type: 'config', serverVersion: SERVER_INSTANCE_ID, settings: trackerSettingsOf(streamer.id, tracker) }];
   try {
-    first.push({ type: 'tracker', tracker, value: trackers.values(streamer.id)[tracker] });
+    first.push({ type: 'tracker', tracker, value: trackers.valueOf(streamer.id, tracker) });
   } catch (err) {
     console.error(`[Overlay] Tracker ${tracker} for streamer ${streamer.id} cannot be read:`, err.message);
   }

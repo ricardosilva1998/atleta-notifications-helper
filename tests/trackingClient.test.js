@@ -60,7 +60,9 @@ function allElements(node) {
   return node.children.flatMap((child) => [child, ...allElements(child)]);
 }
 
-function loadTracking({ page = {}, texts = TEXTS, lang = 'en' } = {}) {
+// heldFrames: animation frames wait in `frames` until the test runs them (otherwise each runs at once, at its end).
+function loadTracking({ page = {}, texts = TEXTS, lang = 'en', heldFrames = false } = {}) {
+  const frames = [];
   const root = makeElement('div');
   root.id = 'tracking-root';
   const listeners = {};
@@ -87,7 +89,7 @@ function loadTracking({ page = {}, texts = TEXTS, lang = 'en' } = {}) {
     EventSource: FakeEventSource,
     setTimeout: () => 0,
     clearTimeout: () => {},
-    requestAnimationFrame: (fn) => { fn(1e9); return 1; },
+    requestAnimationFrame: (fn) => { if (heldFrames) frames.push(fn); else fn(1e9); return 1; },
     cancelAnimationFrame: () => {},
     performance: { now: () => 0 },
     Intl,
@@ -96,7 +98,7 @@ function loadTracking({ page = {}, texts = TEXTS, lang = 'en' } = {}) {
   vm.createContext(context);
   vm.runInContext(SOURCE, context, { filename: 'tracking.js' });
   const post = (data, origin = 'https://atleta.example') => (listeners.message || []).forEach((fn) => fn({ origin, data }));
-  return { api: context.module.exports, browserApi: window.TrackingSource, root, sources, post, reloads };
+  return { api: context.module.exports, browserApi: window.TrackingSource, root, sources, post, reloads, frames };
 }
 
 const goal = (over = {}) => ({
@@ -168,6 +170,32 @@ describe('the goal bar', () => {
       assert.equal(find(root, 'goal-fill').style.width, '0%');
       assert.doesNotMatch(card.textContent, /\d/, 'no number is shown');
     }
+  });
+
+  test('a reached goal that becomes unavailable is not drawn full (goal.css fills a .completed bar)', () => {
+    const { api, root } = loadTracking();
+    api.renderGoal(goal({ current: 20, percent: 100, completed: true }));
+    api.renderGoal(goal({ current: null, percent: 0, completed: true, unavailable: 'needs_reconnect' }));
+    const card = find(root, 'goal-card');
+    assert.ok(card.classList.contains('unavailable'));
+    assert.ok(!card.classList.contains('completed'), 'no .completed while unavailable');
+    assert.equal(find(root, 'goal-fill').style.width, '0%');
+    api.renderGoal(goal({ current: 21, percent: 100, completed: true }));
+    assert.ok(card.classList.contains('completed'), 'available again: reached again');
+    assert.ok(!card.classList.contains('unavailable'));
+  });
+
+  test('back from unavailable, the count is shown as it is, not rolled up from the old number', () => {
+    const { api, root, frames } = loadTracking({ heldFrames: true });
+    api.renderGoal(goal({ current: 5, percent: 25 }));
+    frames.splice(0).forEach((fn) => fn(1e9));
+    assert.equal(find(root, 'goal-current').textContent, '5');
+    api.renderGoal(goal({ current: null, percent: 0, unavailable: 'not_affiliate' }));
+    api.renderGoal(goal({ current: 900, percent: 45, target: 2000 }));
+    assert.equal(frames.length, 0, 'no roll-up');
+    assert.equal(find(root, 'goal-current').textContent, '900', 'straight to the count');
+    api.renderGoal(goal({ current: 901, percent: 45, target: 2000 }));
+    assert.equal(frames.length, 1, 'later changes roll as before');
   });
 
   test('no active goal: nothing is drawn; a new goal builds a new card', () => {

@@ -35,13 +35,14 @@
     return element;
   }
 
+  // One formatter for the page's language (the roll-up formats every frame); null when the language has none.
+  let wholeNumbers;
   function count(n) {
     const value = Math.round(Number(n) || 0);
-    try {
-      return new Intl.NumberFormat(locale).format(value);
-    } catch (e) {
-      return String(value);
+    if (wholeNumbers === undefined) {
+      try { wholeNumbers = new Intl.NumberFormat(locale); } catch (e) { wholeNumbers = null; }
     }
+    return wholeNumbers ? wholeNumbers.format(value) : String(value);
   }
 
   function money(amount, currency) {
@@ -157,9 +158,11 @@
 
     const color = colorOr(goal.barColor, GOAL_COLOR);
     card.style.setProperty('--goal-color', color);
-    card.classList.toggle('completed', !!goal.completed);
-    const unavailable = goal.unavailable || goal.current === null || goal.current === undefined;
-    card.classList.toggle('unavailable', !!unavailable);
+    const unavailable = !!(goal.unavailable || goal.current === null || goal.current === undefined);
+    const wasUnavailable = card.classList.contains('unavailable');
+    card.classList.toggle('unavailable', unavailable);
+    // goal.css fills a .completed bar whatever its width, so a goal Twitch cannot count for is never .completed
+    card.classList.toggle('completed', !unavailable && !!goal.completed);
 
     root.querySelector('.goal-title').textContent = (goal.completed ? '🏁 ' : '') + String(goal.title || '');
     const current = root.querySelector('.goal-current');
@@ -177,7 +180,13 @@
     root.querySelector('.goal-target').textContent = count(goal.target);
     pct.textContent = goal.completed ? (texts.goalReached || '') : Math.floor(percent) + '%';
     fill.style.width = Math.max(percent, goal.current > 0 ? 2 : 0) + '%';
-    animateCount(current, Number(goal.current) || 0);
+    if (wasUnavailable) {
+      // back from the unavailable text: the count as it is, not rolled up from the number shown before
+      shownCount = Number(goal.current) || 0;
+      current.textContent = count(shownCount);
+    } else {
+      animateCount(current, Number(goal.current) || 0);
+    }
 
     if (event && Number(event.added) > 0) showIncrement(card, event.added);
     if (event && event.justCompleted) celebrate(card, color);

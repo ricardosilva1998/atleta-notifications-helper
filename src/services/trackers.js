@@ -102,30 +102,33 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     }
   }
 
-  // Every tracker's value, in TRACKERS order: the stored ones read back (null when none, or one that cannot be read)
-  // and the top tipper worked out now.
+  // A stored value read back: null when none, or one that cannot be read.
+  function parsed(text) {
+    if (text == null) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
+
+  // Every tracker's value, in TRACKERS order: the stored ones read back and the top tipper worked out now.
   function values(streamerId) {
     const stored = db.getTrackerValues(streamerId);
     const out = {};
-    for (const tracker of TRACKERS) {
-      if (tracker === 'top_tipper') {
-        out[tracker] = topTipper(streamerId);
-        continue;
-      }
-      let value = null;
-      if (stored[tracker] != null) {
-        try {
-          value = JSON.parse(stored[tracker]);
-        } catch {
-          value = null;
-        }
-      }
-      out[tracker] = value;
-    }
+    for (const tracker of TRACKERS) out[tracker] = tracker === 'top_tipper' ? topTipper(streamerId) : parsed(stored[tracker]);
     return out;
   }
 
-  return { onEvent, onTip, topTipper, values };
+  // One tracker's value, as values() gives it, working out only that one (the top tipper only when asked for);
+  // null for a tracker that does not exist.
+  function valueOf(streamerId, tracker) {
+    if (!TRACKERS.includes(tracker)) return null;
+    if (tracker === 'top_tipper') return topTipper(streamerId);
+    return parsed(db.getTrackerValues(streamerId)[tracker]);
+  }
+
+  return { onEvent, onTip, topTipper, values, valueOf };
 }
 
 // The app's instance. The database is required when first used: it loads the app's config, which this file's unit
@@ -149,4 +152,5 @@ module.exports = {
   onTip: (...args) => instance().onTip(...args),
   topTipper: (...args) => instance().topTipper(...args),
   values: (...args) => instance().values(...args),
+  valueOf: (...args) => instance().valueOf(...args),
 };
