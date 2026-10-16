@@ -443,6 +443,7 @@ router.get('/:token', (req, res) => {
   <script src="/overlay/objects/kit.js"></script>
   <script src="/overlay/objects/styles.js?v=${alertStyles().version}"></script>
   <script src="/overlay/fx.js"></script>
+  <script src="/overlay/tipVoiceTiming.js"></script>
   <script src="/overlay/placement.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>

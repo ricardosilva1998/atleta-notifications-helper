@@ -529,8 +529,36 @@ function playNext() {
     playRedemption(event);
   } else {
     const run = alertRun;
-    whenLookReady(objectFor(event.type), () => { if (run === alertRun) showNotification(event); });
+    const voice = loadTipVoice(event); // null: nothing to wait for
+    whenLookReady(objectFor(event.type), () => {
+      if (!voice) { if (run === alertRun) showNotification(event); return; }
+      voice.then((buffer) => { if (run === alertRun) showNotification(event, buffer); });
+    });
   }
+}
+
+// A tip's reading (data.tts: { url, volume }, sent once the server has the audio): fetched and decoded
+// before the alert shows, at most 3 s. Answers a promise of the decoded buffer, or of null when it could
+// not be loaded in time (the alert then plays as it always has), and null at once when there is no reading
+// or the streamer's volume is 0 (silent: no voice, nothing to wait for). Its timeout is an alertTimer, so
+// Clear All cancels it with the rest.
+const TIP_VOICE_LOAD_MS = 3000;
+function loadTipVoice(event) {
+  const tts = event.data && event.data.tts;
+  if (!tts || typeof tts.url !== 'string' || !tts.url || !window.ATLETA_TIP_VOICE) return null;
+  if (overlayVolume() === 0 || typeof fetch !== 'function') return null;
+  return new Promise((resolve) => {
+    let timeout = null;
+    const finish = (buffer) => {
+      if (timeout !== null) { clearTimeout(timeout); alertTimers.delete(timeout); timeout = null; }
+      resolve(buffer);
+    };
+    timeout = alertTimer(() => { timeout = null; resolve(null); }, TIP_VOICE_LOAD_MS);
+    fetch(tts.url)
+      .then((response) => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.arrayBuffer(); })
+      .then((bytes) => audioCtx.decodeAudioData(bytes))
+      .then(finish, (err) => { console.warn('[Overlay] Tip voice not loaded:', err && err.message); finish(null); });
+  });
 }
 
 // ─── Card class mapping ────────────────────────────────────────
@@ -552,6 +580,23 @@ function getCardClass(type) {
 
 // ─── Show notification ─────────────────────────────────────────
 let currentAudio = null;
+let currentVoice = null; // the Web Audio source of a tip's reading while it plays
+
+// Plays a decoded tip reading through a gain of the streamer's volume times the tip's own (0-1).
+function playTipVoice(buffer, tipVolume) {
+  const volume = overlayVolume() * (typeof tipVolume === 'number' && Number.isFinite(tipVolume) ? Math.min(Math.max(tipVolume, 0), 1) : 1);
+  if (volume === 0) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const source = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  source.buffer = buffer;
+  gain.gain.value = volume;
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.onended = () => { if (currentVoice === source) currentVoice = null; };
+  currentVoice = source;
+  source.start();
+}
 
 function stopCurrentSound() {
   if (currentAudio) {
@@ -561,11 +606,16 @@ function stopCurrentSound() {
     } catch (e) {}
     currentAudio = null;
   }
+  if (currentVoice) {
+    try { currentVoice.stop(); } catch (e) {}
+    currentVoice = null;
+  }
   // Also stop any in-progress redemption media
   stopRedemption(false);
 }
 
-function showNotification(event) {
+// `voice`: the decoded reading of a tip (loadTipVoice), played a second after the alert's own sound
+function showNotification(event, voice) {
   // Stop any currently playing sound before starting new one
   stopCurrentSound();
 
@@ -598,6 +648,10 @@ function showNotification(event) {
   } else {
     playDefaultSound();
   }
+
+  // A tip's voice follows the alert's sound by VOICE_START_MS (an alertTimer, so Clear All cancels it)
+  const tipVoice = voice && window.ATLETA_TIP_VOICE ? window.ATLETA_TIP_VOICE : null;
+  if (tipVoice) alertTimer(() => playTipVoice(voice, event.data.tts.volume), tipVoice.VOICE_START_MS);
 
   // Build the alert. Every alert sits in a slot (.alert-pos) that carries its saved
   // position and width; what is inside animates on its own, so no entrance has to
@@ -671,7 +725,9 @@ function showNotification(event) {
       slot.remove();
       alertTimer(playNext, 500);
     }, objectDef ? exitMs(objectDef, speed) : 400);
-  }, holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed));
+  }, tipVoice
+    ? tipVoice.voiceHoldMs(holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed), voice.duration)
+    : holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed));
 }
 
 // ─── Build card HTML per event type ───────────────────────────
