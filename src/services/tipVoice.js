@@ -15,7 +15,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { speechDecision, prepareSpeech } = require('./tipSpeech');
-const { defaultVoice, isVoice } = require('./ttsVoices');
+const { defaultVoice, isVoice, modelFor } = require('./ttsVoices');
 const { createTestCooldown } = require('./testCooldown');
 
 const TTS_DIR = path.join(__dirname, '..', '..', 'data', 'tts');
@@ -117,7 +117,7 @@ function voiceFor(streamer, text, d) {
       speed: streamer.tts_speed ?? SPEED_DEFAULT,
       expressiveness: streamer.tts_expressiveness ?? EXPRESSIVENESS_DEFAULT,
       lang,
-    }, { timeoutMs: Math.max(1, AUDIO_DEADLINE_MS - (d.now() - started)) });
+    }, { model: modelFor(lang, settings.model), timeoutMs: Math.max(1, AUDIO_DEADLINE_MS - (d.now() - started)) });
     if (!Buffer.isBuffer(audio) || audio.length === 0) throw new Error('elevenlabs_empty');
     if (over) throw new Error('elevenlabs_timeout');
 

@@ -48,7 +48,7 @@ What production needs set:
 
 Optional: `ADMIN_DISCORD_IDS`, `BOT_CHAT_RATE_LIMIT`, `ANTHROPIC_API_KEY` (+ `TRIAGE_MODEL`) for AI
 analysis of reported issues; `TTS_CREDIT_FLOOR` (default 20000: tips stop being read while the ElevenLabs
-account has fewer credits left) and `ELEVENLABS_TTS_MODEL` (default `eleven_multilingual_v2`), best left unset. `YOUTUBE_API_KEY` is **not set** in production, so YouTube livestreams
+account has fewer credits left) and `ELEVENLABS_TTS_MODEL` (default `eleven_multilingual_v2`; Portuguese always uses `eleven_turbo_v2_5`), best left unset. `YOUTUBE_API_KEY` is **not set** in production, so YouTube livestreams
 are not detected and the YouTube chat bot never starts (uploads are still announced from RSS). Leave
 `WEEKLY_DIGEST_INTERVAL` unset: an hourly value gives the weekly digest one try per week instead of
 four. `DISCORD_DISABLED` must never be set.

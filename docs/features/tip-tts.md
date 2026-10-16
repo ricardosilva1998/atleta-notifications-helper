@@ -154,8 +154,10 @@ three from Brazil, the region in their name; es: Spain, Latin America and Mexico
 cost), no live moderation and a notice period of at least 365 days before an owner can withdraw a voice (zh's
 Julia: 365; the others: 730). Library voices are used directly by id (ElevenLabs adds one to the account's "My Voices"
 on first use; it takes no voice slot) and may be used commercially on a paid plan. A voice that is withdrawn makes
-its tips fail (`elevenlabs_<status>`) until it is replaced in the list. All voices use the one model,
-`ELEVENLABS_TTS_MODEL` (default `eleven_multilingual_v2`).
+its tips fail (`elevenlabs_<status>`) until it is replaced in the list. Voices speak with `ELEVENLABS_TTS_MODEL` (default `eleven_multilingual_v2`), except where
+`MODEL_BY_LANGUAGE` in `ttsVoices.js` names another: Portuguese uses `eleven_turbo_v2_5`, because Multilingual v2 pulls
+every Portuguese voice towards a Brazilian accent and Turbo keeps the Portugal voices Portuguese (the owner compared the
+models by ear on 2026-10-16). A language's previews are recorded with its model.
 
 ### Adding or replacing a voice
 
