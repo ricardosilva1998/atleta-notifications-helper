@@ -276,6 +276,170 @@ router.get('/goal/:token', (req, res) => {
   res.send(goalPageHtml(`window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};`));
 });
 
+// ── Tracking: the follower and sub goal bars and the six trackers ──
+// Each is an OBS browser source of its own (public/overlay/tracking.js + tracking.css over goal.css), with its own
+// event stream: the config, then what it shows now (a goal's progress, a tracker's stored value or the top tipper
+// worked out now), so a reload or a restart shows the same number, then its bus channel's events — a goal's
+// `trackgoal:<id>:<kind>`, the trackers' `tracker:<id>` (a tracker passes only its own). An open goal source counts
+// for trackingGoals.connected(), which decides how often a goal re-reads Twitch. The goal routes have two segments
+// after /goal/ (/goal/followers/<token>), the tip goal's one (/goal/<token>, /goal/events/<token>), so neither takes
+// the other's links.
+const trackingGoals = require('../services/trackingGoals');
+const trackers = require('../services/trackers');
+
+const GOAL_SOURCES = Object.freeze({ followers: 'follow', subs: 'sub' });
+const TRACKER_COLOR = '#9146FF';
+
+// The sources' texts: tracking.source.* in the language the link names; {{count}} stays for the page to fill in. The
+// tracker titles are named by tracker, the unavailable texts by trackingGoals' code.
+const TRACKING_TEXTS = Object.freeze({
+  latest_follower: 'tracking.source.latestFollower', latest_sub: 'tracking.source.latestSub',
+  latest_tip: 'tracking.source.latestTip', latest_raid: 'tracking.source.latestRaid',
+  latest_bits: 'tracking.source.latestBits', top_tipper: 'tracking.source.topTipper',
+  months: 'tracking.source.months', monthOne: 'tracking.source.monthOne', gifted: 'tracking.source.gifted',
+  viewers: 'tracking.source.viewers', viewerOne: 'tracking.source.viewerOne',
+  bits: 'tracking.source.bits', bitOne: 'tracking.source.bitOne',
+  needs_reconnect: 'tracking.source.needsReconnect', not_affiliate: 'tracking.source.notAffiliate',
+  goalReached: 'tracking.source.goalReached',
+});
+
+function trackingPageHtml(req, title, pageConfig) {
+  const lang = SUPPORTED_LANGS.includes(req.query.lang) ? req.query.lang : 'en';
+  const texts = Object.fromEntries(Object.entries(TRACKING_TEXTS).map(([name, key]) => [name, t(lang, key, { count: '{{count}}' })]));
+  return `<!DOCTYPE html>
+<html lang="${lang}">
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/overlay/goal.css">
+  <link rel="stylesheet" href="/overlay/tracking.css">
+</head>
+<body>
+  <div id="tracking-root"></div>
+  <script>window.TRACKING_PAGE = ${JSON.stringify(pageConfig).replace(/</g, '\\u003c')}; window.TRACKING_TEXTS = ${JSON.stringify(texts).replace(/</g, '\\u003c')};</script>
+  <script src="/overlay/tracking.js"></script>
+</body>
+</html>`;
+}
+
+function sendTrackingPage(req, res, title, pageConfig) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(trackingPageHtml(req, title, pageConfig));
+}
+
+// A tracker's settings as its source draws them: no row is on; a colour that is not #rrggbb is the Atleta purple.
+function trackerSettingsOf(streamerId, tracker) {
+  const row = db.getTrackerSettings(streamerId)[tracker];
+  const color = row && typeof row.color === 'string' && /^#[0-9a-f]{6}$/i.test(row.color) ? row.color : TRACKER_COLOR;
+  return { enabled: row ? !!row.enabled : true, color };
+}
+
+// Opens a Tracking source's event stream: `first` (the config and what it shows now), then every event on `channel`
+// that `passes`, a heartbeat every 30 s; ended when the account is disabled or the server stops. `onClose` runs once,
+// when the viewer leaves, the stream is ended, or the connection was already gone.
+function openTrackingStream(req, res, streamer, { first, channel, passes, onClose }) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  const send = (event) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+  };
+  for (const event of first) send(event);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+  }, 30000);
+  const listener = (event) => {
+    try { if (passes(event)) send(event); } catch (e) {}
+  };
+  bus.on(channel, listener);
+  endStreamWhenAccountDisabled(streamer.id, req, res);
+  holdStream(res);
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    bus.off(channel, listener);
+    if (onClose) onClose();
+  };
+  req.on('close', close);
+  res.once('close', close);
+  if (res.destroyed) close();
+}
+
+// A goal bar's stream
+for (const [slug, kind] of Object.entries(GOAL_SOURCES)) {
+  router.get(`/goal/${slug}/events/:token`, (req, res) => {
+    const streamer = db.getStreamerByOverlayToken(req.params.token);
+    if (!streamer) return res.status(404).send('Invalid overlay token');
+
+    const first = [{ type: 'config', serverVersion: SERVER_INSTANCE_ID }];
+    try {
+      first.push({ type: 'track_goal', goal: trackingGoals.progressOf(streamer.id, kind) });
+    } catch (err) {
+      console.error(`[Overlay] ${kind} goal for streamer ${streamer.id} cannot be read:`, err.message);
+    }
+    trackingGoals.connected(streamer.id, kind, 1);
+    openTrackingStream(req, res, streamer, {
+      first,
+      channel: trackingGoals.channel(streamer.id, kind),
+      passes: () => true,
+      onClose: () => trackingGoals.connected(streamer.id, kind, -1),
+    });
+  });
+
+  router.get(`/goal/${slug}/:token`, (req, res) => {
+    const streamer = db.getStreamerByOverlayToken(req.params.token);
+    if (!streamer) return res.status(404).send('Invalid overlay token');
+    const events = `/overlay/goal/${slug}/events/${encodeURIComponent(streamer.overlay_token)}`;
+    sendTrackingPage(req, res, kind === 'follow' ? 'Follower Goal' : 'Sub Goal', { source: 'goal', events });
+  });
+}
+
+// A tracker's stream
+router.get('/tracker/:tracker/events/:token', (req, res) => {
+  const { tracker } = req.params;
+  if (!trackers.TRACKERS.includes(tracker)) return res.status(404).send('Invalid tracker');
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+
+  const first = [{ type: 'config', serverVersion: SERVER_INSTANCE_ID, settings: trackerSettingsOf(streamer.id, tracker) }];
+  try {
+    first.push({ type: 'tracker', tracker, value: trackers.values(streamer.id)[tracker] });
+  } catch (err) {
+    console.error(`[Overlay] Tracker ${tracker} for streamer ${streamer.id} cannot be read:`, err.message);
+  }
+  openTrackingStream(req, res, streamer, {
+    first,
+    channel: trackers.channel(streamer.id),
+    passes: (event) => !!event && event.tracker === tracker && (event.type === 'tracker' || event.type === 'tracker_settings'),
+  });
+});
+
+router.get('/tracker/:tracker/:token', (req, res) => {
+  const { tracker } = req.params;
+  if (!trackers.TRACKERS.includes(tracker)) return res.status(404).send('Invalid tracker');
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  if (!streamer) return res.status(404).send('Invalid overlay token');
+  const events = `/overlay/tracker/${tracker}/events/${encodeURIComponent(streamer.overlay_token)}`;
+  sendTrackingPage(req, res, 'Tracker', { source: 'tracker', tracker, events });
+});
+
+// The previews — no token, no stream. Driven by postMessage from the Tracking page (track_goal, tracker,
+// tracker_settings messages, as the streams send them).
+router.get('/goal-demo/tracking', (req, res) => {
+  sendTrackingPage(req, res, 'Goal Preview', { source: 'goal', demo: true });
+});
+router.get('/tracker-demo', (req, res) => {
+  sendTrackingPage(req, res, 'Tracker Preview', { source: 'tracker', demo: true });
+});
+
 // The Polls & predictions bar (an OBS browser source of its own). Its stream says what runs when it opens — read from
 // Twitch when EventSub said nothing lately (after a restart OBS reconnects here) — then every change on the bus
 // channel poll:<streamerId>; it does not follow the alerts' switch. While something runs the bar asks livePolls again:
