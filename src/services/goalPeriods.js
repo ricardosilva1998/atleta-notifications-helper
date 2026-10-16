@@ -59,15 +59,24 @@ function localDate(ms, timeZone) {
   return { y: parts.year, m: parts.month, d: parts.day };
 }
 
-// The UTC instant of local 00:00 on a date in the zone. Guess the date as UTC,
-// then correct by the zone's offset at the guess, twice: the second pass lands
-// right when the first one crossed a daylight-saving change. `d` may run past
-// the month's end (or below 1); Date.UTC rolls it over.
+// The UTC instant of local 00:00 on a date in the zone. The zone's offset on
+// the day before and the day after are the only ones that can apply (a day has
+// at most one change); each gives a candidate instant, valid when the zone
+// really has that offset there. Midnight that happens twice (clocks go back)
+// takes the earlier one; midnight that never happens (clocks jump over it,
+// as in Azores, Havana, Santiago) is the instant of the jump, where the day
+// really begins. `d` may run past the month's end (or below 1); Date.UTC
+// rolls it over.
 function localMidnight(y, m, d, timeZone) {
   const wall = Date.UTC(y, m - 1, d);
-  let ms = wall - offsetAt(wall, timeZone);
-  ms = wall - offsetAt(ms, timeZone);
-  return ms;
+  const before = offsetAt(wall - DAY_MS, timeZone);
+  const after = offsetAt(wall + DAY_MS, timeZone);
+  let earliest = null;
+  for (const offset of new Set([before, after])) {
+    const candidate = wall - offset;
+    if (offsetAt(candidate, timeZone) === offset && (earliest === null || candidate < earliest)) earliest = candidate;
+  }
+  return earliest === null ? wall - before : earliest;
 }
 
 function calendarWindow(period, now, timeZone) {

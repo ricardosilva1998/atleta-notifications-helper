@@ -53,6 +53,48 @@ test('the day the clocks go forward lasts 23 hours', () => {
   assert.equal(w.end - w.start, 23 * 3600e3);
 });
 
+test('a day whose midnight the clocks skip begins at the jump (Azores)', () => {
+  const tz = 'Atlantic/Azores';
+  const w = P.windowFor({ period: 'day', mode: 'calendar', time_zone: tz }, new Date('2026-03-29T01:30:00Z'));
+  assert.equal(iso(w.start), '2026-03-29T01:00:00.000Z'); // local 00:00 never happens: 00:00 -01 jumps to 01:00 +00
+  const earlier = P.windowFor({ period: 'day', mode: 'calendar', time_zone: tz }, new Date('2026-03-29T00:30:00Z'));
+  assert.equal(+earlier.end, +w.start);
+  assert.ok(earlier.start <= new Date('2026-03-29T00:30:00Z') && new Date('2026-03-29T00:30:00Z') < earlier.end);
+});
+
+test('a Sao Paulo day that lost its midnight lasts 23 hours (2017-10-15)', () => {
+  const w = P.windowFor({ period: 'day', mode: 'calendar', time_zone: 'America/Sao_Paulo' }, new Date('2017-10-15T12:00:00Z'));
+  assert.equal(iso(w.start), '2017-10-15T03:00:00.000Z');
+  assert.equal(w.end - w.start, 23 * 3600e3);
+});
+
+test('days stay contiguous across a skipped midnight (Havana, Santiago, Asuncion)', () => {
+  const cases = [
+    ['America/Havana', '2026-03-08T12:00:00Z'],
+    ['America/Santiago', '2026-09-06T12:00:00Z'],
+    ['America/Asuncion', '2018-10-07T12:00:00Z'],
+  ];
+  for (const [tz, noon] of cases) {
+    const day = { period: 'day', mode: 'calendar', time_zone: tz };
+    const t = new Date(noon);
+    const w = P.windowFor(day, t);
+    assert.ok(w.start <= t && t < w.end, tz);
+    const previous = P.windowFor(day, new Date(+w.start - 1));
+    assert.equal(+previous.end, +w.start, tz);
+    const following = P.windowFor(day, w.end);
+    assert.equal(+following.start, +w.end, tz);
+  }
+});
+
+test('Asuncion 2018: the October month spans the jump and the 7th starts at it', () => {
+  const tz = 'America/Asuncion';
+  const month = P.windowFor({ period: 'month', mode: 'calendar', time_zone: tz }, new Date('2018-10-15T12:00:00Z'));
+  assert.equal(iso(month.start), '2018-10-01T04:00:00.000Z'); // 00:00 at -04
+  assert.equal(iso(month.end), '2018-11-01T03:00:00.000Z');   // 00:00 at -03
+  const day = P.windowFor({ period: 'day', mode: 'calendar', time_zone: tz }, new Date('2018-10-07T12:00:00Z'));
+  assert.equal(iso(day.start), '2018-10-07T04:00:00.000Z');   // local 00:00 skipped: 00:00 -04 jumps to 01:00 -03
+});
+
 test('a calendar year runs from Jan 1 to the next Jan 1 in the goal zone', () => {
   const w = P.windowFor({ period: 'year', mode: 'calendar', time_zone: 'Asia/Tokyo' }, new Date('2026-12-31T16:00:00Z')); // already 2027-01-01 01:00 in Tokyo
   assert.equal(iso(w.start), '2026-12-31T15:00:00.000Z');
