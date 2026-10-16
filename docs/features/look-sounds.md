@@ -68,7 +68,8 @@ functions are still registered and now play only when a recording cannot load.
 
 The pipeline that made them is in the gitignored `.superpowers/sounds/`, and its `README.md` says what it
 needs (Node, ffmpeg, a Python 3.12 environment from its `requirements.txt`) and how to run it, step by step.
-It reads `ELEVENLABS_API_KEY` from the repository's `.env` (development only; the app never reads it), and
+It reads `ELEVENLABS_API_KEY` from the repository's `.env` (the same key production uses for tips read aloud,
+`docs/features/tip-tts.md`; both spend the one account's credits), and
 ElevenLabs charges 11 credits per second of audio it generates (the first round used 18,330). Its last
 step copies the mixes into `public/overlay/objects/sounds/`, as below.
 

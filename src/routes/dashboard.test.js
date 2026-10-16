@@ -16,6 +16,7 @@ const RealDatabase = require('better-sqlite3');
 const realFs = require('fs');
 const os = require('os');
 const { DEFAULT_DURATION_SECONDS } = require('../services/overlaySettings');
+const { VOICES, defaultVoice } = require('../services/ttsVoices');
 
 // src/config.js exits without these; the values are never used.
 for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) {
@@ -5486,9 +5487,10 @@ describe('reading tips aloud', () => {
   });
   afterEach(() => { ttsConfig.apiKey = savedKey; });
 
-  // Every field the page's form posts, as a browser sends it with the switch ticked.
+  // Every field the page's form posts, as a browser sends it with the switch ticked (a Portuguese voice that is not the default).
+  const PT_VOICE = VOICES.pt[1].id;
   const FORM = {
-    tts_enabled: '1', tts_min_amount: '7.5', tts_language: 'pt', tts_voice: 'pNInz6obpgDQGcFmaJgB', tts_speed: '1.1',
+    tts_enabled: '1', tts_min_amount: '7.5', tts_language: 'pt', tts_voice: PT_VOICE, tts_speed: '1.1',
     tts_expressiveness: '0.25', tts_volume: '0.6', tts_template: '{name} mandou {amount}: {message}', tts_template_empty: '',
   };
 
@@ -5515,6 +5517,19 @@ describe('reading tips aloud', () => {
     const off = (await request('GET', '/dashboard/donations', { streamer: id })).text;
     assert.ok(off.includes(unavailable));
     assert.ok(!off.includes('action="/dashboard/donations/tts"'), 'no form while it is not available');
+  });
+
+  test('the voice list is the language\'s voices, the stored one picked, and ▶ is there to play its recorded preview', async () => {
+    const voice = VOICES.fr[2];
+    const id = addStreamer({ tts_language: 'fr', tts_voice: voice.id });
+    const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+    const select = page.slice(page.indexOf('<select id="tts-voice"'), page.indexOf('</select>', page.indexOf('<select id="tts-voice"')));
+    assert.deepEqual([...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]), VOICES.fr.map((v) => v.id));
+    assert.match(select, new RegExp(`<option value="${voice.id}" selected>${esc(voice.name)}</option>`));
+    assert.match(page, /<button type="button" id="tts-listen"[^>]*>&#9654;<\/button>/, 'the button is not hidden');
+    for (const lang of Object.keys(VOICES)) {
+      for (const v of VOICES[lang]) assert.ok(page.includes(`"preview":"${v.preview}"`), `${lang} ${v.name}: its preview is in the page's data`);
+    }
   });
 
   test('the amount field accepts any amount in cents, whatever the tip page\'s minimum', async () => {
@@ -5568,7 +5583,7 @@ describe('reading tips aloud', () => {
     const row = db.getStreamerById(id);
     assert.deepEqual(
       [row.tts_enabled, row.tts_min_amount, row.tts_language, row.tts_voice, row.tts_speed, row.tts_expressiveness, row.tts_volume, row.tts_template, row.tts_template_empty],
-      [1, 2, 'pt', '21m00Tcm4TlvDq8ikWAM', 1.2, 0.25, 0.6, '{name} mandou {amount}: {message}', null],
+      [1, 2, 'pt', defaultVoice('pt'), 1.2, 0.25, 0.6, '{name} mandou {amount}: {message}', null],
     );
     const saved = (await request('GET', '/dashboard/donations?saved=tts', { streamer: id })).text;
     assert.ok(saved.includes(esc(t('en', 'donations.tts.saved'))));
@@ -5587,7 +5602,7 @@ describe('reading tips aloud', () => {
     const row = db.getStreamerById(id);
     assert.deepEqual(
       [row.tts_enabled, row.tts_min_amount, row.tts_language, row.tts_voice, row.tts_speed, row.tts_expressiveness, row.tts_volume, row.tts_template],
-      [0, 7.5, 'pt', 'pNInz6obpgDQGcFmaJgB', 1.1, 0.25, 0.6, '{name} mandou {amount}: {message}'],
+      [0, 7.5, 'pt', PT_VOICE, 1.1, 0.25, 0.6, '{name} mandou {amount}: {message}'],
     );
   });
 

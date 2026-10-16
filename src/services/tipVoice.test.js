@@ -11,6 +11,7 @@ const path = require('path');
 const { t } = require('../i18n');
 const { createTestCooldown } = require('./testCooldown');
 const tipVoice = require('./tipVoice');
+const { defaultVoice } = require('./ttsVoices');
 
 const NOW = Date.UTC(2026, 9, 16, 12, 0, 0);
 const AUDIO = Buffer.from('ID3-fake-mp3-bytes');
@@ -116,7 +117,7 @@ describe('announceWithVoice', () => {
     assert.deepEqual(result, { status: 'read' });
     assert.deepEqual(calls.reserve, [[streamer.id, '2026-10', line.length, 15000]]);
     assert.equal(calls.synth.length, 1);
-    assert.deepEqual(calls.synth[0].args, { voiceId: '21m00Tcm4TlvDq8ikWAM', text: line, speed: 1, expressiveness: 0.5, lang: 'en' });
+    assert.deepEqual(calls.synth[0].args, { voiceId: defaultVoice('en'), text: line, speed: 1, expressiveness: 0.5, lang: 'en' });
     assert.ok(calls.synth[0].opts.timeoutMs <= tipVoice.AUDIO_DEADLINE_MS);
     assert.deepEqual(fs.readFileSync(file), AUDIO);
     assert.deepEqual(emitted, [{ url: `/overlay/tts/tok-${streamer.id}/${UUID1}.mp3`, volume: 0.6 }]);
