@@ -120,8 +120,21 @@ describe('the default look, the effect and the sound', () => {
   const look = { key: 'follow-kitfx', family: 'kittest', fx: 'sparks', sound: 'kitBeep' };
   const ownObject = { key: 'follow' };
 
-  test('the giveaway\'s default look is Racing\'s Victory lap; the five have none (today\'s object)', () => {
-    assert.deepEqual(K.DEFAULT_LOOKS, { giveaway_winner: 'giveaway-racing' });
+  test('every alert\'s default look is Glass\'s', () => {
+    assert.deepEqual(K.DEFAULT_LOOKS, {
+      follow: 'follow-glass', subscription: 'subscriber-glass', bits: 'bits-glass',
+      donation: 'donation-glass', raid: 'raid-glass', giveaway_winner: 'giveaway-glass',
+    });
+  });
+
+  test('ownSettings: a design with the look\'s own settings, its place, width and everything else as they are', () => {
+    const old = { screen_effect: 'confetti', animation_speed: 1.8, style_accent: '#29E0FF', style_sound: 'rcFlyby', card_width: 630, card_position: 'top-left' };
+    assert.deepEqual(K.ownSettings(old), {
+      screen_effect: 'default', animation_speed: 1, style_accent: null, style_label: null, style_sound: null, style_grows: null,
+      card_width: 630, card_position: 'top-left',
+    });
+    assert.equal(old.screen_effect, 'confetti', 'the design it was given stays as it was');
+    assert.deepEqual(K.ownSettings(null), { style_accent: null, style_label: null, style_sound: null, style_grows: null, screen_effect: 'default', animation_speed: 1 });
   });
 
   test('effectFor: none for today\'s objects and the C1, the design\'s effect or the look\'s own for a look', () => {

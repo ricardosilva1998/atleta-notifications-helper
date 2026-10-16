@@ -876,30 +876,34 @@ describe('the look an alert is drawn in (alert styles)', () => {
   const raid = (viewers = 42) => ({ type: 'raid', data: { username: 'GridWalker', viewers } });
   const bits = (amount) => ({ type: 'bits', data: { username: 'TurboTina', amount } });
 
-  test('an alert nobody has restyled is today\'s object, as before: no speed, no colour, no scaling, whatever an older builder saved', () => {
+  test('an alert nobody has given a look draws Glass\'s as it comes: its own speed and colour whatever an older builder saved, scaled to the saved width', () => {
     const overlay = loadOverlay({ styles: true, designs: { follow: design({ animation_speed: 1.8, screen_effect: 'confetti', card_width: 630 }) } });
     overlay.send(follow());
     const [slot] = overlay.slots();
-    assert.match(slot.innerHTML, /^<div class="obj o-follow/);
-    for (const name of ['--spd', '--a', '--zw']) assert.equal(slot.style.properties[name], undefined, name);
-    assert.ok(!slot.classList.contains('look'));
-    assert.equal(slot.style.width, '630px', 'it reflows to its width, as before');
+    assert.match(slot.innerHTML, /^<div class="obj o-gl o-glf/);
+    assert.equal(slot.style.properties['--spd'], '1', 'its own speed, not the 1.8 saved for today\'s card');
+    assert.equal(slot.style.properties['--a'], undefined, 'its own colour');
+    assert.ok(slot.classList.contains('look'));
+    assert.equal(slot.style.properties['--zw'], '1.5', 'drawn for 420 px and scaled to the saved 630');
+    assert.equal(slot.style.width, '630px');
   });
 
-  test('the giveaway with no look is Racing\'s Victory lap, in the colours and text saved for the old card', () => {
+  test('the giveaway with no look is Glass\'s Spotlight; what was saved for the old card is not part of it', () => {
     const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ bg_color: '#123456', accent_color: '#abcdef', event_label: 'And the winner is' }) } });
     overlay.send(giveaway());
     const [slot] = overlay.slots();
-    assert.match(slot.innerHTML, /^<div class="obj o-rc o-rcg" style="--rc-bg:#123456;/);
-    assert.ok(slot.innerHTML.includes('--rc-a:#abcdef;'));
-    assert.ok(slot.innerHTML.includes('>And the winner is<'));
+    assert.match(slot.innerHTML, /^<div class="obj o-gl o-glg"/);
+    assert.ok(!slot.innerHTML.includes('#123456') && !slot.innerHTML.includes('And the winner is'));
     assert.ok(slot.classList.contains('playing'));
   });
 
-  test('with no saved design at all the giveaway is the Victory lap in its own colours', () => {
+  test('with no saved design at all every alert draws Glass\'s look', () => {
     const overlay = loadOverlay({ styles: true });
-    overlay.send(giveaway());
-    assert.match(overlay.slots()[0].innerHTML, /--rc-bg:#1c1200;[^"]*--rc-a:#f59e0b;/);
+    for (const [event, cls] of [[giveaway(), 'o-glg'], [follow(), 'o-glf'], [raid(), 'o-glr'], [bits(500), 'o-glb']]) {
+      overlay.send({ type: 'clear' });
+      overlay.send(event);
+      assert.match(overlay.slots()[0].innerHTML, new RegExp(`^<div class="obj o-gl ${cls}`), event.type);
+    }
   });
 
   test('a picked look carries the streamer\'s colour with its shades, and its speed when it takes one', () => {
@@ -972,8 +976,8 @@ describe('the look an alert is drawn in (alert styles)', () => {
     assert.equal(overlay.slots().length, 0);
   });
 
-  test('today\'s objects keep the streamer\'s duration as it is', () => {
-    const overlay = loadOverlay({ styles: true });
+  test('today\'s objects (the looks did not load) keep the streamer\'s duration as it is', () => {
+    const overlay = loadOverlay({ kit: true, styles: false });
     overlay.send({ type: 'config-update', config: baseConfig({ follow: { enabled: true, duration: 1 } }) });
     overlay.send(follow());
     overlay.clock.advance(1000);
@@ -983,10 +987,10 @@ describe('the look an alert is drawn in (alert styles)', () => {
   test('a look this page does not know draws the alert\'s default look', () => {
     const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style: 'giveaway-nope' }), follow: design({ style: 'follow-nope' }) } });
     overlay.send(giveaway());
-    assert.match(overlay.slots()[0].innerHTML, /class="obj o-rc o-rcg"/);
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-gl o-glg"/);
     overlay.send({ type: 'clear' });
     overlay.send(follow());
-    assert.match(overlay.slots()[0].innerHTML, /^<div class="obj o-follow/);
+    assert.match(overlay.slots()[0].innerHTML, /^<div class="obj o-gl o-glf/);
   });
 
   test('when the joined looks did not load, the giveaway is today\'s card and the five are their objects', () => {
@@ -1001,7 +1005,7 @@ describe('the look an alert is drawn in (alert styles)', () => {
   test('a look that throws while drawing falls back to the alert\'s own object, or its card, and says so once', () => {
     const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing' }) } });
     overlay.run("window.ATLETA_OBJECT_STYLES['follow-racing'].render = () => { throw new Error('boom'); }");
-    overlay.run("window.ATLETA_OBJECT_STYLES['giveaway-racing'].render = () => { throw new Error('boom'); }");
+    overlay.run("window.ATLETA_OBJECT_STYLES['giveaway-glass'].render = () => { throw new Error('boom'); }");
     overlay.send(follow());
     assert.match(overlay.slots()[0].innerHTML, /^<div class="obj o-follow/);
     overlay.send({ type: 'clear' });
@@ -1010,7 +1014,7 @@ describe('the look an alert is drawn in (alert styles)', () => {
     overlay.send(giveaway());
     assert.ok(overlay.slots()[0].children.some((c) => c.classList.contains('alert-card')));
     assert.equal(overlay.errors.filter((e) => e.includes('follow-racing')).length, 1, 'once per look');
-    assert.equal(overlay.errors.filter((e) => e.includes('giveaway-racing')).length, 1);
+    assert.equal(overlay.errors.filter((e) => e.includes('giveaway-glass')).length, 1);
   });
 });
 
@@ -1021,7 +1025,7 @@ describe('the screen effect and the sound of a look (alert styles)', () => {
   // Which sound played: today's synthesized one or a look's, replaced by markers.
   const listen = (overlay) => {
     overlay.run("window.played = []; soundEffects.follow = () => window.played.push('today:follow'); soundEffects.giveaway_winner = () => window.played.push('today:giveaway');");
-    for (const [key, family] of [['rcVictory', 'racing'], ['rcFlyby', 'racing'], ['samuraiBell', 'samurai']]) {
+    for (const [key, family] of [['rcVictory', 'racing'], ['rcFlyby', 'racing'], ['samuraiBell', 'samurai'], ['glFollow', 'glass'], ['glGiveaway', 'glass']]) {
       overlay.run(`window.ATLETA_KIT.registerSound('${key}', '${family}', () => window.played.push('${key}'))`);
     }
     return () => JSON.parse(overlay.run('JSON.stringify(window.played)')); // an array of this realm
@@ -1031,15 +1035,15 @@ describe('the screen effect and the sound of a look (alert styles)', () => {
     const overlay = loadOverlay({ styles: true });
     overlay.run('window.preloaded = []; window.ATLETA_KIT.preloadSounds = (keys) => window.preloaded.push(keys.slice());');
     overlay.send({ type: 'config-update', designs: { follow: design({ style: 'follow-racing' }), raid: design({ style: 'raid-racing', style_sound: 'rcConvoy.2' }) } });
-    assert.deepEqual(JSON.parse(overlay.run('JSON.stringify(window.preloaded)')), [['rcFlyby', 'today', 'today', 'today', 'rcConvoy.2', 'rcVictory']]);
+    assert.deepEqual(JSON.parse(overlay.run('JSON.stringify(window.preloaded)')), [['rcFlyby', 'glSub', 'glBits', 'glDonation', 'rcConvoy.2', 'glGiveaway']]);
   });
 
-  test('an alert nobody has restyled plays no effect, whatever an older builder saved, and today\'s sound', () => {
+  test('an alert nobody has given a look plays Glass\'s own effect and sound, whatever an older builder saved', () => {
     const overlay = loadOverlay({ styles: true, designs: { follow: design({ screen_effect: 'confetti' }) } });
     const played = listen(overlay);
     overlay.send(follow());
-    assert.equal(all(overlay), 0);
-    assert.deepEqual(played(), ['today:follow']);
+    assert.equal(all(overlay), 0, 'Pill has no effect of its own; the confetti saved for today\'s card is not played');
+    assert.deepEqual(played(), ['glFollow']);
   });
 
   test('a picked look plays the effect its design names, or its own, and its own sound', () => {
@@ -1053,20 +1057,37 @@ describe('the screen effect and the sound of a look (alert styles)', () => {
     assert.equal(effects(overlay, 'fx-spark'), 56);
   });
 
-  test('the giveaway\'s Victory lap plays its chequered confetti and its fanfare; a saved effect carries over', () => {
+  test('the giveaway with no look plays Spotlight\'s confetti and its sound; an effect saved for the old card does not carry over', () => {
     const fresh = loadOverlay({ styles: true });
     const played = listen(fresh);
     fresh.send(giveaway());
-    assert.equal(effects(fresh, 'fx-check'), 60);
-    assert.deepEqual(played(), ['rcVictory']);
+    assert.ok(effects(fresh, 'confetti') > 0);
+    assert.deepEqual(played(), ['glGiveaway']);
     const saved = loadOverlay({ styles: true, designs: { giveaway_winner: design({ screen_effect: 'gold' }) } });
     saved.send(giveaway());
-    assert.ok(effects(saved, 'gold-item') > 0, 'the gold rain the streamer saved for the old card');
+    assert.equal(effects(saved, 'gold-item'), 0, 'no gold rain');
+    assert.ok(effects(saved, 'confetti') > 0, 'Spotlight\'s own confetti');
+  });
+
+  test('an alert with no look plays its effect at the look\'s own speed, not one saved for the old card; the saved amount stays, as the builder shows it', () => {
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ animation_speed: 1.8, effect_amount: 0.5 }) } });
+    overlay.send(giveaway());
+    const confetti = overlay.container.children.filter((c) => c.classList.contains('confetti'));
+    assert.equal(confetti.length, 30, 'half of 60 pieces');
+    assert.ok(confetti.every((c) => parseFloat(c.style.animationDuration) >= 2), 'speed 1: 2 to 4 s a piece, not 1.1 to 2.2');
+  });
+
+  test('a picked Victory lap plays its chequered confetti and its fanfare', () => {
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style: 'giveaway-racing', screen_effect: 'default' }) } });
+    const played = listen(overlay);
+    overlay.send(giveaway());
+    assert.equal(effects(overlay, 'fx-check'), 60);
+    assert.deepEqual(played(), ['rcVictory']);
   });
 
   test('the design\'s sound wins over the look\'s; "none" is silence; an unknown one is the look\'s own', () => {
     for (const [style_sound, expected] of [['samuraiBell', ['samuraiBell']], ['today', ['today:giveaway']], ['none', []], ['nope', ['rcVictory']]]) {
-      const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style_sound }) } });
+      const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style: 'giveaway-racing', style_sound }) } });
       const played = listen(overlay);
       overlay.send(giveaway());
       assert.deepEqual(played(), expected, style_sound);
@@ -1074,7 +1095,7 @@ describe('the screen effect and the sound of a look (alert styles)', () => {
   });
 
   test('a sound the streamer uploaded still plays first, even over "none"', () => {
-    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style_sound: 'none' }) } });
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style: 'giveaway-racing', style_sound: 'none' }) } });
     overlay.send({ type: 'config-update', config: baseConfig({ sounds: { giveaway_winner: '/overlay/sounds/test-token/giveaway_winner?v=1' } }) });
     const played = listen(overlay);
     overlay.send(giveaway());
@@ -1112,21 +1133,22 @@ describe('the fonts of the looks (alert styles)', () => {
   };
   const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-  test('each family a design names, and the giveaway\'s default look, is asked for once, on connecting and on each update', () => {
+  test('each family a design names, and the default looks\' (Glass), is asked for once, on connecting and on each update', () => {
     const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing' }) } });
-    assert.equal(fontLinks(overlay).length, 1, 'Racing once: the follow\'s look and the giveaway\'s default');
+    assert.equal(fontLinks(overlay).length, 2, 'Racing for the follow\'s look, Glass once for the six default looks');
     assert.match(fontLinks(overlay)[0].href, /family=Kanit:ital,wght@0,800;0,900;1,800;1,900&family=Barlow\+Condensed:[^&]+&display=swap$/);
+    assert.match(fontLinks(overlay)[1].href, /family=DM\+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Manrope:wght@500;700;800&display=swap$/);
     overlay.send({ type: 'config-update', designs: { giveaway_winner: design({ style: 'giveaway-samurai' }) } });
     overlay.send({ type: 'config-update', designs: { giveaway_winner: design({ style: 'giveaway-samurai' }) } });
-    assert.equal(fontLinks(overlay).length, 2);
-    assert.match(fontLinks(overlay)[1].href, /family=Noto\+Serif\+JP:wght@700&display=swap$/);
+    assert.equal(fontLinks(overlay).length, 3);
+    assert.match(fontLinks(overlay)[2].href, /family=Noto\+Serif\+JP:wght@700&display=swap$/);
   });
 
   test('the first alert in a look waits for its fonts, at most 1.5 s, then plays with the fallbacks', () => {
     const overlay = loadOverlay({ styles: true });
     overlay.sandbox.document.fonts = fontSet();
     overlay.send(giveaway());
-    assert.equal(overlay.slots().length, 0, 'waiting for Kanit');
+    assert.equal(overlay.slots().length, 0, 'waiting for its fonts');
     overlay.clock.advance(1499);
     assert.equal(overlay.slots().length, 0);
     overlay.clock.advance(1);
@@ -1157,10 +1179,13 @@ describe('the fonts of the looks (alert styles)', () => {
     assert.equal(overlay.slots().length, 0);
   });
 
-  test('today\'s objects and the cards never wait', () => {
-    const overlay = loadOverlay({ styles: true });
+  test('today\'s objects (the looks did not load) and the cards never wait', () => {
+    const overlay = loadOverlay({ kit: true, styles: false });
     overlay.sandbox.document.fonts = fontSet();
     overlay.send(follow());
     assert.equal(overlay.slots().length, 1);
+    overlay.send({ type: 'clear' });
+    overlay.send({ type: 'yt_member', data: { username: 'NewMember42', level: 'Member' } });
+    assert.equal(overlay.slots().length, 1, 'a card');
   });
 });

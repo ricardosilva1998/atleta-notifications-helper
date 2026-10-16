@@ -196,6 +196,8 @@ while it is empty. The other words inside a look stay English, as the overlay is
 - **Which look.** The C1 branch's `objectFor(type)` returns the style the design names, when the page knows
   it and it draws this alert. Otherwise it returns the default look: today's object for the five alerts,
   `giveaway-racing` for the giveaway (new). Anything else gets the legacy card. YouTube's alerts are unchanged.
+  *Changed 16 October 2026 (the owner's decision): the default look is Glass's for all six alerts, played
+  with its own settings (`kit.ownSettings`); `docs/operations/deploy.md`, "Glass, the default look".*
 - **What the slot carries.** Before an alert renders, its slot gets:
   - `--spd` from `animation_speed` (today it is fixed at 1). Today's five samurai looks keep 1: older builders
     saved a speed for the legacy cards, and it must not start changing them;

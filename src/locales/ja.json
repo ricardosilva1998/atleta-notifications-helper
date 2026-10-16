@@ -550,7 +550,6 @@
   "overlayBuilder.style.familiesLabel": "スタイルのシリーズ",
   "overlayBuilder.style.galleryLabel": "このアラートのスタイル",
   "overlayBuilder.style.all": "すべて",
-  "overlayBuilder.style.today": "現在",
   "overlayBuilder.style.default": "デフォルト",
   "overlayBuilder.style.mine": "あなた専用",
   "overlayBuilder.style.useFamily": "6つのアラートすべてに{{family}}を使う",

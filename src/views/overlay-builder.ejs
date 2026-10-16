@@ -1316,7 +1316,7 @@ const I18N = <%- JSON.stringify({
   systemDefault: t('overlayBuilder.text.systemDefault'), fontSample: t('overlayBuilder.text.fontSample'),
   defaultSponsorName: t('overlayBuilder.sponsors.defaultName'),
   style: {
-    all: t('overlayBuilder.style.all'), today: t('overlayBuilder.style.today'), default: t('overlayBuilder.style.default'), mine: t('overlayBuilder.style.mine'),
+    all: t('overlayBuilder.style.all'), default: t('overlayBuilder.style.default'), mine: t('overlayBuilder.style.mine'),
     useFamily: t('overlayBuilder.style.useFamily', { family: '{{family}}' }), familyDone: t('overlayBuilder.style.familyDone', { family: '{{family}}' }),
     failed: t('overlayBuilder.style.failed'), fontOwn: t('overlayBuilder.style.fontOwn'), labelHint: t('overlayBuilder.style.labelHint'),
     soundOwn: t('overlayBuilder.style.soundOwn'), soundToday: t('overlayBuilder.style.soundToday'), soundNone: t('overlayBuilder.style.soundNone'),
@@ -1588,8 +1588,8 @@ const PREVIEW_DATA = {
 };
 
 // The look an alert's preview draws: the same rule as objectFor() in public/overlay/overlay.js,
-// reading the look the page shows (ALERT_STYLES): that look, else the alert's default look (the
-// giveaway's is Racing's Victory lap), else its own object; null for the legacy cards.
+// reading the look the page shows (ALERT_STYLES): that look, else the alert's default look (Glass's),
+// else its own object; null for the legacy cards.
 function previewObjectFor(type) {
   const styles = window.ATLETA_OBJECT_STYLES || {};
   const kit = window.ATLETA_KIT;

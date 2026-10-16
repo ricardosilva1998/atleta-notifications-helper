@@ -225,11 +225,12 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     const KIT = require('../public/overlay/objects/kit.js');
     require('../public/overlay/objects/styles/samurai.js');
     require('../public/overlay/objects/styles/racing.js');
+    require('../public/overlay/objects/styles/glass.js');
     const looks = { ATLETA_OBJECTS: OBJECTS, ATLETA_OBJECT_STYLES: OBJECTS.STYLES, ATLETA_KIT: KIT };
     const registries = [
       { name: 'real styles', win: real, styleIds: STYLE_IDS },
       { name: 'synthetic styles', win: alias, styleIds: [...STYLE_IDS, 'donation-alias'] },
-      { name: 'the looks with the kit', win: looks, styleIds: [...STYLE_IDS, 'giveaway-racing', 'giveaway-samurai', 'follow-racing', 'bits-racing', 'follow-samurai'] },
+      { name: 'the looks with the kit', win: looks, styleIds: [...STYLE_IDS, 'giveaway-racing', 'giveaway-samurai', 'follow-racing', 'bits-racing', 'follow-samurai', 'follow-glass', 'giveaway-glass'] },
     ];
     for (const { name, win, styleIds } of registries) {
       for (const type of TYPES) {
@@ -246,10 +247,11 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     // Not two nulls: both picks give the real C1 for its own style.
     assert.strictEqual(pickPreview(real, 'donation', 'donation-c1'), OBJECTS.STYLES['donation-c1'], 'the preview draws the C1');
     assert.strictEqual(pickOverlay(real, 'donation', 'donation-c1'), OBJECTS.STYLES['donation-c1'], 'the OBS overlay draws the C1');
-    // Not two nulls either: the giveaway with no style is Racing's Victory lap in both.
-    assert.equal(pickPreview(looks, 'giveaway_winner', undefined).key, 'giveaway-racing');
-    assert.equal(pickOverlay(looks, 'giveaway_winner', undefined).key, 'giveaway-racing');
-    assert.equal(pickPreview(looks, 'follow', undefined), OBJECTS.follow, 'the five keep today\'s object');
+    // Not two nulls either: an alert with no style is Glass's look in both.
+    assert.equal(pickPreview(looks, 'giveaway_winner', undefined).key, 'giveaway-glass');
+    assert.equal(pickOverlay(looks, 'giveaway_winner', undefined).key, 'giveaway-glass');
+    assert.equal(pickPreview(looks, 'follow', undefined).key, 'follow-glass');
+    assert.equal(pickOverlay(looks, 'follow', undefined).key, 'follow-glass');
   });
 });
 

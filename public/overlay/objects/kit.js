@@ -219,17 +219,30 @@
 
   // ── The look an alert draws, its effect and its sound ────────────────
   // While an alert's design names no look (overlay_designs.style NULL) it draws its default look:
-  // today's object for the five Twitch alerts (index.js: nothing changes until the streamer picks a
-  // look), and Racing's Victory lap for the giveaway, improved in place. objectFor() in overlay.js
-  // and previewObjectFor() in the builder read this table.
-  var DEFAULT_LOOKS = { giveaway_winner: 'giveaway-racing' };
+  // Glass's, for all six (the owner's choice, 16 October 2026; until then the five drew today's
+  // objects and the giveaway Racing's Victory lap), with that look's own settings (ownSettings below).
+  // objectFor() in overlay.js and previewObjectFor() in the builder read this table, and the server's
+  // DEFAULT_STYLES (services/alertStyles.js) is this table.
+  var DEFAULT_LOOKS = {
+    follow: 'follow-glass', subscription: 'subscriber-glass', bits: 'bits-glass',
+    donation: 'donation-glass', raid: 'raid-glass', giveaway_winner: 'giveaway-glass',
+  };
+  // A look's settings as a look comes (what picking another look starts afresh: builder-styles-core.js,
+  // db.setOverlayDesignStyle). An alert with no look stored plays its default look with these, whatever
+  // an older builder saved for today's card (an effect, a speed); its place and width stay.
+  var LOOK_SETTINGS = { style_accent: null, style_label: null, style_sound: null, style_grows: null, screen_effect: 'default', animation_speed: 1 };
+  function ownSettings(design) {
+    var out = {}, k;
+    if (design) for (k in design) if (Object.prototype.hasOwnProperty.call(design, k)) out[k] = design[k];
+    for (k in LOOK_SETTINGS) out[k] = LOOK_SETTINGS[k];
+    return out;
+  }
   var SOUNDS = {};
   var SOUND_FAMILIES = {};
 
   // The screen effect an alert plays with its look ('none', a name from overlay.js, or one of fx.js).
-  // Today's five objects with no style and the C1 have none, as before; a look the streamer picked
-  // plays the design's effect, 'default' being the look's own. The giveaway's default look plays its
-  // saved effect too: what the streamer saved for the old card carries over.
+  // Today's objects and the C1 have none, as before; a look plays the design's effect, 'default' being
+  // the look's own (an alert with no look stored is handed ownSettings(): its default look's own).
   function effectFor(look, design) {
     if (!look || !look.family) return 'none';
     var chosen = design && design.screen_effect;
@@ -374,7 +387,7 @@
     ALERTS: ALERTS, MIDDLE: MIDDLE, styles: STYLES, families: FAMILIES, sounds: SOUNDS, soundFamilies: SOUND_FAMILIES,
     esc: esc, money: money, fitStyle: fitStyle, nm: nm, samName: samName, fmt: fmt, label: label, odo: odo, typed: typed,
     hash: hash, rng: rng, code3: code3, intOf: intOf, isWide: isWide, rgbOf: rgbOf, onColour: onColour, accentVars: accentVars,
-    sizeOf: sizeOf, lookData: lookData, slotVars: slotVars, DEFAULT_LOOKS: DEFAULT_LOOKS, effectFor: effectFor, soundFor: soundFor,
+    sizeOf: sizeOf, lookData: lookData, slotVars: slotVars, DEFAULT_LOOKS: DEFAULT_LOOKS, ownSettings: ownSettings, effectFor: effectFor, soundFor: soundFor,
     registerFamily: registerFamily, fontNames: fontNames, register: register, looksOf: looksOf,
     setAudio: setAudio, registerSound: registerSound, playSound: playSound, tone: tone, noise: noise, engine: engine,
     soundFiles: FILES, registerSoundFiles: registerSoundFiles, preloadSounds: preloadSounds, setSoundBase: setSoundBase,

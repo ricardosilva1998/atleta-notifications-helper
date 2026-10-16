@@ -550,7 +550,6 @@
   "overlayBuilder.style.familiesLabel": "Families of looks",
   "overlayBuilder.style.galleryLabel": "Looks for this alert",
   "overlayBuilder.style.all": "All",
-  "overlayBuilder.style.today": "Today",
   "overlayBuilder.style.default": "Default",
   "overlayBuilder.style.mine": "Made for you",
   "overlayBuilder.style.useFamily": "Use {{family}} for all six alerts",

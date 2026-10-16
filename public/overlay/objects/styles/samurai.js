@@ -22,8 +22,8 @@
     K.register({
       key: p[1], eventType: p[0], family: 'samurai', preset: true,
       anim: object.anim, exit: object.exit, len: p[2],
-      // A streamer who picks the look gets its Samurai recording; an alert with no look picked still
-      // draws today's object (index.js) with today's sound. No screen effect, as today.
+      // Today's object (index.js) with its Samurai recording; no screen effect, as today. (An alert
+      // with no look picked draws the default look, Glass's: kit.js DEFAULT_LOOKS.)
       sound: p[3], fx: 'none', grows: false,
       controls: { colour: 'accent', label: false, speed: false },
       render: object.render,

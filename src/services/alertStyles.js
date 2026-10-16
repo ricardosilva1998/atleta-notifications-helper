@@ -27,12 +27,9 @@ const STANDALONE_STYLES = Object.freeze({
   'donation-c1-channel': Object.freeze({ eventType: 'donation' }),
 });
 
-// What an alert draws while its design names no look: today's object for the five Twitch alerts,
-// Racing's Victory lap for the giveaway (improved in place).
-const DEFAULT_STYLES = Object.freeze({
-  follow: 'follow-samurai', subscription: 'subscriber-samurai', bits: 'bits-samurai',
-  donation: 'donation-samurai', raid: 'raid-samurai', giveaway_winner: 'giveaway-racing',
-});
+// What an alert draws while its design names no look: Glass's six (kit.js DEFAULT_LOOKS, the table the
+// OBS overlay and the builder preview draw with; the owner's choice, 16 October 2026).
+const DEFAULT_STYLES = Object.freeze({ ...KIT.DEFAULT_LOOKS });
 
 function isAlert(eventType) { return KIT.ALERTS.includes(eventType); }
 function lookOf(styleId) { return typeof styleId === 'string' && Object.hasOwn(KIT.styles, styleId) ? KIT.styles[styleId] : null; }

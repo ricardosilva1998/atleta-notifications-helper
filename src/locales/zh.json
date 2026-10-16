@@ -550,7 +550,6 @@
   "overlayBuilder.style.familiesLabel": "样式系列",
   "overlayBuilder.style.galleryLabel": "此提醒的样式",
   "overlayBuilder.style.all": "全部",
-  "overlayBuilder.style.today": "当前",
   "overlayBuilder.style.default": "默认",
   "overlayBuilder.style.mine": "为你定制",
   "overlayBuilder.style.useFamily": "六种提醒都使用{{family}}",

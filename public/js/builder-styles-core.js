@@ -48,12 +48,11 @@
     return (alertStyles && alertStyles[type]) || (defaults && defaults[type]) || null;
   }
 
-  // An alert nobody has restyled since the looks came (no stored look) is shown with its default
-  // look's own settings: what an older builder saved for today's card (an effect, a speed) is not
-  // what the OBS overlay plays, so the builder does not show it either. The giveaway keeps its
-  // saved effect and speed: they carry over to its Victory lap.
+  // An alert nobody has given a look (no stored look) is shown as its default look (Glass's) comes,
+  // with that look's own settings: what an older builder saved for today's card (an effect, a speed)
+  // is not what the OBS overlay plays (kit.js ownSettings), so the builder does not show it either.
   function untouched(type, design, storedStyle) {
-    if (storedStyle || !isStyled(type) || type === 'giveaway_winner') return design;
+    if (storedStyle || !isStyled(type)) return design;
     return startLook(design);
   }
 
@@ -70,14 +69,14 @@
   }
 
   // One alert's gallery (the server's entries { id, family, mine }, in family order): a look made for
-  // this streamer first ('mine', "Made for you"), then the alert's default look ('today', or 'default'
-  // for the giveaway, whose default is not today's card), then the others.
+  // this streamer first ('mine', "Made for you"), then the alert's default look ('default', Glass's),
+  // then the others.
   function orderGallery(entries, type, defaults) {
     var def = defaults && defaults[type];
     var mine = [], first = [], rest = [];
     (entries || []).forEach(function (e) {
       if (e.mine) mine.push({ id: e.id, family: e.family, badge: 'mine' });
-      else if (e.id === def) first.push({ id: e.id, family: e.family, badge: type === 'giveaway_winner' ? 'default' : 'today' });
+      else if (e.id === def) first.push({ id: e.id, family: e.family, badge: 'default' });
       else rest.push({ id: e.id, family: e.family, badge: null });
     });
     return mine.concat(first, rest);

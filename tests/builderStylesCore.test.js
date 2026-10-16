@@ -57,17 +57,19 @@ describe('"Use <family> for all six alerts"', () => {
 describe('the look the page shows', () => {
   test('the one picked or saved, else the alert\'s default look; nothing for the other tabs', () => {
     assert.equal(core.shownStyle('follow', { follow: 'follow-racing' }, DEFAULT_STYLES), 'follow-racing');
-    assert.equal(core.shownStyle('follow', {}, DEFAULT_STYLES), 'follow-samurai');
-    assert.equal(core.shownStyle('giveaway_winner', {}, DEFAULT_STYLES), 'giveaway-racing');
+    assert.equal(core.shownStyle('follow', {}, DEFAULT_STYLES), 'follow-glass');
+    assert.equal(core.shownStyle('giveaway_winner', {}, DEFAULT_STYLES), 'giveaway-glass');
     assert.equal(core.shownStyle('yt_member', {}, DEFAULT_STYLES), null);
   });
 
-  test('an alert nobody has restyled shows its look\'s own settings, not what an older builder saved for the card', () => {
+  test('an alert nobody has given a look shows its default look\'s own settings, not what an older builder saved for the card', () => {
     const old = { screen_effect: 'confetti', animation_speed: 1.8, card_width: 600 };
-    assert.deepEqual(core.untouched('follow', old, null), { ...old, style_accent: null, style_label: null, style_sound: null, style_grows: null, screen_effect: 'default', animation_speed: 1 });
+    const own = { ...old, style_accent: null, style_label: null, style_sound: null, style_grows: null, screen_effect: 'default', animation_speed: 1 };
+    assert.deepEqual(core.untouched('follow', old, null), own);
+    assert.deepEqual(core.untouched('giveaway_winner', old, null), own, 'the giveaway too: its default is Glass\'s Spotlight');
     assert.deepEqual(core.untouched('follow', old, 'follow-samurai'), old, 'a look was picked: what is saved is its settings');
-    assert.deepEqual(core.untouched('giveaway_winner', old, null), old, 'the giveaway\'s effect and speed carry over to its Victory lap');
     assert.deepEqual(core.untouched('yt_member', old, null), old);
+    assert.deepEqual(core.untouched('follow', old, null), K.ownSettings(old), 'what the OBS overlay plays (kit.js ownSettings)');
   });
 });
 
@@ -96,26 +98,28 @@ describe('the gallery', () => {
     { id: 'donation-c1', family: null, mine: true },
     { id: 'donation-samurai', family: 'samurai', mine: false },
     { id: 'donation-racing', family: 'racing', mine: false },
+    { id: 'donation-glass', family: 'glass', mine: false },
   ];
 
-  test('a look made for the streamer first, then the alert\'s default look, then the rest in family order', () => {
+  test('a look made for the streamer first, then the alert\'s default look (Glass\'s), then the rest in family order', () => {
     assert.deepEqual(core.orderGallery(entries, 'donation', DEFAULT_STYLES), [
       { id: 'donation-c1', family: null, badge: 'mine' },
-      { id: 'donation-samurai', family: 'samurai', badge: 'today' },
+      { id: 'donation-glass', family: 'glass', badge: 'default' },
+      { id: 'donation-samurai', family: 'samurai', badge: null },
       { id: 'donation-racing', family: 'racing', badge: null },
     ]);
   });
 
-  test('the giveaway\'s default look is marked "default": it is not today\'s card', () => {
-    const giveaway = [{ id: 'giveaway-samurai', family: 'samurai', mine: false }, { id: 'giveaway-racing', family: 'racing', mine: false }];
+  test('every alert\'s default look is marked "default", the giveaway\'s too', () => {
+    const giveaway = [{ id: 'giveaway-samurai', family: 'samurai', mine: false }, { id: 'giveaway-racing', family: 'racing', mine: false }, { id: 'giveaway-glass', family: 'glass', mine: false }];
     assert.deepEqual(core.orderGallery(giveaway, 'giveaway_winner', DEFAULT_STYLES).map((e) => [e.id, e.badge]),
-      [['giveaway-racing', 'default'], ['giveaway-samurai', null]]);
+      [['giveaway-glass', 'default'], ['giveaway-samurai', null], ['giveaway-racing', null]]);
   });
 
   test('a family filter keeps that family\'s looks; "all" keeps every look', () => {
     const ordered = core.orderGallery(entries, 'donation', DEFAULT_STYLES);
     assert.deepEqual(core.filterGallery(ordered, 'racing').map((e) => e.id), ['donation-racing']);
-    assert.equal(core.filterGallery(ordered, 'all').length, 3);
+    assert.equal(core.filterGallery(ordered, 'all').length, 4);
   });
 });
 

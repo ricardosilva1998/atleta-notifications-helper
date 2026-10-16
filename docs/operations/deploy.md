@@ -417,7 +417,8 @@ What changes when it deploys (docs/features/look-sounds.md):
   image, under `/overlay/objects/sounds/`, served with a one-year cache (their names carry their content hash).
 - Nothing stored changes: no column, no migration. A saved `style_sound` keeps working; the new `<key>.2` values only
   exist once a streamer picks a second version.
-- An alert with no look picked keeps today's object and today's engine sound. A streamer who picked one of the five
+- An alert with no look picked keeps today's object and today's engine sound (until the next release: "Glass, the
+  default look" below). A streamer who picked one of the five
   Samurai presets now hears its Samurai recording instead of today's sound; every other look's sound is now its
   recording.
 - Six sounds have new names in all seven languages (rcNumber, rcNitro, upshift, pb, samuraiTaiko, samuraiTaiko3),
@@ -431,7 +432,38 @@ After the deploy (while no streamer is live):
    `/overlay/objects/sounds/racing/` plus the `rcFlyby` file named in the manifest.
 3. In the Overlay Builder, pick Racing's Fly-by for the follow: ▶ plays the V10 fly-by; pick "Fly-by whoosh
    (version 2)", save, and press Test: OBS plays the second version.
-4. An alert with no look still plays the engine sound in OBS.
+4. An alert with no look still plays the engine sound in OBS (true until "Glass, the default look" below).
 
 Rolling back is safe: older code does not know the `<key>.2` values and plays the look's own (synthesized) sound
 for them, and the recordings are simply not fetched.
+
+## Glass, the default look
+
+What changes when it deploys (the owner's decision, 16 October 2026):
+- An alert with no look stored (`overlay_designs.style` NULL, or no row at all) draws Glass's look instead of today's
+  object: Pill (follow), Ring (sub), Counter (bits), Receipt (donation), Wave (raid) and Spotlight (the giveaway, which
+  drew Racing's Victory lap), with Glass's recordings (`glFollow` … `glGiveaway`). `kit.js` `DEFAULT_LOOKS` names them
+  and the server's `DEFAULT_STYLES` copies it.
+- It plays as the look comes: its own colour, speed 1, its own screen effect (Spotlight's confetti; the other five have
+  none) and its own sound, whatever an older builder saved for today's card (`kit.ownSettings`). The place, the width
+  and the effect's amount, size and direction stay, as when a streamer picks a look.
+- A stored look stays, the Samurai presets (today's objects) included: the builder saves the look it shows, so an
+  alert saved in the builder since release A keeps the look it was saved with. On 16 October that meant:
+  ricardobsilva98's sub, bits, donation, raid and giveaway, and andre_vilela_'s giveaway, switch to Glass; every other
+  stored look (Samurai presets, the C1 with the channel's name) stays. A streamer moves the rest with "Use Glass for
+  all six alerts" in the Overlay Builder.
+- The builder marks Glass's tile "Default" in every alert's gallery and shows it first after a look made for the
+  streamer; the "Today" badge and its text in the seven languages are gone. The overlay asks Google Fonts for Glass's
+  fonts (DM Sans, Manrope) when it connects; a first alert in a look waits at most 1.5 s for them, as before.
+- Nothing stored changes: no column, no migration.
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200 and `/overlay/objects/kit.js` names `follow-glass` in `DEFAULT_LOOKS` (it is served
+   `no-store`, so OBS gets it on its next load).
+2. In the Overlay Builder, on an alert with no look, Glass's tile is checked and marked "Default", the preview draws it
+   and ▶ plays its recording.
+3. Press Test on such an alert with OBS open: it draws the Glass look and plays its recording.
+
+Rolling back is safe: nothing stored changed, so older code draws today's objects and the Victory lap again for the
+alerts with no look. A builder save made after this release stores Glass's id, which older code draws too (Glass came
+with release B).

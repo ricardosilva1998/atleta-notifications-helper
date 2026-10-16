@@ -46,8 +46,9 @@ functions are still registered and now play only when a recording cannot load.
   there).
 - The five Samurai presets (`follow-samurai` … `raid-samurai`) play their Samurai recording
   (`samuraiBlade`, `samuraiTaiko`, `samuraiTally`, `samuraiKoto`, `samuraiTaiko3`) when a streamer picks
-  them. An alert with no look picked still draws today's object (`objects/index.js`) and plays today's
-  engine sound: nothing changes for a streamer who never opened the Style section.
+  them. An alert with no look stored draws the default look, Glass's (the owner's decision, 16 October
+  2026), and plays its recording (`glFollow`, `glSub`, `glBits`, `glDonation`, `glRaid`, `glGiveaway`).
+  Today's engine sound stays in every list as "Today's sound".
 
 ## Where they came from
 

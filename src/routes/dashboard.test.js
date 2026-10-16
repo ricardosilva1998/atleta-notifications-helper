@@ -2868,7 +2868,8 @@ describe('the overlay builder page and a slow Twitch', () => {
     const { locals } = (await builder()).json();
     const data = JSON.parse(locals.styleData);
     assert.deepEqual(Object.keys(data.gallery).sort(), ['bits', 'donation', 'follow', 'giveaway_winner', 'raid', 'subscription']);
-    assert.equal(data.defaults.giveaway_winner, 'giveaway-racing');
+    assert.equal(data.defaults.giveaway_winner, 'giveaway-glass');
+    assert.equal(data.defaults.follow, 'follow-glass');
     assert.ok(!data.gallery.donation.some((e) => e.id === 'donation-c1'), 'the C1 is not this streamer\'s');
     assert.equal(data.looks['follow-racing'].title, t('en', 'overlayBuilder.looks.follow-racing.title'));
     assert.deepEqual(data.families.slice(0, 2).map((f) => [f.key, f.name]), [['samurai', t('en', 'overlayBuilder.families.samurai.name')], ['racing', t('en', 'overlayBuilder.families.racing.name')]]);

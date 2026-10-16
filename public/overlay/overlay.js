@@ -37,8 +37,8 @@ function alertSeconds(type) {
 
 // The look an alert is drawn in: the style its saved design names (overlay_designs.style), when
 // this page knows that style and it draws this alert type (andre_vilela_'s donation is
-// 'donation-c1'); otherwise the alert's default look (kit.js DEFAULT_LOOKS: the giveaway's is
-// Racing's Victory lap); otherwise the alert's own object; null for the legacy cards.
+// 'donation-c1'); otherwise the alert's default look (kit.js DEFAULT_LOOKS: Glass's); otherwise the
+// alert's own object (today's, when the looks did not load); null for the legacy cards.
 // The builder preview picks with the same rule (previewObjectFor in overlay-builder.ejs).
 function objectFor(type) {
   const design = overlayDesigns[type];
@@ -53,12 +53,22 @@ function objectFor(type) {
   return own && own.key === type ? own : null;
 }
 
+// The design an alert's look plays with. An alert nobody has given a look (no stored style) plays its
+// default look as that look comes (kit.js ownSettings): what an older builder saved for today's card
+// (an effect, a speed) is not part of it, while its place and width stay.
+function designOf(type) {
+  const design = overlayDesigns[type];
+  const kit = window.ATLETA_KIT;
+  if (!kit || typeof kit.ownSettings !== 'function' || kit.ALERTS.indexOf(type) < 0 || (design && design.style)) return design;
+  return kit.ownSettings(design);
+}
+
 // What a look is handed: the event's data, and for a look of the alert styles its main text and
 // whether it grows with the amount (kit.js lookData). Today's objects and the C1 get the data as before.
 function lookDataFor(look, event) {
   const data = event.data || {};
   const kit = window.ATLETA_KIT;
-  return kit && look.family ? kit.lookData(look, data, overlayDesigns[event.type]) : data;
+  return kit && look.family ? kit.lookData(look, data, designOf(event.type)) : data;
 }
 
 // The alert's look and its markup. A look that throws while drawing is replaced by the alert's own
@@ -132,7 +142,7 @@ function alertTimer(fn, ms) {
 function loadDesignSounds() {
   const kit = window.ATLETA_KIT;
   if (!kit || typeof kit.preloadSounds !== 'function') return;
-  kit.preloadSounds(kit.ALERTS.map((type) => kit.soundFor(objectFor(type), overlayDesigns[type])));
+  kit.preloadSounds(kit.ALERTS.map((type) => kit.soundFor(objectFor(type), designOf(type))));
 }
 
 // Load Google Fonts used by custom designs
@@ -561,7 +571,7 @@ function showNotification(event) {
 
   const drawn = drawAlert(event);
   const objectDef = drawn.look;
-  const design = overlayDesigns[event.type];
+  const design = designOf(event.type);
 
   // Play notification sound — the streamer's custom sound when they set one, otherwise (or if it
   // fails to play) the look's sound (kit.js soundFor: the design's, else the look's own; today's
@@ -622,11 +632,11 @@ function showNotification(event) {
   if (!objectDef) applyCustomDesign(card, event.type);
 
   // Full-screen effects: a card plays its design's; a look the one its design names or its own
-  // (kit.js effectFor: none for today's objects with no look picked, and for the C1)
+  // (kit.js effectFor: none for today's objects and the C1)
   if (!objectDef) spawnEffects(event.type);
   else {
     const effect = kit ? kit.effectFor(objectDef, design) : 'none';
-    if (effect !== 'none') spawnEffects(event.type, effect);
+    if (effect !== 'none') spawnEffects(event.type, effect, design);
   }
 
   // Dismiss after duration
@@ -824,10 +834,12 @@ function buildBannerContent(event) {
 
 // ─── Full-screen effects ───────────────────────────────────────
 // `chosen`: the effect a look plays (showNotification); a card plays its design's, or its alert's default.
-function spawnEffects(type, chosen) {
+// `lookDesign`: the design the look plays with (designOf: an alert with no look stored plays at its
+// look's own speed, as the builder preview does); a card reads its saved design.
+function spawnEffects(type, chosen, lookDesign) {
   document.querySelectorAll('.screen-effect').forEach(e => e.remove());
 
-  const design = overlayDesigns[type] || {};
+  const design = lookDesign || overlayDesigns[type] || {};
   const speed = design.animation_speed || 1.0;
   const amount = design.effect_amount || 1.0;
   const size = design.effect_size || 1.0;
