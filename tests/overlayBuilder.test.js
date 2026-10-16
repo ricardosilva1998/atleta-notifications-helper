@@ -178,11 +178,10 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     assert.ok(!/ATLETA_OBJECTS\[currentType\]/.test(builder), 'no lookup skips the style');
   });
 
-  test('a save sends the look the page shows next to the design; Discard and Reset put back the saved look', () => {
-    assert.match(functionSource('saveCurrentDesign'), /STYLE_CORE\.savePayload\(currentType, design, style\)/);
-    assert.match(functionSource('saveCurrentDesign'), /SAVED_STYLES\[currentType\] = ALERT_STYLES\[currentType\] = style/);
-    for (const name of ['discardChanges', 'resetCurrentDesign']) assert.match(functionSource(name), /restoreSavedLook\(currentType\)/, name);
-    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')), 'the look travels next to the design, not in it');
+  // The save itself is the edit window's Done (tests/builderCards.test.js: "a save sends the look the window
+  // shows next to the design; Cancel and Reset put back the saved look").
+  test('the look travels next to the design, not in it', () => {
+    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')));
   });
 
   test("the page tells the registry the streamer's Twitch name for the C1's rear window, before any preview is drawn", () => {

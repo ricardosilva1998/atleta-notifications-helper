@@ -193,6 +193,67 @@
     @keyframes ecardSponsor { 0% { opacity: 0; transform: scale(.96); } 12%, 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
     @media (prefers-reduced-motion: reduce) { .ecard-sponsor.playing img { animation: none; opacity: 1; } }
 
+    /* ── The edit window (public/js/builder-cards.js): over the cards, under the page's pop-ups (z-index 1000) ── */
+    .ed-back { position: fixed; inset: 0; z-index: 500; background: rgba(4,4,10,.72); backdrop-filter: blur(4px); }
+    .ed {
+      position: fixed; inset: 3vh 3vw; z-index: 501; display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg-surface); border: 1px solid rgba(255,255,255,.12); border-radius: 20px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.6);
+    }
+    .ed-back[hidden], .ed[hidden], .ed-side[hidden], .ed-pane[hidden] { display: none; }
+    .ed-head { display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid var(--border); }
+    .ed-head h2 { font-size: 19px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ed-close {
+      margin-left: auto; width: 34px; height: 34px; flex: none; border-radius: 10px; cursor: pointer; font-size: 16px;
+      border: 1px solid rgba(255,255,255,.12); background: var(--bg-elevated); color: var(--text-primary);
+    }
+    .ed-close:hover { border-color: rgba(145,70,255,.4); }
+    .ed-tabs { display: flex; gap: 4px; padding: 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; flex: none; }
+    .ed-tab {
+      background: none; border: 0; border-bottom: 2px solid transparent; padding: 14px 16px 12px; cursor: pointer;
+      font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--text-secondary);
+      display: flex; gap: 8px; align-items: baseline; white-space: nowrap;
+    }
+    .ed-tab:hover { color: var(--text-primary); }
+    .ed-tab[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); }
+    .ed-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .ed-tab .tab-val { font-weight: 500; font-size: 12px; color: var(--text-muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .ed-tab .tab-val:empty { display: none; }
+    /* The tab's controls; on Location and Design a narrow column of them beside the wide stage */
+    .ed-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+    .ed.with-stage .ed-body { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+    .ed-main { overflow-y: auto; padding: 18px 22px 28px; min-width: 0; }
+    .ed.with-stage .ed-main { border-right: 1px solid var(--border); }
+    .ed-side { overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    /* The stream preview: a 1920x1080 screen scaled to the column's width */
+    .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-md); overflow: hidden; border: 1px solid rgba(255,255,255,.12); flex: none; }
+    .stage-inner { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    .stage-inner .stream-bg {
+      position: absolute; inset: 0; background-color: #10101c;
+      background-image:
+        radial-gradient(ellipse at 20% 80%, rgba(80,40,140,.55), transparent 55%),
+        radial-gradient(ellipse at 85% 20%, rgba(20,90,120,.45), transparent 50%),
+        linear-gradient(160deg, #10101c, #1b1b33 45%, #0d0d18);
+    }
+    .stage .fx-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+    .stage .alert-pos { pointer-events: none; --fw: 1920px; }
+    .ed-foot { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); flex: none; }
+    .ed-msg { flex: 1; min-width: 0; font-size: 13px; color: var(--success); }
+    .ed-msg.error { color: var(--danger); }
+    .ed-foot .btn:disabled { opacity: .6; cursor: progress; }
+    /* Full screen on a phone or a narrow window; the stage goes above the controls */
+    @media (max-width: 900px) {
+      .ed { inset: 0; border-radius: 0; border: 0; }
+      .ed.with-stage .ed-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+      .ed-side { order: -1; border-bottom: 1px solid var(--border); overflow: visible; }
+      .ed.with-stage .ed-main { border-right: 0; }
+      .ed-head, .ed-foot { padding-left: 16px; padding-right: 16px; }
+      .ed-tabs { padding: 0 8px; }
+      .ed-main, .ed-side { padding-left: 16px; padding-right: 16px; }
+      .ed-foot { flex-wrap: wrap; }
+      .ed-msg { flex-basis: 100%; order: -1; }
+    }
+
     /* ── Layout ── */
     .builder-layout[hidden] { display: none; }
     .builder-layout {
@@ -975,6 +1036,43 @@
   </div>
 </main>
 
+<!-- The edit window of one card (public/js/builder-cards.js): its tabs (each with what is chosen), the panes,
+     the stream preview (Location and Design), and Reset, Cancel, Done (Done saves the alert) -->
+<div class="ed-back" id="editor-back" hidden></div>
+<div class="ed" id="editor" role="dialog" aria-modal="true" aria-labelledby="editor-title" hidden>
+  <div class="ed-head">
+    <span class="ecard-icon" id="editor-icon" aria-hidden="true"></span>
+    <h2 id="editor-title"></h2>
+    <button type="button" class="ed-close" id="editor-close" aria-label="<%= t('overlayBuilder.window.close') %>" title="<%= t('overlayBuilder.window.close') %>">✕</button>
+  </div>
+  <div class="ed-tabs" id="editor-tabs" role="tablist"></div>
+  <div class="ed-body">
+    <div class="ed-main">
+      <section class="ed-pane" id="pane-animation" role="tabpanel" aria-labelledby="tab-animation" hidden></section>
+      <section class="ed-pane" id="pane-customize" role="tabpanel" aria-labelledby="tab-customize" hidden></section>
+      <section class="ed-pane" id="pane-sound" role="tabpanel" aria-labelledby="tab-sound" hidden></section>
+      <section class="ed-pane" id="pane-location" role="tabpanel" aria-labelledby="tab-location" hidden></section>
+      <section class="ed-pane" id="pane-images" role="tabpanel" aria-labelledby="tab-images" hidden></section>
+      <section class="ed-pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design" hidden></section>
+    </div>
+    <div class="ed-side" id="editor-side" hidden>
+      <div class="stage" id="stage">
+        <div class="stage-inner" id="stage-inner">
+          <div class="stream-bg" id="stage-bg"></div>
+          <div class="fx-layer" id="fx-layer"></div>
+          <div class="alert-pos" id="stage-slot"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ed-foot">
+    <button type="button" class="btn btn-secondary" id="editor-reset"><%= t('overlayBuilder.reset') %></button>
+    <span class="ed-msg" id="editor-msg" aria-live="polite"></span>
+    <button type="button" class="btn btn-secondary" id="editor-cancel"><%= t('overlayBuilder.window.cancel') %></button>
+    <button type="button" class="btn btn-primary" id="editor-done"><%= t('overlayBuilder.window.done') %></button>
+  </div>
+</div>
+
 <!-- Today's editor, hidden: its parts move into the edit window (Overlay Builder cards plan, Tasks 4, 5 and 8) -->
 <div class="builder-layout" hidden>
 
@@ -1323,8 +1421,6 @@ const I18N = <%- JSON.stringify({
     giveaway_winner: t('overlayBuilder.event.giveawayWinner'),
   },
   copy: t('overlayBuilder.copy'), copied: t('overlayBuilder.copied'), upload: t('overlayBuilder.sponsors.upload'),
-  saved: t('overlayBuilder.saved'), saveFailed: t('overlayBuilder.saveFailed'), saveFailedWith: t('overlayBuilder.saveFailedWith', { error: '{{error}}' }),
-  resetConfirm: t('overlayBuilder.resetConfirm', { name: '{{name}}' }), resetDone: t('overlayBuilder.resetDone'),
   iconNone: t('overlayBuilder.icons.noneSelected'), iconCustom: t('overlayBuilder.icons.custom', { icon: '{{icon}}' }),
   iconDefault: t('overlayBuilder.icons.defaultIcon', { icon: '{{icon}}' }), iconDefaultNone: t('overlayBuilder.icons.defaultNone'),
   noSponsors: t('overlayBuilder.sponsors.none'), durationTitle: t('overlayBuilder.sponsors.displayDurationTitle'), deleteTitle: t('overlayBuilder.sponsors.deleteTitle'),
@@ -1372,9 +1468,9 @@ const SAVED_DESIGNS = {};
 const SERVER_DESIGNS = <%- designs %>;
 SERVER_DESIGNS.forEach(d => { SAVED_DESIGNS[d.event_type] = d; });
 // Each alert's look (overlay_designs.style; andre_vilela_'s donation is 'donation-c1'), as the page
-// shows it: the Style section changes it, and a save sends it next to the design. Kept apart from
-// workingDesigns: Reset and Discard rebuild those from the defaults and put back the saved look,
-// which the server keeps through both.
+// shows it; the edit window's Done saves its look next to the design (public/js/builder-cards.js).
+// Kept apart from the designs: Cancel and Reset put back the saved look, which the server keeps
+// through both.
 const ALERT_STYLES = {};
 SERVER_DESIGNS.forEach(d => { if (d.style) ALERT_STYLES[d.event_type] = d.style; });
 // The looks as saved; ALERT_STYLES differs from them until the alert is saved
@@ -1670,8 +1766,8 @@ function updatePreview() {
     return;
   }
   renderedObjectType = null;
-  // Fix round 1, Critical 1: don't clobber the Sponsor/Timed tab. switchTab()
-  // calls updateSponsorPreview() BEFORE updatePreview() when opening 'timed',
+  // Fix round 1, Critical 1: don't clobber the Sponsor/Timed tab. Opening the
+  // timed card calls updateSponsorPreview() BEFORE updatePreview(),
   // and that function sets #preview-card to display:none to show the sponsor
   // image in its place whenever rotation is enabled. This unconditional
   // restore used to un-hide it again right after, stacking the legacy
@@ -2161,56 +2257,6 @@ function playPreviewAnimation() {
   }, 50);
 }
 
-// ─── Tab switching ────────────────────────────────────────────────────────────
-function switchTab(type) {
-  // Save current working values before switching
-  workingDesigns[currentType] = getControlValues();
-
-  // Stop sponsor preview if leaving timed tab
-  if (currentType === 'timed' && type !== 'timed') {
-    stopSponsorPreview();
-  }
-
-  currentType = type;
-
-  // Update tab UI
-  document.querySelectorAll('.event-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.type === type);
-  });
-
-  // Show/hide sponsor section
-  const sponsorSection = document.getElementById('sponsor-section');
-  if (type === 'timed') {
-    sponsorSection.classList.add('visible');
-    updateSponsorPreview();
-  } else {
-    sponsorSection.classList.remove('visible');
-  }
-
-  // Update badges
-  const name = EVENT_NAMES[type] || type;
-  const topBadge = document.getElementById('save-event-badge-top');
-  if (topBadge) topBadge.textContent = name;
-
-  // Update preview username text in both layouts
-  const uname = PREVIEW_USERNAMES[type] || 'StreamerFan99';
-  document.getElementById('preview-username').textContent = uname;
-  document.getElementById('preview-username-flat').textContent = uname;
-
-  // Load controls for this type
-  setControlValues(workingDesigns[type]);
-  updateSideIconGrid(workingDesigns[type]);
-  if (typeof updateAnimSectionPreview === 'function') updateAnimSectionPreview(workingDesigns[type]);
-  updatePreview();
-  renderStyleSection();
-
-  // Update URL and sounds link to preserve tab context
-  const url = new URL(window.location);
-  url.searchParams.set('tab', type);
-  window.history.replaceState({}, '', url);
-  document.getElementById('sounds-link').href = '/dashboard/overlay?tab=' + type;
-}
-
 // ─── Position grid ────────────────────────────────────────────────────────────
 document.getElementById('position-grid').addEventListener('click', e => {
   const cell = e.target.closest('.pos-cell');
@@ -2268,12 +2314,6 @@ let soundTheme = null;
 // The look the page shows for an alert: the one picked or saved, else the alert's default look.
 function shownLook(type) {
   return STYLE_CORE.shownStyle(type, ALERT_STYLES, STYLE_DATA.defaults);
-}
-
-// The look as saved: Discard and Reset put it back (the server keeps the alert's look through both).
-function restoreSavedLook(type) {
-  if (SAVED_STYLES[type]) ALERT_STYLES[type] = SAVED_STYLES[type];
-  else delete ALERT_STYLES[type];
 }
 
 // What a look draws with this design: its data with its main text and "grows with the amount" (kit.js
@@ -2603,71 +2643,6 @@ async function testLook() {
   }
 }
 
-// ─── Save ────────────────────────────────────────────────────────────────────
-async function saveCurrentDesign() {
-  const design = getControlValues();
-  workingDesigns[currentType] = design;
-  const style = shownLook(currentType);
-
-  try {
-    const resp = await fetch('/dashboard/overlay-builder/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(STYLE_CORE.savePayload(currentType, design, style)),
-    });
-    const data = await resp.json();
-    if (data.ok) {
-      SAVED_DESIGNS[currentType] = Object.assign({}, design);
-      // The page shows the default look as its id, and the save stores that id
-      if (STYLE_CORE.isStyled(currentType)) SAVED_STYLES[currentType] = ALERT_STYLES[currentType] = style;
-      const status = document.getElementById('save-status');
-      status.textContent = I18N.saved;
-      status.classList.add('visible');
-      setTimeout(() => status.classList.remove('visible'), 2000);
-    } else {
-      alert(data.error || I18N.saveFailed);
-    }
-  } catch(e) {
-    alert(fill(I18N.saveFailedWith, { error: e.message }));
-  }
-}
-
-// ─── Discard ──────────────────────────────────────────────────────────────────
-function discardChanges() {
-  restoreSavedLook(currentType);
-  const saved = STYLE_CORE.untouched(currentType, Object.assign({}, EVENT_DEFAULTS[currentType], SAVED_DESIGNS[currentType] || {}), SAVED_STYLES[currentType]);
-  workingDesigns[currentType] = saved;
-  setControlValues(saved);
-  renderedObjectType = null;
-  updatePreview();
-  renderStyleSection();
-}
-
-// ─── Reset to default ─────────────────────────────────────────────────────────
-async function resetCurrentDesign() {
-  if (!confirm(fill(I18N.resetConfirm, { name: EVENT_NAMES[currentType] }))) return;
-  try {
-    await fetch('/dashboard/overlay-builder/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType: currentType }),
-    });
-  } catch(e) {}
-
-  delete SAVED_DESIGNS[currentType];
-  restoreSavedLook(currentType);
-  workingDesigns[currentType] = Object.assign({}, EVENT_DEFAULTS[currentType]);
-  setControlValues(workingDesigns[currentType]);
-  renderedObjectType = null;
-  updatePreview();
-  renderStyleSection();
-
-  const status = document.getElementById('save-status');
-  status.textContent = I18N.resetDone;
-  status.classList.add('visible');
-  setTimeout(() => status.classList.remove('visible'), 2000);
-}
-
 // ─── Theme presets ────────────────────────────────────────────────────────────
 document.querySelectorAll('.theme-preset').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2982,12 +2957,6 @@ initStyleControls();
 renderStyleSection();
 renderSponsorList();
 document.getElementById('sp-rotation-toggle').checked = sponsorRotationEnabled;
-
-// Deep-link: ?tab=timed restores active tab
-const urlTab = new URLSearchParams(window.location.search).get('tab');
-if (urlTab && workingDesigns[urlTab]) {
-  switchTab(urlTab);
-}
 
 // Re-position card on window resize
 window.addEventListener('resize', () => {

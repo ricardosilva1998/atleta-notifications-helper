@@ -3,13 +3,15 @@
 /**
  * The Overlay Builder's alert cards (docs/superpowers/specs/2026-10-16-overlay-builder-cards-design.md):
  * one card per alert, each looping the look it is set to on a faux stream, with its sound and its place,
- * Test in OBS and Edit alert. The page-free rules are window.ATLETA_BUILDER_STYLES
+ * Test in OBS and Edit alert, and the edit window Edit alert opens (Done saves the alert). The page-free
+ * rules are window.ATLETA_BUILDER_STYLES
  * (public/js/builder-styles-core.js); the looks are drawn with the files the OBS overlay uses
  * (objects/kit.js and the joined family files), picked with the view's previewObjectFor().
  *
  * It reads what the view's inline script defines (src/views/overlay-builder.ejs): previewObjectFor,
- * ALERT_STYLES, SERVER_DESIGNS, STYLE_DATA, EVENT_DEFAULTS, PREVIEW_DATA, I18N, sponsorImages,
- * sponsorRotationEnabled, STREAMER_ID, and window.BUILDER / window.BUILDER_TEXTS, so it is loaded after
+ * ALERT_STYLES, SAVED_STYLES, SERVER_DESIGNS, SAVED_DESIGNS, STYLE_DATA, EVENT_DEFAULTS, PREVIEW_DATA, I18N,
+ * sponsorImages, sponsorRotationEnabled, STREAMER_ID, currentType (set for the legacy controls), and
+ * window.BUILDER / window.BUILDER_TEXTS, so it is loaded after
  * that script. Dual-exported: a browser global (window.ATLETA_BUILDER_CARDS) for <script src>, CommonJS
  * for tests/builderCards.test.js (which runs it under node:vm).
  */
@@ -67,7 +69,7 @@
     try {
       var got = this.get() || {};
       look = got.look;
-      if (!look) return;   // nothing to play (a card without a look): no loop
+      if (!look) { this.running = false; return; }   // nothing to play (a card without a look): no loop, and a later start() tries again
       var design = got.design || {};
       timings = C.loopTimings(look, C.speedOf(look, design));
       played = this.play(look, design, got.sample || {});
@@ -201,13 +203,17 @@
     }
     return key;
   }
-  // Where the alert sits: a 3x3 dot grid and "Top centre" / "Free position".
+  // Where the alert sits, in words: "Top centre" or "Free position".
+  function placeLabel(design) {
+    var place = core().placeSummary(design);
+    var parts = place.position.split('-');
+    return place.free ? text('cards.free') : text('place.' + parts[0]) + ' ' + text('place.' + parts[1]);
+  }
+  // Where the alert sits: a 3x3 dot grid and its place in words.
   function placeChip(design) {
     var place = core().placeSummary(design);
     var dots = POSITIONS.map(function (_, i) { return '<i class="' + (place.free || i === place.cell ? 'on' : '') + '"></i>'; }).join('');
-    var parts = place.position.split('-');
-    var label = place.free ? text('cards.free') : text('place.' + parts[0]) + ' ' + text('place.' + parts[1]);
-    return '<span class="chip"><span class="ecard-dots" aria-hidden="true">' + dots + '</span>' + esc(label) + '</span>';
+    return '<span class="chip"><span class="ecard-dots" aria-hidden="true">' + dots + '</span>' + esc(placeLabel(design)) + '</span>';
   }
 
   // ── Sound (the page's own AudioContext, made on the first click, as browsers require) ──
@@ -226,32 +232,54 @@
   }
 
   // ── The cards ──
-  // Loops run only while their card is on screen (one IntersectionObserver); the alert's width follows
-  // the preview's (one ResizeObserver per card).
+  // Loops run only while their card is on screen (one IntersectionObserver on the cards' scrolling page)
+  // and the edit window is closed; the alert's width follows the preview's (one ResizeObserver per card).
   var loopers = new Map();
   var resizers = [];
   var observer = null;
+  var onScreenCards = new Set();
+  var paused = false;
   function onScreen(entries) {
     entries.forEach(function (entry) {
       var lp = loopers.get(entry.target);
       if (!lp) return;
-      if (entry.isIntersecting) lp.start(); else lp.stop();
+      if (entry.isIntersecting) {
+        onScreenCards.add(entry.target);
+        if (!paused) lp.start();
+      } else {
+        onScreenCards.delete(entry.target);
+        lp.stop();
+      }
     });
   }
   function watch(el, lp) {
     loopers.set(el, lp);
-    if (!observer && root.IntersectionObserver) observer = new root.IntersectionObserver(onScreen, { rootMargin: '80px' });
-    if (observer) observer.observe(el); else lp.start();
+    if (!observer && root.IntersectionObserver) {
+      var page = root.document && root.document.querySelector ? root.document.querySelector('.cards-page') : null;
+      observer = new root.IntersectionObserver(onScreen, { root: page, rootMargin: '80px' });
+    }
+    if (observer) observer.observe(el);
+    else {
+      onScreenCards.add(el);
+      if (!paused) lp.start();
+    }
   }
   function teardown() {
     loopers.forEach(function (lp, el) { lp.stop(); if (observer) observer.unobserve(el); });
     loopers.clear();
+    onScreenCards.clear();
     resizers.forEach(function (ro) { ro.disconnect(); });
     resizers = [];
   }
-
-  // The edit window comes with the next task; until then the cards open nothing.
-  function openEditor(type) { /* Task 4 */ }
+  // The edit window stops the cards behind it, and starts the ones on screen again when it closes.
+  function pauseCards() {
+    paused = true;
+    loopers.forEach(function (lp) { lp.stop(); });
+  }
+  function resumeCards() {
+    paused = false;
+    loopers.forEach(function (lp, el) { if (onScreenCards.has(el)) lp.start(); });
+  }
 
   function previewBackground(preview) {
     var thumb = builder().streamThumbnail;
@@ -396,13 +424,381 @@
     });
   }
 
+  // ── The edit window ──
+  // One alert at a time: CARDS.editing is the card, CARDS.draft its working design and CARDS.draftStyle
+  // the look it shows (null for the cards without looks). Nothing is stored until Done (saveDraft); Reset
+  // acts at once. The panes are filled by the code each tab belongs to, through CARDS.panes[name]
+  // ({ show(), hide() }, both optional); the stage (#stage) shows on Location and Design only.
+  var TAB_ICONS = { animation: '✨', customize: '🎨', sound: '🔊', location: '📍', images: '🖼️', design: '🖌️' };
+  var PANES = ['animation', 'customize', 'sound', 'location', 'images', 'design'];
+  var opened = null;        // { design, style } as the window opened (or was last stored): isDirty() compares
+  var tabValues = {};       // the value span of each tab in the bar
+  var opener = null;        // what had the focus, given back on close
+  var saving = false;
+
+  function el(id) { return root.document ? root.document.getElementById(id) : null; }
+  function copy(design) { return Object.assign({}, design || {}); }
+  // The design an alert's window edits: its working design without the stored row's own columns (the
+  // look travels next to the design, in the save's `style`).
+  var ROW_COLUMNS = ['id', 'streamer_id', 'event_type', 'style', 'design_version', 'created_at'];
+  function draftOf(type) {
+    var design = copy(designOf(type));
+    ROW_COLUMNS.forEach(function (column) { delete design[column]; });
+    return design;
+  }
+  function pageGlobal(name) {
+    if (name === 'SAVED_STYLES') return typeof SAVED_STYLES !== 'undefined' ? SAVED_STYLES : null;
+    if (name === 'ALERT_STYLES') return typeof ALERT_STYLES !== 'undefined' ? ALERT_STYLES : null;
+    if (name === 'SAVED_DESIGNS') return typeof SAVED_DESIGNS !== 'undefined' ? SAVED_DESIGNS : null;
+    if (name === 'SERVER_DESIGNS') return typeof SERVER_DESIGNS !== 'undefined' && Array.isArray(SERVER_DESIGNS) ? SERVER_DESIGNS : null;
+    return null;
+  }
+
+  // The look the window shows when it opens: the stored one, else the alert's default look.
+  function shownStyleOf(type) {
+    return core().shownStyle(type, pageGlobal('ALERT_STYLES') || {}, styleData().defaults);
+  }
+  // The look object of the draft's look (an alert's own look only), else the one the page shows.
+  function draftLook() {
+    var type = CARDS.editing, id = CARDS.draftStyle;
+    var styles = root.ATLETA_OBJECT_STYLES || {};
+    var look = id && Object.prototype.hasOwnProperty.call(styles, id) ? styles[id] : null;
+    if (look && look.key === id && look.eventType === type) return look;
+    return typeof previewObjectFor === 'function' ? previewObjectFor(type) : null;
+  }
+  // The look as saved goes back where the page shows it (the server keeps an alert's look through
+  // Cancel and Reset).
+  function restoreSavedLook(type) {
+    var saved = pageGlobal('SAVED_STYLES') || {}, shown = pageGlobal('ALERT_STYLES');
+    if (!shown) return;
+    if (saved[type]) shown[type] = saved[type];
+    else delete shown[type];
+  }
+  // The stored row of an alert, as the cards read it (designOf): replaced, or removed with null.
+  function storeRow(type, row) {
+    var rows = pageGlobal('SERVER_DESIGNS'), byType = pageGlobal('SAVED_DESIGNS');
+    if (rows) {
+      var at = -1;
+      for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].event_type === type) { at = i; break; }
+      if (row && at >= 0) rows[at] = row;
+      else if (row) rows.push(row);
+      else if (at >= 0) rows.splice(at, 1);
+    }
+    if (byType) {
+      if (row) byType[type] = row;
+      else delete byType[type];
+    }
+  }
+
+  // What a tab shows next to its name: the look, the sound, the place, the number of images.
+  function tabValue(name) {
+    var type = CARDS.editing, draft = CARDS.draft;
+    if (!type || !draft) return '';
+    if (name === 'animation') {
+      var looks = styleData().looks || {};
+      return (CARDS.draftStyle && looks[CARDS.draftStyle] && looks[CARDS.draftStyle].title) || '';
+    }
+    if (name === 'sound') {
+      var look = draftLook();
+      return look && kit() ? soundLabel(type, look, draft) : '';
+    }
+    if (name === 'location') return placeLabel(draft);
+    if (name === 'images') {
+      var images = typeof sponsorImages !== 'undefined' && Array.isArray(sponsorImages) ? sponsorImages : [];
+      return text('cards.images', { count: images.length });
+    }
+    return '';
+  }
+  function renderTabValues() {
+    Object.keys(tabValues).forEach(function (name) { tabValues[name].textContent = tabValue(name); });
+  }
+
+  function buildTabs(type) {
+    var doc = root.document, bar = el('editor-tabs');
+    tabValues = {};
+    if (!bar) return;
+    bar.innerHTML = '';
+    core().tabsFor(type).forEach(function (name) {
+      var button = doc.createElement('button');
+      button.type = 'button';
+      button.className = 'ed-tab';
+      button.id = 'tab-' + name;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('data-tab', name);
+      button.setAttribute('aria-controls', 'pane-' + name);
+      var label = doc.createElement('span');
+      label.textContent = TAB_ICONS[name] + ' ' + text('tabs.' + name);
+      var value = doc.createElement('span');
+      value.className = 'tab-val';
+      button.appendChild(label);
+      button.appendChild(value);
+      button.addEventListener('click', function () { setTab(name); });
+      bar.appendChild(button);
+      tabValues[name] = value;
+    });
+  }
+
+  function paneHook(name, what) {
+    var pane = CARDS.panes[name];
+    if (pane && typeof pane[what] === 'function') {
+      try { pane[what](); } catch (e) { if (root.console) root.console.error(e); }
+    }
+  }
+
+  // Shows one of the card's tabs: its pane, and the stage on Location and Design.
+  function setTab(name) {
+    var type = CARDS.editing;
+    if (!type || core().tabsFor(type).indexOf(name) < 0) return;
+    var previous = CARDS.tab;
+    if (previous && previous !== name) paneHook(previous, 'hide');
+    CARDS.tab = name;
+    var bar = el('editor-tabs');
+    if (bar) Array.prototype.forEach.call(bar.children, function (button) {
+      var on = button.getAttribute('data-tab') === name;
+      button.setAttribute('aria-selected', String(on));
+      button.setAttribute('tabindex', on ? '0' : '-1');
+    });
+    PANES.forEach(function (p) { var pane = el('pane-' + p); if (pane) pane.hidden = p !== name; });
+    var withStage = name === 'location' || name === 'design';
+    var side = el('editor-side'), dialog = el('editor');
+    if (side) side.hidden = !withStage;
+    if (dialog) {
+      dialog.classList.toggle('with-stage', withStage);
+      dialog.setAttribute('data-tab', name);
+    }
+    renderTabValues();
+    paneHook(name, 'show');
+  }
+
+  function showMessage(message, isError) {
+    var msg = el('editor-msg');
+    if (!msg) return;
+    msg.textContent = message || '';
+    msg.classList.toggle('error', !!isError);
+  }
+
+  // The ?tab= of the address follows the window, so a reload opens it again (the old builder kept its tab).
+  function setUrlTab(type) {
+    try {
+      var url = new root.URL(root.location.href);
+      if (type) url.searchParams.set('tab', type);
+      else url.searchParams.delete('tab');
+      root.history.replaceState(root.history.state, '', url);
+    } catch (e) { /* no address to keep (tests) */ }
+  }
+
+  function openEditor(type) {
+    if (!type || !core().tabsFor(type).length) return;
+    if (CARDS.editing && !closeEditor()) return;
+    var dialog = el('editor'), back = el('editor-back');
+    if (!dialog) return;
+    CARDS.editing = type;
+    // The page's legacy controls (the Design tab) read the card they edit from currentType.
+    if (typeof currentType !== 'undefined') currentType = type;
+    CARDS.draft = draftOf(type);
+    CARDS.draftStyle = core().isStyled(type) ? shownStyleOf(type) : null;
+    opened = { design: copy(CARDS.draft), style: CARDS.draftStyle };
+    CARDS.tab = null;
+
+    var title = el('editor-title'), icon = el('editor-icon');
+    if (title) title.textContent = type === 'timed' ? text('cards.editSponsors') : text('window.title', { alert: cardName(type) });
+    if (icon) icon.textContent = CARD_ICONS[type] || '';
+    showMessage('');
+    buildTabs(type);
+    pauseCards();
+    opener = root.document ? root.document.activeElement : null;
+    dialog.hidden = false;
+    if (back) back.hidden = false;
+    setTab(core().tabsFor(type)[0]);
+    setUrlTab(type);
+    var first = el('tab-' + CARDS.tab) || el('editor-close');
+    if (first && first.focus) first.focus();
+  }
+
+  // Closes the window; with edits, and not forced, only once the streamer agrees to lose them.
+  function closeEditor(options) {
+    var force = !!(options && options.force);
+    var type = CARDS.editing;
+    if (!type) return true;
+    if (!force && isDirty() && !root.confirm(text('window.leave'))) return false;
+    if (CARDS.tab) paneHook(CARDS.tab, 'hide');
+    restoreSavedLook(type);
+    CARDS.editing = null;
+    CARDS.draft = null;
+    CARDS.draftStyle = null;
+    CARDS.tab = null;
+    opened = null;
+    var dialog = el('editor'), back = el('editor-back');
+    if (dialog) dialog.hidden = true;
+    if (back) back.hidden = true;
+    showMessage('');
+    setUrlTab(null);
+    resumeCards();
+    // The focus goes back where it was; when the cards were drawn again, to this card's Edit button.
+    var back = opener;
+    if (back && back.isConnected === false && root.document.querySelector) back = root.document.querySelector('.ecard[data-card="' + type + '"] [data-act="edit"]');
+    if (back && back.focus) back.focus();
+    opener = null;
+    return true;
+  }
+
+  function sameValue(a, b) {
+    var x = a == null ? null : a, y = b == null ? null : b;
+    if (x !== null && y !== null && typeof x === 'object') return JSON.stringify(x) === JSON.stringify(y);
+    return x === y;
+  }
+  // Whether the window holds edits that are not stored: another look, or any field changed.
+  function isDirty() {
+    if (!CARDS.editing || !opened || !CARDS.draft) return false;
+    if ((CARDS.draftStyle || null) !== (opened.style || null)) return true;
+    var draft = CARDS.draft, was = opened.design, keys = {}, k;
+    for (k in draft) if (Object.prototype.hasOwnProperty.call(draft, k)) keys[k] = true;
+    for (k in was) if (Object.prototype.hasOwnProperty.call(was, k)) keys[k] = true;
+    for (k in keys) if (!sameValue(draft[k], was[k])) return true;
+    return false;
+  }
+
+  // Done: one save of this alert with the look the window shows (the overlay's save route, which pushes
+  // it to an open OBS source); on success the page takes it as stored, the cards are drawn again and the
+  // window closes; a refusal keeps the window open with the route's message.
+  function saveDraft() {
+    var type = CARDS.editing;
+    if (!type || saving) return Promise.resolve({ ok: false });
+    var design = copy(CARDS.draft), style = CARDS.draftStyle;
+    var done = el('editor-done');
+    saving = true;
+    if (done) { done.disabled = true; done.textContent = text('window.saving'); }
+    showMessage('');
+    function finish(result) {
+      saving = false;
+      if (done) { done.disabled = false; done.textContent = text('window.done'); }
+      return result;
+    }
+    return fetch('/dashboard/overlay-builder/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(core().savePayload(type, design, style)),
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || !data || !data.ok) {
+          var error = (data && data.error) || text('saveFailed');
+          showMessage(error, true);
+          return finish({ ok: false, error: error });
+        }
+        var row = Object.assign({}, storedRow(type) || {}, design, { event_type: type });
+        if (core().isStyled(type)) {
+          row.style = style || null;
+          var saved = pageGlobal('SAVED_STYLES') || {}, shown = pageGlobal('ALERT_STYLES') || {};
+          if (style) saved[type] = shown[type] = style;
+          else { delete saved[type]; delete shown[type]; }
+        }
+        storeRow(type, row);
+        finish(null);
+        CARDS.renderCards();
+        closeEditor({ force: true });
+        return { ok: true };
+      });
+    }).catch(function (e) {
+      var error = text('saveFailedWith', { error: e && e.message });
+      showMessage(error, true);
+      return finish({ ok: false, error: error });
+    });
+  }
+
+  // Reset: today's reset route, after its confirmation. The stored design goes back to the defaults and
+  // the alert keeps its saved look (its own settings start again); the window shows that, unedited.
+  function resetDraft() {
+    var type = CARDS.editing;
+    if (!type) return Promise.resolve({ ok: false });
+    if (!root.confirm(text('resetConfirm', { name: cardName(type) }))) return Promise.resolve({ ok: false });
+    return fetch('/dashboard/overlay-builder/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType: type }),
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || !data || !data.ok) {
+          var error = (data && data.error) || text('saveFailed');
+          showMessage(error, true);
+          return { ok: false, error: error };
+        }
+        var savedStyle = (pageGlobal('SAVED_STYLES') || {})[type];
+        storeRow(type, savedStyle ? { event_type: type, style: savedStyle } : null);
+        restoreSavedLook(type);
+        if (CARDS.editing === type) {
+          CARDS.draft = draftOf(type);
+          CARDS.draftStyle = core().isStyled(type) ? shownStyleOf(type) : null;
+          opened = { design: copy(CARDS.draft), style: CARDS.draftStyle };
+          showMessage(text('resetDone'));
+          renderTabValues();
+          if (CARDS.tab) paneHook(CARDS.tab, 'show');
+        }
+        CARDS.renderCards();
+        return { ok: true };
+      });
+    }).catch(function (e) {
+      var error = text('saveFailedWith', { error: e && e.message });
+      showMessage(error, true);
+      return { ok: false, error: error };
+    });
+  }
+
+  // ?tab=<card> opens that card's window, when the page shows the card.
+  function openFromUrl(search) {
+    var Params = root.URLSearchParams;
+    if (!Params) return null;
+    var type = core().cardForTab(new Params(search || '').get('tab'), shownCards(builder().features));
+    if (type) CARDS.openEditor(type);
+    return CARDS.editing === type ? type : null;
+  }
+
+  // The window's buttons, Esc, the tab bar's arrow keys, and the stage scaled to its width.
+  function bindEditor() {
+    var doc = root.document;
+    function on(id, fn) { var node = el(id); if (node) node.addEventListener('click', fn); }
+    on('editor-close', function () { closeEditor(); });
+    on('editor-cancel', function () { closeEditor(); });
+    on('editor-back', function () { closeEditor(); });
+    on('editor-done', function () { saveDraft(); });
+    on('editor-reset', function () { resetDraft(); });
+    doc.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && CARDS.editing) { e.preventDefault(); closeEditor(); }
+    });
+    var bar = el('editor-tabs');
+    if (bar) bar.addEventListener('keydown', function (e) {
+      if (!CARDS.editing || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+      var tabs = core().tabsFor(CARDS.editing), at = tabs.indexOf(CARDS.tab);
+      var next = tabs[(at + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      e.preventDefault();
+      setTab(next);
+      var button = el('tab-' + next);
+      if (button && button.focus) button.focus();
+    });
+    var stage = el('stage'), inner = el('stage-inner');
+    if (stage && inner && root.ResizeObserver) {
+      new root.ResizeObserver(function () { inner.style.transform = 'scale(' + (stage.clientWidth / 1920) + ')'; }).observe(stage);
+    }
+    var bg = el('stage-bg'), thumb = builder().streamThumbnail;
+    if (bg && thumb) bg.style.backgroundImage = 'url(' + JSON.stringify(String(thumb)) + ')';
+  }
+
   var CARDS = {
     Looper: Looper, fitAlert: fitAlert, designOf: designOf, shownCards: shownCards, renderCards: renderCards,
-    openEditor: openEditor, CARD_ICONS: CARD_ICONS,
+    CARD_ICONS: CARD_ICONS,
+    // The edit window (the cards call CARDS.openEditor, late-bound)
+    openEditor: openEditor, closeEditor: closeEditor, setTab: setTab, saveDraft: saveDraft, resetDraft: resetDraft,
+    isDirty: isDirty, tabValue: tabValue, renderTabValues: renderTabValues, draftLook: draftLook, openFromUrl: openFromUrl,
+    editing: null, draft: null, draftStyle: null, tab: null, panes: {},
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CARDS;
   if (root) root.ATLETA_BUILDER_CARDS = CARDS;
 
-  // On the page: draw the cards once the script is loaded (it comes after the markup).
-  if (root && root.document && root.document.getElementById && root.document.getElementById('cards')) renderCards();
+  // On the page (the script comes after the markup): the window's controls, the cards, and the window a
+  // ?tab= asks for.
+  var doc = root && root.document && root.document.getElementById ? root.document : null;
+  if (doc && doc.getElementById('editor')) bindEditor();
+  if (doc && doc.getElementById('cards')) {
+    renderCards();
+    openFromUrl(root.location && root.location.search);
+  }
 })(typeof window !== 'undefined' ? window : null);

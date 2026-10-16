@@ -25,7 +25,9 @@ function load(globals = {}) {
   });
   context.window = context;
   vm.runInContext(SOURCE, context);
-  return context.ATLETA_BUILDER_CARDS;
+  const cards = context.ATLETA_BUILDER_CARDS;
+  Object.defineProperty(cards, '__context', { value: context });   // the test's handle on the page's globals
+  return cards;
 }
 
 function element() {
@@ -228,5 +230,355 @@ describe('the cards the page shows', () => {
   test('every card the core lists has an icon', () => {
     const { CARD_ICONS } = load();
     for (const type of CORE.CARD_TYPES) assert.ok(CARD_ICONS[type], type);
+  });
+});
+
+describe('a loop with nothing to play', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }));
+  afterEach(() => mock.timers.reset());
+
+  test('a get() with no look stops the loop, so a later start() plays', () => {
+    const { Looper } = load();
+    const slot = element();
+    let look = null;
+    const lp = new Looper(slot, () => ({ look, design: {}, sample: {} }), {});
+    lp.start();
+    assert.equal(lp.running, false, 'not stuck as running');
+    assert.ok(!slot.classList.contains('playing'));
+    look = LOOK;
+    lp.start();
+    assert.ok(slot.classList.contains('playing'), 'the next start() plays');
+    lp.stop();
+  });
+});
+
+// ── The edit window ──
+// A fake page: the window's elements by id (nothing else, so the cards are not drawn at load), elements
+// that keep their children, attributes and listeners, and a document that takes keydown listeners.
+const EDITOR_IDS = ['editor', 'editor-back', 'editor-icon', 'editor-title', 'editor-close', 'editor-tabs', 'editor-side',
+  'editor-msg', 'editor-reset', 'editor-cancel', 'editor-done', 'stage', 'stage-inner', 'stage-bg',
+  'pane-animation', 'pane-customize', 'pane-sound', 'pane-location', 'pane-images', 'pane-design'];
+
+function fakeElement(doc, tag) {
+  const el = element();
+  const children = [];
+  const attrs = {};
+  const listeners = {};
+  Object.assign(el, {
+    tagName: String(tag || 'div').toUpperCase(), hidden: false, disabled: false, textContent: '', id: '',
+    children,
+    setAttribute(name, value) { attrs[name] = String(value); },
+    getAttribute(name) { return Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : null; },
+    removeAttribute(name) { delete attrs[name]; },
+    appendChild(child) { children.push(child); return child; },
+    addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
+    fire(type, extra = {}) { (listeners[type] || []).forEach((fn) => fn({ target: el, currentTarget: el, preventDefault() {}, ...extra })); },
+    focus() { doc.activeElement = el; },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    closest: () => null,
+  });
+  Object.defineProperty(el, 'innerHTML', { get: () => '', set: () => { children.length = 0; } });
+  return el;
+}
+function fakeDocument() {
+  const byId = {};
+  const listeners = {};
+  const doc = {
+    activeElement: null,
+    getElementById: (id) => byId[id] || null,
+    createElement: (tag) => fakeElement(doc, tag),
+    querySelector: () => null,
+    addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
+    fire(type, extra = {}) { (listeners[type] || []).forEach((fn) => fn({ preventDefault() {}, ...extra })); },
+  };
+  EDITOR_IDS.forEach((id) => { byId[id] = fakeElement(doc, 'div'); byId[id].id = id; });
+  ['editor', 'editor-back'].forEach((id) => { byId[id].hidden = true; });   // as the markup has them
+  return doc;
+}
+
+const TEXTS = {
+  'window.title': 'Edit the {{alert}} alert', 'window.leave': 'Close without saving your changes?', 'window.saving': 'Saving…',
+  'window.done': 'Done', 'tabs.animation': 'Animation', 'tabs.customize': 'Customize', 'tabs.sound': 'Sound', 'tabs.location': 'Location',
+  'tabs.images': 'Images', 'tabs.design': 'Design', 'cards.editSponsors': 'Edit sponsor images', 'cards.images': '{{count}} images',
+  'cards.free': 'Free position', 'cards.uploaded': 'Your uploaded sound', 'sound.today': 'Classic engine sound', 'sound.none': 'No sound',
+  'place.top': 'Top', 'place.mid': 'Middle', 'place.bot': 'Bottom', 'place.left': 'left', 'place.center': 'centre', 'place.right': 'right',
+  resetConfirm: 'Reset "{{name}}" to default settings?', resetDone: 'Reset to default', saveFailed: 'Save failed', saveFailedWith: 'Save failed: {{error}}',
+};
+const GLASS = { ...LOOK, key: 'follow-glass', sound: 'glFollow' };
+const RACING = { ...LOOK, key: 'follow-racing', family: 'racing', sound: 'rcFollow' };
+const ARCADE = { ...LOOK, key: 'follow-arcade', family: 'arcade', sound: 'arFollow' };
+
+// The page script with a fake page and the view's globals. `answers` are what fetch returns, in order;
+// every call is kept in `calls`.
+function loadPage({ saved = {}, rows = [], answers = [], confirmAnswer = true, features = {} } = {}) {
+  const calls = [];
+  const confirms = [];
+  const document = fakeDocument();
+  const g = {
+    document,
+    URLSearchParams,
+    confirm: (q) => { confirms.push(q); return typeof confirmAnswer === 'function' ? confirmAnswer(q) : confirmAnswer; },
+    fetch: (url, opts) => {
+      calls.push({ url, opts });
+      const answer = answers.shift() || { status: 200, body: { ok: true } };
+      if (answer.pending) return answer.pending;
+      return Promise.resolve({ ok: answer.status < 400, status: answer.status, json: () => Promise.resolve(answer.body) });
+    },
+    currentType: 'follow',
+    SAVED_STYLES: { ...saved },
+    ALERT_STYLES: { ...saved },
+    SAVED_DESIGNS: {},
+    SERVER_DESIGNS: rows.map((r) => ({ ...r })),
+    EVENT_DEFAULTS: {
+      follow: { card_width: 420, card_position: 'top-center', screen_effect: 'default', animation_speed: 1 },
+      timed: { card_width: 500, card_position: 'bot-center', sponsor_animation: 'fade' },
+      yt_member: { card_width: 420, card_position: 'top-center' },
+    },
+    STYLE_DATA: {
+      looks: { 'follow-glass': { title: 'Pill' }, 'follow-racing': { title: 'Pit board' }, 'follow-arcade': { title: 'Coin' } },
+      families: [], defaults: { follow: 'follow-glass' },
+      sounds: [{ family: 'glass', sounds: [{ key: 'glFollow', name: 'Soft chime' }] }, { family: 'racing', sounds: [{ key: 'rcFollow', name: 'Air horn' }] }],
+    },
+    I18N: { eventNames: { follow: 'Follow', timed: 'Timed', yt_member: 'Member' } },
+    sponsorImages: [{ filename: 'a.png', enabled: 1 }, { filename: 'b.png', enabled: 0 }],
+    ATLETA_OBJECT_STYLES: { 'follow-glass': GLASS, 'follow-racing': RACING, 'follow-arcade': ARCADE },
+    ATLETA_KIT: {
+      lookData: (look, sample) => sample, slotVars: () => ({}),
+      soundFor: (look, d) => (d && d.style_sound) || (look && look.sound) || 'none',
+    },
+    BUILDER: { features, uploadedSounds: {} },
+    BUILDER_TEXTS: TEXTS,
+  };
+  const CARDS = load(g);
+  let renders = 0;
+  CARDS.renderCards = () => { renders += 1; };
+  return { CARDS, g, document, calls, confirms, renders: () => renders };
+}
+const isOpen = (document) => !document.getElementById('editor').hidden && !document.getElementById('editor-back').hidden;
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+describe('the edit window', () => {
+  test('opens on the first of its tabs, says which alert, and sets currentType for the page\'s legacy code', () => {
+    const { CARDS, g, document } = loadPage({ saved: {} });
+    CARDS.openEditor('follow');
+    assert.ok(isOpen(document));
+    assert.equal(CARDS.editing, 'follow');
+    assert.equal(document.getElementById('editor-title').textContent, 'Edit the Follow alert');
+    assert.equal(document.getElementById('editor-icon').textContent, CARDS.CARD_ICONS.follow);
+    assert.equal(g.currentType, 'follow');
+    assert.equal(CARDS.draftStyle, 'follow-glass', 'the alert\'s default look when none is stored');
+    assert.equal(CARDS.tab, 'animation');
+    const tabs = document.getElementById('editor-tabs').children;
+    assert.deepEqual(tabs.map((b) => b.getAttribute('data-tab')), ['animation', 'customize', 'sound', 'location']);
+    assert.deepEqual(tabs.map((b) => b.getAttribute('aria-selected')), ['true', 'false', 'false', 'false']);
+    assert.equal(document.getElementById('pane-animation').hidden, false);
+    for (const p of ['customize', 'sound', 'location', 'images', 'design']) assert.equal(document.getElementById('pane-' + p).hidden, true, p);
+    assert.equal(document.getElementById('editor-side').hidden, true, 'no stage on Animation');
+  });
+
+  test('each tab shows its current value: the look, the sound, the place', () => {
+    const { CARDS, document } = loadPage({ saved: {} });
+    CARDS.openEditor('follow');
+    assert.equal(CARDS.tabValue('animation'), 'Pill');
+    assert.equal(CARDS.tabValue('customize'), '');
+    assert.equal(CARDS.tabValue('sound'), 'Soft chime');
+    assert.equal(CARDS.tabValue('location'), 'Top centre');
+    CARDS.draft.card_custom_x = 0.2;
+    CARDS.draft.card_custom_y = 0.3;
+    CARDS.draftStyle = 'follow-racing';
+    CARDS.renderTabValues();
+    assert.equal(CARDS.tabValue('location'), 'Free position');
+    assert.equal(CARDS.tabValue('animation'), 'Pit board');
+    assert.equal(CARDS.tabValue('sound'), 'Air horn');
+    const animationTab = document.getElementById('editor-tabs').children[0];
+    assert.equal(animationTab.children[1].textContent, 'Pit board', 'the tab bar shows it');
+  });
+
+  test('the stage shows only on Location and Design; tabs switch their panes', () => {
+    const { CARDS, document } = loadPage();
+    CARDS.openEditor('follow');
+    CARDS.setTab('location');
+    assert.equal(document.getElementById('pane-location').hidden, false);
+    assert.equal(document.getElementById('pane-animation').hidden, true);
+    assert.equal(document.getElementById('editor-side').hidden, false);
+    CARDS.setTab('sound');
+    assert.equal(document.getElementById('editor-side').hidden, true);
+    CARDS.setTab('images');
+    assert.equal(CARDS.tab, 'sound', 'a tab the card does not have is ignored');
+  });
+
+  test('Done sends one save with the look the window shows, and closes on success', async () => {
+    let resolve;
+    const pending = new Promise((r) => { resolve = r; });
+    const { CARDS, g, document, calls, renders } = loadPage({ saved: { follow: 'follow-glass' }, rows: [{ event_type: 'follow', style: 'follow-glass', card_width: 500 }], answers: [{ pending }] });
+    CARDS.openEditor('follow');
+    CARDS.draftStyle = 'follow-racing';
+    CARDS.draft.card_width = 640;
+    const saving = CARDS.saveDraft();
+    assert.equal(document.getElementById('editor-done').textContent, 'Saving…');
+    assert.equal(document.getElementById('editor-done').disabled, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, '/dashboard/overlay-builder/save');
+    assert.equal(calls[0].opts.method, 'POST');
+    assert.equal(calls[0].opts.body, JSON.stringify(CORE.savePayload('follow', CARDS.draft, 'follow-racing')));
+    resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+    const result = await saving;
+    assert.equal(result.ok, true);
+    assert.equal(g.SAVED_STYLES.follow, 'follow-racing');
+    assert.equal(g.ALERT_STYLES.follow, 'follow-racing');
+    const row = g.SERVER_DESIGNS.find((r) => r.event_type === 'follow');
+    assert.equal(row.style, 'follow-racing', 'the stored row is what was saved, so the card shows it');
+    assert.equal(row.card_width, 640);
+    assert.equal(g.SERVER_DESIGNS.length, 1);
+    assert.ok(!isOpen(document), 'closed');
+    assert.equal(CARDS.editing, null);
+    assert.equal(renders(), 1, 'the cards are drawn again');
+    assert.equal(document.getElementById('editor-done').textContent, 'Done');
+    assert.equal(document.getElementById('editor-done').disabled, false);
+  });
+
+  test('the draft holds the design only: the look travels next to it, and the row\'s own columns stay out', async () => {
+    const { CARDS, calls } = loadPage({ saved: { follow: 'follow-glass' }, rows: [{ id: 7, streamer_id: 3, event_type: 'follow', style: 'follow-glass', design_version: 2, created_at: 'x', card_width: 500 }] });
+    CARDS.openEditor('follow');
+    for (const column of ['id', 'streamer_id', 'event_type', 'style', 'design_version', 'created_at']) assert.ok(!(column in CARDS.draft), column);
+    assert.equal(CARDS.draft.card_width, 500);
+    await CARDS.saveDraft();
+    const body = JSON.parse(calls[0].opts.body);
+    assert.equal(body.style, 'follow-glass');
+    assert.ok(!('style' in body.design) && !('event_type' in body.design));
+  });
+
+  test('a save of an alert with no row adds one', async () => {
+    const { CARDS, g } = loadPage({ saved: {} });
+    CARDS.openEditor('follow');
+    await CARDS.saveDraft();
+    assert.deepEqual(g.SERVER_DESIGNS.map((r) => [r.event_type, r.style]), [['follow', 'follow-glass']]);
+    assert.equal(g.SAVED_DESIGNS.follow.style, 'follow-glass');
+  });
+
+  test('a refused save keeps the window open with the route\'s message', async () => {
+    const { CARDS, g, document } = loadPage({ saved: { follow: 'follow-glass' }, answers: [{ status: 400, body: { ok: false, error: 'Invalid field: card_width' } }] });
+    CARDS.openEditor('follow');
+    CARDS.draftStyle = 'follow-racing';
+    const result = await CARDS.saveDraft();
+    assert.deepEqual({ ...result }, { ok: false, error: 'Invalid field: card_width' });
+    assert.ok(isOpen(document));
+    assert.equal(CARDS.editing, 'follow');
+    assert.equal(document.getElementById('editor-msg').textContent, 'Invalid field: card_width');
+    assert.equal(g.SAVED_STYLES.follow, 'follow-glass');
+    assert.equal(document.getElementById('editor-done').disabled, false);
+  });
+
+  test('a save with no answer keeps the window open and says so', async () => {
+    const { CARDS, document } = loadPage();
+    CARDS.openEditor('follow');
+    CARDS.__context.fetch = () => Promise.reject(new Error('offline'));
+    const result = await CARDS.saveDraft();
+    assert.equal(result.ok, false);
+    assert.ok(isOpen(document));
+    assert.equal(document.getElementById('editor-msg').textContent, 'Save failed: offline');
+  });
+
+  test('closing with edits asks first; without edits it just closes', () => {
+    let answer = false;
+    const { CARDS, document, confirms } = loadPage({ confirmAnswer: () => answer });
+    CARDS.openEditor('follow');
+    assert.equal(CARDS.isDirty(), false);
+    CARDS.draft.card_width = 700;
+    assert.equal(CARDS.isDirty(), true);
+    assert.equal(CARDS.closeEditor(), false);
+    assert.ok(isOpen(document), 'still open');
+    assert.deepEqual(confirms, ['Close without saving your changes?']);
+    answer = true;
+    assert.equal(CARDS.closeEditor(), true);
+    assert.ok(!isOpen(document), 'closed');
+
+    CARDS.openEditor('follow');
+    CARDS.closeEditor();
+    assert.ok(!isOpen(document));
+    assert.equal(confirms.length, 2, 'no edits: no question');
+
+    CARDS.openEditor('follow');
+    CARDS.draftStyle = 'follow-racing';
+    assert.equal(CARDS.isDirty(), true, 'another look is an edit');
+    CARDS.closeEditor({ force: true });
+    assert.equal(confirms.length, 2, 'force: no question');
+  });
+
+  test('Esc, the close button, Cancel and the backdrop close the window', () => {
+    const { CARDS, document } = loadPage();
+    for (const close of [() => document.fire('keydown', { key: 'Escape' }), () => document.getElementById('editor-close').fire('click'),
+      () => document.getElementById('editor-cancel').fire('click'), () => document.getElementById('editor-back').fire('click')]) {
+      CARDS.openEditor('follow');
+      close();
+      assert.ok(!isOpen(document));
+    }
+  });
+
+  test('a save sends the look the window shows next to the design; Cancel and Reset put back the saved look', async () => {
+    // Cancel: a look picked in the window (and shown by a preview) is not kept.
+    let page = loadPage({ saved: { follow: 'follow-glass' } });
+    page.CARDS.openEditor('follow');
+    page.g.ALERT_STYLES.follow = 'follow-racing';
+    page.CARDS.draftStyle = 'follow-racing';
+    page.CARDS.closeEditor();
+    assert.equal(page.g.ALERT_STYLES.follow, 'follow-glass');
+    assert.equal(page.g.SAVED_STYLES.follow, 'follow-glass');
+
+    // Reset: the route, then the window shows the reset design in the saved look.
+    page = loadPage({ saved: { follow: 'follow-arcade' }, rows: [{ event_type: 'follow', style: 'follow-arcade', card_width: 600 }] });
+    page.CARDS.openEditor('follow');
+    page.g.ALERT_STYLES.follow = 'follow-racing';
+    page.CARDS.draftStyle = 'follow-racing';
+    page.CARDS.draft.card_width = 700;
+    const result = await page.CARDS.resetDraft();
+    assert.equal(result.ok, true);
+    assert.deepEqual(page.confirms, ['Reset "Follow" to default settings?']);
+    assert.equal(page.calls.length, 1);
+    assert.equal(page.calls[0].url, '/dashboard/overlay-builder/reset');
+    assert.equal(page.calls[0].opts.body, JSON.stringify({ eventType: 'follow' }));
+    assert.ok(isOpen(page.document), 'the window stays open');
+    assert.equal(page.CARDS.draftStyle, 'follow-arcade', 'the look is kept');
+    assert.equal(page.g.ALERT_STYLES.follow, 'follow-arcade');
+    assert.equal(page.CARDS.draft.card_width, 420, 'the design is the defaults');
+    assert.deepEqual({ ...page.g.SERVER_DESIGNS[0] }, { event_type: 'follow', style: 'follow-arcade' });
+    assert.equal(page.CARDS.isDirty(), false, 'what the window shows is what is stored');
+    assert.equal(page.document.getElementById('editor-msg').textContent, 'Reset to default');
+    assert.equal(page.renders(), 1);
+  });
+
+  test('Reset of an alert with no stored look removes its row; a declined Reset sends nothing', async () => {
+    let page = loadPage({ saved: {}, rows: [{ event_type: 'follow', card_width: 600 }] });
+    page.CARDS.openEditor('follow');
+    await page.CARDS.resetDraft();
+    assert.deepEqual(page.g.SERVER_DESIGNS, []);
+    assert.equal(page.CARDS.draftStyle, 'follow-glass');
+
+    page = loadPage({ confirmAnswer: false });
+    page.CARDS.openEditor('follow');
+    const result = await page.CARDS.resetDraft();
+    assert.equal(result.ok, false);
+    assert.equal(page.calls.length, 0);
+  });
+
+  test('?tab=timed opens the sponsor images window; ?tab=yt_member does not while YouTube is off', () => {
+    let page = loadPage();
+    assert.equal(page.CARDS.openFromUrl('?tab=timed'), 'timed');
+    assert.equal(page.CARDS.editing, 'timed');
+    assert.ok(isOpen(page.document));
+    assert.equal(page.document.getElementById('editor-title').textContent, 'Edit sponsor images');
+    assert.equal(page.CARDS.draftStyle, null, 'no look for the sponsor images');
+    assert.deepEqual(page.document.getElementById('editor-tabs').children.map((b) => b.getAttribute('data-tab')), ['images', 'design', 'location']);
+    assert.equal(page.CARDS.tabValue('images'), '2 images');
+
+    page = loadPage();
+    assert.equal(page.CARDS.openFromUrl('?tab=yt_member'), null);
+    assert.ok(!isOpen(page.document));
+    assert.equal(page.CARDS.openFromUrl('?tab=nope'), null);
+    assert.equal(page.CARDS.openFromUrl(''), null);
+
+    page = loadPage({ features: { youtube: true } });
+    assert.equal(page.CARDS.openFromUrl('?tab=yt_member'), 'yt_member');
   });
 });

@@ -2748,6 +2748,7 @@ const BUILDER_TEXT_KEYS = [
   'overlayBuilder.place.freeNote', 'overlayBuilder.place.size', 'overlayBuilder.place.width',
   'overlayBuilder.place.top', 'overlayBuilder.place.mid', 'overlayBuilder.place.bot',
   'overlayBuilder.place.left', 'overlayBuilder.place.center', 'overlayBuilder.place.right',
+  'overlayBuilder.saveFailed', 'overlayBuilder.saveFailedWith', 'overlayBuilder.resetConfirm', 'overlayBuilder.resetDone',
 ];
 const KEEP_PLACEHOLDERS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function builderTexts(t) {
