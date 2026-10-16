@@ -3156,7 +3156,7 @@ function updateShoutoutSettings(streamerId, fields) {
   updateStreamerColumns(SHOUTOUT_COLUMNS, streamerId, fields);
 }
 
-// What the Donations page saves for reading tips aloud (checkTtsSettings in services/tipSpeech.js returns exactly these
+// What the Donations page saves for reading tips aloud (checkTtsSettings in services/ttsSettings.js returns exactly these
 // keys). The monthly limit and the last error are written by their own functions below.
 const TTS_COLUMNS = new Set([
   'tts_enabled', 'tts_min_amount', 'tts_language', 'tts_voice', 'tts_speed', 'tts_expressiveness', 'tts_volume',

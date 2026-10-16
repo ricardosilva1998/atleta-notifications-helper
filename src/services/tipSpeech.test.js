@@ -7,21 +7,7 @@ const {
   cleanSpeech, spokenAmount, buildLine, speechDecision, defaultTemplates, prepareSpeech,
 } = require('./tipSpeech');
 
-// A stand-in for i18n.t() until the locale files hold the tts.* keys: the same
-// one-pass {{placeholder}} fill, over a small table.
-const TEXTS = {
-  'tts.template.default': '{{name}} tipped {{amount}}: {{message}}',
-  'tts.template.empty': '{{name}} tipped {{amount}}!',
-  'tts.someone': 'Someone',
-  'tts.currency.EUR.one': 'euro',
-  'tts.currency.EUR.other': 'euros',
-  'tts.currency.USD.one': 'dollar',
-  'tts.currency.USD.other': 'dollars',
-};
-function t(lang, key, params = {}) {
-  const str = TEXTS[key] || key;
-  return str.replace(/\{\{(\w+)\}\}/g, (_, k) => params[k] ?? '');
-}
+const { t } = require('../i18n');
 
 test('the limits', () => {
   assert.equal(MESSAGE_MAX, 200);
@@ -65,8 +51,8 @@ test('amounts are spoken in the language', () => {
   assert.equal(spokenAmount('25.00', 'EUR', 'en', t), '25 euros');
   assert.equal(spokenAmount(1, 'USD', 'en', t), '1 dollar');
   assert.equal(spokenAmount(12.5, 'EUR', 'pt', t), '12,50 euros');
-  assert.equal(spokenAmount(12.5, 'EUR', 'de', t), '12,50 euros');
-  assert.equal(spokenAmount(12.5, 'EUR', 'ja', t), '12.50 euros');
+  assert.equal(spokenAmount(12.5, 'EUR', 'de', t), '12,50 Euro');
+  assert.equal(spokenAmount(12.5, 'EUR', 'ja', t), '12.50 ユーロ');
   assert.equal(spokenAmount(3.456, 'USD', 'en', t), '3.46 dollars');
 });
 
