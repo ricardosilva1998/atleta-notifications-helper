@@ -106,6 +106,165 @@
   </div>
 </form>
 
+<%# Reading tips aloud (routes/dashboard.js ttsSection()): its own form, saved by POST /dashboard/donations/tts, which
+    stores every field it sends (the switch is left out while it is unticked: off). Without an ElevenLabs key on the
+    site it only says it is not available. The voice list and the default lines follow the language without a reload,
+    and "Test the voice" reads a sample with what the form shows (POST /dashboard/donations/tts/test). %>
+<% if (typeof tts !== 'undefined' && tts) { const _tts = tts.settings; const _num = (n) => { try { return new Intl.NumberFormat(_lang).format(n); } catch (e) { return String(n); } }; %>
+<div id="tts" class="card animate-in" style="margin-bottom: 16px;">
+  <h3>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+    <%= t('donations.tts.title') %>
+  </h3>
+  <p style="color: var(--text-muted); font-size: 13px; margin: 8px 0 12px;"><%= t('donations.tts.intro') %></p>
+  <% if (!tts.available) { %>
+    <div class="alert alert-warning" role="status" style="font-size: 13px; margin-bottom: 0;"><%= t('donations.tts.unavailable') %></div>
+  <% } else { %>
+    <% if (ttsSaved) { %><div class="alert alert-success" role="status"><%= t('donations.tts.saved') %></div><% } %>
+    <% if (ttsError) { %><div class="alert alert-danger" role="alert"><%= ttsError %></div><% } %>
+    <form id="tts-form" method="POST" action="/dashboard/donations/tts">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px;">
+        <label for="tts-enabled" style="font-weight: 600; font-size: 14px;"><%= t('donations.tts.enabled') %></label>
+        <label class="pill-toggle">
+          <input type="checkbox" name="tts_enabled" value="1" <%= _tts.enabled ? 'checked' : '' %> id="tts-enabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="tts-grid">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="tts-min"><%= t('donations.tts.minAmount') %> (<%= tts.currency %>)</label>
+          <input type="number" id="tts-min" name="tts_min_amount" value="<%= _tts.minAmount %>" min="<%= tts.minFloor %>" max="10000" step="0.5" style="width: 100%;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="tts-language"><%= t('donations.tts.language') %></label>
+          <select id="tts-language" name="tts_language" style="width: 100%;">
+            <% tts.languages.forEach(function (code) { %>
+              <option value="<%= code %>" lang="<%= code %>" <%= code === _tts.language ? 'selected' : '' %>><%= t('lang.' + code) %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="tts-voice"><%= t('donations.tts.voice') %></label>
+          <div style="display: flex; gap: 6px;">
+            <select id="tts-voice" name="tts_voice" style="flex: 1; min-width: 0;">
+              <% (tts.voices[_tts.language] || []).forEach(function (voice) { %>
+                <option value="<%= voice.id %>" <%= voice.id === _tts.voice ? 'selected' : '' %>><%= voice.name %></option>
+              <% }) %>
+            </select>
+            <% const _preview = ((tts.voices[_tts.language] || []).find(function (voice) { return voice.id === _tts.voice; }) || {}).preview; %>
+            <button type="button" id="tts-listen" class="btn btn-secondary" title="<%= t('donations.tts.listen') %>" aria-label="<%= t('donations.tts.listen') %>" style="flex-shrink: 0; padding: 6px 12px;"<%= _preview ? '' : ' hidden' %>>&#9654;</button>
+          </div>
+        </div>
+      </div>
+      <div class="tts-grid" style="margin-top: 16px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="tts-speed"><%= t('donations.tts.speed') %> <output id="tts-speed-out" for="tts-speed"><%= Number(_tts.speed).toFixed(2) %>&times;</output></label>
+          <input type="range" id="tts-speed" name="tts_speed" min="0.7" max="1.2" step="0.05" value="<%= _tts.speed %>" style="width: 100%;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="tts-expressiveness"><%= t('donations.tts.expressiveness') %></label>
+          <input type="range" id="tts-expressiveness" name="tts_expressiveness" min="0" max="1" step="0.05" value="<%= _tts.expressiveness %>" style="width: 100%;">
+          <div class="tts-ends"><span><%= t('donations.tts.calm') %></span><span><%= t('donations.tts.lively') %></span></div>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="tts-volume"><%= t('donations.tts.volume') %> <output id="tts-volume-out" for="tts-volume"><%= Math.round(_tts.volume * 100) %>%</output></label>
+          <input type="range" id="tts-volume" name="tts_volume" min="0" max="1" step="0.05" value="<%= _tts.volume %>" style="width: 100%;">
+        </div>
+      </div>
+      <% const _defaults = tts.templates[_tts.language] || {}; %>
+      <div class="form-group" style="margin: 16px 0 0;">
+        <label for="tts-template"><%= t('donations.tts.template') %></label>
+        <input type="text" id="tts-template" name="tts_template" maxlength="200" value="<%= _tts.template %>" placeholder="<%= _defaults.template %>" style="width: 100%;">
+      </div>
+      <div class="form-group" style="margin: 12px 0 0;">
+        <label for="tts-template-empty"><%= t('donations.tts.templateEmpty') %></label>
+        <input type="text" id="tts-template-empty" name="tts_template_empty" maxlength="200" value="<%= _tts.templateEmpty %>" placeholder="<%= _defaults.emptyTemplate %>" style="width: 100%;">
+      </div>
+      <p style="color: var(--text-muted); font-size: 12px; margin: 8px 0 0;"><%= t('donations.tts.placeholders') %> <%= t('donations.tts.banned') %></p>
+      <% const _resets = (function () { try { return new Intl.DateTimeFormat(_lang, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(tts.resetsOn + 'T00:00:00Z')); } catch (e) { return tts.resetsOn; } })(); %>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0 0;"><%= t('donations.tts.usage', { used: _num(tts.used), limit: _num(tts.limit), date: _resets }) %></p>
+      <% if (tts.lastError) { %>
+        <p style="color: var(--warning); font-size: 12px; margin: 6px 0 0;"><%= t('donations.tts.lastError', { error: tts.lastError }) %><% if (tts.lastErrorAt) { %> · <%= tts.lastErrorAt.slice(0, 16) %> UTC<% } %></p>
+      <% } %>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px;">
+        <button type="button" id="tts-test" class="btn btn-secondary"><%= t('donations.tts.test') %></button>
+        <button type="submit" class="btn btn-primary"><%= t('donations.settings.save') %></button>
+      </div>
+      <p id="tts-test-status" style="font-size: 12px; color: var(--text-muted); margin: 8px 0 0;" aria-live="polite"></p>
+    </form>
+  <% } %>
+</div>
+<% if (tts.available) { %>
+<script>
+  (function () {
+    // The voices and default lines of every language, and the test's answers (routes/dashboard.js ttsSection()).
+    var TTS = <%- JSON.stringify({ voices: tts.voices, templates: tts.templates, errors: tts.errorTexts }).replace(/</g, '\\u003c') %>;
+    var form = document.getElementById('tts-form');
+    if (!form) return;
+    var language = form.elements.tts_language;
+    var voice = form.elements.tts_voice;
+    var listen = document.getElementById('tts-listen');
+    var statusEl = document.getElementById('tts-test-status');
+    var testButton = document.getElementById('tts-test');
+    var playing = null;
+
+    function play(url, volume) {
+      if (playing) playing.pause();
+      playing = new Audio(url);
+      if (volume != null) playing.volume = Math.max(0, Math.min(1, volume));
+      playing.play().catch(function () {});
+    }
+    function voicesOf(lang) { return TTS.voices[lang] || []; }
+    function previewOf() {
+      var found = voicesOf(language.value).filter(function (v) { return v.id === voice.value; })[0];
+      return found ? found.preview : null;
+    }
+    function showListen() { listen.hidden = !previewOf(); }
+
+    // Another language: its voices (the same voice when it has it, else its first) and its default lines.
+    language.addEventListener('change', function () {
+      var before = voice.value;
+      voice.textContent = '';
+      voicesOf(language.value).forEach(function (v) {
+        var option = document.createElement('option');
+        option.value = v.id;
+        option.textContent = v.name;
+        voice.append(option);
+      });
+      if (voicesOf(language.value).some(function (v) { return v.id === before; })) voice.value = before;
+      var lines = TTS.templates[language.value] || {};
+      form.elements.tts_template.placeholder = lines.template || '';
+      form.elements.tts_template_empty.placeholder = lines.emptyTemplate || '';
+      showListen();
+    });
+    voice.addEventListener('change', showListen);
+    listen.addEventListener('click', function () { var url = previewOf(); if (url) play(url); });
+
+    var speed = form.elements.tts_speed;
+    var volume = form.elements.tts_volume;
+    speed.addEventListener('input', function () { document.getElementById('tts-speed-out').textContent = Number(speed.value).toFixed(2) + '\u00d7'; });
+    volume.addEventListener('input', function () { document.getElementById('tts-volume-out').textContent = Math.round(Number(volume.value) * 100) + '%'; });
+
+    // Test the voice with what the form shows now (nothing is saved); the sample plays here at the voice volume.
+    testButton.addEventListener('click', function () {
+      var body = {};
+      new FormData(form).forEach(function (value, key) { if (key !== '_csrf') body[key] = value; });
+      testButton.disabled = true;
+      statusEl.textContent = '';
+      fetch('/dashboard/donations/tts/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json(); })
+        .then(function (answer) {
+          if (answer && answer.ok && answer.url) play(answer.url, Number(volume.value));
+          else statusEl.textContent = TTS.errors[answer && answer.error] || TTS.errors.failed;
+        })
+        .catch(function () { statusEl.textContent = TTS.errors.failed; })
+        .then(function () { testButton.disabled = false; });
+    });
+  })();
+</script>
+<% } %>
+<% } %>
+
 <%# The tip goal is a progress bar shown on stream in OBS: its form, preview, test buttons, OBS link and past goals are hidden while the overlay features are off. %>
 <% if (features.overlays) { %>
 <!-- Tip Goal -->
@@ -374,6 +533,10 @@
   .goal-test-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: var(--text-muted); margin-right: 2px; }
   .goal-test-btn { font-size: 12px !important; padding: 6px 12px !important; }
   .goal-test-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+  .tts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+  .tts-grid output { color: var(--text-muted); font-weight: 400; margin-left: 4px; }
+  #tts-listen[hidden] { display: none; }
+  .tts-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
   .goal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
   .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
   .pill-toggle input { opacity: 0; width: 0; height: 0; }

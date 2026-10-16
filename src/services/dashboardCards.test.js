@@ -319,6 +319,20 @@ describe('Donations', () => {
     const noTwitch = build({ streamer: { twitch_username: null } }).donations;
     assert.deepEqual([noTwitch.tipUrl, keyOf(noTwitch.status)], [null, 'cards.donations.status.noTwitch']);
   });
+
+  test('reading tips aloud: the switch only while it is available, its line while it is on', () => {
+    assert.equal(build().donations.tts, null, 'not available without the key');
+    assert.deepEqual(build().donations.counts, {});
+    const tts = { available: true, used: 2340, limit: 15000, lang: 'en' };
+    const on = build({ tts, streamer: { tts_enabled: 1, tts_min_amount: 5, donation_currency: 'EUR' } }).donations;
+    assert.deepEqual(on.tts, { on: true });
+    assert.deepEqual(on.counts.tts, { key: 'cards.donations.ttsOn', params: { amount: '€5', used: '2,340', limit: '15,000' } });
+    const cents = build({ tts: { ...tts, lang: 'pt' }, streamer: { tts_enabled: 1, tts_min_amount: 7.5, donation_currency: 'BRL' } }).donations;
+    assert.deepEqual(cents.counts.tts.params, { amount: 'R$\u00a07,50', used: '2.340', limit: '15.000' });
+    const off = build({ tts, streamer: { tts_enabled: 0 } }).donations;
+    assert.deepEqual([off.tts, off.counts.tts], [{ on: false }, { text: '' }]);
+    assert.equal(build({ tts, streamer: { paypal_email: null } }).donations.tts, null, 'not before the tip page has an email');
+  });
 });
 
 describe('Chat protection', () => {

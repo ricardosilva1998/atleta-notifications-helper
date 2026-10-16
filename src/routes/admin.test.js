@@ -467,3 +467,46 @@ describe('the tab named in the admin panel URL', () => {
     assert.equal(res.headers.location, '/dashboard');
   });
 });
+
+describe('the monthly limit for reading tips aloud', () => {
+  const limitOf = (id) => db.getStreamerById(id).tts_monthly_limit;
+
+  test('an admin sets one streamer\'s monthly limit; an empty value is the default', async () => {
+    const target = addStreamer();
+    const other = addStreamer();
+    const res = await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: '40000' }, admin);
+    assert.equal(res.status, 302);
+    assert.equal(messageOf(res), 'updated');
+    assert.deepEqual([limitOf(target), limitOf(other)], [40000, null]);
+
+    await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: '  ' }, admin);
+    assert.equal(limitOf(target), null, 'empty: back to the default');
+
+    await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: '0' }, admin);
+    assert.equal(limitOf(target), 0, 'zero: nothing is read');
+    await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: '99999999' }, admin);
+    assert.equal(limitOf(target), 1000000, 'clamped');
+    await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: '1234.9' }, admin);
+    assert.equal(limitOf(target), 1234, 'a whole number');
+    for (const bad of ['-5', 'lots', '1e400']) {
+      await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: bad }, admin);
+      assert.equal(limitOf(target), 1234, `${bad} changes nothing`);
+    }
+  });
+
+  test('the users tab shows each streamer\'s limit and this month\'s use', async () => {
+    const target = addStreamer({ tts_monthly_limit: 5000 });
+    db.reserveTtsCharacters(target, new Date().toISOString().slice(0, 7), 120, 5000);
+    const row = (await get('/admin/dashboard?tab=users', admin)).json().locals.streamers.find((s) => s.id === target);
+    assert.deepEqual([row.ttsUsed, row.ttsLimit], [120, 5000]);
+    const plain = (await get('/admin/dashboard?tab=users', admin)).json().locals.streamers.find((s) => s.id === admin);
+    assert.equal(plain.ttsLimit, 15000, 'the default');
+  });
+
+  test('someone who is not an admin cannot change it', async () => {
+    const target = addStreamer();
+    const res = await postForm(`/admin/streamers/${target}/tts-limit`, { tts_monthly_limit: '9' }, addStreamer());
+    assert.equal(res.headers.location, '/dashboard');
+    assert.equal(limitOf(target), null);
+  });
+});

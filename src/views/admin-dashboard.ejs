@@ -159,6 +159,12 @@
         </select>
         <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;">Set</button>
       </form>
+      <form method="POST" action="/admin/streamers/<%= s.id %>/tts-limit" style="margin: 0; display: flex; align-items: center; gap: 6px;" title="<%= t('admin.users.ttsLimit') %>">
+        <label style="font-size: 11px; color: var(--text-muted); white-space: nowrap;"><%= t('admin.users.ttsLimit') %> (<%= s.ttsUsed %> / <%= s.ttsLimit %>)
+          <input type="number" name="tts_monthly_limit" min="0" max="1000000" step="1" value="<%= s.tts_monthly_limit ?? '' %>" placeholder="<%= s.ttsLimit %>" style="width: 100px; padding: 6px 8px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px;">
+        </label>
+        <button type="submit" class="btn btn-secondary" style="padding: 6px 12px; font-size: 11px;">Set</button>
+      </form>
       <form method="POST" action="/admin/streamers/<%= s.id %>/toggle" style="margin: 0;">
         <button type="submit" class="btn btn-secondary" style="padding: 6px 12px; font-size: 11px;"><%= s.enabled ? 'Disable' : 'Enable' %></button>
       </form>

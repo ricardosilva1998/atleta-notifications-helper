@@ -233,7 +233,36 @@ function sponsorsCard({ streamer, sponsorMessages, features }) {
   };
 }
 
-function donationsCard({ streamer, tips, tipGoal, features, appUrl, now }) {
+// An amount in the tip page's currency, without ".00" for a whole one ("€5", "€7.50").
+function moneyText(amount, currency, lang) {
+  const n = Number(amount) || 0;
+  const digits = Number.isInteger(n) ? 0 : 2;
+  try {
+    return new Intl.NumberFormat(lang, { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
+  } catch {
+    return `${n.toFixed(digits)} ${currency}`;
+  }
+}
+const countText = (n, lang) => { try { return new Intl.NumberFormat(lang).format(n); } catch { return String(n); } };
+
+// Reading tips aloud on the Donations card: its switch only while the site offers it (an ElevenLabs key) and the tip
+// page has its email; its line ("Reading tips from €5 · 2,340 of 15,000 characters") while it is on.
+function tipVoiceOf(streamer, tts, currency, hasEmail) {
+  if (!tts || !tts.available || !hasEmail) return { tts: null, counts: {} };
+  const on = !!streamer.tts_enabled;
+  if (!on) return { tts: { on }, counts: { tts: plain('') } };
+  const lang = tts.lang || 'en';
+  return {
+    tts: { on },
+    counts: {
+      tts: label('cards.donations.ttsOn', {
+        amount: moneyText(streamer.tts_min_amount ?? 5, currency, lang), used: countText(tts.used, lang), limit: countText(tts.limit, lang),
+      }),
+    },
+  };
+}
+
+function donationsCard({ streamer, tips, tipGoal, features, appUrl, now, tts }) {
   const hasEmail = !!streamer.paypal_email;
   const on = !!streamer.donation_page_enabled;
   const tipUrl = streamer.twitch_username ? `${appUrl}/tip/${encodeURIComponent(streamer.twitch_username)}` : null;
@@ -249,6 +278,7 @@ function donationsCard({ streamer, tips, tipGoal, features, appUrl, now }) {
     const target = Number(tipGoal.target_amount) || 0;
     goal = { title: tipGoal.title, current, target, currency: tipGoal.currency || 'EUR', percent: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0 };
   }
+  const voice = tipVoiceOf(streamer, tts, currency, hasEmail);
   return {
     setup: hasEmail ? null : 'paypal',
     on,
@@ -261,7 +291,8 @@ function donationsCard({ streamer, tips, tipGoal, features, appUrl, now }) {
     recent: tips.recent.map((d) => ({
       id: d.id, amount: Number(d.amount) || 0, currency: d.currency || currency, name: d.donor_name || '', message: d.message || '', ago: ago(d.created_at, now),
     })),
-    counts: {},
+    tts: voice.tts,
+    counts: voice.counts,
   };
 }
 

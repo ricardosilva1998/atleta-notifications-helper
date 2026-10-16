@@ -28,6 +28,7 @@ function fakeDb({ streamer = {}, guilds = {}, watchers = [], sponsorMessages = [
     updateDonationSettings: recordInto('updateDonationSettings'),
     updatePollSettings: recordInto('updatePollSettings'),
     updateShoutoutSettings: recordInto('updateShoutoutSettings'),
+    updateTtsSettings: recordInto('updateTtsSettings'),
     setSponsorChatSetting: (id, column, value) => { writes.push(['setSponsorChatSetting', id, column, value]); row[column] = value; },
     setGuildSwitch: (guildId, id, column, value) => { writes.push(['setGuildSwitch', guildId, id, column, value]); return true; },
     setWatcherNotify: (watcherId, id, column, value) => { writes.push(['setWatcherNotify', watcherId, id, column, value]); return true; },
@@ -38,12 +39,12 @@ function fakeDb({ streamer = {}, guilds = {}, watchers = [], sponsorMessages = [
 function run(body, setup = {}) {
   const db = fakeDb(setup);
   const followUps = [];
-  const result = save(db.getStreamerById(1), body, { db, followUps: { run: (info) => followUps.push(info) } });
+  const result = save(db.getStreamerById(1), body, { db, followUps: { run: (info) => followUps.push(info) }, ttsAvailable: setup.ttsAvailable });
   return { result, writes: db.writes.filter(([name]) => name !== 'transaction'), followUps };
 }
 
 describe('the settings a card may save', () => {
-  test('are exactly these 68 keys', () => {
+  test('are exactly these 69 keys', () => {
     assert.deepEqual(Object.keys(SETTINGS).sort(), [
       'chat_bits_enabled', 'chat_bits_template', 'chat_donation_enabled', 'chat_donation_template',
       'chat_follow_enabled', 'chat_follow_template', 'chat_giftsub_enabled', 'chat_giftsub_template',
@@ -61,7 +62,7 @@ describe('the settings a card may save', () => {
       'prediction_start_template', 'recap_enabled', 'shoutout_command_enabled', 'shoutout_raid_enabled',
       'shoutout_raid_min_viewers', 'shoutout_template',
       'sponsor_chat_interval_minutes', 'sponsor_message_enabled', 'sponsor_send_chat', 'sub_sync_enabled',
-      'weekly_highlights_enabled',
+      'tts_enabled', 'weekly_highlights_enabled',
     ]);
     assert.equal(BATCH_MAX, 20);
     for (const { status, text } of Object.values(ERRORS)) {
@@ -129,6 +130,14 @@ describe('settings that need something first', () => {
     assert.deepEqual(run({ key: 'donation_page_enabled', value: 1 }).result, { ok: false, code: 'no_email', status: 409 });
     assert.deepEqual(run({ key: 'donation_page_enabled', value: 1 }, { streamer: { paypal_email: 'tips@example.test' } }).result.values, { donation_page_enabled: 1 });
     assert.deepEqual(run({ key: 'donation_page_enabled', value: 0 }).result.values, { donation_page_enabled: 0 });
+  });
+
+  test('reading tips aloud switches on only while it is available; off always', () => {
+    assert.deepEqual(run({ key: 'tts_enabled', value: 1 }).result, { ok: false, code: 'tts_unavailable', status: 409 });
+    const { result, writes } = run({ key: 'tts_enabled', value: 1 }, { ttsAvailable: true });
+    assert.deepEqual(result.values, { tts_enabled: 1 });
+    assert.deepEqual(writes, [['updateTtsSettings', 1, { tts_enabled: 1 }]]);
+    assert.deepEqual(run({ key: 'tts_enabled', value: 0 }).result.values, { tts_enabled: 0 });
   });
 
   test('a server switch needs the streamer\'s own server; sub roles also need a role', () => {

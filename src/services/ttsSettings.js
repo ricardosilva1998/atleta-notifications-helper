@@ -15,6 +15,26 @@ const SPEED = Object.freeze({ min: 0.7, max: 1.2, fallback: 1 });
 const EXPRESSIVENESS = Object.freeze({ min: 0, max: 1, fallback: 0.5 });
 const VOLUME = Object.freeze({ min: 0, max: 1, fallback: 0.8 });
 
+// The codes a save (?error=) or a test of the voice answers, and the text the Donations page shows for each.
+const TTS_ERRORS = Object.freeze({
+  bad_language: 'donations.tts.error.bad_language',
+  limit: 'donations.tts.error.limit',
+  failed: 'donations.tts.error.failed',
+  cooldown: 'donations.tts.error.cooldown',
+  unavailable: 'donations.tts.error.unavailable',
+});
+
+// What happened to a tip (donations.tts_status), as the donation history shows it.
+const TTS_STATUS_TEXTS = Object.freeze({
+  read: 'donations.tts.status.read',
+  below_threshold: 'donations.tts.status.below_threshold',
+  other_currency: 'donations.tts.status.other_currency',
+  blocked_off: 'donations.tts.status.blocked_off',
+  overlay_closed: 'donations.tts.status.overlay_closed',
+  limit: 'donations.tts.status.limit',
+  failed: 'donations.tts.status.failed',
+});
+
 const twoDecimals = (n) => Math.round(n * 100) / 100;
 const inRange = ({ min, max, fallback }, value) => twoDecimals(clampNumber(value, min, max, fallback));
 
@@ -47,4 +67,4 @@ function checkTtsSettings(body, { tipMinimum }) {
   };
 }
 
-module.exports = { checkTtsSettings };
+module.exports = { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings };

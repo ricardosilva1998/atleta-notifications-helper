@@ -38,6 +38,12 @@ const { SYNC_DELETE_FAILED } = require('../services/twitchRewards');
 const dashboardSettings = require('../services/dashboardSettings');
 const overlayPresence = require('../services/overlayPresence');
 const { buildCards, cardTexts } = require('../services/dashboardCards');
+const tipVoice = require('../services/tipVoice');
+const { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings } = require('../services/ttsSettings');
+const { TTS_LANGUAGES, VOICES, defaultVoice, isVoice } = require('../services/ttsVoices');
+const { defaultTemplates } = require('../services/tipSpeech');
+const { setUserContentHeaders } = require('../services/userContentHeaders');
+const { t: translateIn } = require('../i18n');
 
 const router = Router();
 
@@ -356,6 +362,11 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
   return card;
 }
 
+// Reading tips aloud: this month (UTC, 'YYYY-MM'), whose characters count toward the streamer's limit, and the limit
+// (the admin's, else the default).
+const utcMonth = (now = new Date()) => now.toISOString().slice(0, 7);
+const ttsLimitOf = (streamer) => streamer.tts_monthly_limit ?? config.tts.monthlyLimit;
+
 // Everything the Twitch tab's working cards show; services/dashboardCards.js decides each card's state from it.
 // `discord` is discordNotificationsCard()'s result. Only our own tables and the bot's caches are read.
 function gatherCards(req, discord, lang) {
@@ -378,6 +389,7 @@ function gatherCards(req, discord, lang) {
     sponsorMessages: db.getSponsorMessages(s.id),
     tips: { recent: db.getDonations(s.id, { sinceDays: 90, limit: 3 }), count90d: db.countDonations(s.id, { sinceDays: 90 }) },
     tipGoal: db.getActiveTipGoal(s.id),
+    tts: { available: Boolean(config.tts.apiKey), used: db.getTtsUsage(s.id, utcMonth()), limit: ttsLimitOf(s), lang },
     rewards: db.getRewards(s.id).filter((r) => !isPendingDelete(r)),
     rewardsAccess: { hasScope: hasRedemptionScope(s) },
     pollTemplates: db.getPollTemplates(s.id),
@@ -1055,7 +1067,9 @@ function runSettingFollowUps({ before, after, steps }) {
 // A working card's switch, number or short text, saved as it changes: one setting, or a few at once
 // ({ changes }). services/dashboardSettings.js lists what may be saved and checks it.
 router.post('/settings', (req, res) => {
-  const result = dashboardSettings.save(req.streamer, req.body, { db, followUps: { run: runSettingFollowUps } });
+  const result = dashboardSettings.save(req.streamer, req.body, {
+    db, followUps: { run: runSettingFollowUps }, ttsAvailable: Boolean(config.tts.apiKey),
+  });
   if (!result.ok) {
     return res.status(result.status).json({ ok: false, code: result.code, error: res.locals.t(dashboardSettings.ERRORS[result.code].text) });
   }
@@ -1225,6 +1239,82 @@ router.get('/donations', (req, res) => {
     }),
     goalError: errorMessage(GOAL_ERRORS, req.query.goal_error, t),
     goalCurrencyWarning: mismatch ? t('donations.goal.currencyMismatch', mismatch) : null,
+    tts: ttsSection(req.streamer, t),
+    ttsError: errorMessage(TTS_ERRORS, req.query.error, t),
+    ttsSaved: req.query.saved === 'tts',
+  });
+});
+
+// The "Read tips aloud" section of the Donations page: the streamer's settings (before a first save, what a tip is
+// read with: English and its first voice, as services/tipVoice.js does), every language's voices and default lines
+// (the page switches them without a reload), and this month's use with the day it starts again (UTC).
+function ttsSection(streamer, t) {
+  const language = TTS_LANGUAGES.includes(streamer.tts_language) ? streamer.tts_language : 'en';
+  const now = new Date();
+  return {
+    available: Boolean(config.tts.apiKey),
+    settings: {
+      enabled: !!streamer.tts_enabled,
+      minAmount: streamer.tts_min_amount ?? 5,
+      language,
+      voice: isVoice(language, streamer.tts_voice) ? streamer.tts_voice : defaultVoice(language),
+      speed: streamer.tts_speed ?? 1,
+      expressiveness: streamer.tts_expressiveness ?? 0.5,
+      volume: streamer.tts_volume ?? 0.8,
+      template: streamer.tts_template || '',
+      templateEmpty: streamer.tts_template_empty || '',
+    },
+    currency: streamer.donation_currency || 'EUR',
+    minFloor: Math.max(Number(streamer.donation_min_amount) || 0, MIN_AMOUNT_FLOOR),
+    languages: TTS_LANGUAGES,
+    voices: VOICES,
+    templates: Object.fromEntries(TTS_LANGUAGES.map((lang) => [lang, defaultTemplates(translateIn, lang)])),
+    used: db.getTtsUsage(streamer.id, utcMonth(now)),
+    limit: ttsLimitOf(streamer),
+    resetsOn: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10),
+    lastError: streamer.tts_last_error || null,
+    lastErrorAt: streamer.tts_last_error_at || null,
+    errorTexts: Object.fromEntries(Object.entries(TTS_ERRORS).map(([code, key]) => [code, t(key)])),
+  };
+}
+
+// The whole section's form: checked and clamped (services/ttsSettings.js), every field it sends stored. The form
+// always sends every field except the switch, which a browser leaves out while it is unticked (stored as off).
+router.post('/donations/tts', (req, res) => {
+  if (!config.tts.apiKey) return res.redirect('/dashboard/donations?error=unavailable#tts');
+  const checked = checkTtsSettings(req.body, { tipMinimum: req.streamer.donation_min_amount });
+  if (!checked.ok) return res.redirect(`/dashboard/donations?error=${encodeURIComponent(checked.error)}#tts`);
+  db.updateTtsSettings(req.streamer.id, checked.settings);
+  res.redirect('/dashboard/donations?saved=tts#tts');
+});
+
+// "Test the voice": a sample tip read with the settings the form shows (saved or not; nothing is saved), through
+// services/tipVoice.js (it counts toward the month, has its own 10 s cooldown, and plays in OBS when it is open).
+// Answers the URL the page plays it from, or the reason it could not (a TTS_ERRORS code).
+const TTS_TEST_STATUS = Object.freeze({ cooldown: 429, limit: 409, unavailable: 503, failed: 502, bad_language: 400 });
+router.post('/donations/tts/test', async (req, res) => {
+  let streamer = req.streamer;
+  const body = req.body || {};
+  if (body.tts_language !== undefined) {
+    const checked = checkTtsSettings(body, { tipMinimum: streamer.donation_min_amount });
+    if (!checked.ok) return res.status(TTS_TEST_STATUS[checked.error]).json({ ok: false, error: checked.error });
+    streamer = { ...streamer, ...checked.settings };
+  }
+  const result = await tipVoice.testVoice(streamer);
+  if (!result.ok) return res.status(TTS_TEST_STATUS[result.error] || 500).json({ ok: false, error: result.error });
+  res.json({ ok: true, url: `/dashboard/donations/tts/audio/${result.file}` });
+});
+
+// A test's audio, for the page that asked: only a file name tipVoice makes, only from the logged-in streamer's own
+// folder (gone after an hour). Anything else is 404.
+router.get('/donations/tts/audio/:file', (req, res) => {
+  const file = tipVoice.ttsFilePath(req.streamer.id, req.params.file);
+  if (!file) return res.status(404).end();
+  res.set('Cache-Control', 'no-cache');
+  setUserContentHeaders(res, file); // a file made from the streamer's text: never run as a page here
+  res.type('audio/mpeg');
+  res.sendFile(path.basename(file), { root: path.dirname(file) }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
   });
 });
 
@@ -1263,14 +1353,17 @@ router.get('/donations/history', (req, res) => {
 
   // A donation with no donor name is stored under the name 'Anonymous' (db.logDonation); the
   // page shows it as the translated word, so those rows read like the rest of the page.
+  // What happened to each tip's reading aloud (donations.tts_status), as a text key; the column shows while the
+  // streamer reads tips or a tip on the page has a status.
   const donations = db.getDonations(req.streamer.id, { ...f, limit: perPage, offset: (page - 1) * perPage })
-    .map((d) => (d.donor_name === 'Anonymous' ? { ...d, donor_name: null } : d));
+    .map((d) => ({ ...d, donor_name: d.donor_name === 'Anonymous' ? null : d.donor_name, ttsStatusKey: TTS_STATUS_TEXTS[d.tts_status] || null }));
 
   res.render('donation-history', {
     streamer: req.streamer,
     filters: f,
     donations,
     total, page, pages, totals, months, chartCurrency,
+    showTts: !!req.streamer.tts_enabled || donations.some((d) => d.ttsStatusKey),
     otherCurrencies: yearTotals.filter(t => t.currency !== chartCurrency).map(t => t.currency),
   });
 });
@@ -1284,8 +1377,8 @@ router.get('/donations/history.csv', (req, res) => {
     if (/^[=+\-@\t\r]/.test(str)) str = "'" + str;
     return '"' + str.replace(/"/g, '""') + '"';
   };
-  const lines = [['date_utc', 'donor', 'amount', 'currency', 'source', 'message'].join(',')];
-  rows.forEach(r => lines.push([r.created_at, r.donor_name, r.amount.toFixed(2), r.currency, r.source, r.message].map(cell).join(',')));
+  const lines = [['date_utc', 'donor', 'amount', 'currency', 'source', 'message', 'tts_status'].join(',')];
+  rows.forEach(r => lines.push([r.created_at, r.donor_name, r.amount.toFixed(2), r.currency, r.source, r.message, r.tts_status].map(cell).join(',')));
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="donations-${f.range}${f.source ? '-' + f.source : ''}.csv"`);
   res.send('\uFEFF' + lines.join('\r\n'));

@@ -154,6 +154,20 @@ const discordNotifications = {
     switches: { goLive: false, clips: false, recaps: true, milestones: false, highlights: true, subRoles: true }, liveWhere: null, hasLiveChannel: false, hasSubRole: false,
   })],
 };
+// The "Read tips aloud" section's data (ttsSection() in routes/dashboard.js), available or not.
+const ttsVoices = ['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja'].map((lang) => [lang, [
+  { id: 'zzvoice1', name: 'zzrachel', gender: 'female', preview: '/tts/previews/zzrachel.mp3' },
+  { id: 'zzvoice2', name: 'zzadam', gender: 'male', preview: null },
+]]);
+const ttsSection = (over = {}) => ({
+  available: true,
+  settings: { enabled: true, minAmount: 5, language: 'pt', voice: 'zzvoice1', speed: 1, expressiveness: 0.5, volume: 0.8, template: 'zztemplate', templateEmpty: '' },
+  currency: 'EUR', minFloor: 1, languages: ttsVoices.map(([lang]) => lang), voices: Object.fromEntries(ttsVoices),
+  templates: Object.fromEntries(ttsVoices.map(([lang]) => [lang, { template: 'zzdefault', emptyTemplate: 'zzempty' }])),
+  used: 2340, limit: 15000, resetsOn: '2026-11-01', lastError: 'elevenlabs_timeout', lastErrorAt: '2026-10-16 10:00:00',
+  errorTexts: { failed: 'zzfailed' },
+  ...over,
+});
 const months = (total) => Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, total: total(i), count: i % 3 }));
 
 // Each page with data that shows its branches: [name, locals]
@@ -200,11 +214,11 @@ const SAMPLES = {
     }],
   ],
   'donation-settings': [
-    ['a goal is running', { streamer: streamerRow(), appUrl: 'https://example.test', activeGoal: { id: 1, title: 'zzgoal', currency: 'EUR', target_amount: 100, current_amount: 5, bar_color: '#22c55e' }, goalHistory: [{ title: 'zzold', currency: 'USD', current_amount: 5, target_amount: 10, completed_at: 'x', created_at: '2026-01-01' }], goalOverlayUrl: 'https://example.test/overlay/goal/zztoken', settingsError: 'zzerror', goalError: 'zzerror', goalCurrencyWarning: 'zzwarning' }],
-    ['no goal, no overlay link', { streamer: streamerRow({ twitch_username: null, paypal_email: null }), appUrl: 'https://example.test', activeGoal: null, goalHistory: [], goalOverlayUrl: null, settingsError: null, goalError: null, goalCurrencyWarning: null }],
+    ['a goal is running', { streamer: streamerRow(), appUrl: 'https://example.test', activeGoal: { id: 1, title: 'zzgoal', currency: 'EUR', target_amount: 100, current_amount: 5, bar_color: '#22c55e' }, goalHistory: [{ title: 'zzold', currency: 'USD', current_amount: 5, target_amount: 10, completed_at: 'x', created_at: '2026-01-01' }], goalOverlayUrl: 'https://example.test/overlay/goal/zztoken', settingsError: 'zzerror', goalError: 'zzerror', goalCurrencyWarning: 'zzwarning', tts: ttsSection(), ttsError: 'zzerror', ttsSaved: true }],
+    ['no goal, no overlay link', { streamer: streamerRow({ twitch_username: null, paypal_email: null }), appUrl: 'https://example.test', activeGoal: null, goalHistory: [], goalOverlayUrl: null, settingsError: null, goalError: null, goalCurrencyWarning: null, tts: ttsSection({ available: false }), ttsError: null, ttsSaved: false }],
   ],
   'donation-history': [
-    ['with donations', { streamer: streamerRow(), filters: { range: '30d', source: 'legacy' }, donations: [{ id: 1, created_at: '2026-10-01 10:00:00', donor_name: null, amount: 5, currency: 'EUR', source: 'paypal', message: 'zzmessage' }, { id: 2, created_at: '2026-10-02 10:00:00', donor_name: 'zzdonor', amount: 1, currency: 'USD', source: 'legacy', message: '' }], total: 2, page: 2, pages: 3, totals: [{ currency: 'EUR', total: 5, count: 1, biggest: 5 }, { currency: 'USD', total: 1, count: 2, biggest: 1 }], months: months((i) => i), chartCurrency: 'EUR', otherCurrencies: ['USD'] }],
+    ['with donations', { streamer: streamerRow(), filters: { range: '30d', source: 'legacy' }, donations: [{ id: 1, created_at: '2026-10-01 10:00:00', donor_name: null, amount: 5, currency: 'EUR', source: 'paypal', message: 'zzmessage', tts_status: 'read', ttsStatusKey: 'donations.tts.status.read' }, { id: 2, created_at: '2026-10-02 10:00:00', donor_name: 'zzdonor', amount: 1, currency: 'USD', source: 'legacy', message: '', tts_status: null, ttsStatusKey: null }], showTts: true, total: 2, page: 2, pages: 3, totals: [{ currency: 'EUR', total: 5, count: 1, biggest: 5 }, { currency: 'USD', total: 1, count: 2, biggest: 1 }], months: months((i) => i), chartCurrency: 'EUR', otherCurrencies: ['USD'] }],
     ['nothing yet', { streamer: streamerRow(), filters: { range: '7d', source: '' }, donations: [], total: 0, page: 1, pages: 1, totals: [], months: months(() => 0), chartCurrency: null, otherCurrencies: [] }],
   ],
   'giveaways-config': [
