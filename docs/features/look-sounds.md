@@ -64,6 +64,14 @@ functions are still registered and now play only when a recording cannot load.
   the default alerts' engine sounds (about −16 to −21); the recordings sit at the level of the engine
   sounds, so a streamer's volume setting still fits.
 
+## Making new recordings
+
+The pipeline that made them is in the gitignored `.superpowers/sounds/`, and its `README.md` says what it
+needs (Node, ffmpeg, a Python 3.12 environment from its `requirements.txt`) and how to run it, step by step.
+It reads `ELEVENLABS_API_KEY` from the repository's `.env` (development only; the app never reads it), and
+ElevenLabs charges 11 credits per second of audio it generates (the first round used 18,330). Its last
+step copies the mixes into `public/overlay/objects/sounds/`, as below.
+
 ## Replacing or adding a recording
 
 1. Put the new MP3 in the family's folder as `<key>.<hash>.mp3` (or `<key>.2.<hash>.mp3`), the hash being
