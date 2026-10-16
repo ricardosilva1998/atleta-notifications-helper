@@ -20,6 +20,9 @@ const DECIMAL_SEPARATOR = Object.freeze({ en: '.', zh: '.', ja: '.', pt: ',', es
 
 const LINE_BREAKS = /[\t\n\r]+/g;
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/g;
+// Invisible formatting characters (soft hyphen, zero-width space, joiners, direction marks, word joiner, BOM):
+// nothing to say, and they would break up a link ("evil<ZWSP>.com") so the link test misses it.
+const INVISIBLE_CHARACTERS = /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 const WHITESPACE = /\s+/;
 const LONG_RUN = /(.)\1{3,}/gsu;
 const PLACEHOLDER = /\{(name|amount|message)\}/g;
@@ -32,10 +35,10 @@ function limitCharacters(text, max) {
 
 // What a donor's text becomes before it is spoken: runs of one character cut to
 // three (so "woooooow" and a row of fire emoji stay short), control characters
-// removed, the words that are links dropped, whitespace collapsed.
+// and invisible formatting characters removed, the words that are links dropped, whitespace collapsed.
 function cleanSpeech(text) {
   if (text == null) return '';
-  const plain = String(text).replace(LINE_BREAKS, ' ').replace(CONTROL_CHARACTERS, '');
+  const plain = String(text).replace(LINE_BREAKS, ' ').replace(CONTROL_CHARACTERS, '').replace(INVISIBLE_CHARACTERS, '');
   // Runs first: "wwwwwww.x" is a link only once it is "www.x".
   const cut = plain.replace(LONG_RUN, (_, character) => character.repeat(RUN_MAX));
   return cut.split(WHITESPACE).filter((word) => word && !containsLink(word)).join(' ');

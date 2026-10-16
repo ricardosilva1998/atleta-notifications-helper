@@ -38,6 +38,13 @@ test('a run of one character cannot build a link', () => {
   assert.equal(cleanSpeech('wwwwwww.x hi'), 'hi');
 });
 
+test('invisible characters cannot hide a link', () => {
+  assert.equal(cleanSpeech('evil​.com hi'), 'hi');
+  assert.equal(cleanSpeech('evil­.com hi'), 'hi');
+  assert.equal(cleanSpeech('ev‍il.c⁠om﻿ hi'), 'hi');
+  assert.equal(cleanSpeech('he​llo'), 'hello');
+});
+
 test('runs of one character are cut to three, emoji too', () => {
   assert.equal(cleanSpeech('woooooow'), 'wooow');
   assert.equal(cleanSpeech('🔥🔥🔥🔥🔥🔥'), '🔥🔥🔥');
