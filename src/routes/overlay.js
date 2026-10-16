@@ -252,11 +252,13 @@ router.get('/goal/:token', (req, res) => {
 
 // The Polls & predictions bar (an OBS browser source of its own). Its stream says what runs when it opens — read from
 // Twitch when EventSub said nothing lately (after a restart OBS reconnects here) — then every change on the bus
-// channel poll:<streamerId>; it does not follow the alerts' switch. EventSub can lose an end, lock or result event, so
-// while what the bar shows may be stale it asks livePolls to read Twitch again (live() reads at most once every 5 s per
-// streamer, and what a read finds reaches every open bar on poll:<streamerId>):
-const BAR_OVERDUE_CHECK_MS = 5000; // every 5 s while a running poll or prediction is past its end
-const BAR_LOCKED_CHECK_MS = 60000; // at most once a minute while a prediction stays locked
+// channel poll:<streamerId>; it does not follow the alerts' switch. While something runs the bar asks livePolls again:
+// a streamer whose overlay and chatbot are both off has no EventSub connection, and EventSub can lose an end, lock or
+// result event. Asking costs nothing while EventSub talks: live() reads Twitch only when EventSub has been quiet for
+// 30 s (or a running view is past its end), at most once every 5 s per streamer, one read shared by every caller, and
+// what a read finds reaches every open bar on poll:<streamerId>.
+const BAR_RUNNING_CHECK_MS = 5000; // every 5 s while a poll or prediction runs
+const BAR_LOCKED_CHECK_MS = 60000; // at most once a minute while a prediction stays locked (a lock can last 24 h)
 
 router.get('/poll/events/:token', (req, res) => {
   const streamer = db.getStreamerByOverlayToken(req.params.token);
@@ -280,12 +282,12 @@ router.get('/poll/events/:token', (req, res) => {
   const recheck = setInterval(() => {
     const now = Date.now();
     const { poll, prediction } = livePolls.barState(streamer.id);
-    const overdue = [poll, prediction].some((view) => !!view && view.state === 'running' && view.endsAt !== null && view.endsAt <= now);
+    const running = [poll, prediction].some((view) => !!view && view.state === 'running');
     const locked = !!prediction && prediction.state === 'locked';
-    if (!overdue && !(locked && now - askedAt >= BAR_LOCKED_CHECK_MS)) return;
+    if (!running && !(locked && now - askedAt >= BAR_LOCKED_CHECK_MS)) return;
     askedAt = now;
     livePolls.live(streamer.id).catch(() => null);
-  }, BAR_OVERDUE_CHECK_MS);
+  }, BAR_RUNNING_CHECK_MS);
   const channel = `poll:${streamer.id}`;
   bus.on(channel, send);
   endStreamWhenAccountDisabled(streamer.id, req, res);

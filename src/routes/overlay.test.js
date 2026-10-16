@@ -422,22 +422,33 @@ describe('an open Polls & predictions bar asks Twitch again while what it shows 
     await until(() => bus.listenerCount(`poll:${bar.id}`) === 0, 'the bar\'s bus listener was not removed when OBS disconnected');
   }
 
-  test('every 5 seconds while a running poll or prediction is past its end, and not before its end', async (t) => {
-    const bar = await openBar(t, { poll: view('poll', 'running', NOW + 15000), prediction: null });
+  // A streamer whose overlay and chatbot are both off has no EventSub connection: the bar's counts move only because
+  // it asks (live() reads Twitch only while EventSub has been quiet, at most once every 5 s per streamer).
+  test('every 5 seconds while a poll or a prediction runs, long before its end too; not once it has ended', async (t) => {
+    const bar = await openBar(t, { poll: view('poll', 'running', NOW + 600000), prediction: null });
     assert.deepEqual(bar.calls, [bar.id], 'the read when the bar opens');
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 2, 'a running poll long before its end');
     advance(t, 10000);
-    assert.equal(bar.calls.length, 1, 'a running poll before its end');
-    advance(t, 5000);
-    assert.equal(bar.calls.length, 2, 'at its end');
-    advance(t, 5000);
-    assert.equal(bar.calls.length, 3, 'and every 5 seconds after it');
+    assert.equal(bar.calls.length, 4, 'every 5 seconds');
     bar.state = { poll: view('poll', 'ended', null), prediction: null };
     advance(t, 15000);
-    assert.equal(bar.calls.length, 3, 'once a read has found the end');
-    bar.state = { poll: null, prediction: view('prediction', 'running', NOW) };
+    assert.equal(bar.calls.length, 4, 'once a read has found the end');
+    bar.state = { poll: null, prediction: view('prediction', 'running', NOW + 600000) };
     advance(t, 5000);
-    assert.equal(bar.calls.length, 4, 'a running prediction past its end too');
+    assert.equal(bar.calls.length, 5, 'a running prediction too');
+    bar.state = { poll: view('poll', 'running', NOW), prediction: null };
+    advance(t, 5000);
+    assert.equal(bar.calls.length, 6, 'and one past its end (its end event is late)');
     assert.ok(bar.calls.every((streamerId) => streamerId === bar.id), 'the bar asks about its own streamer');
+    await disconnect(bar);
+  });
+
+  test('a poll running beside a locked prediction: every 5 seconds, for the poll', async (t) => {
+    const locked = view('prediction', 'locked', null);
+    const bar = await openBar(t, { poll: view('poll', 'running', NOW + 600000), prediction: locked });
+    advance(t, 15000);
+    assert.equal(bar.calls.length, 4);
     await disconnect(bar);
   });
 
