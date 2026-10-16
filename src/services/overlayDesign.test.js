@@ -41,9 +41,10 @@ const accepts = (over) => {
 
 describe('event types', () => {
   test('are the builder\'s tabs', () => {
-    const tabs = [...builder.matchAll(/class="event-tab[^"]*" data-type="([a-z_]+)"/g)].map((m) => m[1]);
-    assert.ok(tabs.length >= 10, 'found the tabs');
-    assert.deepEqual([...BUILDER_EVENT_TYPES].sort(), [...tabs].sort());
+    // Every type the server saves has a card in the builder (public/js/builder-cards.js draws CARD_TYPES).
+    const { CARD_TYPES } = require('../../public/js/builder-styles-core.js');
+    assert.ok(CARD_TYPES.length >= 10, 'found the cards');
+    assert.deepEqual([...BUILDER_EVENT_TYPES].sort(), [...CARD_TYPES].sort());
   });
 
   test('anything else is refused', () => {

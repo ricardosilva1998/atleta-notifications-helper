@@ -117,7 +117,84 @@
     }
     .urls-dropdown .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+    .nav-title { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; flex: 0 1 auto; }
+    .nav-sub { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .top-nav h1, .top-nav a, .top-nav .overlay-urls-btn { white-space: nowrap; }
+    @media (max-width: 760px) {
+      .top-nav { gap: 10px; padding: 0 16px; }
+      .nav-sub, .top-nav .sep { display: none; }
+      .nav-title { flex: none; }
+      #sounds-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      /* The back link keeps its chevron; its label stays for screen readers */
+      .back-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    }
+
+    /* ── The alert cards (public/js/builder-cards.js) ── */
+    .cards-page { flex: 1; min-height: 0; overflow-y: auto; }
+    .cards-wrap { max-width: 1760px; margin: 0 auto; padding: 24px 28px 60px; }
+    .section-label {
+      font-family: var(--font-display); font-weight: 600; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; margin: 0 0 12px;
+    }
+    .cards + .section-label { margin-top: 32px; }
+    .section-label-soon { color: var(--text-muted); margin-top: 32px; }
+    /* Two cards per row; one on a narrow window. The previews grow with the card. */
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    @media (max-width: 760px) {
+      .cards { grid-template-columns: minmax(0, 1fr); }
+      .cards-wrap { padding: 16px 16px 48px; }
+    }
+    .ecard {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s;
+    }
+    .ecard:hover { border-color: rgba(145,70,255,.35); }
+    .ecard-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+    .ecard-icon { width: 34px; height: 34px; flex: none; border-radius: 10px; background: var(--accent-glow); display: grid; place-items: center; font-size: 18px; }
+    .ecard-names { min-width: 0; }
+    .ecard-title { font-size: 16px; font-weight: 700; }
+    .ecard-look { color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The faux stream: 16:7, at least 210 px tall; the alert loops in its middle */
+    .ecard-preview {
+      position: relative; aspect-ratio: 16 / 7; min-height: 210px; margin: 0 12px;
+      border-radius: var(--radius-md); overflow: hidden; display: grid; place-items: center; cursor: pointer;
+    }
+    .ecard-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .ecard-preview .stream-bg {
+      position: absolute; inset: 0;
+      background-color: #10101c;
+      background-image:
+        radial-gradient(ellipse at 20% 80%, rgba(80,40,140,.55), transparent 55%),
+        radial-gradient(ellipse at 85% 20%, rgba(20,90,120,.45), transparent 50%),
+        linear-gradient(160deg, #10101c, #1b1b33 45%, #0d0d18);
+    }
+    .ecard-preview .mini-slot { position: relative; --fw: 1920px; }
+    /* A look of the alert styles is drawn for 420 px and scaled to the width (as .alert-pos.look in OBS) */
+    .mini-slot.look > .obj { width: 420px; zoom: var(--zw, 1); }
+    .ecard-meta { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 0; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary);
+      background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+      max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ecard-dots { display: inline-grid; grid-template-columns: repeat(3, 5px); gap: 2px; flex: none; }
+    .ecard-dots i { width: 5px; height: 5px; border-radius: 1px; background: var(--text-muted); opacity: .5; }
+    .ecard-dots i.on { background: var(--accent-hover); opacity: 1; }
+    .ecard-foot { display: flex; align-items: center; gap: 8px; padding: 14px 16px 16px; margin-top: auto; }
+    .ecard-msg { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary); }
+    .ecard-foot .btn-primary { margin-left: auto; }
+    /* The sponsor images card: the first image in the banner, fading in and out while on screen */
+    .ecard-sponsor {
+      position: relative; width: 62%; max-width: 760px; aspect-ratio: 500 / 180; border-radius: 12px;
+      overflow: hidden; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.2);
+    }
+    .ecard-sponsor img { max-width: 100%; max-height: 100%; object-fit: contain; opacity: 0; }
+    .ecard-sponsor.playing img { animation: ecardSponsor 4s ease-in-out infinite; }
+    @keyframes ecardSponsor { 0% { opacity: 0; transform: scale(.96); } 12%, 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+    @media (prefers-reduced-motion: reduce) { .ecard-sponsor.playing img { animation: none; opacity: 1; } }
+
     /* ── Layout ── */
+    .builder-layout[hidden] { display: none; }
     .builder-layout {
       display: flex;
       flex: 1;
@@ -133,28 +210,6 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-    }
-
-    /* Event tabs */
-    .event-tabs {
-      flex-shrink: 0;
-    }
-    .event-tabs-section { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.2); }
-    .event-tabs-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #666; margin-bottom: 6px; margin-top: 10px; font-family: var(--font-display); }
-    .event-tabs-label:first-child { margin-top: 0; }
-    .event-tabs-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 4px; }
-    .event-tab {
-      padding: 6px 4px; font-size: 11px; font-weight: 600;
-      font-family: var(--font-display); cursor: pointer;
-      background: var(--bg-elevated); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); color: var(--text-secondary);
-      text-align: center; transition: all 0.15s; user-select: none;
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-    }
-    .event-tab:hover { border-color: rgba(145,70,255,0.3); color: var(--text-primary); }
-    .event-tab.active {
-      background: rgba(145,70,255,0.15); border-color: rgba(145,70,255,0.5);
-      color: var(--accent);
     }
 
     /* Panel scrollable area */
@@ -657,24 +712,7 @@
     }
     .anim-playing { animation-fill-mode: both; animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-    /* ── Save bar ── */
-    .save-bar {
-      height: 56px;
-      border-top: 1px solid var(--border);
-      background: var(--bg-surface);
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .save-bar .event-badge {
-      font-size: 12px; font-family: var(--font-display); font-weight: 700;
-      color: var(--text-secondary); background: var(--bg-elevated);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      padding: 4px 10px;
-    }
-    .save-bar .spacer { flex: 1; }
+    /* ── Save status ── */
     .save-status {
       font-size: 12px; color: var(--success); font-family: var(--font-display);
       font-weight: 600; opacity: 0; transition: opacity 0.3s;
@@ -870,10 +908,13 @@
 <nav class="top-nav">
   <a href="/dashboard" class="back-link">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    <%= t('nav.dashboard') %>
+    <span class="back-label"><%= t('nav.dashboard') %></span>
   </a>
   <span class="sep">/</span>
-  <h1><%= t('overlayBuilder.heading') %></h1>
+  <div class="nav-title">
+    <h1><%= t('overlayBuilder.heading') %></h1>
+    <span class="nav-sub"><%= t('overlayBuilder.cards.subtitle') %></span>
+  </div>
   <span class="sep">/</span>
   <a id="sounds-link" href="/dashboard/overlay" style="font-size:13px;color:var(--text-secondary);font-family:var(--font-display);font-weight:500;"><%= t('overlayBuilder.settingsLink') %></a>
   <div class="spacer"></div>
@@ -917,40 +958,28 @@
   <% } %>
 </nav>
 
-<!-- Main layout -->
-<div class="builder-layout">
+<!-- The alert cards: each loops its look; Edit alert opens its edit window (public/js/builder-cards.js) -->
+<main class="cards-page">
+  <div class="cards-wrap">
+    <h2 class="section-label"><%= t('overlayBuilder.cards.twitch') %></h2>
+    <div class="cards" id="cards"></div>
+    <% if (features.youtube) { %>
+    <h2 class="section-label"><%= t('overlayBuilder.cards.youtube') %></h2>
+    <div class="cards" id="cards-youtube"></div>
+    <% } %>
+    <% if (features.kick) { %>
+    <h2 class="section-label section-label-soon"><%= t('overlayBuilder.tab.kickSoon') %></h2>
+    <% } %>
+    <h2 class="section-label"><%= t('overlayBuilder.cards.other') %></h2>
+    <div class="cards" id="cards-other"></div>
+  </div>
+</main>
+
+<!-- Today's editor, hidden: its parts move into the edit window (Overlay Builder cards plan, Tasks 4, 5 and 8) -->
+<div class="builder-layout" hidden>
 
   <!-- LEFT PANEL -->
   <div class="left-panel">
-    <div class="event-tabs">
-      <div class="event-tabs-section">
-        <div class="event-tabs-label">Twitch</div>
-        <div class="event-tabs-row">
-          <div class="event-tab active" data-type="follow"><span style="font-size:16px;">🏁</span><span style="font-size:10px;"><%= t('overlayBuilder.event.follow') %></span></div>
-          <div class="event-tab" data-type="subscription"><span style="font-size:16px;">🏆</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.sub') %></span></div>
-          <div class="event-tab" data-type="bits"><span style="font-size:16px;">⛽</span><span style="font-size:10px;"><%= t('overlayBuilder.event.bits') %></span></div>
-          <div class="event-tab" data-type="donation"><span style="font-size:16px;">💰</span><span style="font-size:10px;"><%= t('overlayBuilder.event.donation') %></span></div>
-          <div class="event-tab" data-type="raid"><span style="font-size:16px;">🤖</span><span style="font-size:10px;"><%= t('overlayBuilder.event.raid') %></span></div>
-          <div class="event-tab" data-type="giveaway_winner"><span style="font-size:16px;">🎁</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.giveaway') %></span></div>
-        </div>
-        <% if (features.youtube) { %>
-        <div class="event-tabs-label">YouTube</div>
-        <div class="event-tabs-row">
-          <div class="event-tab" data-type="yt_superchat"><span style="font-size:16px;">💬</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.superchat') %></span></div>
-          <div class="event-tab" data-type="yt_member"><span style="font-size:16px;">⭐</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.member') %></span></div>
-          <div class="event-tab" data-type="yt_giftmember"><span style="font-size:16px;">🎁</span><span style="font-size:10px;"><%= t('overlayBuilder.tab.gift') %></span></div>
-        </div>
-        <% } %>
-        <% if (features.kick) { %>
-        <div class="event-tabs-label" style="color: #555;"><%= t('overlayBuilder.tab.kickSoon') %></div>
-        <% } %>
-        <div class="event-tabs-label"><%= t('overlayBuilder.tab.general') %></div>
-        <div class="event-tabs-row">
-          <div class="event-tab" data-type="timed"><span style="font-size:16px;">⏰</span><span style="font-size:10px;"><%= t('overlayBuilder.event.timed') %></span></div>
-        </div>
-      </div>
-    </div>
-
     <div class="panel-scroll">
 
       <!-- Sponsor Section (visible only on Timed tab) -->
@@ -1222,19 +1251,6 @@
 
   <!-- RIGHT PANEL -->
   <div class="right-panel">
-
-    <!-- Save bar (above canvas) -->
-    <div class="save-bar">
-      <span class="event-badge" id="save-event-badge-top"><%= t('overlayBuilder.event.follow') %></span>
-      <div class="spacer"></div>
-      <span class="save-status" id="save-status"><%= t('overlayBuilder.saved') %></span>
-      <button class="btn btn-danger" onclick="resetCurrentDesign()"><%= t('overlayBuilder.reset') %></button>
-      <button class="btn btn-secondary" onclick="discardChanges()"><%= t('overlayBuilder.discard') %></button>
-      <button class="btn btn-primary" onclick="saveCurrentDesign()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        <%= t('overlayBuilder.save') %>
-      </button>
-    </div>
 
     <!-- Preview canvas -->
     <div class="preview-canvas-wrap">
@@ -2207,13 +2223,6 @@ document.getElementById('position-grid').addEventListener('click', e => {
     workingDesigns[currentType].card_custom_y = null;
   }
   updatePreview();
-});
-
-// ─── Event tabs ──────────────────────────────────────────────────────────────
-document.querySelector('.event-tabs-section').addEventListener('click', e => {
-  const tab = e.target.closest('.event-tab');
-  if (!tab) return;
-  switchTab(tab.dataset.type);
 });
 
 // ─── Range display updates ────────────────────────────────────────────────────
@@ -4086,6 +4095,20 @@ function updateAnimSectionPreview(d) {
 // Initial animation section preview
 updateAnimSectionPreview(workingDesigns[currentType]);
 </script>
+
+<script>
+// What the alert cards need besides the globals above (public/js/builder-cards.js): the switched-on
+// platforms, which alerts have a sound the streamer uploaded, the overlay's URL, the stream's thumbnail
+// for the previews, and their texts.
+window.BUILDER = {
+  features: { youtube: <%= !!features.youtube %>, kick: <%= !!features.kick %> },
+  uploadedSounds: <%- uploadedSounds %>,
+  overlayUrl: <%- JSON.stringify(overlayUrl || null).replace(/</g, '\\u003c') %>,
+  streamThumbnail: <%- JSON.stringify(streamThumbnail || null).replace(/</g, '\\u003c') %>,
+};
+window.BUILDER_TEXTS = <%- builderTexts %>;
+</script>
+<script src="/js/builder-cards.js"></script>
 
 </body>
 </html>
