@@ -35,6 +35,7 @@ function fakeServices(streamer, { failing = [], youtubeChat } = {}) {
       eventSubManager: { startForStreamer: rec('eventsub.start'), stopForStreamer: rec('eventsub.stop') },
       streamElementsManager: { startForStreamer: rec('se.start'), stopForStreamer: rec('se.stop') },
       chatManager: { startForStreamer: rec('chat.start'), stopForStreamer: rec('chat.stop'), partChannel: rec('chat.part') },
+      livePolls: { forget: rec('polls.forget') },
       timedNotificationManager: {
         stopForStreamer: rec('sponsors.stop'),
         restartForStreamer: rec('sponsors.restart'),
@@ -238,10 +239,20 @@ describe('twitchAccountChanged', () => {
   const NOW_LINKED = { id: 5, twitch_username: 'new_channel', chatbot_enabled: 1, enabled: 1 };
   const eventSubStops = (calls) => calls.filter((c) => c[0] === 'eventsub.stop');
 
-  test('stops EventSub, leaves the previous channel and joins the new one, in that order', () => {
+  test('stops EventSub, forgets the poll and prediction, leaves the previous channel and joins the new one, in that order', () => {
     const { calls, services } = fakeServices(NOW_LINKED);
     twitchAccountChanged(5, 'old_channel', services);
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.part', 'old_channel'], ['chat.start', 5]]);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.part', 'old_channel'], ['chat.start', 5]]);
+  });
+
+  // What the Polls & predictions card and the bar showed ran on the previous channel; a read of the new one could not
+  // replace a poll still running there, so the card would stay locked on it.
+  test('forgets the poll and the prediction the card and the bar showed, whatever else happens', () => {
+    for (const streamer of [NOW_LINKED, { ...NOW_LINKED, chatbot_enabled: 0 }, { ...NOW_LINKED, enabled: 0 }, undefined]) {
+      const { calls, services } = fakeServices(streamer);
+      twitchAccountChanged(5, null, services);
+      assert.deepEqual(calls.filter((c) => c[0] === 'polls.forget'), [['polls.forget', 5]], JSON.stringify(streamer));
+    }
   });
 
   test('does not start EventSub again: without a broadcaster authorization there is nothing to connect with', () => {
@@ -253,29 +264,29 @@ describe('twitchAccountChanged', () => {
   test('without a chat bot the new channel is not joined, but the old one is still left', () => {
     const { calls, services } = fakeServices({ ...NOW_LINKED, chatbot_enabled: 0 });
     twitchAccountChanged(5, 'old_channel', services);
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.part', 'old_channel']]);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.part', 'old_channel']]);
   });
 
   test('a streamer who lost the account to someone else (no channel linked any more) only stops and leaves', () => {
     const { calls, services } = fakeServices({ id: 5, twitch_username: null, chatbot_enabled: 1, enabled: 1 });
     twitchAccountChanged(5, 'shared_channel', services);
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.part', 'shared_channel']]);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.part', 'shared_channel']]);
   });
 
   test('a first link has no previous channel to leave', () => {
     const { calls, services } = fakeServices(NOW_LINKED);
     twitchAccountChanged(5, null, services);
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.start', 5]]);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.start', 5]]);
   });
 
   test('a disabled account does not join', () => {
     const { calls, services } = fakeServices({ ...NOW_LINKED, enabled: 0 });
     twitchAccountChanged(5, 'old_channel', services);
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.part', 'old_channel']]);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.part', 'old_channel']]);
   });
 
   test('one manager failing does not stop the others, and says so', () => {
-    const { calls, services } = fakeServices(NOW_LINKED, { failing: ['eventsub.stop', 'chat.part'] });
+    const { calls, services } = fakeServices(NOW_LINKED, { failing: ['eventsub.stop', 'polls.forget', 'chat.part'] });
     const logged = [];
     const original = console.error;
     console.error = (...args) => logged.push(args.join(' '));
@@ -284,15 +295,44 @@ describe('twitchAccountChanged', () => {
     } finally {
       console.error = original;
     }
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.part', 'old_channel'], ['chat.start', 5]]);
-    assert.equal(logged.length, 2);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.part', 'old_channel'], ['chat.start', 5]]);
+    assert.equal(logged.length, 3);
     assert.match(logged[0], /EventSub stop failed for streamer 5/);
-    assert.match(logged[1], /Twitch chat leave failed for streamer 5/);
+    assert.match(logged[1], /Polls forget failed for streamer 5/);
+    assert.match(logged[2], /Twitch chat leave failed for streamer 5/);
+  });
+
+  test('the app\'s own services forget them too: an open bar is told that nothing runs', () => {
+    const Module = require('module');
+    const FILE = require.resolve('./accountLifecycle');
+    const stopped = [];
+    const stubs = { // the managers that need the app's config; livePolls and the bus are the real ones
+      '../db': { getStreamerById: () => undefined },
+      './eventsub': { eventSubManager: { stopForStreamer: (id) => stopped.push(id) } },
+      './twitchChat': { chatManager: { partChannel() {}, startForStreamer() {} } },
+    };
+    const load = Module._load;
+    Module._load = function (request, parent, isMain) {
+      if (parent && parent.filename === FILE && Object.hasOwn(stubs, request)) return stubs[request];
+      return load.call(this, request, parent, isMain);
+    };
+    const bus = require('./overlayBus');
+    const told = [];
+    const listener = (payload) => told.push(payload);
+    bus.on('poll:5', listener);
+    try {
+      twitchAccountChanged(5, null);
+    } finally {
+      Module._load = load;
+      bus.off('poll:5', listener);
+    }
+    assert.deepEqual(stopped, [5]);
+    assert.deepEqual(told.map(({ type, poll, prediction }) => [type, poll, prediction]), [['poll-state', null, null]]);
   });
 
   test('a streamer who is not found only has its connections stopped', () => {
     const { calls, services } = fakeServices(undefined);
     twitchAccountChanged(5, 'old_channel', services);
-    assert.deepEqual(calls, [['eventsub.stop', 5], ['chat.part', 'old_channel']]);
+    assert.deepEqual(calls, [['eventsub.stop', 5], ['polls.forget', 5], ['chat.part', 'old_channel']]);
   });
 });

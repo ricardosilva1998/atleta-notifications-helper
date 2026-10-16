@@ -325,6 +325,71 @@ describe('reading Twitch (live)', () => {
   });
 });
 
+describe('reading Twitch again at once (recheck), after a refusal says the card may be stale', () => {
+  test('a poll Twitch ended early whose end was lost, while the prediction\'s events keep EventSub fresh: the next live() reads, within 5 seconds of the last read too', async () => {
+    const w = setup({ latest: { poll: helixPoll1('ACTIVE'), prediction: null } });
+    await w.lp.live(7);
+    assert.equal(w.reads, 1);
+    w.t = NOW + 1000;
+    w.lp.onEvent(7, 'channel.prediction.begin', predictionBegin);
+    w.latest = { poll: helixPoll1('TERMINATED', NOW + 2000), prediction: helixPrediction1('ACTIVE') }; // its end event never comes
+    w.t = NOW + 3000;
+    assert.equal((await w.lp.live(7)).poll.state, 'running', 'EventSub spoke a moment ago and Twitch was read 3 seconds ago');
+    assert.equal(w.reads, 1);
+    w.lp.recheck(7); // Twitch refused End now with `changed`
+    const seen = await w.lp.live(7);
+    assert.equal(w.reads, 2, 'read at once');
+    assert.equal(seen.poll.state, 'ended');
+    assert.equal(w.lp.barState(7).poll.state, 'ended');
+    assert.deepEqual(w.said, ['Prediction: Clean first lap? — place your channel points! (0:59 to predict)'], 'what a read finds is never announced');
+  });
+
+  test('a read already on its way is shared; a streamer with nothing kept is read anyway', async () => {
+    const w = setup();
+    let release;
+    w.latest = new Promise((resolve) => { release = resolve; });
+    const first = w.lp.live(7);
+    w.lp.recheck(7);
+    const second = w.lp.live(7);
+    release({ poll: helixPoll1('ACTIVE'), prediction: null });
+    await Promise.all([first, second]);
+    assert.equal(w.reads, 1);
+    const fresh = setup({ latest: { poll: helixPoll1('ACTIVE'), prediction: null } });
+    fresh.lp.recheck(8);
+    assert.equal((await fresh.lp.live(8)).poll.id, 'poll-1');
+    assert.equal(fresh.reads, 1);
+  });
+});
+
+describe('forgetting a streamer (forget), when their linked Twitch account changes', () => {
+  test('the poll and the prediction go, and an open bar is told that nothing runs', () => {
+    const w = setup();
+    w.lp.onEvent(7, 'channel.poll.begin', pollBegin);
+    w.lp.onEvent(7, 'channel.prediction.begin', predictionBegin);
+    w.emitted.length = 0;
+    w.t = NOW + 5000;
+    w.lp.forget(7);
+    assert.deepEqual(w.lp.barState(7), { poll: null, prediction: null, serverNow: NOW + 5000 });
+    assert.deepEqual(w.lp.snapshot('7'), { poll: null, prediction: null, serverNow: NOW + 5000 });
+    assert.deepEqual(w.emitted, [{ channel: 'poll:7', payload: { type: 'poll-state', poll: null, prediction: null, serverNow: NOW + 5000 } }]);
+  });
+
+  test('the next live() reads the new channel; a read of the previous one on its way keeps nothing', async () => {
+    const w = setup();
+    let release;
+    w.latest = new Promise((resolve) => { release = resolve; });
+    const reading = w.lp.live(7);
+    w.lp.forget('7');
+    release({ poll: helixPoll1('ACTIVE'), prediction: helixPrediction1('LOCKED') }); // the previous channel's
+    await reading;
+    assert.deepEqual([w.lp.barState(7).poll, w.lp.barState(7).prediction], [null, null]);
+    w.latest = { poll: null, prediction: null };
+    await w.lp.live(7);
+    assert.equal(w.reads, 2, 'the new channel is read');
+    assert.equal(w.lp.barState(7).poll, null);
+  });
+});
+
 describe('memory', () => {
   test('a streamer with nothing running is forgotten an hour after the last change; one with a poll running is kept', () => {
     const w = setup();

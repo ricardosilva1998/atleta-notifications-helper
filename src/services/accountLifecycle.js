@@ -35,12 +35,13 @@ function liveServices() {
 // `services.now` is for tests.
 const nowOf = (services) => (typeof services.now === 'function' ? services.now() : Date.now());
 
-// The two managers a change of Twitch account touches.
+// The two managers a change of Twitch account touches, and the polls the card and the bar show.
 function twitchServices() {
   return {
     db: require('../db'),
     eventSubManager: require('./eventsub').eventSubManager,
     chatManager: require('./twitchChat').chatManager,
+    livePolls: require('./livePolls').livePolls,
   };
 }
 
@@ -134,13 +135,16 @@ function removeAccount(streamerId, services = liveServices()) {
 // A streamer's linked Twitch account changed, or the link was taken over by
 // another streamer who linked the same account (db.linkTwitch has cleared the
 // broadcaster authorization that belonged to the previous account). What ran for
-// that account stops: EventSub, and the chat bot leaves the previous channel
+// that account stops: EventSub; the poll and prediction the Polls & predictions
+// card and the bar showed are forgotten (an open bar clears, and the card reads
+// the new channel); and the chat bot leaves the previous channel
 // (previousUsername, which the database no longer holds) and joins the new one
 // if the chat bot is on. EventSub is not started again: there is no
 // authorization to connect with until the streamer gives one for the new
 // account, and giving it starts EventSub.
 function twitchAccountChanged(streamerId, previousUsername, services = twitchServices()) {
   attempt('EventSub stop', streamerId, () => services.eventSubManager.stopForStreamer(streamerId));
+  attempt('Polls forget', streamerId, () => services.livePolls.forget(streamerId));
   if (previousUsername) {
     attempt('Twitch chat leave', streamerId, () => services.chatManager.partChannel(previousUsername));
   }

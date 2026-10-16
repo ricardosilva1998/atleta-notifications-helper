@@ -39,6 +39,10 @@ function liveAnswer(req, res, live) {
   return { ...live, status: { text: res.locals.t(st.key, st.params), tone: st.tone } };
 }
 
+// Twitch's refusals that say what the card shows may be stale (an end or a lock whose event was lost, a poll started on
+// Twitch whose start was lost): the card's next ask reads Twitch at once (livePolls.recheck).
+const STALE_REFUSALS = new Set(['running', 'changed', 'not_found']);
+
 // One of the card's Twitch buttons: Twitch's answer is shown at once and announced once (`phase`), and the card gets
 // the live state back. A refusal answers its code; Twitch's message is logged, never shown.
 async function act(req, res, kind, phase, call) {
@@ -47,6 +51,7 @@ async function act(req, res, kind, phase, call) {
   } catch (err) {
     if (!(err instanceof twitchPolls.PollsError)) throw err;
     console.warn(`[Polls] Twitch refused a ${kind} ${phase} for streamer ${req.streamer.id}: ${err.message}`);
+    if (STALE_REFUSALS.has(err.code)) livePolls.recheck(req.streamer.id);
     return refuse(res, err.code, kind);
   }
   res.json({ ok: true, live: liveAnswer(req, res, livePolls.snapshot(req.streamer.id)) });
@@ -94,7 +99,12 @@ router.post('/api/polls/start', needsPermissions, async (req, res) => {
   const { value } = checked;
   const shown = livePolls.snapshot(req.streamer.id)[value.kind];
   const key = `${req.streamer.id}:${value.kind}`;
-  if ((shown && shown.state !== 'ended') || starting.has(key)) return refuse(res, 'running');
+  if (shown && shown.state !== 'ended') {
+    // It may have ended on Twitch without its event reaching us: the card's next ask reads Twitch.
+    livePolls.recheck(req.streamer.id);
+    return refuse(res, 'running');
+  }
+  if (starting.has(key)) return refuse(res, 'running');
   starting.add(key);
   try {
     await act(req, res, value.kind, 'start', () => (value.kind === 'poll'

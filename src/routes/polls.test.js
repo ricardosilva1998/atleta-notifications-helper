@@ -58,6 +58,7 @@ const twitchStub = {
 };
 const said = []; // the bot's announcements: [streamerId, text]
 const latest = { poll: null, prediction: null }; // what a read of Twitch finds
+const reads = { count: 0 }; // how many times Twitch was read
 const livePollsStub = { livePolls: null }; // a real livePolls around fakes, made in before()
 
 // ── App ──────────────────────────────────────────────────────────────────
@@ -113,7 +114,10 @@ before(async () => {
     emit: () => {},
     send: (streamerId, text) => said.push([streamerId, text]),
     getStreamer: (id) => db.getStreamerById(id),
-    fetchLatest: async () => latest,
+    fetchLatest: async () => {
+      reads.count += 1;
+      return latest;
+    },
   });
   const { requireActiveStreamer, applyAccountStatus } = require('../services/streamerAccess');
   const app = express();
@@ -144,6 +148,7 @@ beforeEach(() => {
   logs.length = 0;
   latest.poll = null;
   latest.prediction = null;
+  reads.count = 0;
 });
 
 const SCOPES = 'channel:read:subscriptions channel:manage:polls channel:manage:predictions';
@@ -335,6 +340,73 @@ describe('the live view', () => {
     const res = await request('GET', '/dashboard/api/polls/live');
     assert.equal(res.status, 302);
     assert.equal(res.headers.location, '/auth/login');
+  });
+});
+
+// What the card shows may be stale: EventSub lost an end, while the other kind's events keep it "fresh", so the card's
+// asks are answered from memory. A refusal that says Twitch moved on makes the card's next ask read Twitch.
+describe('a refusal that says what the card shows may be stale', () => {
+  const twoChoices = (votes) => [{ id: 'a', title: 'Yes', votes }, { id: 'b', title: 'No', votes: 0 }];
+  const eventSubSpeaks = (id) => livePollsStub.livePolls.onEvent(id, 'channel.prediction.progress', {
+    id: 'pred-7', title: 'Clean lap?', started_at: iso(Date.now()), locks_at: iso(Date.now() + 600000),
+    outcomes: [{ id: 'o1', title: 'Clean', color: 'blue', users: 2, channel_points: 300 }, { id: 'o2', title: 'Chaos', color: 'pink', users: 1, channel_points: 100 }],
+  });
+  // A poll that runs for 10 minutes as EventSub said, and a prediction whose events keep coming.
+  function staleRunningPoll(id) {
+    const at = Date.now();
+    livePollsStub.livePolls.onEvent(id, 'channel.poll.begin', { id: 'poll-7', title: 'Top 5?', choices: twoChoices(0), started_at: iso(at), ends_at: iso(at + 600000) });
+    eventSubSpeaks(id);
+    return at;
+  }
+  const endedOnTwitch = (startedAt) => ({ id: 'poll-7', title: 'Top 5?', status: 'TERMINATED', duration: 600, started_at: iso(startedAt), ended_at: iso(Date.now()), choices: twoChoices(3) });
+  const live = async (id) => (await request('GET', '/dashboard/api/polls/live', { streamer: id })).json();
+
+  test('End now refused with `changed`: the card\'s next ask reads Twitch and shows the poll ended', async () => {
+    const id = addStreamer();
+    const startedAt = staleRunningPoll(id);
+    latest.poll = endedOnTwitch(startedAt); // ended early on Twitch; its end event never came
+    assert.equal((await live(id)).poll.state, 'running', 'EventSub spoke just now: the card is answered from memory');
+    assert.equal(reads.count, 0);
+    helix.refuse = 'changed';
+    const ended = await request('POST', '/dashboard/api/polls/end', { streamer: id, body: { id: 'poll-7' } });
+    assert.equal(ended.json().code, 'changed');
+    const after = await live(id);
+    assert.equal(reads.count, 1, 'Twitch is read at once');
+    assert.equal(after.poll.state, 'ended');
+    assert.deepEqual(after.status, { text: t('en', 'cards.polls.status.predictionRunning'), tone: 'ok' });
+  });
+
+  test('a start the card refuses because the poll it holds still runs: the next ask reads Twitch, and the next start goes', async () => {
+    const id = addStreamer();
+    const startedAt = staleRunningPoll(id);
+    latest.poll = endedOnTwitch(startedAt);
+    const refused = await start(id, poll);
+    assert.deepEqual(refused.json(), { ok: false, code: 'running', error: t('en', 'cards.polls.error.running') });
+    assert.deepEqual(helix.calls, [], 'refused without asking Twitch');
+    assert.equal((await live(id)).poll.state, 'ended');
+    assert.equal(reads.count, 1);
+    assert.equal((await start(id, poll)).status, 200);
+  });
+
+  test('Twitch\'s own `running` at a start, and `not_found`, make the next ask read Twitch too; other refusals do not', async () => {
+    for (const [code, send] of [
+      ['running', (id) => start(id, poll)],
+      ['not_found', (id) => request('POST', '/dashboard/api/predictions/resolve', { streamer: id, body: { id: 'pred-7', outcomeId: 'o9' } })],
+      ['automod', (id) => start(id, poll)],
+      ['twitch_failed', (id) => start(id, poll)],
+    ]) {
+      const id = addStreamer();
+      eventSubSpeaks(id);
+      // a poll started on Twitch whose begin event was lost
+      latest.poll = { id: 'poll-8', title: 'Started on Twitch', status: 'ACTIVE', duration: 120, started_at: iso(Date.now()), choices: twoChoices(1) };
+      reads.count = 0;
+      helix.refuse = code;
+      assert.equal((await send(id)).json().code, code);
+      const seen = await live(id);
+      const recheck = code === 'running' || code === 'not_found';
+      assert.equal(reads.count, recheck ? 1 : 0, code);
+      assert.equal(seen.poll ? seen.poll.id : null, recheck ? 'poll-8' : null, code);
+    }
   });
 });
 

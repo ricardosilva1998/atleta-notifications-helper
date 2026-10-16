@@ -4,9 +4,11 @@
 // and the bot see them. Twitch tells this module about them three ways: EventSub's seven poll and prediction events
 // (onEvent), Twitch's answer to the card's own buttons (setFromTwitch), and a read of Twitch when the card or the bar
 // asks (live) — while EventSub said nothing in the last 30 seconds, or while a running poll or prediction is past its
-// end (its end or lock event is late) — at most one every 5 seconds per streamer. A late or repeated message never
-// takes a poll back: an ended poll stays ended, and an earlier poll never replaces a later one. Every change goes on
-// the bus channel `poll:<streamerId>` for the bar (never `overlay:<id>`: the alert overlay would queue it as a card).
+// end (its end or lock event is late) — at most one every 5 seconds per streamer; after a refusal that says what is
+// kept may be stale, the next ask reads at once (recheck). A late or repeated message never takes a poll back: an
+// ended poll stays ended, and an earlier poll never replaces a later one. When the streamer links another Twitch
+// account, what was kept is forgotten (forget). Every change goes on the bus channel `poll:<streamerId>` for the bar
+// (never `overlay:<id>`: the alert overlay would queue it as a card).
 // The bot announces a start, a lock and an end once per poll or prediction — never what a read finds — with the
 // streamer's texts while their announcements are on (chatManager.sendMessage checks the chatbot switch). A streamer is
 // known by their id as a number, whether it is given as a number or as text.
@@ -137,8 +139,11 @@ function createLivePolls({ emit, send, getStreamer, fetchLatest, now = Date.now 
     try {
       const latest = await fetchLatest(getStreamer(streamerId));
       e.failing = false;
-      take(streamerId, 'poll', latest && latest.poll, null);
-      take(streamerId, 'prediction', latest && latest.prediction, null);
+      // A streamer forgotten meanwhile (another Twitch account) keeps nothing of the previous channel's read.
+      if (streamers.get(streamerId) === e) {
+        take(streamerId, 'poll', latest && latest.poll, null);
+        take(streamerId, 'prediction', latest && latest.prediction, null);
+      }
     } catch (err) {
       if (!isRefusal(err)) {
         console.error(`[Polls] Reading Twitch's poll and prediction failed for streamer ${streamerId}:`, err);
@@ -158,9 +163,9 @@ function createLivePolls({ emit, send, getStreamer, fetchLatest, now = Date.now 
 
   // The card's view, after reading Twitch when EventSub said nothing in the last 30 seconds (a poll started on
   // Twitch's own dashboard or by a moderator shows without EventSub) or when a running poll or prediction is past its
-  // end (its end or lock event is late: the result still reaches the card and the bar), at most once every 5 seconds.
-  // What a read finds is never announced. A read that fails keeps what is known; a missing permission
-  // (needs_reconnect) is passed on to every caller until the next read, 5 seconds later.
+  // end (its end or lock event is late: the result still reaches the card and the bar), at most once every 5 seconds
+  // (after recheck(), at once). What a read finds is never announced. A read that fails keeps what is known; a
+  // missing permission (needs_reconnect) is passed on to every caller until the next read, 5 seconds later.
   async function live(streamerId) {
     const id = Number(streamerId);
     const e = entry(id);
@@ -177,6 +182,24 @@ function createLivePolls({ emit, send, getStreamer, fetchLatest, now = Date.now 
     return snapshot(id);
   }
 
+  // The next live() reads Twitch at once, whatever EventSub said lately and however recent the last read: Twitch
+  // refused one of the card's buttons in a way that says what is kept may be stale (an end or a lock whose event was
+  // lost). A read already on its way is shared.
+  function recheck(streamerId) {
+    const e = streamers.get(Number(streamerId));
+    if (!e) return; // nothing kept: the next live() reads anyway
+    e.readAt = 0;
+    e.eventAt = 0;
+  }
+
+  // Forgets what is kept for a streamer whose linked Twitch account changed (what ran on the previous channel is not
+  // theirs any more, and a read of the new one cannot replace it), and tells an open bar that nothing runs.
+  function forget(streamerId) {
+    const id = Number(streamerId);
+    streamers.delete(id);
+    emit(`poll:${id}`, { type: 'poll-state', ...barState(id) });
+  }
+
   // Forgets a streamer with nothing running and no change in the last hour.
   function sweep() {
     const t = now();
@@ -186,7 +209,7 @@ function createLivePolls({ emit, send, getStreamer, fetchLatest, now = Date.now 
     }
   }
 
-  return { onEvent, setFromTwitch, snapshot, barState, live, sweep };
+  return { onEvent, setFromTwitch, snapshot, barState, live, recheck, forget, sweep };
 }
 
 // The app's instance. The chat bot, the database and twitchPolls are required when first used: they load the app's
