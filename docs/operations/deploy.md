@@ -336,13 +336,13 @@ None of these commands needs a deploy.
 What changes when it deploys:
 - Four columns are added to `overlay_designs` (`style_accent`, `style_label`, `style_sound`, `style_grows`); the boot log shows `[DB] Added style_… to overlay_designs` four times, once. Nothing stored is rewritten.
 - The giveaway winner alert becomes Racing's Victory lap for every streamer (decided). Its saved colours, text and screen effect carry over; it plays the look's fanfare unless the streamer uploaded a sound.
-- Every other alert stays exactly as it is until its streamer picks a look in the Overlay Builder's Style section.
+- Every other alert stays exactly as it is until its streamer picks a look in the Overlay Builder's Style section (release B; now the Animation tab of the edit window).
 - Every streamer's donation gallery offers the C1 with their own Twitch name (`donation-c1-channel`), to pick themselves.
 - The overlay page and the builder load `/overlay/objects/kit.js`, `/overlay/objects/styles.js?v=…` and `.css`, and `/overlay/fx.js`/`fx.css`. An open OBS source reloads itself when the server restarts.
 
 After the deploy (while no streamer is live):
 1. `/health` answers 200, and the boot log shows the four `Added style_…` lines.
-2. In the Overlay Builder, the Style section opens each of the six alert tabs. Pick Racing's Fly-by for the follow, save, and press Test: OBS plays it.
+2. In the Overlay Builder, the Style section (release B; now the Animation tab of the edit window) opens each of the six alert tabs. Pick Racing's Fly-by for the follow, save, and press Test: OBS plays it.
 3. Pick a colour far from the look's own (cyan on a red look) and test again: the change is obvious.
 4. andre_vilela_'s donation still shows the C1, first in his gallery as "Made for you"; another streamer's donation gallery shows "C1 with your name", with their Twitch name on the rear window.
 
@@ -412,8 +412,8 @@ Watch after release:
 
 What changes when it deploys (docs/features/look-sounds.md):
 - Every alert look plays a recorded sound instead of a synthesized one, and the Overlay Builder's sound list offers
-  each sound twice: "<name>" (version A, the default) and "<name> (version 2)", by theme (a Theme dropdown picks which
-  family's sounds the list shows). 312 MP3s, about 13 MB in the
+  each sound twice: "<name>" (version A, the default) and "<name> (version 2)", by theme (the edit window's Sound tab, since
+  the cards release, lists only the alert's own sounds, with theme chips and search). 312 MP3s, about 13 MB in the
   image, under `/overlay/objects/sounds/`, served with a one-year cache (their names carry their content hash).
 - Nothing stored changes: no column, no migration. A saved `style_sound` keeps working; the new `<key>.2` values only
   exist once a streamer picks a second version.
