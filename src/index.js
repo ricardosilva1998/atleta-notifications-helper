@@ -101,6 +101,13 @@ function startHousekeeping() {
   setInterval(cleanupDonations, 24 * 60 * 60 * 1000);
   cleanupDonations();
 
+  // The voices of tips read aloud (data/tts/<streamerId>/) are removed once they are an hour old (every hour).
+  const cleanupTipVoices = () => {
+    try { require('./services/tipVoice').cleanupTtsFiles(); } catch (e) { console.error('[TTS] Cleanup error:', e.message); }
+  };
+  setInterval(cleanupTipVoices, 60 * 60 * 1000).unref();
+  cleanupTipVoices();
+
   // Clean up old bridge logs (every 6 hours)
   setInterval(() => { try { db.cleanupOldBridgeLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
   db.cleanupOldBridgeLogs();

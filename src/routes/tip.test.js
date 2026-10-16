@@ -42,6 +42,7 @@ const saved = {};
 const ALREADY_CAPTURED = { name: 'UNPROCESSABLE_ENTITY', details: [{ issue: 'ORDER_ALREADY_CAPTURED' }], debug_id: 'dbg1' };
 const IN_PROGRESS = { name: 'CONFLICT', details: [{ issue: 'PREVIOUS_REQUEST_IN_PROGRESS' }], debug_id: 'dbg2' };
 let paypal;
+const otherRequests = []; // anything fetched that is not PayPal (ElevenLabs included): must stay empty
 
 // An order the buyer approved that PayPal has not captured (yet).
 function approvedOrder(id) {
@@ -78,7 +79,10 @@ function resetPayPal() {
 
 async function fakeFetch(url, opts = {}) {
   url = String(url);
-  if (!url.startsWith(`${PAYPAL}/`)) throw new Error(`unexpected request to ${url}`);
+  if (!url.startsWith(`${PAYPAL}/`)) {
+    otherRequests.push(url);
+    throw new Error(`unexpected request to ${url}`);
+  }
   paypal.calls.push({
     url, method: opts.method || 'GET', prefer: opts.headers && opts.headers.Prefer,
     timeout: opts.signal instanceof AbortSignal, body: opts.body,
@@ -285,6 +289,31 @@ describe('GET /tip/:username/success', () => {
     assertAnnouncedOnce();
     assert.equal(captureCalls().length, 1);
     assert.equal(orderReads().length, 0);
+  });
+
+  test('with TTS off the alert still fires at once: no voice, no status, nothing synthesized', async () => {
+    otherRequests.length = 0;
+    const order = await startTip();
+    await request('GET', `/tip/tips_a/success?token=${order}&PayerID=PAYER1`);
+    assertAnnouncedOnce();
+    assert.deepEqual(alerts[0], { type: 'donation', data: { username: 'Viewer One', amount: 7, message: 'Keep racing', currency: 'EUR' } });
+    assert.equal(db.db.prepare('SELECT tts_status FROM donations').get().tts_status, null);
+    assert.deepEqual(otherRequests, []);
+  });
+
+  test('with TTS on and the overlay not open in OBS the alert fires without a voice and the tip says why', async () => {
+    otherRequests.length = 0;
+    db.db.prepare('UPDATE streamers SET tts_enabled = 1, overlay_enabled = 1, overlay_donation_enabled = 1 WHERE id = ?').run(streamerA);
+    try {
+      const order = await startTip();
+      await request('GET', `/tip/tips_a/success?token=${order}&PayerID=PAYER1`);
+      assertAnnouncedOnce();
+      assert.deepEqual(alerts[0].data, { username: 'Viewer One', amount: 7, message: 'Keep racing', currency: 'EUR' });
+      assert.equal(db.db.prepare('SELECT tts_status FROM donations').get().tts_status, 'overlay_closed');
+      assert.deepEqual(otherRequests, []);
+    } finally {
+      db.db.prepare('UPDATE streamers SET tts_enabled = 0, overlay_enabled = 0 WHERE id = ?').run(streamerA);
+    }
   });
 
   test('a lost capture answer is recovered from the order and counted once', async () => {

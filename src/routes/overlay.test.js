@@ -13,6 +13,7 @@ const Module = require('module');
 const express = require('express');
 const RealDatabase = require('better-sqlite3');
 const realFs = require('fs');
+const os = require('os');
 
 for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) {
   process.env[key] = process.env[key] || 'test';
@@ -20,6 +21,9 @@ for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET'
 
 const SRC = path.join(__dirname, '..');
 const DB_FILE = path.join(SRC, 'db.js');
+const OVERLAY_FILE = path.join(__dirname, 'overlay.js');
+// The tip voices' folder for these tests (the route's files are never looked for in data/).
+const TTS_DIR = realFs.mkdtempSync(path.join(os.tmpdir(), 'overlay-tts-'));
 
 let db;
 let bus;
@@ -76,6 +80,10 @@ before(async () => {
       if (request === 'better-sqlite3') return function MemoryDatabase(_file, opts) { return new RealDatabase(':memory:', opts); };
       if (request === 'fs') return { ...realFs, existsSync: () => true, mkdirSync: () => {} };
     }
+    if (parent && parent.filename === OVERLAY_FILE && request === '../services/tipVoice') {
+      const tipVoice = saved.load(request, parent, isMain);
+      return { ...tipVoice, ttsFilePath: (streamerId, name) => tipVoice.ttsFilePath(streamerId, name, TTS_DIR) };
+    }
     return saved.load(request, parent, isMain);
   };
   saved.log = console.log;
@@ -99,6 +107,7 @@ after(async () => {
   console.log = saved.log;
   console.error = saved.error;
   Module._load = saved.load;
+  realFs.rmSync(TTS_DIR, { recursive: true, force: true });
   await new Promise((resolve) => server.close(resolve));
 });
 
@@ -132,6 +141,7 @@ const PAGES = [
   (t) => `/overlay/poll/${t}`,
   (t) => `/overlay/poll/events/${t}`,
   (t) => `/overlay/sounds/${t}/follow`,
+  (t) => `/overlay/tts/${t}/00000000-0000-4000-8000-0000000000aa.mp3`,
 ];
 
 describe("the overlay page names the streamer's channel for the C1's rear window", () => {
@@ -534,5 +544,45 @@ describe('an open Polls & predictions bar asks Twitch again while what it shows 
     assert.equal(bus.listenerCount(`overlay-disabled:${bar.id}`), 0);
     advance(t, 60000);
     assert.equal(bar.calls.length, 2, 'no read is asked for once OBS has disconnected');
+  });
+});
+
+describe('the tip voice files (/overlay/tts/:token/:file)', () => {
+  const FILE = '3f2a9c1e-7b4d-4e8f-9a0b-1c2d3e4f5a6b.mp3';
+  const AUDIO = Buffer.from('ID3-test-voice');
+
+  function addVoice(id, name = FILE) {
+    realFs.mkdirSync(path.join(TTS_DIR, String(id)), { recursive: true });
+    realFs.writeFileSync(path.join(TTS_DIR, String(id), name), AUDIO);
+  }
+
+  test("an unknown file, a bad name or another streamer's token is 404; the streamer's file is served as audio/mpeg with the user-content headers", async () => {
+    const owner = addStreamer();
+    const other = addStreamer();
+    addVoice(owner.id);
+
+    const res = await get(`/overlay/tts/${owner.token}/${FILE}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['content-type'], 'audio/mpeg');
+    assert.equal(res.text, AUDIO.toString());
+    assert.equal(res.headers['content-security-policy'], "sandbox; default-src 'none'");
+    assert.equal(res.headers['x-content-type-options'], 'nosniff');
+    assert.equal(res.headers['content-disposition'], undefined);
+    assert.equal(res.headers['cache-control'], 'no-cache');
+
+    assert.equal((await get(`/overlay/tts/${owner.token}/00000000-0000-4000-8000-0000000000ff.mp3`)).status, 404, 'unknown file');
+    assert.equal((await get(`/overlay/tts/${other.token}/${FILE}`)).status, 404, "another streamer's token");
+    assert.equal((await get(`/overlay/tts/nobody/${FILE}`)).status, 404, 'unknown token');
+    for (const bad of ['voice.mp3', FILE.replace('.mp3', '.wav'), FILE.toUpperCase(), '..%2F..%2Fpackage.json', `..%2F${owner.id}%2F${FILE}`]) {
+      assert.equal((await get(`/overlay/tts/${owner.token}/${bad}`)).status, 404, bad);
+    }
+  });
+
+  test('a disabled account answers like an unknown token', async () => {
+    const { id, token } = addStreamer();
+    addVoice(id);
+    assert.equal((await get(`/overlay/tts/${token}/${FILE}`)).status, 200);
+    disable(id);
+    assert.equal((await get(`/overlay/tts/${token}/${FILE}`)).status, 404);
   });
 });

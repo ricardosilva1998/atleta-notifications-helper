@@ -73,13 +73,18 @@ function tipError(res, streamer, reason) {
   renderTipPage(res, streamer, { status, error: message });
 }
 
-// A new PayPal donation: overlay alert, overlay stats, tip goal and chat thank-you.
+// A new PayPal donation: overlay alert, overlay stats, tip goal and chat thank-you. The overlay alert waits for its
+// voice when the tip is read aloud (services/tipVoice.js, up to 15 s, one tip at a time per streamer); nothing here
+// waits for it, so the viewer's return page and everything else stay immediate.
 function announceTip(streamer, d) {
   try {
-    require('../services/overlayBus').emit(`overlay:${streamer.id}`, {
-      type: 'donation',
-      data: { username: d.donorName, amount: d.amount, message: d.message, currency: d.currency },
-    });
+    const bus = require('../services/overlayBus');
+    require('../services/tipVoice').announceWithVoice(streamer, d, {
+      emitAlert: (tts) => bus.emit(`overlay:${streamer.id}`, {
+        type: 'donation',
+        data: { username: d.donorName, amount: d.amount, message: d.message, currency: d.currency, ...(tts ? { tts } : {}) },
+      }),
+    }).catch((e) => console.error('[Tip] Overlay alert error:', e.message));
   } catch (e) { console.error('[Tip] Overlay alert error:', e.message); }
   try { db.logOverlayEvent(streamer.id, 'donation', d.donorName, { amount: d.amount, currency: d.currency }); } catch (e) {}
   require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency);
