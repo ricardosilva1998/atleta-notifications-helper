@@ -386,6 +386,9 @@ describe('the Polls & predictions bar', () => {
     bus.emit(`poll:${id}`, { type: 'poll-state', poll: { id: 'poll-1' }, prediction: null, serverNow: 1 });
     await until(() => stream.chunks.join('').includes('"poll-1"'), 'a change on poll:<id> reaches the bar');
     assert.ok(!stream.chunks.join('').includes('"follow"'), 'an alert is not the bar\'s');
+    // Closed here: its own 5-second timer (made with the real clock) must not run on into the tests below.
+    stream.request.destroy();
+    await until(() => bus.listenerCount(`poll:${id}`) === 0, 'the bar\'s stream was not closed');
   });
 });
 
@@ -399,21 +402,31 @@ describe('an open Polls & predictions bar asks Twitch again while what it shows 
 
   // Opens a bar whose barState() answers `bar.state`; live() records the streamer it is asked about and refuses as it
   // does for a streamer without the permissions (the route must catch it, as it does for the read when the bar opens).
+  // Both answer so for the bar's own streamer only; any other streamer gets the real ones.
   async function openBar(t, state) {
     t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: NOW });
     const real = { live: livePolls.live, barState: livePolls.barState };
     t.after(() => Object.assign(livePolls, real));
     const bar = { state, calls: [] };
+    const ours = (streamerId) => Number(streamerId) === bar.id;
     livePolls.live = (streamerId) => {
+      if (!ours(streamerId)) return real.live.call(livePolls, streamerId);
       bar.calls.push(streamerId);
       return Promise.reject(Object.assign(new Error('needs_reconnect'), { code: 'needs_reconnect' }));
     };
-    livePolls.barState = () => ({ ...bar.state, serverNow: Date.now() });
+    livePolls.barState = (streamerId) => (ours(streamerId) ? { ...bar.state, serverNow: Date.now() } : real.barState.call(livePolls, streamerId));
     const { id, token } = addStreamer();
     bar.id = id;
     bar.stream = await openStream(`/overlay/poll/events/${token}`);
     return bar;
   }
+  // A poll bar left open by an earlier test keeps its own 5-second timer on the real clock; on a slow runner it would
+  // ask while these tests count.
+  test('no poll bar an earlier test opened is still open', () => {
+    const open = bus.eventNames().filter((name) => String(name).startsWith('poll:') && bus.listenerCount(name) > 0);
+    assert.deepEqual(open, []);
+  });
+
   // Moves the clock 5 seconds at a time, so each turn of the bar's timer sees its own time.
   const advance = (t, ms) => { for (let done = 0; done < ms; done += 5000) t.mock.timers.tick(5000); };
   // OBS disconnects; the server has run its close handler once the bar's bus listener is gone.
@@ -441,6 +454,7 @@ describe('an open Polls & predictions bar asks Twitch again while what it shows 
     advance(t, 5000);
     assert.equal(bar.calls.length, 6, 'and one past its end (its end event is late)');
     assert.ok(bar.calls.every((streamerId) => streamerId === bar.id), 'the bar asks about its own streamer');
+    assert.equal(livePolls.barState(bar.id + 1000).poll, null, 'another streamer is answered by the real livePolls');
     await disconnect(bar);
   });
 
