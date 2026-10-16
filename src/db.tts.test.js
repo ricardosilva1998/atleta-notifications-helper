@@ -140,6 +140,18 @@ describe('the settings writers', () => {
     assert.equal(s.tts_last_error.length, 200);
     assert.match(s.tts_last_error_at, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
   });
+
+  test('clearTtsError empties the last problem and its time, for that streamer only', () => {
+    const id = addStreamer();
+    const other = addStreamer();
+    db.recordTtsError(id, 'elevenlabs_401');
+    db.recordTtsError(other, 'elevenlabs_500');
+    db.clearTtsError(id);
+    const cleared = db.getStreamerById(id);
+    assert.equal(cleared.tts_last_error, null);
+    assert.equal(cleared.tts_last_error_at, null);
+    assert.equal(db.getStreamerById(other).tts_last_error, 'elevenlabs_500');
+  });
 });
 
 describe('the per-tip status', () => {

@@ -2355,6 +2355,7 @@
   "tts.sample.message": "Super course aujourd'hui !",
   "cards.donations.ttsSwitch": "Lire les dons à voix haute",
   "cards.donations.ttsOn": "Lecture des dons à partir de {{amount}} · {{used}} caractères sur {{limit}}",
+  "donations.tts.status.credit_floor": "En pause : budget vocal du site",
   "donations.tts.error.credit_floor": "La lecture des dons à voix haute est en pause jusqu'au renouvellement du budget vocal du site.",
   "dashboard.settings.error.ttsUnavailable": "La lecture des dons à voix haute n'est pas disponible pour le moment.",
   "donations.tts.title": "Lire les dons à voix haute",

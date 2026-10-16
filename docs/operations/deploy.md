@@ -44,7 +44,7 @@ What production needs set:
 | `CSRF_SECRET` | `openssl rand -hex 32` | a per-boot secret: after every restart each open dashboard tab must be reloaded before it can save |
 | `BOT_TWITCH_TOKEN` | a token that also carries `moderator:manage:chat_settings` | raid protection and `!slow` stay inert (one warning per streamer per day) |
 | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `15` | see the table above |
-| `ELEVENLABS_API_KEY` | Atleta's ElevenLabs key (the owner's Creator plan; the same one the development `.env` holds) | tips are not read aloud: the Donations page says the feature is not available and the card has no switch |
+| `ELEVENLABS_API_KEY` | Atleta's ElevenLabs key (the owner's Creator plan; the same one the development `.env` holds). The key needs **text-to-speech** access **and** read access to **user** (the subscription, `GET /v1/user/subscription`): without the second the site credit floor silently stops applying (see `[TTS] Credits read failed` under the log lines) | tips are not read aloud: the Donations page says the feature is not available and the card has no switch |
 
 Optional: `ADMIN_DISCORD_IDS`, `BOT_CHAT_RATE_LIMIT`, `ANTHROPIC_API_KEY` (+ `TRIAGE_MODEL`) for AI
 analysis of reported issues; `TTS_CREDIT_FLOOR` (default 20000: tips stop being read while the ElevenLabs
@@ -129,6 +129,11 @@ Trouble:
   refused (changed or deleted on ElevenLabs). `elevenlabs_429`: ElevenLabs is busy or the plan's concurrency is used
   up. `elevenlabs_timeout`: no audio within 15 s. A `4xx` for one voice: that library voice was withdrawn (replace it,
   `docs/features/tip-tts.md`). The alert still played, without its voice.
+- `[TTS] Credits read failed: <status|failed>`: the hourly-at-most log of a failed read of the account's remaining credits
+  (`GET /v1/user/subscription`, tried every 10 minutes). `401` or `403`: the key has no permission to read the user
+  (subscription): give it **user** read access on ElevenLabs. `failed`: no answer in 10 s, no network or an unreadable
+  answer; a `429` or `5xx` is ElevenLabs being busy. While credits cannot be read the site-wide credit floor
+  (`TTS_CREDIT_FLOOR`) does **not** apply (tips are still read, bounded by the monthly limits), so fix it.
 - `[TTS] Cleanup error: ...`: the hourly removal of the voice files older than an hour (`data/tts/`) failed.
 - `[YouTube] ... invalid_grant`: the YouTube bot's refresh token was revoked or expired (a Google OAuth
   app in "Testing" mode expires it after 7 days); make a new `YOUTUBE_BOT_REFRESH_TOKEN`.

@@ -20,9 +20,11 @@ const DECIMAL_SEPARATOR = Object.freeze({ en: '.', zh: '.', ja: '.', pt: ',', es
 
 const LINE_BREAKS = /[\t\n\r]+/g;
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/g;
-// Invisible formatting characters (soft hyphen, zero-width space, joiners, direction marks, word joiner, BOM):
-// nothing to say, and they would break up a link ("evil<ZWSP>.com") so the link test misses it.
-const INVISIBLE_CHARACTERS = /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+// Invisible formatting characters: every Unicode format character (\p{Cf}: soft hyphen, zero-width space and joiners,
+// direction marks, word joiner, BOM, the tag characters), plus the invisible ones that are not in that class (the
+// combining grapheme joiner, the Hangul fillers, the braille blank, the variation selectors). Nothing to say, and
+// they would break up a link ("evil<ZWSP>.com") so the link test misses it. U+200D (the joiner) goes too.
+const INVISIBLE_CHARACTERS = /[\p{Cf}\u034F\u115F\u1160\u3164\uFFA0\u2800\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu;
 const WHITESPACE = /\s+/;
 const LONG_RUN = /(.)\1{3,}/gsu;
 const PLACEHOLDER = /\{(name|amount|message)\}/g;

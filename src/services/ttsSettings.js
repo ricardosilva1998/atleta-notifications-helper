@@ -22,6 +22,7 @@ const TTS_ERRORS = Object.freeze({
   failed: 'donations.tts.error.failed',
   cooldown: 'donations.tts.error.cooldown',
   unavailable: 'donations.tts.error.unavailable',
+  credit_floor: 'donations.tts.error.credit_floor',
 });
 
 // What happened to a tip (donations.tts_status), as the donation history shows it.
@@ -32,6 +33,7 @@ const TTS_STATUS_TEXTS = Object.freeze({
   blocked_off: 'donations.tts.status.blocked_off',
   overlay_closed: 'donations.tts.status.overlay_closed',
   limit: 'donations.tts.status.limit',
+  credit_floor: 'donations.tts.status.credit_floor',
   failed: 'donations.tts.status.failed',
 });
 

@@ -2355,6 +2355,7 @@
   "tts.sample.message": "今天的比赛太棒了！",
   "cards.donations.ttsSwitch": "朗读打赏",
   "cards.donations.ttsOn": "朗读 {{amount}} 起的打赏 · 已用 {{used}} / {{limit}} 个字符",
+  "donations.tts.status.credit_floor": "已暂停：网站语音额度已用完",
   "donations.tts.error.credit_floor": "朗读打赏已暂停，直到网站的语音额度更新。",
   "dashboard.settings.error.ttsUnavailable": "朗读打赏功能目前不可用。",
   "donations.tts.title": "朗读打赏",

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const i18n = require('../i18n');
-const { checkTtsSettings } = require('./ttsSettings');
+const { checkTtsSettings, TTS_ERRORS, TTS_STATUS_TEXTS } = require('./ttsSettings');
 const { TTS_LANGUAGES, VOICES, defaultVoice, isVoice } = require('./ttsVoices');
 const { defaultTemplates } = require('./tipSpeech');
 
@@ -68,4 +68,15 @@ test('every language lists voices, the default is one of them, and a foreign id 
     assert.equal(isVoice(lang, 'nope'), false);
   }
   assert.equal(isVoice('xx', defaultVoice('en')), false);
+});
+
+test('the site floor has its own error code and its own history status, each with a text in all seven languages', () => {
+  assert.equal(TTS_ERRORS.credit_floor, 'donations.tts.error.credit_floor');
+  assert.equal(TTS_STATUS_TEXTS.credit_floor, 'donations.tts.status.credit_floor');
+  for (const lang of ['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja']) {
+    for (const key of [TTS_ERRORS.credit_floor, TTS_STATUS_TEXTS.credit_floor]) {
+      assert.notEqual(i18n.t(lang, key), key, `${lang} has ${key}`);
+    }
+  }
+  assert.notEqual(i18n.t('en', TTS_STATUS_TEXTS.credit_floor), i18n.t('en', TTS_STATUS_TEXTS.limit));
 });

@@ -4,6 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { voiceSettings, synthesize, remainingCredits, resetCredits } = require('./elevenLabs');
 
+const quiet = { error() {} };
+
 function okAudio(bytes = [1, 2]) {
   return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array(bytes).buffer };
 }
@@ -62,35 +64,35 @@ test('remaining credits are read at most every 10 minutes and a failed read keep
   let answer = { ok: true, status: 200, json: async () => ({ character_limit: 100000, character_count: 12345 }) };
   const fetch = async (u, o) => { calls.push([u, o]); if (answer instanceof Error) throw answer; return answer; };
 
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 87655);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), 87655);
   assert.equal(calls[0][0], 'https://api.elevenlabs.io/v1/user/subscription');
   assert.equal(calls[0][1].headers['xi-api-key'], 'k');
   assert.ok(calls[0][1].signal);
 
   t += 9 * 60 * 1000;
   answer = { ok: true, status: 200, json: async () => ({ character_limit: 100000, character_count: 50000 }) };
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 87655);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), 87655);
   assert.equal(calls.length, 1);
 
   t += 2 * 60 * 1000;
   answer = { ok: false, status: 500, json: async () => ({}) };
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 87655);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), 87655);
   assert.equal(calls.length, 2);
 
   t += 11 * 60 * 1000;
   answer = new Error('offline');
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 87655);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), 87655);
   assert.equal(calls.length, 3);
 
   t += 11 * 60 * 1000;
   answer = { ok: true, status: 200, json: async () => ({ character_limit: 100000, character_count: 50000 }) };
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 50000);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), 50000);
 });
 
 test('remaining credits are null when nothing was ever read, and without a key nothing is asked', async () => {
   resetCredits();
   const fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now: () => 1 }), null);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now: () => 1, log: quiet }), null);
   let called = false;
   resetCredits();
   assert.equal(await remainingCredits({ fetch: async () => { called = true; return fetch(); }, apiKey: null, now: () => 1 }), null);
@@ -100,7 +102,7 @@ test('remaining credits are null when nothing was ever read, and without a key n
 test('an unreadable subscription answer is a failed read', async () => {
   resetCredits();
   const fetch = async () => ({ ok: true, status: 200, json: async () => ({ character_limit: 'x' }) });
-  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now: () => 1 }), null);
+  assert.equal(await remainingCredits({ fetch, apiKey: 'k', now: () => 1, log: quiet }), null);
 });
 
 test('after a failed read nothing is asked again for 10 minutes, whether or not a value is known', async () => {
@@ -112,19 +114,53 @@ test('after a failed read nothing is asked again for 10 minutes, whether or not 
     let answer = { ok: true, status: 200, json: async () => ({ character_limit: 10, character_count: 4 }) };
     const fetch = async () => { calls++; if (answer instanceof Error) throw answer; return answer; };
     if (known) {
-      assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 6);
+      assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), 6);
       t += 11 * 60 * 1000;
     }
     calls = 0;
     answer = known ? new Error('offline') : { ok: false, status: 401, json: async () => ({}) };
     const last = known ? 6 : null;
-    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), last);
+    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), last);
     assert.equal(calls, 1);
     t += 60 * 1000;
-    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), last);
+    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), last);
     assert.equal(calls, 1);
     t += 10 * 60 * 1000;
-    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), last);
+    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now, log: quiet }), last);
     assert.equal(calls, 2);
   }
+});
+
+test('a failed credits read is logged as "[TTS] Credits read failed: <status|failed>", at most once an hour, never with the key', async () => {
+  resetCredits();
+  let t = 9_000_000;
+  const now = () => t;
+  const logged = [];
+  const log = { error: (...args) => logged.push(args.join(' ')) };
+  let answer = { ok: false, status: 401, json: async () => ({}) };
+  const fetch = async () => { if (answer instanceof Error) throw answer; return answer; };
+  const read = () => remainingCredits({ fetch, apiKey: 'secret-key', now, log });
+
+  assert.equal(await read(), null);
+  assert.deepEqual(logged, ['[TTS] Credits read failed: 401']);
+
+  for (let i = 0; i < 4; i++) { t += 11 * 60 * 1000; await read(); } // 44 more minutes: still the same hour
+  assert.equal(logged.length, 1, 'not again within the hour');
+
+  t += 17 * 60 * 1000; // 61 min since the first log
+  answer = new Error('socket hang up with secret-key');
+  await read();
+  assert.equal(logged.length, 2, 'logged again after an hour');
+  assert.equal(logged[1], '[TTS] Credits read failed: failed', 'a network failure or timeout reads "failed"');
+
+  t += 61 * 60 * 1000;
+  answer = { ok: true, status: 200, json: async () => ({ character_limit: 'x' }) };
+  await read();
+  assert.equal(logged[2], '[TTS] Credits read failed: failed', 'an unreadable answer reads "failed" too');
+  assert.ok(logged.every((line) => !/secret-key/.test(line)), 'the key is never logged');
+
+  t += 11 * 60 * 1000;
+  answer = { ok: true, status: 200, json: async () => ({ character_limit: 10, character_count: 4 }) };
+  assert.equal(await read(), 6);
+  assert.equal(logged.length, 3, 'a good read logs nothing');
 });

@@ -86,7 +86,8 @@ function noteError(d, streamerId, err) {
 }
 
 // The voice for one line, under one deadline that covers the credits read, the reservation, the request and the file.
-// Resolves { status: 'limit' } or { status: 'read', file, tts }; rejects on any failure (the deadline included). Once
+// Resolves { status: 'credit_floor' } (the site's budget), { status: 'limit' } (the streamer's month) or
+// { status: 'read', file, tts }; rejects on any failure (the deadline included). Once
 // the deadline has passed nothing more is reserved or written; characters already reserved stay counted.
 function voiceFor(streamer, text, d) {
   const started = d.now();
@@ -103,7 +104,7 @@ function voiceFor(streamer, text, d) {
     const credits = await d.remainingCredits();
     if (credits != null && credits < settings.creditFloor) {
       noteError(d, streamer.id, new Error('credit_floor'));
-      return { status: 'limit' };
+      return { status: 'credit_floor' };
     }
     if (over) throw new Error('elevenlabs_timeout');
     const limit = streamer.tts_monthly_limit ?? settings.monthlyLimit;
@@ -134,6 +135,11 @@ function voiceFor(streamer, text, d) {
   return Promise.race([produce(), deadline]).finally(() => clearTimeout(timer));
 }
 
+// A good reading ends the last problem the settings page shows.
+function clearError(d, streamerId) {
+  try { d.db.clearTtsError(streamerId); } catch { /* the database is down: the old problem stays shown */ }
+}
+
 // One tip: decide, read, emit, store the status. Never rejects, and emits exactly once.
 async function voiceThenAlert(streamer, donation, emitAlert, d) {
   let status = null;
@@ -148,11 +154,15 @@ async function voiceThenAlert(streamer, donation, emitAlert, d) {
         overlayOpen: d.isOpen(streamer.id),
       });
       status = decision.status;
-      if (decision.read) {
+      // A voice at volume 0 is silent: nothing is asked of ElevenLabs or reserved, and the alert is not held up.
+      if (decision.read && streamer.tts_volume != null && Number(streamer.tts_volume) === 0) {
+        // no voice, no status
+      } else if (decision.read) {
         const { text } = prepareSpeech({ streamer, donation, t: d.t, bannedCheck: (value) => d.bannedCheck(value, streamer.id) });
         const voice = await voiceFor(streamer, text, d);
         status = voice.status;
         tts = voice.tts || null;
+        if (status === 'read') clearError(d, streamer.id);
       }
     } catch (err) {
       status = 'failed';
@@ -197,7 +207,9 @@ async function testVoice(streamer, deps) {
   try {
     const { text } = prepareSpeech({ streamer, donation: sample, t: d.t, bannedCheck: (value) => d.bannedCheck(value, streamer.id) });
     const voice = await voiceFor(streamer, text, d);
+    if (voice.status === 'credit_floor') return { ok: false, error: 'credit_floor' };
     if (voice.status === 'limit') return { ok: false, error: 'limit' };
+    clearError(d, streamer.id);
     if (d.isOpen(streamer.id)) {
       d.bus.emit(`overlay:${streamer.id}`, {
         type: 'donation',
@@ -219,24 +231,27 @@ function cleanupTtsFiles({ now = Date.now(), maxAgeMs = FILE_MAX_AGE_MS, dir = T
   try { folders = fs.readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
   for (const folder of folders) {
     if (!folder.isDirectory()) continue;
-    const folderPath = path.join(dir, folder.name);
-    let left = 0;
-    for (const name of fs.readdirSync(folderPath)) {
-      const file = path.join(folderPath, name);
-      try {
-        if (now - fs.statSync(file).mtimeMs > maxAgeMs) {
-          fs.unlinkSync(file);
-          removed++;
-        } else {
+    // One folder that is unreadable or vanished meanwhile does not stop the sweep of the others.
+    try {
+      const folderPath = path.join(dir, folder.name);
+      let left = 0;
+      for (const name of fs.readdirSync(folderPath)) {
+        const file = path.join(folderPath, name);
+        try {
+          if (now - fs.statSync(file).mtimeMs > maxAgeMs) {
+            fs.unlinkSync(file);
+            removed++;
+          } else {
+            left++;
+          }
+        } catch {
           left++;
         }
-      } catch {
-        left++;
       }
-    }
-    if (left === 0) {
-      try { fs.rmdirSync(folderPath); } catch { /* a file arrived meanwhile */ }
-    }
+      if (left === 0) {
+        try { fs.rmdirSync(folderPath); } catch { /* a file arrived meanwhile */ }
+      }
+    } catch { /* this folder is skipped */ }
   }
   return removed;
 }

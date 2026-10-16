@@ -29,6 +29,12 @@ test('invisible characters cannot hide a link', () => {
   assert.equal(cleanSpeech('evil­.com hi'), 'hi');
   assert.equal(cleanSpeech('ev‍il.c⁠om﻿ hi'), 'hi');
   assert.equal(cleanSpeech('he​llo'), 'hello');
+  assert.equal(cleanSpeech('evil\u3164.com hi'), 'hi', 'Hangul filler');
+  assert.equal(cleanSpeech('evil\u2800.com hi'), 'hi', 'braille blank');
+  assert.equal(cleanSpeech('evil\uFE0F.com hi'), 'hi', 'variation selector');
+  assert.equal(cleanSpeech('evil\u{E0100}.com hi'), 'hi', 'variation selector supplement');
+  assert.equal(cleanSpeech('evil\u{E0041}.com hi'), 'hi', 'tag character');
+  assert.equal(cleanSpeech('evil\u115F.\u1160com hi'), 'hi', 'Hangul choseong and jungseong fillers');
 });
 
 test('runs of one character are cut to three, emoji too', () => {

@@ -1291,7 +1291,7 @@ router.post('/donations/tts', (req, res) => {
 // "Test the voice": a sample tip read with the settings the form shows (saved or not; nothing is saved), through
 // services/tipVoice.js (it counts toward the month, has its own 10 s cooldown, and plays in OBS when it is open).
 // Answers the URL the page plays it from, or the reason it could not (a TTS_ERRORS code).
-const TTS_TEST_STATUS = Object.freeze({ cooldown: 429, limit: 409, unavailable: 503, failed: 502, bad_language: 400 });
+const TTS_TEST_STATUS = Object.freeze({ cooldown: 429, limit: 409, credit_floor: 503, unavailable: 503, failed: 502, bad_language: 400 });
 router.post('/donations/tts/test', async (req, res) => {
   let streamer = req.streamer;
   const body = req.body || {};

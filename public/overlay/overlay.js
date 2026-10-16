@@ -598,6 +598,13 @@ function playTipVoice(buffer, tipVolume) {
   source.start();
 }
 
+function stopTipVoice() {
+  if (currentVoice) {
+    try { currentVoice.stop(); } catch (e) {}
+    currentVoice = null;
+  }
+}
+
 function stopCurrentSound() {
   if (currentAudio) {
     try {
@@ -606,10 +613,7 @@ function stopCurrentSound() {
     } catch (e) {}
     currentAudio = null;
   }
-  if (currentVoice) {
-    try { currentVoice.stop(); } catch (e) {}
-    currentVoice = null;
-  }
+  stopTipVoice();
   // Also stop any in-progress redemption media
   stopRedemption(false);
 }
@@ -695,6 +699,8 @@ function showNotification(event, voice) {
 
   // Dismiss after duration
   alertTimer(() => {
+    // A reading still going (a template that repeats {message} can outlast the 30 s cap) ends with its alert
+    stopTipVoice();
     // Clean up screen effects
     document.querySelectorAll('.screen-effect').forEach(e => {
       e.style.animation = 'none';

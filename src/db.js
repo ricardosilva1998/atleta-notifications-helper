@@ -3198,6 +3198,11 @@ function recordTtsError(streamerId, message) {
     .run(String(message == null ? '' : message).substring(0, 200), streamerId);
 }
 
+// A good reading ends the problem the settings page shows.
+function clearTtsError(streamerId) {
+  db.prepare('UPDATE streamers SET tts_last_error = NULL, tts_last_error_at = NULL WHERE id = ?').run(streamerId);
+}
+
 const CHATBOT_COLUMNS = new Set([
   'chatbot_enabled',
   'chat_follow_enabled', 'chat_sub_enabled', 'chat_giftsub_enabled',
@@ -6004,6 +6009,7 @@ module.exports = {
   getTtsUsage,
   reserveTtsCharacters,
   recordTtsError,
+  clearTtsError,
   updateChatbotConfig,
   updateBuiltinCommands,
   updateModerationConfig,

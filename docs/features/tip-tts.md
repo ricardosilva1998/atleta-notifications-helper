@@ -44,11 +44,13 @@ the tip's `donations.tts_status`:
 4. The overlay switch (`overlay_enabled`) or the donation alert is off → `blocked_off`.
 5. No alert overlay is open in OBS (`overlayPresence.isOpen`) → `overlay_closed`.
 6. No API key → `failed` (the last problem: `no_key`).
-7. The account's remaining credits are known and under `TTS_CREDIT_FLOOR` → `limit` (the last problem: `credit_floor`).
-8. The line would pass the streamer's monthly limit → `limit`.
+7. The account's remaining credits are known and under `TTS_CREDIT_FLOOR` → `credit_floor` ("Paused: site voice budget"; the
+   last problem: `credit_floor`). Test the voice answers `credit_floor` too, not `limit`.
+8. The line would pass the streamer's monthly limit → `limit` ("Monthly limit reached").
 9. ElevenLabs answers with audio within the deadline → `read`; anything else → `failed`.
 
-Gates 1–5 send nothing to ElevenLabs (`speechDecision()` in `src/services/tipSpeech.js`).
+Gates 1–5 send nothing to ElevenLabs (`speechDecision()` in `src/services/tipSpeech.js`). A streamer whose voice volume
+is 0 is not read either: nothing is sent or reserved, the alert fires at once without a voice, and no status is stored.
 
 ## The line
 
@@ -74,7 +76,11 @@ Insults are not blocked by Atleta: the streamer's own banned words (the chat bot
   reserved in `tts_usage` before the request, so two tips at once cannot both pass the limit; reserved characters stay
   counted when the request then fails or times out. A line that would pass the limit is not read at all, never cut.
 - **The site floor:** the account's remaining credits (`GET /v1/user/subscription`, `character_limit −
-  character_count`) are read at most every 10 minutes (`remainingCredits()`; a failed read waits the same 10 minutes).
+  character_count`) are read at most every 10 minutes (`remainingCredits()`; a failed read waits the same 10 minutes). The key therefore needs **text-to-speech** access
+  **and** read access to **user** (the subscription). A read that fails (a `401` for a key without the user
+  permission, a `429` or `5xx`, no answer in 10 s, an unreadable answer) is logged as `[TTS] Credits read failed:
+  <status|failed>` at most once an hour, never with the key; meanwhile the floor does **not** apply (credits not known
+  do not stop reading, Ruling 8), so a `401` there means the site's spend is only bounded by the monthly limits.
   Below `TTS_CREDIT_FLOOR` (default 20,000) nothing is read until ElevenLabs' monthly reset. The account is shared with
   the look-sounds pipeline (`docs/features/look-sounds.md`).
 - **The deadline:** 15 s per tip, from the start of the tip's turn: it covers the credits read, the reservation, the
@@ -82,11 +88,11 @@ Insults are not blocked by Atleta: the streamer's own banned words (the chat bot
 
 ## Statuses (`donations.tts_status`)
 
-`read`, `below_threshold`, `other_currency`, `blocked_off`, `overlay_closed`, `limit`, `failed`, or NULL while TTS is
-off. The donation history shows them in a TTS column (`TTS_STATUS_TEXTS` in `ttsSettings.js`) while the streamer has TTS
+`read`, `below_threshold`, `other_currency`, `blocked_off`, `overlay_closed`, `limit` (the streamer's month),
+`credit_floor` (the site's budget), `failed`, or NULL while TTS is off (or the voice volume is 0). The donation history shows them in a TTS column (`TTS_STATUS_TEXTS` in `ttsSettings.js`) while the streamer has TTS
 on or any listed tip has a status. A failure is stored on the streamer (`tts_last_error`, `tts_last_error_at`: `no_key`,
 `credit_floor`, `elevenlabs_<status>`, `elevenlabs_timeout`, `elevenlabs_failed`, `elevenlabs_empty`, else `failed`)
-for the settings page, and logged at most once per streamer an hour.
+for the settings page (cleared again by the next good reading), and logged at most once per streamer an hour.
 
 ## Files and cleanup
 
@@ -107,7 +113,9 @@ tips of one streamer go one at a time in order, so a burst is read in order. The
 loaded in time leaves the alert as it always was, and at overlay volume 0 nothing is loaded. It plays through the
 overlay's AudioContext at the overlay volume × the TTS volume, 1 s after the alert starts (the alert's own sound gets
 that second), and the alert stays on screen until 0.3 s after the last word: the streamer's duration or the reading,
-whichever is longer, at most 30 s (`public/overlay/tipVoiceTiming.js`, `voiceHoldMs()`).
+whichever is longer, at most 30 s (`public/overlay/tipVoiceTiming.js`, `voiceHoldMs()`); a reading still going when its
+alert is dismissed (a template that repeats `{message}` can outlast the cap) is stopped with it. A tip waiting behind
+another tip's voice gets its chat thank-you and its tip-goal update at once, before its alert (only the alert waits).
 
 ## Feature flags
 

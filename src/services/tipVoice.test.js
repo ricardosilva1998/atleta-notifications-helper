@@ -47,7 +47,7 @@ const donation = (over = {}) => ({ orderId: 'ORDER-1', donorName: 'Viewer', amou
 
 // Stubbed deps that record what was asked of them.
 function makeDeps(over = {}) {
-  const calls = { reserve: [], status: [], errors: [], synth: [], logged: [], bus: [] };
+  const calls = { reserve: [], status: [], errors: [], cleared: [], synth: [], logged: [], bus: [] };
   let uuid = 0;
   const { db: dbOver, ...rest } = over;
   const deps = {
@@ -56,6 +56,7 @@ function makeDeps(over = {}) {
       reserveTtsCharacters: (...args) => { calls.reserve.push(args); return true; },
       setDonationTtsStatus: (...args) => { calls.status.push(args); },
       recordTtsError: (...args) => { calls.errors.push(args); },
+      clearTtsError: (...args) => { calls.cleared.push(args); },
       ...dbOver,
     },
     config: { tts: { apiKey: 'test-key', model: 'm', creditFloor: 20000, monthlyLimit: 15000 } },
@@ -234,15 +235,47 @@ describe('announceWithVoice', () => {
     assert.deepEqual(calls.status, [['paypal', 'ORDER-1', 'limit']]);
   });
 
-  test('below the site floor: status limit, nothing reserved', async () => {
+  test("below the site floor: its own status credit_floor (not the streamer's limit), nothing reserved", async () => {
     const { deps, calls } = makeDeps({ remainingCredits: async () => 19999 });
     const emitted = [];
     const result = await tipVoice.announceWithVoice(makeStreamer(), donation(), { emitAlert: (tts) => emitted.push(tts), deps });
-    assert.deepEqual(result, { status: 'limit' });
+    assert.deepEqual(result, { status: 'credit_floor' });
     assert.deepEqual(emitted, [null]);
     assert.equal(calls.reserve.length, 0);
     assert.equal(calls.synth.length, 0);
+    assert.deepEqual(calls.status, [['paypal', 'ORDER-1', 'credit_floor']]);
     assert.equal(calls.errors.length, 1, 'the stop is recorded for the settings page');
+    assert.equal(calls.errors[0][1], 'credit_floor');
+  });
+
+  test('a streamer whose volume is 0 is not read: nothing reserved or sent, the alert at once, no status', async () => {
+    const { deps, calls } = makeDeps();
+    const emitted = [];
+    const result = await tipVoice.announceWithVoice(makeStreamer({ tts_volume: 0 }), donation(), { emitAlert: (tts) => emitted.push(tts), deps });
+    assert.deepEqual(result, { status: null });
+    assert.deepEqual(emitted, [null]);
+    assert.equal(calls.reserve.length, 0);
+    assert.equal(calls.synth.length, 0);
+    assert.equal(calls.status.length, 0);
+    assert.equal(calls.errors.length, 0);
+    // a volume that is not stored yet is the default, not silence
+    const unset = await tipVoice.announceWithVoice(makeStreamer({ tts_volume: null }), donation(), { emitAlert: () => {}, deps });
+    assert.deepEqual(unset, { status: 'read' });
+  });
+
+  test('a good reading clears the last problem; a failed one does not', async () => {
+    const { deps, calls } = makeDeps();
+    const streamer = makeStreamer();
+    await tipVoice.announceWithVoice(streamer, donation(), { emitAlert: () => {}, deps });
+    assert.deepEqual(calls.cleared, [[streamer.id]]);
+
+    const failing = makeDeps({ synthesize: async () => { throw new Error('elevenlabs_500'); } });
+    await tipVoice.announceWithVoice(makeStreamer(), donation(), { emitAlert: () => {}, deps: failing.deps });
+    assert.equal(failing.calls.cleared.length, 0);
+
+    const broken = makeDeps({ db: { clearTtsError: () => { throw new Error('db down'); } } });
+    const result = await tipVoice.announceWithVoice(makeStreamer(), donation(), { emitAlert: () => {}, deps: broken.deps });
+    assert.deepEqual(result, { status: 'read' }, 'a problem clearing it changes nothing');
   });
 
   test('credits not known yet (no good read so far) do not stop reading', async () => {
@@ -345,12 +378,21 @@ describe('testVoice', () => {
     let { deps } = makeDeps({ cooldown: cooldown(), db: { reserveTtsCharacters: () => false } });
     assert.deepEqual(await tipVoice.testVoice(makeStreamer(), deps), { ok: false, error: 'limit' });
     ({ deps } = makeDeps({ cooldown: cooldown(), remainingCredits: async () => 10 }));
-    assert.deepEqual(await tipVoice.testVoice(makeStreamer(), deps), { ok: false, error: 'limit' });
+    assert.deepEqual(await tipVoice.testVoice(makeStreamer(), deps), { ok: false, error: 'credit_floor' }, "the site floor is not the streamer's limit");
     ({ deps } = makeDeps({ cooldown: cooldown(), synthesize: async () => { throw new Error('elevenlabs_failed'); } }));
     assert.deepEqual(await tipVoice.testVoice(makeStreamer(), deps), { ok: false, error: 'failed' });
     ({ deps } = makeDeps({ cooldown: cooldown() }));
     deps.config = { tts: { ...deps.config.tts, apiKey: null } };
     assert.deepEqual(await tipVoice.testVoice(makeStreamer(), deps), { ok: false, error: 'unavailable' });
+  });
+});
+
+describe('testVoice clears the last problem', () => {
+  test('after a good reading', async () => {
+    const { deps, calls } = makeDeps({ cooldown: createTestCooldown({ cooldownMs: 10000 }) });
+    const streamer = makeStreamer();
+    assert.equal((await tipVoice.testVoice(streamer, deps)).ok, true);
+    assert.deepEqual(calls.cleared, [[streamer.id]]);
   });
 });
 
@@ -375,6 +417,28 @@ describe('cleanupTtsFiles', () => {
     assert.equal(tipVoice.cleanupTtsFiles({ now: NOW, dir }), 2);
     assert.deepEqual(fs.readdirSync(folder), [`${UUID2}.mp3`]);
     assert.equal(fs.existsSync(emptied), false, 'an emptied folder is removed');
+  });
+
+  test('a folder that cannot be read does not stop the sweep of the others', () => {
+    const bad = path.join(dir, '1');
+    const good = path.join(dir, '2');
+    fs.mkdirSync(bad);
+    fs.mkdirSync(good);
+    const old = path.join(good, `${UUID1}.mp3`);
+    fs.writeFileSync(old, AUDIO);
+    age(old, 2 * tipVoice.FILE_MAX_AGE_MS);
+    const real = fs.readdirSync;
+    fs.readdirSync = (target, ...rest) => {
+      if (target === bad) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+      return real(target, ...rest);
+    };
+    try {
+      assert.equal(tipVoice.cleanupTtsFiles({ now: NOW, dir }), 1);
+    } finally {
+      fs.readdirSync = real;
+    }
+    assert.equal(fs.existsSync(good), false, 'the readable folder was swept and removed');
+    assert.equal(fs.existsSync(bad), true);
   });
 
   test('no folder yet: nothing to do', () => {

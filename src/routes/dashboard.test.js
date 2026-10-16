@@ -139,7 +139,7 @@ const timedNotificationsStub = {
 // folder (never the repo's data/). `tts.audio` is what the stubbed ElevenLabs answers (null: it fails); `tts.open`
 // whether an alert overlay is open; `tts.emitted` what the test sent to OBS.
 const TTS_DIR = realFs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-tts-'));
-const tts = { audio: Buffer.from('ID3 synthetic audio'), open: false, emitted: [], requests: [] };
+const tts = { audio: Buffer.from('ID3 synthetic audio'), open: false, emitted: [], requests: [], credits: null };
 function wrapTipVoice(real) {
   const deps = {
     dir: TTS_DIR,
@@ -148,7 +148,7 @@ function wrapTipVoice(real) {
       if (!tts.audio) throw new Error('elevenlabs_500');
       return tts.audio;
     },
-    remainingCredits: async () => null,
+    remainingCredits: async () => tts.credits,
     isOpen: () => tts.open,
     bannedCheck: () => false,
     bus: { emit: (channel, event) => tts.emitted.push([channel, event]) },
@@ -5483,7 +5483,7 @@ describe('reading tips aloud', () => {
   beforeEach(() => {
     savedKey = ttsConfig.apiKey;
     ttsConfig.apiKey = 'synthetic-elevenlabs-key';
-    Object.assign(tts, { audio: Buffer.from('ID3 synthetic audio'), open: false, emitted: [], requests: [] });
+    Object.assign(tts, { audio: Buffer.from('ID3 synthetic audio'), open: false, emitted: [], requests: [], credits: null });
   });
   afterEach(() => { ttsConfig.apiKey = savedKey; });
 
@@ -5639,6 +5639,16 @@ describe('reading tips aloud', () => {
     assert.deepEqual((await request('POST', '/dashboard/donations/tts/test', { streamer: addStreamer(), body: {} })).json(), { ok: false, error: 'failed' });
     ttsConfig.apiKey = null;
     assert.deepEqual((await request('POST', '/dashboard/donations/tts/test', { streamer: addStreamer(), body: {} })).json(), { ok: false, error: 'unavailable' });
+  });
+
+  test("the test under the site's credit floor says so, not that the month is used up", async () => {
+    tts.credits = 5; // far under config.tts.creditFloor
+    const res = await request('POST', '/dashboard/donations/tts/test', { streamer: addStreamer({ tts_language: 'en' }), body: {} });
+    assert.equal(res.status, 503);
+    assert.deepEqual(res.json(), { ok: false, error: 'credit_floor' });
+    assert.equal(tts.requests.length, 0);
+    const page = (await request('GET', '/dashboard/donations', { streamer: addStreamer() })).text;
+    assert.ok(page.includes(`"credit_floor":${JSON.stringify(t('en', 'donations.tts.error.credit_floor'))}`), 'the page script can tell it (errorTexts)');
   });
 
   test('the audio route serves only the streamer\'s own file', async () => {

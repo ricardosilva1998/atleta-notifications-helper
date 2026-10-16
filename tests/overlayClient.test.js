@@ -474,6 +474,21 @@ describe('a tip read aloud', () => {
     assert.ok(longSlot.classList.contains('exiting'), 'leaves when it ends');
   });
 
+  test('a reading longer than the 30 s cap is stopped when its alert is dismissed', async () => {
+    const overlay = loadOverlay({ voice: { duration: 45 } });
+    overlay.send(tip());
+    await flush();
+    const slot = overlay.slots()[0];
+    overlay.clock.advance(1000);
+    assert.equal(overlay.audio.voices.length, 1);
+    overlay.clock.advance(28999);
+    assert.ok(!slot.classList.contains('exiting'));
+    assert.ok(!overlay.audio.voices[0].stopped, 'still reading just before the cap');
+    overlay.clock.advance(1);
+    assert.ok(slot.classList.contains('exiting'), 'the alert is dismissed at the cap');
+    assert.equal(overlay.audio.voices[0].stopped, true, 'and its voice stops with it');
+  });
+
   test('a reading that cannot be loaded gives the alert without a voice', async () => {
     const overlay = loadOverlay({ voice: { fetch: () => Promise.reject(new Error('offline')) } });
     overlay.send(tip());
