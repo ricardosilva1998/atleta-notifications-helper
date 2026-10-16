@@ -5,10 +5,10 @@ const { chatManager } = require('./twitchChat');
 const { isStreamerDisabled } = require('./streamerAccess');
 
 // One StreamElements event. A real tip is logged once per StreamElements event
-// id, and only a newly logged tip counts toward the tip goal and the 7-day
-// stats: a replayed event (same id) plays the alert again but is not counted
-// twice. Test tips from the StreamElements dashboard only play the alert and
-// the chat message.
+// id, and only a newly logged tip counts toward the tip goal, the 7-day stats
+// and the trackers (Latest tip, Top tipper): a replayed event (same id) plays
+// the alert again but is not counted twice. Test tips from the StreamElements
+// dashboard only play the alert and the chat message.
 function handleTip(streamerId, event, isTest) {
   if (!event || event.type !== 'tip') return;
   const data = event.data || {};
@@ -21,7 +21,10 @@ function handleTip(streamerId, event, isTest) {
         currency: data.currency, message: data.message, external_id: event._id || null,
       });
     } catch (e) { console.error('[StreamElements] logDonation error:', e.message); }
-    if (isNew) require('./tipGoals').recordDonation(streamerId, data.amount, data.currency);
+    if (isNew) {
+      require('./tipGoals').recordDonation(streamerId, data.amount, data.currency);
+      require('./trackers').onTip(streamerId, { name: data.username, amount: data.amount, currency: data.currency });
+    }
   }
   const s = db.getStreamerById(streamerId);
   if (s && s.overlay_donation_enabled) {

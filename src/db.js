@@ -2997,14 +2997,22 @@ function getOverlayEnabledStreamers() {
 // goal or an enabled tracker source needs the same connections (the follows,
 // subs, raids and bits it counts arrive through EventSub), whatever the two
 // switches say.
+const TRACKING_IN_USE = `(EXISTS (SELECT 1 FROM tracking_goals g WHERE g.streamer_id = streamers.id AND g.status = 'active')
+      OR EXISTS (SELECT 1 FROM tracker_settings t WHERE t.streamer_id = streamers.id AND t.enabled = 1))`;
+
 function getOverlayOrChatbotStreamers() {
   return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
-    WHERE (overlay_enabled = 1 OR chatbot_enabled = 1
-      OR EXISTS (SELECT 1 FROM tracking_goals g WHERE g.streamer_id = streamers.id AND g.status = 'active')
-      OR EXISTS (SELECT 1 FROM tracker_settings t WHERE t.streamer_id = streamers.id AND t.enabled = 1))
+    WHERE (overlay_enabled = 1 OR chatbot_enabled = 1 OR ${TRACKING_IN_USE})
     AND COALESCE(enabled, 1) = 1
   `).all());
+}
+
+// Whether the streamer has an active tracking goal or a tracker switched on:
+// the reason, besides the overlay and the chatbot, that their event connections
+// run (getOverlayOrChatbotStreamers above; the dashboard's syncLiveConnections).
+function usesTracking(streamerId) {
+  return !!db.prepare(`SELECT 1 FROM streamers WHERE id = ? AND ${TRACKING_IN_USE}`).get(streamerId);
 }
 
 const OVERLAY_COLUMNS = new Set([
@@ -6124,6 +6132,26 @@ function clearTrackerValues(streamerId) {
   db.prepare('DELETE FROM tracker_values WHERE streamer_id = ?').run(streamerId);
 }
 
+// The donor who gave the most in `currency` since `since` (a Date or ISO/SQLite
+// time): { name, amount } or null. Names are grouped whatever their case (the
+// name shown is the one on the donor's latest tip) and "Anonymous" is left out;
+// a tip without a currency counts as one in `currency`, as the tip goal counts
+// it. Amounts in other currencies are never added in.
+function getTopTipper(streamerId, currency, since) {
+  const row = db.prepare(`
+    SELECT d.donor_name AS name, g.total AS amount FROM (
+      SELECT LOWER(TRIM(donor_name)) AS who, ROUND(SUM(amount), 2) AS total, MAX(id) AS last_id
+      FROM donations
+      WHERE streamer_id = ? AND created_at >= ?
+        AND (currency IS NULL OR currency = '' OR UPPER(currency) = UPPER(?))
+        AND donor_name IS NOT NULL AND TRIM(donor_name) != '' AND LOWER(TRIM(donor_name)) != 'anonymous'
+      GROUP BY who
+    ) g JOIN donations d ON d.id = g.last_id
+    ORDER BY g.total DESC, g.last_id ASC LIMIT 1
+  `).get(streamerId, toSqliteTime(since), String(currency || ''));
+  return row ? { name: row.name, amount: row.amount } : null;
+}
+
 // { [tracker]: { enabled: 0|1, color } } for the trackers that have a row; a
 // tracker with none is on with its default colour.
 function getTrackerSettings(streamerId) {
@@ -6614,6 +6642,8 @@ module.exports = {
   getActiveTrackingGoals,
   setTrackingGoalTwitchState,
   backfillTrackingFollows,
+  getTopTipper,
+  usesTracking,
   getTrackerValues,
   setTrackerValue,
   clearTrackerValues,

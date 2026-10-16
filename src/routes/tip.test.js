@@ -528,6 +528,45 @@ describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
   });
 });
 
+describe('the trackers (Latest tip, Top tipper)', () => {
+  let trackerUpdates;
+  beforeEach(() => {
+    trackerUpdates = [];
+    bus.removeAllListeners(`tracker:${streamerA}`);
+    bus.on(`tracker:${streamerA}`, (e) => trackerUpdates.push(e));
+  });
+
+  test('a verified capture is the latest tip and the top tipper, once; a reload adds nothing', async () => {
+    const order = await startTip();
+    await request('GET', `/tip/tips_a/success?token=${order}&PayerID=PAYER1`);
+    const tip = { name: 'Viewer One', amount: 7, currency: 'EUR' };
+    assert.deepEqual(trackerUpdates, [
+      { type: 'tracker', tracker: 'latest_tip', value: tip },
+      { type: 'tracker', tracker: 'top_tipper', value: tip },
+    ]);
+    assert.deepEqual(JSON.parse(db.getTrackerValues(streamerA).latest_tip), tip);
+    await request('GET', `/tip/tips_a/success?token=${order}&PayerID=PAYER1`);
+    assert.equal(trackerUpdates.length, 2, 'a replay never reaches the trackers');
+  });
+
+  test('a tip already in the donation history does not reach them', async () => {
+    const order = await startTip();
+    db.logDonation(streamerA, { source: 'paypal', donor_name: 'Viewer One', amount: 7, currency: 'EUR', external_id: order });
+    paypal.capture = () => reply(422, ALREADY_CAPTURED);
+    await request('GET', `/tip/tips_a/success?token=${order}`);
+    assert.deepEqual(trackerUpdates, []);
+  });
+
+  test('a tip the daily reconcile recovers reaches them once', async () => {
+    db.createPendingTip({ order_id: 'RECONCILE00000010', streamer_id: streamerA, donor_name: 'Late Viewer', message: 'gg', payee_merchant_id: 'MERCHANT12345' });
+    db.db.prepare("UPDATE pending_tips SET created_at = datetime('now', '-180 minutes') WHERE order_id = ?").run('RECONCILE00000010');
+    assert.equal(await tipRoutes.reconcilePendingTips(), 1);
+    assert.deepEqual(trackerUpdates.map((e) => [e.tracker, e.value && e.value.name]), [['latest_tip', 'Late Viewer'], ['top_tipper', 'Late Viewer']]);
+    assert.equal(await tipRoutes.reconcilePendingTips(), 0);
+    assert.equal(trackerUpdates.length, 2);
+  });
+});
+
 // ── The public page and its messages are in the visit's language ─────────────
 
 describe('what a donor reads is translated', () => {

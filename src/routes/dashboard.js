@@ -892,15 +892,28 @@ router.get('/overlay', overlayPage, (req, res) => {
 
 // EventSub (the Twitch events behind the overlay's alerts and the chatbot's
 // thank-yous), StreamElements and the sponsor rotation run while the overlay or
-// the chatbot is on; the managers start them at boot on the same rule
-// (db.getOverlayOrChatbotStreamers). A save that changes one of the two
-// switches goes through here: `wasNeeded` and `needed` say whether either was
-// on before and is on after. They are started when the first of the two comes
-// on, stopped when the last one goes off, and left alone while the other switch
-// keeps them needed. Settings reach an open OBS source as they are saved, so
+// the chatbot is on, or while the streamer uses Tracking (an active follower or
+// sub goal, or a tracker switched on: trackingInUse); the managers start them
+// at boot on the same rule (db.getOverlayOrChatbotStreamers). A save that
+// changes one of these goes through here: `wasNeeded` and `needed` say whether
+// any was on before and is on after. They are started when the first comes on,
+// stopped when the last one goes off, and left alone while another keeps them
+// needed. Settings reach an open OBS source as they are saved, so
 // nothing else reconnects Twitch (a restart drops events for a second or two);
 // the StreamElements connection also follows its token, when that is added,
 // replaced or removed (streamElementsChanged).
+// Whether the streamer's Tracking needs the event connections (see above). A
+// database error counts as needed: stopping Twitch's events by mistake loses
+// them, keeping them a little longer costs nothing.
+function trackingInUse(streamerId) {
+  try {
+    return db.usesTracking(streamerId);
+  } catch (e) {
+    console.error(`[Dashboard] Tracking check failed for streamer ${streamerId}:`, e.message);
+    return true;
+  }
+}
+
 function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt, streamElementsChanged = false }) {
   // Each step runs on its own, so one that fails does not keep the others from running.
   const attempt = (what, fn) => {
@@ -940,9 +953,10 @@ router.post('/overlay', (req, res) => {
   db.updateOverlayConfig(req.streamer.id, columns);
   pushOverlayConfig(req.streamer.id);
 
+  const tracking = trackingInUse(req.streamer.id);
   syncLiveConnections(req.streamer.id, {
-    wasNeeded: wasEnabled || chatbotOn,
-    needed: !!columns.overlay_enabled || chatbotOn,
+    wasNeeded: wasEnabled || chatbotOn || tracking,
+    needed: !!columns.overlay_enabled || chatbotOn || tracking,
     streamElementsJwt,
     streamElementsChanged: 'streamelements_jwt' in columns,
   });
@@ -1029,7 +1043,7 @@ function pushOverlayConfig(streamerId) {
 }
 
 // What follows a working card's save (POST /dashboard/settings), once per save: the chat bot joins or leaves
-// the channel, the Twitch event connections start or stop (needed while the overlay or the chatbot is on),
+// the channel, the Twitch event connections start or stop (needed while the overlay or the chatbot is on, or Tracking is in use),
 // an open OBS overlay gets the new settings, the sponsor chat rotation restarts.
 function runSettingFollowUps({ before, after, steps }) {
   const id = after.id;
@@ -1043,8 +1057,9 @@ function runSettingFollowUps({ before, after, steps }) {
         console.error('[Dashboard] Chatbot start/stop error:', e.message);
       }
     }
-    const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled);
-    const needed = !!(after.overlay_enabled || after.chatbot_enabled);
+    const tracking = trackingInUse(id);
+    const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled) || tracking;
+    const needed = !!(after.overlay_enabled || after.chatbot_enabled) || tracking;
     if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed, streamElementsJwt: after.streamelements_jwt });
   }
   if (steps.has('overlay')) {
@@ -1558,16 +1573,16 @@ router.post('/chatbot', (req, res) => {
 
   // The chatbot's thank-yous and sponsor messages need the event connections as
   // the overlay does (see syncLiveConnections): switching the chatbot on starts
-  // them unless the overlay already has, switching it off stops them unless the
-  // overlay still needs them. A save that leaves the switch where it was
+  // them unless the overlay or Tracking already has, switching it off stops them
+  // unless the overlay or Tracking still needs them. A save that leaves the switch where it was
   // changes nothing.
   const chatbotWasOn = !!req.streamer.chatbot_enabled;
   const chatbotIsOn = !!b.chatbot_enabled;
   if (chatbotWasOn !== chatbotIsOn) {
-    const overlayOn = !!req.streamer.overlay_enabled;
+    const otherwiseNeeded = !!req.streamer.overlay_enabled || trackingInUse(req.streamer.id);
     syncLiveConnections(req.streamer.id, {
-      wasNeeded: overlayOn || chatbotWasOn,
-      needed: overlayOn || chatbotIsOn,
+      wasNeeded: otherwiseNeeded || chatbotWasOn,
+      needed: otherwiseNeeded || chatbotIsOn,
       streamElementsJwt: req.streamer.streamelements_jwt,
     });
   }

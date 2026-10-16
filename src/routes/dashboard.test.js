@@ -1351,6 +1351,43 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
     });
   });
+
+  // Tracking: an active follower or sub goal, or a tracker switched on, needs the same connections (the events it
+  // counts arrive through EventSub), so neither switch going off stops them while one is in use.
+  describe('an active tracking goal or a tracker switched on', () => {
+    const saveSetting = (id, body) => request('POST', '/dashboard/settings', { streamer: id, body });
+
+    test('keeps them running when the overlay goes off, and they are already running when it comes on', async () => {
+      const id = make({ overlay_enabled: 1 });
+      db.createTrackingGoal(id, 'follow', { title: 'Road to 100', target: 100 });
+      await saveOverlay(id, {});
+      assert.deepEqual(managerCalls, []);
+      assert.deepEqual(sponsorCalls, []);
+      await saveOverlay(id, { overlay_enabled: '1' });
+      assert.deepEqual(managerCalls, []);
+    });
+
+    test('keeps them running when the chatbot goes off, on its page and on its card', async () => {
+      const id = make({ chatbot_enabled: 1 });
+      db.setTrackerSetting(id, 'latest_follower', { enabled: true });
+      await saveChatbot(id, {});
+      assert.deepEqual(managerCalls, [['chat.stop', id]]);
+      db.db.prepare('UPDATE streamers SET chatbot_enabled = 1 WHERE id = ?').run(id);
+      managerCalls.length = 0;
+      await saveSetting(id, { key: 'chatbot_enabled', value: 0 });
+      assert.deepEqual(managerCalls, [['chat.stop', id]]);
+      assert.deepEqual(sponsorCalls, []);
+    });
+
+    test('an ended goal or a tracker switched off is no reason: the last switch going off stops them', async () => {
+      const id = make({ overlay_enabled: 1 });
+      const goal = db.createTrackingGoal(id, 'sub', { title: 'Subs', target: 10 });
+      db.endTrackingGoal(goal.id, id);
+      db.setTrackerSetting(id, 'latest_tip', { enabled: false });
+      await saveOverlay(id, {});
+      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+    });
+  });
 });
 
 // ── Settings reach an open OBS source (M6) and a new link ends the old ones (L5) ──

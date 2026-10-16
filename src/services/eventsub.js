@@ -8,6 +8,8 @@ const { isStreamerDisabled } = require('./streamerAccess');
 const { createMessageDedupe } = require('./messageDedupe');
 const { livePolls } = require('./livePolls');
 const { shoutouts } = require('./shoutouts');
+const trackingGoals = require('./trackingGoals');
+const trackers = require('./trackers');
 
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 const SUBSCRIPTIONS_URL = 'https://api.twitch.tv/helix/eventsub/subscriptions';
@@ -34,6 +36,9 @@ const DRAIN_MS = 30_000;
 const NOTIFICATION_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const seenNotifications = createMessageDedupe({ ttlMs: NOTIFICATION_DEDUPE_TTL_MS });
 setInterval(() => seenNotifications.sweep(), 60 * 1000).unref();
+
+// The events Atleta's follow/sub record keeps (services/trackingGoals.js), by their normalized type.
+const RECORD_KINDS = { follow: 'follow', subscription: 'sub', giftsub: 'sub' };
 
 // Closes a socket this client no longer uses. A connection that went silent is
 // cut (terminate) rather than waiting for a closing handshake that will not come.
@@ -340,22 +345,39 @@ class EventSubClient {
 
     const streamer = db.getStreamerById(this.streamerId);
 
+    // What the follow/sub record needs (normalizeEvent's `record`) stays out of the alert, the stats row and the
+    // thank-you: they get the event as before.
+    const { record, ...alert } = normalized;
+
     // Emit to overlay — giftsub shows as subscription banner
-    const isGift = normalized.type === 'giftsub';
-    const overlayType = isGift ? 'subscription' : normalized.type;
+    const isGift = alert.type === 'giftsub';
+    const overlayType = isGift ? 'subscription' : alert.type;
     const typeMap = { follow: 'follow', subscription: 'sub', giftsub: 'sub', bits: 'bits', donation: 'donation', raid: 'raid' };
     const enabledKey = `overlay_${typeMap[overlayType] || overlayType}_enabled`;
     if (streamer && streamer[enabledKey]) {
-      bus.emit(`overlay:${this.streamerId}`, { ...normalized, type: overlayType, isGift });
+      bus.emit(`overlay:${this.streamerId}`, { ...alert, type: overlayType, isGift });
     }
-    try { db.logOverlayEvent(this.streamerId, normalized.type, normalized.data?.username, normalized.data); } catch (e) {}
+    try { db.logOverlayEvent(this.streamerId, alert.type, alert.data?.username, alert.data); } catch (e) {}
+
+    // Tracking: follows and subs go to Atleta's record (and the goals that count them), and the five events to the
+    // trackers. Neither throws, whatever the overlay and chatbot switches say.
+    const recordKind = RECORD_KINDS[alert.type];
+    if (recordKind && record) {
+      trackingGoals.recordEvent(this.streamerId, recordKind, {
+        subType: record.subType || null,
+        twitchUserId: record.userId || null,
+        username: alert.data?.username,
+        count: record.count || 1,
+      });
+    }
+    trackers.onEvent(this.streamerId, alert);
 
     // Emit to chat service
-    chatManager.sendEventMessage(this.streamerId, normalized.type, normalized.data);
-    if (normalized.type === 'raid') {
+    chatManager.sendEventMessage(this.streamerId, alert.type, alert.data);
+    if (alert.type === 'raid') {
       chatManager.startRaidProtection(this.streamerId);
       // The Shoutouts card's raid shoutout: after the thank-you above (it waits for Twitch's lookup of the raider).
-      shoutouts.afterRaid(this.streamerId, normalized.data)
+      shoutouts.afterRaid(this.streamerId, alert.data)
         .catch((err) => console.error(`[Shoutout] Raid shoutout failed for streamer ${this.streamerId}:`, err.message));
     }
   }
@@ -475,7 +497,7 @@ class EventSubClient {
   normalizeEvent(subType, event) {
     switch (subType) {
       case 'channel.follow':
-        return { type: 'follow', data: { username: event.user_name } };
+        return { type: 'follow', data: { username: event.user_name }, record: { userId: event.user_id } };
 
       case 'channel.subscribe':
         // A gifted sub. Twitch sends one of these per recipient, besides the single
@@ -490,6 +512,7 @@ class EventSubClient {
             months: 1,
             message: null,
           },
+          record: { subType: 'new', userId: event.user_id },
         };
 
       case 'channel.subscription.gift':
@@ -501,6 +524,7 @@ class EventSubClient {
             amount: event.total,
             message: `Gifted ${event.total} sub${event.total > 1 ? 's' : ''}!`,
           },
+          record: { subType: 'gift', userId: event.is_anonymous ? null : event.user_id, count: event.total },
         };
 
       case 'channel.subscription.message':
@@ -512,6 +536,9 @@ class EventSubClient {
             months: event.cumulative_months,
             message: event.message ? event.message.text : null,
           },
+          // A sub the viewer announces in chat: a resub past the first month (a renewal Twitch sends without a
+          // message never reaches Atleta).
+          record: { subType: event.cumulative_months > 1 ? 'resub' : 'new', userId: event.user_id },
         };
 
       case 'channel.cheer':

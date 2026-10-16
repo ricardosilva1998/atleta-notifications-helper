@@ -23,11 +23,12 @@ const dbStub = {
 const busStub = new EventEmitter();
 const chatStub = { chatManager: { sendEventMessage: (id, type, data) => calls.chat.push({ id, type, data }) } };
 const tipGoalsStub = { recordDonation: (id, amount, currency) => calls.recordDonation.push({ id, amount, currency }) };
+const trackersStub = { onTip: (id, tip) => calls.onTip.push({ id, ...tip }) };
 
 const SE_FILE = path.join(__dirname, 'streamelements.js');
 const Module = require('module');
 const origLoad = Module._load.bind(Module);
-// Stays on for the whole file: streamelements.js requires ./tipGoals lazily.
+// Stays on for the whole file: streamelements.js requires ./tipGoals and ./trackers lazily.
 Module._load = function (request, parent, isMain) {
   if (parent && parent.filename === SE_FILE) {
     if (request === 'socket.io-client') return () => { throw new Error('no network in tests'); };
@@ -35,6 +36,7 @@ Module._load = function (request, parent, isMain) {
     if (request === './overlayBus') return busStub;
     if (request === './twitchChat') return chatStub;
     if (request === './tipGoals') return tipGoalsStub;
+    if (request === './trackers') return trackersStub;
   }
   return origLoad(request, parent, isMain);
 };
@@ -51,7 +53,7 @@ const tipEvent = (over) => ({
 
 beforeEach(() => {
   streamer = { id: 7, overlay_donation_enabled: 1 };
-  calls = { logDonation: [], logOverlayEvent: [], chat: [], recordDonation: [], alerts: [] };
+  calls = { logDonation: [], logOverlayEvent: [], chat: [], recordDonation: [], onTip: [], alerts: [] };
   logDonationResult = true;
   busStub.removeAllListeners();
   busStub.on('overlay:7', (e) => calls.alerts.push(e));
@@ -115,4 +117,25 @@ test('other StreamElements events are ignored', () => {
   handleTip(7, null, false);
   assert.deepEqual(calls.logDonation, []);
   assert.deepEqual(calls.alerts, []);
+});
+
+test('a real tip reaches the trackers once; a replay, a test tip or one that could not be logged never does', () => {
+  handleTip(7, tipEvent(), false);
+  assert.deepEqual(calls.onTip, [{ id: 7, name: 'Viewer', amount: 5, currency: 'EUR' }]);
+
+  calls.onTip.length = 0;
+  logDonationResult = false; // the same StreamElements id again
+  handleTip(7, tipEvent(), false);
+  handleTip(7, tipEvent({ _id: 'se-test' }), true);
+  logDonationResult = new Error('database is locked');
+  const { error } = console;
+  console.error = () => {};
+  try { handleTip(7, tipEvent({ _id: 'se-event-2' }), false); } finally { console.error = error; }
+  assert.deepEqual(calls.onTip, []);
+});
+
+test('with the donation alert off, a real tip still reaches the trackers', () => {
+  streamer = { id: 7, overlay_donation_enabled: 0 };
+  handleTip(7, tipEvent(), false);
+  assert.equal(calls.onTip.length, 1);
 });
