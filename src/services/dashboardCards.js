@@ -245,10 +245,11 @@ function moneyText(amount, currency, lang) {
 }
 const countText = (n, lang) => { try { return new Intl.NumberFormat(lang).format(n); } catch { return String(n); } };
 
-// Reading tips aloud on the Donations card: its switch only while the site offers it (an ElevenLabs key) and the tip
-// page has its email; its line ("Reading tips from €5 · 2,340 of 15,000 characters") while it is on.
-function tipVoiceOf(streamer, tts, currency, hasEmail) {
-  if (!tts || !tts.available || !hasEmail) return { tts: null, counts: {} };
+// Reading tips aloud on the Donations card: its switch only while the site offers it (an ElevenLabs key), the tip
+// page has its email and the overlay features are shown (a tip is read only through the alert overlay); its line
+// ("Reading tips from €5 · 2,340 of 15,000 characters") while it is on.
+function tipVoiceOf(streamer, tts, currency, hasEmail, overlays) {
+  if (!tts || !tts.available || !hasEmail || !overlays) return { tts: null, counts: {} };
   const on = !!streamer.tts_enabled;
   if (!on) return { tts: { on }, counts: { tts: plain('') } };
   const lang = tts.lang || 'en';
@@ -278,7 +279,7 @@ function donationsCard({ streamer, tips, tipGoal, features, appUrl, now, tts }) 
     const target = Number(tipGoal.target_amount) || 0;
     goal = { title: tipGoal.title, current, target, currency: tipGoal.currency || 'EUR', percent: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0 };
   }
-  const voice = tipVoiceOf(streamer, tts, currency, hasEmail);
+  const voice = tipVoiceOf(streamer, tts, currency, hasEmail, !!features.overlays);
   return {
     setup: hasEmail ? null : 'paypal',
     on,

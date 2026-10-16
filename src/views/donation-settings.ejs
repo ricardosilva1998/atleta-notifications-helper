@@ -109,8 +109,9 @@
 <%# Reading tips aloud (routes/dashboard.js ttsSection()): its own form, saved by POST /dashboard/donations/tts, which
     stores every field it sends (the switch is left out while it is unticked: off). Without an ElevenLabs key on the
     site it only says it is not available. The voice list and the default lines follow the language without a reload,
-    and "Test the voice" reads a sample with what the form shows (POST /dashboard/donations/tts/test). %>
-<% if (typeof tts !== 'undefined' && tts) { const _tts = tts.settings; const _num = (n) => { try { return new Intl.NumberFormat(_lang).format(n); } catch (e) { return String(n); } }; %>
+    and "Test the voice" reads a sample with what the form shows (POST /dashboard/donations/tts/test). A tip is read
+    only through the alert overlay, so the section is hidden while the overlay features are (features.overlays). %>
+<% if (features.overlays && typeof tts !== 'undefined' && tts) { const _tts = tts.settings; const _num = (n) => { try { return new Intl.NumberFormat(_lang).format(n); } catch (e) { return String(n); } }; %>
 <div id="tts" class="card animate-in" style="margin-bottom: 16px;">
   <h3>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
@@ -133,7 +134,7 @@
       <div class="tts-grid">
         <div class="form-group" style="margin-bottom: 0;">
           <label for="tts-min"><%= t('donations.tts.minAmount') %> (<%= tts.currency %>)</label>
-          <input type="number" id="tts-min" name="tts_min_amount" value="<%= _tts.minAmount %>" min="<%= tts.minFloor %>" max="10000" step="0.5" style="width: 100%;">
+          <input type="number" id="tts-min" name="tts_min_amount" value="<%= _tts.minAmount %>" min="<%= tts.minFloor %>" max="10000" step="0.01" style="width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label for="tts-language"><%= t('donations.tts.language') %></label>
@@ -184,7 +185,7 @@
       <% const _resets = (function () { try { return new Intl.DateTimeFormat(_lang, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(tts.resetsOn + 'T00:00:00Z')); } catch (e) { return tts.resetsOn; } })(); %>
       <p style="color: var(--text-secondary); font-size: 13px; margin: 12px 0 0;"><%= t('donations.tts.usage', { used: _num(tts.used), limit: _num(tts.limit), date: _resets }) %></p>
       <% if (tts.lastError) { %>
-        <p style="color: var(--warning); font-size: 12px; margin: 6px 0 0;"><%= t('donations.tts.lastError', { error: tts.lastError }) %><% if (tts.lastErrorAt) { %> · <%= tts.lastErrorAt.slice(0, 16) %> UTC<% } %></p>
+        <p style="color: var(--warning); font-size: 12px; margin: 6px 0 0;"><%= t('donations.tts.lastError', { error: t(tts.lastError) }) %><% if (tts.lastErrorAt) { %> · <%= tts.lastErrorAt.slice(0, 16) %> UTC<% } %></p>
       <% } %>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px;">
         <button type="button" id="tts-test" class="btn btn-secondary"><%= t('donations.tts.test') %></button>

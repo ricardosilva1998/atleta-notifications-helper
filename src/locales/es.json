@@ -2355,6 +2355,7 @@
   "tts.sample.message": "¡Gran carrera hoy!",
   "cards.donations.ttsSwitch": "Leer donaciones en voz alta",
   "cards.donations.ttsOn": "Leyendo donaciones desde {{amount}} · {{used}} de {{limit}} caracteres",
+  "donations.tts.error.credit_floor": "La lectura de donaciones en voz alta está en pausa hasta que se renueve el presupuesto de voz del sitio.",
   "dashboard.settings.error.ttsUnavailable": "La lectura de donaciones en voz alta no está disponible ahora.",
   "donations.tts.title": "Leer donaciones en voz alta",
   "donations.tts.intro": "Una voz de IA lee las donaciones de tu página de donaciones en el directo, después de su alerta.",

@@ -39,7 +39,7 @@ const dashboardSettings = require('../services/dashboardSettings');
 const overlayPresence = require('../services/overlayPresence');
 const { buildCards, cardTexts } = require('../services/dashboardCards');
 const tipVoice = require('../services/tipVoice');
-const { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings } = require('../services/ttsSettings');
+const { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings, lastErrorKey } = require('../services/ttsSettings');
 const { TTS_LANGUAGES, VOICES, defaultVoice, isVoice } = require('../services/ttsVoices');
 const { defaultTemplates } = require('../services/tipSpeech');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
@@ -1272,7 +1272,7 @@ function ttsSection(streamer, t) {
     used: db.getTtsUsage(streamer.id, utcMonth(now)),
     limit: ttsLimitOf(streamer),
     resetsOn: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10),
-    lastError: streamer.tts_last_error || null,
+    lastError: streamer.tts_last_error ? lastErrorKey(streamer.tts_last_error) : null, // a text key
     lastErrorAt: streamer.tts_last_error_at || null,
     errorTexts: Object.fromEntries(Object.entries(TTS_ERRORS).map(([code, key]) => [code, t(key)])),
   };
@@ -1354,7 +1354,8 @@ router.get('/donations/history', (req, res) => {
   // A donation with no donor name is stored under the name 'Anonymous' (db.logDonation); the
   // page shows it as the translated word, so those rows read like the rest of the page.
   // What happened to each tip's reading aloud (donations.tts_status), as a text key; the column shows while the
-  // streamer reads tips or a tip on the page has a status.
+  // streamer reads tips or a tip on the page has a status, and never while the overlay features are hidden (a tip is
+  // read only through the alert overlay; the CSV keeps the column).
   const donations = db.getDonations(req.streamer.id, { ...f, limit: perPage, offset: (page - 1) * perPage })
     .map((d) => ({ ...d, donor_name: d.donor_name === 'Anonymous' ? null : d.donor_name, ttsStatusKey: TTS_STATUS_TEXTS[d.tts_status] || null }));
 
@@ -1363,7 +1364,7 @@ router.get('/donations/history', (req, res) => {
     filters: f,
     donations,
     total, page, pages, totals, months, chartCurrency,
-    showTts: !!req.streamer.tts_enabled || donations.some((d) => d.ttsStatusKey),
+    showTts: !!config.features.overlays && (!!req.streamer.tts_enabled || donations.some((d) => d.ttsStatusKey)),
     otherCurrencies: yearTotals.filter(t => t.currency !== chartCurrency).map(t => t.currency),
   });
 });

@@ -2355,6 +2355,7 @@
   "tts.sample.message": "Tolles Rennen heute!",
   "cards.donations.ttsSwitch": "Spenden vorlesen",
   "cards.donations.ttsOn": "Spenden werden ab {{amount}} vorgelesen · {{used}} von {{limit}} Zeichen",
+  "donations.tts.error.credit_floor": "Das Vorlesen von Spenden ist pausiert, bis das Sprachbudget der Website erneuert wird.",
   "dashboard.settings.error.ttsUnavailable": "Das Vorlesen von Spenden ist gerade nicht verfügbar.",
   "donations.tts.title": "Spenden vorlesen",
   "donations.tts.intro": "Eine KI-Stimme liest Spenden von deiner Spendenseite im Stream vor, nach ihrem Alert.",

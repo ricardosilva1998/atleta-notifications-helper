@@ -2355,6 +2355,7 @@
   "tts.sample.message": "今日は最高のレースでした！",
   "cards.donations.ttsSwitch": "投げ銭を読み上げる",
   "cards.donations.ttsOn": "{{amount}}以上の投げ銭を読み上げ中 · {{limit}} 文字中 {{used}} 文字",
+  "donations.tts.error.credit_floor": "サイトの音声枠が更新されるまで、投げ銭の読み上げは一時停止中です。",
   "dashboard.settings.error.ttsUnavailable": "投げ銭の読み上げは現在ご利用いただけません。",
   "donations.tts.title": "投げ銭を読み上げる",
   "donations.tts.intro": "配信中、アラートの後にAI音声が投げ銭ページからの投げ銭を読み上げます。",

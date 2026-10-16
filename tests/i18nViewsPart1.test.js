@@ -164,7 +164,7 @@ const ttsSection = (over = {}) => ({
   settings: { enabled: true, minAmount: 5, language: 'pt', voice: 'zzvoice1', speed: 1, expressiveness: 0.5, volume: 0.8, template: 'zztemplate', templateEmpty: '' },
   currency: 'EUR', minFloor: 1, languages: ttsVoices.map(([lang]) => lang), voices: Object.fromEntries(ttsVoices),
   templates: Object.fromEntries(ttsVoices.map(([lang]) => [lang, { template: 'zzdefault', emptyTemplate: 'zzempty' }])),
-  used: 2340, limit: 15000, resetsOn: '2026-11-01', lastError: 'elevenlabs_timeout', lastErrorAt: '2026-10-16 10:00:00',
+  used: 2340, limit: 15000, resetsOn: '2026-11-01', lastError: 'donations.tts.error.failed', lastErrorAt: '2026-10-16 10:00:00',
   errorTexts: { failed: 'zzfailed' },
   ...over,
 });

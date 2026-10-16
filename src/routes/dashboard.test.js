@@ -5517,6 +5517,49 @@ describe('reading tips aloud', () => {
     assert.ok(!off.includes('action="/dashboard/donations/tts"'), 'no form while it is not available');
   });
 
+  test('the amount field accepts any amount in cents, whatever the tip page\'s minimum', async () => {
+    const id = addStreamer({ donation_min_amount: 1.25 });
+    const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+    assert.match(page, /<input type="number" id="tts-min" name="tts_min_amount" value="5" min="1\.25" max="10000" step="0\.01"/);
+  });
+
+  test('the last problem is told in words, never as its stored code', async () => {
+    const cases = [
+      ['elevenlabs_401', 'donations.tts.error.failed'], ['elevenlabs_timeout', 'donations.tts.error.failed'], ['failed', 'donations.tts.error.failed'],
+      ['credit_floor', 'donations.tts.error.credit_floor'], ['no_key', 'donations.tts.error.unavailable'], ['something_new', 'donations.tts.error.failed'],
+    ];
+    for (const [code, key] of cases) {
+      const id = addStreamer();
+      db.recordTtsError(id, code);
+      const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+      assert.ok(page.includes(esc(t('en', 'donations.tts.lastError', { error: t('en', key) }))), code);
+      assert.ok(!page.includes(code + ' ') && !page.includes(`: ${code}`), `${code} is not printed`);
+    }
+  });
+
+  test('while the overlay features are hidden, nothing of it shows: no section, no card switch, no history column', async () => {
+    const { features } = require('../config');
+    const id = addStreamer({ twitch_user_id: 'tw-tts-off', twitch_username: 'synthetic_tts_off', paypal_email: 'tips@example.test', donation_page_enabled: 1, tts_enabled: 1 });
+    db.logDonation(id, { source: 'paypal', donor_name: 'Hidden Donor', amount: 9, currency: 'EUR', external_id: 'tts-overlays-off-1' });
+    db.setDonationTtsStatus('paypal', 'tts-overlays-off-1', 'overlay_closed');
+    features.overlays = false;
+    try {
+      const settings = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+      assert.ok(!settings.includes('id="tts"') && !settings.includes('action="/dashboard/donations/tts"'));
+      assert.ok(!settings.includes(esc(t('en', 'donations.tts.title'))));
+      const dashboard = (await request('GET', '/dashboard', { streamer: id })).text;
+      assert.ok(!dashboard.includes('data-setting="tts_enabled"') && !dashboard.includes('data-count="tts"'));
+      assert.ok(!('tts' in (await request('GET', '/dashboard/api/cards', { streamer: id })).json().cards.donations.counts));
+      const history = (await request('GET', '/dashboard/donations/history', { streamer: id })).text;
+      assert.ok(history.includes('Hidden Donor'));
+      assert.ok(!history.includes('class="dh-tts') && !history.includes(esc(t('en', 'donations.tts.status.overlay_closed'))));
+      assert.match((await request('GET', '/dashboard/donations/history.csv', { streamer: id })).text, /"overlay_closed"/, 'the CSV keeps the column');
+    } finally {
+      features.overlays = true;
+    }
+    assert.ok((await request('GET', '/dashboard/donations', { streamer: id })).text.includes('id="tts"'), 'back with the overlay features');
+  });
+
   test('a save is checked and clamped; a bad language answers ?error=bad_language', async () => {
     const id = addStreamer({ donation_min_amount: 2 });
     const res = await request('POST', '/dashboard/donations/tts', { streamer: id, form: { ...FORM, tts_speed: '9', tts_min_amount: '1', tts_voice: 'not-a-voice' } });

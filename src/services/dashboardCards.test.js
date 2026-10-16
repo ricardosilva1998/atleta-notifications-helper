@@ -332,6 +332,8 @@ describe('Donations', () => {
     const off = build({ tts, streamer: { tts_enabled: 0 } }).donations;
     assert.deepEqual([off.tts, off.counts.tts], [{ on: false }, { text: '' }]);
     assert.equal(build({ tts, streamer: { paypal_email: null } }).donations.tts, null, 'not before the tip page has an email');
+    const hidden = build({ tts, features: { overlays: false }, streamer: { tts_enabled: 1 } }).donations;
+    assert.deepEqual([hidden.tts, hidden.counts], [null, {}], 'not while the overlay features are hidden');
   });
 });
 

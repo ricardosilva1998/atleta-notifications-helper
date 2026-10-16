@@ -35,6 +35,14 @@ const TTS_STATUS_TEXTS = Object.freeze({
   failed: 'donations.tts.status.failed',
 });
 
+// The last problem the settings page shows (streamers.tts_last_error holds a code from services/tipVoice.js): the text
+// to print for it. A refusal or failure of ElevenLabs reads as the voice failing.
+function lastErrorKey(code) {
+  if (code === 'no_key') return 'donations.tts.error.unavailable';
+  if (code === 'credit_floor') return 'donations.tts.error.credit_floor';
+  return 'donations.tts.error.failed';
+}
+
 const twoDecimals = (n) => Math.round(n * 100) / 100;
 const inRange = ({ min, max, fallback }, value) => twoDecimals(clampNumber(value, min, max, fallback));
 
@@ -67,4 +75,4 @@ function checkTtsSettings(body, { tipMinimum }) {
   };
 }
 
-module.exports = { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings };
+module.exports = { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings, lastErrorKey };

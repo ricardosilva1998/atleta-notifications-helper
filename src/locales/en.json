@@ -2355,6 +2355,7 @@
   "tts.sample.message": "Great race today!",
   "cards.donations.ttsSwitch": "Read tips aloud",
   "cards.donations.ttsOn": "Reading tips from {{amount}} · {{used}} of {{limit}} characters",
+  "donations.tts.error.credit_floor": "Reading tips aloud is paused until the site's voice budget renews.",
   "dashboard.settings.error.ttsUnavailable": "Reading tips aloud is not available right now.",
   "donations.tts.title": "Read tips aloud",
   "donations.tts.intro": "An AI voice reads tips from your tip page on stream, after their alert.",
