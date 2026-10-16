@@ -414,6 +414,124 @@ async function getFollowAge(streamer, userId) {
   return follow ? { following: true, followedAt: follow.followed_at || null } : { following: false, followedAt: null };
 }
 
+// ── Tracking: totals and the follower read-back ──────────────────────
+// followerTotal, subscriberTotal and followersSince read Twitch with the
+// streamer's own broadcaster token, as getFollowAge does, but they reject with
+// an Error whose code the goal service can act on:
+//   needs_reconnect  the scope is missing, or Twitch refuses the refresh token
+//   not_affiliate    subscriptions answer 400/403 (a channel without subs)
+//   twitch_failed    no answer in time, no network, a 429, a 5xx, anything else
+const SUBSCRIPTIONS_SCOPE = 'channel:read:subscriptions';
+
+function trackingError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+// One GET with the streamer's broadcaster token: a token past its expiry is
+// refreshed first and a 401 refreshes once more, then the call is retried. The
+// returned reader keeps the token it ended with, so a read of several pages
+// refreshes at most once. `onStatus` may turn an answer into an error code
+// before the generic mapping.
+function broadcasterReader(streamer, scope, onStatus) {
+  if (!streamer || !streamer.twitch_user_id) {
+    throw trackingError('needs_reconnect', 'Twitch is not linked');
+  }
+  if (!streamer.broadcaster_access_token || !hasBroadcasterScope(streamer, scope)) {
+    throw trackingError('needs_reconnect', `The broadcaster token needs ${scope}`);
+  }
+
+  let token = streamer.broadcaster_access_token;
+  let refreshed = false;
+
+  async function refresh() {
+    refreshed = true;
+    try {
+      token = await refreshBroadcasterTokenShared(streamer);
+    } catch (err) {
+      if (err.code === 'INVALID_REFRESH_TOKEN') throw trackingError('needs_reconnect', 'Twitch refused the refresh token');
+      throw trackingError('twitch_failed', `Token refresh failed: ${err.message}`);
+    }
+  }
+
+  const ask = async (url) => {
+    try {
+      return await fetch(url, {
+        headers: { Authorization: `Bearer ${token}`, 'Client-Id': config.twitch.clientId },
+        signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw trackingError('twitch_failed', `Twitch did not answer: ${err.message}`);
+    }
+  };
+  return async function read(url) {
+    if (!refreshed && streamer.broadcaster_token_expires_at && Date.now() >= streamer.broadcaster_token_expires_at) {
+      await refresh();
+    }
+    let res = await ask(url);
+    if (res.status === 401 && !refreshed) {
+      await refresh();
+      res = await ask(url);
+    }
+    if (res.status === 401) throw trackingError('needs_reconnect', 'Twitch refused the broadcaster token');
+    if (!res.ok) {
+      const code = (onStatus && onStatus(res.status)) || 'twitch_failed';
+      throw trackingError(code, `Twitch answered ${res.status}`);
+    }
+    try {
+      return await res.json();
+    } catch (err) {
+      throw trackingError('twitch_failed', 'Twitch sent an answer that is not JSON');
+    }
+  };
+}
+
+// Followers need the broadcaster's own token; a 403 means the token is not the
+// broadcaster's (or a moderator's), which only a reconnect fixes.
+const followersReader = (streamer) => broadcasterReader(streamer, FOLLOWERS_SCOPE, (status) => (status === 403 ? 'needs_reconnect' : null));
+
+async function followerTotal(streamer) {
+  const read = followersReader(streamer);
+  const params = new URLSearchParams({ broadcaster_id: streamer.twitch_user_id, first: '1' });
+  const data = await read(`https://api.twitch.tv/helix/channels/followers?${params}`);
+  return Number(data && data.total) || 0;
+}
+
+async function subscriberTotal(streamer) {
+  const read = broadcasterReader(streamer, SUBSCRIPTIONS_SCOPE, (status) => (status === 400 || status === 403 ? 'not_affiliate' : null));
+  const params = new URLSearchParams({ broadcaster_id: streamer.twitch_user_id, first: '1' });
+  const data = await read(`https://api.twitch.tv/helix/subscriptions?${params}`);
+  return Number(data && data.total) || 0;
+}
+
+// The people who followed at or after `sinceIso`, newest first. Twitch lists
+// followers newest first, so the read stops at the first one older than
+// `sinceIso`; `complete` is false when `maxPages` (100 followers each) stopped
+// it with more still to read.
+async function followersSince(streamer, sinceIso, maxPages = 50) {
+  const since = Date.parse(sinceIso);
+  if (!Number.isFinite(since)) throw new Error('followersSince needs a valid start time');
+  const read = followersReader(streamer);
+
+  const followers = [];
+  let cursor = null;
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({ broadcaster_id: streamer.twitch_user_id, first: '100' });
+    if (cursor) params.set('after', cursor);
+    const data = await read(`https://api.twitch.tv/helix/channels/followers?${params}`);
+
+    for (const row of Array.isArray(data && data.data) ? data.data : []) {
+      if (Date.parse(row.followed_at) < since) return { followers, complete: true };
+      followers.push({ userId: row.user_id, login: row.user_login, followedAt: row.followed_at });
+    }
+
+    cursor = data && data.pagination && data.pagination.cursor;
+    if (!cursor) return { followers, complete: true };
+  }
+  return { followers, complete: false };
+}
+
 function hasRedemptionScope(streamer) {
   return (streamer.broadcaster_scopes || '').split(' ').includes('channel:manage:redemptions');
 }
@@ -474,4 +592,4 @@ async function getStreamKey(streamer) {
   return key;
 }
 
-module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getChannelInfo, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBroadcasterTokenShared, refreshBotToken, getFollowAge, hasRedemptionScope, hasStreamKeyScope, hasPollsScope, getStreamKey, needsBroadcasterReauth };
+module.exports = { getStream, getStreams, STREAMS_PER_REQUEST, getChannelTitle, getChannelInfo, getUserId, getUserProfile, getUserInfo, getClips, getSubscribers, getSubscriberCount, getVideos, getFollowerCount, getGameNames, refreshBroadcasterToken, refreshBroadcasterTokenShared, refreshBotToken, getFollowAge, followerTotal, subscriberTotal, followersSince, hasRedemptionScope, hasStreamKeyScope, hasPollsScope, getStreamKey, needsBroadcasterReauth };
