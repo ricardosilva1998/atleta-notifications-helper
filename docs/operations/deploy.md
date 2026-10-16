@@ -44,9 +44,11 @@ What production needs set:
 | `CSRF_SECRET` | `openssl rand -hex 32` | a per-boot secret: after every restart each open dashboard tab must be reloaded before it can save |
 | `BOT_TWITCH_TOKEN` | a token that also carries `moderator:manage:chat_settings` | raid protection and `!slow` stay inert (one warning per streamer per day) |
 | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `15` | see the table above |
+| `ELEVENLABS_API_KEY` | Atleta's ElevenLabs key (the owner's Creator plan; the same one the development `.env` holds). The key needs **text-to-speech** access **and** read access to **user** (the subscription, `GET /v1/user/subscription`): without the second the site credit floor silently stops applying (see `[TTS] Credits read failed` under the log lines) | tips are not read aloud: the Donations page says the feature is not available and the card has no switch |
 
 Optional: `ADMIN_DISCORD_IDS`, `BOT_CHAT_RATE_LIMIT`, `ANTHROPIC_API_KEY` (+ `TRIAGE_MODEL`) for AI
-analysis of reported issues. `YOUTUBE_API_KEY` is **not set** in production, so YouTube livestreams
+analysis of reported issues; `TTS_CREDIT_FLOOR` (default 20000: tips stop being read while the ElevenLabs
+account has fewer credits left) and `ELEVENLABS_TTS_MODEL` (default `eleven_multilingual_v2`), best left unset. `YOUTUBE_API_KEY` is **not set** in production, so YouTube livestreams
 are not detected and the YouTube chat bot never starts (uploads are still announced from RSS). Leave
 `WEEKLY_DIGEST_INTERVAL` unset: an hourly value gives the weekly digest one try per week instead of
 four. `DISCORD_DISABLED` must never be set.
@@ -121,6 +123,18 @@ Trouble:
   expected; a Bridge call or other program that is refused needs an entry in `CSRF_EXEMPT` (`src/csrf.js`).
 - `[Tip] Order ... not counted: <reason>`: a PayPal capture that did not pass the checks (nothing is
   announced; the money still reached the streamer).
+- `[TTS] Streamer <id>: <code>`: a tip's voice (or a test) failed, at most once per streamer an hour (the settings
+  page shows the last one). `no_key`: `ELEVENLABS_API_KEY` is not set. `credit_floor`: the account has fewer credits
+  left than `TTS_CREDIT_FLOOR`, so nothing is read until ElevenLabs' monthly reset. `elevenlabs_401`: the key was
+  refused (changed or deleted on ElevenLabs). `elevenlabs_429`: ElevenLabs is busy or the plan's concurrency is used
+  up. `elevenlabs_timeout`: no audio within 15 s. A `4xx` for one voice: that library voice was withdrawn (replace it,
+  `docs/features/tip-tts.md`). The alert still played, without its voice.
+- `[TTS] Credits read failed: <status|failed>`: the hourly-at-most log of a failed read of the account's remaining credits
+  (`GET /v1/user/subscription`, tried every 10 minutes). `401` or `403`: the key has no permission to read the user
+  (subscription): give it **user** read access on ElevenLabs. `failed`: no answer in 10 s, no network or an unreadable
+  answer; a `429` or `5xx` is ElevenLabs being busy. While credits cannot be read the site-wide credit floor
+  (`TTS_CREDIT_FLOOR`) does **not** apply (tips are still read, bounded by the monthly limits), so fix it.
+- `[TTS] Cleanup error: ...`: the hourly removal of the voice files older than an hour (`data/tts/`) failed.
 - `[YouTube] ... invalid_grant`: the YouTube bot's refresh token was revoked or expired (a Google OAuth
   app in "Testing" mode expires it after 7 days); make a new `YOUTUBE_BOT_REFRESH_TOKEN`.
 - `[SubSync]` logs one count line per streamer per cycle and one line per role given or taken, not one
@@ -490,3 +504,35 @@ After the deploy:
 3. `?tab=timed` opens Sponsor images; an image still uploads, switches and reorders.
 
 Rolling back is safe: nothing stored changed, so the earlier builder reads the same rows.
+
+## Tips read aloud
+
+What changes when it deploys (docs/features/tip-tts.md):
+- **Before the release:** set `ELEVENLABS_API_KEY` on the Railway service (Variables). Without it everything else
+  ships, and the Donations page says reading tips aloud is not available.
+- The donations page has a "Read tips aloud" section (off for every streamer until they turn it on) and the Donations
+  card a switch for it; the donation history a TTS column once a streamer has it on. With `features.overlays` off none
+  of it shows.
+- A PayPal tip at or above the streamer's threshold, with the overlay and the donation alert on and an alert overlay
+  open in OBS, waits up to 15 s for its voice, then alerts with it; every other alert is unchanged.
+- New columns (`streamers.tts_*`, `donations.tts_status`) and a table (`tts_usage`), added at boot: `[DB] Added tts_…
+  column to streamers` (twelve times) and `[DB] Added tts_status column to donations`, once each. The voice files live
+  in `data/tts/<streamerId>/` and are removed after an hour. The 37 voice previews (`public/tts/previews/`, about 2 MB)
+  are served with a one-year cache.
+- Cost: at most 15,000 characters a month per streamer (an admin changes one streamer's limit in the admin panel's
+  Users tab); nothing is read while the account has fewer than `TTS_CREDIT_FLOOR` (20,000) credits left. The account is
+  the one the look sounds were made with.
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and the boot log has the `[DB] Added tts_…` lines once and no `[DB migration]` line.
+2. A preview answers 200 with `Cache-Control: public, max-age=31536000, immutable`, e.g. the `preview` of the first
+   English voice in `src/services/ttsVoices.js` under `/tts/previews/`.
+3. On `/dashboard/donations`, the "Read tips aloud" section shows (not "not available"); ▶ next to a voice plays its
+   preview; switch it on, save, and press **Test the voice** with the alert overlay open in OBS: the page plays the
+   sample, OBS shows a donation alert and reads it after the alert's sound, and "This month" grows by the line's
+   length. A `[TTS] Streamer <id>: …` line instead means it failed (see "Log lines worth knowing").
+4. Switch it off again if it was only for the check.
+
+Rolling back is safe: the new columns and table stay and older code ignores them; voice files left in `data/tts/` are
+not served and can be deleted.
+

@@ -40,6 +40,12 @@ function isHttpUrl(value) {
   }
 }
 
+// TTS_CREDIT_FLOOR as a whole number of characters, 0 or more; 20000 when unset or unreadable.
+function ttsCreditFloor(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 20000;
+}
+
 // BOT_CHAT_RATE_LIMIT as a whole number from 1 to 100; 20 when unset or unreadable.
 function chatRateLimit(value) {
   const n = Number.parseInt(value, 10);
@@ -110,6 +116,15 @@ module.exports = {
     accessClientSecret: process.env.MEDIAMTX_CF_ACCESS_CLIENT_SECRET || '',
     enabled: !!(isHttpUrl(process.env.MEDIAMTX_API_URL) && process.env.MEDIAMTX_INGEST_URL
       && process.env.MEDIAMTX_API_TOKEN && process.env.MEDIAMTX_WEBHOOK_SECRET),
+  },
+  // Reading tips aloud (services/tipSpeech.js and the ElevenLabs client). Offered only with ELEVENLABS_API_KEY. Reading
+  // stops while the account's remaining credits are under creditFloor, and a streamer gets monthlyLimit characters a
+  // month unless the admin sets another (streamers.tts_monthly_limit).
+  tts: {
+    apiKey: process.env.ELEVENLABS_API_KEY || null,
+    model: process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
+    creditFloor: ttsCreditFloor(process.env.TTS_CREDIT_FLOOR),
+    monthlyLimit: 15000,
   },
   email: {
     user: process.env.EMAIL_USER || '',

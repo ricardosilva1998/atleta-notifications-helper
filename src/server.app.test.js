@@ -680,3 +680,21 @@ describe('pages are in English unless the visitor picked a language', () => {
     }
   });
 });
+
+describe('recordings named by their content are kept a year', () => {
+  const firstFile = (dir) => realFs.readdirSync(path.join(__dirname, '..', 'public', dir)).find((name) => name.endsWith('.mp3'));
+
+  test('a look\'s recording (public/overlay/objects/sounds/)', async () => {
+    const family = realFs.readdirSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'sounds')).find((name) => !name.includes('.'));
+    const res = await send('GET', `/overlay/objects/sounds/${family}/${firstFile(`overlay/objects/sounds/${family}`)}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['cache-control'], 'public, max-age=31536000, immutable');
+  });
+
+  test('a voice preview (public/tts/previews/)', async () => {
+    const res = await send('GET', `/tts/previews/${firstFile('tts/previews')}`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /^audio\/mpeg/);
+    assert.equal(res.headers['cache-control'], 'public, max-age=31536000, immutable');
+  });
+});

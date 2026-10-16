@@ -6,6 +6,7 @@ const db = require('../db');
 const bus = require('../services/overlayBus');
 const overlayPresence = require('../services/overlayPresence');
 const customSounds = require('../services/customSounds');
+const tipVoice = require('../services/tipVoice');
 const { buildOverlayConfig, channelLettering } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
@@ -114,6 +115,21 @@ router.get('/sounds/:token/:type', async (req, res) => {
   res.set('Cache-Control', 'no-cache');
   setUserContentHeaders(res, file); // an uploaded file: never run as a page here
   res.type(mimeType);
+  res.sendFile(path.basename(file), { root: path.dirname(file) }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
+// A tip's voice (services/tipVoice.js), from the streamer's own folder: only a file name tipVoice makes, only for
+// the token's streamer, and gone after an hour. Anything else is 404.
+router.get('/tts/:token/:file', (req, res) => {
+  const streamer = db.getStreamerByOverlayToken(req.params.token);
+  const file = streamer ? tipVoice.ttsFilePath(streamer.id, req.params.file) : null;
+  if (!file) return res.status(404).end();
+
+  res.set('Cache-Control', 'no-cache');
+  setUserContentHeaders(res, file); // a file made from viewer text: never run as a page here
+  res.type('audio/mpeg');
   res.sendFile(path.basename(file), { root: path.dirname(file) }, (err) => {
     if (err && !res.headersSent) res.status(404).end();
   });
@@ -427,6 +443,7 @@ router.get('/:token', (req, res) => {
   <script src="/overlay/objects/kit.js"></script>
   <script src="/overlay/objects/styles.js?v=${alertStyles().version}"></script>
   <script src="/overlay/fx.js"></script>
+  <script src="/overlay/tipVoiceTiming.js"></script>
   <script src="/overlay/placement.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>

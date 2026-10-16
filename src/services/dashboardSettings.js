@@ -34,6 +34,8 @@ const SETTINGS = Object.freeze({
   sponsor_send_chat: Object.freeze({ kind: 'switch', writer: 'sponsorChat', after: ['sponsorChat'] }),
   sponsor_chat_interval_minutes: Object.freeze({ kind: 'int', min: SPONSOR_CHAT_INTERVAL_MINUTES.min, max: SPONSOR_CHAT_INTERVAL_MINUTES.max, writer: 'sponsorChat', after: ['sponsorChat'] }),
   donation_page_enabled: Object.freeze({ kind: 'switch', writer: 'donations', needs: 'paypalEmail' }),
+  // Reading tips aloud: offered only while the site has an ElevenLabs key (`ttsAvailable`, given by the route).
+  tts_enabled: Object.freeze({ kind: 'switch', writer: 'tts', needs: 'ttsAvailable' }),
   cp_rewards_enabled: Object.freeze({ kind: 'switch', writer: 'overlay' }),
   recap_enabled: Object.freeze({ kind: 'switch', target: 'guild', writer: 'guild' }),
   milestones_enabled: Object.freeze({ kind: 'switch', target: 'guild', writer: 'guild' }),
@@ -61,6 +63,7 @@ const ERRORS = Object.freeze({
   no_email: Object.freeze({ status: 409, text: 'dashboard.settings.error.noEmail' }),
   no_role: Object.freeze({ status: 409, text: 'dashboard.settings.error.noRole' }),
   no_channel: Object.freeze({ status: 409, text: 'dashboard.settings.error.noChannel' }),
+  tts_unavailable: Object.freeze({ status: 409, text: 'dashboard.settings.error.ttsUnavailable' }),
 });
 
 const fail = (code) => ({ ok: false, code, status: ERRORS[code].status });
@@ -106,8 +109,9 @@ function findTarget(setting, change, streamer, db) {
 }
 
 // What is missing to switch a setting on (switching off never needs anything): an error code, or null.
-function missingFirst(setting, value, streamer, target) {
+function missingFirst(setting, value, streamer, target, { ttsAvailable }) {
   if (!value || !setting.needs) return null;
+  if (setting.needs === 'ttsAvailable') return ttsAvailable ? null : 'tts_unavailable';
   if (setting.needs === 'paypalEmail') return streamer.paypal_email ? null : 'no_email';
   if (setting.needs === 'subRole') return target.sub_role_id ? null : 'no_role';
   const watcher = target.watcher;
@@ -122,6 +126,7 @@ function write(db, streamerId, key, setting, value, target) {
     case 'moderation': return db.updateModerationConfig(streamerId, { [key]: value });
     case 'overlay': return db.updateOverlayConfig(streamerId, { [key]: value });
     case 'donations': return db.updateDonationSettings(streamerId, { [key]: value });
+    case 'tts': return db.updateTtsSettings(streamerId, { [key]: value });
     case 'sponsorChat': return db.setSponsorChatSetting(streamerId, key, value);
     case 'guild': return db.setGuildSwitch(target.guild_id, streamerId, key, value);
     case 'watcher': return target.watcher ? db.setWatcherNotify(target.watcher.id, streamerId, key, value) : null;
@@ -134,8 +139,9 @@ function write(db, streamerId, key, setting, value, target) {
 
 // `body` is one change ({ key, value, guildId?, id? }) or { changes: [...] } (at most BATCH_MAX). Every
 // change is read and checked before any is written; then all are written in one transaction, and the
-// follow-ups run once with the streamer's row before and after and the steps the keys name.
-function save(streamer, body, { db, followUps }) {
+// follow-ups run once with the streamer's row before and after and the steps the keys name. `ttsAvailable`: whether
+// reading tips aloud can be switched on (the site has an ElevenLabs key).
+function save(streamer, body, { db, followUps, ttsAvailable = false }) {
   const input = body && typeof body === 'object' && !Array.isArray(body) ? body : null;
   const list = input && Array.isArray(input.changes) ? input.changes : (input && 'key' in input ? [input] : null);
   if (!list || list.length === 0 || list.length > BATCH_MAX) return fail('invalid');
@@ -149,7 +155,7 @@ function save(streamer, body, { db, followUps }) {
     if (read.error) return fail(read.error);
     const found = findTarget(setting, change, streamer, db);
     if (found.error) return fail(found.error);
-    const missing = missingFirst(setting, read.value, streamer, found.target);
+    const missing = missingFirst(setting, read.value, streamer, found.target, { ttsAvailable });
     if (missing) return fail(missing);
     plan.push({ key: change.key, setting, value: read.value, target: found.target });
   }

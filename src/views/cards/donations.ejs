@@ -1,6 +1,7 @@
 <%# The Donations card (dashboardCards.js donationsCard()): the tip page's switch and link, the tip goal (with the
-    overlay features; edited in a pop-up through /dashboard/api/tip-goal) and the latest tips. Without a PayPal email
-    it shows the step to add one. %>
+    overlay features; edited in a pop-up through /dashboard/api/tip-goal), reading tips aloud (its switch, while the
+    site offers it, and its line while it is on) and the latest tips. Without a PayPal email it shows the step to add
+    one. %>
 <% const _money = (amount, currency) => { try { return new Intl.NumberFormat(lang, { style: 'currency', currency: currency || 'EUR' }).format(Number(amount) || 0); } catch (e) { return `${(Number(amount) || 0).toFixed(2)} ${currency || ''}`.trim(); } }; %>
 <section class="card wc-card" id="card-donations" data-card="donations" aria-labelledby="card-donations-title">
   <div class="wc-head">
@@ -27,6 +28,9 @@
       <div class="wc-progress"><span data-goal-bar style="width: <%= _goal ? _goal.percent : 0 %>%"></span></div>
     </div>
     <p class="wc-hint" data-goal-none<%= _goal ? ' hidden' : '' %>><%= t('cards.donations.noGoal') %></p>
+    <% } %>
+    <% if (card.tts) { %>
+    <div class="wc-sw<%= card.tts.on ? ' is-on' : '' %>"><span><%= t('cards.donations.ttsSwitch') %><small data-count="tts"><%= card.counts.tts.text !== undefined ? card.counts.tts.text : t(card.counts.tts.key, card.counts.tts.params) %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('cards.donations.ttsSwitch') %>" data-setting="tts_enabled" <%= card.tts.on ? 'checked' : '' %>><span class="slider"></span></label></div>
     <% } %>
     <div class="wc-sec"><span class="wc-label"><%= t('cards.donations.latest') %></span><a class="wc-link-sm" href="/dashboard/donations/history"><%= t('dashboard.cards.donations.history') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
     <% if (card.recent.length) { %>

@@ -16,6 +16,7 @@ const OVERLAY_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay
 const OBJECTS_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
 const PLACEMENT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'placement.js'), 'utf8');
 const KIT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'kit.js'), 'utf8');
+const TIP_VOICE_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'tipVoiceTiming.js'), 'utf8');
 const FX_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'fx.js'), 'utf8');
 // The family files joined, as the page loads them from /overlay/objects/styles.js
 const STYLES_JS = require('../src/services/alertStyleBundle').bundle().js;
@@ -104,14 +105,17 @@ function makeClock() {
 // Loads overlay.js (and, unless told not to, the object registry) into a fresh context. `styles` also
 // loads the kit and the joined family files of the alert looks; `kit` the kit alone, as a page whose
 // styles.js did not load. `channel` is the name the overlay page gives the C1 (window.ATLETA_CHANNEL).
-function loadOverlay({ objects = true, styles = false, kit = styles, designs = {}, channel } = {}) {
+// `voice` stands in for a tip's reading (and gives the page a fetch, which the other tests leave out so the
+// looks' recordings fall back to their synthesized sounds): { duration } is what decodeAudioData answers,
+// { fetch } replaces the fetch itself (a function returning the response promise), e.g. one that never answers or fails.
+function loadOverlay({ objects = true, styles = false, kit = styles, designs = {}, channel, voice = null } = {}) {
   const clock = makeClock();
   const body = makeElement('body');
   const container = makeElement('div'); container.id = 'notification-container'; body.appendChild(container);
   const timedContainer = makeElement('div'); timedContainer.id = 'timed-container'; body.appendChild(timedContainer);
   const byId = { 'notification-container': container, 'timed-container': timedContainer, 'redemption-video': makeElement('video'), 'redemption-audio': makeElement('audio') };
 
-  const audio = { instances: [], oscillators: 0, bufferSources: 0 };
+  const audio = { instances: [], oscillators: 0, bufferSources: 0, voices: [], gains: [], fetched: [] };
   class FakeAudio {
     constructor(url) { this.url = url; this.volume = 1; this.played = false; audio.instances.push(this); }
     play() { this.played = true; return Promise.resolve(); }
@@ -123,9 +127,17 @@ function loadOverlay({ objects = true, styles = false, kit = styles, designs = {
     constructor() { this.state = 'running'; this.currentTime = 0; this.sampleRate = 8000; this.destination = {}; }
     resume() {}
     createOscillator() { audio.oscillators++; return node(); }
-    createBufferSource() { audio.bufferSources++; return node(); }
+    createBufferSource() {
+      audio.bufferSources++;
+      const source = node();
+      // A source that was given a decoded reading (buffer.voice) and started is a tip's voice
+      source.start = () => { if (source.buffer && source.buffer.voice) audio.voices.push(source); };
+      source.stop = () => { source.stopped = true; };
+      return source;
+    }
     createBuffer(_channels, length) { return { getChannelData: () => new Float32Array(length) }; }
-    createGain() { return node(); }
+    createGain() { const gain = node(); audio.gains.push(gain); return gain; }
+    decodeAudioData() { return Promise.resolve({ voice: true, duration: voice && voice.duration != null ? voice.duration : 4 }); }
     createWaveShaper() { return node(); }
     createBiquadFilter() { return node(); }
   }
@@ -155,6 +167,12 @@ function loadOverlay({ objects = true, styles = false, kit = styles, designs = {
     Math, Number, String, Array, Object, JSON, Set, Map, Promise, Float32Array, Intl, Date, parseInt, parseFloat, isFinite, Proxy,
     reloaded: false,
   };
+  if (voice) {
+    sandbox.fetch = (url) => {
+      audio.fetched.push(url);
+      return voice.fetch ? voice.fetch(url) : Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) });
+    };
+  }
   sandbox.window = sandbox;
   sandbox.OVERLAY_TOKEN = 'test-token';
   // The overlay page names the streamer's Twitch channel for the C1's rear window (src/routes/overlay.js).
@@ -164,6 +182,7 @@ function loadOverlay({ objects = true, styles = false, kit = styles, designs = {
   if (kit) vm.runInContext(KIT_JS, context, { filename: 'objects/kit.js' });
   if (styles) vm.runInContext(STYLES_JS, context, { filename: 'objects/styles.js' });
   vm.runInContext(FX_JS, context, { filename: 'fx.js' });
+  vm.runInContext(TIP_VOICE_JS, context, { filename: 'tipVoiceTiming.js' });
   vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
   vm.runInContext(OVERLAY_JS, context, { filename: 'overlay.js' });
 
@@ -400,6 +419,115 @@ describe('Clear All', () => {
     assert.equal(seen.shown, 1, 'B waits for A\'s 5 s, its exit and the half-second gap');
     overlay.clock.advance(1);
     assert.equal(seen.shown, 2);
+  });
+});
+
+// ── A tip's voice ────────────────────────────────────────────────────────
+
+describe('a tip read aloud', () => {
+  const tip = (over = {}) => ({ type: 'donation', data: { username: 'Fan', amount: 5, currency: 'EUR', message: 'hello', tts: { url: '/overlay/tts/t/abc.mp3', volume: 0.5 }, ...over } });
+  const flush = () => new Promise((resolve) => setImmediate(resolve));
+  const lastGain = (overlay) => overlay.audio.gains[overlay.audio.gains.length - 1].gain.value;
+
+  test('a donation with tts schedules its voice through alertTimer at 1000 ms, and Clear All cancels it', async () => {
+    const overlay = loadOverlay({ voice: {} });
+    overlay.send(tip());
+    await flush();
+    assert.equal(overlay.slots().length, 1, 'the alert shows once the reading is loaded');
+    assert.deepEqual(overlay.audio.fetched, ['/overlay/tts/t/abc.mp3']);
+    overlay.clock.advance(999);
+    assert.equal(overlay.audio.voices.length, 0, 'not before the alert sound has had its second');
+    overlay.clock.advance(1);
+    assert.equal(overlay.audio.voices.length, 1, 'then the voice');
+    assert.ok(Math.abs(lastGain(overlay) - 0.8 * 0.5) < 1e-9, 'at the streamer\'s volume times the tip\'s');
+
+    const cleared = loadOverlay({ voice: {} });
+    cleared.send(tip());
+    await flush();
+    cleared.clock.advance(500);
+    cleared.send({ type: 'clear' });
+    assert.equal(cleared.run('alertTimers.size'), 0);
+    assert.equal(cleared.clock.pending, 0, 'the voice\'s timer is cancelled with the rest');
+    cleared.clock.advance(5000);
+    assert.equal(cleared.audio.voices.length, 0, 'and it never plays');
+  });
+
+  test('Clear All stops a voice that is playing', async () => {
+    const overlay = loadOverlay({ voice: {} });
+    overlay.send(tip());
+    await flush();
+    overlay.clock.advance(1000);
+    assert.equal(overlay.audio.voices.length, 1);
+    assert.ok(!overlay.audio.voices[0].stopped);
+    overlay.send({ type: 'clear' });
+    assert.equal(overlay.audio.voices[0].stopped, true);
+  });
+
+  test('the alert stays on screen until the reading ends (1 s + its length + 0.3 s)', async () => {
+    const long = loadOverlay({ voice: { duration: 9 } }); // the donation's own duration is 6 s
+    long.send(tip());
+    await flush();
+    const longSlot = long.slots()[0];
+    long.clock.advance(10299);
+    assert.ok(!longSlot.classList.contains('exiting'), 'still there just before the reading ends');
+    long.clock.advance(1);
+    assert.ok(longSlot.classList.contains('exiting'), 'leaves when it ends');
+  });
+
+  test('a reading longer than the 30 s cap is stopped when its alert is dismissed', async () => {
+    const overlay = loadOverlay({ voice: { duration: 45 } });
+    overlay.send(tip());
+    await flush();
+    const slot = overlay.slots()[0];
+    overlay.clock.advance(1000);
+    assert.equal(overlay.audio.voices.length, 1);
+    overlay.clock.advance(28999);
+    assert.ok(!slot.classList.contains('exiting'));
+    assert.ok(!overlay.audio.voices[0].stopped, 'still reading just before the cap');
+    overlay.clock.advance(1);
+    assert.ok(slot.classList.contains('exiting'), 'the alert is dismissed at the cap');
+    assert.equal(overlay.audio.voices[0].stopped, true, 'and its voice stops with it');
+  });
+
+  test('a reading that cannot be loaded gives the alert without a voice', async () => {
+    const overlay = loadOverlay({ voice: { fetch: () => Promise.reject(new Error('offline')) } });
+    overlay.send(tip());
+    await flush();
+    assert.equal(overlay.slots().length, 1);
+    overlay.clock.advance(20000);
+    assert.equal(overlay.audio.voices.length, 0);
+  });
+
+  test('a reading that takes over 3 s is given up on: the alert comes without it', async () => {
+    const overlay = loadOverlay({ voice: { fetch: () => new Promise(() => {}) } });
+    overlay.send(tip());
+    await flush();
+    overlay.clock.advance(2999);
+    assert.equal(overlay.slots().length, 0, 'it waits for the reading');
+    overlay.clock.advance(1);
+    await flush();
+    assert.equal(overlay.slots().length, 1, 'then shows');
+    overlay.clock.advance(20000);
+    assert.equal(overlay.audio.voices.length, 0);
+  });
+
+  test('a streamer volume of 0 is silent: nothing is fetched, no voice', async () => {
+    const overlay = loadOverlay({ voice: {} });
+    overlay.send({ type: 'config-update', config: baseConfig({ volume: 0 }) });
+    overlay.send(tip());
+    assert.equal(overlay.slots().length, 1, 'the alert does not wait');
+    overlay.clock.advance(5000);
+    assert.deepEqual(overlay.audio.fetched, []);
+    assert.equal(overlay.audio.voices.length, 0);
+  });
+
+  test('a donation without tts is exactly as before', () => {
+    const overlay = loadOverlay({ voice: {} });
+    overlay.send({ type: 'donation', data: { username: 'Fan', amount: 5, currency: 'EUR' } });
+    assert.equal(overlay.slots().length, 1, 'shown at once');
+    overlay.clock.advance(5000);
+    assert.deepEqual(overlay.audio.fetched, []);
+    assert.equal(overlay.audio.voices.length, 0);
   });
 });
 

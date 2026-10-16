@@ -83,8 +83,10 @@
     <p style="color: var(--text-muted); font-size: 13px; padding: 0 20px 20px;"><%= t('donations.history.empty') %></p>
   <% } else { %>
     <div style="overflow-x: auto;">
+      <%# What happened to each tip's reading aloud (donations.tts_status), while the streamer reads tips or a tip here has a status %>
+      <% const _showTts = typeof showTts !== 'undefined' && showTts; %>
       <table class="dh-table">
-        <thead><tr><th><%= t('donations.history.colDate') %></th><th><%= t('donations.history.colDonor') %></th><th style="text-align: right;"><%= t('donations.history.colAmount') %></th><th><%= t('donations.history.source') %></th><th><%= t('donations.history.colMessage') %></th><th></th></tr></thead>
+        <thead><tr><th><%= t('donations.history.colDate') %></th><th><%= t('donations.history.colDonor') %></th><th style="text-align: right;"><%= t('donations.history.colAmount') %></th><th><%= t('donations.history.source') %></th><th><%= t('donations.history.colMessage') %></th><% if (_showTts) { %><th><%= t('donations.tts.voice') %></th><% } %><th></th></tr></thead>
         <tbody>
           <% donations.forEach(function (d) { %>
             <tr>
@@ -93,6 +95,7 @@
               <td class="dh-amount" style="text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600;"><%= _fmt(d.amount, d.currency || 'USD') %></td>
               <td class="dh-source"><span class="dh-badge"><%= _sourceLabels[d.source] || d.source %></span></td>
               <td class="dh-msg"><%= d.message || '' %></td>
+              <% if (_showTts) { %><td class="dh-tts<%= d.tts_status === 'read' ? ' read' : '' %>"><%= d.ttsStatusKey ? t(d.ttsStatusKey) : '' %></td><% } %>
               <td class="dh-actions" style="text-align: right;">
                 <form method="POST" action="/dashboard/donations/history/<%= d.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('donations.history.removeConfirm')) %>);" style="margin: 0;">
                   <input type="hidden" name="range" value="<%= filters.range %>">
@@ -181,6 +184,8 @@
   .dh-table td { padding: 10px 20px; border-bottom: 1px solid var(--border); color: var(--text-primary); vertical-align: top; }
   .dh-table tr:last-child td { border-bottom: 0; }
   .dh-msg { color: var(--text-secondary) !important; min-width: 180px; max-width: 360px; word-break: break-word; }
+  .dh-tts { color: var(--text-muted) !important; font-size: 12px; white-space: nowrap; }
+  .dh-tts.read { color: var(--success) !important; }
   .dh-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
   .dh-delete { background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; }
   .dh-delete:hover { color: var(--danger); background: var(--danger-bg); }
@@ -191,7 +196,7 @@
     .dh-xlabel { font-size: 9px; }
     /* Stacked rows instead of a wide table */
     .dh-table thead { display: none; }
-    .dh-table tr { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "donor amount del" "date source del" "msg msg msg"; gap: 4px 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .dh-table tr { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "donor amount del" "date source del" "msg msg msg" "tts tts tts"; gap: 4px 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
     .dh-table tr:last-child { border-bottom: 0; }
     .dh-table td { padding: 0; border: 0; }
     .dh-donor { grid-area: donor; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
@@ -200,6 +205,8 @@
     .dh-source { grid-area: source; text-align: right; }
     .dh-msg { grid-area: msg; min-width: 0 !important; max-width: none !important; }
     .dh-msg:empty { display: none; }
+    .dh-tts { grid-area: tts; }
+    .dh-tts:empty { display: none; }
     .dh-actions { grid-area: del; align-self: center; }
   }
 </style>
