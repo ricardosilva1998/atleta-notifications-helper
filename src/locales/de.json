@@ -2352,6 +2352,7 @@
   "cards.polls.error.refused": "Twitch hat es abgelehnt — prüfe die Frage, die Optionen und die Einstellungen deines Kanals.",
   "cards.polls.result.predictionWonOne": "{{outcome}} gewinnt — 1 Zuschauer bekommt {{points}} Punkte",
   "cards.polls.result.predictionWonNobody": "{{outcome}} gewinnt — niemand hat darauf gesetzt",
+  "overlayBuilder.style.soundTheme": "Thema",
   "overlayBuilder.soundVersion": "{{name}} (Version 2)",
   "overlayBuilder.sounds.samuraiTally": "Klinge und Holztäfelchen",
   "pollbar.pointsViewerOne": "{{points}} Punkte · 1 Zuschauer",

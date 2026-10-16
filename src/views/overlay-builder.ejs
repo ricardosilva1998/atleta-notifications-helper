@@ -234,10 +234,11 @@
     .style-link { padding: 0; font-size: 11px; color: var(--accent-hover); background: none; border: 0; text-decoration: underline; cursor: pointer; }
     .style-pair { display: flex; flex: 1 1 45%; align-items: center; justify-content: space-between; gap: 8px; }
     .style-pair input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
-    #style-label, #style-effect, #style-sound, #style-racing-font {
+    #style-label, #style-effect, #style-sound, #style-sound-theme, #style-racing-font {
       flex: 1; min-width: 0; padding: 7px 9px; font-size: 12px; color: var(--text-primary);
       background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px;
     }
+    #style-sound-theme { flex: 0 1 38%; }
     .style-sub { margin: 12px 0 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-muted); }
     .style-sound { display: flex; flex: 1; gap: 6px; }
     #style-listen { width: 34px; color: var(--text-primary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
@@ -1055,6 +1056,7 @@
           <div class="style-row" id="style-row-sound">
             <label class="ctrl-label" for="style-sound"><%= t('overlayBuilder.style.sound') %></label>
             <div class="style-sound">
+              <select id="style-sound-theme" aria-label="<%= t('overlayBuilder.style.soundTheme') %>"></select>
               <select id="style-sound"></select>
               <button type="button" id="style-listen" aria-label="<%= t('overlayBuilder.style.listen') %>">▶</button>
             </div>
@@ -2251,6 +2253,8 @@ let playingTile = null;
 let previewRedraw = null;
 let previewHtml = '';
 let styleAudio = null;
+// The theme the streamer is browsing in the Sound row (null: the saved sound's, else the look's own).
+let soundTheme = null;
 
 // The look the page shows for an alert: the one picked or saved, else the alert's default look.
 function shownLook(type) {
@@ -2308,6 +2312,7 @@ function playLookIn(host, look, html) {
 
 // Shows the Style section on the six alerts' tabs and fills it for the current one.
 function renderStyleSection() {
+  soundTheme = null;
   const styled = STYLE_CORE.isStyled(currentType);
   document.getElementById('section-style').hidden = !styled;
   document.getElementById('style-desc').hidden = !styled;
@@ -2441,7 +2446,15 @@ function syncStyleControls() {
   set('style-speed', d.animation_speed || 1);
   document.getElementById('val-style-speed').textContent = (d.animation_speed || 1) + '×';
   set('style-effect', d.screen_effect || 'default');
-  set('style-sound', d.style_sound || '');
+  // The Sound row, by theme: the theme's list, with the saved sound chosen when the list has it
+  const theme = STYLE_CORE.soundThemeOf(soundTheme, d.style_sound, look, STYLE_DATA.sounds);
+  set('style-sound-theme', theme);
+  fillSoundList(theme);
+  const soundList = document.getElementById('style-sound');
+  if (soundList !== document.activeElement) {
+    soundList.value = d.style_sound || '';
+    if (soundList.value !== (d.style_sound || '')) soundList.selectedIndex = -1;
+  }
   document.getElementById('style-grows').checked = d.style_grows !== 0;
   const sound = window.ATLETA_KIT ? window.ATLETA_KIT.soundFor(look, d) : 'today';
   const listen = document.getElementById('style-listen');
@@ -2474,14 +2487,9 @@ function initStyleControls() {
   });
   const fonts = document.getElementById('style-racing-font');
   STYLE_DATA.fonts.forEach(font => fonts.appendChild(new Option(font === 'System Default' ? I18N.style.fontOwn : font, font)));
-  const sounds = document.getElementById('style-sound');
-  sounds.append(new Option(I18N.style.soundOwn, ''), new Option(I18N.style.soundToday, 'today'), new Option(I18N.style.soundNone, 'none'));
-  STYLE_DATA.sounds.forEach(group => {
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = (STYLE_DATA.families.find(f => f.key === group.family) || {}).name || group.family;
-    group.sounds.forEach(s => optgroup.appendChild(new Option(s.name, s.key)));
-    sounds.appendChild(optgroup);
-  });
+  const themes = document.getElementById('style-sound-theme');
+  STYLE_DATA.sounds.forEach(group => themes.appendChild(new Option(familyName(group.family), group.family)));
+  on('style-sound-theme', 'change', e => { soundTheme = e.target.value; syncStyleControls(); });
   on('style-accent', 'input', e => setLookSetting('style_accent', e.target.value.toUpperCase()));
   on('style-accent-own', 'click', () => setLookSetting('style_accent', null));
   on('style-racing-card', 'input', e => { mirror('ctrl-bg-color', e.target.value); setLookSetting('bg_color', e.target.value); });
@@ -2503,6 +2511,22 @@ function initStyleControls() {
   on('style-listen', 'click', listenToLookSound);
   on('style-family-btn', 'click', useStyleFamily);
   on('style-test', 'click', testLook);
+}
+
+function familyName(key) { return (STYLE_DATA.families.find(f => f.key === key) || {}).name || key; }
+
+// The Sound row's list: the look's own sound, today's and none, then one theme's sounds (each followed
+// by its version 2). Built again only when the theme changes.
+function fillSoundList(theme) {
+  const list = document.getElementById('style-sound');
+  if (list.dataset.theme === theme) return;
+  list.dataset.theme = theme;
+  list.textContent = '';
+  list.append(new Option(I18N.style.soundOwn, ''), new Option(I18N.style.soundToday, 'today'), new Option(I18N.style.soundNone, 'none'));
+  const optgroup = document.createElement('optgroup');
+  optgroup.label = familyName(theme);
+  STYLE_CORE.soundsOfTheme(theme, STYLE_DATA.sounds).forEach(s => optgroup.appendChild(new Option(s.name, s.key)));
+  list.appendChild(optgroup);
 }
 
 // ▶ plays the sound the look plays (the page's own AudioContext, made on the first click). Today's

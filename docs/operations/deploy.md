@@ -412,7 +412,8 @@ Watch after release:
 
 What changes when it deploys (docs/features/look-sounds.md):
 - Every alert look plays a recorded sound instead of a synthesized one, and the Overlay Builder's sound list offers
-  each sound twice: "<name>" (the version the owner kept) and "<name> (version 2)". 312 MP3s, about 13 MB in the
+  each sound twice: "<name>" (version A, the default) and "<name> (version 2)", by theme (a Theme dropdown picks which
+  family's sounds the list shows). 312 MP3s, about 13 MB in the
   image, under `/overlay/objects/sounds/`, served with a one-year cache (their names carry their content hash).
 - Nothing stored changes: no column, no migration. A saved `style_sound` keeps working; the new `<key>.2` values only
   exist once a streamer picks a second version.

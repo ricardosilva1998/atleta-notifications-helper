@@ -2352,6 +2352,7 @@
   "cards.polls.error.refused": "A Twitch não aceitou — confira a pergunta, as opções e as configurações do seu canal.",
   "cards.polls.result.predictionWonOne": "{{outcome}} venceu — 1 espectador recebe {{points}} pontos",
   "cards.polls.result.predictionWonNobody": "{{outcome}} venceu — ninguém escolheu esse resultado",
+  "overlayBuilder.style.soundTheme": "Tema",
   "overlayBuilder.soundVersion": "{{name}} (versão 2)",
   "overlayBuilder.sounds.samuraiTally": "Lâmina e plaquetas",
   "pollbar.pointsViewerOne": "{{points}} pontos · 1 espectador",

@@ -2352,6 +2352,7 @@
   "cards.polls.error.refused": "Twitch に拒否されました。質問、選択肢、チャンネルの設定を確認してください。",
   "cards.polls.result.predictionWonOne": "{{outcome}}が当たり — 視聴者1人が{{points}} ポイントを獲得",
   "cards.polls.result.predictionWonNobody": "{{outcome}}が当たり — 選んだ視聴者はいませんでした",
+  "overlayBuilder.style.soundTheme": "テーマ",
   "overlayBuilder.soundVersion": "{{name}}（バージョン2）",
   "overlayBuilder.sounds.samuraiTally": "刃と木札",
   "pollbar.pointsViewerOne": "{{points}} ポイント · 視聴者1人",

@@ -34,12 +34,16 @@ functions are still registered and now play only when a recording cannot load.
 
 ## Which sound a streamer hears
 
-- The Overlay Builder's sound list shows each sound and, right after it, "<name> (version 2)"
-  (`overlayBuilder.soundVersion`). The choice is saved in `overlay_designs.style_sound` as `<key>` or
-  `<key>.2`; a key the release does not know plays the look's own sound, as before.
-- A look's own sound is its default recording. The defaults are the versions the owner kept on the review
-  page on 16 October 2026; looks the owner did not review default to the version that matched its
-  description best.
+- The Overlay Builder's Sound row is organized by theme: a Theme dropdown (`#style-sound-theme`, the 26
+  families) picks which family's sounds the Sound list shows, after "The look's own sound", "Today's
+  sound" and "None"; each sound is followed by "<name> (version 2)" (`overlayBuilder.soundVersion`). It
+  opens on the saved sound's theme, else the look's own (`soundThemeOf` in `public/js/builder-styles-core.js`).
+  ▶ plays the chosen sound. The choice is saved in `overlay_designs.style_sound` as `<key>` or `<key>.2`;
+  a key the release does not know plays the look's own sound, as before.
+- A look's own sound is its default recording, **version A** (the owner's decision, 16 October 2026): the
+  take that matched its description best, or for the ten sounds redone from the owner's notes their new
+  take. Version B, the other take, is version 2 (Samurai's raid keeps the earlier take the owner liked
+  there).
 - The five Samurai presets (`follow-samurai` … `raid-samurai`) play their Samurai recording
   (`samuraiBlade`, `samuraiTaiko`, `samuraiTally`, `samuraiKoto`, `samuraiTaiko3`) when a streamer picks
   them. An alert with no look picked still draws today's object (`objects/index.js`) and plays today's

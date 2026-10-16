@@ -130,6 +130,31 @@ describe('what a save sends', () => {
   });
 });
 
+describe('the Sound row, by theme', () => {
+  const groups = [
+    { family: 'samurai', sounds: [{ key: 'samuraiBell', name: 'Temple bell' }, { key: 'samuraiBell.2', name: 'Temple bell (version 2)' }] },
+    { family: 'racing', sounds: [{ key: 'rcFlyby', name: 'Fly-by' }, { key: 'rcFlyby.2', name: 'Fly-by (version 2)' }] },
+  ];
+  const racing = { key: 'follow-racing', family: 'racing' };
+
+  test('shows the theme the streamer is browsing, else the saved sound\'s, else the look\'s own, else the first', () => {
+    assert.equal(core.soundThemeOf('samurai', 'rcFlyby', racing, groups), 'samurai', 'browsing wins');
+    assert.equal(core.soundThemeOf(null, 'samuraiBell.2', racing, groups), 'samurai', 'a second version belongs to its theme');
+    assert.equal(core.soundThemeOf(null, null, racing, groups), 'racing', 'the look\'s own');
+    assert.equal(core.soundThemeOf(null, 'today', { key: 'follow' }, groups), 'samurai', 'today\'s object has no family: the first');
+    assert.equal(core.soundThemeOf('nope', 'nope', racing, groups), 'racing', 'an unknown theme or sound is passed over');
+    assert.equal(core.soundThemeOf(null, null, null, []), null);
+  });
+
+  test('lists a theme\'s sounds in the page\'s order, each followed by its version 2', () => {
+    assert.deepEqual(core.soundsOfTheme('racing', groups).map((s) => s.key), ['rcFlyby', 'rcFlyby.2']);
+    assert.deepEqual(core.soundsOfTheme('nope', groups), []);
+    const list = core.soundsOfTheme('racing', groups);
+    list.pop();
+    assert.equal(groups[1].sounds.length, 2, 'a copy: the page\'s groups stay as they are');
+  });
+});
+
 test('dual export: a browser global with the same functions', () => {
   const vm = require('node:vm');
   const fs = require('node:fs');

@@ -2352,6 +2352,7 @@
   "cards.polls.error.refused": "Twitch refused it — check the question, the choices and your channel's settings.",
   "cards.polls.result.predictionWonOne": "{{outcome}} wins — 1 viewer gets {{points}} points",
   "cards.polls.result.predictionWonNobody": "{{outcome}} wins — nobody picked it",
+  "overlayBuilder.style.soundTheme": "Theme",
   "overlayBuilder.soundVersion": "{{name}} (version 2)",
   "overlayBuilder.sounds.samuraiTally": "Blade and tiles",
   "pollbar.pointsViewerOne": "{{points}} points · 1 viewer",

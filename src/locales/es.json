@@ -2352,6 +2352,7 @@
   "cards.polls.error.refused": "Twitch lo rechazó — revisa la pregunta, las opciones y la configuración de tu canal.",
   "cards.polls.result.predictionWonOne": "Gana {{outcome}} — 1 espectador recibe {{points}} puntos",
   "cards.polls.result.predictionWonNobody": "Gana {{outcome}} — nadie eligió ese resultado",
+  "overlayBuilder.style.soundTheme": "Tema",
   "overlayBuilder.soundVersion": "{{name}} (versión 2)",
   "overlayBuilder.sounds.samuraiTally": "Hoja y tablillas",
   "pollbar.pointsViewerOne": "{{points}} puntos · 1 espectador",

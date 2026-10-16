@@ -107,6 +107,32 @@ describe('the card width slider', () => {
   });
 });
 
+describe('the Sound row, by theme', () => {
+  test('a theme dropdown comes before the sound list, and the list holds the look\'s own, today\'s, none, then one theme\'s sounds', () => {
+    assert.match(builder, /<select id="style-sound-theme" aria-label="<%= t\('overlayBuilder\.style\.soundTheme'\) %>"><\/select>\s*<select id="style-sound"><\/select>/);
+    assert.match(functionSource('syncStyleControls'), /STYLE_CORE\.soundThemeOf\(soundTheme, d\.style_sound, look, STYLE_DATA\.sounds\)/);
+    const vm = require('node:vm');
+    const node = () => ({ children: [], dataset: {}, set textContent(_) { this.children = []; }, append(...n) { this.children.push(...n); }, appendChild(n) { this.children.push(n); return n; } });
+    const list = node();
+    const context = vm.createContext({
+      document: { getElementById: (id) => (id === 'style-sound' ? list : null), createElement: () => Object.assign(node(), { label: '' }) },
+      Option: function Option(text, value) { this.text = text; this.value = value; },
+      I18N: { style: { soundOwn: 'Own', soundToday: 'Today', soundNone: 'None' } },
+      STYLE_DATA: {
+        families: [{ key: 'racing', name: 'Racing' }],
+        sounds: [{ family: 'racing', sounds: [{ key: 'rcFlyby', name: 'Fly-by' }, { key: 'rcFlyby.2', name: 'Fly-by (version 2)' }] }],
+      },
+      STYLE_CORE: require('../public/js/builder-styles-core.js'),
+    });
+    vm.runInContext(functionSource('familyName') + '\n' + functionSource('fillSoundList'), context);
+    vm.runInContext("fillSoundList('racing'); fillSoundList('racing')", context);
+    assert.deepEqual(list.children.slice(0, 3).map((o) => o.value), ['', 'today', 'none']);
+    assert.equal(list.children.length, 4, 'built once for the same theme');
+    assert.equal(list.children[3].label, 'Racing');
+    assert.deepEqual(list.children[3].children.map((o) => [o.value, o.text]), [['rcFlyby', 'Fly-by'], ['rcFlyby.2', 'Fly-by (version 2)']]);
+  });
+});
+
 describe('the font picker', () => {
   // The first entry of the list is named by a translation ("System Default"); a font's own name is stored as it is.
   test('prints each name as text, not inside the markup it builds for the item', () => {

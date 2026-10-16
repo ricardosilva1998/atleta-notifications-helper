@@ -2352,6 +2352,7 @@
   "cards.polls.error.refused": "Twitch 拒绝了该请求——请检查问题、选项和你的频道设置。",
   "cards.polls.result.predictionWonOne": "{{outcome}} 获胜——1 位观众获得 {{points}} 积分",
   "cards.polls.result.predictionWonNobody": "{{outcome}} 获胜——无人选择该结果",
+  "overlayBuilder.style.soundTheme": "主题",
   "overlayBuilder.soundVersion": "{{name}}（版本 2）",
   "overlayBuilder.sounds.samuraiTally": "刀与木牌",
   "pollbar.pointsViewerOne": "{{points}} 积分 · 1 位观众",
