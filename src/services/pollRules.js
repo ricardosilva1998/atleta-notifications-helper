@@ -51,6 +51,7 @@ const ERRORS = Object.freeze({
   running: Object.freeze({ status: 409, text: 'cards.polls.error.running' }),
   changed: Object.freeze({ status: 409, text: 'cards.polls.error.changed' }),
   automod: Object.freeze({ status: 400, text: 'cards.polls.error.automod' }),
+  refused: Object.freeze({ status: 400, text: 'cards.polls.error.refused' }),
   not_affiliate: Object.freeze({ status: 409, text: 'cards.polls.error.notAffiliate' }),
   needs_reconnect: Object.freeze({ status: 409, text: 'cards.polls.error.reconnect' }),
   twitch_failed: Object.freeze({ status: 502, text: 'cards.polls.error.twitchFailed' }),

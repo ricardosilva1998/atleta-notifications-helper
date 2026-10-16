@@ -16,8 +16,10 @@
 //   automod          a title or choice Twitch's AutoMod refused
 //   changed          an end, lock, result or cancel of one whose status changed meanwhile
 //   not_found        a prediction or outcome Twitch does not know
+//   refused          any other refusal (a 4xx): it would come again, so the card asks to check the question, the
+//                    choices and the channel's settings (Twitch's message is logged by the route, never shown)
 //   twitch_failed    no answer in time (a request's 10 seconds, the call's 15), no network, a token refresh that
-//                    failed for a moment, or anything else Twitch refuses (the route logs it)
+//                    failed for a moment, too many requests (429) or a server error (5xx)
 
 const config = require('../config');
 const db = require('../db');
@@ -56,6 +58,7 @@ function codeFor(status, message, creating) {
   if (status === 400 && /automod/.test(text)) return 'automod';
   if (status === 400 && creating && /already/.test(text)) return 'running';
   if (status === 400 && !creating && /must be active|current status/.test(text)) return 'changed';
+  if (status >= 400 && status < 500 && status !== 429) return 'refused';
   return 'twitch_failed';
 }
 

@@ -258,6 +258,11 @@ describe('starting', () => {
     helix.refuse = 'automod';
     assert.equal((await start(id, poll)).json().error, t('en', 'cards.polls.error.automod'));
     assert.ok(logs.some((line) => line.includes('twitch_failed')));
+    helix.refuse = 'refused';
+    const refusedByTwitch = await start(id, poll);
+    assert.equal(refusedByTwitch.status, 400);
+    assert.deepEqual(refusedByTwitch.json(), { ok: false, code: 'refused', error: t('en', 'cards.polls.error.refused') });
+    assert.ok(logs.some((line) => /: refused$/.test(line)), 'Twitch\'s message is logged, never shown');
   });
 
   test('another streamer\'s template, or a one-off past a limit, is refused before Twitch', async () => {

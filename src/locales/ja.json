@@ -1787,6 +1787,7 @@
   "cards.polls.result.predictionWon": "{{outcome}}が当たり — 視聴者{{winners}}人で{{points}} ポイントを分配",
   "cards.polls.result.cancelled": "キャンセル — 全員にポイントが返却されました",
   "cards.polls.voteOne": "{{count}}票",
+  "cards.polls.error.refused": "Twitch refused it — check the question, the choices and your channel's settings.",
   "pollbar.voteOne": "{{count}}票",
   "pollbar.pollFootOne": "{{count}}票 · チャット欄の投票ボックスで投票",
   "pollbar.poll": "投票",

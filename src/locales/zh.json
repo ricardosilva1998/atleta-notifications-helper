@@ -1787,6 +1787,7 @@
   "cards.polls.result.predictionWon": "{{outcome}} 获胜——{{winners}} 位观众瓜分 {{points}} 积分",
   "cards.polls.result.cancelled": "已取消——所有人的积分均已退还",
   "cards.polls.voteOne": "{{count}} 票",
+  "cards.polls.error.refused": "Twitch refused it — check the question, the choices and your channel's settings.",
   "pollbar.voteOne": "{{count}} 票",
   "pollbar.pollFootOne": "{{count}} 票 · 在聊天区的投票框中投票",
   "pollbar.poll": "投票",

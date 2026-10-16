@@ -218,9 +218,9 @@ describe('Twitch\'s refusals', () => {
 
   test('"already running" on a call that is not a start is not running: only a start can find one running', async () => {
     answers.push(refused(400, 'The broadcaster already has a poll that\'s running; you may not create another poll until the current poll completes.'));
-    assert.equal(await code(polls.endPoll(streamer(), 'poll-1')), 'twitch_failed');
+    assert.equal(await code(polls.endPoll(streamer(), 'poll-1')), 'refused');
     answers.push(refused(400, 'The broadcaster already has a prediction that\'s running; you may not create another prediction until the current prediction is resolved or canceled.'));
-    assert.equal(await code(polls.cancelPrediction(streamer(), 'pred-1')), 'twitch_failed');
+    assert.equal(await code(polls.cancelPrediction(streamer(), 'pred-1')), 'refused');
   });
 
   test('acting on one whose status changed meanwhile: changed', async () => {
@@ -230,13 +230,55 @@ describe('Twitch\'s refusals', () => {
     assert.equal(await code(polls.lockPrediction(streamer(), 'pred-1')), 'changed');
   });
 
-  test('an unknown prediction or outcome: not_found; any other refusal or a server error: twitch_failed', async () => {
+  test('an unknown prediction or outcome: not_found; any other refusal: refused; a server error: twitch_failed', async () => {
     answers.push(refused(404, 'The prediction in the id field was not found.'), refused(400, 'Bad Request'), refused(403, 'Forbidden'), { status: 503, body: {} });
     assert.equal(await code(polls.resolvePrediction(streamer(), 'gone', 'out-1')), 'not_found');
-    assert.equal(await code(polls.createPoll(streamer(), value)), 'twitch_failed');
-    assert.equal(await code(polls.createPoll(streamer(), value)), 'twitch_failed');
+    assert.equal(await code(polls.createPoll(streamer(), value)), 'refused');
+    assert.equal(await code(polls.createPoll(streamer(), value)), 'refused');
     assert.equal(await code(polls.lockPrediction(streamer(), 'pred-1')), 'twitch_failed');
     assert.deepEqual(affiliateFlags, []);
+  });
+
+  // A refusal that will come again (a title Twitch counts as too long, channel points switched off, a not-Affiliate
+  // wording that names neither) must not say "Twitch did not answer, try again".
+  test('a refusal Twitch words in a way the card does not know: refused, with Twitch\'s message kept for the log; too many requests or a server error: twitch_failed', async () => {
+    for (const [status, message] of [
+      [400, 'The title is too long.'],
+      [400, 'Channel points are not enabled for this channel.'],
+      [403, 'The broadcaster may not create polls.'],
+      [409, 'Conflict'],
+      [422, 'Unprocessable Entity'],
+    ]) {
+      answers.push(refused(status, message));
+      const error = await polls.createPoll(streamer(), value).then(() => null, (err) => err);
+      assert.equal(error && error.code, 'refused', message);
+      assert.ok(error.message.includes(`${status} ${message}`), `Twitch's answer is kept for the log: ${error.message}`);
+    }
+    for (const status of [429, 500, 502, 503]) {
+      answers.push({ status, body: { message: 'Please try again later.' } });
+      assert.equal(await code(polls.createPoll(streamer(), value)), 'twitch_failed', String(status));
+    }
+    assert.deepEqual(affiliateFlags, []);
+  });
+
+  test('every code a call can end with is one the card has a text for (pollRules.ERRORS)', async () => {
+    const { ERRORS } = require('./pollRules');
+    const seen = new Set();
+    for (const reply of [
+      [refused(400, 'Bad Request')], [refused(400, 'The choice\'s title failed AutoMod checks.')],
+      [refused(400, 'The broadcaster already has a poll that\'s running.')], [refused(400, 'The poll must be active to terminate or archive it.')],
+      [refused(401, 'Invalid OAuth token'), refused(401, 'Invalid OAuth token')], [refused(403, 'Forbidden')], [refused(404, 'Not Found')],
+      [refused(403, 'The broadcaster must be a partner or affiliate')], [refused(409, 'Conflict')], [{ status: 429, body: {} }],
+      [{ status: 500, body: {} }], ['network'],
+    ]) {
+      for (const call of [() => polls.createPoll(streamer(), value), () => polls.endPoll(streamer(), 'poll-1')]) {
+        answers.push(...reply);
+        seen.add(await code(call()));
+        answers.length = 0;
+      }
+    }
+    assert.deepEqual([...seen].filter((c) => !Object.hasOwn(ERRORS, c)), []);
+    assert.deepEqual([...seen].sort(), ['automod', 'changed', 'needs_reconnect', 'not_affiliate', 'not_found', 'refused', 'running', 'twitch_failed']);
   });
 
   test('no network, or no answer within the deadline: twitch_failed', async () => {

@@ -1787,6 +1787,7 @@
   "cards.polls.result.predictionWon": "{{outcome}} wins — {{winners}} viewers share {{points}} points",
   "cards.polls.result.cancelled": "Cancelled — everyone got their points back",
   "cards.polls.voteOne": "{{count}} vote",
+  "cards.polls.error.refused": "Twitch refused it — check the question, the choices and your channel's settings.",
   "pollbar.voteOne": "{{count}} vote",
   "pollbar.pollFootOne": "{{count}} vote · vote in the chat's poll box",
   "pollbar.poll": "Poll",
