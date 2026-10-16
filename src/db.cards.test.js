@@ -179,7 +179,8 @@ describe('the settings table against the real database', () => {
   test('every key writes exactly its own column, to the value it is given, and nothing else on the rows it can reach', () => {
     // Whatever a key needs before it switches on is there: a streamer with a PayPal email, a server with a sub
     // role, the streamer's own channel in it with both Discord channels (its two switches start off, so the
-    // first round switches them on through the check that they have a channel) and one sponsor message.
+    // first round switches them on through the check that they have a channel), one sponsor message, and reading
+    // tips aloud offered (the site's ElevenLabs key, given as the route gives it).
     const streamerId = addStreamer('tips@example.test');
     const login = db.getStreamerById(streamerId).twitch_username;
     const guildId = '600000000000000301';
@@ -200,7 +201,7 @@ describe('the settings table against the real database', () => {
         if (setting.target === 'guild' || setting.target === 'watcher') change.guildId = guildId;
         if (setting.target === 'sponsorMessage') change.id = messageId;
 
-        const result = save(db.getStreamerById(streamerId), change, { db, followUps: { run() {} } });
+        const result = save(db.getStreamerById(streamerId), change, { db, followUps: { run() {} }, ttsAvailable: true });
         const after = storedRows(streamerId, guildId, watcherId, messageId);
 
         assert.deepEqual(result, { ok: true, values: { [key]: value } }, `${key}, round ${round}`);

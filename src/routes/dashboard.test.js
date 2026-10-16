@@ -14,7 +14,9 @@ const express = require('express');
 const { Collection, PermissionFlagsBits } = require('discord.js');
 const RealDatabase = require('better-sqlite3');
 const realFs = require('fs');
+const os = require('os');
 const { DEFAULT_DURATION_SECONDS } = require('../services/overlaySettings');
+const { VOICES, defaultVoice } = require('../services/ttsVoices');
 
 // src/config.js exits without these; the values are never used.
 for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) {
@@ -132,6 +134,31 @@ const timedNotificationsStub = {
     stopForStreamer: (id) => sponsorCalls.push(['sponsors.stop', id]),
   },
 };
+
+// Reading tips aloud: the real services/tipVoice.js with ElevenLabs stubbed and its audio files in a temporary
+// folder (never the repo's data/). `tts.audio` is what the stubbed ElevenLabs answers (null: it fails); `tts.open`
+// whether an alert overlay is open; `tts.emitted` what the test sent to OBS.
+const TTS_DIR = realFs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-tts-'));
+const tts = { audio: Buffer.from('ID3 synthetic audio'), open: false, emitted: [], requests: [], credits: null };
+function wrapTipVoice(real) {
+  const deps = {
+    dir: TTS_DIR,
+    synthesize: async (request) => {
+      tts.requests.push(request);
+      if (!tts.audio) throw new Error('elevenlabs_500');
+      return tts.audio;
+    },
+    remainingCredits: async () => tts.credits,
+    isOpen: () => tts.open,
+    bannedCheck: () => false,
+    bus: { emit: (channel, event) => tts.emitted.push([channel, event]) },
+  };
+  return {
+    ...real,
+    testVoice: (streamer) => real.testVoice(streamer, deps),
+    ttsFilePath: (streamerId, name) => real.ttsFilePath(streamerId, name, TTS_DIR),
+  };
+}
 
 // The uploads and deletes the routes make go here, not onto the disk: tests
 // must never write into the repo's data/ folder.
@@ -254,6 +281,7 @@ before(async () => {
       if (request === '../services/eventsub') return eventSubStub;
       if (request === '../services/streamelements') return streamElementsStub;
       if (request === '../services/timedNotifications') return timedNotificationsStub;
+      if (request === '../services/tipVoice') return wrapTipVoice(saved.load(request, parent, isMain));
     }
     return saved.load(request, parent, isMain);
   };
@@ -317,6 +345,7 @@ after(async () => {
   global.fetch = saved.fetch;
   for (const level of ['log', 'warn', 'error']) console[level] = saved[level];
   Module._load = saved.load;
+  realFs.rmSync(TTS_DIR, { recursive: true, force: true });
   await new Promise((resolve) => server.close(resolve));
 });
 
@@ -5441,5 +5470,254 @@ describe('the Polls & predictions routes in the dashboard', () => {
     assert.equal((await request('POST', '/dashboard/api/poll-templates', { cookie, fetchMode: 'cors', body })).status, 403);
     assert.equal(db.countPollTemplates(id), 0);
     assert.equal((await request('POST', '/dashboard/api/poll-templates', { cookie, csrf: token, body })).status, 201);
+  });
+});
+
+// ── Reading tips aloud (the Donations page, the card's switch, the history) ──
+
+describe('reading tips aloud', () => {
+  const { tts: ttsConfig } = require('../config');
+  const month = () => new Date().toISOString().slice(0, 7);
+  const FILE = '00000000-0000-4000-8000-00000000a7a7.mp3';
+  let savedKey;
+  beforeEach(() => {
+    savedKey = ttsConfig.apiKey;
+    ttsConfig.apiKey = 'synthetic-elevenlabs-key';
+    Object.assign(tts, { audio: Buffer.from('ID3 synthetic audio'), open: false, emitted: [], requests: [], credits: null });
+  });
+  afterEach(() => { ttsConfig.apiKey = savedKey; });
+
+  // Every field the page's form posts, as a browser sends it with the switch ticked (a Portuguese voice that is not the default).
+  const PT_VOICE = VOICES.pt[1].id;
+  const FORM = {
+    tts_enabled: '1', tts_min_amount: '7.5', tts_language: 'pt', tts_voice: PT_VOICE, tts_speed: '1.1',
+    tts_expressiveness: '0.25', tts_volume: '0.6', tts_template: '{name} mandou {amount}: {message}', tts_template_empty: '',
+  };
+
+  test('the donations page shows the section with the streamer\'s settings and this month\'s usage; without a key it says it is unavailable', async () => {
+    const id = addStreamer({ donation_currency: 'EUR', tts_enabled: 1, tts_min_amount: 8, tts_language: 'fr', tts_template: 'Synthetic {name} template', tts_monthly_limit: 20000 });
+    db.reserveTtsCharacters(id, month(), 2340, 20000);
+    const data = (await request('GET', '/dashboard/donations', { streamer: id, json: true })).json().locals.tts;
+    assert.equal(data.available, true);
+    assert.deepEqual([data.used, data.limit], [2340, 20000]);
+    assert.deepEqual([data.settings.enabled, data.settings.minAmount, data.settings.language, data.settings.template], [true, 8, 'fr', 'Synthetic {name} template']);
+    assert.equal(data.resetsOn, new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString().slice(0, 10));
+
+    const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+    assert.ok(page.includes('id="tts"') && page.includes('action="/dashboard/donations/tts"'));
+    assert.ok(page.includes(esc(t('en', 'donations.tts.title'))));
+    assert.match(page, /<input type="checkbox" name="tts_enabled" value="1" checked/);
+    assert.ok(page.includes('value="Synthetic {name} template"'));
+    assert.ok(page.includes('2,340') && page.includes('20,000'), 'the usage, in the page language');
+    assert.ok(page.includes('placeholder="' + esc(t('fr', 'tts.template.default', { name: '{name}', amount: '{amount}', message: '{message}' }))), 'the language default as placeholder');
+    const unavailable = `>${esc(t('en', 'donations.tts.unavailable'))}</div>`;
+    assert.ok(!page.includes(unavailable));
+
+    ttsConfig.apiKey = null;
+    const off = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+    assert.ok(off.includes(unavailable));
+    assert.ok(!off.includes('action="/dashboard/donations/tts"'), 'no form while it is not available');
+  });
+
+  test('the voice list is the language\'s voices, the stored one picked, and ▶ is there to play its recorded preview', async () => {
+    const voice = VOICES.fr[2];
+    const id = addStreamer({ tts_language: 'fr', tts_voice: voice.id });
+    const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+    const select = page.slice(page.indexOf('<select id="tts-voice"'), page.indexOf('</select>', page.indexOf('<select id="tts-voice"')));
+    assert.deepEqual([...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]), VOICES.fr.map((v) => v.id));
+    assert.match(select, new RegExp(`<option value="${voice.id}" selected>${esc(voice.name)}</option>`));
+    assert.match(page, /<button type="button" id="tts-listen"[^>]*>&#9654;<\/button>/, 'the button is not hidden');
+    for (const lang of Object.keys(VOICES)) {
+      for (const v of VOICES[lang]) assert.ok(page.includes(`"preview":"${v.preview}"`), `${lang} ${v.name}: its preview is in the page's data`);
+    }
+  });
+
+  test('the amount field accepts any amount in cents, whatever the tip page\'s minimum', async () => {
+    const id = addStreamer({ donation_min_amount: 1.25 });
+    const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+    assert.match(page, /<input type="number" id="tts-min" name="tts_min_amount" value="5" min="1\.25" max="10000" step="0\.01"/);
+  });
+
+  test('the last problem is told in words, never as its stored code', async () => {
+    const cases = [
+      ['elevenlabs_401', 'donations.tts.error.failed'], ['elevenlabs_timeout', 'donations.tts.error.failed'], ['failed', 'donations.tts.error.failed'],
+      ['credit_floor', 'donations.tts.error.credit_floor'], ['no_key', 'donations.tts.error.unavailable'], ['something_new', 'donations.tts.error.failed'],
+    ];
+    for (const [code, key] of cases) {
+      const id = addStreamer();
+      db.recordTtsError(id, code);
+      const page = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+      assert.ok(page.includes(esc(t('en', 'donations.tts.lastError', { error: t('en', key) }))), code);
+      assert.ok(!page.includes(code + ' ') && !page.includes(`: ${code}`), `${code} is not printed`);
+    }
+  });
+
+  test('while the overlay features are hidden, nothing of it shows: no section, no card switch, no history column', async () => {
+    const { features } = require('../config');
+    const id = addStreamer({ twitch_user_id: 'tw-tts-off', twitch_username: 'synthetic_tts_off', paypal_email: 'tips@example.test', donation_page_enabled: 1, tts_enabled: 1 });
+    db.logDonation(id, { source: 'paypal', donor_name: 'Hidden Donor', amount: 9, currency: 'EUR', external_id: 'tts-overlays-off-1' });
+    db.setDonationTtsStatus('paypal', 'tts-overlays-off-1', 'overlay_closed');
+    features.overlays = false;
+    try {
+      const settings = (await request('GET', '/dashboard/donations', { streamer: id })).text;
+      assert.ok(!settings.includes('id="tts"') && !settings.includes('action="/dashboard/donations/tts"'));
+      assert.ok(!settings.includes(esc(t('en', 'donations.tts.title'))));
+      const dashboard = (await request('GET', '/dashboard', { streamer: id })).text;
+      assert.ok(!dashboard.includes('data-setting="tts_enabled"') && !dashboard.includes('data-count="tts"'));
+      assert.ok(!('tts' in (await request('GET', '/dashboard/api/cards', { streamer: id })).json().cards.donations.counts));
+      const history = (await request('GET', '/dashboard/donations/history', { streamer: id })).text;
+      assert.ok(history.includes('Hidden Donor'));
+      assert.ok(!history.includes('class="dh-tts') && !history.includes(esc(t('en', 'donations.tts.status.overlay_closed'))));
+      assert.match((await request('GET', '/dashboard/donations/history.csv', { streamer: id })).text, /"overlay_closed"/, 'the CSV keeps the column');
+    } finally {
+      features.overlays = true;
+    }
+    assert.ok((await request('GET', '/dashboard/donations', { streamer: id })).text.includes('id="tts"'), 'back with the overlay features');
+  });
+
+  test('a save is checked and clamped; a bad language answers ?error=bad_language', async () => {
+    const id = addStreamer({ donation_min_amount: 2 });
+    const res = await request('POST', '/dashboard/donations/tts', { streamer: id, form: { ...FORM, tts_speed: '9', tts_min_amount: '1', tts_voice: 'not-a-voice' } });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/dashboard/donations?saved=tts#tts');
+    const row = db.getStreamerById(id);
+    assert.deepEqual(
+      [row.tts_enabled, row.tts_min_amount, row.tts_language, row.tts_voice, row.tts_speed, row.tts_expressiveness, row.tts_volume, row.tts_template, row.tts_template_empty],
+      [1, 2, 'pt', defaultVoice('pt'), 1.2, 0.25, 0.6, '{name} mandou {amount}: {message}', null],
+    );
+    const saved = (await request('GET', '/dashboard/donations?saved=tts', { streamer: id })).text;
+    assert.ok(saved.includes(esc(t('en', 'donations.tts.saved'))));
+
+    const bad = await request('POST', '/dashboard/donations/tts', { streamer: id, form: { ...FORM, tts_language: 'xx' } });
+    assert.equal(bad.headers.location, '/dashboard/donations?error=bad_language#tts');
+    assert.equal(db.getStreamerById(id).tts_language, 'pt', 'nothing stored');
+    const page = (await request('GET', '/dashboard/donations?error=bad_language', { streamer: id })).text;
+    assert.ok(page.includes(esc(t('en', 'donations.tts.error.bad_language'))));
+  });
+
+  test('a save with the switch unticked stores it off and keeps every other value the form sent', async () => {
+    const id = addStreamer({ tts_enabled: 1 });
+    const { tts_enabled: _ticked, ...unticked } = FORM; // a browser sends no field for an unticked checkbox
+    await request('POST', '/dashboard/donations/tts', { streamer: id, form: unticked });
+    const row = db.getStreamerById(id);
+    assert.deepEqual(
+      [row.tts_enabled, row.tts_min_amount, row.tts_language, row.tts_voice, row.tts_speed, row.tts_expressiveness, row.tts_volume, row.tts_template],
+      [0, 7.5, 'pt', PT_VOICE, 1.1, 0.25, 0.6, '{name} mandou {amount}: {message}'],
+    );
+  });
+
+  test('the test answers a url the page can fetch, counts toward the limit, and a second test within 10 s answers cooldown', async () => {
+    const id = addStreamer({ tts_language: 'en', tts_min_amount: 5, donation_currency: 'EUR', overlay_token: `synthetic-tts-test-${counter}` });
+    const res = await request('POST', '/dashboard/donations/tts/test', { streamer: id, body: {} });
+    assert.equal(res.status, 200);
+    const answer = res.json();
+    assert.equal(answer.ok, true);
+    assert.match(answer.url, /^\/dashboard\/donations\/tts\/audio\/[0-9a-f-]{36}\.mp3$/);
+    assert.equal(tts.requests.length, 1);
+    assert.equal(db.getTtsUsage(id, month()), tts.requests[0].text.length, 'the line counts toward the month');
+    const audio = await request('GET', answer.url, { streamer: id });
+    assert.equal(audio.status, 200);
+    assert.equal(audio.headers['content-type'], 'audio/mpeg');
+
+    const again = await request('POST', '/dashboard/donations/tts/test', { streamer: id, body: {} });
+    assert.equal(again.status, 429);
+    assert.deepEqual(again.json(), { ok: false, error: 'cooldown' });
+    assert.equal(tts.requests.length, 1);
+  });
+
+  test('the test reads the settings the form shows, and says why it could not', async () => {
+    const id = addStreamer({ tts_language: 'en', tts_min_amount: 5 });
+    const res = await request('POST', '/dashboard/donations/tts/test', { streamer: id, body: { ...FORM, tts_template: 'Unsaved {name}' } });
+    assert.equal(res.json().ok, true);
+    assert.equal(tts.requests[0].lang, 'pt');
+    assert.equal(tts.requests[0].text, `Unsaved ${t('pt', 'tts.sample.name')}`);
+    assert.equal(db.getStreamerById(id).tts_template, null, 'a test saves nothing');
+
+    const full = addStreamer({ tts_monthly_limit: 3 });
+    assert.deepEqual((await request('POST', '/dashboard/donations/tts/test', { streamer: full, body: {} })).json(), { ok: false, error: 'limit' });
+    tts.audio = null;
+    assert.deepEqual((await request('POST', '/dashboard/donations/tts/test', { streamer: addStreamer(), body: {} })).json(), { ok: false, error: 'failed' });
+    ttsConfig.apiKey = null;
+    assert.deepEqual((await request('POST', '/dashboard/donations/tts/test', { streamer: addStreamer(), body: {} })).json(), { ok: false, error: 'unavailable' });
+  });
+
+  test("the test under the site's credit floor says so, not that the month is used up", async () => {
+    tts.credits = 5; // far under config.tts.creditFloor
+    const res = await request('POST', '/dashboard/donations/tts/test', { streamer: addStreamer({ tts_language: 'en' }), body: {} });
+    assert.equal(res.status, 503);
+    assert.deepEqual(res.json(), { ok: false, error: 'credit_floor' });
+    assert.equal(tts.requests.length, 0);
+    const page = (await request('GET', '/dashboard/donations', { streamer: addStreamer() })).text;
+    assert.ok(page.includes(`"credit_floor":${JSON.stringify(t('en', 'donations.tts.error.credit_floor'))}`), 'the page script can tell it (errorTexts)');
+  });
+
+  test('the audio route serves only the streamer\'s own file', async () => {
+    const owner = addStreamer();
+    const other = addStreamer();
+    realFs.mkdirSync(path.join(TTS_DIR, String(owner)), { recursive: true });
+    realFs.writeFileSync(path.join(TTS_DIR, String(owner), FILE), 'ID3 synthetic');
+    const res = await request('GET', `/dashboard/donations/tts/audio/${FILE}`, { streamer: owner });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['content-type'], 'audio/mpeg');
+    assert.equal(res.headers['cache-control'], 'no-cache');
+    assert.equal(res.headers['content-security-policy'], "sandbox; default-src 'none'");
+    assert.equal(res.headers['x-content-type-options'], 'nosniff');
+    assert.equal((await request('GET', `/dashboard/donations/tts/audio/${FILE}`, { streamer: other })).status, 404, "another streamer's");
+    assert.equal((await request('GET', '/dashboard/donations/tts/audio/00000000-0000-4000-8000-0000000000ff.mp3', { streamer: owner })).status, 404, 'unknown file');
+    for (const bad of ['..%2F..%2Fbot.db', 'x.mp3', `${FILE}.txt`]) {
+      assert.equal((await request('GET', `/dashboard/donations/tts/audio/${bad}`, { streamer: owner })).status, 404, bad);
+    }
+    assert.equal((await request('GET', `/dashboard/donations/tts/audio/${FILE}`)).status, 302, 'logged out');
+  });
+
+  test('/dashboard/settings accepts tts_enabled, and refuses it while TTS is unavailable', async () => {
+    const id = addStreamer({ tts_enabled: 0 });
+    const on = await request('POST', '/dashboard/settings', { streamer: id, body: { key: 'tts_enabled', value: 1 } });
+    assert.deepEqual(on.json(), { ok: true, value: 1 });
+    assert.equal(db.getStreamerById(id).tts_enabled, 1);
+
+    ttsConfig.apiKey = null;
+    const off = await request('POST', '/dashboard/settings', { streamer: id, body: { key: 'tts_enabled', value: 0 } });
+    assert.deepEqual(off.json(), { ok: true, value: 0 }, 'switching off needs nothing');
+    const refused = await request('POST', '/dashboard/settings', { streamer: id, body: { key: 'tts_enabled', value: 1 } });
+    assert.equal(refused.status, 409);
+    assert.deepEqual(refused.json(), { ok: false, code: 'tts_unavailable', error: t('en', 'dashboard.settings.error.ttsUnavailable') });
+    assert.equal(db.getStreamerById(id).tts_enabled, 0);
+  });
+
+  test('the Donations card has the switch while TTS is available, with its line when on', async () => {
+    const id = addStreamer({ twitch_user_id: 'tw-tts-1', twitch_username: 'synthetic_tts_1', paypal_email: 'tips@example.test', donation_page_enabled: 1, tts_enabled: 1, tts_min_amount: 5, donation_currency: 'EUR' });
+    db.reserveTtsCharacters(id, month(), 2340, 15000);
+    const html = (await request('GET', '/dashboard', { streamer: id })).text;
+    const card = html.slice(html.indexOf('id="card-donations"'), html.indexOf('</section>', html.indexOf('id="card-donations"')));
+    assert.match(card, /data-setting="tts_enabled"[^>]* checked/);
+    assert.ok(card.includes(esc(t('en', 'cards.donations.ttsOn', { amount: '€5', used: '2,340', limit: '15,000' }))));
+    const texts = (await request('GET', '/dashboard/api/cards', { streamer: id })).json().cards.donations;
+    assert.equal(texts.counts.tts, t('en', 'cards.donations.ttsOn', { amount: '€5', used: '2,340', limit: '15,000' }));
+
+    ttsConfig.apiKey = null;
+    const without = (await request('GET', '/dashboard', { streamer: id })).text;
+    assert.ok(!without.includes('data-setting="tts_enabled"'));
+  });
+
+  test('the donation history shows each tip\'s TTS status', async () => {
+    const id = addStreamer();
+    db.logDonation(id, { source: 'paypal', donor_name: 'Read Donor', amount: 9, currency: 'EUR', external_id: 'tts-history-1' });
+    db.logDonation(id, { source: 'paypal', donor_name: 'Small Donor', amount: 1, currency: 'EUR', external_id: 'tts-history-2' });
+    db.logDonation(id, { source: 'paypal', donor_name: 'Quiet Donor', amount: 1, currency: 'EUR', external_id: 'tts-history-3' });
+    db.setDonationTtsStatus('paypal', 'tts-history-1', 'read');
+    db.setDonationTtsStatus('paypal', 'tts-history-2', 'below_threshold');
+    const page = (await request('GET', '/dashboard/donations/history', { streamer: id })).text;
+    assert.ok(page.includes(esc(t('en', 'donations.tts.status.read'))));
+    assert.ok(page.includes(esc(t('en', 'donations.tts.status.below_threshold'))));
+    assert.ok(page.includes('<td class="dh-tts"></td>'), 'a tip with no status has an empty cell');
+    const csv = (await request('GET', '/dashboard/donations/history.csv', { streamer: id })).text;
+    assert.match(csv, /,message,tts_status\r\n/);
+    assert.match(csv, /"Read Donor".*"read"/);
+
+    const never = addStreamer();
+    db.logDonation(never, { source: 'paypal', donor_name: 'Plain Donor', amount: 3, currency: 'EUR', external_id: 'tts-history-4' });
+    const plain = (await request('GET', '/dashboard/donations/history', { streamer: never })).text;
+    assert.ok(plain.includes('Plain Donor') && !plain.includes('class="dh-tts'), 'no column for a streamer who never read tips');
   });
 });

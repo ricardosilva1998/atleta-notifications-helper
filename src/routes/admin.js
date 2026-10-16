@@ -35,10 +35,13 @@ router.get('/dashboard', requireAdmin, (req, res) => {
   const tierBreakdown = db.getSubscriptionsByTier();
   const revenueStats = db.getRevenueStats();
 
-  // Users tab data — enrich with current tier
+  // Users tab data — enrich with current tier, and this month's use of reading tips aloud against the limit
+  const ttsMonth = new Date().toISOString().slice(0, 7);
   const streamers = db.getAllStreamersAdmin().map(s => ({
     ...s,
     currentTier: db.getStreamerTier(s.id),
+    ttsUsed: db.getTtsUsage(s.id, ttsMonth),
+    ttsLimit: s.tts_monthly_limit ?? config.tts.monthlyLimit,
   }));
 
   // Issues tab data
@@ -121,6 +124,26 @@ router.post('/streamers/:id/set-tier', requireAdmin, (req, res) => {
   db.createSubscription(s.id, tier, null, null);
   console.log(`[Admin] Set ${s.discord_username} tier to ${tier}`);
   res.redirect('/admin/dashboard?tab=users&msg=tier_updated');
+});
+
+// One streamer's characters a month for reading tips aloud. Empty goes back to the default (config.tts.monthlyLimit);
+// otherwise a whole number from 0 (nothing is read) to TTS_LIMIT_MAX. Anything else changes nothing.
+const TTS_LIMIT_MAX = 1000000;
+router.post('/streamers/:id/tts-limit', requireAdmin, (req, res) => {
+  const s = db.getStreamerById(parseInt(req.params.id));
+  if (!s) return res.redirect('/admin/dashboard?tab=users');
+
+  const raw = typeof req.body.tts_monthly_limit === 'string' ? req.body.tts_monthly_limit.trim() : null;
+  if (raw === null) return res.redirect('/admin/dashboard?tab=users');
+  let limit = null;
+  if (raw !== '') {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return res.redirect('/admin/dashboard?tab=users');
+    limit = Math.min(Math.floor(n), TTS_LIMIT_MAX);
+  }
+  db.setTtsMonthlyLimit(s.id, limit);
+  console.log(`[Admin] Set ${s.discord_username}'s TTS limit to ${limit ?? 'the default'}`);
+  res.redirect('/admin/dashboard?tab=users&msg=updated');
 });
 
 // --- Issues ---
