@@ -105,6 +105,13 @@ describe('the follow and sub record', () => {
     assert.equal(db.db.prepare('SELECT count FROM tracking_events WHERE streamer_id = ? AND twitch_user_id = ?').get(s, '2').count, 1);
   });
 
+  test('a bound that is given but cannot be read as a time throws instead of opening the window', () => {
+    const s = addStreamer();
+    assert.throws(() => db.countTrackingEvents(s, 'follow', 'not a date', null), /time/i);
+    assert.throws(() => db.countTrackingEvents(s, 'sub', null, '2026-13-45'), /time/i);
+    assert.equal(db.countTrackingEvents(s, 'follow', '', ''), 0, 'an empty bound is an open bound');
+  });
+
   test('cleanupOldTrackingEvents keeps a 399-day-old row and drops a 401-day-old one', () => {
     const s = addStreamer();
     db.db.prepare("INSERT INTO tracking_events (streamer_id, kind, twitch_user_id, created_at) VALUES (?, 'follow', 'keep', datetime('now', '-399 days'))").run(s);
@@ -166,12 +173,28 @@ describe('goals', () => {
   test('nudgeTrackingGoal never takes the shown count below 0', () => {
     const s = addStreamer();
     const g = db.createTrackingGoal(s, 'follow', goalFields());
-    assert.equal(db.nudgeTrackingGoal(g.id, s, 10, 0).nudge, 10);
-    // The goal shows 3 before the nudge, so the stored nudge may reach -3 and no lower.
-    assert.equal(db.nudgeTrackingGoal(g.id, s, -50, 3).nudge, -3);
-    assert.equal(db.nudgeTrackingGoal(g.id, s, -1, 3).nudge, -3);
-    assert.equal(db.nudgeTrackingGoal(g.id, s, 2, 3).nudge, -1);
+    assert.equal(db.nudgeTrackingGoal(g.id, s, 10, 0).nudge, 10, 'a rise is never held back');
+    // The goal shows 3 (base 3, nudge 0 after the rise is undone), so -50 stops at shown 0.
+    const h = db.createTrackingGoal(s, 'sub', goalFields());
+    assert.equal(db.nudgeTrackingGoal(h.id, s, -50, 3).nudge, -3);
+    assert.equal(db.nudgeTrackingGoal(h.id, s, -1, 0).nudge, -3, 'already at 0: nothing lower');
+    assert.equal(db.nudgeTrackingGoal(h.id, s, 2, 0).nudge, -1);
     assert.equal(db.nudgeTrackingGoal(g.id, addStreamer(), 5, 3), null, 'another streamer cannot nudge it');
+  });
+
+  test('nudgeTrackingGoal: floor is the count shown before the nudge (shown = base + nudge), from a nonzero base and nudge', () => {
+    const s = addStreamer();
+    // Base 10 from the record, nudge +5: the goal shows 15. A -100 stops at shown 0, never below.
+    const a = db.createTrackingGoal(s, 'follow', goalFields());
+    assert.equal(db.nudgeTrackingGoal(a.id, s, 5, 10).nudge, 5);
+    assert.equal(db.nudgeTrackingGoal(a.id, s, -100, 15).nudge, -10, 'shown 15 - 15 = 0 with base 10');
+    // Base 10, nudge -4: the goal shows 6. A -10 stops at shown 0 (nudge -10), not at shown 4.
+    const b = db.createTrackingGoal(s, 'sub', goalFields());
+    assert.equal(db.nudgeTrackingGoal(b.id, s, -4, 10).nudge, -4);
+    assert.equal(db.nudgeTrackingGoal(b.id, s, -10, 6).nudge, -10, 'shown 6 - 6 = 0 with base 10');
+    // A step that stays above 0 is taken whole; a rise is never held back.
+    assert.equal(db.nudgeTrackingGoal(b.id, s, 3, 0).nudge, -7);
+    assert.equal(db.nudgeTrackingGoal(b.id, s, -2, 3).nudge, -9, 'shown 3, -2 leaves 1');
   });
 
   test('setTrackingGoalCompleted stamps once and says whether this call did; setTrackingGoalLifetime stores the total and the read time', () => {
@@ -220,6 +243,18 @@ describe('goals', () => {
     assert.equal(periods[0].period_end, '2026-11-01 00:00:00');
     db.rollTrackingGoal(g.id, { periodStart: '2026-11-01T00:00:00Z', periodEnd: '2026-12-01T00:00:00Z', count: 3, target: 100, reached: false, nextStart: '2026-12-01T00:00:00Z' });
     assert.deepEqual(db.db.prepare('SELECT reached FROM tracking_goal_periods WHERE goal_id = ? ORDER BY id').all(g.id).map((r) => r.reached), [1, 0]);
+  });
+
+  test('rollTrackingGoal leaves an ended or unknown goal alone and writes nothing', () => {
+    const s = addStreamer();
+    const g = db.createTrackingGoal(s, 'follow', goalFields());
+    db.nudgeTrackingGoal(g.id, s, 4, 0);
+    db.endTrackingGoal(g.id, s);
+    const roll = { periodStart: '2026-09-01T00:00:00Z', periodEnd: '2026-10-01T00:00:00Z', count: 1, target: 100, reached: false, nextStart: '2026-10-01T00:00:00Z' };
+    assert.equal(db.rollTrackingGoal(g.id, roll), null);
+    assert.equal(db.rollTrackingGoal(999999, roll), null);
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM tracking_goal_periods WHERE goal_id = ?').get(g.id).n, 0);
+    assert.equal(db.db.prepare('SELECT nudge FROM tracking_goals WHERE id = ?').get(g.id).nudge, 4, 'its nudge is untouched');
   });
 
   test('the history lists ended goals and finished periods, newest first, of that kind only, up to the limit', () => {

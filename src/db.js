@@ -5869,12 +5869,14 @@ const TRACKING_SUB_TYPES = new Set(['new', 'resub', 'gift']);
 
 // A time bound as SQLite writes datetime('now'): 'YYYY-MM-DD HH:MM:SS', UTC. A
 // Date or an ISO string is converted; text already in that form is kept (it is
-// UTC, which new Date() would read as local time). Anything else is null.
+// UTC, which new Date() would read as local time). Nothing or '' is null (an
+// open bound); anything else that is not a time throws, so a bad bound can never
+// quietly widen a window.
 function toSqliteTime(value) {
   if (value == null || value === '') return null;
   if (typeof value === 'string' && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(value)) return value;
   const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  if (!Number.isFinite(ms)) return null;
+  if (!Number.isFinite(ms)) throw new Error(`Not a time: ${String(value).slice(0, 40)}`);
   return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
 }
 
@@ -5997,15 +5999,16 @@ function updateTrackingGoal(id, streamerId, fields) {
 }
 
 // Moves the manual correction of the current period by delta. `floor` is the
-// count the goal shows before the nudge, so the stored nudge never goes below
-// -floor and the shown count stays at 0 or more. Returns the row (null when the
-// streamer has no such active goal).
+// count the goal shows before the nudge (the record's count plus the stored
+// nudge), so a step down is held at -floor from where the nudge stands: the new
+// nudge is never below nudge - floor and the shown count stays at 0 or more.
+// Returns the row (null when the streamer has no such active goal).
 function nudgeTrackingGoal(id, streamerId, delta, floor) {
-  const low = -Math.max(0, Math.floor(Number(floor)) || 0);
+  const shown = Math.max(0, Math.floor(Number(floor)) || 0);
   db.prepare(`
-    UPDATE tracking_goals SET nudge = MAX(?, nudge + ?)
+    UPDATE tracking_goals SET nudge = MAX(nudge - ?, nudge + ?)
     WHERE id = ? AND streamer_id = ? AND status = 'active'
-  `).run(low, Math.trunc(Number(delta)) || 0, id, streamerId);
+  `).run(shown, Math.trunc(Number(delta)) || 0, id, streamerId);
   return db.prepare("SELECT * FROM tracking_goals WHERE id = ? AND streamer_id = ? AND status = 'active'").get(id, streamerId) || null;
 }
 
@@ -6017,10 +6020,10 @@ function endTrackingGoal(id, streamerId) {
 
 // A calendar goal's period is over: writes it to the finished periods and
 // starts the next one with the same target (no nudge, not completed). Returns
-// the goal row.
+// the goal row; an ended or unknown goal is left alone (null, nothing written).
 function rollTrackingGoal(id, p) {
   return db.transaction(() => {
-    const goal = db.prepare('SELECT * FROM tracking_goals WHERE id = ?').get(id);
+    const goal = db.prepare("SELECT * FROM tracking_goals WHERE id = ? AND status = 'active'").get(id);
     if (!goal) return null;
     db.prepare(`
       INSERT INTO tracking_goal_periods (goal_id, streamer_id, period_start, period_end, count, target, reached)
