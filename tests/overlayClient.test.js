@@ -15,6 +15,10 @@ const vm = require('node:vm');
 const OVERLAY_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
 const OBJECTS_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
 const PLACEMENT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'placement.js'), 'utf8');
+const KIT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'kit.js'), 'utf8');
+const FX_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'fx.js'), 'utf8');
+// The family files joined, as the page loads them from /overlay/objects/styles.js
+const STYLES_JS = require('../src/services/alertStyleBundle').bundle().js;
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 
@@ -97,8 +101,10 @@ function makeClock() {
   };
 }
 
-// Loads overlay.js (and, unless told not to, the object registry) into a fresh context.
-function loadOverlay({ objects = true, designs = {} } = {}) {
+// Loads overlay.js (and, unless told not to, the object registry) into a fresh context. `styles` also
+// loads the kit and the joined family files of the alert looks; `kit` the kit alone, as a page whose
+// styles.js did not load. `channel` is the name the overlay page gives the C1 (window.ATLETA_CHANNEL).
+function loadOverlay({ objects = true, styles = false, kit = styles, designs = {}, channel } = {}) {
   const clock = makeClock();
   const body = makeElement('body');
   const container = makeElement('div'); container.id = 'notification-container'; body.appendChild(container);
@@ -130,8 +136,9 @@ function loadOverlay({ objects = true, designs = {} } = {}) {
     close() { this.closed = true; }
   }
 
+  const errors = [];
   const sandbox = {
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, warn() {}, error: (...args) => errors.push(args.join(' ')) },
     document: {
       body,
       getElementById: (id) => byId[id] || null,
@@ -150,13 +157,18 @@ function loadOverlay({ objects = true, designs = {} } = {}) {
   };
   sandbox.window = sandbox;
   sandbox.OVERLAY_TOKEN = 'test-token';
+  // The overlay page names the streamer's Twitch channel for the C1's rear window (src/routes/overlay.js).
+  if (channel !== undefined) sandbox.ATLETA_CHANNEL = channel;
   const context = vm.createContext(sandbox);
   if (objects) vm.runInContext(OBJECTS_JS, context, { filename: 'objects/index.js' });
+  if (kit) vm.runInContext(KIT_JS, context, { filename: 'objects/kit.js' });
+  if (styles) vm.runInContext(STYLES_JS, context, { filename: 'objects/styles.js' });
+  vm.runInContext(FX_JS, context, { filename: 'fx.js' });
   vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
   vm.runInContext(OVERLAY_JS, context, { filename: 'overlay.js' });
 
   const overlay = {
-    clock, container, audio, sandbox, context,
+    clock, container, audio, sandbox, context, errors,
     // Feed the overlay a message as the server's event stream would.
     send(message) { sources[sources.length - 1].onmessage({ data: JSON.stringify(message) }); },
     // Read or call anything the script declared at its top level.
@@ -754,6 +766,22 @@ describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
     assert.equal(slot.style.width, '520px');
   });
 
+  test('the C1 any streamer can pick (donation-c1-channel) carries the name the overlay page gives, and leaves like his', () => {
+    const overlay = loadOverlay({ designs: { donation: design({ style: 'donation-c1-channel' }) }, channel: 'RICARDOBSILVA98' });
+    overlay.send(tip);
+    const [slot] = overlay.slots();
+    assert.match(slot.innerHTML, /^<div class="obj o-c1">/);
+    assert.match(slot.innerHTML, /<text class="o-c1-decal"[^>]*>RICARDOBSILVA98<\/text>/);
+    assert.ok(!slot.innerHTML.includes('VILELA'));
+    assert.equal(slot.style.properties['--dur'], '1.25s');
+    overlay.clock.advance(6000); // the donation's 6 s in baseConfig
+    assert.equal(slot.style.properties['--outdur'], '0.90s');
+    overlay.clock.advance(899);
+    assert.equal(overlay.slots().length, 1, 'still driving off');
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 0);
+  });
+
   test('a style pushed while the overlay is open applies to the next donation, with no reload', () => {
     const overlay = loadOverlay();
     overlay.send({ type: 'config-update', designs: { donation: design({ style: 'donation-c1' }) } });
@@ -840,5 +868,292 @@ describe("an alert's saved style picks its object (andre_vilela_'s C1)", () => {
     assert.ok(from.includes('&lt;img src=x onerror=alert(1)&gt;') && from.includes('&amp;A'), 'the name is escaped');
     assert.equal(decode(from), NAME, 'and reads back as the donor typed it');
     assert.equal(decode(message), `"${MESSAGE}"`, 'so does the message, between its quotes');
+  });
+});
+
+describe('the look an alert is drawn in (alert styles)', () => {
+  const giveaway = (prize = 'Season pass') => ({ type: 'giveaway_winner', data: { username: 'RacerDan', prize } });
+  const raid = (viewers = 42) => ({ type: 'raid', data: { username: 'GridWalker', viewers } });
+  const bits = (amount) => ({ type: 'bits', data: { username: 'TurboTina', amount } });
+
+  test('an alert nobody has restyled is today\'s object, as before: no speed, no colour, no scaling, whatever an older builder saved', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ animation_speed: 1.8, screen_effect: 'confetti', card_width: 630 }) } });
+    overlay.send(follow());
+    const [slot] = overlay.slots();
+    assert.match(slot.innerHTML, /^<div class="obj o-follow/);
+    for (const name of ['--spd', '--a', '--zw']) assert.equal(slot.style.properties[name], undefined, name);
+    assert.ok(!slot.classList.contains('look'));
+    assert.equal(slot.style.width, '630px', 'it reflows to its width, as before');
+  });
+
+  test('the giveaway with no look is Racing\'s Victory lap, in the colours and text saved for the old card', () => {
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ bg_color: '#123456', accent_color: '#abcdef', event_label: 'And the winner is' }) } });
+    overlay.send(giveaway());
+    const [slot] = overlay.slots();
+    assert.match(slot.innerHTML, /^<div class="obj o-rc o-rcg" style="--rc-bg:#123456;/);
+    assert.ok(slot.innerHTML.includes('--rc-a:#abcdef;'));
+    assert.ok(slot.innerHTML.includes('>And the winner is<'));
+    assert.ok(slot.classList.contains('playing'));
+  });
+
+  test('with no saved design at all the giveaway is the Victory lap in its own colours', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.send(giveaway());
+    assert.match(overlay.slots()[0].innerHTML, /--rc-bg:#1c1200;[^"]*--rc-a:#f59e0b;/);
+  });
+
+  test('a picked look carries the streamer\'s colour with its shades, and its speed when it takes one', () => {
+    const overlay = loadOverlay({ styles: true, designs: {
+      follow: design({ style: 'follow-samurai', style_accent: '#29E0FF', animation_speed: 1.8 }),
+      giveaway_winner: design({ style: 'giveaway-samurai', style_accent: '#29E0FF', style_label: 'Lucky draw', animation_speed: 1.5 }),
+    } });
+    overlay.send(follow());
+    const [preset] = overlay.slots();
+    assert.equal(preset.style.properties['--a'], '#29E0FF');
+    assert.equal(preset.style.properties['--a-hi'], '#50E6FF');
+    assert.equal(preset.style.properties['--a-on'], '#0B0B12');
+    assert.equal(preset.style.properties['--spd'], undefined, 'today\'s looks keep their pace');
+    overlay.send({ type: 'clear' });
+    overlay.send(giveaway());
+    const [omikuji] = overlay.slots();
+    assert.equal(omikuji.style.properties['--spd'], '1.5');
+    assert.equal(omikuji.style.properties['--a'], '#29E0FF');
+    assert.ok(omikuji.innerHTML.includes('>Lucky draw<'), 'its main text');
+  });
+
+  test('a look of the styles is drawn for 420 px and scaled to the saved width; today\'s looks reflow', () => {
+    const overlay = loadOverlay({ styles: true, designs: {
+      raid: design({ style: 'raid-racing', card_width: 630 }), follow: design({ style: 'follow-samurai', card_width: 630 }),
+    } });
+    overlay.send(raid());
+    const [look] = overlay.slots();
+    assert.ok(look.classList.contains('look'));
+    assert.equal(look.style.properties['--zw'], '1.5');
+    assert.equal(look.style.width, '630px');
+    overlay.send({ type: 'clear' });
+    overlay.send(follow());
+    assert.ok(!overlay.slots()[0].classList.contains('look'), 'the samurai presets are today\'s objects');
+  });
+
+  test('a look is handed the middle picture when "grows with the amount" is off, and the real amount in its words', () => {
+    const lit = (html) => (html.match(/o-rcb-seg on/g) || []).length;
+    const shown = (style_grows, amount) => {
+      const overlay = loadOverlay({ styles: true, designs: { bits: design({ style: 'bits-racing', style_grows }) } });
+      overlay.send(bits(amount));
+      return overlay.slots()[0].innerHTML;
+    };
+    assert.ok(lit(shown(1, 10000)) > lit(shown(1, 500)));
+    assert.equal(lit(shown(0, 10000)), lit(shown(1, 500)));
+    assert.ok(shown(0, 10000).includes('<i>1</i>'), 'the odometer still rolls to the real 10,000');
+  });
+
+  test('a look stays at least its entrance plus a second, at its speed, even when the duration is shorter', () => {
+    const overlay = loadOverlay({ styles: true, designs: { raid: design({ style: 'raid-racing', animation_speed: 2 }) } });
+    overlay.send({ type: 'config-update', config: baseConfig({ raid: { enabled: true, duration: 1 } }) });
+    overlay.send(raid(42));
+    const [slot] = overlay.slots();
+    // raid-racing's entrance: 0.9 s + 0.06 s a car, 12 cars, at speed 2: 0.81 s, plus a second
+    overlay.clock.advance(1800);
+    assert.ok(slot.classList.contains('playing'), 'still on screen');
+    overlay.clock.advance(20);
+    assert.ok(slot.classList.contains('exiting'), 'then it leaves');
+  });
+
+  test('a slowed look stays until its exit has run: Racing at speed 0.5 leaves in 0.72 s, its 0.36 s at half speed', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing', animation_speed: 0.5 }) } });
+    overlay.send({ type: 'config-update', config: baseConfig({ follow: { enabled: true, duration: 5 } }) });
+    overlay.send(follow());
+    overlay.clock.advance(5000);
+    const [slot] = overlay.slots();
+    assert.ok(slot.classList.contains('exiting'), 'it leaves after its 5 s');
+    overlay.clock.advance(719);
+    assert.equal(overlay.slots().length, 1, 'still leaving');
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 0);
+  });
+
+  test('today\'s objects keep the streamer\'s duration as it is', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.send({ type: 'config-update', config: baseConfig({ follow: { enabled: true, duration: 1 } }) });
+    overlay.send(follow());
+    overlay.clock.advance(1000);
+    assert.ok(overlay.slots()[0].classList.contains('exiting'));
+  });
+
+  test('a look this page does not know draws the alert\'s default look', () => {
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style: 'giveaway-nope' }), follow: design({ style: 'follow-nope' }) } });
+    overlay.send(giveaway());
+    assert.match(overlay.slots()[0].innerHTML, /class="obj o-rc o-rcg"/);
+    overlay.send({ type: 'clear' });
+    overlay.send(follow());
+    assert.match(overlay.slots()[0].innerHTML, /^<div class="obj o-follow/);
+  });
+
+  test('when the joined looks did not load, the giveaway is today\'s card and the five are their objects', () => {
+    const overlay = loadOverlay({ kit: true, styles: false, designs: { follow: design({ style: 'follow-racing' }) } });
+    overlay.send(giveaway());
+    assert.ok(overlay.slots()[0].children.some((c) => c.classList.contains('alert-card')), 'the legacy card');
+    overlay.send({ type: 'clear' });
+    overlay.send(follow());
+    assert.match(overlay.slots()[0].innerHTML, /^<div class="obj o-follow/);
+  });
+
+  test('a look that throws while drawing falls back to the alert\'s own object, or its card, and says so once', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing' }) } });
+    overlay.run("window.ATLETA_OBJECT_STYLES['follow-racing'].render = () => { throw new Error('boom'); }");
+    overlay.run("window.ATLETA_OBJECT_STYLES['giveaway-racing'].render = () => { throw new Error('boom'); }");
+    overlay.send(follow());
+    assert.match(overlay.slots()[0].innerHTML, /^<div class="obj o-follow/);
+    overlay.send({ type: 'clear' });
+    overlay.send(follow());
+    overlay.send({ type: 'clear' });
+    overlay.send(giveaway());
+    assert.ok(overlay.slots()[0].children.some((c) => c.classList.contains('alert-card')));
+    assert.equal(overlay.errors.filter((e) => e.includes('follow-racing')).length, 1, 'once per look');
+    assert.equal(overlay.errors.filter((e) => e.includes('giveaway-racing')).length, 1);
+  });
+});
+
+describe('the screen effect and the sound of a look (alert styles)', () => {
+  const giveaway = () => ({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Season pass' } });
+  const effects = (overlay, cls) => overlay.container.children.filter((c) => c.classList.contains(cls)).length;
+  const all = (overlay) => overlay.container.children.filter((c) => c.classList.contains('screen-effect')).length;
+  // Which sound played: today's synthesized one or a look's, replaced by markers.
+  const listen = (overlay) => {
+    overlay.run("window.played = []; soundEffects.follow = () => window.played.push('today:follow'); soundEffects.giveaway_winner = () => window.played.push('today:giveaway');");
+    for (const [key, family] of [['rcVictory', 'racing'], ['rcFlyby', 'racing'], ['samuraiBell', 'samurai']]) {
+      overlay.run(`window.ATLETA_KIT.registerSound('${key}', '${family}', () => window.played.push('${key}'))`);
+    }
+    return () => JSON.parse(overlay.run('JSON.stringify(window.played)')); // an array of this realm
+  };
+
+  test('an alert nobody has restyled plays no effect, whatever an older builder saved, and today\'s sound', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ screen_effect: 'confetti' }) } });
+    const played = listen(overlay);
+    overlay.send(follow());
+    assert.equal(all(overlay), 0);
+    assert.deepEqual(played(), ['today:follow']);
+  });
+
+  test('a picked look plays the effect its design names, or its own, and its own sound', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing', screen_effect: 'default' }), raid: design({ style: 'raid-racing', screen_effect: 'sparks' }) } });
+    const played = listen(overlay);
+    overlay.send(follow());
+    assert.equal(all(overlay), 0, 'Fly-by has no effect of its own');
+    assert.deepEqual(played(), ['rcFlyby']);
+    overlay.send({ type: 'clear' });
+    overlay.send({ type: 'raid', data: { username: 'GridWalker', viewers: 42 } });
+    assert.equal(effects(overlay, 'fx-spark'), 56);
+  });
+
+  test('the giveaway\'s Victory lap plays its chequered confetti and its fanfare; a saved effect carries over', () => {
+    const fresh = loadOverlay({ styles: true });
+    const played = listen(fresh);
+    fresh.send(giveaway());
+    assert.equal(effects(fresh, 'fx-check'), 60);
+    assert.deepEqual(played(), ['rcVictory']);
+    const saved = loadOverlay({ styles: true, designs: { giveaway_winner: design({ screen_effect: 'gold' }) } });
+    saved.send(giveaway());
+    assert.ok(effects(saved, 'gold-item') > 0, 'the gold rain the streamer saved for the old card');
+  });
+
+  test('the design\'s sound wins over the look\'s; "none" is silence; an unknown one is the look\'s own', () => {
+    for (const [style_sound, expected] of [['samuraiBell', ['samuraiBell']], ['today', ['today:giveaway']], ['none', []], ['nope', ['rcVictory']]]) {
+      const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style_sound }) } });
+      const played = listen(overlay);
+      overlay.send(giveaway());
+      assert.deepEqual(played(), expected, style_sound);
+    }
+  });
+
+  test('a sound the streamer uploaded still plays first, even over "none"', () => {
+    const overlay = loadOverlay({ styles: true, designs: { giveaway_winner: design({ style_sound: 'none' }) } });
+    overlay.send({ type: 'config-update', config: baseConfig({ sounds: { giveaway_winner: '/overlay/sounds/test-token/giveaway_winner?v=1' } }) });
+    const played = listen(overlay);
+    overlay.send(giveaway());
+    assert.equal(overlay.audio.instances.length, 1);
+    assert.ok(overlay.audio.instances[0].played);
+    assert.deepEqual(played(), []);
+  });
+
+  test('the looks\' sounds use the overlay\'s AudioContext and volume', () => {
+    const overlay = loadOverlay({ styles: true });
+    const before = overlay.audio.oscillators;
+    overlay.send(giveaway());
+    assert.ok(overlay.audio.oscillators > before, 'Victory lap was played through the page\'s AudioContext');
+    overlay.send({ type: 'config-update', config: baseConfig({ volume: 0 }) });
+    overlay.send({ type: 'clear' });
+    const muted = overlay.audio.oscillators;
+    overlay.send(giveaway());
+    assert.equal(overlay.audio.oscillators, muted, 'volume 0 is silent');
+  });
+
+  test('a legacy card can play one of the new effects too', () => {
+    const overlay = loadOverlay({ styles: true, designs: { yt_member: design({ screen_effect: 'smoke' }) } });
+    overlay.send({ type: 'yt_member', data: { username: 'NewMember42', level: 'Member' } });
+    assert.equal(effects(overlay, 'fx-smoke'), 20);
+  });
+});
+
+describe('the fonts of the looks (alert styles)', () => {
+  const giveaway = () => ({ type: 'giveaway_winner', data: { username: 'RacerDan', prize: 'Season pass' } });
+  const fontLinks = (overlay) => overlay.sandbox.document.head.children.filter((c) => /fonts\.googleapis\.com/.test(c.href || ''));
+  // A browser's FontFaceSet: load() resolves when the test says so.
+  const fontSet = () => {
+    const waiting = [];
+    return { waiting, load: () => new Promise((resolve) => waiting.push(resolve)) };
+  };
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  test('each family a design names, and the giveaway\'s default look, is asked for once, on connecting and on each update', () => {
+    const overlay = loadOverlay({ styles: true, designs: { follow: design({ style: 'follow-racing' }) } });
+    assert.equal(fontLinks(overlay).length, 1, 'Racing once: the follow\'s look and the giveaway\'s default');
+    assert.match(fontLinks(overlay)[0].href, /family=Kanit:ital,wght@0,800;0,900;1,800;1,900&family=Barlow\+Condensed:[^&]+&display=swap$/);
+    overlay.send({ type: 'config-update', designs: { giveaway_winner: design({ style: 'giveaway-samurai' }) } });
+    overlay.send({ type: 'config-update', designs: { giveaway_winner: design({ style: 'giveaway-samurai' }) } });
+    assert.equal(fontLinks(overlay).length, 2);
+    assert.match(fontLinks(overlay)[1].href, /family=Noto\+Serif\+JP:wght@700&display=swap$/);
+  });
+
+  test('the first alert in a look waits for its fonts, at most 1.5 s, then plays with the fallbacks', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.sandbox.document.fonts = fontSet();
+    overlay.send(giveaway());
+    assert.equal(overlay.slots().length, 0, 'waiting for Kanit');
+    overlay.clock.advance(1499);
+    assert.equal(overlay.slots().length, 0);
+    overlay.clock.advance(1);
+    assert.equal(overlay.slots().length, 1);
+  });
+
+  test('fonts that arrive in time start it at once, and the next alert in that look does not wait', async () => {
+    const overlay = loadOverlay({ styles: true });
+    const fonts = fontSet();
+    overlay.sandbox.document.fonts = fonts;
+    overlay.send(giveaway());
+    fontLinks(overlay)[0].onload();
+    await settle();
+    fonts.waiting.forEach((resolve) => resolve([]));
+    await settle();
+    assert.equal(overlay.slots().length, 1, 'before the 1.5 s were up');
+    overlay.send({ type: 'clear' });
+    overlay.send(giveaway());
+    assert.equal(overlay.slots().length, 1, 'at once');
+  });
+
+  test('Clear All while a first alert waits for its fonts: it never shows', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.sandbox.document.fonts = fontSet();
+    overlay.send(giveaway());
+    overlay.send({ type: 'clear' });
+    overlay.clock.advance(5000);
+    assert.equal(overlay.slots().length, 0);
+  });
+
+  test('today\'s objects and the cards never wait', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.sandbox.document.fonts = fontSet();
+    overlay.send(follow());
+    assert.equal(overlay.slots().length, 1);
   });
 });

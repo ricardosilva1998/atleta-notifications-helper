@@ -14,7 +14,17 @@
   <!-- Alert object registry — shared with the live OBS overlay (public/overlay/overlay.js) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/overlay/objects/objects.css">
+  <link rel="stylesheet" href="/overlay/objects/styles.css?v=<%= stylesVersion %>">
   <script src="/overlay/objects/index.js"></script>
+  <!-- The alert looks: their shared kit and every family, joined (services/alertStyleBundle.js) -->
+  <script src="/overlay/objects/kit.js"></script>
+  <script src="/overlay/objects/styles.js?v=<%= stylesVersion %>"></script>
+  <!-- The looks' five screen effects, drawn as the OBS overlay draws them -->
+  <link rel="stylesheet" href="/overlay/fx.css">
+  <script src="/overlay/fx.js"></script>
+  <!-- The Style section: every family's fonts in one stylesheet, and its rules (builder-styles-core.js) -->
+  <link rel="stylesheet" href="<%= styleFontsHref %>">
+  <script src="/js/builder-styles-core.js"></script>
   <!-- Where an alert sits, read from a saved design: shared with the live OBS overlay -->
   <script src="/overlay/placement.js"></script>
   <style>
@@ -185,6 +195,59 @@
     }
     .section.collapsed .section-body { display: none; }
 
+    /* Style section (alert styles): the gallery of looks and the look's controls */
+    /* A control the look does not take is hidden; its own display rule would otherwise keep it on screen */
+    #section-style [hidden] { display: none; }
+    .style-families { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .style-chip {
+      padding: 4px 10px; font-size: 11px; font-weight: 600; font-family: var(--font-display);
+      color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 999px; cursor: pointer;
+    }
+    .style-chip[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .style-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .style-tile {
+      display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 6px; text-align: left;
+      font: inherit; color: var(--text-primary); background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
+    }
+    .style-tile:hover, .style-tile:focus-visible { border-color: var(--border-focus); outline: none; }
+    .style-tile[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .style-stage { position: relative; height: 84px; overflow: hidden; border-radius: 6px; background: #07080d; }
+    .style-stage .alert-pos { top: 50%; left: 50%; width: 420px; transform: translate(-50%, -50%) scale(0.32); }
+    .style-name { overflow: hidden; font-size: 12px; font-weight: 600; font-family: var(--font-display); text-overflow: ellipsis; white-space: nowrap; }
+    .style-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); }
+    .style-badge { padding: 1px 6px; border-radius: 999px; font-weight: 700; color: var(--accent-hover); background: var(--accent-glow); }
+    .style-family-btn {
+      width: 100%; margin: 10px 0 4px; padding: 8px 10px; font-size: 12px; font-weight: 600; font-family: var(--font-display);
+      color: var(--text-primary); background: var(--bg-elevated); border: 1px dashed var(--border-focus);
+      border-radius: var(--radius-sm); cursor: pointer;
+    }
+    .style-family-btn:hover { color: var(--accent-hover); border-color: var(--accent); }
+    .style-msg { min-height: 16px; margin-bottom: 8px; font-size: 11px; color: var(--text-secondary); }
+    .style-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .style-row > .ctrl-label { flex: 0 0 100%; }
+    .style-swatches { display: flex; gap: 6px; }
+    .style-swatch { width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 50%; background: var(--c); cursor: pointer; }
+    .style-swatch[aria-pressed="true"] { border-color: #fff; }
+    #style-accent { width: 34px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: pointer; }
+    .style-link { padding: 0; font-size: 11px; color: var(--accent-hover); background: none; border: 0; text-decoration: underline; cursor: pointer; }
+    .style-pair { display: flex; flex: 1 1 45%; align-items: center; justify-content: space-between; gap: 8px; }
+    .style-pair input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
+    #style-label, #style-effect, #style-sound, #style-racing-font {
+      flex: 1; min-width: 0; padding: 7px 9px; font-size: 12px; color: var(--text-primary);
+      background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .style-sub { margin: 12px 0 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-muted); }
+    .style-sound { display: flex; flex: 1; gap: 6px; }
+    #style-listen { width: 34px; color: var(--text-primary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    #style-listen:disabled { opacity: 0.4; cursor: default; }
+    .style-check { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+    .style-test {
+      width: 100%; padding: 9px; font-size: 13px; font-weight: 600; font-family: var(--font-display);
+      color: #fff; background: var(--accent); border: 0; border-radius: var(--radius-sm); cursor: pointer;
+    }
+    .style-desc { max-width: 720px; margin: 10px auto 0; font-size: 12px; line-height: 1.5; text-align: center; color: var(--text-secondary); }
     /* Popup trigger buttons */
     .popup-trigger-btn {
       width: 100%; padding: 10px 14px; font-size: 13px; font-weight: 600;
@@ -489,6 +552,8 @@
       /* How far a car drives in and out (the C1 style): the preview screen is the 1920px canvas, scaled */
       --fw: 1920px;
     }
+    /* A look of the alert styles is drawn for 420 px and scaled to the width, as in OBS (objects.css .alert-pos.look) */
+    #preview-object-host.look > .obj { width: 420px; zoom: var(--zw, 1); }
     .preview-alert-card .top-accent {
       height: 3px; border-radius: 16px 16px 0 0;
     }
@@ -934,10 +999,69 @@
         </div>
       </div>
 
-      <div id="phase1-notice" style="display:none; padding:12px 14px; margin-bottom:12px;
-           border-left:3px solid #D81E26; background:rgba(216,30,38,0.08);
-           font-size:13px; line-height:1.5;">
-        <%= t('overlayBuilder.fixedNotice') %>
+      <!-- Style: the alert's look (alert styles). Shown on the six alerts' tabs; the page script fills it. -->
+      <div class="section" id="section-style" hidden>
+        <div class="section-header" onclick="toggleSection('style')">
+          <span class="section-title">✨ <%= t('overlayBuilder.style.sectionTitle') %></span>
+          <span class="section-chevron">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="style-families" id="style-families" role="group" aria-label="<%= t('overlayBuilder.style.familiesLabel') %>"></div>
+          <div class="style-gallery" id="style-gallery" role="radiogroup" aria-label="<%= t('overlayBuilder.style.galleryLabel') %>"></div>
+          <button type="button" class="style-family-btn" id="style-family-btn" hidden></button>
+          <p class="style-msg" id="style-msg" role="status" aria-live="polite"></p>
+
+          <div class="style-row" id="style-row-accent">
+            <span class="ctrl-label"><%= t('overlayBuilder.style.colour') %></span>
+            <div class="style-swatches" id="style-swatches"></div>
+            <input type="color" id="style-accent" value="#D81E26" aria-label="<%= t('overlayBuilder.style.colourPick') %>">
+            <button type="button" class="style-link" id="style-accent-own"><%= t('overlayBuilder.style.colourOwn') %></button>
+          </div>
+          <div class="style-row" id="style-row-racing">
+            <label class="style-pair"><span class="ctrl-label"><%= t('overlayBuilder.style.card') %></span><input type="color" id="style-racing-card"></label>
+            <label class="style-pair"><span class="ctrl-label"><%= t('overlayBuilder.style.accent') %></span><input type="color" id="style-racing-accent"></label>
+            <label class="style-pair"><span class="ctrl-label"><%= t('overlayBuilder.style.name') %></span><input type="color" id="style-racing-name"></label>
+            <label class="style-pair"><span class="ctrl-label"><%= t('overlayBuilder.style.nameFont') %></span><select id="style-racing-font"></select></label>
+          </div>
+          <div class="style-row" id="style-row-label">
+            <label class="ctrl-label" for="style-label"><%= t('overlayBuilder.style.label') %></label>
+            <input type="text" id="style-label" maxlength="40">
+          </div>
+          <div class="range-row" id="style-row-speed">
+            <div class="range-header">
+              <span class="ctrl-label"><%= t('overlayBuilder.style.speed') %></span>
+              <span class="range-val" id="val-style-speed">1×</span>
+            </div>
+            <input type="range" id="style-speed" min="0.5" max="2" step="0.1" value="1">
+          </div>
+          <div class="style-sub" id="style-on-top"><%= t('overlayBuilder.style.onTop') %></div>
+          <div class="style-row" id="style-row-effect">
+            <label class="ctrl-label" for="style-effect"><%= t('overlayBuilder.style.effect') %></label>
+            <select id="style-effect">
+              <option value="default"><%= t('overlayBuilder.style.effectOwn') %></option>
+              <option value="none"><%= t('overlayBuilder.none') %></option>
+              <option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option>
+              <option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option>
+              <option value="money"><%= t('overlayBuilder.anim.effect.money') %></option>
+              <option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option>
+              <option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option>
+              <option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option>
+              <option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option>
+              <option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option>
+              <option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option>
+              <option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option>
+            </select>
+          </div>
+          <div class="style-row" id="style-row-sound">
+            <label class="ctrl-label" for="style-sound"><%= t('overlayBuilder.style.sound') %></label>
+            <div class="style-sound">
+              <select id="style-sound"></select>
+              <button type="button" id="style-listen" aria-label="<%= t('overlayBuilder.style.listen') %>">▶</button>
+            </div>
+          </div>
+          <label class="style-check" id="style-row-grows"><input type="checkbox" id="style-grows"> <span><%= t('overlayBuilder.style.grows') %></span></label>
+          <button type="button" class="style-test" id="style-test"><%= t('overlayBuilder.style.test') %></button>
+        </div>
       </div>
 
       <!-- Theme Section -->
@@ -1046,7 +1170,7 @@
           <div style="display:none;">
             <select id="ctrl-entrance-animation"><option value="slideDown"><%= t('overlayBuilder.anim.slideDown') %></option><option value="slideUp"><%= t('overlayBuilder.anim.slideUp') %></option><option value="slideLeft"><%= t('overlayBuilder.anim.slideLeft') %></option><option value="slideRight"><%= t('overlayBuilder.anim.slideRight') %></option><option value="zoomIn"><%= t('overlayBuilder.anim.zoomIn') %></option><option value="fadeIn"><%= t('overlayBuilder.anim.fadeIn') %></option></select>
             <select id="ctrl-car-animation"><option value="zoomLR"><%= t('overlayBuilder.anim.car.zoomLR') %></option><option value="zoomRL"><%= t('overlayBuilder.anim.car.zoomRL') %></option><option value="checkered"><%= t('overlayBuilder.anim.car.checkered') %></option><option value="flames"><%= t('overlayBuilder.anim.car.flames') %></option><option value="sparkles"><%= t('overlayBuilder.anim.car.sparkles') %></option><option value="lightning"><%= t('overlayBuilder.anim.car.lightning') %></option><option value="neonSweep"><%= t('overlayBuilder.anim.car.neonSweep') %></option><option value="equalizer"><%= t('overlayBuilder.anim.car.equalizer') %></option><option value="pulse"><%= t('overlayBuilder.anim.car.pulse') %></option><option value="none"><%= t('overlayBuilder.none') %></option></select>
-            <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option></select>
+            <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option><option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option><option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option><option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option><option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option><option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option></select>
             <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
             <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0">
             <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0">
@@ -1163,6 +1287,9 @@
       </div>
     </div>
 
+    <!-- The chosen look's description (Style section) -->
+    <p class="style-desc" id="style-desc" hidden></p>
+
     <!-- Save bar moved to above canvas -->
 
   </div><!-- end right-panel -->
@@ -1186,6 +1313,13 @@ const I18N = <%- JSON.stringify({
   scale: t('overlayBuilder.sponsors.scale'), deleteSponsorConfirm: t('overlayBuilder.sponsors.deleteConfirm'),
   systemDefault: t('overlayBuilder.text.systemDefault'), fontSample: t('overlayBuilder.text.fontSample'),
   defaultSponsorName: t('overlayBuilder.sponsors.defaultName'),
+  style: {
+    all: t('overlayBuilder.style.all'), today: t('overlayBuilder.style.today'), default: t('overlayBuilder.style.default'), mine: t('overlayBuilder.style.mine'),
+    useFamily: t('overlayBuilder.style.useFamily', { family: '{{family}}' }), familyDone: t('overlayBuilder.style.familyDone', { family: '{{family}}' }),
+    failed: t('overlayBuilder.style.failed'), fontOwn: t('overlayBuilder.style.fontOwn'), labelHint: t('overlayBuilder.style.labelHint'),
+    soundOwn: t('overlayBuilder.style.soundOwn'), soundToday: t('overlayBuilder.style.soundToday'), soundNone: t('overlayBuilder.style.soundNone'),
+    listen: t('overlayBuilder.style.listen'), listenToday: t('overlayBuilder.style.listenToday'), testSent: t('overlayBuilder.style.testSent'),
+  },
   entrance: {
     slideDown: t('overlayBuilder.anim.slideDown'), slideUp: t('overlayBuilder.anim.slideUp'), slideLeft: t('overlayBuilder.anim.slideLeft'),
     slideRight: t('overlayBuilder.anim.slideRight'), zoomIn: t('overlayBuilder.anim.zoomIn'), fadeIn: t('overlayBuilder.anim.fadeIn'),
@@ -1198,7 +1332,9 @@ const I18N = <%- JSON.stringify({
   effect: {
     default: t('overlayBuilder.anim.summary.effectDefault'), none: t('overlayBuilder.none'), confetti: t('overlayBuilder.anim.effect.confetti'),
     gold: t('overlayBuilder.anim.effect.gold'), money: t('overlayBuilder.anim.effect.money'), robots: t('overlayBuilder.anim.effect.robots'),
-    tiremarks: t('overlayBuilder.anim.effect.tiremarks'),
+    tiremarks: t('overlayBuilder.anim.effect.tiremarks'), smoke: t('overlayBuilder.anim.effect.smoke'),
+    checker: t('overlayBuilder.anim.effect.checker'), speed: t('overlayBuilder.anim.effect.speed'),
+    sparks: t('overlayBuilder.anim.effect.sparks'), champagne: t('overlayBuilder.anim.effect.champagne'),
   },
   direction: {
     down: t('overlayBuilder.anim.summary.down'), up: t('overlayBuilder.anim.summary.up'), left: t('overlayBuilder.anim.summary.left'), right: t('overlayBuilder.anim.summary.right'),
@@ -1217,11 +1353,14 @@ function copyBuilderUrl(id, btn) {
 const SAVED_DESIGNS = {};
 const SERVER_DESIGNS = <%- designs %>;
 SERVER_DESIGNS.forEach(d => { SAVED_DESIGNS[d.event_type] = d; });
-// Each alert's stored style (overlay_designs.style; andre_vilela_'s donation is 'donation-c1').
-// Kept apart from workingDesigns: Reset and Discard rebuild those from the defaults, and the
-// server keeps the style through both, so the preview must too. The builder never sends it.
+// Each alert's look (overlay_designs.style; andre_vilela_'s donation is 'donation-c1'), as the page
+// shows it: the Style section changes it, and a save sends it next to the design. Kept apart from
+// workingDesigns: Reset and Discard rebuild those from the defaults and put back the saved look,
+// which the server keeps through both.
 const ALERT_STYLES = {};
 SERVER_DESIGNS.forEach(d => { if (d.style) ALERT_STYLES[d.event_type] = d.style; });
+// The looks as saved; ALERT_STYLES differs from them until the alert is saved
+const SAVED_STYLES = Object.assign({}, ALERT_STYLES);
 
 // Default side icons per event type (null = no icon)
 const DEFAULT_SIDE_ICONS = {
@@ -1234,6 +1373,12 @@ const DEFAULT_SIDE_ICONS = {
 // table (EVENT_DEFAULTS in src/services/overlayDesign.js) and the page is handed it, so
 // the builder and the server's handling of a value it cannot keep use the same defaults.
 const EVENT_DEFAULTS = <%- eventDefaults %>;
+window.ATLETA_CHANNEL = <%- channel %>; // the C1 any streamer can pick carries this name on its rear window
+
+// The Style section (alert styles): its page-free rules (public/js/builder-styles-core.js) and what the
+// server hands it: each alert's gallery, the default looks, the families, sounds and fonts, their names.
+const STYLE_CORE = window.ATLETA_BUILDER_STYLES;
+const STYLE_DATA = <%- styleData %>;
 
 const EVENT_NAMES = I18N.eventNames;
 
@@ -1249,6 +1394,8 @@ const workingDesigns = {};
 Object.keys(EVENT_DEFAULTS).forEach(t => {
   workingDesigns[t] = Object.assign({}, EVENT_DEFAULTS[t], SAVED_DESIGNS[t] || {});
 });
+// An alert nobody has restyled is shown with its default look's own settings, as OBS plays it
+STYLE_CORE.STYLED_ALERTS.forEach(t => { workingDesigns[t] = STYLE_CORE.untouched(t, workingDesigns[t], SAVED_STYLES[t]); });
 
 let currentType = 'follow';
 let unsavedChanges = false;
@@ -1329,6 +1476,11 @@ function getControlValues() {
     shadow_opacity: wd.shadow_opacity != null ? wd.shadow_opacity : 0.6,
     shadow_blur: wd.shadow_blur != null ? wd.shadow_blur : 32,
     shadow_spread: wd.shadow_spread != null ? wd.shadow_spread : 0,
+    // The look's own settings (Style section): empty is the look's own colour, text, sound, growing
+    style_accent: wd.style_accent || null,
+    style_label: wd.style_label || null,
+    style_sound: wd.style_sound || null,
+    style_grows: wd.style_grows === 0 || wd.style_grows === 1 ? wd.style_grows : null,
   };
 }
 
@@ -1430,29 +1582,31 @@ const PREVIEW_DATA = {
   bits:         { username: 'TurboTina', amount: 500 },
   donation:     { username: 'PitBoss92', amount: '25.00', currency: 'EUR' },
   raid:         { username: 'GridWalker', viewers: 42 },
+  giveaway_winner: { username: 'LuckyViewer42', prize: 'Season pass' },
 };
 
-// The object an alert's preview draws: the same rule as objectFor() in public/overlay/overlay.js,
-// reading the stored styles. null for the alerts that are legacy cards.
+// The look an alert's preview draws: the same rule as objectFor() in public/overlay/overlay.js,
+// reading the look the page shows (ALERT_STYLES): that look, else the alert's default look (the
+// giveaway's is Racing's Victory lap), else its own object; null for the legacy cards.
 function previewObjectFor(type) {
-  const styleId = ALERT_STYLES[type];
   const styles = window.ATLETA_OBJECT_STYLES || {};
-  const styled = styleId ? styles[styleId] : null;
-  if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  const kit = window.ATLETA_KIT;
+  const defaultLook = kit && Object.prototype.hasOwnProperty.call(kit.DEFAULT_LOOKS, type) ? kit.DEFAULT_LOOKS[type] : null;
+  for (const styleId of [ALERT_STYLES[type], defaultLook]) {
+    const styled = styleId && Object.prototype.hasOwnProperty.call(styles, styleId) ? styles[styleId] : null;
+    if (styled && styled.key === styleId && styled.eventType === type) return styled;
+  }
   const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[type];
   return own && own.key === type ? own : null;
 }
 
-// The five object event types take only their position and width from a saved
-// design for now (colours and animations are not styled yet), so their colour,
-// text, icon and animation controls are hidden rather than left live and inert.
-// Size & Position stays: the width, the nine-cell grid and dragging the alert
-// in the preview all apply to the real alert. Border radius does not (an object
+// The six alerts are drawn in their looks: the Style section holds a look's colour, text, speed,
+// effect and sound, so today's card controls (colours, text, icon, animations) are hidden for
+// them rather than left live and inert. Size & Position stays: the width, the nine-cell grid and
+// dragging the alert in the preview all apply to the real alert. Border radius does not (a look
 // has its own shape), so that one slider is hidden.
 function syncPhase1Controls() {
   const isObject = !!previewObjectFor(currentType);
-  const notice = document.getElementById('phase1-notice');
-  if (notice) notice.style.display = isObject ? '' : 'none';
   ['section-theme', 'section-text', 'section-sideicon', 'section-animation'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isObject ? 'none' : '';
@@ -1467,32 +1621,34 @@ function updatePreview() {
   const objHost = document.getElementById('preview-object-host');
   const legacyCard = document.getElementById('preview-card');
   if (objDef) {
-    // An object takes its position and width from the saved design (the controls
-    // in Size & Position); its colours and animations are not styled yet.
+    // A look takes its position and width from the design (Size & Position), and its colour,
+    // text, speed, effect and sound from the Style section, as in OBS.
     const d = getControlValues();
     workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], d);
     legacyCard.style.display = 'none';
     objHost.style.display = '';
-    objHost.style.width = ATLETA_PLACEMENT.placementOf(d).width + 'px';
-    // The object is drawn (and its entrance played) when its tab opens; moving or
-    // resizing it afterwards must not replay the entrance on every slider step.
-    if (renderedObjectType !== currentType) {
-      objHost.innerHTML = objDef.render(PREVIEW_DATA[currentType] || {});
-      objHost.style.setProperty('--in', objDef.anim.in);
-      objHost.style.setProperty('--dur', objDef.anim.dur);
-      objHost.style.setProperty('--ease', objDef.anim.ease);
-      objHost.classList.remove('playing');
-      void objHost.offsetWidth;   // force reflow so the animation restarts
-      objHost.classList.add('playing');
-      renderedObjectType = currentType;
+    const width = ATLETA_PLACEMENT.placementOf(d).width;
+    objHost.style.width = width + 'px';
+    sizeLookHost(objHost, objDef, width);
+    setLookVars(objHost, objDef, d);   // the colour and the speed apply at once
+    // The look is drawn (and its entrance played) when its tab opens or another look is picked;
+    // what it draws from its settings (its text, Racing's colours) is drawn again once the
+    // controls rest. Moving or resizing it never replays the entrance.
+    const drawKey = currentType + '|' + objDef.key;
+    const html = lookHtml(objDef, d, PREVIEW_DATA[currentType] || {});
+    clearTimeout(previewRedraw);
+    if (renderedObjectType !== drawKey) {
+      playLookIn(objHost, objDef, html);
+      renderedObjectType = drawKey;
+    } else if (html !== previewHtml) {
+      previewRedraw = setTimeout(() => playLookIn(objHost, objDef, html), 350);
     }
-    // renderScreenEffect('none') is a clean clear: objects carry their own motion and
-    // the live overlay skips spawnEffects() for them, so a saved screen effect would
-    // misrepresent what the streamer gets. No loadGoogleFont() call: objects use
-    // Oxanium/Saira Condensed from the page's own <link>, not the per-design font path.
+    // The effect the OBS overlay plays with this look (kit.js effectFor): none for today's
+    // objects with no look picked and for the C1, else the one the design names or the look's own.
+    // No loadGoogleFont() call: objects use their own fonts, not the per-design font path.
     positionCard(d.card_position, d.card_width);
     updateOverlayGuide();
-    renderScreenEffect('none');
+    renderScreenEffect(window.ATLETA_KIT ? window.ATLETA_KIT.effectFor(objDef, d) : 'none');
     return;
   }
   renderedObjectType = null;
@@ -1814,6 +1970,16 @@ function renderScreenEffect(effect) {
   }
   if (!effect || effect === 'none') return;
 
+  // The alert looks' five effects (fx.js), as the OBS overlay draws them, at the preview's scale
+  if (window.ATLETA_FX && window.ATLETA_FX.KINDS.includes(effect)) {
+    const layer = document.createElement('div');
+    layer.className = 'preview-fx';
+    layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5;';
+    screen.appendChild(layer);
+    window.ATLETA_FX.spawn(layer, effect, { scale: screen.offsetWidth / 1920 });
+    return;
+  }
+
   const d = workingDesigns[currentType] || {};
   const speed = d.animation_speed || 1.0;
   const amount = d.effect_amount || 1.0;
@@ -2018,6 +2184,7 @@ function switchTab(type) {
   updateSideIconGrid(workingDesigns[type]);
   if (typeof updateAnimSectionPreview === 'function') updateAnimSectionPreview(workingDesigns[type]);
   updatePreview();
+  renderStyleSection();
 
   // Update URL and sounds link to preserve tab context
   const url = new URL(window.location);
@@ -2074,20 +2241,352 @@ document.getElementById('ctrl-border-radius').addEventListener('input', function
   el.addEventListener('change', updatePreview);
 });
 
+// ─── Style: the alert's look (alert styles) ──────────────────────────────────
+// docs/superpowers/specs/2026-10-15-alert-styles-design.md, 4.6. The gallery and the preview draw the looks
+// with the files the OBS overlay uses (objects/kit.js and the joined family files); the page-free rules
+// are STYLE_CORE (public/js/builder-styles-core.js).
+const STYLE_SWATCHES = ['#D81E26', '#FF8000', '#FFC21A', '#17A35A', '#36C6FF', '#3B82F6', '#9146FF', '#FF4FA3'];
+let styleFamily = 'all';
+let playingTile = null;
+let previewRedraw = null;
+let previewHtml = '';
+let styleAudio = null;
+
+// The look the page shows for an alert: the one picked or saved, else the alert's default look.
+function shownLook(type) {
+  return STYLE_CORE.shownStyle(type, ALERT_STYLES, STYLE_DATA.defaults);
+}
+
+// The look as saved: Discard and Reset put it back (the server keeps the alert's look through both).
+function restoreSavedLook(type) {
+  if (SAVED_STYLES[type]) ALERT_STYLES[type] = SAVED_STYLES[type];
+  else delete ALERT_STYLES[type];
+}
+
+// What a look draws with this design: its data with its main text and "grows with the amount" (kit.js
+// lookData), as overlay.js hands it; today's objects and the C1 get the sample as it is. null when the
+// look throws.
+function lookHtml(look, d, sample) {
+  const kit = window.ATLETA_KIT;
+  try {
+    return look.render(kit && look.family ? kit.lookData(look, sample, d) : sample);
+  } catch (e) {
+    return null;
+  }
+}
+
+// The colour and speed variables a look's slot carries (kit.js slotVars), as in OBS.
+const lookVarsOf = new WeakMap();
+function setLookVars(slot, look, d) {
+  const kit = window.ATLETA_KIT;
+  (lookVarsOf.get(slot) || []).forEach(name => slot.style.removeProperty(name));
+  const vars = kit && look.family ? kit.slotVars(look, d) : {};
+  Object.keys(vars).forEach(name => slot.style.setProperty(name, vars[name]));
+  lookVarsOf.set(slot, Object.keys(vars));
+}
+
+// A look of the alert styles is drawn for 420 px and scaled to the width (as .alert-pos.look in OBS);
+// today's objects, the samurai presets among them, and the C1 reflow instead.
+function sizeLookHost(host, look, width) {
+  const scaled = !!(look && look.family && !look.preset);
+  host.classList.toggle('look', scaled);
+  if (scaled) host.style.setProperty('--zw', String(Math.round(width / 420 * 1000) / 1000));
+  else host.style.removeProperty('--zw');
+}
+
+// Draws a look in the preview and plays its entrance. A look that throws leaves the preview empty.
+function playLookIn(host, look, html) {
+  previewHtml = html;
+  host.innerHTML = html || '';
+  host.style.setProperty('--in', look.anim.in);
+  host.style.setProperty('--dur', look.anim.dur);
+  host.style.setProperty('--ease', look.anim.ease);
+  host.classList.remove('playing');
+  void host.offsetWidth;   // force reflow so the animation restarts
+  host.classList.add('playing');
+}
+
+// Shows the Style section on the six alerts' tabs and fills it for the current one.
+function renderStyleSection() {
+  const styled = STYLE_CORE.isStyled(currentType);
+  document.getElementById('section-style').hidden = !styled;
+  document.getElementById('style-desc').hidden = !styled;
+  if (!styled) return;
+  document.getElementById('style-msg').textContent = '';
+  renderStyleFamilies();
+  renderStyleGallery();
+  syncStyleControls();
+}
+
+function renderStyleFamilies() {
+  const box = document.getElementById('style-families');
+  box.innerHTML = '';
+  [{ key: 'all', name: I18N.style.all }].concat(STYLE_DATA.families).forEach(family => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'style-chip';
+    chip.textContent = family.name;
+    chip.setAttribute('aria-pressed', String(styleFamily === family.key));
+    chip.addEventListener('click', () => { styleFamily = family.key; renderStyleSection(); });
+    box.appendChild(chip);
+  });
+}
+
+// The gallery: each look drawn at rest (its finished picture), scaled down, with its name and family.
+// A tile plays when hovered or focused, one at a time.
+function renderStyleGallery() {
+  const box = document.getElementById('style-gallery');
+  const shown = shownLook(currentType);
+  const entries = STYLE_CORE.filterGallery(STYLE_CORE.orderGallery(STYLE_DATA.gallery[currentType], currentType, STYLE_DATA.defaults), styleFamily);
+  box.innerHTML = '';
+  playingTile = null;
+  entries.forEach(entry => {
+    const look = (window.ATLETA_OBJECT_STYLES || {})[entry.id];
+    if (!look) return;   // its family's file did not load
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'style-tile';
+    tile.setAttribute('role', 'radio');
+    tile.setAttribute('aria-checked', String(entry.id === shown));
+    const stage = document.createElement('div');
+    stage.className = 'style-stage';
+    const slot = document.createElement('div');
+    slot.className = 'alert-pos';
+    // Racing's tiles show the alert's own card colours, which carry over to it; the others their own colour
+    const tileDesign = STYLE_CORE.controlsFor(look).racing ? workingDesigns[currentType] : {};
+    slot.innerHTML = lookHtml(look, tileDesign, PREVIEW_DATA[currentType] || {}) || '';
+    setLookVars(slot, look, tileDesign);
+    slot.style.setProperty('--in', look.anim.in);
+    slot.style.setProperty('--dur', look.anim.dur);
+    slot.style.setProperty('--ease', look.anim.ease);
+    stage.appendChild(slot);
+    const name = document.createElement('span');
+    name.className = 'style-name';
+    name.textContent = (STYLE_DATA.looks[entry.id] || {}).title || entry.id;
+    const meta = document.createElement('span');
+    meta.className = 'style-meta';
+    if (entry.badge) {
+      const badge = document.createElement('span');
+      badge.className = 'style-badge';
+      badge.textContent = I18N.style[entry.badge];
+      meta.appendChild(badge);
+    }
+    const family = STYLE_DATA.families.find(f => f.key === entry.family);
+    if (family) meta.appendChild(document.createTextNode(family.name));
+    tile.append(stage, name, meta);
+    tile.addEventListener('click', () => pickLook(entry.id));
+    tile.addEventListener('mouseenter', () => playTile(slot));
+    tile.addEventListener('focus', () => playTile(slot));
+    tile.addEventListener('mouseleave', () => restTile(slot));
+    tile.addEventListener('blur', () => restTile(slot));
+    box.appendChild(tile);
+  });
+  const look = (window.ATLETA_OBJECT_STYLES || {})[shown];
+  const family = STYLE_DATA.families.find(f => look && f.key === look.family);
+  const button = document.getElementById('style-family-btn');
+  button.hidden = !family;
+  if (family) {
+    button.textContent = fill(I18N.style.useFamily, { family: family.name });
+    button.dataset.family = family.key;
+  }
+  document.getElementById('style-desc').textContent = (STYLE_DATA.looks[shown] || {}).desc || '';
+}
+
+function playTile(slot) {
+  if (playingTile && playingTile !== slot) restTile(playingTile);
+  playingTile = slot;
+  slot.classList.remove('playing');
+  void slot.offsetWidth;
+  slot.classList.add('playing');
+}
+
+function restTile(slot) {
+  slot.classList.remove('playing');
+  if (playingTile === slot) playingTile = null;
+}
+
+// Picks a look for the current alert: its settings start from the look's own (the server does the
+// same when the alert is saved), and the preview draws it and plays its entrance.
+function pickLook(id) {
+  const previous = shownLook(currentType);
+  ALERT_STYLES[currentType] = id;
+  workingDesigns[currentType] = STYLE_CORE.withLook(getControlValues(), previous, id);
+  setControlValues(workingDesigns[currentType]);
+  renderedObjectType = null;
+  renderStyleSection();
+  updatePreview();
+}
+
+// The look's controls, shown as the look takes them (STYLE_CORE.controlsFor) and set from the working
+// design. Racing's colours, font and text are today's design fields; the other looks use their own.
+function syncStyleControls() {
+  const look = previewObjectFor(currentType);
+  const show = STYLE_CORE.controlsFor(look);
+  const d = workingDesigns[currentType] || {};
+  const rows = {
+    'style-row-accent': show.accent, 'style-row-racing': show.racing, 'style-row-label': show.label,
+    'style-row-speed': show.speed, 'style-row-effect': show.effect, 'style-row-sound': show.sound, 'style-row-grows': show.grows,
+  };
+  Object.keys(rows).forEach(id => { document.getElementById(id).hidden = !rows[id]; });
+  document.getElementById('style-on-top').hidden = !(show.effect || show.sound || show.grows);
+  const set = (id, value) => { const el = document.getElementById(id); if (el !== document.activeElement) el.value = value; };
+  set('style-accent', d.style_accent || '#D81E26');
+  document.querySelectorAll('#style-swatches .style-swatch').forEach(s => s.setAttribute('aria-pressed', String(s.dataset.colour === d.style_accent)));
+  set('style-racing-card', d.bg_color || '#1a1a3e');
+  set('style-racing-accent', d.accent_color || '#8888cc');
+  set('style-racing-name', d.username_color || d.text_color || '#ffffff');
+  set('style-racing-font', d.username_font_family || 'System Default');
+  set('style-label', (show.racing ? d.event_label : d.style_label) || '');
+  document.getElementById('style-label').placeholder = I18N.style.labelHint;
+  set('style-speed', d.animation_speed || 1);
+  document.getElementById('val-style-speed').textContent = (d.animation_speed || 1) + '×';
+  set('style-effect', d.screen_effect || 'default');
+  set('style-sound', d.style_sound || '');
+  document.getElementById('style-grows').checked = d.style_grows !== 0;
+  const sound = window.ATLETA_KIT ? window.ATLETA_KIT.soundFor(look, d) : 'today';
+  const listen = document.getElementById('style-listen');
+  listen.disabled = sound === 'today' || sound === 'none';
+  listen.title = sound === 'today' ? I18N.style.listenToday : I18N.style.listen;
+}
+
+// One of the look's settings changed: into the working design, then the controls and the preview.
+function setLookSetting(field, value) {
+  workingDesigns[currentType] = Object.assign({}, workingDesigns[currentType], { [field]: value });
+  syncStyleControls();
+  updatePreview();
+}
+
+// Wires the Style section's controls once; each writes the field the save sends, and mirrors today's
+// hidden controls where getControlValues() reads it (the speed, the effect, Racing's card colours, its text).
+function initStyleControls() {
+  const on = (id, type, fn) => document.getElementById(id).addEventListener(type, fn);
+  const mirror = (id, value) => { document.getElementById(id).value = value; };
+  const swatches = document.getElementById('style-swatches');
+  STYLE_SWATCHES.forEach(hex => {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.className = 'style-swatch';
+    swatch.dataset.colour = hex;
+    swatch.style.setProperty('--c', hex);
+    swatch.setAttribute('aria-label', hex);
+    swatch.addEventListener('click', () => setLookSetting('style_accent', hex));
+    swatches.appendChild(swatch);
+  });
+  const fonts = document.getElementById('style-racing-font');
+  STYLE_DATA.fonts.forEach(font => fonts.appendChild(new Option(font === 'System Default' ? I18N.style.fontOwn : font, font)));
+  const sounds = document.getElementById('style-sound');
+  sounds.append(new Option(I18N.style.soundOwn, ''), new Option(I18N.style.soundToday, 'today'), new Option(I18N.style.soundNone, 'none'));
+  STYLE_DATA.sounds.forEach(group => {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = (STYLE_DATA.families.find(f => f.key === group.family) || {}).name || group.family;
+    group.sounds.forEach(s => optgroup.appendChild(new Option(s.name, s.key)));
+    sounds.appendChild(optgroup);
+  });
+  on('style-accent', 'input', e => setLookSetting('style_accent', e.target.value.toUpperCase()));
+  on('style-accent-own', 'click', () => setLookSetting('style_accent', null));
+  on('style-racing-card', 'input', e => { mirror('ctrl-bg-color', e.target.value); setLookSetting('bg_color', e.target.value); });
+  on('style-racing-accent', 'input', e => { mirror('ctrl-accent-color', e.target.value); setLookSetting('accent_color', e.target.value); });
+  on('style-racing-name', 'input', e => setLookSetting('username_color', e.target.value));
+  on('style-racing-font', 'change', e => setLookSetting('username_font_family', e.target.value === 'System Default' ? null : e.target.value));
+  on('style-label', 'input', e => {
+    if (STYLE_CORE.controlsFor(previewObjectFor(currentType)).racing) {
+      mirror('ctrl-event-label', e.target.value);
+      setLookSetting('event_label', e.target.value);
+    } else {
+      setLookSetting('style_label', e.target.value);
+    }
+  });
+  on('style-speed', 'input', e => { mirror('ctrl-animation-speed', e.target.value); setLookSetting('animation_speed', parseFloat(e.target.value)); });
+  on('style-effect', 'change', e => { mirror('ctrl-screen-effect', e.target.value); setLookSetting('screen_effect', e.target.value); });
+  on('style-sound', 'change', e => setLookSetting('style_sound', e.target.value || null));
+  on('style-grows', 'change', e => setLookSetting('style_grows', e.target.checked ? 1 : 0));
+  on('style-listen', 'click', listenToLookSound);
+  on('style-family-btn', 'click', useStyleFamily);
+  on('style-test', 'click', testLook);
+}
+
+// ▶ plays the sound the look plays (the page's own AudioContext, made on the first click). Today's
+// sound lives in the OBS overlay only: Test plays it there.
+function listenToLookSound() {
+  const kit = window.ATLETA_KIT;
+  const key = kit.soundFor(previewObjectFor(currentType), workingDesigns[currentType]);
+  if (key === 'today' || key === 'none') return;
+  if (!styleAudio) {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return;
+    styleAudio = new Context();
+    kit.setAudio(styleAudio, () => 0.8);
+  }
+  if (styleAudio.state === 'suspended') styleAudio.resume();
+  kit.playSound(key);
+}
+
+// "Use <family> for all six alerts": saved on the server at once (all six in one transaction); its
+// answer is the six rows, which the page takes as saved.
+async function useStyleFamily() {
+  const family = document.getElementById('style-family-btn').dataset.family;
+  const msg = document.getElementById('style-msg');
+  try {
+    const res = await fetch('/dashboard/overlay-builder/family', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ family }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) { msg.textContent = data.error || I18N.style.failed; return; }
+    Object.keys(data.designs).forEach(type => {
+      const row = data.designs[type];
+      SAVED_DESIGNS[type] = row;
+      SAVED_STYLES[type] = ALERT_STYLES[type] = row.style;
+      // Only the look and its settings change: what was edited on any tab and not saved stays.
+      workingDesigns[type] = STYLE_CORE.lookApplied(workingDesigns[type], Object.assign({}, EVENT_DEFAULTS[type], row));
+    });
+    setControlValues(workingDesigns[currentType]);
+    renderedObjectType = null;
+    renderStyleSection();
+    updatePreview();
+    msg.textContent = fill(I18N.style.familyDone, { family: (STYLE_DATA.families.find(f => f.key === family) || {}).name || family });
+  } catch (e) {
+    msg.textContent = I18N.style.failed;
+  }
+}
+
+// Test: plays the look in the preview, and through the overlay's test route in OBS, which plays what was
+// saved last (the test cooldown is the overlay settings page's).
+async function testLook() {
+  renderedObjectType = null;
+  updatePreview();
+  const msg = document.getElementById('style-msg');
+  try {
+    const res = await fetch('/dashboard/overlay/test/' + encodeURIComponent(currentType), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat: false }),   // the look in OBS, no test thank-you in the Twitch chat
+    });
+    const data = await res.json().catch(() => ({}));
+    msg.textContent = res.ok ? I18N.style.testSent : (data.error || I18N.style.failed);
+  } catch (e) {
+    msg.textContent = I18N.style.failed;
+  }
+}
+
 // ─── Save ────────────────────────────────────────────────────────────────────
 async function saveCurrentDesign() {
   const design = getControlValues();
   workingDesigns[currentType] = design;
+  const style = shownLook(currentType);
 
   try {
     const resp = await fetch('/dashboard/overlay-builder/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType: currentType, design }),
+      body: JSON.stringify(STYLE_CORE.savePayload(currentType, design, style)),
     });
     const data = await resp.json();
     if (data.ok) {
       SAVED_DESIGNS[currentType] = Object.assign({}, design);
+      // The page shows the default look as its id, and the save stores that id
+      if (STYLE_CORE.isStyled(currentType)) SAVED_STYLES[currentType] = ALERT_STYLES[currentType] = style;
       const status = document.getElementById('save-status');
       status.textContent = I18N.saved;
       status.classList.add('visible');
@@ -2102,10 +2601,13 @@ async function saveCurrentDesign() {
 
 // ─── Discard ──────────────────────────────────────────────────────────────────
 function discardChanges() {
-  const saved = Object.assign({}, EVENT_DEFAULTS[currentType], SAVED_DESIGNS[currentType] || {});
+  restoreSavedLook(currentType);
+  const saved = STYLE_CORE.untouched(currentType, Object.assign({}, EVENT_DEFAULTS[currentType], SAVED_DESIGNS[currentType] || {}), SAVED_STYLES[currentType]);
   workingDesigns[currentType] = saved;
   setControlValues(saved);
+  renderedObjectType = null;
   updatePreview();
+  renderStyleSection();
 }
 
 // ─── Reset to default ─────────────────────────────────────────────────────────
@@ -2120,9 +2622,12 @@ async function resetCurrentDesign() {
   } catch(e) {}
 
   delete SAVED_DESIGNS[currentType];
+  restoreSavedLook(currentType);
   workingDesigns[currentType] = Object.assign({}, EVENT_DEFAULTS[currentType]);
   setControlValues(workingDesigns[currentType]);
+  renderedObjectType = null;
   updatePreview();
+  renderStyleSection();
 
   const status = document.getElementById('save-status');
   status.textContent = I18N.resetDone;
@@ -2440,6 +2945,8 @@ function stopSponsorPreview() {
 setControlValues(workingDesigns['follow']);
 updateSideIconGrid(workingDesigns['follow']);
 updatePreview();
+initStyleControls();
+renderStyleSection();
 renderSponsorList();
 document.getElementById('sp-rotation-toggle').checked = sponsorRotationEnabled;
 
@@ -2510,6 +3017,7 @@ document.addEventListener('mousemove', e => {
     const sponsorWrap = dragTarget.querySelector('.preview-sponsor-wrap');
     card.style.width = newWidth + 'px';
     objHost.style.width = newWidth + 'px';
+    sizeLookHost(objHost, previewObjectFor(currentType), newWidth);
     if (sponsorWrap) sponsorWrap.style.width = newWidth + 'px';
 
     // A card anchored to the right, bottom or centre grows from there, as it does live
@@ -2939,6 +3447,11 @@ document.addEventListener('mouseup', e => {
             <option value="money"><%= t('overlayBuilder.anim.effect.money') %></option>
             <option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option>
             <option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option>
+            <option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option>
+            <option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option>
+            <option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option>
+            <option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option>
+            <option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option>
           </select>
         </div>
         <div>

@@ -219,7 +219,7 @@ describe('numbers match the builder\'s controls', () => {
     const controls = {
       username_size: ['ctrl-username-size', 'modal-username-size'], card_width: ['ctrl-card-width'], border_radius: ['ctrl-border-radius'],
       label_font_size: ['modal-label-size'], detail_font_size: ['modal-detail-size'],
-      animation_speed: ['ctrl-animation-speed', 'modal-animation-speed'], effect_amount: ['ctrl-effect-amount', 'modal-effect-amount'],
+      animation_speed: ['ctrl-animation-speed', 'modal-animation-speed', 'style-speed'], effect_amount: ['ctrl-effect-amount', 'modal-effect-amount'],
       effect_size: ['ctrl-effect-size', 'modal-effect-size'], bg_opacity: ['modal-bg-opacity'], border_opacity: ['modal-border-opacity'],
       glow_intensity: ['modal-glow-intensity'], shadow_opacity: ['modal-shadow-opacity'], border_thickness: ['modal-border-thickness'],
       shadow_blur: ['modal-shadow-blur'], shadow_spread: ['modal-shadow-spread'],
@@ -280,7 +280,7 @@ describe('drop-down choices', () => {
   test('match the options the builder offers', () => {
     for (const id of ['ctrl-entrance-animation', 'modal-entrance-animation']) same(FIELD_SPECS.entrance_animation.values, optionsOf(id));
     for (const id of ['ctrl-car-animation', 'modal-car-animation']) same(FIELD_SPECS.car_animation.values, optionsOf(id));
-    for (const id of ['ctrl-screen-effect', 'modal-screen-effect']) same(FIELD_SPECS.screen_effect.values, optionsOf(id));
+    for (const id of ['ctrl-screen-effect', 'modal-screen-effect', 'style-effect']) same(FIELD_SPECS.screen_effect.values, optionsOf(id));
     for (const id of ['ctrl-effect-direction', 'modal-effect-direction']) same(FIELD_SPECS.effect_direction.values, optionsOf(id));
     same(FIELD_SPECS.sponsor_animation.values, optionsOf('ctrl-sponsor-animation'));
     same(FIELD_SPECS.gradient_direction.values, optionsOf('modal-gradient-direction'));
@@ -374,6 +374,10 @@ describe('the builder\'s free-text inputs stop where the server cuts', () => {
   test('the label is held to 100 characters where it is typed, the detail text to 300', () => {
     for (const id of ['ctrl-event-label', 'modal-event-label']) assert.equal(maxlengthOf(id), FIELD_SPECS.event_label.max, id);
     for (const id of ['ctrl-detail-text', 'modal-detail-text']) assert.equal(maxlengthOf(id), FIELD_SPECS.detail_text.max, id);
+  });
+
+  test('the look\'s main text is held to 40 characters where it is typed', () => {
+    assert.equal(maxlengthOf('style-label'), FIELD_SPECS.style_label.max);
   });
 
   test('every free-text input of the builder has one, so the server\'s cut is never silent', () => {
@@ -568,5 +572,58 @@ describe('a design no builder could have sent is still refused', () => {
     for (const bad of [undefined, null, 5, true, [], 'not json', '{"bg_color":', '[]']) {
       assert.deepEqual(validateOverlayDesign(bad), { ok: false, field: 'design' }, String(bad));
     }
+  });
+});
+
+describe('a look\'s settings (alert styles)', () => {
+  const LOOK = { style_accent: '#29E0FF', style_label: 'Quest accepted', style_sound: 'rcFlyby', style_grows: 0 };
+  const lookOf = (design) => Object.fromEntries(Object.keys(LOOK).filter((f) => f in design).map((f) => [f, design[f]]));
+
+  test('the colour, the main text, the sound and growing with the amount are kept as sent', () => {
+    assert.deepEqual(lookOf(accepts(LOOK)), LOOK);
+    assert.equal(accepts({ style_grows: 1 }).style_grows, 1);
+  });
+
+  test('missing, null or empty means the look\'s own: left out, so the column stays empty', () => {
+    for (const field of ['style_accent', 'style_sound', 'style_grows']) {
+      for (const value of [undefined, null, '']) assert.equal(field in accepts({ [field]: value }), false, `${field}=${value}`);
+    }
+    assert.equal('style_label' in accepts({ style_label: null }), false);
+    assert.equal(accepts({ style_label: '' }).style_label, '', 'an empty main text is what was typed (the look shows its own words)');
+  });
+
+  test('the main text is cut at 40 characters, by characters', () => {
+    assert.equal(accepts({ style_label: 'x'.repeat(40) }).style_label, 'x'.repeat(40));
+    assert.equal(accepts({ style_label: 'x'.repeat(41) }).style_label, 'x'.repeat(40));
+    assert.equal(accepts({ style_label: '\u{1F3C1}'.repeat(41) }).style_label, '\u{1F3C1}'.repeat(40));
+    rejects({ style_label: 5 }, 'style_label');
+  });
+
+  test('a sound the catalogue does not have is left out, so the look\'s own plays; today\'s and none are sounds', () => {
+    for (const sound of ['today', 'none', 'samuraiBell', 'rcVictory']) assert.equal(accepts({ style_sound: sound }).style_sound, sound, sound);
+    for (const other of ['nope', 'RCFLYBY', '<b>', 'x'.repeat(500)]) assert.equal('style_sound' in accepts({ style_sound: other }), false, other);
+    rejects({ style_sound: 5 }, 'style_sound');
+  });
+
+  test('a colour must be #rrggbb, and growing with the amount 0 or 1', () => {
+    for (const bad of ['red', '#FFF', '#GGGGGG', 12]) rejects({ style_accent: bad }, 'style_accent');
+    for (const bad of ['1', true, [], {}]) rejects({ style_grows: bad }, 'style_grows');
+    assert.equal('style_grows' in accepts({ style_grows: 2 }), false, 'a number that is not a choice is left out');
+  });
+});
+
+describe('the five screen effects of the alert looks', () => {
+  test('are choices of the effect, and each is kept as chosen', () => {
+    for (const effect of ['smoke', 'checker', 'speed', 'sparks', 'champagne']) {
+      assert.ok(FIELD_SPECS.screen_effect.values.includes(effect), effect);
+      assert.equal(accepts({ screen_effect: effect }).screen_effect, effect);
+    }
+  });
+
+  test('are the effects public/overlay/fx.js draws, for the OBS overlay and the builder alike', () => {
+    const FX = require('../../public/overlay/fx.js');
+    for (const kind of FX.KINDS) assert.ok(FIELD_SPECS.screen_effect.values.includes(kind), kind);
+    assert.match(overlayJs, /window\.ATLETA_FX\.spawn\(container, effect\)/);
+    assert.match(builder, /window\.ATLETA_FX\.spawn\(/);
   });
 });

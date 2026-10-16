@@ -65,6 +65,17 @@ describe('objects.css integrity', () => {
     assert.match(css, /\.o-blade\s*\{/, '.o-blade must exist — shared cut flash');
   });
 
+  test('text on the streamer\'s colour reads --a-on (dark on a light colour), and stays white while no colour is picked', () => {
+    // The follow band and the raid's main banner are drawn in the accent, with their text on it.
+    const onAccent = ['.o-follow .o-name', '.o-follow .o-follow-glyph', '.o-follow .o-meta', '.o-raid .o-raid-cnt', '.o-raid .o-raid-clbl'];
+    for (const selector of onAccent) {
+      const rule = css.match(new RegExp('(?:^|\\n)' + selector.replace(/\./g, '\\.') + '\\{([^}]*)\\}'));
+      assert.ok(rule, `${selector} has a rule`);
+      const colour = (rule[1].match(/(?:^|;)\s*color:([^;]+)/) || [])[1] || '';
+      assert.match(colour, /^(var\(--a-on,#fff\)|rgba\(var\(--a-on-rgb,255,255,255\),\.\d+\))$/i, `${selector}: its colour follows --a-on (it is ${colour})`);
+    }
+  });
+
   test('no object-internal class escapes its .o- prefix', () => {
     // Guards the collision that pinned the byobu frame rail to the wrong edge.
     const generic = ['.rail{', '.rail {', '.panel{', '.panel {', '.seal{', '.seal {'];
@@ -464,7 +475,7 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
   test('rides along with the registry without changing the five', () => {
     assert.deepEqual(Object.keys(OBJECTS).sort(), [...KEYS].sort(), 'Object.keys still lists only the five');
     assert.ok(STYLES, 'STYLES is on the export');
-    assert.deepEqual(Object.keys(STYLES), ['donation-c1']);
+    assert.deepEqual(Object.keys(STYLES), ['donation-c1', 'donation-c1-channel']);
   });
 
   test('has the registry shape, the id it is filed under and the alert it draws', () => {
@@ -573,6 +584,85 @@ describe("styles — andre_vilela_'s C1 donation alert (donation-c1)", () => {
   });
 });
 
+describe('styles — the C1 any streamer can pick, with their own name on it (donation-c1-channel)', () => {
+  const STYLES = OBJECTS.STYLES;
+  const ANY = STYLES && STYLES['donation-c1-channel'];
+  const C1 = STYLES && STYLES['donation-c1'];
+  const data = { username: 'PitBoss92', amount: '25.00', currency: 'EUR', message: 'Go!' };
+  const lettering = (html) => {
+    const m = /<text class="o-c1-decal"([^>]*)>([^<]*)<\/text>/.exec(html);
+    return m ? { attrs: m[1], text: m[2] } : null;
+  };
+  const AT = ' x="88" y="38" text-anchor="middle"';
+  const SQUEEZED = AT + ' textLength="30" lengthAdjust="spacingAndGlyphs"';
+  // The page says whose overlay it is (window.ATLETA_CHANNEL, set by the overlay page and the
+  // builder) and render() reads it as it draws. Node has no window, so the test lends one.
+  function onPage(channel, render) {
+    const had = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+    const before = globalThis.window;
+    globalThis.window = channel === undefined ? {} : { ATLETA_CHANNEL: channel };
+    try { return render(); } finally { if (had) globalThis.window = before; else delete globalThis.window; }
+  }
+  const draw = (channel) => onPage(channel, () => ANY.render(data));
+
+  test('is the same C1, filed under its own id, for donations', () => {
+    assert.ok(ANY, 'STYLES has donation-c1-channel');
+    assert.equal(ANY.key, 'donation-c1-channel');
+    assert.equal(ANY.eventType, 'donation');
+    assert.deepEqual(ANY.anim, C1.anim);
+    assert.deepEqual(ANY.exit, C1.exit);
+    const drawing = (html) => html.replace(/oc1u\d+/g, 'U').replace(/<text class="o-c1-decal"[^>]*>[^<]*<\/text>/, '');
+    assert.equal(drawing(draw('ABC')), drawing(onPage('ABC', () => C1.render(data))), 'everything but the lettering is his drawing');
+  });
+
+  test('a name that fits the glass is set like VILELA, at its own width and never stretched, however many letters it has', () => {
+    // Widths measured in Chromium at the decal's font: PABLOS 26.1, JILLIAN 25.5, FIJI_11 22.5, TILLIE_1 27.9 (of 29).
+    for (const name of ['PABLOS', 'JILLIAN', 'FIJI_11', 'TILLIE_1']) {
+      assert.deepEqual(lettering(draw(name)), { attrs: AT, text: name }, name);
+    }
+  });
+
+  test('a name wider than the glass is squeezed into its 30 units, short names of wide capitals too', () => {
+    // RICARDO 29.8, MOMWOW 34.7, WWWWWW 39.4, RICARDOBSILVA98 62.7 (of 29).
+    for (const name of ['RICARDO', 'MOMWOW', 'WWWWWW', 'RICARDOBSILVA98']) {
+      assert.deepEqual(lettering(draw(name)), { attrs: SQUEEZED, text: name }, name);
+    }
+    assert.deepEqual(lettering(draw('ABCDEFGHIJKLMNOP')), { attrs: SQUEEZED, text: 'ABCDEFGHIJKLMNOP' }, 'sixteen characters are shown whole');
+  });
+
+  test("the width table was measured at the decal's font, size and spacing: changing them means measuring it again", () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+    assert.match(css, /\.o-c1 \.o-c1-decal\{font-family:var\(--o-cond\);font-weight:700;font-size:7\.5px;letter-spacing:\.9px;/);
+  });
+
+  test('a character the width table does not hold counts as the widest, so it never overruns the glass', () => {
+    assert.deepEqual(lettering(draw('ÉÉÉÉÉ')), { attrs: SQUEEZED, text: 'ÉÉÉÉÉ' }, 'five unknown characters are wider than 29 units');
+  });
+
+  test('a name past sixteen characters is cut with …', () => {
+    assert.deepEqual(lettering(draw('AVERYLONGTWITCHNAMEIS25CH')), { attrs: SQUEEZED, text: 'AVERYLONGTWITCH…' });
+  });
+
+  test('no name, no lettering: the window stays plain glass (a streamer without Twitch, or Node with no page)', () => {
+    assert.equal(lettering(draw('')), null);
+    assert.equal(lettering(draw(undefined)), null);
+    assert.equal(typeof globalThis.window, 'undefined', 'this test file runs without a window');
+    assert.equal(lettering(ANY.render(data)), null, 'no window at all');
+    assert.match(draw(''), /^<div class="obj o-c1">/, 'still the whole C1');
+  });
+
+  test('the name is escaped like every text the registry prints', () => {
+    // Its symbols are not in the width table, so they count as the widest and the name is squeezed.
+    assert.deepEqual(lettering(draw('<B>&"X')), { attrs: SQUEEZED, text: '&lt;B&gt;&amp;&quot;X' });
+  });
+
+  test("andre_vilela_'s C1 keeps VILELA whatever name the page gives", () => {
+    const html = onPage('SOMEONEELSE', () => C1.render(data));
+    assert.ok(html.includes('<text class="o-c1-decal" x="88" y="38" text-anchor="middle">VILELA</text>'));
+    assert.ok(!html.includes('SOMEONEELSE'));
+  });
+});
+
 describe('objects.css — the C1 (donation-c1)', () => {
   const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
   const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -658,5 +748,35 @@ describe('objects.css — the C1 (donation-c1)', () => {
       + lineBox('.o-c1 .o-c1-from', px)
       + gaps + margins;
     assert.ok(need <= room, `the worst case needs ${need}px between the paddings and the board has ${room}px`);
+  });
+});
+
+describe("objects.css — today's samurai red is the streamer's colour (alert styles)", () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'objects.css'), 'utf8');
+  // The five objects come before the C1, whose paint is the real car's and stays as it is.
+  const five = css.slice(0, css.indexOf('.o-c1{'));
+
+  test('every red of the five reads a colour variable, with today\'s red as the fallback', () => {
+    const fixed = five
+      .replace(/var\(--[a-z-]+,\s*(#[0-9A-Fa-f]{6}|\d+,\d+,\d+)\)/g, '')
+      .replace('--r-red:#D81E26;', '').replace('--r-red-deep:#B50000;', '');
+    const reds = [...fixed.matchAll(/#([0-9A-Fa-f]{6})\b/g)].map((m) => m[1]).filter((hex) => {
+      const v = parseInt(hex, 16), r = v >> 16, g = (v >> 8) & 255, b = v & 255;
+      return r > 40 && r > 1.6 * g && r > 1.6 * b;
+    });
+    assert.deepEqual([...new Set(reds)], [], 'a red that does not follow the streamer\'s colour');
+    assert.ok(!/rgba\(\s*(216,30,38|255,66,71)\s*,/.test(fixed), 'an rgba() red that does not follow it');
+  });
+
+  test('the red itself is the streamer\'s accent, Ronin red until one is picked', () => {
+    assert.match(css, /\.obj\{--r-red:var\(--a,#D81E26\);--r-red-deep:var\(--a-lo,#B50000\)\}/);
+  });
+
+  test('without a picked colour nothing changes: each shade falls back to the colour that was there', () => {
+    for (const [shade, hex] of [['--a-hi', '#F0343C'], ['--a-deep', '#8E0A10'], ['--a-soft', '#C9636A'], ['--a-tint', '#FF6B6B'], ['--a-night', '#5E070C'], ['--a-ink', '#3A0407']]) {
+      assert.ok(css.includes(`var(${shade},${hex})`), `${shade} falls back to ${hex}`);
+    }
   });
 });

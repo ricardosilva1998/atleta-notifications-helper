@@ -1,0 +1,261 @@
+/* ═════════ DEEP SEA — under the sea ═════════
+   Navy water with light rays from above, rising bubbles and glowing sea life. The accent is the
+   bioluminescence: each look's hero (the bubble and its fish, the pearl, the school, the bottle glass, the
+   dolphins, the jellyfish), the rim glow and the haze of every panel, and the labels. The water, the sand,
+   the shells and the paper keep their own colours. Motion is buoyant: things rise or drift down, overshoot a
+   little and settle, then hold still. Fredoka for names and numbers, Quicksand for the small print. Every
+   text sits on near-opaque water, paper or nacre, so it reads over any game. Text on a panel always sits in
+   a positioned box, so the light rays (::before) stay behind it. */
+.o-sea{--seaa:var(--a,#3EF0D0);--seaa-rgb:var(--a-rgb,62,240,208);--sea-on:var(--a-on,#032A2E);--sea-ink:#16303F;--sea-foam:#F2FBFF;--sea-dim:rgba(214,238,252,.8);font-family:"Fredoka","Baloo 2","Nunito",system-ui,sans-serif;font-weight:600;line-height:1.15;color:var(--sea-foam)}
+/* The water every panel is made of: deep navy, lit from the surface, with the accent glowing up from below. */
+.o-sea-water{position:absolute;overflow:hidden;border-radius:26px;background:radial-gradient(75% 65% at 50% 124%,rgba(var(--seaa-rgb),.36),rgba(var(--seaa-rgb),.1) 52%,rgba(var(--seaa-rgb),0) 76%),radial-gradient(90% 75% at 24% -16%,rgba(160,220,255,.22),rgba(160,220,255,0) 62%),linear-gradient(180deg,#0D3D61 0%,#092E50 40%,#061C36 100%);box-shadow:inset 0 0 0 1.5px rgba(var(--seaa-rgb),.62),inset 0 0 22px rgba(var(--seaa-rgb),.24),inset 0 2px 0 rgba(255,255,255,.14),0 0 18px rgba(var(--seaa-rgb),.3),0 12px 24px rgba(0,0,0,.5)}
+/* Light rays from the surface, fading out with depth. */
+.o-sea-water::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;background:linear-gradient(101deg,rgba(200,236,255,0) 6%,rgba(200,236,255,.1) 10%,rgba(200,236,255,0) 15%),linear-gradient(106deg,rgba(200,236,255,0) 27%,rgba(200,236,255,.08) 32%,rgba(200,236,255,0) 38%),linear-gradient(99deg,rgba(200,236,255,0) 52%,rgba(200,236,255,.09) 56%,rgba(200,236,255,0) 60%),linear-gradient(104deg,rgba(200,236,255,0) 73%,rgba(200,236,255,.07) 79%,rgba(200,236,255,0) 86%);-webkit-mask-image:linear-gradient(180deg,#000,rgba(0,0,0,0) 82%);mask-image:linear-gradient(180deg,#000,rgba(0,0,0,0) 82%)}
+/* Sand on the sea floor, a little lit by the accent. */
+.o-sea-floor{position:absolute;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.09) 0 1px,rgba(255,255,255,0) 1.6px) 0 0/9px 7px,radial-gradient(circle at 70% 60%,rgba(0,0,0,.14) 0 1px,rgba(0,0,0,0) 1.6px) 0 0/7px 9px,linear-gradient(180deg,#3B5169,#22364C 55%,#1A2B3E);box-shadow:inset 0 2px 0 rgba(190,225,255,.18),inset 0 10px 18px rgba(var(--seaa-rgb),.16)}
+.o-sea-tag{display:block;max-width:100%;padding:2px 11px 1px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,0) 65%),var(--seaa);color:var(--sea-on);font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:12px;line-height:1.5;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 0 12px rgba(var(--seaa-rgb),.55),inset 0 -1px 0 rgba(0,0,0,.15)}
+.o-sea-name{font-weight:600;line-height:1.12;color:#FFFFFF;text-shadow:0 0 10px rgba(var(--seaa-rgb),.55),0 2px 2px rgba(0,12,28,.6)}
+.o-sea-cap{font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:12.5px;line-height:1.3;letter-spacing:.03em;color:var(--sea-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Bubbles: a clear ball with a bright rim and a highlight. .o-sea-bub rises once and is gone; .o-sea-orb stays. */
+.o-sea-bub,.o-sea-orb{position:absolute;width:var(--bs,8px);height:var(--bs,8px);margin:calc(var(--bs,8px) / -2) 0 0 calc(var(--bs,8px) / -2);border-radius:50%;pointer-events:none;background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,0) 30%),radial-gradient(circle closest-side,rgba(var(--seaa-rgb),.1) 0 60%,rgba(var(--seaa-rgb),.45) 82%,rgba(232,250,255,.85) 94%,rgba(232,250,255,.3) 100%)}
+.o-sea-bub{opacity:0}
+/* Sea life in the accent (the fish, the school, the dolphins), each with a soft glow behind it. */
+.o-sea-fish{position:absolute;display:block}
+.o-sea-fish::before{content:"";position:absolute;left:-25%;top:-50%;width:150%;height:200%;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.5),rgba(var(--seaa-rgb),0))}
+.o-sea-fish > svg{position:relative;display:block;width:100%;height:100%;overflow:visible}
+.o-sea-fb{fill:var(--seaa)}
+.o-sea-fl{fill:rgba(255,255,255,.42)}
+.o-sea-fd{fill:rgba(0,24,44,.26)}
+.o-sea-fe{fill:#06203A}
+.o-sea-fm{fill:none;stroke:rgba(0,24,44,.42);stroke-width:.8;stroke-linecap:round}
+.o-sea-fg{fill:#FFFFFF}
+@keyframes seaPanelIn{0%{opacity:0;transform:translateY(18px) scale(.97)}60%{opacity:1;transform:translateY(-3px) scale(1)}82%{transform:translateY(1px)}100%{opacity:1;transform:none}}
+@keyframes seaRiseIn{0%{opacity:0;transform:translateY(12px)}60%{opacity:1;transform:translateY(-2px)}100%{opacity:1;transform:none}}
+@keyframes seaFadeIn{from{opacity:0}}
+@keyframes seaBubble{0%{opacity:0;transform:translate(0,0) scale(.4)}18%{opacity:1}100%{opacity:0;transform:translate(var(--bx,0px),var(--by,-60px)) scale(1)}}
+@keyframes seaFloatOut{0%{transform:none}30%{transform:translateY(3px) scale(.99)}100%{opacity:0;transform:translateY(-18px) scale(1.03)}}
+@keyframes seaSinkOut{0%{transform:none}25%{transform:translateY(-4px)}100%{opacity:0;transform:translateY(24px) scale(.97)}}
+@keyframes seaDriftOut{0%{transform:none}30%{transform:translateX(-5px)}100%{opacity:0;transform:translate(38px,6px) rotate(1.5deg)}}
+.playing .o-sea-bub{animation:seaBubble calc(var(--bu,.9s) / var(--spd)) cubic-bezier(.3,.6,.5,1) calc(var(--bd,0s) / var(--spd)) both}
+
+/* follow — Bubble up: a bubble rises and grows, pops into the glowing plate; two little fish dart in and stop on its rim */
+.o-seaf{height:136px}
+.o-seaf-plate{left:8px;top:26px;width:404px;height:96px;border-radius:32px;clip-path:inset(-34px -34px -34px -34px round 66px);box-shadow:inset 0 0 0 2px rgba(var(--seaa-rgb),.85),inset 0 0 28px rgba(var(--seaa-rgb),.45),inset 0 3px 0 rgba(255,255,255,.2),0 0 18px rgba(var(--seaa-rgb),.42),0 10px 18px rgba(0,0,0,.45)}
+.o-seaf-shine{position:absolute;left:22px;top:7px;width:150px;height:26px;border-radius:50%;border-top:2.5px solid rgba(255,255,255,.42);transform:rotate(-3deg)}
+.o-seaf-txt{position:absolute;left:26px;right:92px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-seaf-name{width:100%;margin-top:5px;font-size:calc(30px * var(--fit,1))}
+.o-seaf-cap{max-width:100%;margin-top:3px}
+.o-seaf-bw{position:absolute;left:178px;top:42px;width:64px;height:64px;z-index:3}
+.o-seaf-bubble{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.95) 0 5px,rgba(255,255,255,0) 11px),radial-gradient(circle at 70% 74%,rgba(255,255,255,.55) 0 2px,rgba(255,255,255,0) 6px),radial-gradient(circle closest-side,rgba(var(--seaa-rgb),.12) 0 58%,rgba(var(--seaa-rgb),.5) 82%,rgba(235,252,255,.9) 94%,rgba(var(--seaa-rgb),.5) 100%);box-shadow:0 0 18px rgba(var(--seaa-rgb),.55);opacity:0;transform:scale(1.4)}
+.o-seaf-ring{position:absolute;left:178px;top:42px;width:64px;height:64px;z-index:3;border-radius:50%;border:2px solid rgba(var(--seaa-rgb),.9);box-shadow:0 0 10px rgba(var(--seaa-rgb),.6);opacity:0}
+.o-seaf-drop{position:absolute;left:207px;top:71px;width:6px;height:6px;z-index:3;border-radius:50%;background:#EFFFFF;box-shadow:0 0 6px rgba(var(--seaa-rgb),.9);opacity:0}
+.o-seaf-fish{z-index:4}
+.o-seaf-fish.a{left:328px;top:8px;width:32px;height:18px}
+.o-seaf-fish.b{left:364px;top:19px;width:25px;height:14px}
+@keyframes seafRise{0%{opacity:0;transform:translateY(66px) scale(.3)}14%{opacity:1}50%{transform:translateY(22px) scale(.66,.74)}78%{transform:translateY(-3px) scale(1.04,.95)}100%{opacity:1;transform:none}}
+@keyframes seafPop{0%{opacity:1;transform:none}100%{opacity:0;transform:scale(1.4)}}
+@keyframes seafRing{0%{opacity:0;transform:scale(.9)}15%{opacity:1}100%{opacity:0;transform:scale(2.4,1.6)}}
+@keyframes seafDrop{0%{opacity:0;transform:translate(0,0) scale(1)}12%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.4)}}
+@keyframes seafOpen{0%{opacity:0;clip-path:inset(16px 170px 16px 170px round 32px)}1%{opacity:1}100%{opacity:1;clip-path:inset(-34px -34px -34px -34px round 66px)}}
+@keyframes seafDart{0%{opacity:0;transform:translate(-290px,8px)}18%{opacity:1}45%{transform:translate(-110px,-5px)}75%{transform:translate(5px,1px)}100%{opacity:1;transform:none}}
+.playing .o-seaf-bw{animation:seafRise calc(.6s / var(--spd)) cubic-bezier(.3,.6,.4,1) both}
+.playing .o-seaf-bubble{animation:seafPop calc(.13s / var(--spd)) ease-out calc(.6s / var(--spd)) both}
+.playing .o-seaf-ring{animation:seafRing calc(.45s / var(--spd)) ease-out calc(.6s / var(--spd)) both}
+.playing .o-seaf-drop{animation:seafDrop calc(.42s / var(--spd)) cubic-bezier(.2,.7,.4,1) calc(.6s / var(--spd)) both}
+.playing .o-seaf-plate{animation:seafOpen calc(.42s / var(--spd)) cubic-bezier(.22,.85,.3,1) calc(.6s / var(--spd)) both}
+.playing .o-seaf-tag{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.82s / var(--spd)) both}
+.playing .o-seaf-name{animation:seaRiseIn calc(.4s / var(--spd)) ease-out calc(.9s / var(--spd)) both}
+.playing .o-seaf-cap{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.98s / var(--spd)) both}
+.playing .o-seaf-fish.a{animation:seafDart calc(.5s / var(--spd)) cubic-bezier(.2,.75,.3,1) calc(1.04s / var(--spd)) both}
+.playing .o-seaf-fish.b{animation:seafDart calc(.5s / var(--spd)) cubic-bezier(.2,.75,.3,1) calc(1.14s / var(--spd)) both}
+
+/* subscriber — Pearl: the clam opens on the sea floor, the pearl glows with the months, starfish light up for the tier */
+.o-seas{height:184px}
+.o-seas-water{left:4px;right:4px;top:4px;height:176px}
+.o-seas-floor{left:-40px;right:-40px;bottom:-44px;height:80px}
+.o-seas-floor::after{content:"";position:absolute;left:12%;top:-6%;width:34%;height:70%;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.42),rgba(var(--seaa-rgb),0))}
+.o-seas-clam{position:absolute;left:20px;top:22px;width:150px;height:140px}
+.o-seas-lid{position:absolute;left:9px;top:0;width:132px;height:84px;transform-origin:50% 100%;transform:perspective(520px) rotateX(0deg)}
+.o-seas-lid > svg,.o-seas-bowl > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-seas-lf{fill:#C9D3E2;stroke:#7887A6;stroke-width:2;stroke-linejoin:round}
+.o-seas-lr{fill:none;stroke:rgba(80,98,130,.42);stroke-width:1.6;stroke-linecap:round}
+.o-seas-glow{position:absolute;left:-25px;top:-8px;width:200px;height:180px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.62),rgba(var(--seaa-rgb),.2) 52%,rgba(var(--seaa-rgb),0));opacity:.85}
+.o-seas-pearl{position:absolute;left:43px;top:50px;width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--sea-on);background:radial-gradient(circle at 34% 28%,#FFFFFF 0 7%,rgba(255,255,255,.6) 16%,rgba(255,255,255,0) 44%),radial-gradient(circle at 62% 72%,rgba(0,0,0,0) 38%,rgba(0,22,40,.3) 100%),var(--seaa);box-shadow:0 0 20px 4px rgba(var(--seaa-rgb),.6),inset 0 -3px 6px rgba(0,0,0,.16)}
+.o-seas-num{display:block;font-weight:700;line-height:1;text-shadow:0 1px 0 rgba(255,255,255,.4),0 -1px 0 rgba(0,20,30,.25)}
+.o-seas-bowl{position:absolute;left:0;top:86px;width:150px;height:56px}
+.o-seas-bo{fill:#6F7E9D;stroke:#55627F;stroke-width:1.6;stroke-linejoin:round}
+.o-seas-br{fill:none;stroke:rgba(30,42,66,.4);stroke-width:1.5;stroke-linecap:round}
+.o-seas-bi{fill:#D3DCE9}
+.o-seas-bl{fill:none;stroke:rgba(var(--seaa-rgb),.95);stroke-width:2.4;stroke-linecap:round}
+.o-seas-txt{position:absolute;left:184px;right:14px;top:16px;height:122px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.o-seas-name{width:100%;margin-top:5px;font-size:calc(28px * var(--fit,1))}
+.o-seas-mo{max-width:100%;margin-top:4px;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:15px;line-height:1.3;color:var(--sea-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-seas-mn{font-family:"Fredoka","Baloo 2",system-ui,sans-serif;font-weight:700;font-size:19px;color:#FFFFFF;text-shadow:0 0 10px rgba(var(--seaa-rgb),.7)}
+.o-seas-msg{max-width:100%;margin-top:4px;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:600;font-size:12.5px;line-height:1.3;color:var(--sea-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-seas-tier{position:absolute;left:194px;top:144px;height:26px;display:flex;align-items:center;gap:6px}
+.o-seas-star{position:relative;display:block;flex:none;width:24px;height:24px;transform:rotate(var(--sr,0deg))}
+.o-seas-star > svg{position:relative;display:block;width:100%;height:100%;overflow:visible}
+.o-seas-star.on::before{content:"";position:absolute;left:-10px;top:-10px;width:44px;height:44px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.6),rgba(var(--seaa-rgb),0))}
+.o-seas-stp{fill:rgba(150,172,198,.3);stroke:rgba(150,172,198,.3);stroke-width:2.6;stroke-linejoin:round}
+.o-seas-stl{fill:var(--seaa);stroke:var(--seaa);stroke-width:2.6;stroke-linejoin:round}
+.o-seas-std{fill:rgba(255,255,255,.6)}
+.o-seas-tl{margin-left:4px;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--sea-dim);white-space:nowrap}
+@keyframes seasLid{0%{transform:perspective(520px) rotateX(-80deg)}58%{transform:perspective(520px) rotateX(10deg)}80%{transform:perspective(520px) rotateX(-3deg)}100%{transform:perspective(520px) rotateX(0deg)}}
+@keyframes seasPearl{0%{opacity:0;transform:scale(.5)}55%{opacity:1;transform:scale(1.1)}100%{opacity:1;transform:none}}
+@keyframes seasGlow{0%{opacity:0;transform:scale(.5)}45%{opacity:1;transform:scale(1.12)}100%{opacity:.85;transform:none}}
+@keyframes seasStar{0%{transform:rotate(var(--sr,0deg)) scale(.85)}45%{transform:rotate(calc(var(--sr,0deg) + 24deg)) scale(1.3)}100%{transform:rotate(var(--sr,0deg)) scale(1)}}
+.playing .o-seas-water{animation:seaPanelIn calc(.45s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-seas-tag{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.28s / var(--spd)) both}
+.playing .o-seas-name{animation:seaRiseIn calc(.4s / var(--spd)) ease-out calc(.36s / var(--spd)) both}
+.playing .o-seas-mo{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.44s / var(--spd)) both}
+.playing .o-seas-msg{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.52s / var(--spd)) both}
+.playing .o-seas-lid{animation:seasLid calc(.5s / var(--spd)) ease-out calc(.52s / var(--spd)) both}
+.playing .o-seas-glow{animation:seasGlow calc(.6s / var(--spd)) ease-out calc(.74s / var(--spd)) both}
+.playing .o-seas-pearl{animation:seasPearl calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.76s / var(--spd)) both}
+.playing .o-seas-tl{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(1.08s / var(--spd)) both}
+.playing .o-seas-star.on{animation:seasStar calc(.42s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-seas-star.on::before,.playing .o-seas-stl,.playing .o-seas-std{animation:seaFadeIn calc(.3s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+
+/* bits — School of fish: a school swirls in from the open water (more fish for more bits) and settles in a ring round the amount */
+.o-seab{height:164px}
+.o-seab-water{left:4px;right:4px;top:4px;height:156px}
+.o-seab-halo{position:absolute;left:56px;top:22px;width:300px;height:116px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.34),rgba(var(--seaa-rgb),.08) 62%,rgba(var(--seaa-rgb),0));opacity:.9}
+.o-seab-fish{left:0;top:0;transform:translate(var(--x5),var(--y5)) rotate(var(--r5))}
+.o-seab-txt{position:absolute;left:96px;right:96px;top:24px;height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.o-seab-amt{display:flex;align-items:flex-end;justify-content:center;margin-top:3px;font-weight:700;line-height:1;color:#FFFFFF;text-shadow:0 0 16px rgba(var(--seaa-rgb),.75),0 3px 2px rgba(0,12,28,.6)}
+/* The odometer clips every digit, so a text-shadow glow would show each digit's box: the rolling digits glow through a drop-shadow instead. */
+.o-seab-amt > .o-odo{text-shadow:none;filter:drop-shadow(0 3px 2px rgba(0,12,28,.6)) drop-shadow(0 0 16px rgba(var(--seaa-rgb),.75))}
+.o-seab-plus{display:block;line-height:1}
+.o-seab-unit{display:block;margin:0 0 .14em 7px;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:.38em;line-height:1;letter-spacing:.05em;color:var(--sea-dim);text-shadow:none}
+.o-seab-tag{max-width:176px}
+.o-seab-from{display:flex;align-items:baseline;justify-content:center;gap:6px;max-width:168px;margin-top:5px}
+.o-seab-from > .o-sea-cap{flex:none}
+.o-seab-name{min-width:0;font-size:calc(20px * var(--fit,1))}
+@keyframes seabSwirl{0%{opacity:0;transform:translate(var(--x0),var(--y0)) rotate(var(--r0))}20%{opacity:1;transform:translate(var(--x1),var(--y1)) rotate(var(--r1))}40%{transform:translate(var(--x2),var(--y2)) rotate(var(--r2))}60%{transform:translate(var(--x3),var(--y3)) rotate(var(--r3))}80%{transform:translate(var(--x4),var(--y4)) rotate(var(--r4))}100%{opacity:1;transform:translate(var(--x5),var(--y5)) rotate(var(--r5))}}
+.playing .o-seab-water{animation:seaPanelIn calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-seab-fish{animation:seabSwirl calc(.95s / var(--spd)) linear calc(var(--fd) / var(--spd)) both}
+.playing .o-seab-halo{animation:seaFadeIn calc(.5s / var(--spd)) ease-out calc(.9s / var(--spd)) both}
+.playing .o-seab-tag{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.34s / var(--spd)) both}
+.playing .o-seab-amt{animation:seaRiseIn calc(.4s / var(--spd)) ease-out calc(.42s / var(--spd)) both}
+.playing .o-seab-from{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.54s / var(--spd)) both}
+
+/* donation — Message in a bottle: the bottle drifts down and settles, the cork pops, the scroll unrolls with the tip */
+.o-sead{height:210px}
+.o-sead-water{left:0;right:0;top:0;height:210px}
+.o-sead-floor{left:-34px;width:220px;bottom:-42px;height:72px}
+.o-sead-bw{position:absolute;left:34px;top:58px;width:56px;height:124px}
+.o-sead-bottle{position:absolute;left:0;top:0;width:100%;height:100%;transform:rotate(32deg)}
+.o-sead-bottle::before{content:"";position:absolute;left:-34px;top:-14px;width:124px;height:152px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.42),rgba(var(--seaa-rgb),0))}
+.o-sead-bottle > svg{position:relative;display:block;width:100%;height:100%;overflow:visible}
+.o-sead-glass{fill:rgba(var(--seaa-rgb),.55);stroke:rgba(232,252,255,.75);stroke-width:1.6;stroke-linejoin:round}
+.o-sead-shade{fill:rgba(0,24,44,.26)}
+.o-sead-hi{fill:none;stroke:rgba(255,255,255,.78);stroke-width:3;stroke-linecap:round}
+.o-sead-hi2{fill:none;stroke:rgba(255,255,255,.55);stroke-width:1.6;stroke-linecap:round}
+.o-sead-lip{fill:rgba(var(--seaa-rgb),.85);stroke:rgba(232,252,255,.8);stroke-width:1.2}
+.o-sead-inner{opacity:0}
+.o-sead-pp{fill:#EFE2BF}
+.o-sead-pln{fill:none;stroke:rgba(90,70,40,.45);stroke-width:1.2;stroke-linecap:round}
+.o-sead-cork{position:absolute;left:22px;top:-3px;width:12px;height:13px;border-radius:3px 3px 2px 2px;background:linear-gradient(90deg,#7A4B26,#C38D58 45%,#8A5A30);box-shadow:inset 0 -2px 0 rgba(0,0,0,.2);opacity:0;transform:translate(14px,-58px) rotate(160deg)}
+.o-sead-scroll{position:absolute;left:110px;top:10px;width:298px;height:190px;transform-origin:0 50%;filter:drop-shadow(0 6px 8px rgba(0,8,20,.45))}
+.o-sead-sheet{position:absolute;left:6px;top:8px;width:286px;height:174px;display:flex;flex-direction:column;justify-content:center;padding:10px 22px 10px 24px;color:var(--sea-ink);background:radial-gradient(120% 90% at 50% 40%,rgba(255,252,240,.55),rgba(255,252,240,0) 62%),radial-gradient(55% 45% at 100% 100%,rgba(90,120,140,.2),rgba(90,120,140,0) 70%),radial-gradient(45% 40% at 0 0,rgba(140,110,60,.16),rgba(140,110,60,0) 70%),linear-gradient(180deg,#F4EACF,#E8DAB5);box-shadow:inset 0 0 16px rgba(120,96,50,.35)}
+.o-sead-head{max-width:100%;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:11px;line-height:1.3;letter-spacing:.14em;text-transform:uppercase;color:rgba(22,48,63,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-sead-amtw{display:flex;margin-top:6px}
+.o-sead-amt{display:block;padding:3px 14px 2px;border-radius:999px;font-weight:700;line-height:1.1;white-space:nowrap;color:var(--sea-on);background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,0) 60%),var(--seaa);box-shadow:0 0 12px rgba(var(--seaa-rgb),.6),inset 0 -2px 0 rgba(0,0,0,.14)}
+.o-sead-msg{margin-top:7px;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:600;font-size:14px;line-height:17px;max-height:68px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-sead-sign{display:flex;align-items:baseline;gap:7px;min-width:0;margin-top:6px}
+.o-sead-sign.solo{margin-top:10px}
+.o-sead-from{flex:none;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:12px;color:rgba(22,48,63,.65)}
+.o-sead-name{flex:1;min-width:0;font-weight:600;line-height:1.12;font-size:calc(20px * var(--fit,1));color:var(--sea-ink)}
+.o-sead-sign.solo > .o-sead-name{font-size:calc(25px * var(--fit,1))}
+.o-sead-sent{margin-top:3px;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:13px;color:rgba(22,48,63,.65)}
+.o-sead-rod{position:absolute;top:0;width:12px;height:190px;border-radius:6px;background:linear-gradient(90deg,#9A865C,#F5EBD2 40%,#E4D6B2 62%,#A08C62);box-shadow:inset 0 0 0 1px rgba(70,50,20,.3)}
+.o-sead-rod.l{left:0}
+.o-sead-rod.r{left:286px}
+.o-sead-rod::before,.o-sead-rod::after{content:"";position:absolute;left:-3px;width:18px;height:9px;border-radius:5px;background:radial-gradient(circle at 38% 34%,rgba(255,255,255,.75) 0 1.5px,rgba(255,255,255,0) 4px),var(--seaa);box-shadow:0 0 7px rgba(var(--seaa-rgb),.75)}
+.o-sead-rod::before{top:-4px}
+.o-sead-rod::after{bottom:-4px}
+@keyframes seadSink{0%{opacity:0;transform:translate(-16px,-196px) rotate(-34deg)}12%{opacity:1}38%{transform:translate(12px,-110px) rotate(-6deg)}64%{transform:translate(-6px,-34px) rotate(-18deg)}84%{transform:translate(0,4px) rotate(3deg)}100%{opacity:1;transform:none}}
+@keyframes seadCork{0%,72%{opacity:1;transform:none;animation-timing-function:cubic-bezier(.2,.7,.4,1)}100%{opacity:0;transform:translate(14px,-58px) rotate(160deg)}}
+@keyframes seadInner{0%,82%{opacity:1}100%{opacity:0}}
+@keyframes seadEmerge{0%{opacity:0;transform:translate(-20px,-31px) scale(.4)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes seadUnroll{0%{clip-path:inset(0 276px 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes seadRoll{0%{transform:translateX(-276px)}100%{transform:none}}
+.playing .o-sead-water{animation:seaPanelIn calc(.4s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-sead-bw{animation:seadSink calc(.8s / var(--spd)) cubic-bezier(.3,.5,.45,1) calc(.08s / var(--spd)) both}
+.playing .o-sead-cork{animation:seadCork calc(1.24s / var(--spd)) linear both}
+.playing .o-sead-inner{animation:seadInner calc(1.16s / var(--spd)) linear both}
+.playing .o-sead-scroll{animation:seadEmerge calc(.3s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.96s / var(--spd)) both}
+.playing .o-sead-sheet{animation:seadUnroll calc(.55s / var(--spd)) cubic-bezier(.4,.1,.3,1) calc(1.22s / var(--spd)) both}
+.playing .o-sead-rod.r{animation:seadRoll calc(.55s / var(--spd)) cubic-bezier(.4,.1,.3,1) calc(1.22s / var(--spd)) both}
+
+/* raid — Pod: dolphins leap out of the water one after another (one per raider up to eight), splash back in and swim on as a pod */
+.o-sear{height:200px}
+.o-sear-scene{left:4px;right:4px;top:0;height:122px;border-radius:24px}
+.o-sear-scene::before{top:46px;height:76px}
+.o-sear-sky{position:absolute;left:0;right:0;top:0;height:46px;background:radial-gradient(circle at 9% 28%,rgba(255,255,255,.8) 0 .8px,rgba(255,255,255,0) 1.5px),radial-gradient(circle at 23% 62%,rgba(255,255,255,.6) 0 .7px,rgba(255,255,255,0) 1.4px),radial-gradient(circle at 41% 22%,rgba(255,255,255,.7) 0 .8px,rgba(255,255,255,0) 1.5px),radial-gradient(circle at 63% 48%,rgba(255,255,255,.55) 0 .7px,rgba(255,255,255,0) 1.4px),radial-gradient(circle at 79% 18%,rgba(255,255,255,.75) 0 .8px,rgba(255,255,255,0) 1.5px),radial-gradient(circle at 93% 56%,rgba(255,255,255,.6) 0 .7px,rgba(255,255,255,0) 1.4px),linear-gradient(180deg,#06122A 0%,#0C2546 62%,#15426C 100%)}
+.o-sear-surf{position:absolute;left:0;right:0;top:42px;height:8px;background:radial-gradient(circle at 50% 0,rgba(200,240,255,0) 5px,rgba(200,240,255,.55) 5.6px,rgba(200,240,255,0) 7.4px) 0 0/16px 8px repeat-x,linear-gradient(180deg,rgba(200,240,255,0),rgba(200,240,255,.28) 45%,rgba(200,240,255,0))}
+.o-sear-dol{position:absolute;width:50px;height:22px;margin:-11px 0 0 -25px;z-index:2}
+.o-sear-dy{position:absolute;left:0;top:0;width:100%;height:100%}
+.o-sear-dr{left:0;top:0;width:100%;height:100%}
+.o-sear-spl{position:absolute;width:30px;height:16px;margin:-14px 0 0 -15px;z-index:3;transform-origin:50% 100%;opacity:0;background:radial-gradient(circle at 18% 58%,#F2FCFF 0 1.8px,rgba(242,252,255,0) 2.4px),radial-gradient(circle at 50% 22%,#F2FCFF 0 2.2px,rgba(242,252,255,0) 2.8px),radial-gradient(circle at 82% 52%,#F2FCFF 0 1.8px,rgba(242,252,255,0) 2.4px),radial-gradient(ellipse 50% 40% at 50% 100%,rgba(230,250,255,.85),rgba(230,250,255,0))}
+.o-sear-plate{left:4px;right:4px;top:128px;height:68px;border-radius:22px}
+.o-sear-pin{position:absolute;left:20px;right:20px;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.o-sear-name{max-width:100%;font-size:calc(24px * var(--fit,1))}
+.o-sear-line{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;white-space:nowrap}
+.o-sear-tag{flex:none;max-width:140px}
+.o-sear-num{display:block;font-weight:700;font-size:21px;line-height:1;color:#FFFFFF;filter:drop-shadow(0 0 10px rgba(var(--seaa-rgb),.75))}
+.o-sear-unit{font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:14px;color:var(--sea-dim)}
+@keyframes searX{0%{opacity:0;transform:translateX(-160px);animation-timing-function:linear}10%{opacity:1}66%{transform:translateX(-52px);animation-timing-function:cubic-bezier(.2,.6,.4,1)}100%{opacity:1;transform:none}}
+@keyframes searY{0%{transform:translateY(8px);animation-timing-function:cubic-bezier(.5,0,.9,.6)}28%{transform:translateY(var(--ya));animation-timing-function:cubic-bezier(.15,.55,.45,1)}48%{transform:translateY(var(--yb));animation-timing-function:cubic-bezier(.55,0,.85,.45)}66%{transform:translateY(var(--yc));animation-timing-function:cubic-bezier(.2,.6,.4,1)}100%{transform:none}}
+@keyframes searR{0%{transform:rotate(-10deg)}28%{transform:rotate(-44deg)}48%{transform:rotate(0deg)}66%{transform:rotate(40deg)}86%{transform:rotate(8deg)}100%{transform:none}}
+@keyframes searSplash{0%{opacity:0;transform:translateY(4px) scale(.4)}25%{opacity:1}100%{opacity:0;transform:translateY(-6px) scale(1.3)}}
+.playing .o-sear-scene{animation:seaPanelIn calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-sear-plate{animation:seaPanelIn calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(.1s / var(--spd)) both}
+.playing .o-sear-name{animation:seaRiseIn calc(.4s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-sear-line{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(.42s / var(--spd)) both}
+.playing .o-sear-dol{animation:searX calc(.95s / var(--spd)) linear calc(var(--dd) / var(--spd)) both}
+.playing .o-sear-dy{animation:searY calc(.95s / var(--spd)) linear calc(var(--dd) / var(--spd)) both}
+.playing .o-sear-dr{animation:searR calc(.95s / var(--spd)) linear calc(var(--dd) / var(--spd)) both}
+.playing .o-sear-spl{animation:searSplash calc(.5s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+
+/* giveaway — Jellyfish glow: three jellyfish rise from the deep and pulse once; the name glows in their light; the prize sits on a shell tag */
+.o-seag{height:214px}
+.o-seag-water{left:0;right:0;top:0;height:214px;border-radius:28px}
+.o-seag-light{position:absolute;left:24px;right:24px;top:62px;height:120px;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.38),rgba(var(--seaa-rgb),.1) 60%,rgba(var(--seaa-rgb),0));opacity:.95}
+.o-seag-jw{position:absolute}
+.o-seag-jglow{position:absolute;left:-35%;top:-28%;width:170%;height:105%;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--seaa-rgb),.55),rgba(var(--seaa-rgb),0));opacity:.8}
+.o-seag-tw{position:absolute;left:0;top:41.7%;width:100%;height:58.3%;transform-origin:50% 0}
+.o-seag-bell{position:absolute;left:0;top:0;width:100%;height:50%;transform-origin:50% 40%}
+.o-seag-tw > svg,.o-seag-bell > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-seag-bp{fill:rgba(var(--seaa-rgb),.88);stroke:rgba(235,252,255,.65);stroke-width:1.4;stroke-linejoin:round}
+.o-seag-bc{fill:rgba(255,255,255,.24)}
+.o-seag-bh{fill:rgba(255,255,255,.5)}
+.o-seag-bs{fill:rgba(255,255,255,.7)}
+.o-seag-tt{fill:none;stroke:rgba(var(--seaa-rgb),.62);stroke-width:1.6;stroke-linecap:round}
+.o-seag-ta{fill:none;stroke:rgba(var(--seaa-rgb),.8);stroke-width:4.6;stroke-linecap:round}
+.o-seag-tl{fill:none;stroke:rgba(255,255,255,.3);stroke-width:1.4;stroke-linecap:round}
+.o-seag-txt{position:absolute;left:24px;right:24px;top:94px;height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.o-seag-name{width:100%;margin-top:5px;font-size:calc(32px * var(--fit,1));text-shadow:0 0 12px rgba(var(--seaa-rgb),.8),0 0 2px rgba(var(--seaa-rgb),.9),0 2px 2px rgba(0,12,28,.6)}
+.o-seag-pw{position:absolute;left:0;right:0;top:166px;display:flex;justify-content:center}
+.o-seag-prize{position:relative;display:flex;align-items:center;gap:8px;max-width:320px;height:36px;padding:0 18px 0 46px;border-radius:18px;color:var(--sea-ink);background:linear-gradient(115deg,rgba(255,255,255,0) 30%,rgba(var(--seaa-rgb),.4) 52%,rgba(255,255,255,0) 74%),linear-gradient(180deg,#FFFFFF,#E3EAF2);box-shadow:0 0 0 1.5px rgba(255,255,255,.7),0 0 14px rgba(var(--seaa-rgb),.5),0 6px 12px rgba(0,0,0,.35)}
+.o-seag-shell{position:absolute;left:8px;top:3px;display:block;width:32px;height:28px}
+.o-seag-shell > svg{display:block;width:100%;height:100%;overflow:visible}
+.o-seag-sf{fill:#FBFCFE;stroke:#8C9BB6;stroke-width:1.3;stroke-linejoin:round}
+.o-seag-sa{fill:rgba(var(--seaa-rgb),.4)}
+.o-seag-sr{fill:none;stroke:rgba(110,128,160,.6);stroke-width:1;stroke-linecap:round}
+.o-seag-pk{flex:none;font-family:"Quicksand","Fredoka",system-ui,sans-serif;font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(22,48,63,.65)}
+.o-seag-pv{min-width:0;font-weight:600;font-size:16px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes seagUp{0%{opacity:0;transform:translateY(184px)}12%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes seagSway{0%,100%{transform:skewX(0deg)}30%{transform:skewX(10deg)}70%{transform:skewX(-8deg)}}
+@keyframes seagPulse{0%,100%{transform:none}35%{transform:scale(.86,1.1)}70%{transform:scale(1.07,.93)}}
+@keyframes seagFlare{0%{opacity:.8;transform:none}35%{opacity:1;transform:scale(1.35)}100%{opacity:.8;transform:none}}
+@keyframes seagName{0%{opacity:0;transform:scale(.92);text-shadow:0 0 26px rgba(var(--seaa-rgb),1),0 0 6px rgba(var(--seaa-rgb),1),0 2px 2px rgba(0,12,28,.6)}40%{opacity:1}100%{opacity:1;transform:none;text-shadow:0 0 12px rgba(var(--seaa-rgb),.8),0 0 2px rgba(var(--seaa-rgb),.9),0 2px 2px rgba(0,12,28,.6)}}
+.playing .o-seag-water{animation:seaPanelIn calc(.42s / var(--spd)) cubic-bezier(.3,.7,.4,1) both}
+.playing .o-seag-jw{animation:seagUp calc(.85s / var(--spd)) cubic-bezier(.22,.62,.3,1) calc(var(--jd) / var(--spd)) both}
+.playing .o-seag-tw{animation:seagSway calc(.42s / var(--spd)) ease-in-out calc(var(--jd) / var(--spd)) 2}
+.playing .o-seag-bell{animation:seagPulse calc(.5s / var(--spd)) ease-in-out calc(1.02s / var(--spd)) both}
+.playing .o-seag-jglow{animation:seagFlare calc(.55s / var(--spd)) ease-out calc(1.02s / var(--spd)) both}
+.playing .o-seag-light{animation:seaFadeIn calc(.5s / var(--spd)) ease-out calc(1.02s / var(--spd)) both}
+.playing .o-seag-tag{animation:seaRiseIn calc(.36s / var(--spd)) ease-out calc(1s / var(--spd)) both}
+.playing .o-seag-name{animation:seagName calc(.6s / var(--spd)) ease-out calc(1.1s / var(--spd)) both}
+.playing .o-seag-prize{animation:seaRiseIn calc(.45s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc(1.38s / var(--spd)) both}

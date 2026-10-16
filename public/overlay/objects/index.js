@@ -3,7 +3,8 @@
 /**
  * Alert object registry — the single source of truth for the five Twitch
  * alert objects, and for the styles an alert can be drawn in instead
- * (STYLES, today donation-c1: andre_vilela_'s C1). Consumed by BOTH render
+ * (STYLES, today the C1: donation-c1, andre_vilela_'s, and donation-c1-channel,
+ * which any streamer can pick, with their own name on it). Consumed by BOTH render
  * paths:
  *   1. public/overlay/overlay.js        (the real OBS overlay)
  *   2. src/views/overlay-builder.ejs    (the builder's live preview)
@@ -208,8 +209,9 @@ var OBJECTS = {
 // STYLES holds objects filed under a style id, each naming the alert it draws
 // (eventType). An alert whose saved design names a style (overlay_designs.style)
 // renders that style's object instead of its own: objectFor() in overlay.js and
-// previewObjectFor() in the builder pick with the same rule. Today there is one:
-// andre_vilela_'s C1.
+// previewObjectFor() in the builder pick with the same rule. Today they are the
+// C1, in two looks: andre_vilela_'s (VILELA on the window) and the one any
+// streamer can pick (their own Twitch name on it).
 
 // The C1: a racing first-generation Citroën C1 tows the donation in on a billboard
 // trailer (docs/superpowers/specs/2026-10-15-vilela-c1-donation-design.md). The car
@@ -230,6 +232,47 @@ function c1AmountFit(text) {
   var length = Array.from(text).length;
   if (length <= C1_AMOUNT_HOLDS) return '';
   return ' style="--afit:' + Math.max(C1_AMOUNT_FLOOR, C1_AMOUNT_HOLDS / length).toFixed(2) + '"';
+}
+
+// The name on the rear side window: VILELA on andre_vilela_'s C1, the streamer's own Twitch name on
+// the C1 any streamer can pick. The glass between the window's edge and the roll-cage bar holds 30
+// units centred on x 88. Each character a lettering can hold (the page gives A–Z, 0–9 and _; "…" ends
+// a cut name) is as wide as below at the decal's font, size and spacing (Saira Condensed 700, 7.5
+// units, .9 spacing), measured in Chromium; any other character counts as the widest. A name wider
+// than 29 units (one kept for kerning) is squeezed into the 30; a narrower one is set as it is, never
+// stretched; one past sixteen characters is cut with "…". No name, no lettering: plain glass.
+var C1_LETTER_WIDTHS = {
+  A: 4.66, B: 4.56, C: 3.87, D: 4.62, E: 4.06, F: 3.84, G: 4.55, H: 4.79, I: 2.72, J: 3.12, K: 4.59, L: 3.74, M: 6.17,
+  N: 4.82, O: 4.7, P: 4.46, Q: 4.7, R: 4.61, S: 4.22, T: 4.04, U: 4.7, V: 4.54, W: 6.57, X: 4.66, Y: 4.37, Z: 4.19,
+  '0': 4.48, '1': 3.23, '2': 4.28, '3': 4.18, '4': 4.42, '5': 4.3, '6': 4.45, '7': 4.06, '8': 4.55, '9': 4.45,
+  _: 3.61, '…': 6.35
+};
+var C1_LETTER_WIDEST = 6.57;
+var C1_LETTERING_ROOM = 30;
+var C1_LETTERING_FITS = 29;
+var C1_LETTERING_MAX = 16;
+
+function c1LetteringWidth(chars) {
+  var width = 0;
+  for (var i = 0; i < chars.length; i++) {
+    width += Object.prototype.hasOwnProperty.call(C1_LETTER_WIDTHS, chars[i]) ? C1_LETTER_WIDTHS[chars[i]] : C1_LETTER_WIDEST;
+  }
+  return width;
+}
+
+function c1Lettering(name) {
+  var chars = Array.from(String(name == null ? '' : name));
+  if (!chars.length) return '';
+  if (chars.length > C1_LETTERING_MAX) chars = chars.slice(0, C1_LETTERING_MAX - 1).concat('…');
+  var fit = c1LetteringWidth(chars) > C1_LETTERING_FITS
+    ? ' textLength="' + C1_LETTERING_ROOM + '" lengthAdjust="spacingAndGlyphs"' : '';
+  return '<text class="o-c1-decal" x="88" y="38" text-anchor="middle"' + fit + '>' + esc(chars.join('')) + '</text>';
+}
+
+// The channel the page is drawn for: the overlay page and the Overlay Builder set
+// window.ATLETA_CHANNEL (the streamer's Twitch name in capitals). None in Node.
+function c1PageChannel() {
+  return typeof window !== 'undefined' && window && typeof window.ATLETA_CHANNEL === 'string' ? window.ATLETA_CHANNEL : '';
 }
 
 // Smoke puffs: [delay s, drift x px, drift y px, final scale]
@@ -261,7 +304,7 @@ function c1Wheel(u, cx, side) {
     + '</g>';
 }
 
-function c1Car(u) {
+function c1Car(u, lettering) {
   return '<svg class="o-c1-svg" viewBox="0 0 320 140" aria-hidden="true" focusable="false">'
     + '<defs>'
     +   '<linearGradient id="' + u + 'p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--o-c1-hi)"/><stop offset=".45" style="stop-color:var(--o-c1-mid)"/><stop offset="1" style="stop-color:var(--o-c1-lo)"/></linearGradient>'
@@ -314,7 +357,7 @@ function c1Car(u) {
     +     '<path d="M154.8,28.2L162.7,28.2L162.8,33.8L154.8,33.8C153.4,33.8 152.8,32.8 152.8,31C152.8,29.2 153.4,28.2 154.8,28.2Z" fill="#141D27"/>'
     +     '<path d="M144.2,27C147.4,24.4 151.6,23.4 156,23.8" stroke="#D81E26" stroke-width="1.8" fill="none"/>'
     +     '<path d="M168,18L182,18L146,58L132,58Z" fill="rgba(255,255,255,.07)"/>'
-    +     '<text class="o-c1-decal" x="88" y="38" text-anchor="middle">VILELA</text>'
+    +     c1Lettering(lettering)
     +   '</g>'
     +   '<path d="M108.6,19.6L116.4,19.6L118.4,50.8L110.4,51.2Z" fill="#0B0D10"/>'
     // tail light high on the rear corner, with its two round lamps
@@ -347,9 +390,11 @@ function c1TrailerWheel(u, left) {
     + '</svg>';
 }
 
-var STYLES = {
-  'donation-c1': {
-    key: 'donation-c1',
+// One drawing, two looks: andre_vilela_'s own C1 (lettering 'VILELA') and the C1 any streamer can
+// pick (lettering null: the streamer's Twitch name, from the page).
+function c1Look(key, lettering) {
+  return {
+    key: key,
     eventType: 'donation',
     anim: { in: 'hold', dur: '1.25s', ease: 'linear' },
     exit: { out: 'hold', dur: '0.90s', ease: 'linear' },
@@ -369,7 +414,7 @@ var STYLES = {
         +   c1TrailerWheel(u, '14%') + c1TrailerWheel(u, '66%')
         +   '<div class="o-c1-hitch"></div>'
         + '</div>'
-        + '<div class="o-c1-car">' + c1Car(u)
+        + '<div class="o-c1-car">' + c1Car(u, lettering === null ? c1PageChannel() : lettering)
         +   '<div class="o-c1-flame"></div>'
         +   '<div class="o-c1-bsmoke">' + c1Puffs([[0.46, 16, -7, 2.1], [0.52, 26, -12, 2.6], [0.58, 10, -4, 1.8]]) + '</div>'
         + '</div>'
@@ -377,7 +422,12 @@ var STYLES = {
         + '<div class="o-c1-exsmoke">' + c1Puffs([[0, -26, -8, 2.4], [0.06, -46, -14, 3], [0.12, -30, -4, 2.6], [0.2, -58, -18, 3.2]]) + '</div>'
         + '</div>';
     },
-  },
+  };
+}
+
+var STYLES = {
+  'donation-c1': c1Look('donation-c1', 'VILELA'),
+  'donation-c1-channel': c1Look('donation-c1-channel', null),
 };
 
 if (typeof module !== 'undefined' && module.exports) {

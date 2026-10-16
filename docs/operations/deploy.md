@@ -290,9 +290,86 @@ once in the Overlay Builder, which writes the row, and run the command again.
 Never switch it by loading `src/db.js` in a second process (`require('/app/src/db.js')`): loading it runs every
 boot migration against the live database while the app is using it.
 
+Since the alert styles (release A), Vilela (or anyone signed in as him) can also change it in the Overlay Builder:
+the C1 is the first look of his Donation tab's Style gallery, marked "Made for you", and picking another look and
+saving changes it (the SQL above still works). A builder page opened before release A sends no look with its save,
+so the stored look stays.
+
 Going back to an earlier release is a plain revert (older code never reads `style`), but older code's save
 writes the whole row again and would drop the style; after coming back, set it again with the command above
 (`SET style = 'donation-c1'`).
+
+### The C1 for any streamer
+
+The same C1 is also a look any streamer can have: `donation-c1-channel`. Its rear window carries the streamer's
+own Twitch login in capitals instead of VILELA (the overlay page and the Overlay Builder give it to the drawing
+as `window.ATLETA_CHANNEL`; a streamer without a linked Twitch account gets plain glass). Streamers pick it
+themselves in the Overlay Builder's donation gallery (alert styles, release A). By hand, give it to a streamer
+who asks, naming them by their Twitch login. First, read only:
+their row, and their donation design with its current look (`style` null is the standard donation alert; with
+`card_width` null too, they have no donation design yet):
+
+```bash
+cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT s.id, s.twitch_username, o.style, o.card_width, o.card_position FROM streamers s LEFT JOIN overlay_designs o ON o.streamer_id = s.id AND o.event_type = 'donation' WHERE lower(s.twitch_username) = lower('their_login')"
+```
+
+Then switch it on. The last condition means the command only ever replaces the standard donation alert, never
+another look (andre_vilela_'s own `donation-c1` among them):
+
+```bash
+cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE overlay_designs SET style = 'donation-c1-channel' WHERE event_type = 'donation' AND streamer_id = (SELECT id FROM streamers WHERE lower(twitch_username) = lower('their_login')) AND style IS NULL"
+```
+
+`changes: 1` means it is on (an open overlay picks it up after a builder save or a reconnect). `changes: 0` means
+no streamer has that login, they have no donation design yet (have them save their Donation design once in the
+Overlay Builder, which writes the row, and run it again), or their donation already has another look (the
+read-only query shows which). To give them the standard donation alert back:
+
+```bash
+cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE overlay_designs SET style = NULL WHERE event_type = 'donation' AND streamer_id = (SELECT id FROM streamers WHERE lower(twitch_username) = lower('their_login')) AND style = 'donation-c1-channel'"
+```
+
+None of these commands needs a deploy.
+
+## Alert styles (release A)
+
+What changes when it deploys:
+- Four columns are added to `overlay_designs` (`style_accent`, `style_label`, `style_sound`, `style_grows`); the boot log shows `[DB] Added style_… to overlay_designs` four times, once. Nothing stored is rewritten.
+- The giveaway winner alert becomes Racing's Victory lap for every streamer (decided). Its saved colours, text and screen effect carry over; it plays the look's fanfare unless the streamer uploaded a sound.
+- Every other alert stays exactly as it is until its streamer picks a look in the Overlay Builder's Style section.
+- Every streamer's donation gallery offers the C1 with their own Twitch name (`donation-c1-channel`), to pick themselves.
+- The overlay page and the builder load `/overlay/objects/kit.js`, `/overlay/objects/styles.js?v=…` and `.css`, and `/overlay/fx.js`/`fx.css`. An open OBS source reloads itself when the server restarts.
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and the boot log shows the four `Added style_…` lines.
+2. In the Overlay Builder, the Style section opens each of the six alert tabs. Pick Racing's Fly-by for the follow, save, and press Test: OBS plays it.
+3. Pick a colour far from the look's own (cyan on a red look) and test again: the change is obvious.
+4. andre_vilela_'s donation still shows the C1, first in his gallery as "Made for you"; another streamer's donation gallery shows "C1 with your name", with their Twitch name on the rear window.
+
+Rolling back is safe: older code ignores the four columns, and a style id it does not know (`follow-racing`) draws the alert's own object.
+
+## Alert styles (release B)
+
+What changes when it deploys:
+- The Overlay Builder's gallery gets the other 24 families (144 looks): Grand Prix, Cockpit, Arcade, Quest, Comic,
+  Cozy, Cosmos, Glass, Spooky, Cyber, Western, Retro OS, Graffiti, Kawaii, Steampunk, Frost, Neon Sign, Deep Sea,
+  Music, Stadium, Fireworks, Dino, UFO and Breaking News. "Use <family> for all six" offers each of them.
+- Nothing stored changes: no column, no migration, no look anyone picked. Every alert stays as it is until its
+  streamer picks one of the new looks.
+- The joined family files grow to about 1.1 MB (about 240 KB as Cloudflare compresses them); an open OBS source
+  fetches them again once, after the server restarts. The builder loads every family's fonts in one stylesheet
+  (44 fonts).
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and `/overlay/objects/styles.js` registers 26 families.
+2. In the Overlay Builder, the gallery of each alert shows the 26 families. Pick Spooky's Treat bucket for the bits,
+   save, and press Test: OBS plays it.
+3. Pick a cyan colour on a new look and test again: its main parts follow the colour.
+4. Turn "Grows with the amount" off on that look and test a big cheer: the middle picture, the real number.
+
+Rolling back is safe: older code does not know the new looks and draws the alert's own object (release A's rule).
+Until a streamer who picked one picks a look the older code knows, the builder refuses to save that alert.
+
 
 ## Polls, predictions and shoutouts
 

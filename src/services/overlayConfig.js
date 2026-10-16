@@ -49,4 +49,14 @@ function buildOverlayConfig(streamer, options = {}) {
   return config;
 }
 
-module.exports = { buildOverlayConfig, TWITCH_ALERTS, YOUTUBE_ALERTS };
+// The name on the rear window of the C1 any streamer can pick (STYLES['donation-c1-channel'] in
+// public/overlay/objects/index.js): the streamer's Twitch login in capitals, which the overlay page
+// and the Overlay Builder hand the registry as window.ATLETA_CHANNEL. The display name differs from
+// the login only in letter case, or is written in another script that would not fit the window, so
+// the login is used. Only what a login can hold is kept. Empty when no Twitch account is linked.
+function channelLettering(streamer) {
+  const login = streamer && streamer.twitch_username;
+  return String(login || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 25).toUpperCase();
+}
+
+module.exports = { buildOverlayConfig, channelLettering, TWITCH_ALERTS, YOUTUBE_ALERTS };

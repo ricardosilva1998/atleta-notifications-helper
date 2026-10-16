@@ -1,0 +1,182 @@
+/* ═════════ NEON SIGN — night-time neon on a dark brick wall ═════════
+   Every look is a sign on a dark brick wall (.o-neo-wall), which is also the plate that keeps the text
+   readable over any game. A tube (.o-neo-tube) is pale glass over the accent: the letters are 60 % white
+   over a zero-blur copy of themselves in the accent, so the core is a light tint of the streamer's colour,
+   with em-sized glows in the accent around them. Rolling numbers (.o-neo-num) glow through a drop-shadow
+   on their box instead, because the odometer clips every digit. Unlit glass is the same tube at .14
+   opacity, so a tube can flicker on: a couple of hard on/off steps, then steady. Bulbs are grey glass;
+   lit, a white-hot dot in an accent halo. The wall, the metal boards, the mounts and the cable stay
+   neutral; the accent is the tubes, the bulbs' glow and the light they throw on the wall (.o-neo-spill). */
+.o-neo{--neoa:var(--a,#FF2BD6);--neoa-rgb:var(--a-rgb,255,43,214);--neo-on:var(--a-on,#16001A);--neo-core:rgba(255,255,255,.6);--neo-glow:0 0 0 var(--neoa),0 0 .05em var(--neoa),0 0 .17em rgba(var(--neoa-rgb),.85),0 0 .4em rgba(var(--neoa-rgb),.42);--neo-ink:#150F17;font-family:"Tilt Neon","Varela Round","Arial Rounded MT Bold",system-ui,sans-serif;font-weight:400;line-height:1.15;color:#F3EDF1}
+.o-neo-wall{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:8px;background:linear-gradient(180deg,rgba(10,6,8,.16),rgba(10,6,8,.52)),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='28'%3E%3Crect width='64' height='28' fill='%23120E0F'/%3E%3Crect x='1' y='1' width='30' height='12' rx='1.5' fill='%2336241F'/%3E%3Crect x='33' y='1' width='30' height='12' rx='1.5' fill='%232F201E'/%3E%3Crect x='-15' y='15' width='30' height='12' rx='1.5' fill='%233A2722'/%3E%3Crect x='17' y='15' width='30' height='12' rx='1.5' fill='%2331221F'/%3E%3Crect x='49' y='15' width='30' height='12' rx='1.5' fill='%233A2722'/%3E%3Cpath d='M2 1.5h28M34 1.5h28M1 15.5h13M18 15.5h28M50 15.5h13' stroke='%23FFE2D2' stroke-opacity='.08'/%3E%3C/svg%3E") 0 0/64px 28px,#171112;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 0 30px rgba(0,0,0,.72),0 12px 26px rgba(0,0,0,.5)}
+/* The tubes' light on the bricks; it comes on with the sign's main tube. */
+.o-neo-spill{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:inherit;pointer-events:none;background:radial-gradient(var(--sw,50%) var(--sh,66%) at var(--sx,50%) var(--sy,50%),rgba(var(--neoa-rgb),.3),rgba(var(--neoa-rgb),.1) 52%,rgba(var(--neoa-rgb),0) 80%)}
+.o-neo-tube{color:var(--neo-core);text-shadow:var(--neo-glow)}
+.o-neo-mono{font-family:"Monoton","Tilt Neon",cursive;font-weight:400;text-transform:uppercase}
+.o-neo-script{font-family:"Neonderthaw","Brush Script MT",cursive;font-weight:400}
+/* A clipped line keeps room for its glow: padding, pulled back out by the same negative margin. */
+.o-neo-clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.5em .6em;margin:-.5em -.6em}
+.o-neo-nm > .o-nm-t{padding:.45em .5em;margin:-.45em -.5em}
+.o-neo-num{color:var(--neo-core);text-shadow:0 0 0 var(--neoa),0 0 1px var(--neoa);filter:drop-shadow(0 0 3px var(--neoa)) drop-shadow(0 0 10px rgba(var(--neoa-rgb),.55))}
+/* A painted metal sign board with a steel rim, catching a little of its own tubes' light. */
+.o-neo-board{position:absolute;background:radial-gradient(120% 90% at 50% 0,rgba(var(--neoa-rgb),.13),rgba(var(--neoa-rgb),0) 62%),linear-gradient(180deg,#201C24,#110F14);box-shadow:inset 0 0 0 2px #4B4653,inset 0 0 0 3.5px #0A090C,inset 0 5px 0 1px rgba(255,255,255,.05),0 6px 14px rgba(0,0,0,.6)}
+/* A straight tube: white over the accent for the core, glows in the accent. */
+.o-neo-bar{position:absolute;border-radius:3px;background:linear-gradient(rgba(255,255,255,.6),rgba(255,255,255,.6)),var(--neoa);box-shadow:0 0 1px var(--neoa),0 0 6px rgba(var(--neoa-rgb),.9),0 0 16px rgba(var(--neoa-rgb),.45)}
+/* A bent tube drawn in SVG: the glass (accent) under its hot core (pale). */
+.o-neo-ico{position:absolute;display:block;overflow:visible;filter:drop-shadow(0 0 2px var(--neoa)) drop-shadow(0 0 6px rgba(var(--neoa-rgb),.7))}
+.o-neo-tg{fill:none;stroke:var(--neoa);stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+.o-neo-tc{fill:none;stroke:rgba(255,255,255,.62);stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}
+.o-neo-frame{left:0;top:0;width:100%;height:100%}
+.o-neo-frame .o-neo-tg{stroke-width:3}
+.o-neo-cable{fill:none;stroke:#0B090C;stroke-width:2.6;stroke-linecap:round}
+/* Bulbs: grey glass; lit (::after), a white-hot dot in an accent halo that stays inside its 18-19px cell. */
+.o-neo-bulb{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(circle at 44% 40%,rgba(255,255,255,.5) 0 .8px,rgba(255,255,255,0) 1.8px),radial-gradient(circle,#5B5462 0 2.2px,#34303A 3.6px,#121014 4.6px,rgba(18,16,20,0) 5.3px)}
+.o-neo-bulb::after{content:"";position:absolute;left:0;top:0;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle,#FFFFFF 0 1.7px,rgba(255,255,255,.9) 2.5px,var(--neoa) 4.1px,rgba(var(--neoa-rgb),.55) 5.2px,rgba(var(--neoa-rgb),.2) 7px,rgba(var(--neoa-rgb),0) 9px)}
+.o-neo-bulb.off::after{opacity:0}
+.o-neo-strip{position:absolute;background-image:radial-gradient(circle at 44% 40%,rgba(255,255,255,.5) 0 .8px,rgba(255,255,255,0) 1.8px),radial-gradient(circle,#5B5462 0 2.2px,#34303A 3.6px,#121014 4.6px,rgba(18,16,20,0) 5.3px);background-size:19px 19px}
+.o-neo-lit{position:absolute;left:0;top:0;width:100%;height:100%;background-image:radial-gradient(circle,#FFFFFF 0 1.7px,rgba(255,255,255,.9) 2.5px,var(--neoa) 4.1px,rgba(var(--neoa-rgb),.55) 5.2px,rgba(var(--neoa-rgb),.2) 7px,rgba(var(--neoa-rgb),0) 9px);background-size:19px 19px}
+@keyframes neoOn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes neoExit{0%{opacity:1;transform:none}12%{opacity:.3}22%{opacity:1}34%{opacity:.15}46%{opacity:.8}100%{opacity:0;transform:translateY(8px) scale(.985)}}
+/* Tube strikes (run with steps(1,end), so every change is a hard cut): dim glass, on, off, on, off, steady. */
+@keyframes neoFlick{0%{opacity:.14}10%{opacity:1}18%{opacity:.14}34%{opacity:1}42%{opacity:.28}52%,100%{opacity:1}}
+@keyframes neoBlink{0%{opacity:.14}20%{opacity:1}52%{opacity:.14}72%,100%{opacity:1}}
+@keyframes neoQuick{0%{opacity:.14}30%{opacity:1}52%{opacity:.3}72%,100%{opacity:1}}
+@keyframes neoFluo{0%{opacity:.1}14%{opacity:.85}22%{opacity:.1}44%{opacity:.6}52%{opacity:.1}64%,100%{opacity:1}}
+@keyframes neoBulb{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:scale(1.45)}100%{opacity:1;transform:none}}
+@keyframes neoPop{0%,100%{transform:none}35%{transform:scale(1.35)}}
+@keyframes neoRise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes neoSign{from{clip-path:inset(-30px 100% -30px -30px)}to{clip-path:inset(-30px -30px -30px -30px)}}
+.playing .o-neo-bulb.on::after{animation:neoBulb calc(.24s / var(--spd)) ease-out calc(var(--bd) / var(--spd)) both}
+
+/* follow — Open sign: NEW FOLLOWER strikes, then the name in cursive tube, then the arrow blinks once */
+.o-neof{height:128px}
+.o-neof-spill{--sx:60%;--sy:62%;--sw:52%;--sh:72%}
+.o-neof-wire{position:absolute;left:0;top:0;width:60px;height:128px;overflow:visible}
+.o-neof-arrow{left:18px;top:62px;width:66px;height:36px}
+.o-neof-lbl{position:absolute;left:96px;right:16px;top:15px;font-size:calc(22px * var(--fit,1));line-height:28px}
+.o-neof-name{position:absolute;left:96px;right:14px;top:44px;font-size:calc(50px * var(--fit,1));line-height:56px}
+.playing .o-neof-lbl{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.26s / var(--spd)) both}
+.playing .o-neof-name,.playing .o-neof-spill{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.6s / var(--spd)) both}
+.playing .o-neof-arrow{animation:neoBlink calc(.5s / var(--spd)) steps(1,end) calc(.98s / var(--spd)) both}
+
+/* subscription — Motel sign: the bulbs chase once, MONTH and the months, the label box, the name, the tier stars */
+.o-neos{height:186px}
+.o-neos-spill{--sx:68%;--sy:52%;--sw:44%;--sh:64%}
+.o-neos-stars{position:absolute;left:16px;top:3px;width:128px;height:24px;display:flex;justify-content:center;gap:10px}
+.o-neos-rail{position:absolute;left:16px;right:16px;bottom:-4px;height:3px;border-radius:2px;background:linear-gradient(180deg,#615C69,#2A2730)}
+.o-neos-star{position:relative;flex:none;width:24px;height:24px}
+.o-neos-star.off{opacity:.16}
+.o-neos-sign{left:16px;top:30px;width:128px;height:150px;border-radius:12px}
+.o-neos-word{position:absolute;left:0;right:0;top:22px;text-align:center;font-size:18px;line-height:24px}
+.o-neos-num{position:absolute;left:0;right:0;display:flex;justify-content:center;line-height:1}
+.o-neos-box{position:absolute;left:162px;top:38px;max-width:244px;height:30px;display:flex;align-items:center;padding:0 13px}
+.o-neos-lbl{min-width:0;font-size:calc(14px * var(--fit,1));line-height:1.3;letter-spacing:.14em;text-transform:uppercase}
+.o-neos-name{position:absolute;left:162px;right:14px;top:74px;font-size:calc(46px * var(--fit,1));line-height:52px}
+.o-neos-tier{position:absolute;left:162px;right:14px;top:136px;font-size:13px;line-height:17px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.88);text-shadow:0 0 6px rgba(var(--neoa-rgb),.85),0 1px 2px rgba(0,0,0,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-neos-msg{position:absolute;left:162px;right:14px;top:158px;font-size:13px;line-height:17px;color:rgba(255,255,255,.78);text-shadow:0 1px 2px rgba(0,0,0,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.playing .o-neos-word{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.5s / var(--spd)) both}
+.playing .o-neos-num{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.56s / var(--spd)) both}
+.playing .o-neos-box{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.8s / var(--spd)) both}
+.playing .o-neos-name,.playing .o-neos-spill{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(1.02s / var(--spd)) both}
+.playing .o-neos-star.on{animation:neoQuick calc(.3s / var(--spd)) steps(1,end) calc(var(--sd) / var(--spd)) both,neoPop calc(.36s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-neos-tier,.playing .o-neos-msg{animation:neoRise calc(.3s / var(--spd)) ease-out calc(1.3s / var(--spd)) both}
+
+/* bits — Diner counter: the tab strikes, the amount rolls while the bulbs light round (further for more bits), the name */
+.o-neob{height:164px}
+.o-neob-spill{--sx:50%;--sy:60%;--sw:58%;--sh:66%}
+.o-neob-sign{left:10px;top:26px;width:400px;height:132px;border-radius:66px}
+.o-neob-tab{left:130px;top:0;width:160px;height:30px;border-radius:15px 15px 5px 5px;display:flex;align-items:center;justify-content:center;padding:0 16px}
+.o-neob-lbl{min-width:0;font-size:calc(17px * var(--fit,1));line-height:1.3}
+.o-neob-amt{position:absolute;left:40px;right:40px;top:24px;display:flex;align-items:flex-end;justify-content:center;gap:8px}
+.o-neob-num{display:flex;line-height:1}
+.o-neob-unit{font-size:40px;line-height:1}
+.o-neob-who{position:absolute;left:56px;right:56px;top:84px;display:flex;align-items:center;justify-content:center;gap:8px}
+.o-neob-from{flex:none;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.72)}
+.o-neob-name{min-width:0;font-size:calc(23px * var(--fit,1));line-height:28px}
+@keyframes neoAll{0%{opacity:1}40%{opacity:.22}}
+.playing .o-neob-lbl{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.22s / var(--spd)) both}
+.playing .o-neob-amt,.playing .o-neob-spill{animation:neoFlick calc(.45s / var(--spd)) steps(1,end) calc(.34s / var(--spd)) both}
+.playing .o-neob-who{animation:neoFlick calc(.45s / var(--spd)) steps(1,end) calc(var(--wd) / var(--spd)) both}
+.playing .o-neob.full .o-neo-bulb.on::after{animation:neoBulb calc(.24s / var(--spd)) ease-out calc(var(--bd) / var(--spd)) both,neoAll calc(.16s / var(--spd)) steps(1,end) calc(var(--fl) / var(--spd)) 2}
+
+/* donation — Billboard: the frame lights section by section, the amount, the signature, the light box */
+.o-neod{height:214px}
+.o-neod.nomsg{height:146px}
+.o-neod-spill{--sx:50%;--sy:34%;--sw:60%;--sh:52%}
+.o-neod.nomsg .o-neod-spill{--sy:48%;--sh:72%}
+.o-neod-board{left:12px;top:6px;width:396px;height:132px;border-radius:5px}
+.o-neod-tagrow{position:absolute;left:0;right:0;top:-2px;display:flex;justify-content:center}
+.o-neod-tag{position:relative;max-width:240px;height:28px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:linear-gradient(180deg,#221E26,#141217);box-shadow:inset 0 0 0 1.5px #4B4653,0 2px 6px rgba(0,0,0,.6)}
+.o-neod-lbl{min-width:0;font-size:calc(17px * var(--fit,1));line-height:1.3}
+.o-neod-amt{position:absolute;left:20px;right:20px;top:24px;display:flex;justify-content:center;line-height:1}
+.o-neod-sig{position:absolute;left:26px;right:26px;top:72px;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.o-neod-from{flex:none;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.72)}
+.o-neod-sw{position:relative;min-width:0}
+.o-neod-name{font-size:calc(36px * var(--fit,1));line-height:40px}
+.o-neod-swoosh{left:4%;width:96%;bottom:-4px;height:12px}
+.o-neod-rod{position:absolute;top:136px;width:3px;height:14px;background:linear-gradient(90deg,#34303A,#7A7582,#34303A)}
+.o-neod-rod.l{left:96px}
+.o-neod-rod.r{right:96px}
+.o-neod-box{position:absolute;left:34px;right:34px;top:148px;height:64px;border-radius:7px;background:#121014;box-shadow:inset 0 0 0 2px #3E3A44,inset 0 0 0 3.5px #0A090C,0 6px 12px rgba(0,0,0,.5)}
+.o-neod-face{position:absolute;left:5px;top:5px;right:5px;bottom:5px;display:flex;align-items:center;justify-content:center;padding:0 14px;border-radius:4px;background:linear-gradient(180deg,rgba(255,255,255,.94),rgba(255,255,255,.84)),var(--neoa);box-shadow:0 0 12px rgba(var(--neoa-rgb),.5),inset 0 0 10px rgba(0,0,0,.14)}
+.o-neod-msg{font-size:14px;line-height:18px;color:var(--neo-ink);text-align:center;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.playing .o-neod-lbl{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.22s / var(--spd)) both}
+.playing .o-neod-seg{animation:neoQuick calc(.24s / var(--spd)) steps(1,end) calc(var(--gd) / var(--spd)) both}
+.playing .o-neod-amt,.playing .o-neod-spill{animation:neoFlick calc(.45s / var(--spd)) steps(1,end) calc(.74s / var(--spd)) both}
+.playing .o-neod-from{animation:neoRise calc(.26s / var(--spd)) ease-out calc(.94s / var(--spd)) both}
+.playing .o-neod-name{animation:neoSign calc(.45s / var(--spd)) cubic-bezier(.45,.05,.55,.95) calc(.98s / var(--spd)) both}
+.playing .o-neod-swoosh{animation:neoSign calc(.28s / var(--spd)) ease-out calc(1.36s / var(--spd)) both}
+.playing .o-neod-face{animation:neoFluo calc(.48s / var(--spd)) steps(1,end) calc(1.42s / var(--spd)) both}
+
+/* raid — Street of signs: the crew's name lights, then a little sign per raider flickers on, one by one */
+.o-neor{height:198px}
+.o-neor-spill{--sx:50%;--sy:30%;--sw:62%;--sh:46%}
+.o-neor-plate{left:12px;right:12px;top:104px;height:86px;border-radius:12px}
+.o-neor-name{position:absolute;left:16px;right:16px;top:4px;text-align:center;font-size:calc(40px * var(--fit,1));line-height:46px}
+.o-neor-info{position:absolute;left:16px;right:16px;top:56px;height:24px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:14px;line-height:1.2;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.9);text-shadow:0 0 6px rgba(var(--neoa-rgb),.85),0 1px 2px rgba(0,0,0,.9);white-space:nowrap}
+.o-neor-lbl{min-width:0}
+.o-neor-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--neoa);box-shadow:0 0 6px var(--neoa)}
+.o-neor-num{flex:none;display:flex;font-weight:400;font-size:22px;line-height:1;letter-spacing:0}
+.o-neor-unit{flex:none}
+.playing .o-neor-name{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.26s / var(--spd)) both}
+.playing .o-neor-info{animation:neoFlick calc(.45s / var(--spd)) steps(1,end) calc(.5s / var(--spd)) both}
+.playing .o-neor-spill{animation:neoFlick calc(.4s / var(--spd)) steps(1,end) calc(.62s / var(--spd)) both}
+.playing .o-neor-sign{animation:neoFlick calc(.4s / var(--spd)) steps(1,end) calc(var(--sd) / var(--spd)) both}
+
+/* giveaway — Marquee: WINNER strikes, the bulbs chase once round, the board lights and takes the name letter by letter, the prize box */
+.o-neog{height:214px}
+.o-neog.nopz{height:176px}
+.o-neog-spill{--sx:50%;--sy:46%;--sw:62%;--sh:60%}
+.o-neog-mq{left:8px;top:54px;width:404px;height:114px;border-radius:10px}
+.o-neog-s.t{left:12px;top:0;width:380px;height:19px}
+.o-neog-s.r{left:373px;top:19px;width:19px;height:76px}
+.o-neog-s.b{left:12px;top:95px;width:380px;height:19px}
+.o-neog-s.l{left:12px;top:19px;width:19px;height:76px}
+.o-neog-face{position:absolute;left:40px;top:22px;width:324px;height:70px;border-radius:4px;background:linear-gradient(180deg,rgba(255,255,255,.93),rgba(255,255,255,.82)),var(--neoa);box-shadow:inset 0 0 0 2px #1C1820,inset 0 0 14px rgba(0,0,0,.16),0 0 16px rgba(var(--neoa-rgb),.4)}
+.o-neog-face::before{content:"";position:absolute;left:10px;right:10px;top:19px;height:1px;background:rgba(20,14,22,.22);box-shadow:0 41px 0 rgba(20,14,22,.22)}
+.o-neog-row{position:absolute;left:0;right:0;top:4px;text-align:center;font-size:11px;line-height:14px;letter-spacing:.34em;padding-left:.34em;text-transform:uppercase;color:rgba(20,14,22,.7)}
+.o-neog-name{position:absolute;left:12px;right:12px;top:21px;height:38px;text-align:center;font-size:calc(30px * var(--fit,1));line-height:38px;letter-spacing:.05em;text-transform:uppercase;color:var(--neo-ink);text-shadow:0 1px 0 rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-neog-name > .o-ch{display:inline-block}
+.o-neog-crest{left:112px;top:4px;width:196px;height:52px;border-radius:98px 98px 8px 8px / 48px 48px 8px 8px}
+.o-neog-lbl{position:absolute;left:18px;right:18px;top:13px;text-align:center;font-size:calc(24px * var(--fit,1));line-height:30px}
+.o-neog-pzrow{position:absolute;left:0;right:0;top:178px;display:flex;justify-content:center}
+.o-neog-pz{position:relative;max-width:340px;border-radius:7px;background:#121014;box-shadow:0 0 0 2.5px #3E3A44,0 0 0 4px #0A090C,0 6px 12px rgba(0,0,0,.5)}
+.o-neog-pz::before,.o-neog-pz::after{content:"";position:absolute;top:-11px;width:3px;height:11px;background:linear-gradient(90deg,#34303A,#7A7582,#34303A)}
+.o-neog-pz::before{left:22px}
+.o-neog-pz::after{right:22px}
+.o-neog-pzf{display:flex;align-items:center;gap:9px;height:30px;padding:0 18px;border-radius:7px;background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,0) 62%),var(--neoa);color:var(--neo-on);box-shadow:0 0 14px rgba(var(--neoa-rgb),.65),inset 0 0 0 1px rgba(255,255,255,.28)}
+.o-neog-pk{flex:none;font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.75}
+.o-neog-pv{min-width:0;font-weight:400;font-size:16px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes neoChaseR{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes neoChaseD{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes neoChaseL{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
+@keyframes neoChaseU{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes neoSlot{0%{opacity:0;transform:translateY(-10px)}60%{opacity:1;transform:translateY(1.5px)}100%{opacity:1;transform:none}}
+.playing .o-neog-lbl,.playing .o-neog-spill{animation:neoFlick calc(.5s / var(--spd)) steps(1,end) calc(.28s / var(--spd)) both}
+.playing .o-neog-s.t > .o-neo-lit{animation:neoChaseR calc(.36s / var(--spd)) steps(20,end) calc(.36s / var(--spd)) both}
+.playing .o-neog-s.r > .o-neo-lit{animation:neoChaseD calc(.072s / var(--spd)) steps(4,end) calc(.72s / var(--spd)) both}
+.playing .o-neog-s.b > .o-neo-lit{animation:neoChaseL calc(.36s / var(--spd)) steps(20,end) calc(.792s / var(--spd)) both}
+.playing .o-neog-s.l > .o-neo-lit{animation:neoChaseU calc(.072s / var(--spd)) steps(4,end) calc(1.152s / var(--spd)) both}
+.playing .o-neog-face{animation:neoFluo calc(.45s / var(--spd)) steps(1,end) calc(.62s / var(--spd)) both}
+.playing .o-neog .o-neog-name > .o-ch{animation:neoSlot calc(.2s / var(--spd)) cubic-bezier(.3,.7,.4,1) calc((var(--t0) + var(--ti) * var(--tper)) / var(--spd)) both}
+.playing .o-neog-pzf{animation:neoFluo calc(.4s / var(--spd)) steps(1,end) calc(1.38s / var(--spd)) both}

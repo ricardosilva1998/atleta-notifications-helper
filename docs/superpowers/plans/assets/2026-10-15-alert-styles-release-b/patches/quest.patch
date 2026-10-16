@@ -1,0 +1,136 @@
+diff --git a/public/overlay/objects/styles/quest.css b/public/overlay/objects/styles/quest.css
+index 3c947b0..d9501c9 100644
+--- a/public/overlay/objects/styles/quest.css
++++ b/public/overlay/objects/styles/quest.css
+@@ -72,7 +72,7 @@
+ .o-qss-star{width:14px;height:14px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);background:rgba(var(--qsa-rgb),.25)}
+ .o-qss-star.on{background:linear-gradient(180deg,#FFF3C4,var(--qsa))}
+ .o-qss-xp{position:relative;height:12px;margin-top:auto;border-radius:6px;background:#140605;box-shadow:inset 0 0 0 1px rgba(var(--qsa-rgb),.6)}
+-.o-qss-xp i{position:absolute;inset:2px;border-radius:4px;background:linear-gradient(90deg,#9A7414,var(--qsa),#FFF0B8);transform-origin:left}
++.o-qss-fill{position:absolute;inset:2px;border-radius:4px;background:linear-gradient(90deg,#9A7414,var(--qsa),#FFF0B8);transform-origin:left}
+ .o-qss-xp b{position:absolute;right:4px;top:-15px;font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:9px;letter-spacing:.22em;color:#D9C29A}
+ @keyframes qsRays{from{opacity:0;transform:scale(.2) rotate(-40deg)}to{opacity:1;transform:none}}
+ @keyframes qsCrest{0%{opacity:0;transform:scale(1.7)}60%{opacity:1;transform:scale(.94)}100%{opacity:1;transform:none}}
+@@ -83,7 +83,7 @@
+    (crest, rays, LEVEL UP!), then who it is (name, tier and months, stars). */
+ .playing .o-qss-plate{animation:qsRise calc(.28s / var(--spd)) ease-out both}
+ .playing .o-qss-xp{animation:qsRise calc(.28s / var(--spd)) ease-out calc(.06s / var(--spd)) both}
+-.playing .o-qss-xp i{animation:qsFill calc(.55s / var(--spd)) cubic-bezier(.45,.05,.3,1) calc(.2s / var(--spd)) both,qsFlash calc(.45s / var(--spd)) ease-out calc(.75s / var(--spd))}
++.playing .o-qss-fill{animation:qsFill calc(.55s / var(--spd)) cubic-bezier(.45,.05,.3,1) calc(.2s / var(--spd)) both,qsFlash calc(.45s / var(--spd)) ease-out calc(.75s / var(--spd))}
+ .playing .o-qss-crestw{animation:qsCrest calc(.34s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.7s / var(--spd)) both}
+ .playing .o-qss-rays{animation:qsRays calc(.5s / var(--spd)) cubic-bezier(.2,.8,.3,1) calc(.74s / var(--spd)) both}
+ .playing .o-qss-up{animation:qsLevel calc(.4s / var(--spd)) cubic-bezier(.3,.8,.3,1) calc(.84s / var(--spd)) both}
+@@ -141,7 +141,7 @@
+ .o-qsd-carrier{position:absolute;left:-14px;right:-14px;top:0;bottom:0;z-index:2;pointer-events:none}
+ .o-qsd-carrier .o-qsd-rod{position:absolute;left:0;right:0;bottom:-8px;margin:0}
+ .o-qsd-seal{position:absolute;right:22px;bottom:16px;z-index:3;width:52px;height:52px;display:grid;place-items:center;clip-path:polygon(50% 0,63% 6%,78% 4%,86% 16%,98% 26%,95% 41%,100% 56%,90% 68%,88% 84%,73% 88%,62% 99%,48% 94%,34% 100%,24% 88%,9% 84%,10% 68%,0 55%,7% 41%,3% 25%,16% 16%,24% 4%,38% 7%);background:radial-gradient(circle at 40% 34%,#E04848,var(--qs-wax) 52%,#6E0A0F 100%)}
+-.o-qsd-seal i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25),inset 0 0 0 4px rgba(255,255,255,.08)}
++.o-qsd-emblem{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25),inset 0 0 0 4px rgba(255,255,255,.08)}
+ .o-qsd-seal svg{display:block;width:18px;height:18px}
+ /* The paper's visible edge and the lower rod's centre both start 10px down and travel the sheet's
+    height with the same easing, so the rod always covers the edge it is unrolling (in and out). */
+@@ -167,7 +167,7 @@
+ .o-qsr-ban::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;background:linear-gradient(90deg,#3E2614,#8A5A2E,#3E2614)}
+ .o-qsr-ban::after{content:"";position:absolute;left:50%;top:-4px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--qsa)}
+ .o-qsr-flag{position:absolute;left:3px;right:3px;top:8px;height:64px;transform-origin:50% 0;clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);background:var(--qsa)}
+-.o-qsr-flag i{position:absolute;inset:2px 2px 3px;clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);background:linear-gradient(180deg,#7A1E1E,#4A0E0E)}
++.o-qsr-field{position:absolute;inset:2px 2px 3px;clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);background:linear-gradient(180deg,#7A1E1E,#4A0E0E)}
+ .o-qsr-flag b{position:absolute;left:50%;top:18px;width:13px;height:13px;margin-left:-6.5px;transform:rotate(45deg);background:var(--qsa)}
+ .o-qsr-plate{position:absolute;left:0;right:0;top:76px;bottom:0;border-radius:8px;padding:12px 14px;text-align:center;background:linear-gradient(180deg,#2A1210,#140807);box-shadow:inset 0 0 0 2px rgba(var(--qsa-rgb),.7),0 14px 28px rgba(0,0,0,.6)}
+ .o-qsr-title{font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:19px;line-height:1.15;letter-spacing:.08em;text-transform:uppercase;color:var(--qsa);text-shadow:0 2px 0 rgba(0,0,0,.6)}
+@@ -176,13 +176,13 @@
+ .o-qsr-count{font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:19px;color:var(--qsa)}
+ .o-qsr-shields{display:flex;justify-content:center;align-items:flex-end;gap:6px;height:42px;margin-top:9px}
+ .o-qsr-sh{position:relative;flex:none;width:34px;height:40px;clip-path:polygon(0 0,100% 0,100% 45%,92% 70%,50% 100%,8% 70%,0 45%);background:var(--qsa)}
+-.o-qsr-sh i{position:absolute;inset:2.5px;clip-path:polygon(0 0,100% 0,100% 45%,92% 70%,50% 100%,8% 70%,0 45%);background:var(--sf)}
+-.o-qsr-sh i::before{content:"";position:absolute;inset:0}
+-.o-qsr-sh.c0 i::before{background:linear-gradient(135deg,transparent 40%,var(--qsa) 40% 58%,transparent 58%)}
+-.o-qsr-sh.c1 i::before{background:linear-gradient(90deg,transparent 40%,var(--qsa) 40% 60%,transparent 60%),linear-gradient(0deg,transparent 52%,var(--qsa) 52% 66%,transparent 66%)}
+-.o-qsr-sh.c2 i::before{background:linear-gradient(90deg,transparent 38%,var(--qsa) 38% 62%,transparent 62%)}
+-.o-qsr-sh.c3 i::before{background:linear-gradient(0deg,transparent 48%,var(--qsa) 48% 66%,transparent 66%)}
+-.o-qsr-sh.c4 i::before{background:radial-gradient(circle at 50% 42%,#FBE3A0 0 4px,var(--qsa) 5px 8px,transparent 9px)}
++.o-qsr-arms{position:absolute;inset:2.5px;clip-path:polygon(0 0,100% 0,100% 45%,92% 70%,50% 100%,8% 70%,0 45%);background:var(--sf)}
++.o-qsr-arms::before{content:"";position:absolute;inset:0}
++.o-qsr-sh.c0 .o-qsr-arms::before{background:linear-gradient(135deg,transparent 40%,var(--qsa) 40% 58%,transparent 58%)}
++.o-qsr-sh.c1 .o-qsr-arms::before{background:linear-gradient(90deg,transparent 40%,var(--qsa) 40% 60%,transparent 60%),linear-gradient(0deg,transparent 52%,var(--qsa) 52% 66%,transparent 66%)}
++.o-qsr-sh.c2 .o-qsr-arms::before{background:linear-gradient(90deg,transparent 38%,var(--qsa) 38% 62%,transparent 62%)}
++.o-qsr-sh.c3 .o-qsr-arms::before{background:linear-gradient(0deg,transparent 48%,var(--qsa) 48% 66%,transparent 66%)}
++.o-qsr-sh.c4 .o-qsr-arms::before{background:radial-gradient(circle at 50% 42%,#FBE3A0 0 4px,var(--qsa) 5px 8px,transparent 9px)}
+ .o-qsr-more{align-self:center;margin-left:4px;font-family:"Cinzel",Georgia,serif;font-weight:900;font-size:15px;color:var(--qsa)}
+ @keyframes qsBanRise{from{transform:translateY(84px)}to{transform:none}}
+ @keyframes qsSway{0%,100%{transform:skewX(0deg)}50%{transform:skewX(4deg)}}
+@@ -202,7 +202,7 @@
+ .o-qsg-flip{position:absolute;inset:0;transform-style:preserve-3d}
+ .o-qsg-face{position:absolute;inset:0;overflow:hidden;border-radius:12px;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+ .o-qsg-back{transform:rotateY(180deg);display:grid;place-items:center;background:repeating-linear-gradient(45deg,#5B1A1A 0 10px,#4A1414 10px 20px);box-shadow:inset 0 0 0 3px var(--qsa),inset 0 0 0 7px #2A0A0A,inset 0 0 0 8px rgba(var(--qsa-rgb),.6)}
+-.o-qsg-back i{width:70px;height:70px;transform:rotate(45deg);border:3px solid var(--qsa);box-shadow:inset 0 0 0 6px rgba(var(--qsa-rgb),.25)}
++.o-qsg-emblem{width:70px;height:70px;transform:rotate(45deg);border:3px solid var(--qsa);box-shadow:inset 0 0 0 6px rgba(var(--qsa-rgb),.25)}
+ .o-qsg-front{display:flex;flex-direction:column;align-items:center;padding:14px 18px;text-align:center;background:linear-gradient(170deg,#2C1A10,#160C06);box-shadow:inset 0 0 0 2px var(--a,#FF9A2E),inset 0 0 0 5px #1A0E06,inset 0 0 0 6px rgba(var(--a-rgb,255,154,46),.55),0 0 26px rgba(var(--a-rgb,255,154,46),.55),0 14px 30px rgba(0,0,0,.6)}
+ .o-qsg-rarity{font-family:"Cinzel",Georgia,serif;font-weight:700;font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--a,#FF9A2E)}
+ .o-qsg-gem{position:relative;width:44px;height:44px;margin:8px auto 6px;clip-path:polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%);background:linear-gradient(160deg,#FFF3C4 0%,var(--qsa) 40%,#FF9A2E 70%,#8A4A0A 100%)}
+diff --git a/public/overlay/objects/styles/quest.js b/public/overlay/objects/styles/quest.js
+index 52031bc..6b34761 100644
+--- a/public/overlay/objects/styles/quest.js
++++ b/public/overlay/objects/styles/quest.js
+@@ -76,18 +76,18 @@
+         + '<div class="o-qss-crestw"><div class="o-qss-crest"><i></i><span class="o-qss-lv">LV</span><span class="o-qss-num">' + months + '</span></div></div>'
+         + '<div class="o-qss-txt"><div class="o-qss-up">' + label(d, 'Level up!') + '</div>' + nm('o-qs-name', d.username, 15)
+         + '<div class="o-qss-meta"><span class="o-qss-stars">' + stars + '</span><span>Tier ' + tier + ' · ' + months + (months === 1 ? ' month' : ' months') + '</span></div>'
+-        + '<div class="o-qss-xp"><b>XP</b><i></i></div></div></div>';
++        + '<div class="o-qss-xp"><b>XP</b><i class="o-qss-fill"></i></div></div></div>';
+     },
+   });
+ 
+   K.register({
+-    key: 'bits-quest', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-quest', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     amount: 'Grows with the amount', sound: 'qsBits', fx: 'none',
+     anim: { in: 'hold', dur: '1.3s', ease: 'linear' },
+     exit: { out: 'qsExitDown', dur: '0.4s', ease: 'cubic-bezier(.5,0,.9,.4)' }, len: 1.4,
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), r = rng(hash(d.username + n));
+-      var count = Math.max(4, Math.min(14, 3 + Math.round(Math.log10(n + 1) * 2.6))), coins = '';
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), r = rng(hash(d.username + size));
++      var count = Math.max(4, Math.min(14, 3 + Math.round(Math.log10(size + 1) * 2.6))), coins = '';
+       for (var i = 0; i < count; i++) {
+         var side = i % 3, cx, cl;
+         if (side === 0) { cx = -(46 + r() * 26); cl = 54 + r() * 8; }
+@@ -114,23 +114,23 @@
+         + '<div class="o-qsd-by">granted by</div>' + nm('o-qs-name', d.username, 16)
+         + (d.message ? '<div class="o-qsd-msg">“' + esc(d.message) + '”</div>' : '')
+         + '</div><div class="o-qsd-carrier"><i class="o-qsd-rod"></i></div>'
+-        + '<div class="o-qsd-seal"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18l-1.6-10-4.4 4-3-7-3 7-4.4-4z" fill="rgba(60,0,4,.55)"/><path d="M3 20.5h18" stroke="rgba(60,0,4,.55)" stroke-width="2"/></svg></i></div>'
++        + '<div class="o-qsd-seal"><i class="o-qsd-emblem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18l-1.6-10-4.4 4-3-7-3 7-4.4-4z" fill="rgba(60,0,4,.55)"/><path d="M3 20.5h18" stroke="rgba(60,0,4,.55)" stroke-width="2"/></svg></i></div>'
+         + '</div></div>';
+     },
+   });
+ 
+   K.register({
+-    key: 'raid-quest', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-quest', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     amount: 'Grows with the viewers', sound: 'qsRaid', fx: 'smoke',
+     anim: { in: 'hold', dur: '1.5s', ease: 'linear' },
+     exit: { out: 'qsExitDown', dur: '0.45s', ease: 'cubic-bezier(.5,0,.9,.4)' },
+-    len: function (d) { return 0.95 + Math.min(9, intOf(d.viewers)) * 0.08; },
++    len: function (d) { return 0.95 + Math.min(9, intOf(K.sizeOf(d, 'raid'))) * 0.08; },
+     render: function (d) {
+-      var v = intOf(d.viewers), n = Math.min(v, 9), shields = '', bans = '';
++      var v = intOf(d.viewers), n = Math.min(intOf(K.sizeOf(d, 'raid')), 9), shields = '', bans = '';
+       var fields = ['#5B1A1A', '#1F3A6B', '#22502E', '#1A1A1E', '#6B4A12'];
+-      for (var i = 0; i < n; i++) shields += '<span class="o-qsr-sh c' + (i % 5) + '" style="--sf:' + fields[(i * 2) % 5] + ';--sd:' + (0.66 + i * 0.08).toFixed(2) + 's"><i></i></span>';
++      for (var i = 0; i < n; i++) shields += '<span class="o-qsr-sh c' + (i % 5) + '" style="--sf:' + fields[(i * 2) % 5] + ';--sd:' + (0.66 + i * 0.08).toFixed(2) + 's"><i class="o-qsr-arms"></i></span>';
+       if (v > n) shields += '<span class="o-qsr-more" style="--sd:' + (0.66 + n * 0.08).toFixed(2) + 's">+' + fmt(v - n) + '</span>';
+-      [22, 50, 78].forEach(function (x, j) { bans += '<span class="o-qsr-ban" style="--bx:' + x + '%;--bd:' + (0.2 + j * 0.08).toFixed(2) + 's"><span class="o-qsr-flag"><i></i><b></b></span></span>'; });
++      [22, 50, 78].forEach(function (x, j) { bans += '<span class="o-qsr-ban" style="--bx:' + x + '%;--bd:' + (0.2 + j * 0.08).toFixed(2) + 's"><span class="o-qsr-flag"><i class="o-qsr-field"></i><b></b></span></span>'; });
+       return '<div class="obj o-qs o-qsr"><div class="o-qsr-banners">' + bans + '</div><div class="o-qsr-plate">'
+         + '<div class="o-qsr-title">' + label(d, 'The horde approaches') + '</div>'
+         + '<div class="o-qsr-line">' + nm('o-qsr-who', d.username, 12) + '<span>leads</span><b class="o-qsr-count">' + odo(fmt(v), 0.5, 0.6) + '</b><span>' + (v === 1 ? 'warrior' : 'warriors') + '</span></div>'
+@@ -145,7 +145,7 @@
+     exit: { out: 'qsExitShrink', dur: '0.4s', ease: 'cubic-bezier(.5,0,.9,.4)' }, len: 1.2,
+     render: function (d) {
+       return '<div class="obj o-qs o-qsg"><div class="o-qsg-rays"></div><div class="o-qsg-card"><div class="o-qsg-flip">'
+-        + '<div class="o-qsg-face o-qsg-back"><i></i></div>'
++        + '<div class="o-qsg-face o-qsg-back"><i class="o-qsg-emblem"></i></div>'
+         + '<div class="o-qsg-face o-qsg-front"><div class="o-qsg-rarity" style="--k:0">' + label(d, 'Legendary') + '</div><div class="o-qsg-gem" style="--k:1"></div>'
+         + nm('o-qs-name', d.username, 16, '--k:2;') + '<div class="o-qsg-type" style="--k:3">Giveaway winner</div>'
+         + (d.prize ? '<div class="o-qsg-desc" style="--k:4">Grants: <b>' + esc(d.prize) + '</b></div>' : '')

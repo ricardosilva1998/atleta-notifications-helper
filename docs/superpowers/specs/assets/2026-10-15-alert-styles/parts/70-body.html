@@ -1,0 +1,154 @@
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">Overlay builder · proposal 5 · 15 October 2026</p>
+      <h1>Alert styles</h1>
+      <p class="lede">Each alert gets a gallery of finished looks. Today’s looks stay as presets, so nobody’s overlay changes until a streamer picks something new. The <b>racing cards</b> come back for all six alerts, rebuilt as night-race graphics; <b>Grand Prix</b>, <b>Cockpit</b> and <b>Arcade</b> add racing flavours; and twenty-one families have nothing to do with racing: <b>Quest</b>, <b>Comic</b>, <b>Cozy</b>, <b>Cosmos</b>, <b>Glass</b>, <b>Spooky</b>, <b>Cyber</b>, <b>Western</b>, <b>Retro OS</b>, <b>Graffiti</b>, <b>Kawaii</b>, <b>Steampunk</b>, <b>Frost</b>, and new in this proposal <b>Neon Sign</b>, <b>Deep Sea</b>, <b>Music</b>, <b>Stadium</b>, <b>Fireworks</b>, <b>Dino</b>, <b>UFO</b> and <b>Breaking News</b>. Every look takes the streamer’s colour, today’s samurai looks included: try the colour swatches. On top of any look a streamer can add a screen effect and a sound, and some looks grow with the amount.</p>
+      <p class="facts-line" id="facts-line"></p>
+    </div>
+    <div class="stage-box">
+      <div class="stage" id="stage" role="button" tabindex="0" aria-label="Play the chosen family on the stream">
+        <div class="screen1080" id="stage-screen">
+          <div class="scene"><i class="kerb l"></i><i class="kerb r"></i><i class="dash"></i><div class="hud tl">P4 · LAP 12/30<br>1:32.418</div><div class="hud br">287 <small>km/h</small></div></div>
+          <div class="alert-pos" id="stage-slot"></div>
+          <div class="fx-layer" id="stage-fx"></div>
+        </div>
+        <div class="stage-cap" id="stage-cap"></div>
+      </div>
+      <div class="fchips" id="stage-fam" role="group" aria-label="Family on the stream"></div>
+      <div class="stage-ctl">
+        <button type="button" class="btn primary" id="stage-play">▶ Play all six alerts</button>
+        <button type="button" class="toggle" id="stage-fx-t" aria-pressed="true">Screen effects</button>
+        <button type="button" class="toggle" id="stage-sound-t" aria-pressed="false">Sound</button>
+        <button type="button" class="toggle" id="stage-zoom-t" aria-pressed="false">Close-up</button>
+      </div>
+      <p class="stage-note">A 1920×1080 stream scaled down to fit, so the alerts are the size they will be on stream. Close-up enlarges the top of the screen.</p>
+    </div>
+  </div>
+</header>
+
+<nav class="bar" aria-label="Preview settings">
+  <div class="wrap">
+    <div class="ctl"><span class="lbl">Alert</span>
+      <div class="seg" id="f-alert" role="group" aria-label="Show alert">
+        <button type="button" data-v="all" aria-pressed="true">All</button>
+        <button type="button" data-v="follow" aria-pressed="false">Follow</button>
+        <button type="button" data-v="subscription" aria-pressed="false">Sub</button>
+        <button type="button" data-v="bits" aria-pressed="false">Bits</button>
+        <button type="button" data-v="donation" aria-pressed="false">Donation</button>
+        <button type="button" data-v="raid" aria-pressed="false">Raid</button>
+        <button type="button" data-v="giveaway" aria-pressed="false">Giveaway</button>
+      </div>
+    </div>
+    <div class="ctl"><span class="lbl">Family</span>
+      <div class="seg" id="f-fam" role="group" aria-label="Show family">
+        <button type="button" data-v="all" aria-pressed="true">All</button>
+      </div>
+    </div>
+    <div class="ctl"><span class="lbl">Example</span>
+      <div class="seg" id="f-level" role="group" aria-label="Example amounts">
+        <button type="button" data-v="small" aria-pressed="false">Small</button>
+        <button type="button" data-v="medium" aria-pressed="true">Medium</button>
+        <button type="button" data-v="big" aria-pressed="false">Big</button>
+      </div>
+      <button type="button" class="toggle" id="f-long" aria-pressed="false">Long name</button>
+    </div>
+    <div class="ctl"><span class="lbl">Colour</span><div class="swatches" id="f-livery" role="group" aria-label="Accent colour of the new families"></div></div>
+    <div class="ctl"><span class="lbl">Speed</span>
+      <div class="seg" id="f-speed" role="group" aria-label="Animation speed">
+        <button type="button" data-v="0.75" aria-pressed="false">0.75×</button>
+        <button type="button" data-v="1" aria-pressed="true">1×</button>
+        <button type="button" data-v="1.5" aria-pressed="false">1.5×</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <button type="button" class="toggle" id="f-loop" aria-pressed="true">Loop</button>
+      <button type="button" class="toggle" id="f-sound" aria-pressed="false">Sound</button>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <section class="sec" id="families">
+    <div class="wrap">
+      <div class="sec-head"><h2>Families</h2><p>A family gives all six alerts one look. Streamers pick per alert, or set a whole family in one click.</p></div>
+      <ul class="fam-grid" id="fam-grid"></ul>
+    </div>
+  </section>
+  <div id="groups"></div>
+
+  <section class="sec" id="layers">
+    <div class="wrap">
+      <div class="sec-head"><h2>On top of any look</h2><p>These layers work with every look, so a streamer can put tyre smoke behind the samurai gate or give the Cockpit dash an arcade coin sound. Today’s screen effects (confetti, gold, money, robots, tyre marks) stay available.</p></div>
+      <div class="fx-grid" id="fx-grid"></div>
+      <div class="split">
+        <div class="card">
+          <h3>A sound for every look</h3>
+          <p>Each look comes with its own sound, made in the browser like today’s engine revs, so there is nothing to upload. A streamer’s own uploaded sound still wins. Click to listen.</p>
+          <div class="sound-fams" id="sound-list"></div>
+        </div>
+        <div class="card">
+          <h3>Grows with the amount</h3>
+          <p>Looks tagged in purple read the number in the alert. Switch the Example control above between Small, Medium and Big to see the difference.</p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Alert</th><th>Grand Prix</th><th>Cockpit</th><th>Arcade</th></tr></thead>
+              <tbody>
+                <tr><td>Bits</td><td>Sectors go yellow, green, purple. 1,000 or more is a purple lap.</td><td>The needle goes further. 1,000 or more bounces off the limiter.</td><td>More coins. 1,000 or more says HIGH SCORE!</td></tr>
+                <tr><td>Donation</td><td>Message typed out as team radio.</td><td>More fuel, and a faster pit stop for a bigger tip.</td><td>Goes straight to 1st on the table.</td></tr>
+                <tr><td>Raid</td><td>One car per raider in the pit lane, up to 12, then +N.</td><td>One radar blip per raider, up to 22.</td><td>A longer convoy, up to 10 cars.</td></tr>
+                <tr><td>Subscriber</td><td>Months are the lap; tier is the tyre: soft, medium, hard.</td><td>Months are the lap; tier is the engine map.</td><td>Months are the stage; tier is the class.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="builder">
+    <div class="wrap">
+      <div class="sec-head"><h2>In the builder <span class="mock-tag">mock-up</span></h2><p>A Style section opens each alert: pick a look, then change its colour, text, speed and the layers on top. The preview uses the same code as OBS, as it does today. Click the looks and tabs to try it.</p></div>
+      <div class="bm" id="bm">
+        <div class="bm-panel" id="bm-panel"></div>
+        <div class="bm-main">
+          <div class="bm-save"><span class="bm-badge" id="bm-badge">Follow</span><code id="bm-id" style="font-size:12px;color:var(--fg-2)"></code><span class="spacer"></span><button type="button" class="btn" id="bm-test">▶ Test</button><button type="button" class="btn primary" id="bm-save">Save</button></div>
+          <div class="bm-canvas" id="bm-canvas" style="--h:250px"><div class="scene"><i class="kerb l"></i><i class="kerb r"></i><i class="dash"></i></div><div class="crop-screen"><div class="alert-pos" id="bm-slot"></div></div></div>
+          <div class="bm-foot" id="bm-foot"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="notes">
+    <div class="wrap">
+      <div class="sec-head"><h2>Notes</h2></div>
+      <div class="notes">
+        <div class="card"><h3>Stays the same</h3><ul>
+          <li>The six looks you named become presets with exactly those names: <code>follow-samurai</code>, <code>subscriber-samurai</code>, <code>bits-samurai</code>, <code>donation-samurai</code>, <code>raid-samurai</code>, <code>giveaway-racing</code>.</li>
+          <li>Nobody’s overlay changes on release. An alert with no style chosen keeps today’s look.</li>
+          <li>Position and width still come from Size &amp; Position, for every look.</li>
+          <li>The OBS link stays the same, and a newly saved style reaches an open overlay without a reload.</li>
+        </ul></div>
+        <div class="card"><h3>Decided</h3><ul>
+          <li><b>All 18 families of proposal 4 are kept</b>, and the spec describes how they ship: release A is the system with Samurai and Racing, then B (Spooky, Grand Prix, Cockpit, Arcade) before Halloween, C, and D before December.</li>
+          <li><b>The racing cards come back for all six alerts, improved:</b> <code>follow-racing</code> to <code>giveaway-racing</code>. The giveaway’s card is improved in place; a streamer’s saved colours and texts carry over.</li>
+          <li><b>Every look’s colour is the streamer’s to pick</b>, the samurai looks and the omikuji included.</li>
+          <li><b>The plan for release A is written</b> and was run end to end before it was written.</li>
+        </ul></div>
+        <div class="card"><h3>New in this proposal</h3><ul>
+          <li><b>Eight more families, 48 looks:</b> Neon Sign (tubes and bulbs on a brick wall), Deep Sea (bubbles, a pearl, a school of fish, a message in a bottle, dolphins, jellyfish), Music (a record, an equalizer, a bass drop, a tape deck, a crowd, a gold record), Stadium (a jumbotron, a season ticket, a goal, a sponsor board, a crowd wave, a trophy lift), Fireworks, Dino, UFO and Breaking News.</li>
+          <li><b>Each of them was built to the colour rule:</b> your colour paints the main thing in every look (the neon tubes, the pearl, the record, the fireworks, the saucer’s beam, the news bar), and text on it stays readable.</li>
+          <li><b>The samurai looks and the omikuji now follow the colour too.</b> Every shade of their red reads your colour; with no colour picked they are exactly today’s.</li>
+          <li><b>Pick the ones to keep.</b> Each family ships on its own, so any of them can wait for a later release.</li>
+        </ul></div>
+        <div class="card"><h3>Found while preparing this</h3><ul id="found-list">
+          <li><b>Today’s giveaway card has no look of its own.</b> Its colours come only from a design saved in the builder. Without one it is see-through, with a black label and border (checked against <code>overlay.css</code>). The improved <code>giveaway-racing</code> always has its colours.</li>
+          <li><b>A Reset, or one family for all six alerts, would have given Racing the follow alert’s colours</b> (the database filled a new row with the follow’s navy and lavender). The plan fixes it: such a row takes the alert’s own colours.</li>
+          <li><b>The overlay page sizes every box with its padding inside</b> (<code>box-sizing: border-box</code> in <code>overlay.css</code>). This page now does the same, so what you see here is what OBS draws; the families drawn the other way say so in their own styles and look exactly as before.</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap">Proposal 1 for the Atleta overlay builder. Every look on this page runs on the same structure as the real alert registry (<code>public/overlay/objects/</code>); the samurai looks and the racing card are today’s code. Nothing has been committed.</div></footer>

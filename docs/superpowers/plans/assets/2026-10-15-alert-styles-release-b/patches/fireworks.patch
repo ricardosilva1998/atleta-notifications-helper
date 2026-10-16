@@ -1,0 +1,50 @@
+diff --git a/public/overlay/objects/styles/fireworks.js b/public/overlay/objects/styles/fireworks.js
+index a161a01..9b4bf0c 100644
+--- a/public/overlay/objects/styles/fireworks.js
++++ b/public/overlay/objects/styles/fireworks.js
+@@ -177,11 +177,11 @@
+     return { count: count, st: st, last: last, glow: last + 0.08, len: Math.max(last + 0.55, last + 0.08 + 0.72) };
+   }
+   K.register({
+-    key: 'bits-fireworks', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'bits-fireworks', eventType: 'bits', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'fwkBits', fx: 'sparks', anim: hold('1.5s'), exit: exit('fwkFall', '0.45s'),
+-    len: function (d) { return volley(intOf(d.amount != null ? d.amount : d.bits)).len; },
++    len: function (d) { return volley(intOf(K.sizeOf(d, 'bits'))).len; },
+     render: function (d) {
+-      var n = intOf(d.amount != null ? d.amount : d.bits), V = volley(n), r = rng(hash(d.username + n)), lvl = n >= 1000 ? 2 : n >= 100 ? 1 : 0;
++      var n = intOf(d.amount != null ? d.amount : d.bits), size = intOf(K.sizeOf(d, 'bits')), V = volley(size), r = rng(hash(d.username + size)), lvl = size >= 1000 ? 2 : size >= 100 ? 1 : 0;
+       var order = [], rockets = '', shells = '', sp = 340 / V.count, mid = (V.count - 1) / 2, i;
+       for (i = 0; i < V.count; i++) order.push(i);
+       order.sort(function (a, b) { return Math.abs(a - mid) - Math.abs(b - mid) || a - b; });   // the middle goes first
+@@ -205,12 +205,12 @@
+     return { size: [150, 180, 206][lvl], rays: [18, 22, 26][lvl], inner: [0, 10, 14][lvl] };
+   }
+   K.register({
+-    key: 'donation-fireworks', eventType: 'donation', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'donation-fireworks', eventType: 'donation', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'fwkDonation', fx: 'none', anim: hold('1.5s'), exit: exit('fwkFlashOut', '0.5s'), len: 1.65,
+     render: function (d) {
+-      var B = bigShell(d.amount), amt = money(d.amount, d.currency), al = Array.from(amt).length, msg = d.message || '';
++      var size = K.sizeOf(d, 'donation'), B = bigShell(size), amt = money(d.amount, d.currency), al = Array.from(amt).length, msg = d.message || '';
+       return '<div class="obj o-fwk o-fwkd"><div class="o-fwk-sky o-fwkd-sky">' + rocket(210, 116, 58, 0.22, 0.38)
+-        + shell(210, 58, B.size, { rays: B.rays, inner: B.inner, t: 0.68, seed: hash(d.username + amt), sw: 2, tw: true }) + TOWN
++        + shell(210, 58, B.size, { rays: B.rays, inner: B.inner, t: 0.68, seed: hash(d.username + money(size, d.currency)), sw: 2, tw: true }) + TOWN
+         + '<i class="o-fwkd-puff"></i><div class="o-fwkd-amt" style="font-size:' + (al <= 6 ? 42 : al <= 8 ? 36 : 30) + 'px">' + odo(amt, 0.72, 0.6) + '</div></div>'
+         + '<div class="o-fwk-plate o-fwkd-plate' + (msg ? '' : ' solo') + '">'
+         + (msg ? '<div class="o-fwkd-msg">“' + esc(msg) + '”</div>' : '')
+@@ -227,11 +227,11 @@
+     return { n: n, st: st, last: last, len: last + 0.5 };
+   }
+   K.register({
+-    key: 'raid-fireworks', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: false,
++    key: 'raid-fireworks', eventType: 'raid', family: FAMILY, controls: CONTROLS, grows: true,
+     sound: 'fwkRaid', fx: 'none', anim: hold('1.6s'), exit: exit('fwkFall', '0.45s'),
+-    len: function (d) { return barrage(intOf(d.viewers)).len; },
++    len: function (d) { return barrage(intOf(K.sizeOf(d, 'raid'))).len; },
+     render: function (d) {
+-      var v = intOf(d.viewers), B = barrage(v), r = rng(hash(d.username + v)), sp = 372 / B.n, size = Math.round(Math.max(48, Math.min(86, 250 / B.n + 34))), sky = '';
++      var v = intOf(d.viewers), drawn = intOf(K.sizeOf(d, 'raid')), B = barrage(drawn), r = rng(hash(d.username + drawn)), sp = 372 / B.n, size = Math.round(Math.max(48, Math.min(86, 250 / B.n + 34))), sky = '';
+       for (var i = 0; i < B.n; i++) {
+         var x = 24 + sp * (i + 0.5), y = (B.n === 1 ? 52 : i % 2 ? 66 : 40) + (r() - 0.5) * 8, lt = 0.24 + i * B.st;
+         sky += rocket(x, 130, y, lt, 0.36) + shell(x, y, size + Math.round((r() - 0.5) * 8), { rays: 10, t: lt + 0.42, seed: hash(d.username) + i * 7 });

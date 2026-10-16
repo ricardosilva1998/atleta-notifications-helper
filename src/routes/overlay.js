@@ -6,9 +6,10 @@ const db = require('../db');
 const bus = require('../services/overlayBus');
 const overlayPresence = require('../services/overlayPresence');
 const customSounds = require('../services/customSounds');
-const { buildOverlayConfig } = require('../services/overlayConfig');
+const { buildOverlayConfig, channelLettering } = require('../services/overlayConfig');
 const { accountDisabledChannel } = require('../services/streamerAccess');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
+const { bundle: alertStyles } = require('../services/alertStyleBundle');
 // Event streams are ended when the server shuts down; OBS reconnects to the new one.
 const { holdStream } = require('../httpDrain');
 const { t, SUPPORTED_LANGS } = require('../i18n');
@@ -32,6 +33,15 @@ function endStreamWhenAccountDisabled(streamerId, req, res) {
 // redemption clips, and the chat lines the iRacing chat overlay reads, which twitchChat.js already sends only
 // while the switch is on).
 const ALERT_TYPES = new Set(['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember']);
+
+// The alert looks' family files, joined (services/alertStyleBundle.js). The pages ask for them at
+// ?v=<version>, which changes when a file does, so a browser may keep them for a day.
+router.get('/objects/styles.css', (req, res) => {
+  res.type('text/css').set('Cache-Control', 'public, max-age=86400').send(alertStyles().css);
+});
+router.get('/objects/styles.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'public, max-age=86400').send(alertStyles().js);
+});
 
 // SSE endpoint — MUST be before /:token to avoid being caught by the wildcard
 router.get('/events/:token', (req, res) => {
@@ -402,6 +412,8 @@ router.get('/:token', (req, res) => {
   <link rel="stylesheet" href="/overlay/overlay.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Saira+Condensed:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/overlay/objects/objects.css">
+  <link rel="stylesheet" href="/overlay/objects/styles.css?v=${alertStyles().version}">
+  <link rel="stylesheet" href="/overlay/fx.css">
 </head>
 <body>
   <div id="notification-container"></div>
@@ -410,7 +422,11 @@ router.get('/:token', (req, res) => {
          style="position:absolute; display:none; pointer-events:none; object-fit:contain; z-index:90;"></video>
   <audio id="redemption-audio" preload="auto"></audio>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script>window.ATLETA_CHANNEL = ${JSON.stringify(channelLettering(streamer)).replace(/</g, '\\u003c')};</script>
   <script src="/overlay/objects/index.js"></script>
+  <script src="/overlay/objects/kit.js"></script>
+  <script src="/overlay/objects/styles.js?v=${alertStyles().version}"></script>
+  <script src="/overlay/fx.js"></script>
   <script src="/overlay/placement.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>

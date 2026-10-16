@@ -1,0 +1,234 @@
+/* ═════════ FROST — winter and festive ═════════
+   Frosted navy plates that wear a snow cap with icicles, soft icy glows, a handful of snowflakes (finite)
+   and a soft bounce on landing. Labels are Mountains of Christmas, names and numbers Quicksand. The accent
+   (labels, glows, two of the presents, the aurora) is the streamer's colour; snow, pine, berry, gold and
+   wood stay put. Every animation runs once and then the alert holds still. */
+.o-fro{--froa:var(--a,#8ED8FF);--froa-rgb:var(--a-rgb,142,216,255);--fro-navy:#0E1A33;--fro-snow:#F4F9FF;--fro-pine:#1F6B4A;--fro-berry:#C8234A;--fro-gold:#F2C14E;--fro-muted:rgba(226,238,255,.84);font-family:"Quicksand","Nunito",system-ui,sans-serif;font-weight:700;color:var(--fro-snow)}
+/* The frosted plate: navy glass with an icy edge and frost ferns in the two lower corners. */
+.o-fro-plate{position:absolute;z-index:0;border-radius:16px;background:radial-gradient(130% 80% at 50% 0%,rgba(var(--froa-rgb),.18),rgba(var(--froa-rgb),0) 62%),linear-gradient(180deg,var(--a-night,rgba(27,49,92,.97)),var(--a-ink,rgba(14,26,51,.97)) 72%);box-shadow:inset 0 0 0 1.5px rgba(var(--froa-rgb),.5),inset 0 0 18px rgba(var(--froa-rgb),.14),0 0 18px rgba(var(--froa-rgb),.22),0 12px 24px rgba(3,8,20,.5)}
+.o-fro-plate::before,.o-fro-plate::after{content:"";position:absolute;bottom:3px;z-index:-1;width:54px;height:54px;pointer-events:none;opacity:.5;background:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M2 62L26 38M10 54V47M10 54H17M18 46V39M18 46H25M2 62L8 26M5 44L1 40M5 44L9 40M7 34L3 31M7 34L11 31M2 62L38 56M15 60L20 56M15 60L20 63M27 58L32 54M27 58L32 61' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 0 0/100% 100% no-repeat}
+.o-fro-plate::before{left:3px}
+.o-fro-plate::after{right:3px;transform:scaleX(-1)}
+/* The snow cap: lumpy snow on the plate's top edge, with a few thin icicles hanging under it. */
+.o-fro-cap{position:absolute;left:-4px;right:-4px;top:-9px;z-index:2;height:25px;pointer-events:none;border-radius:10px 10px 4px 4px;background:radial-gradient(ellipse 16px 8px at 50% 100%,#FFFFFF 94%,rgba(255,255,255,0) 100%) 0 1px/32px 9px repeat-x,radial-gradient(ellipse 12px 6px at 50% 100%,#F4F9FF 94%,rgba(244,249,255,0) 100%) 14px 4px/25px 6px repeat-x,linear-gradient(180deg,#FFFFFF,#D6E8FA) 0 9px/100% 7px no-repeat,conic-gradient(from -17deg at 50% 100%,#D6E8FA 0 34deg,rgba(214,232,250,0) 0) 5px 16px/17px 6px repeat-x,conic-gradient(from -13deg at 50% 100%,#CBE2F8 0 26deg,rgba(203,226,248,0) 0) 12px 16px/29px 9px repeat-x;filter:drop-shadow(0 2px 1.5px rgba(5,14,36,.45))}
+.o-fro-lbl{font-family:"Mountains of Christmas","Quicksand",cursive;font-weight:700;font-size:23px;line-height:1.2;color:var(--froa);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 0 rgba(3,8,20,.9),0 0 12px rgba(var(--froa-rgb),.55)}
+.o-fro-name{font-weight:700;font-size:calc(26px * var(--fit,1));line-height:1.15;color:#FFFFFF;text-shadow:0 0 14px rgba(var(--froa-rgb),.5),0 2px 3px rgba(3,8,20,.75)}
+.o-fro-flake{display:block;fill:none;stroke:#FFFFFF;stroke-width:1.9;stroke-linecap:round;overflow:visible;filter:drop-shadow(0 0 3px rgba(var(--froa-rgb),.75))}
+.o-fro-pine{display:block;overflow:visible}
+.o-fro-pine-t{fill:#23744F;stroke:#174F37;stroke-width:.8;stroke-linejoin:round}
+.o-fro-pine-s{fill:#FFFFFF;stroke:#FFFFFF;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.o-fro-pine-k{fill:#5A3520}
+.o-fro-stars{position:absolute;inset:0;background:radial-gradient(circle at 6% 18%,#FFFFFF 0 1px,rgba(255,255,255,0) 1.7px),radial-gradient(circle at 15% 44%,rgba(255,255,255,.75) 0 .8px,rgba(255,255,255,0) 1.5px),radial-gradient(circle at 24% 12%,rgba(255,255,255,.9) 0 1.1px,rgba(255,255,255,0) 1.8px),radial-gradient(circle at 33% 36%,rgba(255,255,255,.6) 0 .8px,rgba(255,255,255,0) 1.4px),radial-gradient(circle at 44% 9%,#FFFFFF 0 .9px,rgba(255,255,255,0) 1.6px),radial-gradient(circle at 52% 30%,rgba(255,255,255,.7) 0 .8px,rgba(255,255,255,0) 1.5px),radial-gradient(circle at 63% 15%,rgba(255,255,255,.85) 0 1px,rgba(255,255,255,0) 1.7px),radial-gradient(circle at 74% 40%,rgba(255,255,255,.6) 0 .8px,rgba(255,255,255,0) 1.4px),radial-gradient(circle at 83% 10%,#FFFFFF 0 1.1px,rgba(255,255,255,0) 1.8px),radial-gradient(circle at 92% 28%,rgba(255,255,255,.75) 0 .9px,rgba(255,255,255,0) 1.6px),radial-gradient(circle at 96% 52%,rgba(255,255,255,.6) 0 .8px,rgba(255,255,255,0) 1.4px),radial-gradient(circle at 4% 60%,rgba(255,255,255,.6) 0 .8px,rgba(255,255,255,0) 1.4px)}
+@keyframes froRise{0%{opacity:0;transform:translateY(18px) scale(.96)}60%{opacity:1;transform:translateY(-3px) scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes froFrostIn{0%{opacity:0;filter:blur(3px);transform:translateY(5px)}100%{opacity:1;filter:none;transform:none}}
+@keyframes froFade{from{opacity:0}to{opacity:1}}
+@keyframes froTwinkle{0%{opacity:0;transform:scale(0) rotate(-45deg)}50%{opacity:1;transform:scale(1.5) rotate(0deg)}100%{opacity:var(--o,1);transform:none}}
+@keyframes froSheen{from{transform:translateX(-120%) skewX(-16deg)}to{transform:translateX(330%) skewX(-16deg)}}
+
+/* follow — Snow globe: it lands, shakes, the snow swirls and settles, the name appears inside */
+.o-frof{height:140px}
+.o-frof-globe{position:absolute;left:50%;top:0;width:352px;height:140px;margin-left:-176px;transform-origin:50% 100%}
+.o-frof-glass{position:absolute;left:14px;right:14px;top:2px;height:100px;overflow:hidden;border-radius:162px 162px 16px 16px/82px 82px 16px 16px;background:radial-gradient(ellipse 60% 70% at 50% 100%,rgba(var(--froa-rgb),.42),rgba(var(--froa-rgb),0) 72%),linear-gradient(180deg,var(--a-deep,#1C3764) 0%,var(--a-night,#122542) 55%,var(--a-ink,#0E1A33) 100%);box-shadow:0 0 22px rgba(var(--froa-rgb),.32),0 10px 20px rgba(3,8,20,.45)}
+.o-frof-ground{position:absolute;left:-18px;right:-18px;bottom:-30px;height:58px;border-radius:50%;background:radial-gradient(ellipse 60% 55% at 50% 30%,#FFFFFF,#DCEBFA 70%,#BBD5F0);box-shadow:0 -3px 10px rgba(255,255,255,.3)}
+.o-frof-tree{position:absolute}
+.o-frof-tl{left:26px;bottom:16px;width:30px;height:40px}
+.o-frof-tr{right:30px;bottom:19px;width:24px;height:32px}
+.o-frof-txt{position:absolute;left:36px;right:36px;top:28px;text-align:center}
+.o-frof-name{font-size:calc(27px * var(--fit,1))}
+.o-frof-sn{position:absolute;left:var(--x);top:var(--y);width:var(--s);height:var(--s);margin:calc(var(--s) / -2) 0 0 calc(var(--s) / -2);border-radius:50%;background:#FFFFFF;box-shadow:0 0 5px rgba(255,255,255,.75);opacity:var(--o,1)}
+.o-frof-rim{position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 2px rgba(226,242,255,.6),inset 0 8px 16px rgba(255,255,255,.1)}
+.o-frof-rim::before{content:"";position:absolute;left:30px;top:9px;width:132px;height:62px;border-radius:50%;border-top:3px solid rgba(255,255,255,.5);transform:rotate(-9deg)}
+.o-frof-rim::after{content:"";position:absolute;right:46px;top:16px;width:12px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);transform:rotate(18deg)}
+.o-frof-base{position:absolute;left:0;right:0;top:96px;height:42px;clip-path:polygon(4% 0,96% 0,100% 100%,0 100%);background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 7px,rgba(0,0,0,.05) 7px 13px),linear-gradient(180deg,#87542F 0%,#653A1F 42%,#43250F 100%);box-shadow:inset 0 3px 0 rgba(242,193,78,.9),inset 0 -5px 0 rgba(0,0,0,.28)}
+.o-frof-plaque{position:absolute;left:50%;top:9px;max-width:248px;height:26px;padding:0 16px;display:flex;align-items:center;overflow:hidden;border-radius:6px;transform:translateX(-50%);background:linear-gradient(180deg,#FFE9A8,#F2C14E 48%,#C8921F);box-shadow:inset 0 0 0 1px rgba(90,54,6,.55),inset 0 1px 0 rgba(255,255,255,.6),0 2px 3px rgba(0,0,0,.4)}
+.o-frof-plaque::after{content:"";position:absolute;top:0;bottom:0;left:0;width:40%;background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.75),rgba(255,255,255,0));transform:translateX(-120%) skewX(-16deg)}
+.o-frof-lbl{min-width:0;font-family:"Mountains of Christmas","Quicksand",cursive;font-weight:700;font-size:20px;line-height:1.2;color:#3A2208;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 0 rgba(255,244,214,.6)}
+@keyframes froGlobeIn{0%{opacity:0;transform:translateY(24px) scale(.94)}55%{opacity:1;transform:translateY(-4px) scale(1.01)}78%{opacity:1;transform:translateY(1px) scale(1)}100%{opacity:1;transform:none}}
+@keyframes froShake{0%,100%{transform:none}18%{transform:rotate(-4.5deg)}38%{transform:rotate(4deg)}58%{transform:rotate(-2.6deg)}78%{transform:rotate(1.2deg)}}
+@keyframes froSwirl{0%{opacity:0;transform:translate(var(--sx),var(--sy))}12%{opacity:1}38%{transform:translate(var(--mx),var(--my))}66%{transform:translate(var(--nx),var(--ny))}100%{opacity:var(--o,1);transform:none}}
+@keyframes froExitSink{to{opacity:0;transform:translateY(16px) scale(.95)}}
+.playing .o-frof-globe{animation:froGlobeIn calc(.46s / var(--spd)) ease-out both,froShake calc(.62s / var(--spd)) ease-in-out calc(.46s / var(--spd))}
+.playing .o-frof-sn{animation:froSwirl calc(var(--du) / var(--spd)) cubic-bezier(.3,.55,.4,1) calc(var(--sd) / var(--spd)) both}
+.playing .o-frof-name{animation:froFrostIn calc(.5s / var(--spd)) ease-out calc(1.02s / var(--spd)) both}
+.playing .o-frof-plaque::after{animation:froSheen calc(.7s / var(--spd)) ease-in-out calc(1.25s / var(--spd)) both}
+
+/* subscriber — Ornament: it drops onto the branch, catches, swings and spins to a stop on the months */
+.o-fros{height:188px}
+.o-fros-t1{--orn:#C8234A;--orn-rgb:200,35,74;--orn-hi:#FF8EAA;--orn-dk:#5A0A20;--orn-band:#F2C14E;--orn-num:#FFE7A0;--orn-cart:rgba(70,6,22,.6);--orn-on:#FFFFFF}
+.o-fros-t2{--orn:#58AEE8;--orn-rgb:110,190,240;--orn-hi:#E8F8FF;--orn-dk:#1A4A80;--orn-band:#FFFFFF;--orn-num:#FFFFFF;--orn-cart:rgba(12,30,62,.55);--orn-on:#0E1A33}
+.o-fros-t3{--orn:#E2A834;--orn-rgb:242,193,78;--orn-hi:#FFF3C4;--orn-dk:#7A4C0A;--orn-band:#FFF7DD;--orn-num:#4A2C04;--orn-cart:rgba(255,248,222,.65);--orn-on:#3A2406}
+.o-fros-plate{left:152px;right:0;top:52px;height:132px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:20px 18px 10px 24px}
+.o-fros-meta{display:flex;align-items:center;gap:9px;margin-top:3px;font-size:15px;color:var(--fro-muted)}
+.o-fros-tier{flex:none;padding:3px 10px 2px;border-radius:999px;background:linear-gradient(180deg,var(--orn-hi),var(--orn) 60%);color:var(--orn-on);font-size:12px;line-height:1.3;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 0 0 1.5px rgba(255,255,255,.35),0 0 10px rgba(var(--orn-rgb),.45)}
+.o-fros-mo{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.o-fros-mn{font-size:19px;color:#FFFFFF}
+.o-fros-msg{font-weight:600;font-size:13px;color:var(--fro-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-fros-orn{position:absolute;left:44px;top:17px;z-index:2;width:96px;height:148px}
+.o-fros-sw{position:absolute;inset:0;transform-origin:48px 2px}
+.o-fros-str{position:absolute;left:47px;top:0;width:2px;height:44px;border-radius:1px;background:#F2C14E;box-shadow:0 0 3px rgba(242,193,78,.6)}
+.o-fros-capm{position:absolute;left:36px;top:40px;width:24px;height:13px;border-radius:4px 4px 2px 2px;background:repeating-linear-gradient(90deg,#FFE9A8 0 2px,#C8921F 2px 4px);box-shadow:inset 0 -2px 0 rgba(90,54,6,.45),0 1px 2px rgba(0,0,0,.45)}
+.o-fros-capm::before{content:"";position:absolute;left:7px;top:-7px;width:10px;height:10px;box-sizing:border-box;border:2px solid #F2C14E;border-radius:50%}
+.o-fros-ball{position:absolute;left:0;top:50px;width:96px;height:96px;overflow:hidden;border-radius:50%;background:radial-gradient(circle at 34% 30%,var(--orn-hi),var(--orn) 46%,var(--orn-dk) 100%);box-shadow:0 0 20px rgba(var(--orn-rgb),.5),0 10px 18px rgba(3,8,20,.45)}
+/* The ornament's surface, unrolled: a band of dots and lines and the engraved months at its right end. It slides
+   left behind the round window, which reads as the ornament spinning, and stops with the months in front. */
+.o-fros-skin{position:absolute;top:0;bottom:0;left:-240px;width:336px;background:radial-gradient(circle,var(--orn-band) 0 2px,rgba(0,0,0,0) 2.6px) 0 16px/16px 12px repeat-x,radial-gradient(circle,var(--orn-band) 0 2px,rgba(0,0,0,0) 2.6px) 8px 68px/16px 12px repeat-x,linear-gradient(180deg,rgba(0,0,0,0) 30%,var(--orn-band) 30% 32.5%,rgba(0,0,0,0) 32.5% 67.5%,var(--orn-band) 67.5% 70%,rgba(0,0,0,0) 70%),repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 18px,rgba(255,255,255,.16) 18px 22px,rgba(255,255,255,0) 22px 40px)}
+.o-fros-num{position:absolute;right:0;top:0;bottom:0;width:96px;display:flex;align-items:center;justify-content:center;font-weight:700;line-height:1;color:var(--orn-num);background:radial-gradient(ellipse 31px 20px at 50% 50%,var(--orn-cart),rgba(0,0,0,0) 100%);text-shadow:0 1px 0 rgba(255,255,255,.3),0 -1px 0 rgba(0,0,0,.35)}
+.o-fros-shade{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 32% 27%,rgba(255,255,255,.7) 0 5%,rgba(255,255,255,.18) 13%,rgba(255,255,255,0) 26%),radial-gradient(circle at 50% 46%,rgba(0,0,0,0) 56%,rgba(0,0,0,.38) 100%)}
+.o-fros-glint{position:absolute;left:19px;top:15px;width:16px;height:16px;background:#FFFFFF;clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%);opacity:.9}
+.o-fros-bough{position:absolute;left:-6px;top:0;z-index:3;width:432px;height:52px;overflow:visible;filter:drop-shadow(0 3px 3px rgba(3,8,20,.5))}
+.o-fros-twig{fill:none;stroke:#5B3A22;stroke-width:4;stroke-linecap:round}
+.o-fros-nlt{fill:none;stroke:#2F8D60;stroke-width:2;stroke-linecap:round}
+.o-fros-ndk{fill:none;stroke:#1F6B4A;stroke-width:2.3;stroke-linecap:round}
+.o-fros-snow{fill:#F4F9FF}
+.o-fros-fl{position:absolute;top:22px;left:var(--x);z-index:3;width:var(--s);height:var(--s);border-radius:50%;background:#FFFFFF;opacity:0}
+@keyframes froBoughIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes froOrnDrop{0%{opacity:0;transform:translateY(-46px);animation-timing-function:cubic-bezier(.5,0,.9,.6)}58%{opacity:1;transform:translateY(7px);animation-timing-function:ease-out}80%{opacity:1;transform:translateY(-2px);animation-timing-function:ease-in-out}100%{opacity:1;transform:none}}
+@keyframes froSwing{0%{transform:rotate(7deg)}30%{transform:rotate(-4.5deg)}58%{transform:rotate(2.2deg)}80%{transform:rotate(-.8deg)}100%{transform:none}}
+@keyframes froSpin{from{transform:translateX(240px)}to{transform:none}}
+@keyframes froFlurry{0%{opacity:0;transform:none}15%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy))}}
+@keyframes froGlint{0%{opacity:0;transform:scale(0) rotate(-60deg)}50%{opacity:1;transform:scale(1.5) rotate(0deg)}100%{opacity:.9;transform:none}}
+@keyframes froExitLift{to{opacity:0;transform:translateY(-18px)}}
+.playing .o-fros-plate{animation:froRise calc(.45s / var(--spd)) ease-out both}
+.playing .o-fros-bough{animation:froBoughIn calc(.4s / var(--spd)) ease-out both}
+.playing .o-fros-orn{animation:froOrnDrop calc(.55s / var(--spd)) linear calc(.3s / var(--spd)) both}
+.playing .o-fros-sw{animation:froSwing calc(1s / var(--spd)) ease-in-out calc(.62s / var(--spd)) both}
+.playing .o-fros-skin{animation:froSpin calc(1.15s / var(--spd)) cubic-bezier(.12,.62,.24,1) calc(.36s / var(--spd)) both}
+.playing .o-fros-fl{animation:froFlurry calc(var(--du) / var(--spd)) ease-in calc(var(--fd) / var(--spd)) both}
+.playing .o-fros-glint{animation:froGlint calc(.5s / var(--spd)) ease-out calc(1.5s / var(--spd)) both}
+.playing .o-fros-lbl{animation:froFrostIn calc(.45s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-fros-name{animation:froFrostIn calc(.45s / var(--spd)) ease-out calc(.86s / var(--spd)) both}
+.playing .o-fros-meta{animation:froFrostIn calc(.4s / var(--spd)) ease-out calc(1s / var(--spd)) both}
+.playing .o-fros-msg{animation:froFade calc(.35s / var(--spd)) ease-out calc(1.15s / var(--spd)) both}
+
+/* bits — Gift stack: presents drop and stack with a bounce, then the bow lands on the top one */
+.o-frob{height:168px}
+.o-frob-plate{left:196px;right:0;top:24px;height:134px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:20px 16px 10px 20px}
+.o-frob-amt{display:flex;align-items:center;gap:7px;line-height:1;color:#FFFFFF;text-shadow:0 0 16px rgba(var(--froa-rgb),.6),0 2px 3px rgba(3,8,20,.7)}
+.o-frob-amt .o-odo{text-shadow:none;filter:drop-shadow(0 0 16px rgba(var(--froa-rgb),.6)) drop-shadow(0 2px 3px rgba(3,8,20,.7))}
+.o-frob-num{font-weight:700;line-height:1}
+.o-frob-unit{font-size:16px;letter-spacing:.04em;color:var(--froa)}
+.o-frob-name{font-size:calc(24px * var(--fit,1))}
+.o-frob-pile{position:absolute;left:8px;bottom:4px;width:178px;height:160px}
+.o-frob-drift{position:absolute;left:-12px;right:-10px;bottom:-7px;height:18px;border-radius:50%;background:radial-gradient(ellipse 55% 60% at 50% 35%,#FFFFFF,#D9E9F9 75%,#B6D0EC);box-shadow:0 4px 8px rgba(3,8,20,.35)}
+.o-frob-poof{position:absolute;left:-6px;right:24px;bottom:-4px;height:22px;border-radius:50%;background:radial-gradient(ellipse 50% 50% at 50% 60%,rgba(255,255,255,.9),rgba(255,255,255,0) 72%);opacity:0}
+.o-frob-box{position:absolute;border-radius:3px;transform-origin:50% 100%;background:linear-gradient(90deg,rgba(0,0,0,0) calc(50% - 4px),var(--rib) calc(50% - 4px),var(--rib) calc(50% + 4px),rgba(0,0,0,0) calc(50% + 4px)),linear-gradient(180deg,rgba(0,0,0,0) calc(56% - 4px),var(--rib) calc(56% - 4px),var(--rib) calc(56% + 4px),rgba(0,0,0,0) calc(56% + 4px)),var(--pat,linear-gradient(rgba(0,0,0,0),rgba(0,0,0,0))),var(--bx);box-shadow:inset 0 -6px 0 rgba(0,0,0,.15),inset 4px 0 0 rgba(255,255,255,.1),0 3px 6px rgba(3,8,20,.4)}
+.o-frob-box::before{content:"";position:absolute;left:-3px;right:-3px;top:-4px;height:11px;border-radius:2px;background:linear-gradient(90deg,rgba(0,0,0,0) calc(50% - 4px),var(--rib) calc(50% - 4px),var(--rib) calc(50% + 4px),rgba(0,0,0,0) calc(50% + 4px)),var(--bx);box-shadow:inset 0 -2px 0 rgba(0,0,0,.2),inset 0 2px 0 rgba(255,255,255,.22),0 2px 2px rgba(0,0,0,.2)}
+.o-frob-bow{position:absolute;z-index:2;width:38px;height:26px;transform-origin:50% 60%;--bow:#F2C14E;--bow-dk:#A87818}
+.o-frob-bow-b{--bow:#D42A52;--bow-dk:#7A0F2A}
+.o-frob-bsvg{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 2px rgba(3,8,20,.4))}
+.o-frob-loop{fill:var(--bow);stroke:var(--bow-dk);stroke-width:1.2}
+.o-frob-tail{fill:var(--bow);stroke:var(--bow-dk);stroke-width:1}
+.o-frob-knot{fill:var(--bow);stroke:var(--bow-dk);stroke-width:1.2}
+@keyframes froBoxDrop{0%{opacity:0;transform:translateY(-58px) scale(1,1);animation-timing-function:cubic-bezier(.5,0,.85,.55)}60%{opacity:1;transform:translateY(0) scale(1.08,.86);animation-timing-function:ease-out}80%{opacity:1;transform:translateY(-3px) scale(.98,1.03);animation-timing-function:ease-in-out}100%{opacity:1;transform:translateY(0) scale(1,1)}}
+@keyframes froBowLand{0%{opacity:0;transform:translateY(-30px) rotate(-24deg) scale(.6)}55%{opacity:1;transform:translateY(2px) rotate(6deg) scale(1.12)}78%{opacity:1;transform:translateY(-1px) rotate(-2deg) scale(.97)}100%{opacity:1;transform:translateY(0) rotate(0deg) scale(1)}}
+@keyframes froPoof{0%{opacity:0;transform:scale(.5,.4)}30%{opacity:.85}100%{opacity:0;transform:scale(1.25,1)}}
+@keyframes froExitSlide{to{opacity:0;transform:translateX(-34px) rotate(-2deg)}}
+.playing .o-frob-plate{animation:froRise calc(.45s / var(--spd)) ease-out both}
+.playing .o-frob-drift{animation:froFade calc(.3s / var(--spd)) ease-out calc(.12s / var(--spd)) both}
+.playing .o-frob-box{animation:froBoxDrop calc(.5s / var(--spd)) linear calc(var(--bd) / var(--spd)) both}
+.playing .o-frob-poof{animation:froPoof calc(.55s / var(--spd)) ease-out calc(.56s / var(--spd)) both}
+.playing .o-frob-bow{animation:froBowLand calc(.5s / var(--spd)) ease-out calc(var(--bwd) / var(--spd)) both}
+.playing .o-frob-name{animation:froFrostIn calc(.45s / var(--spd)) ease-out calc(.8s / var(--spd)) both}
+
+/* donation — Hot cocoa: the mug fills, marshmallows drop in, the steam curls up into the amount */
+.o-frod{height:212px}
+.o-frod-card{left:160px;right:0;top:16px;bottom:8px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:22px 16px 12px 20px}
+.o-frod-name{font-size:calc(24px * var(--fit,1))}
+.o-frod-rule{position:relative;flex:none;height:12px;margin:2px 0 3px;background:linear-gradient(90deg,rgba(var(--froa-rgb),0),rgba(var(--froa-rgb),.7) 32%,rgba(var(--froa-rgb),0) 42%,rgba(var(--froa-rgb),0) 58%,rgba(var(--froa-rgb),.7) 68%,rgba(var(--froa-rgb),0)) 0 50%/100% 1.5px no-repeat}
+.o-frod-rflake{position:absolute;left:50%;top:0;width:12px;height:12px;margin-left:-6px;stroke:var(--froa);stroke-width:2.2;filter:none}
+.o-frod-msg{font-weight:600;font-size:15px;line-height:20px;color:rgba(236,244,255,.94);max-height:60px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-frod-thanks{font-family:"Mountains of Christmas","Quicksand",cursive;font-size:21px;line-height:1.2;color:var(--fro-gold);text-shadow:0 1px 0 rgba(3,8,20,.9)}
+.o-frod-amt{position:absolute;left:0;top:12px;width:152px;padding:4px 0;text-align:center;font-weight:700;line-height:1.1;white-space:nowrap;color:#FFFFFF;background:radial-gradient(ellipse 50% 58% at 50% 55%,rgba(14,26,51,.6),rgba(14,26,51,0) 100%);text-shadow:0 0 10px rgba(255,236,214,.85),0 0 24px rgba(var(--froa-rgb),.55),0 2px 3px rgba(3,8,20,.85)}
+.o-frod-steam{position:absolute;left:28px;top:52px;width:84px;height:62px;overflow:visible;filter:blur(.6px)}
+.o-frod-wisp{fill:none;stroke:rgba(255,255,255,.8);stroke-width:4;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:0;opacity:.45}
+.o-frod-mug{position:absolute;left:22px;bottom:6px;z-index:1;width:124px;height:112px}
+.o-frod-cane{position:absolute;left:14px;bottom:30px;z-index:1;width:30px;height:80px;overflow:visible;transform:rotate(-12deg);transform-origin:50% 100%}
+.o-frod-cw{fill:none;stroke:#FFFFFF;stroke-width:7;stroke-linecap:round}
+.o-frod-cr{fill:none;stroke:#C8234A;stroke-width:7;stroke-dasharray:5 6}
+.o-frod-handle{position:absolute;left:84px;bottom:22px;z-index:1;width:36px;height:52px;box-sizing:border-box;border:7px solid rgba(214,236,255,.55);border-left:0;border-radius:0 28px 28px 0}
+.o-frod-glass{position:absolute;left:0;bottom:0;z-index:2;width:96px;height:92px;overflow:hidden;border-radius:7px 7px 22px 22px;background:linear-gradient(90deg,rgba(190,225,255,.3),rgba(255,255,255,.1) 45%,rgba(190,225,255,.32));box-shadow:0 10px 18px rgba(3,8,20,.45)}
+.o-frod-glass::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(90deg,rgba(255,255,255,0) 10px,rgba(255,255,255,.4) 10px 17px,rgba(255,255,255,0) 17px) 0 10px/100% 62px no-repeat;box-shadow:inset 0 0 0 2.5px rgba(228,244,255,.85)}
+.o-frod-cocoa{position:absolute;left:0;right:0;bottom:0;height:82px;background:linear-gradient(180deg,#7B4428 0%,#5A2E17 35%,#3C1C0C 100%)}
+.o-frod-cocoa::before{content:"";position:absolute;left:3px;right:3px;top:-5px;height:11px;border-radius:50%;background:radial-gradient(ellipse at 50% 40%,#B57A50,#8A5332 70%)}
+.o-frod-mm{position:absolute;z-index:3;width:16px;height:13px;border-radius:4px;background:linear-gradient(180deg,#FFFFFF,var(--mc) 80%);box-shadow:inset 0 -2px 0 rgba(150,110,130,.25),0 1px 1px rgba(60,30,10,.45);transform:rotate(var(--r))}
+.o-frod-rim{position:absolute;left:-1px;bottom:86px;z-index:4;width:98px;height:12px;box-sizing:border-box;border:2px solid rgba(236,247,255,.85);border-radius:50%;box-shadow:0 0 6px rgba(var(--froa-rgb),.4)}
+@keyframes froFill{from{transform:translateY(86px)}to{transform:none}}
+@keyframes froMallow{0%{opacity:0;transform:translateY(-44px) rotate(calc(var(--r) - 40deg));animation-timing-function:ease-in}68%{opacity:1;transform:translateY(3px) rotate(var(--r));animation-timing-function:ease-out}84%{opacity:1;transform:translateY(-2px) rotate(var(--r))}100%{opacity:1;transform:translateY(0) rotate(var(--r))}}
+@keyframes froSteam{0%{opacity:0;stroke-dashoffset:100}25%{opacity:.85}75%{opacity:.7;stroke-dashoffset:0}100%{opacity:.45;stroke-dashoffset:0}}
+@keyframes froCurl{0%{opacity:0;filter:blur(4px);transform:translateY(18px) scale(.82) rotate(-4deg)}60%{opacity:1;filter:blur(.5px);transform:translateY(-2px) scale(1.03) rotate(1deg)}100%{opacity:1;filter:none;transform:none}}
+@keyframes froExitFog{to{opacity:0;transform:translateY(-12px) scale(1.02)}}
+.playing .o-frod-card{animation:froRise calc(.45s / var(--spd)) ease-out both}
+.playing .o-frod-mug{animation:froRise calc(.45s / var(--spd)) ease-out calc(.08s / var(--spd)) both}
+.playing .o-frod-name{animation:froFrostIn calc(.45s / var(--spd)) ease-out calc(.4s / var(--spd)) both}
+.playing .o-frod-rule,.playing .o-frod-thanks{animation:froFade calc(.35s / var(--spd)) ease-out calc(.6s / var(--spd)) both}
+.playing .o-frod-msg{animation:froFrostIn calc(.5s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-frod-cocoa{animation:froFill calc(.6s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(.36s / var(--spd)) both}
+.playing .o-frod-mm{animation:froMallow calc(.42s / var(--spd)) linear calc(var(--md) / var(--spd)) both}
+.playing .o-frod-wisp{animation:froSteam calc(.7s / var(--spd)) ease-out calc(var(--wd) / var(--spd)) both}
+.playing .o-frod-amt{animation:froCurl calc(.55s / var(--spd)) ease-out calc(1.12s / var(--spd)) both}
+
+/* raid — Sleigh parade: the team glides across the moon, sparkles light up behind it */
+.o-fror{height:200px}
+.o-fror-sky{position:absolute;left:0;right:0;top:0;z-index:0;height:120px;overflow:hidden;border-radius:16px 16px 8px 8px;background:radial-gradient(ellipse 42% 75% at 68% 45%,rgba(var(--froa-rgb),.24),rgba(var(--froa-rgb),0) 70%),linear-gradient(180deg,#0A1530 0%,#163061 68%,#21467F 100%);box-shadow:0 10px 22px rgba(3,8,20,.45)}
+.o-fror-sky::after{content:"";position:absolute;inset:0;z-index:3;border-radius:inherit;box-shadow:inset 0 0 0 1.5px rgba(var(--froa-rgb),.45);pointer-events:none}
+.o-fror-moon{position:absolute;left:236px;top:12px;width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 64% 34%,rgba(205,180,110,.35) 0 7px,rgba(205,180,110,0) 8px),radial-gradient(circle at 36% 62%,rgba(205,180,110,.3) 0 10px,rgba(205,180,110,0) 11px),radial-gradient(circle at 60% 74%,rgba(205,180,110,.25) 0 5px,rgba(205,180,110,0) 6px),radial-gradient(circle at 40% 36%,#FFFDF2,#F7E9BE 60%,#EBD38F);box-shadow:0 0 28px rgba(255,240,196,.5),0 0 70px rgba(var(--froa-rgb),.3)}
+.o-fror-hills{position:absolute;left:-20px;right:-20px;bottom:-2px;height:30px;background:radial-gradient(ellipse 34% 100% at 22% 100%,#EAF3FF 97%,rgba(234,243,255,0) 100%),radial-gradient(ellipse 40% 90% at 76% 100%,#F4F9FF 97%,rgba(244,249,255,0) 100%),radial-gradient(ellipse 30% 70% at 50% 100%,#DCEAF8 97%,rgba(220,234,248,0) 100%)}
+.o-fror-sp{position:absolute;z-index:1;width:var(--ss);height:var(--ss);margin:calc(var(--ss) / -2) 0 0 calc(var(--ss) / -2);background:var(--sc);clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);opacity:var(--o,.8)}
+.o-fror-team{position:absolute;z-index:2;filter:drop-shadow(0 0 1.5px rgba(var(--froa-rgb),.95))}
+.o-fror-svg{display:block;overflow:visible}
+.o-fror-dk{fill:none;stroke:#081226;stroke-linecap:round;stroke-linejoin:round}
+.o-fror-df{fill:#081226}
+.o-fror-gd{fill:none;stroke:#F2C14E;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.o-fror-rein{fill:none;stroke:#F2C14E;stroke-width:1.1;opacity:.9}
+.o-fror-plate{left:0;right:0;top:110px;height:88px;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:18px 18px 8px 20px}
+.o-fror-line{display:flex;align-items:center;gap:10px;min-width:0}
+.o-fror-name{flex:0 1 auto;min-width:0}
+.o-fror-cnt{flex:none;display:flex;align-items:center;gap:5px;font-size:18px;white-space:nowrap;color:var(--froa);text-shadow:0 0 10px rgba(var(--froa-rgb),.5),0 1px 2px rgba(3,8,20,.85)}
+.o-fror-cnt .o-odo{text-shadow:none;filter:drop-shadow(0 0 10px rgba(var(--froa-rgb),.5)) drop-shadow(0 1px 2px rgba(3,8,20,.85))}
+.o-fror-cn{font-size:22px;color:#FFFFFF}
+@keyframes froMoonUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes froGlide{from{transform:translate(var(--gx),24px)}to{transform:none}}
+@keyframes froExitFly{to{opacity:0;transform:translate(44px,-14px)}}
+.playing .o-fror-sky{animation:froRise calc(.45s / var(--spd)) ease-out both}
+.playing .o-fror-moon{animation:froMoonUp calc(.7s / var(--spd)) cubic-bezier(.2,.8,.2,1) calc(.08s / var(--spd)) both}
+.playing .o-fror-team{animation:froGlide calc(1.15s / var(--spd)) cubic-bezier(.22,.61,.36,1) calc(.28s / var(--spd)) both}
+.playing .o-fror-sp{animation:froTwinkle calc(.5s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-fror-plate{animation:froRise calc(.45s / var(--spd)) ease-out calc(.1s / var(--spd)) both}
+.playing .o-fror-lbl{animation:froFrostIn calc(.4s / var(--spd)) ease-out calc(.5s / var(--spd)) both}
+.playing .o-fror-name{animation:froFrostIn calc(.45s / var(--spd)) ease-out calc(.72s / var(--spd)) both}
+.playing .o-fror-cnt{animation:froFade calc(.3s / var(--spd)) ease-out calc(.9s / var(--spd)) both}
+
+/* giveaway — Northern lights: the aurora ripples across, the name appears in its light, the prize lands */
+.o-frog{height:214px}
+.o-frog-sky{position:absolute;left:0;right:0;top:0;z-index:0;height:156px;overflow:hidden;border-radius:18px;background:radial-gradient(ellipse 70% 50% at 50% 100%,rgba(var(--froa-rgb),.16),rgba(var(--froa-rgb),0) 70%),linear-gradient(180deg,#040A1A 0%,#0B1730 55%,#132A4F 100%);box-shadow:0 12px 26px rgba(3,8,20,.5)}
+.o-frog-sky::after{content:"";position:absolute;inset:0;z-index:3;border-radius:inherit;box-shadow:inset 0 0 0 1.5px rgba(var(--froa-rgb),.42);pointer-events:none}
+.o-frog-aurw{position:absolute;left:0;right:0;top:0;height:126px;transform-origin:50% 100%}
+.o-frog-aur{position:absolute;left:-14%;width:128%;opacity:var(--ao);transform-origin:50% 100%;background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 7px,rgba(255,255,255,.1) 7px 9px,rgba(255,255,255,0) 9px 15px),linear-gradient(0deg,rgba(var(--c1),0) 0%,rgba(var(--c1),.9) 14%,rgba(var(--c2),.45) 46%,rgba(var(--c3),.18) 76%,rgba(var(--c3),0) 100%)}
+.o-frog-ridge{position:absolute;left:0;right:0;bottom:6px;height:30px;background:linear-gradient(180deg,#0A1A30,#050E1C)}
+.o-frog-snowline{position:absolute;left:-10px;right:-10px;bottom:-4px;height:14px;border-radius:50% 50% 0 0/100% 100% 0 0;background:linear-gradient(180deg,#EAF3FF,#BFD6EE)}
+.o-frog-halo{position:absolute;left:50%;top:44px;z-index:1;width:340px;height:76px;margin-left:-170px;border-radius:50%;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(var(--a-rgb,150,255,215),.2),rgba(var(--froa-rgb),.08) 60%,rgba(var(--froa-rgb),0) 100%)}
+.o-frog-txt{position:absolute;left:18px;right:18px;top:20px;z-index:2;text-align:center}
+.o-frog-lbl{font-size:24px}
+.o-frog-name{margin-top:4px;font-size:calc(34px * var(--fit,1));text-shadow:0 0 18px rgba(var(--a-rgb,130,255,205),.55),0 0 34px rgba(var(--froa-rgb),.45),0 2px 4px rgba(3,8,20,.85)}
+.o-frog-fl{position:absolute;z-index:2;width:var(--fs);height:var(--fs);margin:calc(var(--fs) / -2) 0 0 calc(var(--fs) / -2);opacity:var(--o,.85)}
+.o-frog-prize{left:50%;top:150px;z-index:1;width:300px;height:58px;margin-left:-150px;display:flex;align-items:center;justify-content:center;gap:9px;padding:12px 18px 4px}
+.o-frog-gift{flex:none;width:26px;height:24px;overflow:visible}
+.o-frog-gb{fill:#C8234A}
+.o-frog-gl{fill:#E03A62}
+.o-frog-gr{fill:#F2C14E}
+.o-frog-gw{fill:#F2C14E;stroke:#A87818;stroke-width:.8}
+.o-frog-pl{flex:none;font-family:"Mountains of Christmas","Quicksand",cursive;font-size:21px;line-height:1.2;color:var(--fro-gold);text-shadow:0 1px 0 rgba(3,8,20,.9),0 0 10px rgba(242,193,78,.35)}
+.o-frog-pv{min-width:0;font-size:18px;line-height:1.3;color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes froAurSweep{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes froAurRipple{0%{opacity:0;transform:translateX(-6%) skewX(12deg) scaleY(.55)}35%{opacity:var(--ao)}65%{transform:translateX(2%) skewX(-5deg) scaleY(1.06)}100%{opacity:var(--ao);transform:none}}
+@keyframes froSway{0%,100%{transform:none}50%{transform:skewX(-3.5deg)}}
+@keyframes froDrift{0%{opacity:0;transform:translate(-10px,-40px) rotate(-70deg)}25%{opacity:var(--o,.85)}55%{transform:translate(7px,-16px) rotate(-30deg)}100%{opacity:var(--o,.85);transform:none}}
+@keyframes froExitGlow{0%{opacity:1;filter:brightness(1)}35%{opacity:1;filter:brightness(1.35)}100%{opacity:0;filter:brightness(1.7);transform:scale(1.02)}}
+.playing .o-frog-sky{animation:froRise calc(.5s / var(--spd)) ease-out both}
+.playing .o-frog-aurw{animation:froAurSweep calc(.95s / var(--spd)) cubic-bezier(.4,.1,.3,1) calc(.2s / var(--spd)) both,froSway calc(1.8s / var(--spd)) ease-in-out calc(1.6s / var(--spd)) 2}
+.playing .o-frog-aur{animation:froAurRipple calc(1.35s / var(--spd)) ease-in-out calc(var(--ad) / var(--spd)) both}
+.playing .o-frog-lbl{animation:froFrostIn calc(.45s / var(--spd)) ease-out calc(.55s / var(--spd)) both}
+.playing .o-frog-halo{animation:froFade calc(.6s / var(--spd)) ease-out calc(.8s / var(--spd)) both}
+.playing .o-frog-name{animation:froFrostIn calc(.55s / var(--spd)) ease-out calc(.85s / var(--spd)) both}
+.playing .o-frog-fl{animation:froDrift calc(var(--du) / var(--spd)) ease-out calc(var(--fd) / var(--spd)) both}
+.playing .o-frog-prize{animation:froRise calc(.45s / var(--spd)) ease-out calc(1.2s / var(--spd)) both}

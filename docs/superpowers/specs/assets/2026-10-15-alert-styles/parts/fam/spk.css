@@ -1,0 +1,235 @@
+/* ═════════ SPOOKY — playful Halloween ═════════
+   Cute and spooky, never gory. Night-purple plates rimmed in the accent (pumpkin orange by default),
+   Creepster headlines with a soft glow, Nunito 900 names. Motion floats, wobbles and bounces a little,
+   then holds still; the only repeats (a wave, wing flaps, simmering bubbles, a candle flicker) are
+   finite. Every drawing is inline SVG or CSS, and no selector here reaches inside the shared name,
+   odometer or typed-text parts. */
+.o-spk{--spka:var(--a,#FF7A1A);--spka-rgb:var(--a-rgb,255,122,26);--spk-on:var(--a-on,#1A0E05);--spk-night:#120B1F;--spk-purple:#6A3FA0;--spk-slime:#8BE13A;--spk-ghost:#F4F1FF;--spk-ink:#1A1028;font-family:"Nunito","Varela Round",system-ui,sans-serif;color:var(--spk-ghost)}
+.o-spk-plate{position:absolute;box-sizing:border-box;border-radius:18px;background:radial-gradient(circle at 90% 18%,rgba(244,241,255,.75) 0 1px,rgba(244,241,255,0) 1.8px),radial-gradient(circle at 76% 84%,rgba(244,241,255,.5) 0 1px,rgba(244,241,255,0) 1.8px),radial-gradient(circle at 96% 60%,rgba(244,241,255,.6) 0 1px,rgba(244,241,255,0) 1.8px),radial-gradient(120% 100% at 0 0,rgba(106,63,160,.55),rgba(106,63,160,0) 62%),linear-gradient(180deg,#25173B,var(--spk-night));box-shadow:0 0 0 2px rgba(var(--spka-rgb),.85),0 0 18px rgba(var(--spka-rgb),.28),0 14px 28px rgba(0,0,0,.5)}
+/* Creepster drips below the line, so the clipping box gets room above, below and to the sides. */
+.o-spk-lbl{display:block;font-family:"Creepster","Nunito",cursive;font-weight:400;font-size:22px;line-height:1.15;letter-spacing:.05em;color:var(--spka);text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 12px rgba(var(--spka-rgb),.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.12em .3em .2em;margin:-.12em -.3em -.2em;transform-origin:8% 60%}
+.o-spk-name{font-weight:900;font-size:calc(26px * var(--fit,1));line-height:1.12;color:var(--spk-ghost);text-shadow:0 2px 0 rgba(0,0,0,.55)}
+.o-spk-meta{font-weight:800;font-size:13px;line-height:1.3;letter-spacing:.02em;color:rgba(244,241,255,.78)}
+.o-spk-ghost{position:relative;display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 5px 5px rgba(0,0,0,.4))}
+.o-spk-sheet{fill:var(--spk-ghost);stroke:rgba(106,63,160,.5);stroke-width:1}
+.o-spk-face{fill:var(--spk-ink)}
+.o-spk-shine{fill:#FFFFFF}
+.o-spk-blush{fill:#FF8DB7;opacity:.6}
+.o-spk-bat{display:block;width:100%;height:100%;overflow:visible;transform:rotate(var(--rt,0deg))}
+.o-spk-batb{fill:#21133A;stroke:rgba(244,241,255,.55);stroke-width:.9;stroke-linejoin:round}
+.o-spk-bate{fill:var(--spka)}
+@keyframes spkFloatIn{0%{opacity:0;transform:translateY(16px) scale(.96)}60%{opacity:1;transform:translateY(-3px) scale(1.01)}100%{opacity:1;transform:none}}
+@keyframes spkPop{0%{opacity:0;transform:scale(.3)}60%{opacity:1;transform:scale(1.12)}82%{transform:scale(.96)}100%{opacity:1;transform:none}}
+@keyframes spkWobble{0%{opacity:0;transform:scale(.6) rotate(-8deg)}45%{opacity:1;transform:scale(1.08) rotate(5deg)}70%{transform:scale(.98) rotate(-2.5deg)}100%{opacity:1;transform:none}}
+@keyframes spkRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes spkFade{from{opacity:0}to{opacity:1}}
+@keyframes spkLand{0%{opacity:0;transform:translateY(-34px)}50%{opacity:1;transform:translateY(3px) scale(1.07,.9)}75%{transform:translateY(-2px) scale(.97,1.03)}100%{opacity:1;transform:none}}
+@keyframes spkFlap{0%,100%{transform:rotate(var(--rt,0deg)) scaleY(1)}50%{transform:rotate(var(--rt,0deg)) scaleY(.3)}}
+@keyframes spkGlowOn{0%{opacity:0}30%{opacity:1}45%{opacity:.4}62%{opacity:1}78%{opacity:.7}100%{opacity:1}}
+@keyframes spkExit{0%{opacity:1;transform:none}30%{opacity:1;transform:translateY(3px) scale(1.02,.97)}100%{opacity:0;transform:translateY(-22px) scale(.94)}}
+@keyframes spkSink{0%{opacity:1;transform:none}25%{opacity:1;transform:translateY(-4px)}100%{opacity:0;transform:translateY(28px)}}
+@keyframes spkFlyOff{to{opacity:0;transform:translate(26px,-18px) scale(.95)}}
+
+/* follow — Ghost hello: the ghost rises from behind its tombstone, two bats flutter off, a wisp says boo */
+.o-spkf{height:136px}
+.o-spkf-ground{position:absolute;left:0;bottom:0;width:112px;height:20px;border-radius:50% 50% 0 0/100% 100% 0 0;background:linear-gradient(180deg,#2E1F45,#160E25);box-shadow:inset 0 3px 0 rgba(139,225,58,.55)}
+.o-spkf-stone{position:absolute;left:24px;bottom:10px;width:66px;height:78px;border-radius:33px 33px 6px 6px;background:linear-gradient(180deg,#8E86A8,#5E5679);box-shadow:inset -7px 0 0 rgba(0,0,0,.16),inset 0 0 0 2px rgba(26,16,40,.55),0 6px 10px rgba(0,0,0,.35);transform-origin:50% 100%}
+.o-spkf-rip{position:absolute;left:0;right:0;top:24px;text-align:center;font-family:"Creepster","Nunito",cursive;font-size:17px;line-height:1;letter-spacing:.08em;color:#3A3150;text-shadow:0 1px 0 rgba(255,255,255,.28)}
+.o-spkf-ghost{position:absolute;left:33px;top:6px;width:48px;height:61px}
+.o-spkf-arm{position:absolute;left:37px;top:13px;width:10px;height:18px;border-radius:50%;background:var(--spk-ghost);box-shadow:inset 0 0 0 1px rgba(106,63,160,.5);transform-origin:50% 100%;transform:rotate(38deg)}
+.o-spkf-bat{position:absolute;display:block}
+.o-spkf-ba{left:316px;top:2px;width:28px;height:14px;--fd:.42s;--sx:-273px;--sy:67px}
+.o-spkf-bb{left:360px;top:13px;width:21px;height:11px;--fd:.5s;--sx:-313px;--sy:58px}
+.o-spkf-puff{position:absolute;border-radius:50%;background:#1F1333;box-shadow:0 0 0 2px rgba(var(--spka-rgb),.85),0 0 10px rgba(var(--spka-rgb),.3)}
+.o-spkf-p1{left:87px;top:48px;width:8px;height:8px}
+.o-spkf-p2{left:96px;top:57px;width:13px;height:13px}
+.o-spkf-wisp{left:112px;right:4px;top:26px;height:98px;display:flex;flex-direction:column;justify-content:center;padding:10px 18px 10px 22px;transform-origin:0 45%}
+.o-spkf-boo{font-size:27px}
+.o-spkf-name{font-size:calc(25px * var(--fit,1))}
+.o-spkf-sub{margin-top:1px}
+@keyframes spkSprout{0%{opacity:0;transform:scaleY(.3)}60%{opacity:1;transform:scaleY(1.07)}100%{opacity:1;transform:none}}
+@keyframes spkGhostRise{0%{opacity:0;transform:translateY(58px)}1%{opacity:1;transform:translateY(58px)}70%{transform:translateY(-5px)}100%{opacity:1;transform:none}}
+@keyframes spkBatOff{0%{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.5)}15%{opacity:1}40%{transform:translate(calc(var(--sx) * .8),calc(var(--sy) * .12)) scale(.85)}100%{opacity:1;transform:none}}
+@keyframes spkPuff{0%{opacity:0;transform:scale(.25)}60%{opacity:1;transform:scale(1.04)}100%{opacity:1;transform:none}}
+@keyframes spkWave{0%,50%,100%{transform:rotate(38deg)}25%,75%{transform:rotate(-6deg)}}
+.playing .o-spkf-ground{animation:spkFade calc(.25s / var(--spd)) ease-out both}
+.playing .o-spkf-stone{animation:spkSprout calc(.34s / var(--spd)) ease-out both}
+.playing .o-spkf-ghost{animation:spkGhostRise calc(.55s / var(--spd)) cubic-bezier(.25,.8,.3,1) calc(.26s / var(--spd)) both}
+.playing .o-spkf-bat{animation:spkBatOff calc(.8s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(var(--fd) / var(--spd)) both}
+.playing .o-spkf-wing{animation:spkFlap calc(.13s / var(--spd)) ease-in-out calc(var(--fd) / var(--spd)) 6}
+.playing .o-spkf-p1{animation:spkPop calc(.26s / var(--spd)) ease-out calc(.62s / var(--spd)) both}
+.playing .o-spkf-p2{animation:spkPop calc(.26s / var(--spd)) ease-out calc(.7s / var(--spd)) both}
+.playing .o-spkf-wisp{animation:spkPuff calc(.42s / var(--spd)) ease-out calc(.76s / var(--spd)) both}
+.playing .o-spkf-boo{animation:spkWobble calc(.45s / var(--spd)) ease-out calc(.96s / var(--spd)) both}
+.playing .o-spkf-name{animation:spkRise calc(.34s / var(--spd)) ease-out calc(1.06s / var(--spd)) both}
+.playing .o-spkf-sub{animation:spkFade calc(.3s / var(--spd)) ease-out calc(1.18s / var(--spd)) both}
+.playing .o-spkf-arm{animation:spkWave calc(.62s / var(--spd)) ease-in-out calc(1.2s / var(--spd)) both}
+
+/* subscriber — Cauldron: the brew glows and counts the months; two bubbles pop the words into the card */
+.o-spks{height:178px}
+.o-spks-plate{left:146px;right:4px;top:12px;height:128px;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:12px 16px 12px 22px}
+.o-spks-lbl{font-size:20px}
+.o-spks-name{font-size:calc(27px * var(--fit,1))}
+.o-spks-tier{display:flex;align-items:center;gap:10px;height:30px}
+.o-spks-bottles{display:flex;align-items:flex-end;gap:5px}
+.o-spks-bottle{display:block;width:20px;height:29px;overflow:visible;transform-origin:50% 100%;filter:drop-shadow(0 0 4px var(--bc))}
+.o-spks-glass{fill:rgba(244,241,255,.16);stroke:rgba(244,241,255,.88);stroke-width:1.2;stroke-linejoin:round}
+.o-spks-liq{fill:var(--bc)}
+.o-spks-glint{fill:rgba(255,255,255,.75)}
+.o-spks-cork{fill:#B07A45;stroke:rgba(26,16,40,.5);stroke-width:.6}
+.o-spks-tiertxt{white-space:nowrap}
+.o-spks-pot{position:absolute;left:4px;bottom:2px;width:140px;height:112px;transform-origin:50% 100%}
+.o-spks-glow{position:absolute;left:-6px;right:-6px;top:-40px;height:86px;background:radial-gradient(ellipse 50% 50% at 50% 72%,rgba(139,225,58,.6),rgba(139,225,58,0) 72%)}
+.o-spks-svg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
+.o-spks-leg{fill:#1B1426;stroke:#0E0818;stroke-width:1.5}
+.o-spks-body{fill:#2A2138;stroke:#0E0818;stroke-width:2}
+.o-spks-shine{fill:none;stroke:rgba(255,255,255,.13);stroke-width:6;stroke-linecap:round}
+.o-spks-rim{fill:#4B4063;stroke:#0E0818;stroke-width:2}
+.o-spks-brew{fill:var(--spk-slime)}
+.o-spks-foam{fill:#CDF795}
+.o-spks-drip{fill:var(--spk-slime)}
+.o-spks-sim{position:absolute;width:var(--s);height:var(--s);border-radius:50%;background:radial-gradient(circle at 35% 32%,#F2FFE0 0 18%,#A9EF62 45%,#62B82A 100%);box-shadow:0 0 0 1px rgba(14,8,24,.35);transform-origin:50% 100%}
+.o-spks-num{position:absolute;left:0;right:0;top:54px;text-align:center;font-weight:900;font-size:30px;line-height:1;color:#B8F56E;text-shadow:0 0 10px rgba(139,225,58,.75),0 2px 0 rgba(0,0,0,.5)}
+.o-spks-num .o-odo{text-shadow:none;filter:drop-shadow(0 0 10px rgba(139,225,58,.75)) drop-shadow(0 2px 0 rgba(0,0,0,.5))}
+.o-spks-mo{display:block;margin-top:3px;font-weight:800;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(244,241,255,.75);text-shadow:0 1px 0 rgba(0,0,0,.6)}
+.o-spks-bub{position:absolute;left:64px;top:90px;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.95) 0 3px,rgba(201,247,143,.55) 4px,rgba(139,225,58,.22) 75%);box-shadow:inset 0 0 0 1.5px rgba(214,255,170,.9),0 0 10px rgba(139,225,58,.5);opacity:0}
+@keyframes spkBrew{0%{opacity:0}40%{opacity:1}70%{opacity:.6}100%{opacity:1}}
+@keyframes spkSimmer{0%,100%{transform:scale(1)}40%{transform:scale(1.3)}41%{transform:scale(0)}}
+@keyframes spkBubble{0%{opacity:0;transform:translate(0,0) scale(.3)}15%{opacity:1}45%{transform:translate(calc(var(--tx) * .3),calc(var(--ty) * .7)) scale(.9)}80%{opacity:1;transform:translate(var(--tx),var(--ty)) scale(1)}100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(1.9)}}
+@keyframes spkOpen{from{clip-path:circle(0px at 6% 50%)}to{clip-path:circle(150% at 6% 50%)}}
+.playing .o-spks-pot{animation:spkLand calc(.45s / var(--spd)) ease-out both}
+.playing .o-spks-glow{animation:spkBrew calc(.9s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-spks-sim{animation:spkSimmer calc(.55s / var(--spd)) ease-in-out calc(var(--sd) / var(--spd)) 2 both}
+.playing .o-spks-plate{animation:spkFloatIn calc(.45s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-spks-bub{animation:spkBubble calc(.5s / var(--spd)) cubic-bezier(.3,.5,.4,1) calc(var(--bd) / var(--spd)) both}
+.playing .o-spks-lbl{animation:spkOpen calc(.4s / var(--spd)) ease-out calc(.83s / var(--spd)) both}
+.playing .o-spks-name{animation:spkOpen calc(.4s / var(--spd)) ease-out calc(1.06s / var(--spd)) both}
+.playing .o-spks-bottle{animation:spkPop calc(.32s / var(--spd)) ease-out calc(var(--bd) / var(--spd)) both}
+.playing .o-spks-tiertxt{animation:spkFade calc(.3s / var(--spd)) ease-out calc(1.3s / var(--spd)) both}
+
+/* bits — Treat bucket: candies drop in (more for more bits), then the carved face lights up */
+.o-spkb{height:164px}
+.o-spkb-plate{left:168px;right:4px;top:24px;height:116px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:10px 16px 10px 20px}
+.o-spkb-lbl{font-size:20px}
+.o-spkb-amt{display:flex;align-items:flex-end;gap:6px;font-weight:900;font-size:32px;line-height:1;color:var(--spk-ghost);text-shadow:0 2px 0 rgba(0,0,0,.55),0 0 14px rgba(var(--spka-rgb),.35);white-space:nowrap}
+.o-spkb-amt .o-odo{text-shadow:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.55)) drop-shadow(0 0 14px rgba(var(--spka-rgb),.35))}
+.o-spkb-plus{margin-right:-4px;color:var(--spka)}
+.o-spkb-unit{margin-bottom:3px;font-weight:800;font-size:16px;line-height:1;letter-spacing:.02em;color:rgba(244,241,255,.82);text-shadow:0 1px 0 rgba(0,0,0,.6)}
+.o-spkb-name{font-size:calc(22px * var(--fit,1))}
+.o-spkb-bucket{position:absolute;left:8px;top:26px;width:150px;height:132px;transform-origin:50% 100%}
+.o-spkb-handle{position:absolute;left:26px;top:-20px;width:98px;height:64px;box-sizing:border-box;border:4px solid #2E1D45;border-bottom:0;border-radius:49px 49px 0 0/56px 56px 0 0;box-shadow:0 -1px 0 rgba(244,241,255,.3)}
+.o-spkb-svg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
+.o-spkb-hole{fill:#1E0E05;stroke:rgba(26,16,40,.6);stroke-width:2}
+.o-spkb-pile{position:absolute;left:15px;top:-10px;width:120px;height:54px}
+.o-spkb-candy{position:absolute;width:24px;height:12px;background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,0) 50%,rgba(0,0,0,.2)),var(--c);clip-path:polygon(0 4%,27% 34%,34% 12%,50% 2%,66% 12%,73% 34%,100% 4%,100% 96%,73% 66%,66% 88%,50% 98%,34% 88%,27% 66%,0 96%);transform:rotate(var(--r))}
+.o-spkb-body{fill:var(--spka);stroke:rgba(26,16,40,.6);stroke-width:2}
+.o-spkb-rib{fill:none;stroke:rgba(0,0,0,.16);stroke-width:3;stroke-linecap:round}
+.o-spkb-hi{fill:none;stroke:rgba(255,255,255,.3);stroke-width:4;stroke-linecap:round}
+.o-spkb-cut{fill:#2A1206}
+.o-spkb-tooth{fill:var(--spka)}
+.o-spkb-lit{fill:#FFD54F}
+.o-spkb-light{filter:drop-shadow(0 0 5px rgba(255,186,60,.95))}
+@keyframes spkCandy{0%{opacity:0;transform:translateY(-64px) rotate(calc(var(--r) - 120deg))}20%{opacity:1}70%{transform:translateY(3px) rotate(var(--r))}86%{transform:translateY(-2px) rotate(var(--r))}100%{opacity:1;transform:rotate(var(--r))}}
+.playing .o-spkb-bucket{animation:spkLand calc(.45s / var(--spd)) ease-out both}
+.playing .o-spkb-plate{animation:spkFloatIn calc(.45s / var(--spd)) ease-out calc(.12s / var(--spd)) both}
+.playing .o-spkb-lbl{animation:spkWobble calc(.45s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-spkb-amt{animation:spkRise calc(.3s / var(--spd)) ease-out calc(.4s / var(--spd)) both}
+.playing .o-spkb-name{animation:spkRise calc(.3s / var(--spd)) ease-out calc(.55s / var(--spd)) both}
+.playing .o-spkb-candy{animation:spkCandy calc(.45s / var(--spd)) ease-out calc(var(--cd) / var(--spd)) both}
+.playing .o-spkb-light{animation:spkGlowOn calc(.6s / var(--spd)) linear calc(var(--gd) / var(--spd)) both}
+
+/* donation — Haunted tombstone: it rises from the ground, the words are carved, a ghost peeks over */
+.o-spkd{height:212px}
+.o-spkd-pit{position:absolute;left:0;right:0;top:0;height:194px;overflow:hidden}
+.o-spkd-ghost{position:absolute;left:290px;top:3px;width:40px;height:51px;transform-origin:50% 100%;transform:rotate(-12deg)}
+.o-spkd-stone{position:absolute;left:50%;top:22px;width:356px;height:186px;margin-left:-178px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:26px 28px 30px;text-align:center;border-radius:150px 150px 10px 10px/58px 58px 10px 10px;background:linear-gradient(180deg,#5A5274,#3B3453 55%,#2C2641);box-shadow:inset 0 0 0 3px rgba(18,11,31,.55),inset 10px 0 0 rgba(255,255,255,.04),inset -12px 0 0 rgba(0,0,0,.16)}
+.o-spkd-stone::before{content:"";position:absolute;left:9px;right:9px;top:9px;bottom:-10px;border-radius:141px 141px 6px 6px/52px 52px 6px 6px;box-shadow:inset 0 0 0 2px rgba(18,11,31,.42),0 1px 0 rgba(255,255,255,.08)}
+.o-spkd-stone::after{content:"";position:absolute;left:0;bottom:10px;width:96px;height:22px;background:radial-gradient(circle at 18% 72%,rgba(139,225,58,.75) 0 8px,rgba(139,225,58,0) 9px),radial-gradient(circle at 40% 92%,rgba(139,225,58,.6) 0 6px,rgba(139,225,58,0) 7px),radial-gradient(circle at 6% 36%,rgba(139,225,58,.55) 0 5px,rgba(139,225,58,0) 6px)}
+.o-spkd-lbl,.o-spkd-amt,.o-spkd-from,.o-spkd-msg{position:relative;z-index:1}
+.o-spkd-lbl{max-width:100%;font-size:21px;color:rgba(244,241,255,.9);text-shadow:0 -1px 0 rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.14)}
+.o-spkd-amt{font-weight:900;font-size:34px;line-height:1.05;letter-spacing:.01em;color:var(--spka);text-shadow:0 -1px 0 rgba(0,0,0,.65),0 2px 0 rgba(0,0,0,.35),0 0 16px rgba(var(--spka-rgb),.45);white-space:nowrap}
+.o-spkd-from{max-width:100%;font-weight:900;font-size:calc(18px * var(--fit,1));line-height:1.2;color:var(--spk-ghost);text-shadow:0 -1px 0 rgba(0,0,0,.55)}
+.o-spkd-msg{max-width:100%;margin-top:3px;font-weight:700;font-size:13.5px;line-height:18px;max-height:36px;color:rgba(244,241,255,.84);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.o-spkd-dirt{position:absolute;top:182px;width:9px;height:7px;border-radius:50%;background:#3A2A22;box-shadow:0 0 0 1px rgba(0,0,0,.3);opacity:0}
+.o-spkd-ground{position:absolute;left:6px;right:6px;top:186px;height:24px;border-radius:50% 50% 10px 10px/100% 100% 10px 10px;background:linear-gradient(180deg,#2E1F45,#150D24);box-shadow:inset 0 3px 0 rgba(139,225,58,.55),0 8px 14px rgba(0,0,0,.35)}
+@keyframes spkStoneUp{0%{transform:translateY(176px)}62%{transform:translateY(-7px)}80%{transform:translateY(2px)}100%{transform:none}}
+@keyframes spkDirt{0%{opacity:0;transform:translate(0,0) scale(.5)}15%{opacity:1}100%{opacity:0;transform:translate(var(--dx),-30px) scale(1)}}
+@keyframes spkCarve{from{clip-path:inset(-30% 100% -40% 0)}to{clip-path:inset(-30% 0 -40% 0)}}
+@keyframes spkPeek{0%{opacity:0;transform:translateY(30px) rotate(0deg)}20%{opacity:1}70%{transform:translateY(-3px) rotate(-15deg)}100%{opacity:1;transform:rotate(-12deg)}}
+.playing .o-spkd-ground{animation:spkFade calc(.2s / var(--spd)) ease-out both}
+.playing .o-spkd-stone{animation:spkStoneUp calc(.62s / var(--spd)) cubic-bezier(.25,.8,.35,1) calc(.05s / var(--spd)) both}
+.playing .o-spkd-dirt{animation:spkDirt calc(.5s / var(--spd)) ease-out calc(var(--dd) / var(--spd)) both}
+.playing .o-spkd-lbl{animation:spkCarve calc(.3s / var(--spd)) linear calc(.62s / var(--spd)) both}
+.playing .o-spkd-amt{animation:spkCarve calc(.32s / var(--spd)) linear calc(.8s / var(--spd)) both}
+.playing .o-spkd-from{animation:spkCarve calc(.3s / var(--spd)) linear calc(.98s / var(--spd)) both}
+.playing .o-spkd-ghost{animation:spkPeek calc(.5s / var(--spd)) ease-out calc(1.05s / var(--spd)) both}
+
+/* raid — Bat swarm: a big moon, then one bat per raider (up to twelve) flaps out from behind the card */
+.o-spkr{height:196px}
+.o-spkr-moon{position:absolute;left:228px;top:12px;width:168px;height:168px;border-radius:50%;background:radial-gradient(circle at 38% 36%,#FFFDF0 0,#FBEFC8 46%,#E9D08C 100%);box-shadow:0 0 0 7px rgba(255,240,190,.1),0 0 38px rgba(255,232,160,.38)}
+.o-spkr-crater{position:absolute;border-radius:50%;background:rgba(196,164,96,.3);box-shadow:inset 2px 2px 0 rgba(150,120,60,.22)}
+.o-spkr-c1{left:34px;top:46px;width:26px;height:26px}
+.o-spkr-c2{left:100px;top:30px;width:16px;height:16px}
+.o-spkr-c3{left:92px;top:106px;width:32px;height:32px}
+.o-spkr-c4{left:44px;top:118px;width:12px;height:12px}
+.o-spkr-bats{position:absolute;left:0;top:0;width:100%;height:100%}
+.o-spkr-bat{position:absolute;display:block}
+.o-spkr-plate{left:4px;top:42px;width:236px;height:114px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:10px 16px 10px 18px}
+.o-spkr-lbl{font-size:24px}
+.o-spkr-name{font-size:calc(25px * var(--fit,1))}
+.o-spkr-count{display:flex;align-items:flex-end;gap:6px;font-weight:800;font-size:15px;line-height:1;color:rgba(244,241,255,.85);white-space:nowrap}
+.o-spkr-word{margin-bottom:1px}
+.o-spkr-num{font-weight:900;font-size:22px;color:var(--spka);text-shadow:0 0 10px rgba(var(--spka-rgb),.5)}
+.o-spkr-num .o-odo{text-shadow:none;filter:drop-shadow(0 0 10px rgba(var(--spka-rgb),.5))}
+@keyframes spkMoonUp{0%{opacity:0;transform:translateY(24px) scale(.9)}100%{opacity:1;transform:none}}
+@keyframes spkSwarm{0%{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.4)}15%{opacity:1}55%{transform:translate(calc(var(--sx) * .38),calc(var(--sy) * .38 + var(--arc))) scale(1.08)}100%{opacity:1;transform:none}}
+.playing .o-spkr-moon{animation:spkMoonUp calc(.55s / var(--spd)) ease-out both}
+.playing .o-spkr-plate{animation:spkFloatIn calc(.45s / var(--spd)) ease-out calc(.12s / var(--spd)) both}
+.playing .o-spkr-lbl{animation:spkWobble calc(.45s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-spkr-name{animation:spkRise calc(.32s / var(--spd)) ease-out calc(.45s / var(--spd)) both}
+.playing .o-spkr-count{animation:spkRise calc(.3s / var(--spd)) ease-out calc(.58s / var(--spd)) both}
+.playing .o-spkr-bat{animation:spkSwarm calc(.62s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(var(--bd) / var(--spd)) both}
+.playing .o-spkr-wing{animation:spkFlap calc(.15s / var(--spd)) ease-in-out calc(var(--bd) / var(--spd)) 4}
+
+/* giveaway — Pumpkin reveal: the face lights up, the top pops off, sparkles fly out, the name glows */
+.o-spkg{height:214px}
+.o-spkg-plate{left:174px;right:4px;top:34px;height:104px;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:12px 16px 12px 20px}
+.o-spkg-lbl{font-size:21px}
+.o-spkg-name{font-size:calc(29px * var(--fit,1));color:#FFF6E6;text-shadow:0 0 12px rgba(var(--spka-rgb),.9),0 0 2px rgba(var(--spka-rgb),.9),0 2px 0 rgba(0,0,0,.5);transform-origin:0 50%}
+/* Room for the glow at the sides of the clipped name, without moving where it ends in an ellipsis. */
+.o-spkg-name > .o-nm-t{padding:.3em 14px;margin:-.3em -14px}
+.o-spkg-tagwrap{position:absolute;left:252px;top:138px;width:150px;height:60px;transform-origin:50% 0}
+.o-spkg-string{position:absolute;left:50%;top:0;width:2px;height:20px;margin-left:-1px;background:rgba(244,241,255,.75)}
+.o-spkg-tag{position:absolute;left:0;right:0;top:12px;box-sizing:border-box;height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 14px 4px;border-radius:10px;background:var(--spka);color:var(--spk-on);text-align:center;box-shadow:0 0 0 2px rgba(18,11,31,.65),0 8px 14px rgba(0,0,0,.45)}
+.o-spkg-tag::before{content:"";position:absolute;left:50%;top:4px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:rgba(18,11,31,.75)}
+.o-spkg-ptl{display:block;font-weight:900;font-size:9px;line-height:1.2;letter-spacing:.22em;text-transform:uppercase;opacity:.8}
+.o-spkg-prize{display:block;max-width:100%;font-weight:900;font-size:15px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-spkg-pumpkin{position:absolute;left:6px;top:60px;width:160px;height:145px;transform-origin:50% 100%}
+.o-spkg-svg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
+.o-spkg-lobe{fill:var(--spka);stroke:rgba(26,16,40,.55);stroke-width:2}
+.o-spkg-shade{fill:rgba(0,0,0,.14)}
+.o-spkg-hi{fill:none;stroke:rgba(255,255,255,.3);stroke-width:5;stroke-linecap:round}
+.o-spkg-hole{fill:#2A1206}
+.o-spkg-cut{fill:#2A1206}
+.o-spkg-tooth{fill:var(--spka)}
+.o-spkg-lit{fill:#FFD54F}
+.o-spkg-light{filter:drop-shadow(0 0 6px rgba(255,186,60,.95))}
+.o-spkg-lid{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:80px 38px;transform:translate(20px,-10px) rotate(22deg)}
+.o-spkg-stem{fill:#6E5A2E;stroke:rgba(26,16,40,.6);stroke-width:1.5}
+.o-spkg-vine{fill:none;stroke:#6FB82E;stroke-width:2;stroke-linecap:round}
+.o-spkg-leaf{fill:var(--spk-slime);stroke:rgba(26,16,40,.55);stroke-width:1.2}
+.o-spkg-cap{fill:var(--spka);stroke:rgba(26,16,40,.6);stroke-width:2;stroke-linejoin:round}
+.o-spkg-sparks{position:absolute;left:86px;top:104px;width:0;height:0}
+.o-spkg-spark{position:absolute;left:calc(var(--z) / -2);top:calc(var(--z) / -2);width:var(--z);height:var(--z);background:#FFF1BF;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);opacity:.9;transform:translate(var(--dx),var(--dy)) scale(var(--ss))}
+@keyframes spkLidPop{0%{transform:none}35%{transform:translate(4px,-50px) rotate(-18deg)}70%{transform:translate(18px,-14px) rotate(26deg)}85%{transform:translate(20px,-8px) rotate(19deg)}100%{transform:translate(20px,-10px) rotate(22deg)}}
+@keyframes spkSpark{0%{opacity:0;transform:translate(0,0) scale(.2)}20%{opacity:1}70%{opacity:1;transform:translate(var(--dx),var(--dy)) scale(1.3)}100%{opacity:.9;transform:translate(var(--dx),var(--dy)) scale(var(--ss))}}
+@keyframes spkGlowIn{0%{opacity:0;transform:scale(.9);text-shadow:0 0 0 rgba(var(--spka-rgb),0),0 0 0 rgba(var(--spka-rgb),0),0 2px 0 rgba(0,0,0,.5)}50%{opacity:1;text-shadow:0 0 22px rgba(var(--spka-rgb),1),0 0 4px rgba(var(--spka-rgb),1),0 2px 0 rgba(0,0,0,.5)}100%{opacity:1;transform:none;text-shadow:0 0 12px rgba(var(--spka-rgb),.9),0 0 2px rgba(var(--spka-rgb),.9),0 2px 0 rgba(0,0,0,.5)}}
+@keyframes spkSwing{0%{opacity:0;transform:rotate(-24deg)}25%{opacity:1}55%{transform:rotate(9deg)}78%{transform:rotate(-4deg)}100%{opacity:1;transform:none}}
+.playing .o-spkg-pumpkin{animation:spkLand calc(.45s / var(--spd)) ease-out both}
+.playing .o-spkg-plate{animation:spkFloatIn calc(.45s / var(--spd)) ease-out calc(.12s / var(--spd)) both}
+.playing .o-spkg-lbl{animation:spkWobble calc(.45s / var(--spd)) ease-out calc(.3s / var(--spd)) both}
+.playing .o-spkg-light{animation:spkGlowOn calc(.55s / var(--spd)) linear calc(.45s / var(--spd)) both}
+.playing .o-spkg-lid{animation:spkLidPop calc(.55s / var(--spd)) cubic-bezier(.3,.6,.4,1) calc(.85s / var(--spd)) both}
+.playing .o-spkg-spark{animation:spkSpark calc(.7s / var(--spd)) ease-out calc(var(--sd) / var(--spd)) both}
+.playing .o-spkg-name{animation:spkGlowIn calc(.55s / var(--spd)) ease-out calc(1s / var(--spd)) both}
+.playing .o-spkg-tagwrap{animation:spkSwing calc(.6s / var(--spd)) ease-out calc(1.3s / var(--spd)) both}

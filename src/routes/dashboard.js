@@ -17,7 +17,7 @@ const { parseOverlaySettings, giveawayDurationSeconds, DEFAULT_DURATION_SECONDS 
 const { isAllowedScreenshot, redemptionMediaError, isAllowedSound } = require('../services/uploadValidation');
 const customSounds = require('../services/customSounds');
 const storageQuota = require('../services/storageQuota');
-const { buildOverlayConfig } = require('../services/overlayConfig');
+const { buildOverlayConfig, channelLettering } = require('../services/overlayConfig');
 const {
   TIP_GOAL_CURRENCIES, SETTINGS_ERRORS, GOAL_ERRORS, MIN_AMOUNT_FLOOR, MIN_AMOUNT_CEIL, PAYPAL_EMAIL_MAX,
   parseDonationSettings, parseTipGoalFields, errorMessage, goalCurrencyMismatch,
@@ -28,7 +28,9 @@ const {
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction, parseSwitch } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
-const { EVENT_DEFAULTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
+const { EVENT_DEFAULTS, OVERLAY_FONTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
+const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
+const { ALERTS: STYLED_ALERTS, DEFAULT_STYLES, canUseStyle, familyStyles, galleryFor, familyKeys, soundGroups, fontsOf } = require('../services/alertStyles');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
@@ -991,8 +993,9 @@ router.post('/overlay/test/:eventType', knownOverlayTestType, overlayOn, limitTe
   bus.emit(`overlay:${req.streamer.id}`, { ...event, data: { ...event.data } });
 
   // Fire chatbot message in sync (a test is never merged with real thank-yous).
-  // Only the Twitch alerts have a thank-you in Twitch chat.
-  if (TWITCH_ALERT_TYPES.includes(type)) {
+  // Only the Twitch alerts have a thank-you in Twitch chat; the Overlay Builder's Test (chat: false)
+  // only plays the alert, so trying looks never posts in a live channel.
+  if (TWITCH_ALERT_TYPES.includes(type) && !(req.body && req.body.chat === false)) {
     const { chatManager } = require('../services/twitchChat');
     chatManager.sendEventMessage(req.streamer.id, type, event.data, { test: true });
   }
@@ -2693,6 +2696,27 @@ router.delete('/giveaways/:id', (req, res) => {
 
 // --- Overlay Builder ---
 
+// What the builder's Style section is handed (alert styles): each alert's gallery (a look made for
+// this streamer first), the default looks, the families and the sounds in the gallery's order, every
+// name in the streamer's language, and the fonts Racing's name can take. The page has every family's
+// code (styles.js), so it draws the looks itself.
+function builderStyleData(streamer, t) {
+  const gallery = {};
+  const looks = {};
+  for (const type of STYLED_ALERTS) {
+    gallery[type] = galleryFor(type, streamer);
+    for (const { id } of gallery[type]) looks[id] = { title: t(`overlayBuilder.looks.${id}.title`), desc: t(`overlayBuilder.looks.${id}.desc`) };
+  }
+  return {
+    defaults: DEFAULT_STYLES,
+    gallery,
+    looks,
+    families: familyKeys().map((key) => ({ key, name: t(`overlayBuilder.families.${key}.name`), desc: t(`overlayBuilder.families.${key}.desc`) })),
+    sounds: soundGroups().map(({ family, sounds }) => ({ family, sounds: sounds.map((key) => ({ key, name: t(`overlayBuilder.sounds.${key}`) })) })),
+    fonts: OVERLAY_FONTS,
+  };
+}
+
 router.get('/overlay-builder', overlayPage, async (req, res) => {
   const designs = db.getAllOverlayDesigns(req.streamer.id);
   const overlayUrl = req.streamer.overlay_token
@@ -2706,6 +2730,8 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
   const sponsors = db.getSponsorImages(req.streamer.id);
   res.render('overlay-builder', {
     streamer: req.streamer,
+    // The name on the rear window of the C1 any streamer can pick (services/overlayConfig.js).
+    channel: JSON.stringify(channelLettering(req.streamer)).replace(/</g, '\\u003c'),
     // \u003c escaping: these are embedded raw into an inline <script> in the
     // builder, and JSON.stringify does NOT neutralise a literal "</script>" in
     // user-controlled text (event_label, detail_text, sponsor names).
@@ -2713,13 +2739,28 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
     sponsors: JSON.stringify(sponsors).replace(/</g, '\\u003c'),
     // What each alert starts from (the server's own table, see services/overlayDesign.js)
     eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
+    // The joined alert looks' version (services/alertStyleBundle.js), as the OBS overlay asks for them
+    stylesVersion: alertStyleBundle().version,
+    // The Style section, and every family's fonts in one stylesheet
+    styleData: JSON.stringify(builderStyleData(req.streamer, res.locals.t)).replace(/</g, '\\u003c'),
+    styleFontsHref: 'https://fonts.googleapis.com/css2?' + fontsOf(familyKeys()).map((spec) => `family=${spec}`).join('&') + '&display=swap',
     overlayUrl,
     streamThumbnail
   });
 });
 
+// The streamer's designs, sent to their open overlays so a change applies without a reload.
+function pushOverlayDesigns(streamerId) {
+  const designMap = {};
+  db.getAllOverlayDesigns(streamerId).forEach(d => { designMap[d.event_type] = d; });
+  require('../services/overlayBus').emit(`overlay:${streamerId}`, { type: 'config-update', designs: designMap });
+}
+
 // Only what the builder itself can produce is saved (services/overlayDesign.js);
-// anything else is a 400 that names the field.
+// anything else is a 400 that names the field. Next to the design comes the look the builder
+// shows (`style`, alert styles): one that draws this alert, or the streamer's own private one;
+// '' or null is the alert's default look. A page from before the looks sends none, and the
+// stored look stays.
 router.post('/overlay-builder/save', (req, res) => {
   const t = res.locals.t;
   const { eventType, design } = req.body || {};
@@ -2730,16 +2771,31 @@ router.post('/overlay-builder/save', (req, res) => {
   if (!checked.ok) {
     return res.status(400).json({ ok: false, field: checked.field, error: t('overlayBuilder.error.invalidField', { field: checked.field }) });
   }
+  const namesStyle = Object.prototype.hasOwnProperty.call(req.body, 'style');
+  const style = req.body.style === '' ? null : req.body.style;
+  if (namesStyle && !canUseStyle(style, eventType, req.streamer)) {
+    return res.status(400).json({ ok: false, field: 'style', error: t('overlayBuilder.error.style') });
+  }
+  // The look first: another look starts from its own settings, then the design is what the builder sent.
+  if (namesStyle) db.setOverlayDesignStyle(req.streamer.id, eventType, style);
   db.saveOverlayDesign(req.streamer.id, eventType, checked.design);
-
-  // Push updated designs to running overlay so it updates without reconnecting
-  const bus = require('../services/overlayBus');
-  const designs = db.getAllOverlayDesigns(req.streamer.id);
-  const designMap = {};
-  designs.forEach(d => { designMap[d.event_type] = d; });
-  bus.emit(`overlay:${req.streamer.id}`, { type: 'config-update', designs: designMap });
-
+  pushOverlayDesigns(req.streamer.id);
   res.json({ ok: true });
+});
+
+// "Use <family> for all six alerts": the family's look on each of the six alerts, all or none (a
+// row whose look changes starts from the look's own settings), one config-update to the open
+// overlay, and the six rows for the builder.
+router.post('/overlay-builder/family', (req, res) => {
+  const styles = familyStyles(req.body && req.body.family);
+  if (!styles) {
+    return res.status(400).json({ ok: false, field: 'family', error: res.locals.t('overlayBuilder.error.family') });
+  }
+  db.setOverlayDesignStyles(req.streamer.id, styles);
+  pushOverlayDesigns(req.streamer.id);
+  const designs = {};
+  for (const eventType of Object.keys(styles)) designs[eventType] = db.getOverlayDesign(req.streamer.id, eventType);
+  res.json({ ok: true, designs });
 });
 
 router.post('/overlay-builder/reset', (req, res) => {
@@ -2747,16 +2803,9 @@ router.post('/overlay-builder/reset', (req, res) => {
   if (!isBuilderEventType(eventType)) {
     return res.status(400).json({ ok: false, error: res.locals.t('overlayBuilder.error.eventType') });
   }
-  // Back to the defaults; a style the owner set (andre_vilela_'s C1) is kept
+  // Back to the defaults; the alert's look is kept (its own settings start again)
   db.resetOverlayDesign(req.streamer.id, eventType);
-
-  // Push updated designs to running overlay
-  const bus = require('../services/overlayBus');
-  const designs = db.getAllOverlayDesigns(req.streamer.id);
-  const designMap = {};
-  designs.forEach(d => { designMap[d.event_type] = d; });
-  bus.emit(`overlay:${req.streamer.id}`, { type: 'config-update', designs: designMap });
-
+  pushOverlayDesigns(req.streamer.id);
   res.json({ ok: true });
 });
 
