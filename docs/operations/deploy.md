@@ -467,3 +467,26 @@ After the deploy (while no streamer is live):
 Rolling back is safe: nothing stored changed, so older code draws today's objects and the Victory lap again for the
 alerts with no look. A builder save made after this release stores Glass's id, which older code draws too (Glass came
 with release B).
+
+## The Overlay Builder's cards and edit window
+
+What streamers see when it deploys (`docs/superpowers/specs/2026-10-16-overlay-builder-cards-design.md`):
+- `/dashboard/overlay-builder` is a grid of alert cards instead of one tabbed panel: Follow, Subscription, Bits,
+  Donation, Raid, Giveaway winner and Sponsor images (and the three YouTube alerts while `features.youtube` is on). Each
+  card loops the look the alert is set to, shows its sound and where it sits, and has **Test in OBS** and **Edit
+  alert**.
+- Edit alert opens a window with the tabs Animation, Customize, Sound and Location (Images, Design and Location for
+  Sponsor images; Design and Location for a YouTube alert). **Done** saves the alert; Reset to Default and "Use <theme>
+  for all six alerts" act at once. The Sound tab lists only the alert's own sounds.
+- Links with `?tab=<card>` (for example `?tab=timed`) open that card's window.
+- Nothing to migrate and no data change: the same `overlay_designs` rows, the same save, family, reset and test routes,
+  and the OBS overlay is untouched, so an open OBS source needs no reload. The change is the page (`overlay-builder.ejs`,
+  `public/js/builder-cards.js`, `public/js/builder-styles-core.js`) and the texts in the seven locales.
+
+After the deploy:
+1. `/health` answers 200 and `/dashboard/overlay-builder` shows the cards, two to a row on a wide window, each looping.
+2. Edit the Follow alert, pick another look, press Done: the card shows it, a reload keeps it, and an open OBS source
+   draws it on the next Test in OBS without a reload.
+3. `?tab=timed` opens Sponsor images; an image still uploads, switches and reorders.
+
+Rolling back is safe: nothing stored changed, so the earlier builder reads the same rows.
