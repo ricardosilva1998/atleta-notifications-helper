@@ -1061,6 +1061,11 @@ describe('the Sound tab', () => {
     const tag = walk(row).find((n) => /^snd-tag/.test(n.className));
     assert.match(textOf(tag), new RegExp(page.CARDS.CARD_ICONS.follow + ' Follow'), 'the alert\'s badge');
     assert.match(textOf(tag), /Pill/, 'the look');
+    const name = walk(row).find((n) => n.className === 'snd-name');
+    assert.equal(name.getAttribute('title'), 'glFollow', 'the ellipsised name can be read in full');
+    const second = walk(rowOf(page.document, 'glFollow.2', glass)).find((n) => n.className === 'snd-name');
+    assert.equal(second.getAttribute('title'), 'glFollow (version 2)');
+    assert.ok(walk(row).filter((n) => /^snd-(name|tag)/.test(n.className)).every((n) => n.tagName === 'SPAN'), 'phrasing content inside the button');
     const line = walk(tag).find((n) => n.className === 'tag-txt');
     assert.equal(line.getAttribute('title'), 'Pill · Own sound', 'the full text is in the title');
     assert.match(textOf(rowOf(page.document, 'none', mine)), /Silent/);

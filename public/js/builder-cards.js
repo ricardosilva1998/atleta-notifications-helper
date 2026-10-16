@@ -1096,10 +1096,12 @@
     var pick = make('button', 'snd-pick');
     pick.type = 'button';
     pick.setAttribute('aria-pressed', String(current === key));
-    pick.appendChild(make('div', 'snd-name', soundNameOf(key)));
+    var name = make('span', 'snd-name', soundNameOf(key));
+    name.setAttribute('title', soundNameOf(key));
+    pick.appendChild(name);
     var words = [owner && ((styleData().looks || {})[owner.look.key] || {}).title || (owner && owner.look.key), SOUND_TAGS[tag] && text(SOUND_TAGS[tag])].filter(Boolean).join(' · ');
     if (owner || words) {
-      var line = make('div', 'snd-tag' + (tag === 'own' ? ' own' : ''));
+      var line = make('span', 'snd-tag' + (tag === 'own' ? ' own' : ''));
       if (owner) line.appendChild(alertBadge(owner.eventType));
       var label = make('span', 'tag-txt', words);
       label.setAttribute('title', words);
