@@ -501,3 +501,11 @@ When this log grows past ~10 entries, archive the oldest to `docs/team-log-archi
 - An alert with no look keeps today's object and engine sound; the five Samurai presets play their recordings only when picked.
 - Recordings sit at −16 LUFS (the engine sounds' level), named by content hash and cached for a year; `node scripts/look-sounds.js` writes the manifest and `tests/lookSounds.test.js` checks it against the files. The sources (prompts, takes, mixes, tools) are in the gitignored `.superpowers/sounds/`.
 **Open:** whether alerts with no look should also play the Samurai recordings (the owner's call); 91 looks the owner has not listened to yet (both versions ship); delete the ElevenLabs API key once the sounds are final (it was pasted in a chat).
+
+### 2026-10-16 13:20 — claude (direct session)
+**Task:** The owner's picks on the ten redone look sounds: two defaults move to version B
+**Files:** `public/overlay/objects/sounds/racing/rcNitro.*`, `public/overlay/objects/sounds/cockpit/pb.*` (default and second version swapped), `public/overlay/objects/sounds/manifest.js`, `CLAUDE.md`
+**Decisions:**
+- Racing's Turbo boost (bits) and Cockpit's Exhaust crackle (sub) now default to the take the owner kept (B); the other take is their version 2. The other five redone looks the owner picked keep A, as shipped.
+- Grand Prix's Start lights, Comic's KAPOW and Samurai's Taiko war march have no pick since their redo and keep their current defaults.
+**Open:** whether alerts with no look should also play the Samurai recordings (the owner's call); delete the ElevenLabs API key.
