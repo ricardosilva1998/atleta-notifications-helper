@@ -1961,6 +1961,11 @@ const STREAMER_OWNED_ROWS = [
   ['sponsor_messages', 'streamer_id = ?'],
   ['timed_notifications', 'streamer_id = ?'],
   ['tip_goals', 'streamer_id = ?'],
+  ['tracking_goal_periods', 'streamer_id = ?'],
+  ['tracking_goals', 'streamer_id = ?'],
+  ['tracking_events', 'streamer_id = ?'],
+  ['tracker_values', 'streamer_id = ?'],
+  ['tracker_settings', 'streamer_id = ?'],
   ['vtuber_models', 'streamer_id = ?'],
   ['banned_words', 'streamer_id = ?'],
   ['donations', 'streamer_id = ?'],
@@ -2988,11 +2993,16 @@ function getOverlayEnabledStreamers() {
 // uses the chatbot needs them as much as one who only uses the overlay. Disabled
 // accounts are left out. Each manager adds its own conditions to this list:
 // EventSub a broadcaster token, StreamElements a token of its own, the sponsor
-// rotation a rotation that is switched on.
+// rotation a rotation that is switched on. A streamer with an active tracking
+// goal or an enabled tracker source needs the same connections (the follows,
+// subs, raids and bits it counts arrive through EventSub), whatever the two
+// switches say.
 function getOverlayOrChatbotStreamers() {
   return openTokensOfAll(db.prepare(`
     SELECT * FROM streamers
-    WHERE (overlay_enabled = 1 OR chatbot_enabled = 1)
+    WHERE (overlay_enabled = 1 OR chatbot_enabled = 1
+      OR EXISTS (SELECT 1 FROM tracking_goals g WHERE g.streamer_id = streamers.id AND g.status = 'active')
+      OR EXISTS (SELECT 1 FROM tracker_settings t WHERE t.streamer_id = streamers.id AND t.enabled = 1))
     AND COALESCE(enabled, 1) = 1
   `).all());
 }
@@ -4017,6 +4027,89 @@ try {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tip_goals_streamer_status ON tip_goals(streamer_id, status)`);
 } catch (e) { _migrationLog('tip_goals', e); }
+
+// Migration: Tracking (goal bars and trackers). tracking_events is the long-lived
+// record of follows and subs the goals count from (kept 400 days); a gift row
+// carries the size of the gift in count. A goal's count is not stored: nudge is
+// the streamer's manual correction to the current period, lifetime_total the
+// last total read from Twitch. One active goal per streamer and kind.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracking_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      sub_type TEXT,
+      twitch_user_id TEXT,
+      username TEXT,
+      count INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tracking_events_streamer_kind_date ON tracking_events(streamer_id, kind, created_at)`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracking_goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      target INTEGER NOT NULL,
+      bar_color TEXT DEFAULT '#22c55e',
+      period TEXT NOT NULL DEFAULT 'lifetime',
+      mode TEXT NOT NULL DEFAULT 'calendar',
+      hours INTEGER,
+      time_zone TEXT,
+      nudge INTEGER NOT NULL DEFAULT 0,
+      lifetime_total INTEGER,
+      lifetime_read_at TEXT,
+      period_start TEXT,
+      completed_at TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      started_at TEXT DEFAULT (datetime('now')),
+      ended_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tracking_goals_streamer_status ON tracking_goals(streamer_id, kind, status)`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tracking_goals_one_active ON tracking_goals(streamer_id, kind) WHERE status = 'active'`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracking_goal_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      goal_id INTEGER NOT NULL,
+      streamer_id INTEGER NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      target INTEGER NOT NULL,
+      reached INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (goal_id) REFERENCES tracking_goals(id),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tracking_goal_periods_goal ON tracking_goal_periods(goal_id, period_end)`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_values (
+      streamer_id INTEGER NOT NULL,
+      tracker TEXT NOT NULL,
+      value TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (streamer_id, tracker),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_settings (
+      streamer_id INTEGER NOT NULL,
+      tracker TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      color TEXT,
+      PRIMARY KEY (streamer_id, tracker),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+} catch (e) { _migrationLog('tracking', e); }
 
 // Migration: Donation history (365-day retention). On first creation, backfill
 // from the donation rows still in overlay_events (30-day retention) so history
@@ -5769,6 +5862,229 @@ function endTipGoal(id, streamerId) {
   ).run(id, streamerId);
 }
 
+// --- Tracking: the follow/sub record, goals, finished periods, trackers ---
+
+const TRACKING_KINDS = new Set(['follow', 'sub']);
+const TRACKING_SUB_TYPES = new Set(['new', 'resub', 'gift']);
+
+// A time bound as SQLite writes datetime('now'): 'YYYY-MM-DD HH:MM:SS', UTC. A
+// Date or an ISO string is converted; text already in that form is kept (it is
+// UTC, which new Date() would read as local time). Anything else is null.
+function toSqliteTime(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'string' && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(value)) return value;
+  const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// Writes one follow or sub to the record; returns the row id, or null for a
+// kind the record does not keep. A gift row's count is the size of the gift.
+function recordTrackingEvent(streamerId, ev) {
+  if (!ev || !TRACKING_KINDS.has(ev.kind)) return null;
+  const subType = ev.kind === 'sub' && TRACKING_SUB_TYPES.has(ev.subType) ? ev.subType : null;
+  const count = Math.max(1, Math.floor(Number(ev.count)) || 1);
+  const twitchUserId = ev.twitchUserId == null ? null : String(ev.twitchUserId).slice(0, 40);
+  const username = ev.username == null ? null : String(ev.username).slice(0, 100);
+  return Number(db.prepare(`
+    INSERT INTO tracking_events (streamer_id, kind, sub_type, twitch_user_id, username, count)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(streamerId, ev.kind, subType, twitchUserId, username, count).lastInsertRowid);
+}
+
+// How many follows or subs the record holds in [start, end) (either bound may
+// be null: open). Follows count each Twitch user once (a row without a user id
+// counts on its own); subs add up count over the given sub types (all of them
+// when none are given). Bounds are ISO or SQLite text, or Dates.
+function countTrackingEvents(streamerId, kind, start, end, { subTypes } = {}) {
+  const where = ['streamer_id = ?', 'kind = ?'];
+  const params = [streamerId, kind];
+  const from = toSqliteTime(start);
+  const to = toSqliteTime(end);
+  if (from) { where.push('created_at >= ?'); params.push(from); }
+  if (to) { where.push('created_at < ?'); params.push(to); }
+  if (kind === 'follow') {
+    return db.prepare(`
+      SELECT COUNT(DISTINCT NULLIF(twitch_user_id, ''))
+        + COALESCE(SUM(CASE WHEN twitch_user_id IS NULL OR twitch_user_id = '' THEN 1 ELSE 0 END), 0) AS n
+      FROM tracking_events WHERE ${where.join(' AND ')}
+    `).get(...params).n;
+  }
+  if (Array.isArray(subTypes)) {
+    if (!subTypes.length) return 0;
+    where.push(`sub_type IN (${subTypes.map(() => '?').join(', ')})`);
+    params.push(...subTypes);
+  }
+  return db.prepare(`SELECT COALESCE(SUM(count), 0) AS n FROM tracking_events WHERE ${where.join(' AND ')}`).get(...params).n;
+}
+
+function cleanupOldTrackingEvents() {
+  const result = db.prepare("DELETE FROM tracking_events WHERE created_at < datetime('now', '-400 days')").run();
+  if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} tracking events older than 400 days`);
+}
+
+// A goal field under its column name or its camelCase one.
+function goalField(fields, column, camel) {
+  const v = fields[column] !== undefined ? fields[column] : fields[camel];
+  return v === undefined ? null : v;
+}
+
+function getActiveTrackingGoal(streamerId, kind) {
+  return db.prepare(
+    "SELECT * FROM tracking_goals WHERE streamer_id = ? AND kind = ? AND status = 'active' ORDER BY id DESC LIMIT 1"
+  ).get(streamerId, kind) || null;
+}
+
+// The goals that ended and the periods a calendar goal finished, newest first,
+// as one list: { type: 'goal', ... } rows from tracking_goals and
+// { type: 'period', ... } rows with their goal's title, each with `at`, the
+// time it ended.
+function getTrackingGoalHistory(streamerId, kind, limit) {
+  const max = Math.max(1, Math.floor(Number(limit)) || 10);
+  const goals = db.prepare(`
+    SELECT 'goal' AS type, id, title, target, bar_color, period, mode, started_at, ended_at, ended_at AS at
+    FROM tracking_goals WHERE streamer_id = ? AND kind = ? AND status = 'ended'
+    ORDER BY ended_at DESC, id DESC LIMIT ?
+  `).all(streamerId, kind, max);
+  const periods = db.prepare(`
+    SELECT 'period' AS type, p.id, p.goal_id, g.title, g.bar_color, g.period, g.mode,
+      p.period_start, p.period_end, p.count, p.target, p.reached, p.period_end AS at
+    FROM tracking_goal_periods p JOIN tracking_goals g ON g.id = p.goal_id
+    WHERE p.streamer_id = ? AND g.kind = ?
+    ORDER BY p.period_end DESC, p.id DESC LIMIT ?
+  `).all(streamerId, kind, max);
+  return [...goals, ...periods]
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+    .slice(0, max);
+}
+
+// Starting a goal ends the active one of the same kind (one active goal per
+// streamer and kind); the other kind is left alone. fields: title, target,
+// bar_color, period, mode, hours, time_zone, period_start, lifetime_total.
+function createTrackingGoal(streamerId, kind, fields) {
+  return db.transaction(() => {
+    db.prepare(
+      "UPDATE tracking_goals SET status = 'ended', ended_at = datetime('now') WHERE streamer_id = ? AND kind = ? AND status = 'active'"
+    ).run(streamerId, kind);
+    const lifetimeTotal = goalField(fields, 'lifetime_total', 'lifetimeTotal');
+    const result = db.prepare(`
+      INSERT INTO tracking_goals (streamer_id, kind, title, target, bar_color, period, mode, hours, time_zone,
+        period_start, lifetime_total, lifetime_read_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END)
+    `).run(
+      streamerId, kind, fields.title, fields.target,
+      goalField(fields, 'bar_color', 'barColor') || '#22c55e',
+      fields.period || 'lifetime', fields.mode || 'calendar',
+      fields.hours == null ? null : fields.hours,
+      goalField(fields, 'time_zone', 'timeZone'),
+      toSqliteTime(goalField(fields, 'period_start', 'periodStart')),
+      lifetimeTotal, lifetimeTotal,
+    );
+    return db.prepare('SELECT * FROM tracking_goals WHERE id = ?').get(result.lastInsertRowid);
+  })();
+}
+
+// Changes the title, target and colour of the streamer's active goal. A new
+// target clears the celebration, so the caller can set it again if the count
+// already passes it (setTrackingGoalCompleted). Returns the row.
+function updateTrackingGoal(id, streamerId, fields) {
+  db.prepare(`
+    UPDATE tracking_goals SET title = ?, target = ?, bar_color = ?,
+      completed_at = CASE WHEN target = ? THEN completed_at ELSE NULL END
+    WHERE id = ? AND streamer_id = ? AND status = 'active'
+  `).run(fields.title, fields.target, goalField(fields, 'bar_color', 'barColor') || '#22c55e', fields.target, id, streamerId);
+  return db.prepare('SELECT * FROM tracking_goals WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+// Moves the manual correction of the current period by delta. `floor` is the
+// count the goal shows before the nudge, so the stored nudge never goes below
+// -floor and the shown count stays at 0 or more. Returns the row (null when the
+// streamer has no such active goal).
+function nudgeTrackingGoal(id, streamerId, delta, floor) {
+  const low = -Math.max(0, Math.floor(Number(floor)) || 0);
+  db.prepare(`
+    UPDATE tracking_goals SET nudge = MAX(?, nudge + ?)
+    WHERE id = ? AND streamer_id = ? AND status = 'active'
+  `).run(low, Math.trunc(Number(delta)) || 0, id, streamerId);
+  return db.prepare("SELECT * FROM tracking_goals WHERE id = ? AND streamer_id = ? AND status = 'active'").get(id, streamerId) || null;
+}
+
+function endTrackingGoal(id, streamerId) {
+  return db.prepare(
+    "UPDATE tracking_goals SET status = 'ended', ended_at = datetime('now') WHERE id = ? AND streamer_id = ? AND status = 'active'"
+  ).run(id, streamerId);
+}
+
+// A calendar goal's period is over: writes it to the finished periods and
+// starts the next one with the same target (no nudge, not completed). Returns
+// the goal row.
+function rollTrackingGoal(id, p) {
+  return db.transaction(() => {
+    const goal = db.prepare('SELECT * FROM tracking_goals WHERE id = ?').get(id);
+    if (!goal) return null;
+    db.prepare(`
+      INSERT INTO tracking_goal_periods (goal_id, streamer_id, period_start, period_end, count, target, reached)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, goal.streamer_id, toSqliteTime(p.periodStart), toSqliteTime(p.periodEnd),
+      Math.max(0, Math.floor(Number(p.count)) || 0), p.target, p.reached ? 1 : 0);
+    db.prepare('UPDATE tracking_goals SET nudge = 0, completed_at = NULL, period_start = ? WHERE id = ?')
+      .run(toSqliteTime(p.nextStart), id);
+    return db.prepare('SELECT * FROM tracking_goals WHERE id = ?').get(id);
+  })();
+}
+
+// Stamps the moment a goal was reached; true only for the call that did it.
+function setTrackingGoalCompleted(id) {
+  return db.prepare("UPDATE tracking_goals SET completed_at = datetime('now') WHERE id = ? AND completed_at IS NULL").run(id).changes > 0;
+}
+
+function setTrackingGoalLifetime(id, total) {
+  db.prepare("UPDATE tracking_goals SET lifetime_total = ?, lifetime_read_at = datetime('now') WHERE id = ?").run(total, id);
+}
+
+// { [tracker]: value }; a value is stored as text (an object is saved as JSON).
+function getTrackerValues(streamerId) {
+  const out = {};
+  for (const r of db.prepare('SELECT tracker, value FROM tracker_values WHERE streamer_id = ?').all(streamerId)) out[r.tracker] = r.value;
+  return out;
+}
+
+function setTrackerValue(streamerId, tracker, value) {
+  const text = value == null ? null : (typeof value === 'string' ? value : JSON.stringify(value));
+  db.prepare(`
+    INSERT INTO tracker_values (streamer_id, tracker, value, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(streamer_id, tracker) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(streamerId, tracker, text);
+}
+
+function clearTrackerValues(streamerId) {
+  db.prepare('DELETE FROM tracker_values WHERE streamer_id = ?').run(streamerId);
+}
+
+// { [tracker]: { enabled: 0|1, color } } for the trackers that have a row; a
+// tracker with none is on with its default colour.
+function getTrackerSettings(streamerId) {
+  const out = {};
+  for (const r of db.prepare('SELECT tracker, enabled, color FROM tracker_settings WHERE streamer_id = ?').all(streamerId)) {
+    out[r.tracker] = { enabled: r.enabled, color: r.color };
+  }
+  return out;
+}
+
+// Creates or changes a tracker's row; what the call does not name stays as it
+// was (a new row starts on, with no colour). `color: null` clears the colour.
+function setTrackerSetting(streamerId, tracker, settings) {
+  const s = settings || {};
+  const hasEnabled = s.enabled !== undefined;
+  const hasColor = s.color !== undefined;
+  db.prepare(`
+    INSERT INTO tracker_settings (streamer_id, tracker, enabled, color) VALUES (?, ?, ?, ?)
+    ON CONFLICT(streamer_id, tracker) DO UPDATE SET
+      enabled = CASE WHEN ? THEN excluded.enabled ELSE enabled END,
+      color = CASE WHEN ? THEN excluded.color ELSE color END
+  `).run(streamerId, tracker, hasEnabled ? (s.enabled ? 1 : 0) : 1, hasColor ? s.color : null, hasEnabled ? 1 : 0, hasColor ? 1 : 0);
+}
+
 // ── Boot: tokens at rest (see "Secrets at rest" at the top) ─────────────
 // Runs after every migration above, so all the token columns exist (on a new
 // database some appear only from the second boot; the ones missing are skipped).
@@ -6220,6 +6536,23 @@ module.exports = {
   updateTipGoal,
   addToTipGoal,
   endTipGoal,
+  recordTrackingEvent,
+  countTrackingEvents,
+  cleanupOldTrackingEvents,
+  getActiveTrackingGoal,
+  getTrackingGoalHistory,
+  createTrackingGoal,
+  updateTrackingGoal,
+  nudgeTrackingGoal,
+  endTrackingGoal,
+  rollTrackingGoal,
+  setTrackingGoalCompleted,
+  setTrackingGoalLifetime,
+  getTrackerValues,
+  setTrackerValue,
+  clearTrackerValues,
+  getTrackerSettings,
+  setTrackerSetting,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
   // GET /health: throws when the database cannot answer (or has been closed).
