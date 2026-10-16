@@ -1953,6 +1953,7 @@ const STREAMER_OWNED_ROWS = [
   ['channel_point_rewards', 'streamer_id = ?'],
   ['chat_commands', 'streamer_id = ?'],
   ['poll_templates', 'streamer_id = ?'],
+  ['tts_usage', 'streamer_id = ?'],
   ['custom_overlays', 'streamer_id = ?'],
   ['overlay_designs', 'streamer_id = ?'],
   ['overlay_designs_v0_backup', 'streamer_id = ?'],
@@ -3155,6 +3156,48 @@ function updateShoutoutSettings(streamerId, fields) {
   updateStreamerColumns(SHOUTOUT_COLUMNS, streamerId, fields);
 }
 
+// What the Donations page saves for reading tips aloud (checkTtsSettings in services/tipSpeech.js returns exactly these
+// keys). The monthly limit and the last error are written by their own functions below.
+const TTS_COLUMNS = new Set([
+  'tts_enabled', 'tts_min_amount', 'tts_language', 'tts_voice', 'tts_speed', 'tts_expressiveness', 'tts_volume',
+  'tts_template', 'tts_template_empty',
+]);
+
+function updateTtsSettings(streamerId, settings) {
+  updateStreamerColumns(TTS_COLUMNS, streamerId, settings);
+}
+
+// The admin's per-streamer limit; null goes back to the default one.
+function setTtsMonthlyLimit(streamerId, limitOrNull) {
+  db.prepare('UPDATE streamers SET tts_monthly_limit = ? WHERE id = ?').run(limitOrNull == null ? null : limitOrNull, streamerId);
+}
+
+function getTtsUsage(streamerId, month) {
+  const row = db.prepare('SELECT characters FROM tts_usage WHERE streamer_id = ? AND month = ?').get(streamerId, month);
+  return row ? row.characters : 0;
+}
+
+// Adds `characters` to the month's count when it still fits under `limit`, in one transaction (the check and the add
+// cannot be split by another tip). False, and nothing written, when used + characters would pass the limit.
+const _reserveTtsCharacters = db.transaction((streamerId, month, characters, limit) => {
+  if (getTtsUsage(streamerId, month) + characters > limit) return false;
+  db.prepare(`
+    INSERT INTO tts_usage (streamer_id, month, characters) VALUES (?, ?, ?)
+    ON CONFLICT(streamer_id, month) DO UPDATE SET characters = characters + excluded.characters
+  `).run(streamerId, month, characters);
+  return true;
+});
+
+function reserveTtsCharacters(streamerId, month, characters, limit) {
+  return _reserveTtsCharacters(streamerId, month, characters, limit);
+}
+
+// The last ElevenLabs refusal, cut to 200 characters, with the time.
+function recordTtsError(streamerId, message) {
+  db.prepare("UPDATE streamers SET tts_last_error = ?, tts_last_error_at = datetime('now') WHERE id = ?")
+    .run(String(message == null ? '' : message).substring(0, 200), streamerId);
+}
+
 const CHATBOT_COLUMNS = new Set([
   'chatbot_enabled',
   'chat_follow_enabled', 'chat_sub_enabled', 'chat_giftsub_enabled',
@@ -4005,6 +4048,16 @@ try {
   }
 } catch (e) { _migrationLog('donations', e); }
 
+// Reading tips aloud (2026-10-16): what became of a tip's read-aloud line ('read', or why it was not), shown in the
+// donation history. Tables made before it lack the column.
+try {
+  const donationCols = db.pragma('table_info(donations)').map((c) => c.name);
+  if (!donationCols.includes('tts_status')) {
+    db.exec('ALTER TABLE donations ADD COLUMN tts_status TEXT');
+    console.log('[DB] Added tts_status column to donations');
+  }
+} catch (e) { _migrationLog('donations_tts_status', e); }
+
 // Migration: PayPal tips between order creation and PayPal's redirect back.
 // The donor's name and message stay on the server, keyed by the PayPal order id,
 // instead of in browser cookies; captured_at marks an order already handled.
@@ -4111,6 +4164,51 @@ try {
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_poll_templates_streamer ON poll_templates(streamer_id)');
 } catch (e) { _migrationLog('poll_templates', e); }
+
+// Reading tips aloud (2026-10-16): the streamer's settings (off by default; language and voice are chosen when they
+// first save), the monthly limit that overrides the default one (NULL = default) and the last ElevenLabs refusal the
+// page shows. Existing rows get the defaults (SQLite fills an added column's DEFAULT in).
+{
+  const TTS_COLUMNS = [
+    ['tts_enabled', 'INTEGER DEFAULT 0'],
+    ['tts_min_amount', 'REAL DEFAULT 5'],
+    ['tts_language', 'TEXT'],
+    ['tts_voice', 'TEXT'],
+    ['tts_speed', 'REAL DEFAULT 1'],
+    ['tts_expressiveness', 'REAL DEFAULT 0.5'],
+    ['tts_volume', 'REAL DEFAULT 0.8'],
+    ['tts_template', 'TEXT'],
+    ['tts_template_empty', 'TEXT'],
+    ['tts_monthly_limit', 'INTEGER'],
+    ['tts_last_error', 'TEXT'],
+    ['tts_last_error_at', 'TEXT'],
+  ];
+  let cols = [];
+  try {
+    cols = db.pragma('table_info(streamers)').map((c) => c.name);
+  } catch (e) { _migrationLog('tts_columns', e); }
+  for (const [name, definition] of TTS_COLUMNS) {
+    if (cols.includes(name)) continue;
+    try {
+      db.exec(`ALTER TABLE streamers ADD COLUMN ${name} ${definition}`);
+      console.log(`[DB] Added ${name} column to streamers`);
+    } catch (e) { _migrationLog(name, e); }
+  }
+}
+
+// The characters sent to ElevenLabs per streamer and month ('YYYY-MM', UTC): reserved before a tip is read, so a month
+// never passes the streamer's limit.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_usage (
+      streamer_id INTEGER NOT NULL,
+      month TEXT NOT NULL,
+      characters INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (streamer_id, month),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) { _migrationLog('tts_usage', e); }
 
 // Migration: version overlay designs and snapshot v0 before the object rollout.
 // Phase 1 objects ignore saved style columns, so nothing is overwritten here —
@@ -5512,6 +5610,11 @@ function logDonation(streamerId, d) {
   return result.changes > 0;
 }
 
+// What became of the tip's read-aloud line, by the donation's source and external id (the key logDonation dedupes on).
+function setDonationTtsStatus(source, externalId, status) {
+  db.prepare('UPDATE donations SET tts_status = ? WHERE source = ? AND external_id = ?').run(status, source, externalId);
+}
+
 function _donationFilter(streamerId, opts) {
   const where = ["streamer_id = ?", "created_at >= datetime('now', ?)"];
   const params = [streamerId, `-${parseInt(opts.sinceDays) || 365} days`];
@@ -5896,6 +5999,11 @@ module.exports = {
   deletePollTemplate,
   updatePollSettings,
   updateShoutoutSettings,
+  updateTtsSettings,
+  setTtsMonthlyLimit,
+  getTtsUsage,
+  reserveTtsCharacters,
+  recordTtsError,
   updateChatbotConfig,
   updateBuiltinCommands,
   updateModerationConfig,
@@ -6088,6 +6196,7 @@ module.exports = {
   markRedrawnOut,
   getWinners,
   logDonation,
+  setDonationTtsStatus,
   getDonations,
   countDonations,
   getDonationTotals,
