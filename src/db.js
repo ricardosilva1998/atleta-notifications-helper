@@ -4111,6 +4111,18 @@ try {
   `);
 } catch (e) { _migrationLog('tracking', e); }
 
+// Migration: what a tracking goal's Twitch reads said. twitch_unavailable is
+// null, 'needs_reconnect' or 'not_affiliate' (the goal shows that instead of a
+// number); readback_at is when a period follower goal's read-back of the
+// follows before its start succeeded (null: still to do); readback_capped is 1
+// when that read-back stopped at its cap with more followers left.
+try {
+  const cols = db.prepare('PRAGMA table_info(tracking_goals)').all().map((c) => c.name);
+  for (const [col, type] of [['twitch_unavailable', 'TEXT'], ['readback_at', 'TEXT'], ['readback_capped', 'INTEGER NOT NULL DEFAULT 0']]) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE tracking_goals ADD COLUMN ${col} ${type}`);
+  }
+} catch (e) { _migrationLog('tracking_goals twitch state', e); }
+
 // Migration: Donation history (365-day retention). On first creation, backfill
 // from the donation rows still in overlay_events (30-day retention) so history
 // doesn't start empty. Backfilled rows have source 'legacy' (origin unknown, no message).
@@ -6045,6 +6057,54 @@ function setTrackingGoalLifetime(id, total) {
   db.prepare("UPDATE tracking_goals SET lifetime_total = ?, lifetime_read_at = datetime('now') WHERE id = ?").run(total, id);
 }
 
+// Every active goal, of every streamer and kind (the minute tick walks them).
+function getActiveTrackingGoals() {
+  return db.prepare("SELECT * FROM tracking_goals WHERE status = 'active' ORDER BY id").all();
+}
+
+// What the goal's last Twitch read said; a field the call does not give stays.
+// unavailable: null, 'needs_reconnect' or 'not_affiliate'. readbackDone: true
+// stamps readback_at (the follower read-back is done), false clears it.
+// capped: whether the read-back stopped at its cap.
+function setTrackingGoalTwitchState(id, state) {
+  const s = state || {};
+  const sets = [];
+  const values = [];
+  if (s.unavailable !== undefined) { sets.push('twitch_unavailable = ?'); values.push(s.unavailable || null); }
+  if (s.readbackDone !== undefined) sets.push(s.readbackDone ? "readback_at = datetime('now')" : 'readback_at = NULL');
+  if (s.capped !== undefined) { sets.push('readback_capped = ?'); values.push(s.capped ? 1 : 0); }
+  if (!sets.length) return;
+  db.prepare(`UPDATE tracking_goals SET ${sets.join(', ')} WHERE id = ?`).run(...values, id);
+}
+
+// The follows a read-back from Twitch found that the record lacks: a follower
+// with no follow row since `since` is written once, at the time Twitch says
+// they followed (so rolling windows age it out at the right moment). Followers
+// without a user id or a readable time are skipped. Returns how many were written.
+function backfillTrackingFollows(streamerId, followers, since) {
+  const from = toSqliteTime(since);
+  return db.transaction(() => {
+    const known = new Set(db.prepare(`
+      SELECT DISTINCT twitch_user_id AS id FROM tracking_events
+      WHERE streamer_id = ? AND kind = 'follow' AND twitch_user_id IS NOT NULL AND created_at >= ?
+    `).all(streamerId, from).map((r) => r.id));
+    const insert = db.prepare(`
+      INSERT INTO tracking_events (streamer_id, kind, sub_type, twitch_user_id, username, count, created_at)
+      VALUES (?, 'follow', NULL, ?, ?, 1, ?)
+    `);
+    let written = 0;
+    for (const f of Array.isArray(followers) ? followers : []) {
+      const userId = f && f.userId != null ? String(f.userId).slice(0, 40) : '';
+      const ms = Date.parse(f && f.followedAt);
+      if (!userId || known.has(userId) || !Number.isFinite(ms)) continue;
+      known.add(userId);
+      insert.run(streamerId, userId, f.login == null ? null : String(f.login).slice(0, 100), toSqliteTime(new Date(ms)));
+      written++;
+    }
+    return written;
+  })();
+}
+
 // { [tracker]: value }; a value is stored as text (an object is saved as JSON).
 function getTrackerValues(streamerId) {
   const out = {};
@@ -6551,6 +6611,9 @@ module.exports = {
   rollTrackingGoal,
   setTrackingGoalCompleted,
   setTrackingGoalLifetime,
+  getActiveTrackingGoals,
+  setTrackingGoalTwitchState,
+  backfillTrackingFollows,
   getTrackerValues,
   setTrackerValue,
   clearTrackerValues,

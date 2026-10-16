@@ -211,6 +211,58 @@ describe('goals', () => {
     assert.ok(row.lifetime_read_at);
   });
 
+  test('a new goal has no Twitch state; setTrackingGoalTwitchState changes only what it is given', () => {
+    const s = addStreamer();
+    const g = db.createTrackingGoal(s, 'follow', goalFields());
+    const state = () => db.db.prepare('SELECT twitch_unavailable, readback_at, readback_capped FROM tracking_goals WHERE id = ?').get(g.id);
+    assert.deepEqual(state(), { twitch_unavailable: null, readback_at: null, readback_capped: 0 });
+    db.setTrackingGoalTwitchState(g.id, { unavailable: 'needs_reconnect' });
+    assert.deepEqual(state(), { twitch_unavailable: 'needs_reconnect', readback_at: null, readback_capped: 0 });
+    db.setTrackingGoalTwitchState(g.id, { readbackDone: true, capped: true });
+    assert.equal(state().twitch_unavailable, 'needs_reconnect');
+    assert.match(state().readback_at, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+    assert.equal(state().readback_capped, 1);
+    db.setTrackingGoalTwitchState(g.id, { unavailable: null, readbackDone: false, capped: false });
+    assert.deepEqual(state(), { twitch_unavailable: null, readback_at: null, readback_capped: 0 });
+    db.setTrackingGoalTwitchState(g.id, {});
+    assert.deepEqual(state(), { twitch_unavailable: null, readback_at: null, readback_capped: 0 });
+  });
+
+  test('getActiveTrackingGoals lists the active goals of every streamer and kind', () => {
+    const s = addStreamer();
+    const t = addStreamer();
+    const a = db.createTrackingGoal(s, 'follow', goalFields());
+    const b = db.createTrackingGoal(s, 'sub', goalFields());
+    const c = db.createTrackingGoal(t, 'follow', goalFields());
+    db.endTrackingGoal(b.id, s);
+    const ids = db.getActiveTrackingGoals().map((g) => g.id);
+    assert.ok(ids.includes(a.id) && ids.includes(c.id));
+    assert.ok(!ids.includes(b.id));
+  });
+
+  test('backfillTrackingFollows writes once each follower the record lacks since the start, at the time Twitch gives', () => {
+    const s = addStreamer();
+    insertEventAt(s, 'follow', '2026-10-10 09:00:00', { twitchUserId: '2' });
+    insertEventAt(s, 'follow', '2026-09-20 09:00:00', { twitchUserId: '4' }); // before the window: not known in it
+    const written = db.backfillTrackingFollows(s, [
+      { userId: '1', login: 'a', followedAt: '2026-10-03T10:00:00Z' },
+      { userId: '2', login: 'b', followedAt: '2026-10-10T09:00:00Z' },
+      { userId: '1', login: 'a', followedAt: '2026-10-02T10:00:00Z' },
+      { userId: '4', login: 'd', followedAt: '2026-10-05T10:00:00.500Z' },
+      { userId: '', login: 'nobody', followedAt: '2026-10-05T10:00:00Z' },
+      { userId: '5', login: 'e', followedAt: 'not a time' },
+      null,
+    ], '2026-10-01T00:00:00.000Z');
+    assert.equal(written, 2);
+    assert.deepEqual(db.db.prepare("SELECT twitch_user_id AS id, username, sub_type, count, created_at FROM tracking_events WHERE streamer_id = ? AND created_at >= '2026-10-01' ORDER BY created_at").all(s), [
+      { id: '1', username: 'a', sub_type: null, count: 1, created_at: '2026-10-03 10:00:00' },
+      { id: '4', username: 'd', sub_type: null, count: 1, created_at: '2026-10-05 10:00:00' },
+      { id: '2', username: 'x', sub_type: null, count: 1, created_at: '2026-10-10 09:00:00' },
+    ]);
+    assert.equal(db.backfillTrackingFollows(s, [{ userId: '1', login: 'a', followedAt: '2026-10-03T10:00:00Z' }], '2026-10-01T00:00:00Z'), 0);
+    assert.equal(db.backfillTrackingFollows(s, undefined, '2026-10-01T00:00:00Z'), 0);
+  });
+
   test('endTrackingGoal ends the streamer\'s own active goal only', () => {
     const s = addStreamer();
     const g = db.createTrackingGoal(s, 'follow', goalFields());
