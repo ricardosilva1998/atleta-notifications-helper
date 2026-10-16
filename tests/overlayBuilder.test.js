@@ -82,13 +82,14 @@ describe('the card width slider', () => {
   // Two places have set it wrong. It stopped at 700 while the server, the drag handle and placement.js
   // allow 900, so a card saved wider than 700 was set back to 700 the next time the page set the slider.
   // It started at 280 while they allow 200, so a card dragged to a width of 200 to 279 was saved as 280.
-  test('spans the same widths as the server, the drag handle and the OBS overlay, at both ends', () => {
+  test('spans the same widths as the server, the Location tab\'s size slider and the OBS overlay, at both ends', () => {
     const { min, max } = FIELD_SPECS.card_width;
     assert.deepEqual([bound('min'), bound('max')], [min, max], 'the slider and the server');
-    const drag = /newWidth = Math\.max\((\d+), Math\.min\((\d+), newWidth\)\);/.exec(builder);
-    assert.ok(drag, 'the drag handle clamps the width');
-    assert.deepEqual([Number(drag[1]), Number(drag[2])], [min, max], 'the drag handle and the server');
-    assert.deepEqual([PLACEMENT.MIN_WIDTH, PLACEMENT.MAX_WIDTH], [min, max], 'placement.js and the server');
+    // The Location tab's size slider (#loc-width, public/js/builder-cards.js) took over from the old resize handle.
+    const cards = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
+    assert.match(cards, /range\.setAttribute\('min', String\(P\.MIN_WIDTH\)\)/);
+    assert.match(cards, /range\.setAttribute\('max', String\(P\.MAX_WIDTH\)\)/);
+    assert.deepEqual([PLACEMENT.MIN_WIDTH, PLACEMENT.MAX_WIDTH], [min, max], '#loc-width, placement.js and the server');
   });
 
   test('has a step that lands on both ends, so neither is rounded away', () => {
@@ -104,32 +105,6 @@ describe('the card width slider', () => {
     const set = functionSource('setControlValues');
     assert.match(set, /getElementById\('ctrl-card-width'\)\.value = d\.card_width \|\| 420;/);
     assert.ok(!/Math\.min\(\s*700/.test(builder), 'no 700 cap is left in the page');
-  });
-});
-
-describe('the Sound row, by theme', () => {
-  test('a theme dropdown comes before the sound list, and the list holds the look\'s own, today\'s, none, then one theme\'s sounds', () => {
-    assert.match(builder, /<select id="style-sound-theme" aria-label="<%= t\('overlayBuilder\.style\.soundTheme'\) %>"><\/select>\s*<select id="style-sound"><\/select>/);
-    assert.match(functionSource('syncStyleControls'), /STYLE_CORE\.soundThemeOf\(soundTheme, d\.style_sound, look, STYLE_DATA\.sounds\)/);
-    const vm = require('node:vm');
-    const node = () => ({ children: [], dataset: {}, set textContent(_) { this.children = []; }, append(...n) { this.children.push(...n); }, appendChild(n) { this.children.push(n); return n; } });
-    const list = node();
-    const context = vm.createContext({
-      document: { getElementById: (id) => (id === 'style-sound' ? list : null), createElement: () => Object.assign(node(), { label: '' }) },
-      Option: function Option(text, value) { this.text = text; this.value = value; },
-      I18N: { style: { soundOwn: 'Own', soundToday: 'Today', soundNone: 'None' } },
-      STYLE_DATA: {
-        families: [{ key: 'racing', name: 'Racing' }],
-        sounds: [{ family: 'racing', sounds: [{ key: 'rcFlyby', name: 'Fly-by' }, { key: 'rcFlyby.2', name: 'Fly-by (version 2)' }] }],
-      },
-      STYLE_CORE: require('../public/js/builder-styles-core.js'),
-    });
-    vm.runInContext(functionSource('familyName') + '\n' + functionSource('fillSoundList'), context);
-    vm.runInContext("fillSoundList('racing'); fillSoundList('racing')", context);
-    assert.deepEqual(list.children.slice(0, 3).map((o) => o.value), ['', 'today', 'none']);
-    assert.equal(list.children.length, 4, 'built once for the same theme');
-    assert.equal(list.children[3].label, 'Racing');
-    assert.deepEqual(list.children[3].children.map((o) => [o.value, o.text]), [['rcFlyby', 'Fly-by'], ['rcFlyby.2', 'Fly-by (version 2)']]);
   });
 });
 
@@ -178,11 +153,10 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
     assert.ok(!/ATLETA_OBJECTS\[currentType\]/.test(builder), 'no lookup skips the style');
   });
 
-  test('a save sends the look the page shows next to the design; Discard and Reset put back the saved look', () => {
-    assert.match(functionSource('saveCurrentDesign'), /STYLE_CORE\.savePayload\(currentType, design, style\)/);
-    assert.match(functionSource('saveCurrentDesign'), /SAVED_STYLES\[currentType\] = ALERT_STYLES\[currentType\] = style/);
-    for (const name of ['discardChanges', 'resetCurrentDesign']) assert.match(functionSource(name), /restoreSavedLook\(currentType\)/, name);
-    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')), 'the look travels next to the design, not in it');
+  // The save itself is the edit window's Done (tests/builderCards.test.js: "a save sends the look the window
+  // shows next to the design; Cancel and Reset put back the saved look").
+  test('the look travels next to the design, not in it', () => {
+    assert.ok(!/\bstyle\s*:/.test(functionSource('getControlValues')));
   });
 
   test("the page tells the registry the streamer's Twitch name for the C1's rear window, before any preview is drawn", () => {
@@ -255,27 +229,30 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
   });
 });
 
-describe('the Style section (alert styles)', () => {
+// The looks, their settings and their sound are the edit window's Animation, Customize and Sound tabs
+// (public/js/builder-cards.js, tested in tests/builderCards.test.js: picking a look, what Customize shows,
+// "Use <theme> for all six alerts"); these read what stays in the page.
+describe('the looks (alert styles)', () => {
   const vm = require('node:vm');
+  const cards = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
 
-  test('Test plays the look in OBS without a thank-you in the Twitch chat (chat: false)', () => {
-    assert.match(functionSource('testLook'), /body: JSON\.stringify\(\{ chat: false \}\)/);
+  test('a card\'s Test plays the alert in OBS without a thank-you in the Twitch chat (chat: false)', () => {
+    const test = /function testInObs\([\s\S]*?\n {2}\}\n/.exec(cards);
+    assert.ok(test, 'testInObs exists');
+    assert.match(test[0], /body: JSON\.stringify\(\{ chat: false \}\)/);
   });
 
-  test('"Use <family> for all six" keeps every tab\'s unsaved edits: only the look and its settings come from the server', () => {
-    const source = functionSource('useStyleFamily');
-    assert.match(source, /workingDesigns\[type\] = STYLE_CORE\.lookApplied\(/);
-    assert.ok(!source.includes('workingDesigns[type] = Object.assign({}, EVENT_DEFAULTS[type], row)'), 'the saved row no longer replaces the working design');
-  });
-
-  test('opens the six alerts\' tabs, above the card controls it replaces', () => {
-    const style = builder.indexOf('id="section-style"');
-    assert.ok(style > 0 && style < builder.indexOf('id="section-theme"'));
+  test('the Style section is gone: its controls are the Customize tab\'s, in the edit window', () => {
+    assert.ok(!builder.includes('id="section-style"'));
     assert.ok(!builder.includes('phase1-notice'), 'the notice saying colours would come back is gone: they are here');
+    const pane = builder.slice(builder.indexOf('id="pane-customize"'), builder.indexOf('id="pane-sound"'));
+    for (const id of ['style-accent', 'style-racing-card', 'style-racing-accent', 'style-racing-name', 'style-racing-font', 'style-label', 'style-speed', 'style-effect', 'style-grows', 'custom-all-six']) {
+      assert.ok(pane.includes(`id="${id}"`), id);
+    }
   });
 
   test('a control the look does not take is really hidden (its row\'s display rule does not win over [hidden])', () => {
-    assert.match(builder, /#section-style \[hidden\] \{ display: none; \}/);
+    assert.match(builder, /#pane-customize \[hidden\] \{ display: none; \}/);
   });
 
   test('the page loads the core and every family\'s fonts in one stylesheet', () => {
@@ -287,17 +264,7 @@ describe('the Style section (alert styles)', () => {
     assert.match(builder, /STYLE_CORE\.STYLED_ALERTS\.forEach\(t => \{ workingDesigns\[t\] = STYLE_CORE\.untouched\(t, workingDesigns\[t\], SAVED_STYLES\[t\]\); \}\);/);
   });
 
-  test('a picked look starts from its own settings and is drawn again', () => {
-    const src = functionSource('pickLook');
-    assert.match(src, /STYLE_CORE\.withLook\(getControlValues\(\), previous, id\)/);
-    assert.match(src, /renderedObjectType = null/);
-  });
-
-  test('the controls write the fields the save sends, and mirror today\'s hidden controls', () => {
-    const src = functionSource('initStyleControls');
-    for (const [id, mirror] of [['style-speed', 'ctrl-animation-speed'], ['style-effect', 'ctrl-screen-effect'], ['style-racing-card', 'ctrl-bg-color'], ['style-racing-accent', 'ctrl-accent-color']]) {
-      assert.ok(src.includes(`'${id}'`) && src.includes(`'${mirror}'`), `${id} -> ${mirror}`);
-    }
+  test('today\'s controls still carry the look\'s fields', () => {
     const values = functionSource('getControlValues');
     for (const field of ['style_accent', 'style_label', 'style_sound', 'style_grows']) assert.ok(values.includes(`${field}:`), field);
   });

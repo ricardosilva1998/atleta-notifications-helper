@@ -41,9 +41,10 @@ const accepts = (over) => {
 
 describe('event types', () => {
   test('are the builder\'s tabs', () => {
-    const tabs = [...builder.matchAll(/class="event-tab[^"]*" data-type="([a-z_]+)"/g)].map((m) => m[1]);
-    assert.ok(tabs.length >= 10, 'found the tabs');
-    assert.deepEqual([...BUILDER_EVENT_TYPES].sort(), [...tabs].sort());
+    // Every type the server saves has a card in the builder (public/js/builder-cards.js draws CARD_TYPES).
+    const { CARD_TYPES } = require('../../public/js/builder-styles-core.js');
+    assert.ok(CARD_TYPES.length >= 10, 'found the cards');
+    assert.deepEqual([...BUILDER_EVENT_TYPES].sort(), [...CARD_TYPES].sort());
   });
 
   test('anything else is refused', () => {
@@ -149,7 +150,7 @@ describe('colours', () => {
 });
 
 describe('numbers match the builder\'s controls', () => {
-  // [field, min, max] as the builder's sliders and its drag/resize allow them.
+  // [field, min, max] as the builder's sliders allow them.
   const ranges = [
     ['username_size', 14, 52], ['card_width', 200, 900], ['border_radius', 0, 32],
     ['label_font_size', 8, 24], ['detail_font_size', 8, 32],
@@ -230,8 +231,15 @@ describe('numbers match the builder\'s controls', () => {
         assert.ok(FIELD_SPECS[field].min <= min && FIELD_SPECS[field].max >= max, `${field}: ${id} runs ${min}-${max}, the server allows ${FIELD_SPECS[field].min}-${FIELD_SPECS[field].max}`);
       }
     }
-    // Resizing the card by dragging clamps to 200-900 (see the mousemove handler).
-    assert.match(builder, /Math\.max\(200, Math\.min\(900, newWidth\)\)/);
+    // The card's width is set with the Location tab's size slider (#loc-width), built by public/js/builder-cards.js
+    // from placement.js's bounds (it replaced the old preview's resize handle, which clamped to the same 200-900).
+    const placement = require(path.join(root, 'public', 'overlay', 'placement.js'));
+    const cards = fs.readFileSync(path.join(root, 'public', 'js', 'builder-cards.js'), 'utf8');
+    assert.match(cards, /range\.id = 'loc-width'/, 'the slider is built where this test reads it');
+    assert.match(cards, /range\.setAttribute\('min', String\(P\.MIN_WIDTH\)\)/);
+    assert.match(cards, /range\.setAttribute\('max', String\(P\.MAX_WIDTH\)\)/);
+    assert.ok(FIELD_SPECS.card_width.min <= placement.MIN_WIDTH && FIELD_SPECS.card_width.max >= placement.MAX_WIDTH,
+      `card_width: #loc-width runs ${placement.MIN_WIDTH}-${placement.MAX_WIDTH}, the server allows ${FIELD_SPECS.card_width.min}-${FIELD_SPECS.card_width.max}`);
   });
 });
 

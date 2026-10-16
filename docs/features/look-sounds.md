@@ -34,12 +34,16 @@ functions are still registered and now play only when a recording cannot load.
 
 ## Which sound a streamer hears
 
-- The Overlay Builder's Sound row is organized by theme: a Theme dropdown (`#style-sound-theme`, the 26
-  families) picks which family's sounds the Sound list shows, after "The look's own sound", "Today's
-  sound" and "None"; each sound is followed by "<name> (version 2)" (`overlayBuilder.soundVersion`). It
-  opens on the saved sound's theme, else the look's own (`soundThemeOf` in `public/js/builder-styles-core.js`).
-  ▶ plays the chosen sound. The choice is saved in `overlay_designs.style_sound` as `<key>` or `<key>.2`;
-  a key the release does not know plays the look's own sound, as before.
+- The Overlay Builder's Sound tab (in an alert's edit window; `renderSound` in `public/js/builder-cards.js`)
+  lists only that alert's sounds: a search box (by name), theme chips, "This look" (the look's own sound,
+  its "Version 2", the classic engine sound, "No sound"), then one group per theme with the sounds made for
+  this alert's looks, each as a recording and its second version (`soundGroupsFor`, `thisLookRows` in
+  `public/js/builder-styles-core.js`). Every row says which alert and look the sound was made for ("🏁 Follow
+  · Pill"). A saved sound that belongs to another alert comes first in "This look" as "Current", so a save
+  never loses it. ▶ listens without picking; picking a row plays it. A sound the streamer uploaded for the
+  alert shows a notice with a link to the overlay settings (OBS plays the upload first). The choice is
+  saved in `overlay_designs.style_sound` as `<key>` or `<key>.2`, and as null for the look's own sound; a
+  key the release does not know plays the look's own sound, as before.
 - A look's own sound is its default recording, **version A** (the owner's decision, 16 October 2026): the
   take that matched its description best, or for the ten sounds redone from the owner's notes their new
   take. Version B, the other take, is version 2 (Samurai's raid keeps the earlier take the owner liked

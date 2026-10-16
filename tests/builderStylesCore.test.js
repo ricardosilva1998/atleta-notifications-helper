@@ -9,7 +9,15 @@ const core = require('../public/js/builder-styles-core.js');
 const K = require('../public/overlay/objects/kit.js');
 require('../public/overlay/objects/styles/samurai.js');
 require('../public/overlay/objects/styles/racing.js');
-const { DEFAULT_STYLES } = require('../src/services/alertStyles');
+const { DEFAULT_STYLES, soundGroups, secondVersionOf } = require('../src/services/alertStyles');
+
+// Requiring alertStyles loads every family and the sounds' manifest into the kit, so K.styles holds all
+// 156 looks and the '.2' keys exist. The builder's STYLE_DATA.sounds, as builderStyleData() builds it
+// (src/routes/dashboard.js), with the keys as names.
+const STYLE_DATA_SOUNDS = soundGroups().map(({ family, sounds }) => ({
+  family,
+  sounds: sounds.flatMap((key) => (secondVersionOf(key) ? [{ key, name: key }, { key: secondVersionOf(key), name: key + ' (version 2)' }] : [{ key, name: key }])),
+}));
 
 describe('the six alerts that have looks', () => {
   test('are the Twitch five and the giveaway; YouTube\'s and timed messages keep today\'s card', () => {
@@ -134,28 +142,80 @@ describe('what a save sends', () => {
   });
 });
 
-describe('the Sound row, by theme', () => {
-  const groups = [
-    { family: 'samurai', sounds: [{ key: 'samuraiBell', name: 'Temple bell' }, { key: 'samuraiBell.2', name: 'Temple bell (version 2)' }] },
-    { family: 'racing', sounds: [{ key: 'rcFlyby', name: 'Fly-by' }, { key: 'rcFlyby.2', name: 'Fly-by (version 2)' }] },
-  ];
-  const racing = { key: 'follow-racing', family: 'racing' };
-
-  test('shows the theme the streamer is browsing, else the saved sound\'s, else the look\'s own, else the first', () => {
-    assert.equal(core.soundThemeOf('samurai', 'rcFlyby', racing, groups), 'samurai', 'browsing wins');
-    assert.equal(core.soundThemeOf(null, 'samuraiBell.2', racing, groups), 'samurai', 'a second version belongs to its theme');
-    assert.equal(core.soundThemeOf(null, null, racing, groups), 'racing', 'the look\'s own');
-    assert.equal(core.soundThemeOf(null, 'today', { key: 'follow' }, groups), 'samurai', 'today\'s object has no family: the first');
-    assert.equal(core.soundThemeOf('nope', 'nope', racing, groups), 'racing', 'an unknown theme or sound is passed over');
-    assert.equal(core.soundThemeOf(null, null, null, []), null);
+describe('the cards', () => {
+  test('there are ten, the six styled alerts first', () => {
+    assert.deepEqual(core.CARD_TYPES, ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'timed', 'yt_superchat', 'yt_member', 'yt_giftmember']);
   });
+  test('each card has its tabs', () => {
+    assert.deepEqual(core.tabsFor('follow'), ['animation', 'customize', 'sound', 'location']);
+    assert.deepEqual(core.tabsFor('giveaway_winner'), ['animation', 'customize', 'sound', 'location']);
+    assert.deepEqual(core.tabsFor('timed'), ['images', 'design', 'location']);
+    assert.deepEqual(core.tabsFor('yt_member'), ['design', 'location']);
+    assert.deepEqual(core.tabsFor('nope'), []);
+  });
+  test('?tab= opens a card that is shown, and nothing else', () => {
+    const shown = ['follow', 'donation', 'timed'];
+    assert.equal(core.cardForTab('timed', shown), 'timed');
+    assert.equal(core.cardForTab('donation', shown), 'donation');
+    assert.equal(core.cardForTab('yt_member', shown), null);
+    assert.equal(core.cardForTab('<x>', shown), null);
+    assert.equal(core.cardForTab(null, shown), null);
+  });
+});
 
-  test('lists a theme\'s sounds in the page\'s order, each followed by its version 2', () => {
-    assert.deepEqual(core.soundsOfTheme('racing', groups).map((s) => s.key), ['rcFlyby', 'rcFlyby.2']);
-    assert.deepEqual(core.soundsOfTheme('nope', groups), []);
-    const list = core.soundsOfTheme('racing', groups);
-    list.pop();
-    assert.equal(groups[1].sounds.length, 2, 'a copy: the page\'s groups stay as they are');
+describe('sounds by alert', () => {
+  const owners = core.soundOwners(K.styles);
+  test('every look sound belongs to one look, and so to one alert', () => {
+    assert.equal(Object.keys(owners).length, 156);
+    assert.equal(core.ownerOfSound('glFollow', owners).eventType, 'follow');
+    assert.equal(core.ownerOfSound('glFollow.2', owners).look.key, 'follow-glass');
+    assert.equal(core.ownerOfSound('today', owners), null);
+  });
+  test('an alert lists only its own looks\' sounds, by theme, each with its version 2', () => {
+    const groups = core.soundGroupsFor('follow', STYLE_DATA_SOUNDS, owners);
+    assert.equal(groups.length, 26);
+    for (const g of groups) for (const s of g.sounds) assert.equal(core.ownerOfSound(s.key, owners).eventType, 'follow', s.key);
+    assert.deepEqual(groups.find((g) => g.family === 'glass').sounds.map((s) => s.key), ['glFollow', 'glFollow.2']);
+  });
+});
+
+describe('"This look" rows', () => {
+  const look = K.styles['bits-glass'];
+  const alertGroups = () => core.soundGroupsFor('bits', STYLE_DATA_SOUNDS, core.soundOwners(K.styles));
+  test('its own sound, its version 2, the classic engine sound, no sound', () => {
+    assert.deepEqual(core.thisLookRows(look, null, STYLE_DATA_SOUNDS, alertGroups()),
+      [{ key: 'glBits', tag: 'own' }, { key: 'glBits.2', tag: 'second' }, { key: 'today', tag: 'today' }, { key: 'none', tag: 'none' }]);
+  });
+  test('a saved sound of another alert comes first as "current", and is kept', () => {
+    assert.deepEqual(core.thisLookRows(look, 'glFollow', STYLE_DATA_SOUNDS, alertGroups())[0], { key: 'glFollow', tag: 'current' });
+  });
+  test('a saved sound the alert lists anyway is not repeated', () => {
+    for (const saved of ['glBits.2', 'today', 'none', 'rcNitro']) {
+      assert.ok(!core.thisLookRows(look, saved, STYLE_DATA_SOUNDS, alertGroups()).some((r) => r.tag === 'current'), saved);
+    }
+  });
+});
+
+describe('loops and places', () => {
+  test('speed is the design\'s, clamped, only for looks that take one', () => {
+    assert.equal(core.speedOf({ controls: { speed: true } }, { animation_speed: 3 }), 2);
+    assert.equal(core.speedOf({ controls: { speed: true } }, { animation_speed: 0.1 }), 0.5);
+    assert.equal(core.speedOf({ controls: {} }, { animation_speed: 2 }), 1);
+  });
+  test('entrance and exit times at the speed; an exit takes at least 400 ms', () => {
+    assert.deepEqual(core.loopTimings({ anim: { dur: '0.9s' }, exit: { dur: '0.36s' } }, 1), { inMs: 900, exitMs: 400 });
+    assert.deepEqual(core.loopTimings({ anim: { dur: '1.2s' }, exit: { dur: '0.84s' } }, 0.5), { inMs: 2400, exitMs: 1680 });
+    assert.deepEqual(core.loopTimings({ anim: { dur: '1s' } }, 1), { inMs: 1000, exitMs: 400 });
+  });
+  test('where an alert sits', () => {
+    assert.deepEqual(core.placeSummary({}), { free: false, position: 'top-center', cell: 1 });
+    assert.deepEqual(core.placeSummary({ card_position: 'bot-right' }), { free: false, position: 'bot-right', cell: 8 });
+    assert.deepEqual(core.placeSummary({ card_position: 'mid-left', card_custom_x: 0.2, card_custom_y: 0.4 }), { free: true, position: 'mid-left', cell: -1 });
+  });
+  test('a dragged alert stays on the screen', () => {
+    assert.deepEqual(core.clampFree(-50, -10, 420, 120), { x: 0, y: 0 });
+    assert.deepEqual(core.clampFree(1900, 1070, 420, 120), { x: Math.round(1500 / 1920 * 1000) / 1000, y: Math.round(960 / 1080 * 1000) / 1000 });
+    assert.deepEqual(core.clampFree(960, 540, 420, 120), { x: 0.5, y: 0.5 });
   });
 });
 

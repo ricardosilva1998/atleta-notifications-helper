@@ -2790,7 +2790,7 @@ router.delete('/giveaways/:id', (req, res) => {
 
 // --- Overlay Builder ---
 
-// What the builder's Style section is handed (alert styles): each alert's gallery (a look made for
+// What the builder's edit window is handed for the looks (alert styles): each alert's gallery (a look made for
 // this streamer first), the default looks, the families and the sounds in the gallery's order, every
 // name in the streamer's language, and the fonts Racing's name can take. The page has every family's
 // code (styles.js), so it draws the looks itself.
@@ -2819,6 +2819,41 @@ function builderStyleData(streamer, t) {
   };
 }
 
+// The texts the Overlay Builder's cards and edit window need, in the streamer's language, keyed by what follows
+// `overlayBuilder.`. The {{placeholders}} stay in them: the page fills them in.
+const BUILDER_TEXT_KEYS = [
+  'overlayBuilder.cards.subtitle', 'overlayBuilder.cards.edit', 'overlayBuilder.cards.editSponsors',
+  'overlayBuilder.cards.test', 'overlayBuilder.cards.default', 'overlayBuilder.cards.uploaded',
+  'overlayBuilder.cards.free', 'overlayBuilder.cards.sponsors', 'overlayBuilder.cards.rotationOn',
+  'overlayBuilder.cards.rotationOff', 'overlayBuilder.cards.images', 'overlayBuilder.cards.twitch',
+  'overlayBuilder.cards.youtube', 'overlayBuilder.cards.other', 'overlayBuilder.window.title',
+  'overlayBuilder.window.close', 'overlayBuilder.window.cancel', 'overlayBuilder.window.done',
+  'overlayBuilder.window.saving', 'overlayBuilder.window.leave', 'overlayBuilder.window.replay', 'overlayBuilder.window.replayPlain',
+  'overlayBuilder.window.soundLoop', 'overlayBuilder.window.loopHint', 'overlayBuilder.tabs.animation',
+  'overlayBuilder.tabs.customize', 'overlayBuilder.tabs.sound', 'overlayBuilder.tabs.location',
+  'overlayBuilder.tabs.images', 'overlayBuilder.tabs.design', 'overlayBuilder.sound.thisLook',
+  'overlayBuilder.sound.own', 'overlayBuilder.sound.second', 'overlayBuilder.sound.today',
+  'overlayBuilder.sound.none', 'overlayBuilder.sound.silent', 'overlayBuilder.sound.current',
+  'overlayBuilder.sound.search', 'overlayBuilder.sound.both', 'overlayBuilder.sound.uploaded',
+  'overlayBuilder.sound.uploadedLink', 'overlayBuilder.sound.listen', 'overlayBuilder.custom.nothing',
+  'overlayBuilder.custom.ownColour', 'overlayBuilder.custom.ownColours', 'overlayBuilder.custom.allSix',
+  'overlayBuilder.custom.allSixConfirm', 'overlayBuilder.place.fixed', 'overlayBuilder.place.fixedHint',
+  'overlayBuilder.place.free', 'overlayBuilder.place.freeHint', 'overlayBuilder.place.fixedNote',
+  'overlayBuilder.place.freeNote', 'overlayBuilder.place.size', 'overlayBuilder.place.width',
+  'overlayBuilder.place.top', 'overlayBuilder.place.mid', 'overlayBuilder.place.bot',
+  'overlayBuilder.place.left', 'overlayBuilder.place.center', 'overlayBuilder.place.right',
+  'overlayBuilder.saveFailed', 'overlayBuilder.saveFailedWith', 'overlayBuilder.resetConfirm', 'overlayBuilder.resetDone',
+  'overlayBuilder.style.all', 'overlayBuilder.style.default', 'overlayBuilder.style.mine', 'overlayBuilder.style.failed',
+  'overlayBuilder.style.familyDone', 'overlayBuilder.style.labelHint', 'overlayBuilder.style.fontOwn', 'overlayBuilder.style.testSent',
+  'overlayBuilder.style.listenToday',
+];
+const KEEP_PLACEHOLDERS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
+function builderTexts(t) {
+  const texts = {};
+  for (const key of BUILDER_TEXT_KEYS) texts[key.slice('overlayBuilder.'.length)] = t(key, KEEP_PLACEHOLDERS);
+  return texts;
+}
+
 router.get('/overlay-builder', overlayPage, async (req, res) => {
   const designs = db.getAllOverlayDesigns(req.streamer.id);
   const overlayUrl = req.streamer.overlay_token
@@ -2843,8 +2878,11 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
     eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
     // The joined alert looks' version (services/alertStyleBundle.js), as the OBS overlay asks for them
     stylesVersion: alertStyleBundle().version,
-    // The Style section, and every family's fonts in one stylesheet
+    // The looks' gallery, sounds and fonts for the edit window, and every family's fonts in one stylesheet
     styleData: JSON.stringify(builderStyleData(req.streamer, res.locals.t)).replace(/</g, '\\u003c'),
+    // Which alerts have a sound the streamer uploaded (OBS plays it instead of the look's sound), and the cards' texts
+    uploadedSounds: JSON.stringify(customSounds.soundStatus(req.streamer).custom).replace(/</g, '\\u003c'),
+    builderTexts: JSON.stringify(builderTexts(res.locals.t)).replace(/</g, '\\u003c'),
     styleFontsHref: 'https://fonts.googleapis.com/css2?' + fontsOf(familyKeys()).map((spec) => `family=${spec}`).join('&') + '&display=swap',
     overlayUrl,
     streamThumbnail
