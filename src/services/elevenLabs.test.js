@@ -77,9 +77,12 @@ test('remaining credits are read at most every 10 minutes and a failed read keep
   assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 87655);
   assert.equal(calls.length, 2);
 
+  t += 11 * 60 * 1000;
   answer = new Error('offline');
   assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 87655);
+  assert.equal(calls.length, 3);
 
+  t += 11 * 60 * 1000;
   answer = { ok: true, status: 200, json: async () => ({ character_limit: 100000, character_count: 50000 }) };
   assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 50000);
 });
@@ -98,4 +101,30 @@ test('an unreadable subscription answer is a failed read', async () => {
   resetCredits();
   const fetch = async () => ({ ok: true, status: 200, json: async () => ({ character_limit: 'x' }) });
   assert.equal(await remainingCredits({ fetch, apiKey: 'k', now: () => 1 }), null);
+});
+
+test('after a failed read nothing is asked again for 10 minutes, whether or not a value is known', async () => {
+  for (const known of [false, true]) {
+    resetCredits();
+    let t = 5_000_000;
+    const now = () => t;
+    let calls = 0;
+    let answer = { ok: true, status: 200, json: async () => ({ character_limit: 10, character_count: 4 }) };
+    const fetch = async () => { calls++; if (answer instanceof Error) throw answer; return answer; };
+    if (known) {
+      assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), 6);
+      t += 11 * 60 * 1000;
+    }
+    calls = 0;
+    answer = known ? new Error('offline') : { ok: false, status: 401, json: async () => ({}) };
+    const last = known ? 6 : null;
+    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), last);
+    assert.equal(calls, 1);
+    t += 60 * 1000;
+    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), last);
+    assert.equal(calls, 1);
+    t += 10 * 60 * 1000;
+    assert.equal(await remainingCredits({ fetch, apiKey: 'k', now }), last);
+    assert.equal(calls, 2);
+  }
 });

@@ -55,19 +55,21 @@ async function synthesize({ voiceId, text, speed, expressiveness, lang }, option
   }
 }
 
-// The last good read and when it was made (module state; resetCredits is for the tests).
-let credits = { value: null, at: 0 };
+// The last good value and when the last read was tried, good or not (module state; resetCredits is for the tests).
+let credits = { value: null, at: null };
 
 function resetCredits() {
-  credits = { value: null, at: 0 };
+  credits = { value: null, at: null };
 }
 
 // Characters left this billing period (limit minus used), read at most every 10 minutes.
-// A failed read answers the last value known, null when there is none.
+// A failed read answers the last value known, null when there is none, and waits just as long
+// before the next try, so a slow or refusing ElevenLabs is asked once per 10 minutes, not once per tip.
 async function remainingCredits({ fetch = globalThis.fetch, apiKey = ttsConfig().apiKey, now = Date.now } = {}) {
   if (!apiKey) return credits.value;
   const t = now();
-  if (credits.value !== null && t - credits.at < CREDITS_TTL_MS) return credits.value;
+  if (credits.at !== null && t - credits.at < CREDITS_TTL_MS) return credits.value;
+  credits.at = t;
   try {
     const res = await fetch(`${API}/user/subscription`, {
       headers: { 'xi-api-key': apiKey },
@@ -77,7 +79,7 @@ async function remainingCredits({ fetch = globalThis.fetch, apiKey = ttsConfig()
     const body = await res.json();
     if (!Number.isFinite(body.character_limit) || !Number.isFinite(body.character_count)) return credits.value;
     const left = body.character_limit - body.character_count;
-    credits = { value: left, at: t };
+    credits.value = left;
     return left;
   } catch {
     return credits.value;
