@@ -197,11 +197,13 @@ try {
 // Migration 9b: remember which broadcast a channel was last announced live for,
 // and how many polls in a row found it offline. The live poller needs both to
 // tell a one-poll blip, or the same stream coming back, from a stream that
-// really ended. These must exist before the statements below are prepared.
+// really ended. last_stream_started_at is when the last stream started, kept
+// after the stream's session is cleared (Tracking: the top tipper of the stream
+// that just ended). These must exist before the statements below are prepared.
 try {
   const cols = db.prepare("PRAGMA table_info(channel_state)").all();
   if (cols.length > 0) {
-    for (const [col, type] of [['last_stream_id', 'TEXT'], ['offline_polls', 'INTEGER DEFAULT 0']]) {
+    for (const [col, type] of [['last_stream_id', 'TEXT'], ['offline_polls', 'INTEGER DEFAULT 0'], ['last_stream_started_at', 'TEXT']]) {
       if (!cols.find((c) => c.name === col)) {
         db.exec(`ALTER TABLE channel_state ADD COLUMN ${col} ${type}`);
         console.log(`[DB] Added ${col} column to channel_state`);
@@ -531,7 +533,8 @@ db.exec(`
     stream_started_at TEXT,
     peak_viewers INTEGER DEFAULT 0,
     last_stream_id TEXT,
-    offline_polls INTEGER DEFAULT 0
+    offline_polls INTEGER DEFAULT 0,
+    last_stream_started_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS watched_youtube_channels (
@@ -2042,6 +2045,12 @@ const _getWatchersForChannel = db.prepare(`
   WHERE wc.twitch_username = ? AND wc.enabled = 1 AND s.enabled = 1
 `);
 const _getChannelState = db.prepare('SELECT * FROM channel_state WHERE twitch_username = ?');
+// Every enabled streamer's own linked login: the live poller checks these too,
+// watched by a server or not (Tracking needs to know when their stream starts).
+const _getEnabledStreamerTwitchLogins = db.prepare(`
+  SELECT DISTINCT LOWER(twitch_username) AS login FROM streamers
+  WHERE enabled = 1 AND twitch_username IS NOT NULL AND TRIM(twitch_username) != ''
+`);
 const _upsertChannelState = db.prepare(`
   INSERT INTO channel_state (twitch_username) VALUES (?)
   ON CONFLICT(twitch_username) DO NOTHING
@@ -2055,6 +2064,7 @@ const _updateChannelState = db.prepare(`
     stream_category = COALESCE(?, stream_category),
     stream_thumbnail_url = COALESCE(?, stream_thumbnail_url),
     stream_started_at = COALESCE(?, stream_started_at),
+    last_stream_started_at = COALESCE(?, last_stream_started_at),
     last_stream_id = COALESCE(?, last_stream_id),
     offline_polls = COALESCE(?, offline_polls),
     peak_viewers = CASE WHEN ? > COALESCE(peak_viewers, 0) THEN ? ELSE peak_viewers END
@@ -2130,6 +2140,15 @@ function getChannelState(twitchUsername) {
   return _getChannelState.get(twitchUsername.toLowerCase());
 }
 
+// The channel's stored state, or null; unlike getChannelState it never writes a row.
+function findChannelState(twitchUsername) {
+  return _getChannelState.get(String(twitchUsername).toLowerCase()) || null;
+}
+
+function getEnabledStreamerTwitchLogins() {
+  return _getEnabledStreamerTwitchLogins.all().map((r) => r.login);
+}
+
 function updateChannelState(twitchUsername, updates) {
   const peakViewers = updates.peak_viewers ?? 0;
   _updateChannelState.run(
@@ -2140,6 +2159,8 @@ function updateChannelState(twitchUsername, updates) {
     updates.stream_category ?? null,
     updates.stream_thumbnail_url ?? null,
     updates.stream_started_at ?? null,
+    // A stream's start is also its channel's last stream start, which clearStreamSession leaves alone.
+    updates.last_stream_started_at ?? updates.stream_started_at ?? null,
     updates.last_stream_id ?? null,
     updates.offline_polls ?? null,
     peakViewers, peakViewers, // twice for the CASE WHEN comparison
@@ -4176,6 +4197,13 @@ try {
   }
 } catch (e) { _migrationLog('donations_tts_status', e); }
 
+// Tracking (2026-10-16): the trackers start with what Atleta already has, so a
+// new OBS source is not empty until the next event (seedTrackerValues, below).
+_runOnce('tracking_seed_trackers', () => {
+  const filled = seedTrackerValues();
+  if (filled > 0) console.log(`[DB] Filled ${filled} tracker value(s) from the last events and tips`);
+});
+
 // Migration: PayPal tips between order creation and PayPal's redirect back.
 // The donor's name and message stay on the server, keyed by the PayPal order id,
 // instead of in browser cookies; captured_at marks an order already handled.
@@ -6132,6 +6160,57 @@ function clearTrackerValues(streamerId) {
   db.prepare('DELETE FROM tracker_values WHERE streamer_id = ?').run(streamerId);
 }
 
+// Fills the five stored trackers of every streamer from what Atleta already has:
+// the newest overlay_events row of the last 30 days per kind (follow, a sub or a
+// gift, bits, raid) and the newest donations row (the latest tip, in any
+// currency), in the shapes services/trackers.js stores. A tracker that already
+// has a value keeps it. Returns how many values it wrote. Run once at the
+// Tracking release (_runOnce('tracking_seed_trackers')).
+function seedTrackerValues() {
+  const { valueOfEvent, valueOfTip } = require('./services/trackers');
+  const insert = db.prepare(`
+    INSERT INTO tracker_values (streamer_id, tracker, value, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(streamer_id, tracker) DO NOTHING
+  `);
+  const events = db.prepare(`
+    SELECT streamer_id, event_type, username, data FROM (
+      SELECT oe.streamer_id, oe.event_type, oe.username, oe.data,
+             ROW_NUMBER() OVER (
+               PARTITION BY oe.streamer_id, CASE WHEN oe.event_type = 'giftsub' THEN 'subscription' ELSE oe.event_type END
+               ORDER BY oe.created_at DESC, oe.id DESC
+             ) AS newest
+      FROM overlay_events oe
+      JOIN streamers s ON s.id = oe.streamer_id
+      WHERE oe.event_type IN ('follow', 'subscription', 'giftsub', 'bits', 'raid')
+        AND oe.created_at >= datetime('now', '-30 days')
+    ) WHERE newest = 1
+  `).all();
+  const tips = db.prepare(`
+    SELECT streamer_id, donor_name, amount, currency FROM (
+      SELECT d.streamer_id, d.donor_name, d.amount, d.currency,
+             ROW_NUMBER() OVER (PARTITION BY d.streamer_id ORDER BY d.created_at DESC, d.id DESC) AS newest
+      FROM donations d
+      JOIN streamers s ON s.id = d.streamer_id
+    ) WHERE newest = 1
+  `).all();
+  let written = 0;
+  return db.transaction(() => {
+    for (const row of events) {
+      let data = null;
+      try { data = row.data ? JSON.parse(row.data) : null; } catch {}
+      if (!data || typeof data !== 'object') data = {};
+      if (data.username == null) data.username = row.username;
+      const set = valueOfEvent({ type: row.event_type, data });
+      if (set) written += insert.run(row.streamer_id, set[0], JSON.stringify(set[1])).changes;
+    }
+    for (const row of tips) {
+      const value = valueOfTip({ name: row.donor_name, amount: row.amount, currency: row.currency });
+      written += insert.run(row.streamer_id, 'latest_tip', JSON.stringify(value)).changes;
+    }
+    return written;
+  })();
+}
+
 // The donor who gave the most in `currency` since `since` (a Date or ISO/SQLite
 // time): { name, amount } or null. Names are grouped whatever their case (the
 // name shown is the one on the donor's latest tip) and "Anonymous" is left out;
@@ -6296,6 +6375,8 @@ module.exports = {
   getAllUniqueWatchedChannels,
   getWatchersForChannel,
   getChannelState,
+  findChannelState,
+  getEnabledStreamerTwitchLogins,
   updateChannelState,
   addWatchedYoutubeChannel,
   removeWatchedYoutubeChannel,
@@ -6656,6 +6737,7 @@ module.exports = {
   getTrackerValues,
   setTrackerValue,
   clearTrackerValues,
+  seedTrackerValues,
   getTrackerSettings,
   setTrackerSetting,
   ensureTrackerSettings,

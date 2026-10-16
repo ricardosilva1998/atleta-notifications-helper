@@ -40,6 +40,7 @@ const READBACK_EVERY_MS = 30 * 60 * 1000; // a period follower goal's read-back
 const READBACK_PAGES = 50; // 100 followers a page: 5,000 followers
 const MAX_ROLLS = 400; // periods written in one tick for a goal (a daily goal after a long stop)
 const TEST_REVERT_MS = 10000;
+const TICK_EVERY_MS = 60 * 1000; // the minute tick (startTicks)
 const TEST_SAMPLE_TARGET = 10;
 const TEST_ADDED_MAX = 1000;
 const LIFETIME_SUB_TYPES = ['new', 'gift']; // a resub is already in Twitch's total
@@ -138,6 +139,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
   const reading = new Set(); // goal ids with a Twitch read under way
   const failing = new Set(); // `${streamerId}:${kind}` whose last Twitch read got no answer (logged once)
   const testTimers = new Map(); // `${streamerId}:${kind}` → the timer that reverts a test
+  let tickTimer = null; // the minute tick, while startTicks has started it
 
   const clock = () => new Date(now());
   const keyOf = (streamerId, kind) => `${Number(streamerId)}:${kind}`;
@@ -440,6 +442,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     return +at - last >= every;
   }
 
+  // Resolves true when Twitch answered (with a number, or with why there is none), false when it did not.
   async function refreshFromTwitch(goal, at) {
     reading.add(goal.id);
     triedAt.set(goal.id, +at);
@@ -462,8 +465,10 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
       }
       const fresh = db.getActiveTrackingGoal(goal.streamer_id, goal.kind);
       if (fresh && fresh.id === goal.id) settle(fresh);
+      return !!state;
     } catch (err) {
       logger.error(`[TrackingGoal] Twitch read for goal ${goal.id} failed: ${err.message}`);
+      return false;
     } finally {
       reading.delete(goal.id);
     }
@@ -506,6 +511,43 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
         if (readDue(row, at)) reads.push(refreshFromTwitch(row, at));
       } catch (err) {
         logger.error(`[TrackingGoal] tick error for goal ${goal.id}:`, err.message);
+      }
+    }
+    await Promise.all(reads);
+  }
+
+  // The minute tick, from boot (src/index.js) until shutdown. One timer however often it is started; it never holds
+  // the process open, and a tick that fails is logged, never thrown.
+  function startTicks() {
+    if (tickTimer) return;
+    tickTimer = setInterval(() => {
+      tick().catch((err) => logger.error('[TrackingGoal] tick error:', err && err.message));
+    }, TICK_EVERY_MS);
+    if (typeof tickTimer.unref === 'function') tickTimer.unref();
+  }
+
+  function stopTicks() {
+    if (tickTimer) clearInterval(tickTimer);
+    tickTimer = null;
+  }
+
+  // After the streamer authorized Twitch again (the broadcaster callback in routes/auth.js, once the new scopes are
+  // stored): each of the streamer's active goals that reads Twitch — a lifetime total, a period follower goal's
+  // read-back — reads it now, whatever was tried lately and whether or not one of its sources is open, so a goal
+  // that showed "Reconnect Twitch" shows its number as soon as Twitch answers. Twitch's answer sets the goal's state
+  // (an answer with a number clears the unavailable one); a read Twitch does not answer leaves the goal as it was
+  // (never a lifetime count without its total) and is tried again on the next tick while a source is open. A read
+  // already under way is left to finish. Resolves when the reads are done; never rejects.
+  async function recheck(streamerId) {
+    const at = clock();
+    const reads = [];
+    for (const kind of KINDS) {
+      try {
+        const goal = db.getActiveTrackingGoal(streamerId, kind);
+        if (!goal || reading.has(goal.id) || !(goal.period === 'lifetime' || readsBack(goal))) continue;
+        reads.push(refreshFromTwitch(goal, at).then((answered) => { if (!answered) triedAt.delete(goal.id); }));
+      } catch (err) {
+        logger.error(`[TrackingGoal] recheck error for streamer ${streamerId}:`, err.message);
       }
     }
     await Promise.all(reads);
@@ -568,7 +610,10 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     broadcast(streamerId, kind);
   }
 
-  return { startGoal, progressOf, broadcast, recordEvent, editGoal, nudgeGoal, endGoal, tick, connected, sendTest, endTest };
+  return {
+    startGoal, progressOf, broadcast, recordEvent, editGoal, nudgeGoal, endGoal, tick, startTicks, stopTicks, recheck,
+    connected, sendTest, endTest,
+  };
 }
 
 // The app's instance. The database and Twitch are required when first used: they load the app's config, which this
@@ -602,6 +647,9 @@ module.exports = {
   nudgeGoal: (...args) => instance().nudgeGoal(...args),
   endGoal: (...args) => instance().endGoal(...args),
   tick: (...args) => instance().tick(...args),
+  startTicks: (...args) => instance().startTicks(...args),
+  stopTicks: (...args) => instance().stopTicks(...args),
+  recheck: (...args) => instance().recheck(...args),
   connected: (...args) => instance().connected(...args),
   sendTest: (...args) => instance().sendTest(...args),
   endTest: (...args) => instance().endTest(...args),

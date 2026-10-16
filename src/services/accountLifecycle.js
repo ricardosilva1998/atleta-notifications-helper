@@ -35,13 +35,16 @@ function liveServices() {
 // `services.now` is for tests.
 const nowOf = (services) => (typeof services.now === 'function' ? services.now() : Date.now());
 
-// The two managers a change of Twitch account touches, and the polls the card and the bar show.
+// The two managers a change of Twitch account touches, the polls the card and the bar show, and the Tracking goals
+// and trackers.
 function twitchServices() {
   return {
     db: require('../db'),
     eventSubManager: require('./eventsub').eventSubManager,
     chatManager: require('./twitchChat').chatManager,
     livePolls: require('./livePolls').livePolls,
+    trackingGoals: require('./trackingGoals'),
+    trackers: require('./trackers'),
   };
 }
 
@@ -137,7 +140,9 @@ function removeAccount(streamerId, services = liveServices()) {
 // broadcaster authorization that belonged to the previous account). What ran for
 // that account stops: EventSub; the poll and prediction the Polls & predictions
 // card and the bar showed are forgotten (an open bar clears, and the card reads
-// the new channel); and the chat bot leaves the previous channel
+// the new channel); the active follower and sub goals end and the trackers are
+// cleared (their open sources too), so nothing shows the previous channel's
+// numbers; and the chat bot leaves the previous channel
 // (previousUsername, which the database no longer holds) and joins the new one
 // if the chat bot is on. EventSub is not started again: there is no
 // authorization to connect with until the streamer gives one for the new
@@ -145,6 +150,10 @@ function removeAccount(streamerId, services = liveServices()) {
 function twitchAccountChanged(streamerId, previousUsername, services = twitchServices()) {
   attempt('EventSub stop', streamerId, () => services.eventSubManager.stopForStreamer(streamerId));
   attempt('Polls forget', streamerId, () => services.livePolls.forget(streamerId));
+  for (const kind of services.trackingGoals.KINDS) {
+    attempt('Tracking goal end', streamerId, () => services.trackingGoals.endGoal(streamerId, kind));
+  }
+  attempt('Trackers clear', streamerId, () => services.trackers.clear(streamerId));
   if (previousUsername) {
     attempt('Twitch chat leave', streamerId, () => services.chatManager.partChannel(previousUsername));
   }

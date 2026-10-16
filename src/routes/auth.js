@@ -292,6 +292,15 @@ router.get('/broadcaster/callback', async (req, res) => {
       console.error('[Auth] EventSub restart after broadcaster auth failed:', e.message);
     }
 
+    // The follower and sub goals read Twitch again at once with the new scopes, so a goal showing "Reconnect
+    // Twitch" shows its number as soon as Twitch answers. Not waited for: the dashboard opens meanwhile.
+    try {
+      require('../services/trackingGoals').recheck(streamer.id)
+        .catch((e) => console.error('[Auth] Tracking goals recheck after broadcaster auth failed:', e.message));
+    } catch (e) {
+      console.error('[Auth] Tracking goals recheck after broadcaster auth failed:', e.message);
+    }
+
     console.log(`[Auth] Broadcaster ${streamer.id} authorized for sub sync`);
     res.redirect('/dashboard?msg=broadcaster_authorized');
   } catch (error) {

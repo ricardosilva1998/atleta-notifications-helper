@@ -67,6 +67,10 @@ function startWithoutDiscord() {
 
   require('./services/giveawayManager').init();
 
+  // Follower and sub goals: every minute, hours goals end, calendar goals start their next period, and goals whose
+  // OBS source is open re-read Twitch (services/trackingGoals.js).
+  require('./services/trackingGoals').startTicks();
+
   // Multistream runs only once the relay is configured: then, finish any
   // go-live a previous restart interrupted, and from then on check the relay
   // every minute (services/multistreamSessions.js).
@@ -87,9 +91,13 @@ function startHousekeeping() {
   setInterval(() => { try { db.cleanupOldModLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
   try { db.cleanupOldModLogs(); } catch (e) {}
 
-  // Clean up old overlay events (every 6 hours)
-  setInterval(() => { try { db.cleanupOldOverlayEvents(); } catch (e) {} }, 6 * 60 * 60 * 1000);
+  // Clean up old overlay events (30 days) and the follow and sub record of the Tracking goals (400 days), every 6 hours
+  setInterval(() => {
+    try { db.cleanupOldOverlayEvents(); } catch (e) {}
+    try { db.cleanupOldTrackingEvents(); } catch (e) {}
+  }, 6 * 60 * 60 * 1000);
   db.cleanupOldOverlayEvents();
+  try { db.cleanupOldTrackingEvents(); } catch (e) {}
 
   // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours).
   // Before old pending tips are deleted, tips PayPal captured that were never recorded are recovered.
@@ -212,6 +220,7 @@ async function shutdown(signal) {
   stop('StreamElements', () => require('./services/streamelements').streamElementsManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
+  stop('Tracking goals', () => require('./services/trackingGoals').stopTicks());
   if (config.multistream.enabled) stop('Multistream checks', () => require('./services/multistreamSessions').sessions().stopAll());
   stop('Discord login retry', () => { if (discordLogin) discordLogin.stop(); });
   try {

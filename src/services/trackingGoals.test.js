@@ -725,3 +725,100 @@ test('channel names the kind; KINDS are follow and sub', () => {
   assert.equal(channel(7, 'follow'), 'trackgoal:7:follow');
   assert.deepEqual(KINDS, ['follow', 'sub']);
 });
+
+// After "Reconnect Twitch" (the broadcaster callback): the goals read Twitch at once, without waiting for their
+// throttle or for a source to be open, so "Reconnect Twitch" goes away as soon as Twitch answers.
+describe('recheck', () => {
+  test('re-reads the streamer\'s lifetime goals now, whatever was tried lately, and clears needs_reconnect', async () => {
+    const s = addStreamer();
+    const w = setup({ followerTotal: twitchError('needs_reconnect'), subscriberTotal: twitchError('needs_reconnect') });
+    await w.tg.startGoal({ id: s }, 'follow', fields());
+    await w.tg.startGoal({ id: s }, 'sub', fields());
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, 'needs_reconnect');
+    w.answers.followerTotal = 120;
+    w.answers.subscriberTotal = 8;
+    w.emitted.length = 0;
+
+    await w.tg.recheck(s); // no source open, and the goals were read a moment ago
+
+    assert.equal(w.reads('followerTotal'), 2);
+    assert.equal(w.reads('subscriberTotal'), 2);
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, null);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 120);
+    assert.equal(w.tg.progressOf(s, 'sub').current, 8);
+    assert.deepEqual(w.emitted.map((e) => [e.channel, e.payload.goal.current]).sort(), [[`trackgoal:${s}:follow`, 120], [`trackgoal:${s}:sub`, 8]]);
+  });
+
+  test('reads back a period follower goal now; other streamers\' goals and goals that read nothing from Twitch are left alone', async () => {
+    const s = addStreamer();
+    const other = addStreamer();
+    const t = Date.parse('2026-10-16T12:00:00Z');
+    const w = setup({ t, followersSince: twitchError('needs_reconnect'), followerTotal: 50 });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
+    await w.tg.startGoal({ id: s }, 'sub', fields({ period: 'hours', hours: 5 }));
+    await w.tg.startGoal({ id: other }, 'follow', fields());
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, 'needs_reconnect');
+    w.answers.followersSince = { followers: [{ userId: '1', login: 'a', followedAt: '2026-10-03T10:00:00Z' }], complete: true };
+    w.t = t + MIN;
+
+    await w.tg.recheck(s);
+
+    assert.equal(w.reads('followersSince'), 2);
+    assert.equal(w.reads('followerTotal'), 1, 'the other streamer\'s lifetime goal was not read again');
+    assert.equal(w.reads('subscriberTotal'), 0);
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, null);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 1);
+  });
+
+  test('a recheck Twitch does not answer keeps the goal as it was, and the next tick with a source open tries again', async () => {
+    const s = addStreamer();
+    const w = setup({ followerTotal: twitchError('needs_reconnect') });
+    await w.tg.startGoal({ id: s }, 'follow', fields());
+    w.answers.followerTotal = twitchError('twitch_failed');
+    await w.tg.recheck(s);
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, 'needs_reconnect', 'never a total it does not have');
+    assert.equal(w.tg.progressOf(s, 'follow').current, null);
+
+    w.answers.followerTotal = 75;
+    w.tg.connected(s, 'follow', +1);
+    w.t += MIN; // well within the 10 minutes between reads
+    await w.tg.tick();
+    assert.equal(w.reads('followerTotal'), 3);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 75);
+  });
+
+  test('a streamer with no goal: nothing is read, and it resolves', async () => {
+    const w = setup();
+    await w.tg.recheck(addStreamer());
+    assert.equal(w.calls.length, 0);
+  });
+});
+
+describe('the minute timer', () => {
+  test('startTicks runs tick every 60 s (once, however often it is started) until stopTicks', async (t) => {
+    const s = addStreamer();
+    const start = Date.now();
+    const w = setup({ t: start });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'hours', hours: 1 }));
+    await w.tg.startGoal({ id: s }, 'sub', fields({ period: 'hours', hours: 3 }));
+    t.mock.timers.enable({ apis: ['setInterval'] });
+
+    w.tg.startTicks();
+    w.tg.startTicks();
+    w.t = start + HOUR + MIN;
+    t.mock.timers.tick(59_999);
+    await flush();
+    assert.notEqual(w.tg.progressOf(s, 'follow'), null, 'not before the minute');
+    t.mock.timers.tick(1);
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow'), null, 'the hour is over: the tick ended it');
+    assert.equal(w.logs.filter((l) => /ended \(its hours are over\)/.test(l.text)).length, 1, 'one timer, not two');
+
+    w.tg.stopTicks();
+    w.t = start + 4 * HOUR;
+    t.mock.timers.tick(5 * 60_000);
+    await flush();
+    assert.notEqual(w.tg.progressOf(s, 'sub'), null, 'no tick after stopTicks');
+  });
+});

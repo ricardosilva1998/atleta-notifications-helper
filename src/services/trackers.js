@@ -11,9 +11,12 @@
 // stored and broadcast whether its tracker is switched on or not; a source that is switched off hides itself.
 //
 // The top tipper is worked out, never stored: the donor who gave the most in the tip page's currency
-// (donation_currency) since the stream started — channel_state.stream_started_at of the streamer's linked login,
-// while live or, once it is over, until the live poller clears it — else over the last 12 hours. Names are grouped
-// whatever their case and "Anonymous" is left out; other currencies are never added in.
+// (donation_currency) since the stream started — the channel_state of the streamer's linked login, which the live
+// poller keeps for every enabled streamer's own channel: while live its stream_started_at, once it is over the last
+// stream's start (last_stream_started_at, kept until the next stream starts) — else over the last 12 hours. Names are
+// grouped whatever their case and "Anonymous" is left out; other currencies are never added in.
+//
+// Linking another Twitch account clears the stored values (clear(), from accountLifecycle.twitchAccountChanged).
 //
 // The database is handed in (createTrackers), so the unit tests run this on an in-memory database with a clock of
 // their own; the app's instance requires it when first used.
@@ -50,6 +53,16 @@ function valueOfEvent(normalized) {
   }
 }
 
+// What a tip (db.logDonation()'s new row, or a stored donations row) sets as the latest tip, in any currency.
+function valueOfTip(tip) {
+  const t = tip || {};
+  return {
+    name: nameOf(t.name) || 'Anonymous',
+    amount: round2(numberOf(t.amount)),
+    currency: t.currency ? String(t.currency).toUpperCase() : null,
+  };
+}
+
 function createTrackers({ db, emit, now = Date.now, logger = console }) {
   function broadcast(streamerId, tracker, value) {
     emit(channel(streamerId), { type: 'tracker', tracker, value });
@@ -60,11 +73,15 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     broadcast(streamerId, tracker, value);
   }
 
-  // When this stream started: the linked channel's stream_started_at, else 12 hours ago.
+  // When this stream started: the linked channel's stream_started_at while live, else its last stream's start, else
+  // 12 hours ago. Reads channel_state without writing a row (db.getChannelState would add one).
   function streamStart(streamer) {
     const login = streamer.twitch_username ? String(streamer.twitch_username).toLowerCase() : '';
-    const state = login ? db.getChannelState(login) : null;
-    const started = state && state.stream_started_at ? Date.parse(state.stream_started_at) : NaN;
+    const state = login ? db.findChannelState(login) : null;
+    const value = !state ? null : (state.is_live
+      ? state.stream_started_at || state.last_stream_started_at
+      : state.last_stream_started_at || state.stream_started_at);
+    const started = value ? Date.parse(value) : NaN;
     return Number.isFinite(started) ? new Date(started) : new Date(now() - NO_STREAM_WINDOW_MS);
   }
 
@@ -91,16 +108,18 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
   // top tipper as it stands now. Never throws.
   function onTip(streamerId, tip) {
     try {
-      const t = tip || {};
-      store(streamerId, 'latest_tip', {
-        name: nameOf(t.name) || 'Anonymous',
-        amount: round2(numberOf(t.amount)),
-        currency: t.currency ? String(t.currency).toUpperCase() : null,
-      });
+      store(streamerId, 'latest_tip', valueOfTip(tip));
       broadcast(streamerId, 'top_tipper', topTipper(streamerId));
     } catch (err) {
       logger.error('[Trackers] onTip error:', err.message);
     }
+  }
+
+  // Removes the streamer's stored values and tells the open sources (the five stored ones empty, the top tipper as it
+  // stands now), so nothing shows another channel's numbers after the linked Twitch account changed.
+  function clear(streamerId) {
+    db.clearTrackerValues(streamerId);
+    for (const tracker of TRACKERS) broadcast(streamerId, tracker, tracker === 'top_tipper' ? topTipper(streamerId) : null);
   }
 
   // A stored value read back: null when none, or one that cannot be read.
@@ -142,7 +161,7 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     return out;
   }
 
-  return { onEvent, onTip, topTipper, values, valueOf, settings };
+  return { onEvent, onTip, topTipper, clear, values, valueOf, settings };
 }
 
 // The app's instance. The database is required when first used: it loads the app's config, which this file's unit
@@ -162,10 +181,13 @@ module.exports = {
   TRACKERS,
   DEFAULT_COLOR,
   channel,
+  valueOfEvent,
+  valueOfTip,
   createTrackers,
   onEvent: (...args) => instance().onEvent(...args),
   onTip: (...args) => instance().onTip(...args),
   topTipper: (...args) => instance().topTipper(...args),
+  clear: (...args) => instance().clear(...args),
   values: (...args) => instance().values(...args),
   valueOf: (...args) => instance().valueOf(...args),
   settings: (...args) => instance().settings(...args),

@@ -438,3 +438,93 @@ describe('removing an account', () => {
     }
   });
 });
+
+describe('seeding the trackers at release (tracking_seed_trackers)', () => {
+  const DAY_MS = 86400e3;
+  const ago = (ms) => new Date(Date.now() - ms).toISOString().slice(0, 19).replace('T', ' ');
+  const event = (streamerId, type, username, data, createdAt) => db.db.prepare(
+    'INSERT INTO overlay_events (streamer_id, event_type, username, data, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(streamerId, type, username, typeof data === 'string' || data == null ? data : JSON.stringify(data), createdAt);
+  const tip = (streamerId, name, amount, currency, createdAt) => db.db.prepare(
+    "INSERT INTO donations (streamer_id, source, donor_name, amount, currency, created_at) VALUES (?, 'paypal', ?, ?, ?, ?)"
+  ).run(streamerId, name, amount, currency, createdAt);
+  const values = (streamerId) => Object.fromEntries(Object.entries(db.getTrackerValues(streamerId)).map(([k, v]) => [k, JSON.parse(v)]));
+
+  test('fills each tracker from the newest event of its kind and the latest tip from the newest donation, as the trackers store them; no goal', () => {
+    const s = addStreamer();
+    event(s, 'follow', 'OldFan', { username: 'OldFan' }, ago(2 * DAY_MS));
+    event(s, 'follow', 'NewFan', { username: 'NewFan' }, ago(3600e3));
+    event(s, 'subscription', 'Loyal', { username: 'Loyal', tier: '2', months: 14 }, ago(3 * DAY_MS));
+    event(s, 'giftsub', 'Gifter', { username: 'Gifter', tier: '1', amount: 5 }, ago(2 * DAY_MS)); // newer than the resub
+    event(s, 'bits', 'Cheerer', { username: 'Cheerer', amount: 500 }, ago(DAY_MS));
+    event(s, 'raid', 'Raider', { username: 'Raider', viewers: 42, login: 'raider', userId: '9002' }, ago(DAY_MS));
+    event(s, 'donation', 'NotFromHere', { amount: 1000, currency: 'EUR' }, ago(60e3)); // the latest tip comes from donations
+    tip(s, 'Older', 99, 'USD', ago(DAY_MS));
+    tip(s, 'Tipper', 12.5, 'eur', ago(3600e3));
+
+    assert.ok(db.seedTrackerValues() >= 5);
+
+    assert.deepEqual(values(s), {
+      latest_follower: { name: 'NewFan' },
+      latest_sub: { name: 'Gifter', gifted: 5 },
+      latest_bits: { name: 'Cheerer', amount: 500 },
+      latest_raid: { name: 'Raider', viewers: 42 },
+      latest_tip: { name: 'Tipper', amount: 12.5, currency: 'EUR' },
+    });
+    assert.equal(n('tracking_goals', s), 0, 'no goal is created');
+  });
+
+  test('an event past 30 days is not used, a value already stored is kept, a row without readable data uses its username, a tip without a name is Anonymous', () => {
+    const s = addStreamer();
+    event(s, 'follow', 'Ancient', { username: 'Ancient' }, ago(31 * DAY_MS));
+    event(s, 'raid', 'PlainRaider', 'not json {', ago(DAY_MS));
+    db.setTrackerValue(s, 'latest_bits', { name: 'Kept', amount: 1 });
+    event(s, 'bits', 'Seeded', { username: 'Seeded', amount: 50 }, ago(DAY_MS));
+    tip(s, null, 3, null, ago(DAY_MS));
+
+    db.seedTrackerValues();
+    db.seedTrackerValues(); // and again: nothing more changes
+
+    assert.deepEqual(values(s), {
+      latest_raid: { name: 'PlainRaider', viewers: 0 },
+      latest_bits: { name: 'Kept', amount: 1 },
+      latest_tip: { name: 'Anonymous', amount: 3, currency: null },
+    });
+  });
+});
+
+describe('the channel state the top tipper reads', () => {
+  const stateRows = (login) => db.db.prepare('SELECT COUNT(*) AS n FROM channel_state WHERE twitch_username = ?').get(login).n;
+
+  test('findChannelState reads a row without writing one; the last stream\'s start outlives clearStreamSession', () => {
+    assert.equal(db.findChannelState('nobody_streams_here'), null);
+    assert.equal(stateRows('nobody_streams_here'), 0);
+
+    db.getChannelState('top_tipper_chan');
+    db.updateChannelState('top_tipper_chan', { is_live: 1, stream_started_at: '2026-10-16T20:00:00Z' });
+    assert.equal(db.findChannelState('Top_Tipper_Chan').last_stream_started_at, '2026-10-16T20:00:00Z');
+
+    db.updateChannelState('top_tipper_chan', { offline_polls: 1 });
+    db.clearStreamSession('top_tipper_chan');
+    db.updateChannelState('top_tipper_chan', { is_live: 0, offline_polls: 0 });
+    const ended = db.findChannelState('top_tipper_chan');
+    assert.equal(ended.stream_started_at, null);
+    assert.equal(ended.last_stream_started_at, '2026-10-16T20:00:00Z');
+
+    db.updateChannelState('top_tipper_chan', { is_live: 1, stream_started_at: '2026-10-17T19:00:00Z' });
+    assert.equal(db.findChannelState('top_tipper_chan').last_stream_started_at, '2026-10-17T19:00:00Z', 'a new stream replaces it');
+  });
+
+  test('getEnabledStreamerTwitchLogins: every enabled streamer\'s linked login, lower-cased, once', () => {
+    addStreamer({ twitch_username: 'Own_Login_A' });
+    addStreamer({ twitch_username: 'own_login_a' });
+    addStreamer({ twitch_username: 'own_login_off', enabled: 0 });
+    addStreamer({ twitch_username: '' });
+    const logins = db.getEnabledStreamerTwitchLogins();
+    assert.equal(logins.filter((l) => l === 'own_login_a').length, 1);
+    assert.ok(!logins.includes('Own_Login_A'));
+    assert.ok(!logins.includes('own_login_off'));
+    assert.ok(!logins.includes(''));
+    assert.ok(logins.every((l) => typeof l === 'string' && l === l.toLowerCase()));
+  });
+});

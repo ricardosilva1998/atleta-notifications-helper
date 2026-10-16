@@ -22,9 +22,15 @@ const { planMilestoneCheck } = require('./milestones');
 
 // Whether the watched channels are live, a batch of them per Twitch request:
 // each channel is asked about once, however many servers watch it (one request
-// per channel per minute used up the shared app token's budget).
+// per channel per minute used up the shared app token's budget). Every enabled
+// streamer's own linked channel is asked about too, watched by a server or not:
+// Tracking needs to know when their stream starts (the top tipper of the
+// stream). What is posted still goes only to a channel's watchers, so a channel
+// no server watches only gets its channel_state.
 async function pollAllTwitchLive() {
-  const logins = [...new Set(db.getAllUniqueWatchedChannels().map((c) => String(c.twitch_username).toLowerCase()))];
+  const watched = db.getAllUniqueWatchedChannels().map((c) => c.twitch_username);
+  const logins = [...new Set([...watched, ...db.getEnabledStreamerTwitchLogins()]
+    .filter(Boolean).map((login) => String(login).toLowerCase()))];
   if (logins.length > 0 && !pollAllTwitchLive._logged) {
     console.log(`[TwitchLive] Polling ${logins.length} channels: ${logins.join(', ')}`);
     pollAllTwitchLive._logged = true;

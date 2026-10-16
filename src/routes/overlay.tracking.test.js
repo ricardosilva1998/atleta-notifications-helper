@@ -304,12 +304,21 @@ describe('a tracker\'s stream', () => {
     const { id, token } = addStreamer();
     db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run(`OwnChan${id}`, id);
     const stateRows = () => db.db.prepare('SELECT COUNT(*) AS n FROM channel_state WHERE twitch_username = ?').get(`ownchan${id}`).n;
-    const stream = await openStream(`/overlay/tracker/latest_sub/events/${token}`);
-    await until(() => stream.messages().length >= 2, 'config and value');
-    assert.equal(stateRows(), 0, 'the top tipper (which reads channel_state) was not worked out');
-    const top = await openStream(`/overlay/tracker/top_tipper/events/${token}`);
-    await until(() => top.messages().length >= 2, 'config and value');
-    assert.equal(stateRows(), 1, 'the top tipper source does work it out');
+    // The top tipper reads the linked channel's state (db.findChannelState, which writes nothing).
+    const read = db.findChannelState;
+    const lookups = [];
+    db.findChannelState = (login) => { lookups.push(String(login).toLowerCase()); return read(login); };
+    try {
+      const stream = await openStream(`/overlay/tracker/latest_sub/events/${token}`);
+      await until(() => stream.messages().length >= 2, 'config and value');
+      assert.deepEqual(lookups.filter((l) => l === `ownchan${id}`), [], 'the top tipper was not worked out');
+      const top = await openStream(`/overlay/tracker/top_tipper/events/${token}`);
+      await until(() => top.messages().length >= 2, 'config and value');
+      assert.ok(lookups.includes(`ownchan${id}`), 'the top tipper source does work it out');
+      assert.equal(stateRows(), 0, 'and writes no channel_state row');
+    } finally {
+      db.findChannelState = read;
+    }
   });
 
   test('the top tipper is worked out when the source opens', async () => {

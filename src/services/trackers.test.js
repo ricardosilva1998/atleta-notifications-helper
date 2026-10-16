@@ -58,10 +58,11 @@ function addTip(streamerId, name, amount, currency, createdAt = sqlite(Date.now(
 }
 
 // The channel_state row of the streamer's linked login (stored lower-cased, as the live poller keeps it).
-function setStream(streamerId, { live, startedAt }) {
+// lastStartedAt: the last stream's start, which the live poller keeps after the stream's session is cleared.
+function setStream(streamerId, { live, startedAt, lastStartedAt = null }) {
   const login = db.getStreamerById(streamerId).twitch_username.toLowerCase();
-  db.db.prepare('INSERT OR REPLACE INTO channel_state (twitch_username, is_live, stream_started_at) VALUES (?, ?, ?)')
-    .run(login, live ? 1 : 0, startedAt);
+  db.db.prepare('INSERT OR REPLACE INTO channel_state (twitch_username, is_live, stream_started_at, last_stream_started_at) VALUES (?, ?, ?, ?)')
+    .run(login, live ? 1 : 0, startedAt, lastStartedAt);
 }
 
 function setup({ t = Date.now() } = {}) {
@@ -192,6 +193,29 @@ describe('the top tipper', () => {
     assert.deepEqual(setup().tr.topTipper(id), { name: 'Recent', amount: 2, currency: 'EUR' });
   });
 
+  // The live poller clears a stream's session two empty polls after it ends; the last stream's start stays, so the
+  // top tipper of the stream that just ended is shown until the next one starts.
+  test('after the stream ended (its session cleared), since the last stream\'s start; a new stream starts over', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const start = Date.now() - 3 * HOUR;
+    addTip(id, 'BeforeTheStream', 99, 'EUR', sqlite(start - HOUR));
+    addTip(id, 'During', 3, 'EUR', sqlite(start + HOUR));
+    setStream(id, { live: false, startedAt: null, lastStartedAt: new Date(start).toISOString() });
+    assert.deepEqual(setup().tr.topTipper(id), { name: 'During', amount: 3, currency: 'EUR' });
+
+    const next = Date.now() - 30 * 60e3;
+    setStream(id, { live: true, startedAt: new Date(next).toISOString(), lastStartedAt: new Date(next).toISOString() });
+    assert.equal(setup().tr.topTipper(id), null, 'nobody has tipped in the new stream yet');
+  });
+
+  test('working it out never writes a channel_state row', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const login = db.getStreamerById(id).twitch_username.toLowerCase();
+    addTip(id, 'Bob', 7, 'EUR');
+    assert.deepEqual(setup().tr.topTipper(id), { name: 'Bob', amount: 7, currency: 'EUR' });
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM channel_state WHERE twitch_username = ?').get(login).n, 0);
+  });
+
   test('is nobody without a tip, and for an unknown streamer', () => {
     const id = addStreamer();
     assert.equal(setup().tr.topTipper(id), null);
@@ -202,6 +226,24 @@ describe('the top tipper', () => {
     const id = addStreamer({ donation_currency: 'GBP' });
     addTip(id, 'NoCurrency', 4, null);
     assert.deepEqual(setup().tr.topTipper(id), { name: 'NoCurrency', amount: 4, currency: 'GBP' });
+  });
+});
+
+describe('clearing the trackers', () => {
+  test('clear() removes the stored values and tells the open sources: the five empty, the top tipper as it stands', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const other = addStreamer();
+    const w = setup();
+    w.tr.onEvent(id, { type: 'follow', data: { username: 'OldChannelFan' } });
+    w.tr.onEvent(other, { type: 'follow', data: { username: 'Elsewhere' } });
+    w.emitted.length = 0;
+
+    w.tr.clear(id);
+
+    assert.deepEqual(db.getTrackerValues(id), {});
+    assert.deepEqual(JSON.parse(db.getTrackerValues(other).latest_follower), { name: 'Elsewhere' }, 'another streamer keeps theirs');
+    assert.deepEqual(w.emitted.map((e) => [e.channel, e.payload.tracker, e.payload.value]),
+      trackers.TRACKERS.map((tracker) => [`tracker:${id}`, tracker, null]));
   });
 });
 
