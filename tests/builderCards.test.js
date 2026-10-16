@@ -265,7 +265,9 @@ const EDITOR_IDS = ['editor', 'editor-back', 'editor-icon', 'editor-title', 'edi
   'anim-chips', 'anim-gallery', 'custom-preview', 'custom-slot', 'custom-nothing', 'custom-row-accent', 'custom-row-racing',
   'custom-row-label', 'custom-row-speed', 'custom-row-effect', 'custom-row-grows', 'style-accent', 'style-accent-own', 'style-accent-val',
   'style-racing-card', 'style-racing-accent', 'style-racing-name', 'style-racing-font', 'style-label', 'style-speed', 'val-style-speed',
-  'style-effect', 'style-grows', 'custom-all-six'];
+  'style-effect', 'style-grows', 'custom-all-six',
+  // the legacy cards: the page's card (and where it waits off the stage) and the sponsor rotation switch
+  'preview-card-container', 'legacy-preview', 'sp-rotation-toggle'];
 
 function fakeElement(doc, tag) {
   const el = element();
@@ -1375,5 +1377,218 @@ describe('the Location tab', () => {
     page.document.getElementById('stage-replay').fire('click');
     assert.deepEqual(page.played, []);
     page.CARDS.closeEditor({ force: true });
+  });
+});
+
+// ── The legacy cards ──
+// The sponsor images and the YouTube alerts keep today's card editor, which the page owns: its controls
+// (getControlValues / setControlValues), its pop-ups and the card updatePreview() draws. The fakes record what
+// the window asks of the page; `controls` is what the page's controls hold.
+describe('the legacy cards: the sponsor images and the YouTube alerts keep today\'s card editor', () => {
+  const VIEW = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'overlay-builder.ejs'), 'utf8');
+  const between = (from, to) => {
+    const start = VIEW.indexOf(from);
+    assert.ok(start > 0, from);
+    const end = VIEW.indexOf(to, start + 1);
+    assert.ok(end > start, to);
+    return VIEW.slice(start, end);
+  };
+  const PLACE = ['card_width', 'card_position', 'card_custom_x', 'card_custom_y'];
+
+  function legacyPage(options = {}) {
+    const log = [];
+    const controls = { bg_color: '#1a1a3e', card_width: 420, card_position: 'top-center', card_custom_x: null, card_custom_y: null, sponsor_animation: 'fade', ...(options.controls || {}) };
+    const workingDesigns = { timed: { label_color: '#ff0000' }, yt_member: {} };
+    let context = null;
+    const page = loadPage({
+      ...options,
+      extra: {
+        workingDesigns, sponsorRotationEnabled: true,
+        getControlValues: () => ({ ...controls }),
+        setControlValues: (d) => {
+          log.push(['setControlValues', context.currentType, { ...d }]);
+          for (const k of Object.keys(controls)) if (k in d) controls[k] = d[k];
+        },
+        setCardPlace: (p) => { log.push(['setCardPlace', { ...p }]); PLACE.forEach((k) => { controls[k] = p[k]; }); },
+        updatePreview: () => log.push('updatePreview'),
+        updateSponsorPreview: () => log.push('updateSponsorPreview'),
+        stopSponsorPreview: () => log.push('stopSponsorPreview'),
+        renderSponsorList: () => log.push('renderSponsorList'),
+        playPreviewAnimation: () => log.push('playPreviewAnimation'),
+        ...(options.extra || {}),
+      },
+    });
+    context = page.CARDS.__context;
+    const stage = page.document.getElementById('stage');
+    stage.clientWidth = 960;
+    stage.getBoundingClientRect = () => ({ left: 0, top: 0 });
+    const slot = page.document.getElementById('stage-slot');
+    slot.offsetWidth = 500;
+    slot.offsetHeight = 140;
+    return { ...page, log, controls, workingDesigns, stage, slot, card: page.document.getElementById('preview-card-container'), home: page.document.getElementById('legacy-preview') };
+  }
+  const SPONSOR_ROW = { event_type: 'timed', card_width: 500, card_position: 'bot-center', sponsor_animation: 'zoom' };
+  const tabsOf = (document) => document.getElementById('editor-tabs').children.map((b) => b.getAttribute('data-tab'));
+  const walk = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => walk(c, out)); return out; };
+
+  test('the sponsor images window has Images, Design and Location, and Images holds today\'s sponsor controls', () => {
+    const images = between('id="pane-images"', 'id="pane-design"');
+    for (const id of ['sp-rotation-toggle', 'ctrl-sponsor-animation', 'sponsor-list', 'sp-upload-zone', 'sp-file-input', 'sp-upload-name', 'sp-upload-dur', 'sp-upload-btn']) {
+      assert.ok(images.includes(`id="${id}"`), id);
+    }
+    const design = between('id="pane-design"', 'id="editor-side"');
+    for (const id of ['section-theme', 'section-text', 'section-sideicon', 'section-animation', 'row-border-radius', 'ctrl-border-radius',
+      'ctrl-bg-color', 'ctrl-event-label', 'ctrl-detail-text', 'side-icon-grid', 'ctrl-entrance-animation', 'ctrl-screen-effect']) {
+      assert.ok(design.includes(`id="${id}"`), id);
+    }
+    assert.ok(!VIEW.includes('class="builder-layout"'), 'today\'s hidden editor is gone');
+    assert.ok(!VIEW.includes('id="preview-screen"'), 'and its preview frame');
+    assert.ok(!VIEW.includes('resize-handle'), 'and its resize handles');
+
+    const page = legacyPage();
+    page.CARDS.openEditor('timed');
+    assert.deepEqual(tabsOf(page.document), ['images', 'design', 'location']);
+    assert.equal(page.CARDS.tab, 'images');
+    assert.ok(page.log.includes('renderSponsorList'), 'the list is drawn');
+    assert.equal(page.document.getElementById('sp-rotation-toggle').checked, true, 'the rotation switch says whether the rotation is on');
+    assert.equal(page.document.getElementById('editor-side').hidden, true, 'no stage on Images');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('YouTube cards are drawn only while YouTube is on, with Design and Location', () => {
+    assert.match(VIEW, /<% if \(features\.youtube\) \{ %>\s*<h2[^\n]*\n\s*<div class="cards" id="cards-youtube"><\/div>\s*<% \} %>/);
+    const { shownCards } = load();
+    assert.ok(!shownCards({ youtube: false }).some((t) => /^yt_/.test(t)));
+    assert.deepEqual(shownCards({ youtube: true }).filter((t) => /^yt_/.test(t)), ['yt_superchat', 'yt_member', 'yt_giftmember']);
+
+    const page = legacyPage({ features: { youtube: true } });
+    assert.equal(page.CARDS.openFromUrl('?tab=yt_member'), 'yt_member');
+    assert.deepEqual(tabsOf(page.document), ['design', 'location']);
+    assert.equal(page.CARDS.tab, 'design');
+    assert.equal(page.CARDS.draftStyle, null, 'no look');
+    assert.equal(page.document.getElementById('editor-side').hidden, false, 'the stage beside Design');
+    assert.ok(page.slot.children.includes(page.card), 'the page\'s card is in the stage');
+    assert.ok(page.log.includes('updatePreview'), 'drawn by the page');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('opening a legacy card loads its design into the page\'s controls, as it is stored', () => {
+    const page = legacyPage({ rows: [SPONSOR_ROW] });
+    page.CARDS.openEditor('timed');
+    const set = page.log.find((entry) => entry[0] === 'setControlValues');
+    assert.ok(set, 'setControlValues was called');
+    assert.equal(set[1], 'timed', 'with currentType already the card\'s');
+    assert.deepEqual(set[2], { card_width: 500, card_position: 'bot-center', sponsor_animation: 'zoom' }, 'the stored row over the defaults');
+    assert.deepEqual({ ...page.workingDesigns.timed }, set[2], 'the page\'s working copy starts again from it (no edit left from a cancelled window)');
+    assert.deepEqual({ ...page.CARDS.draft }, page.controls, 'the window\'s draft is what the controls hold');
+    assert.equal(page.CARDS.isDirty(), false);
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('Done on a legacy card saves getControlValues() for that type with no style', async () => {
+    const page = legacyPage({ rows: [SPONSOR_ROW] });
+    page.CARDS.openEditor('timed');
+    page.controls.bg_color = '#223344';   // an edit made with the page's controls (the Design tab)
+    assert.equal(page.CARDS.isDirty(), true, 'an edit in the page\'s controls is an edit');
+    await page.CARDS.saveDraft();
+    assert.equal(page.calls.length, 1);
+    assert.equal(page.calls[0].url, '/dashboard/overlay-builder/save');
+    assert.equal(page.calls[0].opts.body, JSON.stringify(CORE.savePayload('timed', page.CARDS.__context.getControlValues())));
+    const body = JSON.parse(page.calls[0].opts.body);
+    assert.ok(!('style' in body), 'no look for the sponsor images');
+    assert.equal(body.design.bg_color, '#223344');
+    const row = page.g.SERVER_DESIGNS.find((r) => r.event_type === 'timed');
+    assert.equal(row.bg_color, '#223344', 'the stored row is what was saved');
+    assert.ok(!('style' in row));
+    assert.ok(!isOpen(page.document));
+  });
+
+  test('the Design and Location tabs show the page\'s card in the stage at its place, and give it back when they close', () => {
+    const page = legacyPage({ rows: [SPONSOR_ROW] });
+    page.CARDS.openEditor('timed');
+    assert.ok(!page.slot.children.includes(page.card), 'not on Images');
+    page.CARDS.setTab('design');
+    assert.ok(page.slot.children.includes(page.card), 'the card is the stage\'s slot');
+    assert.deepEqual(page.log.slice(-2), ['updatePreview', 'updateSponsorPreview'], 'drawn by the page, with its sponsor image');
+    assert.equal(page.slot.style.bottom, '16px', 'at its place');
+    assert.equal(page.slot.style.width, '500px');
+    assert.ok(!page.slot.classList.contains('look'), 'reflowed, not a look scaled from 420 px');
+    assert.ok(!page.slot.classList.contains('playing'), 'nothing loops it');
+    page.document.getElementById('stage-replay').fire('click');
+    assert.equal(page.log[page.log.length - 1], 'playPreviewAnimation', 'Replay plays its entrance');
+    page.CARDS.setTab('location');
+    assert.ok(page.slot.children.includes(page.card), 'still there on Location');
+    page.CARDS.setTab('images');
+    assert.ok(page.home.children.includes(page.card), 'given back off the stage');
+    assert.ok(page.log.includes('stopSponsorPreview'), 'its image rotation stops');
+    page.CARDS.setTab('design');
+    const givenBack = page.home.children.length;
+    page.CARDS.closeEditor({ force: true });
+    assert.equal(page.home.children.length, givenBack + 1, 'given back when the window closes too');
+    assert.equal(page.home.children[givenBack], page.card);
+  });
+
+  test('the Location tab hands a legacy card\'s place to the page\'s controls, which the save reads', async () => {
+    const page = legacyPage({ rows: [SPONSOR_ROW] });
+    page.CARDS.openEditor('timed');
+    page.CARDS.setTab('location');
+    const pane = walk(page.document.getElementById('pane-location'));
+    pane.find((n) => n.getAttribute('data-pos') === 'top-left').fire('click');
+    assert.deepEqual(page.log.filter((e) => e[0] === 'setCardPlace').pop()[1], { card_position: 'top-left', card_width: 500, card_custom_x: null, card_custom_y: null });
+    const slider = pane.find((n) => n.id === 'loc-width');
+    slider.value = '640';
+    slider.fire('input');
+    assert.equal(page.controls.card_width, 640);
+    pane.find((n) => n.getAttribute('data-mode') === 'free').fire('click');
+    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 });
+    page.slot.fire('pointermove', { clientX: 100, clientY: 50 });
+    page.slot.fire('pointerup', {});
+    assert.equal(page.controls.card_custom_x, page.CARDS.draft.card_custom_x, 'a drag too');
+    assert.ok(page.controls.card_custom_x > 0);
+    assert.equal(page.CARDS.isDirty(), true);
+    await page.CARDS.saveDraft();
+    const body = JSON.parse(page.calls[0].opts.body);
+    assert.deepEqual([body.design.card_position, body.design.card_width, body.design.card_custom_x], ['top-left', 640, page.controls.card_custom_x]);
+  });
+
+  test('Reset of a legacy card loads its defaults into the page\'s controls', async () => {
+    const page = legacyPage({ rows: [SPONSOR_ROW] });
+    page.CARDS.openEditor('timed');
+    page.CARDS.setTab('design');
+    page.controls.bg_color = '#223344';
+    const result = await page.CARDS.resetDraft();
+    assert.equal(result.ok, true);
+    const set = page.log.filter((entry) => entry[0] === 'setControlValues').pop();
+    assert.deepEqual(set[2], { card_width: 500, card_position: 'bot-center', sponsor_animation: 'fade' }, 'the defaults');
+    assert.equal(page.CARDS.isDirty(), false);
+    assert.equal(page.log[page.log.length - 1], 'updateSponsorPreview', 'the Design tab draws the card again');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('closing the sponsor images window draws the cards again (its images and rotation may have changed)', () => {
+    const page = legacyPage();
+    page.CARDS.openEditor('timed');
+    page.CARDS.closeEditor();
+    assert.equal(page.renders(), 1);
+    page.CARDS.openEditor('follow');
+    page.CARDS.closeEditor();
+    assert.equal(page.renders(), 1, 'an alert\'s Cancel draws nothing');
+  });
+
+  test('Esc with one of the page\'s pop-ups open closes only the pop-up', () => {
+    const page = legacyPage();
+    page.CARDS.openEditor('timed');
+    page.CARDS.setTab('design');
+    const popup = fakeElement(page.document, 'div');
+    popup.classList.add('modal-overlay', 'visible');
+    let prevented = false;
+    page.document.querySelector = (selector) => (selector === '.modal-overlay.visible' && popup.classList.contains('visible') ? popup : null);
+    page.document.fire('keydown', { key: 'Escape', preventDefault() { prevented = true; } });
+    assert.ok(!popup.classList.contains('visible'), 'the pop-up closed');
+    assert.ok(prevented);
+    assert.ok(isOpen(page.document), 'the window stays');
+    assert.equal(page.CARDS.editing, 'timed');
+    page.document.fire('keydown', { key: 'Escape' });
+    assert.ok(!isOpen(page.document), 'the next Esc closes the window');
   });
 });

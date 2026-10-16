@@ -82,13 +82,14 @@ describe('the card width slider', () => {
   // Two places have set it wrong. It stopped at 700 while the server, the drag handle and placement.js
   // allow 900, so a card saved wider than 700 was set back to 700 the next time the page set the slider.
   // It started at 280 while they allow 200, so a card dragged to a width of 200 to 279 was saved as 280.
-  test('spans the same widths as the server, the drag handle and the OBS overlay, at both ends', () => {
+  test('spans the same widths as the server, the Location tab\'s size slider and the OBS overlay, at both ends', () => {
     const { min, max } = FIELD_SPECS.card_width;
     assert.deepEqual([bound('min'), bound('max')], [min, max], 'the slider and the server');
-    const drag = /newWidth = Math\.max\((\d+), Math\.min\((\d+), newWidth\)\);/.exec(builder);
-    assert.ok(drag, 'the drag handle clamps the width');
-    assert.deepEqual([Number(drag[1]), Number(drag[2])], [min, max], 'the drag handle and the server');
-    assert.deepEqual([PLACEMENT.MIN_WIDTH, PLACEMENT.MAX_WIDTH], [min, max], 'placement.js and the server');
+    // The Location tab's size slider (#loc-width, public/js/builder-cards.js) took over from the old resize handle.
+    const cards = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
+    assert.match(cards, /range\.setAttribute\('min', String\(P\.MIN_WIDTH\)\)/);
+    assert.match(cards, /range\.setAttribute\('max', String\(P\.MAX_WIDTH\)\)/);
+    assert.deepEqual([PLACEMENT.MIN_WIDTH, PLACEMENT.MAX_WIDTH], [min, max], '#loc-width, placement.js and the server');
   });
 
   test('has a step that lands on both ends, so neither is rounded away', () => {

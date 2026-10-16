@@ -5,15 +5,17 @@
  * one card per alert, each looping the look it is set to on a faux stream, with its sound and its place,
  * Test in OBS and Edit alert, and the edit window Edit alert opens (Done saves the alert), with its
  * Animation tab (the alert's looks, each looping), Customize tab (what the picked look takes), Sound tab and Location tab
- * (fixed spot or free drag, and the width, on the stage beside it). The page-free
+ * (fixed spot or free drag, and the width, on the stage beside it); the sponsor images and the YouTube alerts
+ * keep today's card editor in their Images and Design tabs (the page's legacy controls). The page-free
  * rules are window.ATLETA_BUILDER_STYLES
  * (public/js/builder-styles-core.js); the looks are drawn with the files the OBS overlay uses
  * (objects/kit.js and the joined family files), picked with the view's previewObjectFor().
  *
  * It reads what the view's inline script defines (src/views/overlay-builder.ejs): previewObjectFor,
  * ALERT_STYLES, SAVED_STYLES, SERVER_DESIGNS, SAVED_DESIGNS, STYLE_DATA, EVENT_DEFAULTS, PREVIEW_DATA, I18N,
- * sponsorImages, sponsorRotationEnabled, STREAMER_ID, currentType (set for the legacy controls), and
- * window.BUILDER / window.BUILDER_TEXTS, so it is loaded after
+ * sponsorImages, sponsorRotationEnabled, STREAMER_ID, currentType (set for the legacy controls), the legacy
+ * card editor (workingDesigns, getControlValues, setControlValues, setCardPlace, updatePreview and the sponsor
+ * functions), and window.BUILDER / window.BUILDER_TEXTS, so it is loaded after
  * that script. Dual-exported: a browser global (window.ATLETA_BUILDER_CARDS) for <script src>, CommonJS
  * for tests/builderCards.test.js (which runs it under node:vm).
  */
@@ -599,6 +601,7 @@
     // The page's legacy controls (the Design tab) read the card they edit from currentType.
     if (typeof currentType !== 'undefined') currentType = type;
     CARDS.draft = draftOf(type);
+    if (isLegacy(type)) CARDS.draft = loadLegacy(type, CARDS.draft);
     CARDS.draftStyle = core().isStyled(type) ? shownStyleOf(type) : null;
     opened = { design: copy(CARDS.draft), style: CARDS.draftStyle };
     CARDS.tab = null;
@@ -641,6 +644,7 @@
     if (back) back.hidden = true;
     showMessage('');
     setUrlTab(null);
+    if (type === 'timed') CARDS.renderCards();   // its images and rotation are saved as they change
     resumeCards();
     // The focus goes back where it was; when the cards were drawn again, to this card's Edit button.
     var focusTo = opener;
@@ -658,6 +662,7 @@
   // Whether the window holds edits that are not stored: another look, or any field changed.
   function isDirty() {
     if (!CARDS.editing || !opened || !CARDS.draft) return false;
+    syncLegacyDraft();
     if ((CARDS.draftStyle || null) !== (opened.style || null)) return true;
     var draft = CARDS.draft, was = opened.design, keys = {}, k;
     for (k in draft) if (Object.prototype.hasOwnProperty.call(draft, k)) keys[k] = true;
@@ -672,7 +677,8 @@
   function saveDraft() {
     var type = CARDS.editing;
     if (!type || saving) return Promise.resolve({ ok: false });
-    var design = copy(CARDS.draft), style = CARDS.draftStyle;
+    // A legacy card saves what the page's controls hold (its Design tab edits them, not the draft).
+    var design = (isLegacy(type) && legacyValues()) || copy(CARDS.draft), style = CARDS.draftStyle;
     var done = el('editor-done');
     // The window's other ways out wait for the answer too.
     var buttons = ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close'].map(el).filter(Boolean);
@@ -739,6 +745,7 @@
         restoreSavedLook(type);
         if (CARDS.editing === type) {
           CARDS.draft = draftOf(type);
+          if (isLegacy(type)) CARDS.draft = loadLegacy(type, CARDS.draft);
           CARDS.draftStyle = core().isStyled(type) ? shownStyleOf(type) : null;
           opened = { design: copy(CARDS.draft), style: CARDS.draftStyle };
           showMessage(text('resetDone'));
@@ -1202,14 +1209,66 @@
     playLookSound(key);
   }
 
+  // ── The legacy cards: the sponsor images, and the YouTube alerts while YouTube is on ──
+  // They keep today's card editor, which the page owns (src/views/overlay-builder.ejs): the controls of the Images
+  // and Design tabs, read by getControlValues() and set by setControlValues(), the theme, text and animation pop-ups,
+  // and the card updatePreview() draws (#preview-card in #preview-card-container, which waits in #legacy-preview
+  // while no stage shows it). The window loads the card's design into those controls when it opens or is reset,
+  // the Location tab hands them where the card sits (setCardPlace), and Done saves what getControlValues() reads.
+  // Without the page's code (the other tabs' tests) the draft stays as draftOf() made it.
+  function isLegacy(type) { return !!type && !core().isStyled(type) && core().tabsFor(type).length > 0; }
+  function pageFn(name) { return root && typeof root[name] === 'function' ? root[name] : null; }
+  function callPage(name, arg) {
+    var fn = pageFn(name);
+    if (!fn) return undefined;
+    try { return fn(arg); } catch (e) { if (root.console) root.console.error(e); return undefined; }
+  }
+  // What the page's controls hold now, as the save sends it (null without the page's legacy code).
+  function legacyValues() {
+    var values = callPage('getControlValues');
+    return values ? copy(values) : null;
+  }
+  // Puts a design into the page's controls; the page's working copy starts again from it, so a cancelled window
+  // leaves nothing behind. Returns what the controls then hold: the window's draft.
+  function loadLegacy(type, design) {
+    if (!pageFn('setControlValues') || !pageFn('getControlValues')) return design;
+    if (typeof workingDesigns !== 'undefined' && workingDesigns) workingDesigns[type] = copy(design);
+    callPage('setControlValues', design);
+    ['updateSideIconGrid', 'updateTextSectionPreview', 'updateAnimSectionPreview'].forEach(function (name) { callPage(name, design); });
+    return legacyValues() || design;
+  }
+  // The draft follows the page's controls (the Design tab and its pop-ups edit those, not the draft).
+  function syncLegacyDraft() {
+    if (!isLegacy(CARDS.editing) || !CARDS.draft) return;
+    var values = legacyValues();
+    if (values) Object.assign(CARDS.draft, values);
+  }
+  // Where the card sits, as the Location tab sets it, goes to the page's controls too.
+  function pushPlace() {
+    if (!isLegacy(CARDS.editing) || !CARDS.draft) return;
+    var d = CARDS.draft;
+    callPage('setCardPlace', {
+      card_position: d.card_position, card_width: d.card_width,
+      card_custom_x: d.card_custom_x == null ? null : d.card_custom_x, card_custom_y: d.card_custom_y == null ? null : d.card_custom_y,
+    });
+  }
+  // The Images tab: today's sponsor controls, each saving through its route at once.
+  function showImages() {
+    callPage('renderSponsorList');
+    var toggle = el('sp-rotation-toggle');
+    if (toggle && typeof sponsorRotationEnabled !== 'undefined') toggle.checked = !!sponsorRotationEnabled;
+  }
+  function hideImages() { callPage('stopSponsorPreview'); }
+
   // ── The stage ──
   // The wide stream preview beside the Location and Design tabs: a 1920x1080 screen (#stage-inner, scaled to
   // the column by a ResizeObserver) with the alert in #stage-slot, laid out by placement.js as OBS lays it out,
-  // looping with its screen effect. What the slot plays comes from CARDS.stageContent() ({ look, design, sample };
-  // the look of the edit window's alert by default), so a tab whose alert is not a look can play its own. The
-  // loop runs only while the tab that shows the stage is open: stopStage() empties the slot and removes the
-  // particles.
+  // looping with its screen effect. What the slot plays comes from CARDS.stageContent(): { look, design, sample }
+  // for an alert's look, or { element, home } for a legacy card, the page's own card, which the slot shows as the
+  // page draws it (no loop) and gives back to `home` when the stage stops. The loop runs only while the tab that
+  // shows the stage is open: stopStage() empties the slot and removes the particles.
   var stageLooper = null;
+  var mounted = null;           // { node, home }: the page's card while the slot shows it
   var stageHeight = 0;          // the slot's last measured height on the 1920 stage, for when it is empty between loops
   var stageForceSound = false;  // Replay: the next play makes its sound
 
@@ -1263,13 +1322,39 @@
     slot.style.setProperty('--zw', String(placement.width / LOOK_WIDTH));
     slot.style.setProperty('--fw', '1920px');
   }
+  function mountStage(content) {
+    var slot = stageSlot();
+    if (!slot) return;
+    unmountStage();
+    if (stageLooper) stageLooper.stop();   // a look an alert's window left in the slot
+    mounted = { node: content.element, home: content.home || null };
+    slot.appendChild(content.element);
+  }
+  function unmountStage() {
+    if (!mounted) return;
+    if (mounted.home) mounted.home.appendChild(mounted.node);
+    mounted = null;
+  }
   function startStage() {
+    var content = CARDS.stageContent();
+    if (content && content.element) {
+      mountStage(content);
+      placeStage();
+      // The page draws its card, with its screen effect on the stage (and the sponsor image that rotates in its place).
+      callPage('updatePreview');
+      if (CARDS.editing === 'timed') callPage('updateSponsorPreview');
+      return;
+    }
     var loop = stageLoop();
     if (!loop) return;
     placeStage();
     loop.restart();
   }
   function stopStage() {
+    if (mounted) {
+      unmountStage();
+      if (CARDS.editing === 'timed') callPage('stopSponsorPreview');
+    }
     if (stageLooper) stageLooper.stop();
     clearStageFx();
     var stage = el('stage');
@@ -1277,6 +1362,8 @@
     drag = null;
   }
   function replayStage() {
+    var content = CARDS.stageContent();
+    if (content && content.element) { callPage('playPreviewAnimation'); return; }   // a legacy card: its entrance
     stageForceSound = true;
     var loop = stageLoop();
     if (loop && loop.running) loop.restart();
@@ -1320,6 +1407,7 @@
   function setPlace(changes) {
     if (!CARDS.editing || !CARDS.draft) return;
     Object.assign(CARDS.draft, changes);
+    pushPlace();
     syncLocation();
     placeStage();
     renderTabValues();
@@ -1419,6 +1507,7 @@
     var at = core().clampFree((e.clientX - box.left) / drag.k - drag.dx, (e.clientY - box.top) / drag.k - drag.dy, size.w, size.h);
     CARDS.draft.card_custom_x = at.x;
     CARDS.draft.card_custom_y = at.y;
+    pushPlace();
     placeStage();
   }
   function dragEnd() {
@@ -1446,7 +1535,13 @@
     on('editor-done', function () { saveDraft(); });
     on('editor-reset', function () { resetDraft(); });
     doc.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && CARDS.editing) { e.preventDefault(); closeEditor(); }
+      if (e.key !== 'Escape' || !CARDS.editing) return;
+      e.preventDefault();
+      // One of the page's pop-ups (the Design tab's theme, text and animation editors) is over the window: Esc
+      // closes that one alone, as its Cancel does.
+      var popup = doc.querySelector ? doc.querySelector('.modal-overlay.visible') : null;
+      if (popup) { popup.classList.remove('visible'); return; }
+      closeEditor();
     });
     var bar = el('editor-tabs');
     if (bar) bar.addEventListener('keydown', function (e) {
@@ -1485,15 +1580,22 @@
     renderAnimation: renderAnimation, renderCustomize: renderCustomize, pickLook: pickLook, useFamily: useFamily,
     // The Sound tab
     renderSound: renderSound, pickSound: pickSound,
-    // The Location tab and the stage beside it (stageContent is what the stage plays: a tab whose alert is not a look replaces it)
+    // The Location tab and the stage beside it (stageContent is what the stage plays: the alert's look, or a legacy
+    // card's own element, drawn by the page)
     renderLocation: renderLocation, placeStage: placeStage,
-    stageContent: function () { return { look: draftLook(), design: CARDS.draft || {}, sample: sampleOf(CARDS.editing) }; },
+    stageContent: function () {
+      if (isLegacy(CARDS.editing)) return { element: el('preview-card-container'), home: el('legacy-preview'), design: CARDS.draft || {} };
+      return { look: draftLook(), design: CARDS.draft || {}, sample: sampleOf(CARDS.editing) };
+    },
     editing: null, draft: null, draftStyle: null, tab: null,
     panes: {
       animation: { show: renderAnimation, hide: stopGallery },
       customize: { show: renderCustomize, hide: stopCustomize },
       sound: { show: renderSound },
       location: { show: showLocation, hide: hideLocation },
+      // The legacy cards' tabs (the page's own controls)
+      images: { show: showImages, hide: hideImages },
+      design: { show: startStage, hide: stopStage },
     },
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CARDS;

@@ -145,8 +145,10 @@ describe('the placement module is shared by the overlay and the builder', () => 
   });
 
   test('the builder\'s width limits are the ones the module and the server use', () => {
-    const builder = read('src', 'views', 'overlay-builder.ejs');
-    assert.match(builder, /Math\.max\(200, Math\.min\(900, newWidth\)\)/);
+    // The edit window's Location tab builds its size slider (#loc-width) from the module's bounds.
+    const cards = read('public', 'js', 'builder-cards.js');
+    assert.match(cards, /range\.setAttribute\('min', String\(P\.MIN_WIDTH\)\)/);
+    assert.match(cards, /range\.setAttribute\('max', String\(P\.MAX_WIDTH\)\)/);
     assert.equal(PLACEMENT.MIN_WIDTH, 200);
     assert.equal(PLACEMENT.MAX_WIDTH, 900);
     const { FIELD_SPECS } = require('../src/services/overlayDesign');
@@ -167,12 +169,10 @@ describe('the builder shows an object where it will really sit', () => {
     return builder.slice(start, next > 0 ? next : undefined);
   };
 
-  test('the object tabs keep Size & Position (and the resize handles); only the styling sections are hidden', () => {
+  test('for an object only the styling sections are hidden', () => {
     const body = functionBody('syncPhase1Controls');
     const hidden = body.match(/\[([^\]]*)\]\.forEach/)[1].match(/'([a-z-]+)'/g).map((m) => m.slice(1, -1));
     assert.deepEqual(hidden.sort(), ['section-animation', 'section-sideicon', 'section-text', 'section-theme']);
-    assert.ok(!hidden.includes('section-size'), 'Size & Position stays');
-    assert.ok(!body.includes('resize-se'), 'the resize handles stay');
   });
 
   test('the border radius row, which an object has no use for, has its own id so it can be hidden', () => {
@@ -180,24 +180,26 @@ describe('the builder shows an object where it will really sit', () => {
     assert.match(functionBody('syncPhase1Controls'), /row-border-radius/);
   });
 
-  test('previewing an object reads the position and width from the controls, and no longer forces top-centre', () => {
+  test('previewing an object takes its width from the design, and no longer blanks a dragged position', () => {
     const body = functionBody('updatePreview');
-    assert.ok(!body.includes("positionCard('top-center', 420)"), 'the fixed top-centre call is gone');
     assert.doesNotMatch(body, /card_custom_x = null/, 'a dragged position is no longer blanked for objects');
     assert.match(body, /ATLETA_PLACEMENT\.placementOf\(d\)\.width/);
-    assert.match(body, /positionCard\(d\.card_position, d\.card_width\)/);
   });
 
-  test('positionCard reads the design through the shared module and measures the real size', () => {
-    const body = functionBody('positionCard');
-    assert.match(body, /ATLETA_PLACEMENT\.placementOf\(/);
-    assert.match(body, /container\.offsetHeight/);
-    assert.ok(!body.includes('140 * scale'), 'the card height is measured, not estimated');
-    assert.match(body, /ATLETA_PLACEMENT\.MARGIN/);
+  // The old preview frame placed the card itself (positionCard, a resize handle, mouse drag); the edit window's stage
+  // (public/js/builder-cards.js) places every card, looks and legacy cards alike, through the shared module.
+  test('the edit window\'s stage places the alert through the shared module, as OBS does', () => {
+    const cards = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
+    assert.match(cards, /placement = P\.placementOf\(CARDS\.draft\), style = P\.slotStyle\(placement\)/);
+    assert.ok(!builder.includes('function positionCard('), 'the old frame\'s own placement is gone');
+    assert.ok(!builder.includes('resize-handle'), 'and its resize handle');
   });
 
-  test('resizing with the handle changes the width of an object too', () => {
-    assert.match(builder, /objHost\.style\.width = newWidth \+ 'px';/);
+  test('a legacy card\'s place reaches the controls the save reads', () => {
+    const body = functionBody('setCardPlace');
+    assert.match(body, /getElementById\('ctrl-card-width'\)/);
+    assert.match(body, /\.pos-cell/);
+    assert.match(body, /wd\.card_custom_x = /);
   });
 
   test('a border radius of 0 is kept by the builder (the slider is not reset to 16)', () => {

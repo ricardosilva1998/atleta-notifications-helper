@@ -162,7 +162,7 @@
     .ecard-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .ecard-preview .stream-bg, .anim-prev .stream-bg {
       position: absolute; inset: 0;
-      background-color: #10101c;
+      background-color: #10101c; background-size: cover; background-position: center;   /* the stream's thumbnail, when there is one */
       background-image:
         radial-gradient(ellipse at 20% 80%, rgba(80,40,140,.55), transparent 55%),
         radial-gradient(ellipse at 85% 20%, rgba(20,90,120,.45), transparent 50%),
@@ -229,7 +229,7 @@
     .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-md); overflow: hidden; border: 1px solid rgba(255,255,255,.12); flex: none; }
     .stage-inner { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
     .stage-inner .stream-bg {
-      position: absolute; inset: 0; background-color: #10101c;
+      position: absolute; inset: 0; background-color: #10101c; background-size: cover; background-position: center;
       background-image:
         radial-gradient(ellipse at 20% 80%, rgba(80,40,140,.55), transparent 55%),
         radial-gradient(ellipse at 85% 20%, rgba(20,90,120,.45), transparent 50%),
@@ -379,34 +379,8 @@
     .loc-cell[aria-pressed="true"] span { background: var(--accent); opacity: 1; }
     .loc-note { margin: 12px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
 
-    /* ── Layout ── */
-    .builder-layout[hidden] { display: none; }
-    .builder-layout {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    /* ── Left panel ── */
-    .left-panel {
-      width: var(--panel-width);
-      flex-shrink: 0;
-      background: var(--bg-surface);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* Panel scrollable area */
-    .panel-scroll {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0 12px 12px;
-    }
-    .panel-scroll::-webkit-scrollbar { width: 4px; }
-    .panel-scroll::-webkit-scrollbar-track { background: transparent; }
-    .panel-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    /* The legacy cards' Images and Design tabs (the sponsor images and the YouTube alerts): today's card editor, moved as it is */
+    #pane-images { max-width: 640px; }
 
     /* Sections */
     .section {
@@ -577,145 +551,9 @@
       font-size: 11px; color: var(--text-muted); font-family: var(--font-display);
     }
 
-    /* Position grid */
-    .position-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-    }
-    .pos-cell {
-      aspect-ratio: 1.5; border-radius: 4px; cursor: pointer;
-      background: var(--bg-elevated); border: 1px solid var(--border);
-      transition: all 0.15s; display: flex; align-items: center; justify-content: center;
-    }
-    .pos-cell:hover { border-color: rgba(145,70,255,0.4); }
-    .pos-cell.active {
-      background: rgba(145,70,255,0.2); border-color: rgba(145,70,255,0.7);
-    }
-    .pos-dot {
-      width: 6px; height: 6px; border-radius: 50%;
-      background: var(--text-muted);
-    }
-    .pos-cell.active .pos-dot { background: var(--accent); }
-
-    /* ── Right preview ── */
-    .right-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--bg-base);
-    }
-
-    /* Toolbar */
-    .preview-toolbar {
-      height: 48px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-surface);
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .toolbar-btn {
-      padding: 6px 14px; font-size: 12px; font-weight: 600;
-      font-family: var(--font-display); border-radius: var(--radius-sm);
-      cursor: pointer; border: 1px solid var(--border);
-      background: var(--bg-elevated); color: var(--text-secondary);
-      transition: all 0.15s; display: flex; align-items: center; gap: 6px;
-    }
-    .toolbar-btn:hover { border-color: rgba(145,70,255,0.4); color: var(--accent); }
-    .toolbar-btn.primary {
-      background: var(--accent); border-color: var(--accent); color: #fff;
-    }
-    .toolbar-btn.primary:hover { background: var(--accent-hover); }
-    .toolbar-spacer { flex: 1; }
-    .toolbar-hint {
-      font-size: 11px; color: var(--text-muted); font-family: var(--font-display);
-    }
-
-    /* Preview canvas */
-    .preview-canvas-wrap {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px;
-      overflow: hidden;
-    }
-    .preview-screen {
-      width: 100%;
-      aspect-ratio: 16/9;
-      background: #080a10;
-      border-radius: 4px;
-      border: 1px solid rgba(255,255,255,0.08);
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* Fake stream elements */
-    .fake-webcam {
-      position: absolute; bottom: 0; left: 0;
-      width: 22%; aspect-ratio: 16/9;
-      background: linear-gradient(135deg, #1a1a2e, #16213e);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 4px 0 0 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 24px; color: rgba(255,255,255,0.15);
-    }
-    .fake-game-bg {
-      position: absolute; inset: 0;
-      background: linear-gradient(160deg, #0a0e1a 0%, #0d1220 50%, #080b15 100%);
-    }
-    .stream-bg {
-      background-size: cover;
-      background-position: center;
-    }
-    .fake-hud-tl {
-      display: none;
-    }
-    .fake-chat {
-      position: absolute; right: 0; bottom: 0;
-      width: 22%; height: 40%; background: rgba(0,0,0,0.45); padding: 8px;
-      display: flex; flex-direction: column; gap: 4px; overflow: hidden;
-      justify-content: flex-end; border-radius: 6px 0 0 0;
-    }
-    .fake-chat-msg {
-      font-size: 8px; color: rgba(255,255,255,0.5);
-      background: rgba(255,255,255,0.04); border-radius: 3px;
-      padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .fake-chat-msg .chat-user { font-weight: 700; }
-    .fake-chat-msg.c1 .chat-user { color: #9146ff; }
-    .fake-chat-msg.c2 .chat-user { color: #00ff88; }
-    .fake-chat-msg.c3 .chat-user { color: #f7c948; }
-    .fake-chat-msg.c4 .chat-user { color: #ff8800; }
-    .fake-chat-msg.c5 .chat-user { color: #4285f4; }
-    .fake-stream-label {
-      position: absolute; bottom: 8px; left: 12px;
-      font-size: 8px; color: rgba(255,255,255,0.2);
-      font-family: var(--font-display);
-    }
-    .fake-live-badge {
-      position: absolute; top: 10px; right: 10px;
-      background: #e00; border-radius: 3px;
-      font-size: 8px; font-weight: 800; color: #fff;
-      padding: 2px 5px; font-family: var(--font-display); letter-spacing: 1px;
-    }
-
-    /* The preview card container — positions it in the screen */
-    .preview-card-container {
-      position: absolute;
-      pointer-events: auto;
-      transition: all 0.3s ease;
-    }
-    #preview-card-container { cursor: grab; }
-    #preview-card-container:active { cursor: grabbing; }
-    #preview-card-container:hover .preview-alert-card,
-    #preview-card-container:hover #preview-card {
-      outline: 2px dashed rgba(145,71,255,0.4);
-      outline-offset: 4px;
-    }
+    /* The legacy card (#preview-card in #preview-card-container): in the stage's slot on Design and Location, which carries
+       its place and width (placement.js); it waits in #legacy-preview otherwise */
+    .preview-card-container { position: relative; }
 
     /* Preview alert card (mirrors overlay.css structure) */
     .preview-alert-card {
@@ -728,12 +566,9 @@
       transform-origin: top center;
       background: linear-gradient(160deg, rgb(9,9,22), #1a1a3e 40%, rgb(9,9,22));
     }
-    /* Object preview host — mirrors .preview-alert-card's own box model (relative,
-       420px) rather than the live overlay's .alert-pos (absolute + translateX(-50%)):
-       #preview-card-container is ALREADY position:absolute and places this host via
-       positionCard(), so .alert-pos here would double up the positioning and break
-       the layout. The .playing class still goes on this host — objects.css's rule
-       is the descendant selector `.playing .obj`, which matches regardless. */
+    /* Object preview host — mirrors .preview-alert-card's own box model (relative, 420px) rather than the live
+       overlay's .alert-pos: the slot around #preview-card-container carries the place. The .playing class still
+       goes on this host — objects.css's rule is the descendant selector `.playing .obj`, which matches regardless. */
     #preview-object-host {
       position: relative;
       width: 420px;
@@ -844,12 +679,6 @@
     }
     .anim-playing { animation-fill-mode: both; animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-    /* ── Save status ── */
-    .save-status {
-      font-size: 12px; color: var(--success); font-family: var(--font-display);
-      font-weight: 600; opacity: 0; transition: opacity 0.3s;
-    }
-    .save-status.visible { opacity: 1; }
     .btn {
       padding: 8px 18px; font-size: 13px; font-weight: 600;
       font-family: var(--font-display); border-radius: var(--radius-sm);
@@ -869,9 +698,7 @@
     }
     .btn-danger:hover { background: rgba(240,68,56,0.2); border-color: var(--danger); }
 
-    /* ── Sponsor section (timed tab) ── */
-    .sponsor-section { display: none; }
-    .sponsor-section.visible { display: block; }
+    /* ── Sponsor controls (the sponsor images' Images tab) ── */
     .sponsor-toggle-row {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 10px;
@@ -974,64 +801,6 @@
     @keyframes sponsorPreviewZoomIn { from { opacity:0; transform:scale(0.3); } to { opacity:1; transform:scale(1); } }
     @keyframes sponsorPreviewOut { from { opacity:1; } to { opacity:0; transform:scale(0.9); } }
 
-    /* ── Overlay border guide ── */
-    .overlay-guide {
-      position: absolute;
-      pointer-events: none;
-      border: 2px dashed rgba(145,70,255,0.4);
-      border-radius: inherit;
-      z-index: 20;
-      transition: opacity 0.2s;
-    }
-    #preview-card-container:hover .overlay-guide,
-    #preview-card-container.resizing .overlay-guide {
-      border-color: rgba(145,70,255,0.7);
-    }
-    #preview-card-container:not(:hover) .overlay-guide {
-      border-color: rgba(145,70,255,0.25);
-    }
-
-    /* Resize handles */
-    .resize-handle {
-      position: absolute;
-      background: var(--accent);
-      border: 2px solid #fff;
-      border-radius: 50%;
-      width: 10px; height: 10px;
-      z-index: 25;
-      cursor: nwse-resize;
-      opacity: 0;
-      transition: opacity 0.15s;
-      pointer-events: auto;
-    }
-    #preview-card-container:hover .resize-handle { opacity: 1; }
-    .resize-handle.corner-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
-    .resize-handle.corner-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
-    .resize-handle.edge-e { top: 50%; right: -5px; transform: translateY(-50%); cursor: ew-resize; }
-    .resize-handle.edge-w { top: 50%; left: -5px; transform: translateY(-50%); cursor: ew-resize; }
-
-    /* Font picker */
-    .font-picker { position: relative; min-width: 150px; width: 100%; }
-    .font-picker-selected {
-      padding: 6px 10px; background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
-      color: #ccc; font-size: 12px; cursor: pointer;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .font-picker-selected:hover { border-color: var(--border-focus); }
-    .font-picker-arrow { font-size: 10px; color: #666; }
-    .font-picker-dropdown {
-      display: none; position: absolute; top: 100%; left: 0; right: 0;
-      background: #1a1a1e; border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px; margin-top: 4px; z-index: 100;
-      max-height: 200px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-    .font-picker-dropdown.open { display: block; }
-    .font-option {
-      padding: 8px 12px; cursor: pointer; font-size: 14px; color: #ccc;
-      transition: background 0.15s;
-    }
-    .font-option:hover { background: rgba(145,71,255,0.1); }
   </style>
 </head>
 <body>
@@ -1177,8 +946,196 @@
       </section>
       <section class="ed-pane" id="pane-sound" role="tabpanel" aria-labelledby="tab-sound" hidden></section>
       <section class="ed-pane" id="pane-location" role="tabpanel" aria-labelledby="tab-location" hidden></section>
-      <section class="ed-pane" id="pane-images" role="tabpanel" aria-labelledby="tab-images" hidden></section>
-      <section class="ed-pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design" hidden></section>
+      <section class="ed-pane" id="pane-images" role="tabpanel" aria-labelledby="tab-images" hidden>
+        <!-- Today's sponsor controls, moved as they are: each one calls its /dashboard/sponsors/* route at once -->
+        <div class="sponsor-toggle-row">
+          <span class="sponsor-toggle-label"><%= t('overlayBuilder.sponsors.enableRotation') %></span>
+          <label class="sp-toggle">
+            <input type="checkbox" id="sp-rotation-toggle" onchange="toggleSponsorRotation(this.checked)">
+            <span class="sp-toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="sp-anim-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;"><%= t('overlayBuilder.sponsors.animation') %></span>
+          <select id="ctrl-sponsor-animation" style="flex:1;padding:4px 8px;font-size:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);" onchange="updatePreview(); replaySponsorAnimation();">
+            <option value="fade"><%= t('overlayBuilder.sponsors.fade') %></option>
+            <option value="slide-left"><%= t('overlayBuilder.anim.slideLeft') %></option>
+            <option value="slide-right"><%= t('overlayBuilder.anim.slideRight') %></option>
+            <option value="slide-up"><%= t('overlayBuilder.anim.slideUp') %></option>
+            <option value="drop-down"><%= t('overlayBuilder.sponsors.dropDown') %></option>
+            <option value="zoom"><%= t('overlayBuilder.anim.zoomIn') %></option>
+            <option value="none"><%= t('overlayBuilder.none') %></option>
+          </select>
+        </div>
+
+        <div class="sponsor-list" id="sponsor-list">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="sp-upload-zone" id="sp-upload-zone">
+          <input type="file" id="sp-file-input" accept="image/png,image/jpeg,image/gif,image/webp">
+          <div class="sp-upload-text"><%= t('overlayBuilder.sponsors.drop') %></div>
+        </div>
+        <div class="sp-upload-row">
+          <input type="text" id="sp-upload-name" class="sp-upload-input" placeholder="<%= t('overlayBuilder.sponsors.namePlaceholder') %>" value="<%= t('overlayBuilder.sponsors.defaultName') %>">
+          <input type="number" id="sp-upload-dur" class="sp-dur" value="30" min="5" max="300" step="5" title="<%= t('overlayBuilder.sponsors.durationTitle') %>">
+          <span class="sp-dur-label">s</span>
+          <button type="button" id="sp-upload-btn" class="sp-upload-btn" disabled onclick="uploadSponsor()"><%= t('overlayBuilder.sponsors.upload') %></button>
+        </div>
+      </section>
+      <section class="ed-pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design" hidden>
+        <!-- Today's card editor, moved as it is: getControlValues() reads it, the pop-ups below edit it, and
+             updatePreview() draws the card (#preview-card) on the stage -->
+        <!-- Theme Section -->
+        <div class="section" id="section-theme">
+          <div class="section-header" onclick="toggleSection('theme')">
+            <span class="section-title">🎨 <%= t('overlayBuilder.theme.sectionTitle') %></span>
+            <span class="section-chevron">▼</span>
+          </div>
+          <div class="section-body">
+            <button type="button" class="popup-trigger-btn" onclick="openThemePopup()">
+              <span class="theme-swatch-preview">
+                <span id="swatch-bg" style="width:16px;height:16px;border-radius:4px;background:#1a1a3e;border:1px solid rgba(255,255,255,0.1);"></span>
+                <span id="swatch-accent" style="width:16px;height:16px;border-radius:4px;background:#8888cc;border:1px solid rgba(255,255,255,0.1);"></span>
+              </span>
+              <%= t('overlayBuilder.theme.change') %>
+            </button>
+            <!-- Hidden color inputs (still used by getControlValues) -->
+            <div style="display:none;">
+              <input type="color" id="ctrl-bg-color" value="#1a1a3e">
+              <input type="color" id="ctrl-accent-color" value="#8888cc">
+              <input type="color" id="ctrl-border-color" value="#8888cc">
+              <input type="color" id="ctrl-text-color" value="#ffffff">
+            </div>
+          </div>
+        </div>
+
+        <!-- Text Section -->
+        <div class="section" id="section-text">
+          <div class="section-header" onclick="toggleSection('text')">
+            <span class="section-title">✏️ <%= t('overlayBuilder.text.sectionTitle') %></span>
+            <span class="section-chevron">▼</span>
+          </div>
+          <div class="section-body">
+            <!-- Inline preview card showing current text styling -->
+            <div id="text-section-preview" style="padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;text-align:center;">
+              <div id="tsp-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:3px;">New Pit Crew Member</div>
+              <div id="tsp-username" style="font-size:24px;font-weight:800;color:#ffffff;">RacerName</div>
+              <div id="tsp-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race 🏁</div>
+            </div>
+            <button type="button" class="popup-trigger-btn" onclick="openTextPopup()">
+              <%= t('overlayBuilder.text.customize') %>
+            </button>
+            <!-- Hidden inputs (still used by getControlValues) -->
+            <div style="display:none;">
+              <input type="text" id="ctrl-event-label" maxlength="100" placeholder="<%= t('overlayBuilder.text.labelPlaceholder', { example: 'New Pit Crew Member' }) %>">
+              <input type="text" id="ctrl-detail-text" maxlength="300" placeholder="just joined the race 🏁">
+              <div class="font-picker" id="font-picker">
+                <div class="font-picker-selected" id="font-picker-selected">
+                  <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif;">System Default</span>
+                  <span class="font-picker-arrow">▾</span>
+                </div>
+              </div>
+              <input type="range" id="ctrl-username-size" min="14" max="42" step="1" value="24">
+              <span id="val-username-size">24px</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Side Icons Section -->
+        <div class="section" id="section-sideicon">
+          <div class="section-header" onclick="toggleSection('sideicon')">
+            <span class="section-title">🏆 <%= t('overlayBuilder.icons.sectionTitle') %></span>
+            <span class="section-chevron">▼</span>
+          </div>
+          <div class="section-body">
+            <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.icons.hint') %></div>
+            <div class="side-icon-grid" id="side-icon-grid">
+              <button type="button" class="side-icon-btn" data-icon="none" onclick="setSideIcon('none')" title="<%= t('overlayBuilder.none') %>">✕</button>
+              <button type="button" class="side-icon-btn" data-icon="🏆" onclick="setSideIcon('🏆')" title="<%= t('overlayBuilder.icons.trophy') %>">🏆</button>
+              <button type="button" class="side-icon-btn" data-icon="⭐" onclick="setSideIcon('⭐')" title="<%= t('overlayBuilder.icons.star') %>">⭐</button>
+              <button type="button" class="side-icon-btn" data-icon="🔥" onclick="setSideIcon('🔥')" title="<%= t('overlayBuilder.icons.fire') %>">🔥</button>
+              <button type="button" class="side-icon-btn" data-icon="💎" onclick="setSideIcon('💎')" title="<%= t('overlayBuilder.icons.diamond') %>">💎</button>
+              <button type="button" class="side-icon-btn" data-icon="🎉" onclick="setSideIcon('🎉')" title="<%= t('overlayBuilder.icons.party') %>">🎉</button>
+              <button type="button" class="side-icon-btn" data-icon="❤️" onclick="setSideIcon('❤️')" title="<%= t('overlayBuilder.icons.heart') %>">❤️</button>
+              <button type="button" class="side-icon-btn" data-icon="🏁" onclick="setSideIcon('🏁')" title="<%= t('overlayBuilder.icons.checkeredFlag') %>">🏁</button>
+              <button type="button" class="side-icon-btn" data-icon="👑" onclick="setSideIcon('👑')" title="<%= t('overlayBuilder.icons.crown') %>">👑</button>
+              <button type="button" class="side-icon-btn" data-icon="🎁" onclick="setSideIcon('🎁')" title="<%= t('overlayBuilder.icons.gift') %>">🎁</button>
+              <button type="button" class="side-icon-btn" data-icon="💰" onclick="setSideIcon('💰')" title="<%= t('overlayBuilder.icons.money') %>">💰</button>
+              <button type="button" class="side-icon-btn" data-icon="🏎️" onclick="setSideIcon('🏎️')" title="<%= t('overlayBuilder.icons.raceCar') %>">🏎️</button>
+            </div>
+            <div class="ctrl-label" style="margin-top:8px;font-size:11px;color:var(--text-muted);" id="side-icon-hint"><%= t('overlayBuilder.icons.defaultHint') %></div>
+          </div>
+        </div>
+
+        <!-- Animation Section -->
+        <div class="section" id="section-animation">
+          <div class="section-header" onclick="toggleSection('animation')">
+            <span class="section-title">⚡ <%= t('overlayBuilder.anim.sectionTitle') %></span>
+            <span class="section-chevron">▼</span>
+          </div>
+          <div class="section-body">
+            <!-- Inline preview -->
+            <div id="anim-section-preview" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;font-size:12px;color:var(--text-secondary);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.entranceLabel') %></span> <span id="asp-entrance"><%= t('overlayBuilder.anim.slideDown') %></span></div>
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.bottomLabel') %></span> <span id="asp-car"><%= t('overlayBuilder.anim.summary.carFallback') %></span></div>
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.effectLabel') %></span> <span id="asp-effect"><%= t('overlayBuilder.anim.summary.effectDefault') %></span></div>
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.speedLabel') %></span> <span id="asp-speed">1.0×</span></div>
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.amountLabel') %></span> <span id="asp-amount">1.0×</span></div>
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.sizeLabel') %></span> <span id="asp-size">1.0×</span></div>
+              <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.directionLabel') %></span> <span id="asp-direction"><%= t('overlayBuilder.anim.summary.down') %></span></div>
+            </div>
+            <button type="button" class="popup-trigger-btn" onclick="openAnimPopup()">
+              <%= t('overlayBuilder.anim.customize') %>
+            </button>
+            <!-- Hidden inputs still used by getControlValues -->
+            <div style="display:none;">
+              <select id="ctrl-entrance-animation"><option value="slideDown"><%= t('overlayBuilder.anim.slideDown') %></option><option value="slideUp"><%= t('overlayBuilder.anim.slideUp') %></option><option value="slideLeft"><%= t('overlayBuilder.anim.slideLeft') %></option><option value="slideRight"><%= t('overlayBuilder.anim.slideRight') %></option><option value="zoomIn"><%= t('overlayBuilder.anim.zoomIn') %></option><option value="fadeIn"><%= t('overlayBuilder.anim.fadeIn') %></option></select>
+              <select id="ctrl-car-animation"><option value="zoomLR"><%= t('overlayBuilder.anim.car.zoomLR') %></option><option value="zoomRL"><%= t('overlayBuilder.anim.car.zoomRL') %></option><option value="checkered"><%= t('overlayBuilder.anim.car.checkered') %></option><option value="flames"><%= t('overlayBuilder.anim.car.flames') %></option><option value="sparkles"><%= t('overlayBuilder.anim.car.sparkles') %></option><option value="lightning"><%= t('overlayBuilder.anim.car.lightning') %></option><option value="neonSweep"><%= t('overlayBuilder.anim.car.neonSweep') %></option><option value="equalizer"><%= t('overlayBuilder.anim.car.equalizer') %></option><option value="pulse"><%= t('overlayBuilder.anim.car.pulse') %></option><option value="none"><%= t('overlayBuilder.none') %></option></select>
+              <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option><option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option><option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option><option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option><option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option><option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option></select>
+              <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
+              <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0">
+              <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0">
+              <select id="ctrl-effect-direction"><option value="down">down</option><option value="up">up</option><option value="left">left</option><option value="right">right</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-body">
+            <div class="range-row" id="row-border-radius" style="margin-bottom:10px;">
+              <div class="range-header">
+                <span class="ctrl-label"><%= t('overlayBuilder.size.borderRadius') %></span>
+                <span class="range-val" id="val-border-radius">16px</span>
+              </div>
+              <input type="range" id="ctrl-border-radius" min="0" max="32" step="2" value="16">
+            </div>
+          </div>
+        </div>
+        <!-- Where the card sits and its width: the Location tab hands them to setCardPlace(); getControlValues() reads them here -->
+        <div hidden>
+          <div class="range-row">
+            <div class="range-header">
+              <span class="ctrl-label"><%= t('overlayBuilder.size.cardWidth') %></span>
+              <span class="range-val" id="val-card-width">420px</span>
+            </div>
+            <input type="range" id="ctrl-card-width" min="200" max="900" step="10" value="420">
+          </div>
+          <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.size.position') %></div>
+          <div class="position-grid" id="position-grid">
+            <div class="pos-cell" data-pos="top-left"><span class="pos-dot"></span></div>
+            <div class="pos-cell active" data-pos="top-center"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="top-right"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="mid-left"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="mid-center"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="mid-right"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="bot-left"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="bot-center"><span class="pos-dot"></span></div>
+            <div class="pos-cell" data-pos="bot-right"><span class="pos-dot"></span></div>
+          </div>
+        </div>
+      </section>
     </div>
     <div class="ed-side" id="editor-side" hidden>
       <div class="stage" id="stage">
@@ -1203,274 +1160,37 @@
   </div>
 </div>
 
-<!-- Today's editor, hidden: its parts move into the edit window (Overlay Builder cards plan, Tasks 4, 5 and 8) -->
-<div class="builder-layout" hidden>
-
-  <!-- LEFT PANEL -->
-  <div class="left-panel">
-    <div class="panel-scroll">
-
-      <!-- Sponsor Section (visible only on Timed tab) -->
-      <div class="sponsor-section" id="sponsor-section">
-        <div class="section" id="section-sponsors">
-          <div class="section-header" onclick="toggleSection('sponsors')">
-            <span class="section-title">🖼️ <%= t('overlayBuilder.sponsors.title') %></span>
-            <span class="section-chevron">▼</span>
+<!-- The legacy card, drawn by updatePreview(): the stage of the Design and Location tabs shows it (public/js/builder-cards.js),
+     and it waits here otherwise -->
+<div id="legacy-preview" hidden>
+  <div class="preview-card-container" id="preview-card-container">
+    <div class="preview-alert-card" id="preview-card">
+      <div class="top-accent" id="preview-top-accent"></div>
+      <div class="card-body">
+        <div class="cup-row" id="preview-cup-row" style="display:none;">
+          <span class="cup" id="preview-icon-left">🏆</span>
+          <div class="card-inner">
+            <div class="event-label" id="preview-event-label">New Pit Crew Member</div>
+            <div class="username" id="preview-username">StreamerFan99</div>
+            <div class="detail" id="preview-detail">just joined the race 🏁</div>
           </div>
-          <div class="section-body">
-            <div class="sponsor-toggle-row">
-              <span class="sponsor-toggle-label"><%= t('overlayBuilder.sponsors.enableRotation') %></span>
-              <label class="sp-toggle">
-                <input type="checkbox" id="sp-rotation-toggle" onchange="toggleSponsorRotation(this.checked)">
-                <span class="sp-toggle-slider"></span>
-              </label>
-            </div>
-
-            <div class="sp-anim-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;"><%= t('overlayBuilder.sponsors.animation') %></span>
-              <select id="ctrl-sponsor-animation" style="flex:1;padding:4px 8px;font-size:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);" onchange="updatePreview(); replaySponsorAnimation();">
-                <option value="fade"><%= t('overlayBuilder.sponsors.fade') %></option>
-                <option value="slide-left"><%= t('overlayBuilder.anim.slideLeft') %></option>
-                <option value="slide-right"><%= t('overlayBuilder.anim.slideRight') %></option>
-                <option value="slide-up"><%= t('overlayBuilder.anim.slideUp') %></option>
-                <option value="drop-down"><%= t('overlayBuilder.sponsors.dropDown') %></option>
-                <option value="zoom"><%= t('overlayBuilder.anim.zoomIn') %></option>
-                <option value="none"><%= t('overlayBuilder.none') %></option>
-              </select>
-            </div>
-
-            <div class="sponsor-list" id="sponsor-list">
-              <!-- Populated by JS -->
-            </div>
-
-            <div class="sp-upload-zone" id="sp-upload-zone">
-              <input type="file" id="sp-file-input" accept="image/png,image/jpeg,image/gif,image/webp">
-              <div class="sp-upload-text"><%= t('overlayBuilder.sponsors.drop') %></div>
-            </div>
-            <div class="sp-upload-row">
-              <input type="text" id="sp-upload-name" class="sp-upload-input" placeholder="<%= t('overlayBuilder.sponsors.namePlaceholder') %>" value="<%= t('overlayBuilder.sponsors.defaultName') %>">
-              <input type="number" id="sp-upload-dur" class="sp-dur" value="30" min="5" max="300" step="5" title="<%= t('overlayBuilder.sponsors.durationTitle') %>">
-              <span class="sp-dur-label">s</span>
-              <button type="button" id="sp-upload-btn" class="sp-upload-btn" disabled onclick="uploadSponsor()"><%= t('overlayBuilder.sponsors.upload') %></button>
-            </div>
-          </div>
+          <span class="cup" id="preview-icon-right">🏆</span>
+        </div>
+        <div id="preview-no-icon-wrap">
+          <div class="event-label" id="preview-event-label-flat">New Pit Crew Member</div>
+          <div class="username" id="preview-username-flat">StreamerFan99</div>
+          <div class="detail" id="preview-detail-flat">just joined the race 🏁</div>
         </div>
       </div>
-
-      <!-- Theme Section -->
-      <div class="section collapsed" id="section-theme">
-        <div class="section-header" onclick="toggleSection('theme')">
-          <span class="section-title">🎨 <%= t('overlayBuilder.theme.sectionTitle') %></span>
-          <span class="section-chevron">▼</span>
-        </div>
-        <div class="section-body">
-          <button type="button" class="popup-trigger-btn" onclick="openThemePopup()">
-            <span class="theme-swatch-preview">
-              <span id="swatch-bg" style="width:16px;height:16px;border-radius:4px;background:#1a1a3e;border:1px solid rgba(255,255,255,0.1);"></span>
-              <span id="swatch-accent" style="width:16px;height:16px;border-radius:4px;background:#8888cc;border:1px solid rgba(255,255,255,0.1);"></span>
-            </span>
-            <%= t('overlayBuilder.theme.change') %>
-          </button>
-          <!-- Hidden color inputs (still used by getControlValues) -->
-          <div style="display:none;">
-            <input type="color" id="ctrl-bg-color" value="#1a1a3e">
-            <input type="color" id="ctrl-accent-color" value="#8888cc">
-            <input type="color" id="ctrl-border-color" value="#8888cc">
-            <input type="color" id="ctrl-text-color" value="#ffffff">
-          </div>
-        </div>
-      </div>
-
-      <!-- Text Section -->
-      <div class="section collapsed" id="section-text">
-        <div class="section-header" onclick="toggleSection('text')">
-          <span class="section-title">✏️ <%= t('overlayBuilder.text.sectionTitle') %></span>
-          <span class="section-chevron">▼</span>
-        </div>
-        <div class="section-body">
-          <!-- Inline preview card showing current text styling -->
-          <div id="text-section-preview" style="padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;text-align:center;">
-            <div id="tsp-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#8888cc;margin-bottom:3px;">New Pit Crew Member</div>
-            <div id="tsp-username" style="font-size:24px;font-weight:800;color:#ffffff;">RacerName</div>
-            <div id="tsp-detail" style="font-size:13px;color:#ffffff;opacity:0.7;margin-top:2px;">just joined the race 🏁</div>
-          </div>
-          <button type="button" class="popup-trigger-btn" onclick="openTextPopup()">
-            <%= t('overlayBuilder.text.customize') %>
-          </button>
-          <!-- Hidden inputs (still used by getControlValues) -->
-          <div style="display:none;">
-            <input type="text" id="ctrl-event-label" maxlength="100" placeholder="<%= t('overlayBuilder.text.labelPlaceholder', { example: 'New Pit Crew Member' }) %>">
-            <input type="text" id="ctrl-detail-text" maxlength="300" placeholder="just joined the race 🏁">
-            <div class="font-picker" id="font-picker">
-              <div class="font-picker-selected" id="font-picker-selected">
-                <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif;">System Default</span>
-                <span class="font-picker-arrow">▾</span>
-              </div>
-            </div>
-            <input type="range" id="ctrl-username-size" min="14" max="42" step="1" value="24">
-            <span id="val-username-size">24px</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Side Icons Section -->
-      <div class="section collapsed" id="section-sideicon">
-        <div class="section-header" onclick="toggleSection('sideicon')">
-          <span class="section-title">🏆 <%= t('overlayBuilder.icons.sectionTitle') %></span>
-          <span class="section-chevron">▼</span>
-        </div>
-        <div class="section-body">
-          <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.icons.hint') %></div>
-          <div class="side-icon-grid" id="side-icon-grid">
-            <button type="button" class="side-icon-btn" data-icon="none" onclick="setSideIcon('none')" title="<%= t('overlayBuilder.none') %>">✕</button>
-            <button type="button" class="side-icon-btn" data-icon="🏆" onclick="setSideIcon('🏆')" title="<%= t('overlayBuilder.icons.trophy') %>">🏆</button>
-            <button type="button" class="side-icon-btn" data-icon="⭐" onclick="setSideIcon('⭐')" title="<%= t('overlayBuilder.icons.star') %>">⭐</button>
-            <button type="button" class="side-icon-btn" data-icon="🔥" onclick="setSideIcon('🔥')" title="<%= t('overlayBuilder.icons.fire') %>">🔥</button>
-            <button type="button" class="side-icon-btn" data-icon="💎" onclick="setSideIcon('💎')" title="<%= t('overlayBuilder.icons.diamond') %>">💎</button>
-            <button type="button" class="side-icon-btn" data-icon="🎉" onclick="setSideIcon('🎉')" title="<%= t('overlayBuilder.icons.party') %>">🎉</button>
-            <button type="button" class="side-icon-btn" data-icon="❤️" onclick="setSideIcon('❤️')" title="<%= t('overlayBuilder.icons.heart') %>">❤️</button>
-            <button type="button" class="side-icon-btn" data-icon="🏁" onclick="setSideIcon('🏁')" title="<%= t('overlayBuilder.icons.checkeredFlag') %>">🏁</button>
-            <button type="button" class="side-icon-btn" data-icon="👑" onclick="setSideIcon('👑')" title="<%= t('overlayBuilder.icons.crown') %>">👑</button>
-            <button type="button" class="side-icon-btn" data-icon="🎁" onclick="setSideIcon('🎁')" title="<%= t('overlayBuilder.icons.gift') %>">🎁</button>
-            <button type="button" class="side-icon-btn" data-icon="💰" onclick="setSideIcon('💰')" title="<%= t('overlayBuilder.icons.money') %>">💰</button>
-            <button type="button" class="side-icon-btn" data-icon="🏎️" onclick="setSideIcon('🏎️')" title="<%= t('overlayBuilder.icons.raceCar') %>">🏎️</button>
-          </div>
-          <div class="ctrl-label" style="margin-top:8px;font-size:11px;color:var(--text-muted);" id="side-icon-hint"><%= t('overlayBuilder.icons.defaultHint') %></div>
-        </div>
-      </div>
-
-      <!-- Animation Section -->
-      <div class="section collapsed" id="section-animation">
-        <div class="section-header" onclick="toggleSection('animation')">
-          <span class="section-title">⚡ <%= t('overlayBuilder.anim.sectionTitle') %></span>
-          <span class="section-chevron">▼</span>
-        </div>
-        <div class="section-body">
-          <!-- Inline preview -->
-          <div id="anim-section-preview" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:var(--bg-elevated);margin-bottom:10px;font-size:12px;color:var(--text-secondary);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.entranceLabel') %></span> <span id="asp-entrance"><%= t('overlayBuilder.anim.slideDown') %></span></div>
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.bottomLabel') %></span> <span id="asp-car"><%= t('overlayBuilder.anim.summary.carFallback') %></span></div>
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.effectLabel') %></span> <span id="asp-effect"><%= t('overlayBuilder.anim.summary.effectDefault') %></span></div>
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.speedLabel') %></span> <span id="asp-speed">1.0×</span></div>
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.amountLabel') %></span> <span id="asp-amount">1.0×</span></div>
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.sizeLabel') %></span> <span id="asp-size">1.0×</span></div>
-            <div><span style="color:var(--text-muted);"><%= t('overlayBuilder.anim.directionLabel') %></span> <span id="asp-direction"><%= t('overlayBuilder.anim.summary.down') %></span></div>
-          </div>
-          <button type="button" class="popup-trigger-btn" onclick="openAnimPopup()">
-            <%= t('overlayBuilder.anim.customize') %>
-          </button>
-          <!-- Hidden inputs still used by getControlValues -->
-          <div style="display:none;">
-            <select id="ctrl-entrance-animation"><option value="slideDown"><%= t('overlayBuilder.anim.slideDown') %></option><option value="slideUp"><%= t('overlayBuilder.anim.slideUp') %></option><option value="slideLeft"><%= t('overlayBuilder.anim.slideLeft') %></option><option value="slideRight"><%= t('overlayBuilder.anim.slideRight') %></option><option value="zoomIn"><%= t('overlayBuilder.anim.zoomIn') %></option><option value="fadeIn"><%= t('overlayBuilder.anim.fadeIn') %></option></select>
-            <select id="ctrl-car-animation"><option value="zoomLR"><%= t('overlayBuilder.anim.car.zoomLR') %></option><option value="zoomRL"><%= t('overlayBuilder.anim.car.zoomRL') %></option><option value="checkered"><%= t('overlayBuilder.anim.car.checkered') %></option><option value="flames"><%= t('overlayBuilder.anim.car.flames') %></option><option value="sparkles"><%= t('overlayBuilder.anim.car.sparkles') %></option><option value="lightning"><%= t('overlayBuilder.anim.car.lightning') %></option><option value="neonSweep"><%= t('overlayBuilder.anim.car.neonSweep') %></option><option value="equalizer"><%= t('overlayBuilder.anim.car.equalizer') %></option><option value="pulse"><%= t('overlayBuilder.anim.car.pulse') %></option><option value="none"><%= t('overlayBuilder.none') %></option></select>
-            <select id="ctrl-screen-effect"><option value="default"><%= t('overlayBuilder.anim.effect.default') %></option><option value="none"><%= t('overlayBuilder.none') %></option><option value="confetti"><%= t('overlayBuilder.anim.effect.confetti') %></option><option value="gold"><%= t('overlayBuilder.anim.effect.gold') %></option><option value="money"><%= t('overlayBuilder.anim.effect.money') %></option><option value="robots"><%= t('overlayBuilder.anim.effect.robots') %></option><option value="tiremarks"><%= t('overlayBuilder.anim.effect.tiremarks') %></option><option value="smoke"><%= t('overlayBuilder.anim.effect.smoke') %></option><option value="checker"><%= t('overlayBuilder.anim.effect.checker') %></option><option value="speed"><%= t('overlayBuilder.anim.effect.speed') %></option><option value="sparks"><%= t('overlayBuilder.anim.effect.sparks') %></option><option value="champagne"><%= t('overlayBuilder.anim.effect.champagne') %></option></select>
-            <input type="range" id="ctrl-animation-speed" min="0.5" max="2.0" step="0.1" value="1.0">
-            <input type="range" id="ctrl-effect-amount" min="0.2" max="3.0" step="0.1" value="1.0">
-            <input type="range" id="ctrl-effect-size" min="0.5" max="3.0" step="0.1" value="1.0">
-            <select id="ctrl-effect-direction"><option value="down">down</option><option value="up">up</option><option value="left">left</option><option value="right">right</option></select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Size &amp; Position Section -->
-      <div class="section collapsed" id="section-size">
-        <div class="section-header" onclick="toggleSection('size')">
-          <span class="section-title">📐 <%= t('overlayBuilder.size.sectionTitle') %></span>
-          <span class="section-chevron">▼</span>
-        </div>
-        <div class="section-body">
-          <div class="range-row">
-            <div class="range-header">
-              <span class="ctrl-label"><%= t('overlayBuilder.size.cardWidth') %></span>
-              <span class="range-val" id="val-card-width">420px</span>
-            </div>
-            <input type="range" id="ctrl-card-width" min="200" max="900" step="10" value="420">
-          </div>
-          <div class="range-row" id="row-border-radius" style="margin-bottom:10px;">
-            <div class="range-header">
-              <span class="ctrl-label"><%= t('overlayBuilder.size.borderRadius') %></span>
-              <span class="range-val" id="val-border-radius">16px</span>
-            </div>
-            <input type="range" id="ctrl-border-radius" min="0" max="32" step="2" value="16">
-          </div>
-          <div class="ctrl-label" style="margin-bottom:6px;"><%= t('overlayBuilder.size.position') %></div>
-          <div class="position-grid" id="position-grid">
-            <div class="pos-cell" data-pos="top-left"><span class="pos-dot"></span></div>
-            <div class="pos-cell active" data-pos="top-center"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="top-right"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="mid-left"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="mid-center"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="mid-right"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="bot-left"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="bot-center"><span class="pos-dot"></span></div>
-            <div class="pos-cell" data-pos="bot-right"><span class="pos-dot"></span></div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- end panel-scroll -->
-  </div><!-- end left-panel -->
-
-  <!-- RIGHT PANEL -->
-  <div class="right-panel">
-
-    <!-- Preview canvas -->
-    <div class="preview-canvas-wrap">
-      <div class="preview-screen" id="preview-screen">
-        <!-- Fake game background -->
-        <div class="fake-game-bg stream-bg" <% if (streamThumbnail) { %>style="background-image: url('<%= streamThumbnail %>'); background-size: cover; background-position: center;"<% } %>></div>
-
-        <!-- Live badge -->
-        <div class="fake-live-badge"><%= t('overlayBuilder.preview.live') %></div>
-
-        <!-- Stream label -->
-        <div class="fake-stream-label"><%= t('overlayBuilder.preview.label') %></div>
-
-        <% if (streamThumbnail) { %>
-          <div style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 9px; color: rgba(255,255,255,0.3); z-index: 1; pointer-events: none;">
-            <%= t('overlayBuilder.preview.thumbnailNote') %>
-          </div>
-        <% } %>
-
-        <!-- ALERT CARD PREVIEW (positioned dynamically) -->
-        <div class="preview-card-container" id="preview-card-container">
-          <div class="overlay-guide" id="overlay-guide"></div>
-          <div class="resize-handle corner-se" id="resize-se"></div>
-          <div class="resize-handle edge-e" id="resize-e"></div>
-          <div class="preview-alert-card" id="preview-card">
-            <div class="top-accent" id="preview-top-accent"></div>
-            <div class="card-body">
-              <div class="cup-row" id="preview-cup-row" style="display:none;">
-                <span class="cup" id="preview-icon-left">🏆</span>
-                <div class="card-inner">
-                  <div class="event-label" id="preview-event-label">New Pit Crew Member</div>
-                  <div class="username" id="preview-username">StreamerFan99</div>
-                  <div class="detail" id="preview-detail">just joined the race 🏁</div>
-                </div>
-                <span class="cup" id="preview-icon-right">🏆</span>
-              </div>
-              <div id="preview-no-icon-wrap">
-                <div class="event-label" id="preview-event-label-flat">New Pit Crew Member</div>
-                <div class="username" id="preview-username-flat">StreamerFan99</div>
-                <div class="detail" id="preview-detail-flat">just joined the race 🏁</div>
-              </div>
-            </div>
-            <div class="car-track" id="preview-car-track">
-              <div class="race-line"></div>
-              <div class="track-car" id="preview-car">🏎️</div>
-            </div>
-          </div>
-          <!-- Object registry preview host (follow/subscription/bits/donation/raid) —
-               sibling of #preview-card, NOT given .alert-pos (see CSS comment above). -->
-          <div id="preview-object-host" style="display:none;"></div>
-        </div>
+      <div class="car-track" id="preview-car-track">
+        <div class="race-line"></div>
+        <div class="track-car" id="preview-car">🏎️</div>
       </div>
     </div>
-
-    <!-- Save bar moved to above canvas -->
-
-  </div><!-- end right-panel -->
-</div><!-- end builder-layout -->
+    <!-- Object registry preview host (follow/subscription/bits/donation/raid): sibling of #preview-card (see the CSS comment above) -->
+    <div id="preview-object-host" style="display:none;"></div>
+  </div>
+</div>
 
 <script>
 // ─── Texts (rendered by the server; a {{field}} is filled in by fill()) ──────────────
@@ -1695,6 +1415,23 @@ function setControlValues(d) {
   if (cell) cell.classList.add('active');
 }
 
+// Where the card sits and its width: the edit window's Location tab (public/js/builder-cards.js) hands them here,
+// so getControlValues() reads them with the rest of the card. A new width draws the card again.
+function setCardPlace(place) {
+  const wd = workingDesigns[currentType] || (workingDesigns[currentType] = {});
+  const widthControl = document.getElementById('ctrl-card-width');
+  const widthChanged = Number(widthControl.value) !== place.card_width;
+  widthControl.value = place.card_width;
+  document.getElementById('val-card-width').textContent = place.card_width + 'px';
+  document.querySelectorAll('.pos-cell').forEach(c => c.classList.toggle('active', c.dataset.pos === place.card_position));
+  wd.card_custom_x = place.card_custom_x != null ? place.card_custom_x : null;
+  wd.card_custom_y = place.card_custom_y != null ? place.card_custom_y : null;
+  if (widthChanged) {
+    updatePreview();
+    if (currentType === 'timed') replaySponsorAnimation();   // the sponsor image's banner takes the width too
+  }
+}
+
 // ─── Font resolver ────────────────────────────────────────────────────────────
 function resolveFont(name) {
   if (!name || name === 'System Default') return '-apple-system, BlinkMacSystemFont, sans-serif';
@@ -1811,12 +1548,8 @@ function updatePreview() {
     } else if (html !== previewHtml) {
       previewRedraw = setTimeout(() => playLookIn(objHost, objDef, html), 350);
     }
-    // The effect the OBS overlay plays with this look (kit.js effectFor): none for today's
-    // objects with no look picked and for the C1, else the one the design names or the look's own.
-    // No loadGoogleFont() call: objects use their own fonts, not the per-design font path.
-    positionCard(d.card_position, d.card_width);
-    updateOverlayGuide();
-    renderScreenEffect(window.ATLETA_KIT ? window.ATLETA_KIT.effectFor(objDef, d) : 'none');
+    // No loadGoogleFont() call: objects use their own fonts, not the per-design font path. Where it sits and
+    // its effect are the edit window's stage (public/js/builder-cards.js).
     return;
   }
   renderedObjectType = null;
@@ -1951,41 +1684,15 @@ function updatePreview() {
     buildPreviewBottomAnimation(track, bottomAnim, animSpeed, d.accent_color || '#8888cc', card);
   }
 
-  // Position card in the preview screen
-  positionCard(d.card_position, d.card_width);
-
-  // Update overlay guide border
-  updateOverlayGuide();
+  // Where it sits is the edit window's stage (public/js/builder-cards.js), which holds the card in its slot
 
   // Load fonts if needed
   [d.font_family, d.label_font_family, d.username_font_family, d.detail_font_family].forEach(f => {
     if (f && f !== 'System Default') loadGoogleFont(f);
   });
 
-  // Show screen effect preview
+  // Show screen effect preview (on the edit window's stage)
   renderScreenEffect(d.screen_effect);
-}
-
-function updateOverlayGuide() {
-  const container = document.getElementById('preview-card-container');
-  const guide = document.getElementById('overlay-guide');
-  const card = document.getElementById('preview-card');
-  const sponsorWrap = container.querySelector('.preview-sponsor-wrap');
-  const objHost = document.getElementById('preview-object-host');
-  const objectShowing = objHost.style.display !== 'none';
-  const target = (sponsorWrap && sponsorWrap.style.display !== 'none') ? sponsorWrap : (objectShowing ? objHost : card);
-
-  // Wait a frame so layout is computed
-  requestAnimationFrame(() => {
-    const w = target.offsetWidth || parseInt(target.style.width) || 420;
-    const h = target.offsetHeight || 140;
-    guide.style.width = w + 'px';
-    guide.style.height = h + 'px';
-    guide.style.top = '0';
-    guide.style.left = '0';
-    const radius = workingDesigns[currentType]?.border_radius;
-    guide.style.borderRadius = objectShowing ? '4px' : (Number.isFinite(radius) ? radius : 16) + 'px';
-  });
 }
 
 function ensureFxKeyframes() {
@@ -2124,10 +1831,11 @@ function buildPreviewBottomAnimation(track, type, speed, accent, card) {
   }
 }
 
-// `target` ({ screen, design, type }) draws the effect on another screen than the old preview's: the edit
-// window's stage (public/js/builder-cards.js) passes its own, with the draft it is playing.
+// The effect is drawn on the edit window's stage (#stage, public/js/builder-cards.js) with this page's working design;
+// `target` ({ screen, design, type }) names another screen, design or alert: the stage passes the draft it plays.
 function renderScreenEffect(effect, target) {
-  const screen = (target && target.screen) || document.getElementById('preview-screen');
+  const screen = (target && target.screen) || document.getElementById('stage');
+  if (!screen) return;
   const effectType = (target && target.type) || currentType;
   screen.querySelectorAll('.preview-fx').forEach(e => e.remove());
 
@@ -2252,50 +1960,6 @@ function getDetailPreviewText(type) {
   return map[type] || '';
 }
 
-// Position the preview in the screen exactly where the live overlay puts the alert.
-// The preview screen is the 1920x1080 canvas scaled down, so the card keeps its real
-// size (scaled by `scale`), sits 16 canvas pixels from an edge for the grid cells, and
-// a dragged position is the card's top-left corner as a fraction of the screen. The
-// placement is read by the same module the overlay uses (placement.js), and the
-// card's real size is measured, so bottom and middle placements need no estimate.
-function positionCard(pos, cardWidth) {
-  const container = document.getElementById('preview-card-container');
-  const screen = document.getElementById('preview-screen');
-  const screenW = screen.offsetWidth;
-  const screenH = screen.offsetHeight;
-  const scale = screenW / 1920;
-
-  const d = workingDesigns[currentType] || {};
-  const placement = ATLETA_PLACEMENT.placementOf({
-    card_position: pos, card_width: cardWidth, card_custom_x: d.card_custom_x, card_custom_y: d.card_custom_y,
-  });
-
-  container.style.transform = `scale(${scale})`;
-  container.style.transformOrigin = 'top left';
-  container.style.right = '';
-  container.style.bottom = '';
-
-  // If custom x/y from drag, use those
-  if (placement.custom) {
-    container.style.left = (placement.custom.x * screenW) + 'px';
-    container.style.top = (placement.custom.y * screenH) + 'px';
-    return;
-  }
-
-  // What is shown (an object, the card or the sponsor image) is the container's size, unscaled.
-  const boxW = (container.offsetWidth || placement.width) * scale;
-  const boxH = (container.offsetHeight || 140) * scale;
-  const margin = ATLETA_PLACEMENT.MARGIN * scale;
-
-  if (placement.horizontal === 'left') container.style.left = margin + 'px';
-  else if (placement.horizontal === 'right') container.style.left = (screenW - boxW - margin) + 'px';
-  else container.style.left = ((screenW - boxW) / 2) + 'px';
-
-  if (placement.vertical === 'top') container.style.top = margin + 'px';
-  else if (placement.vertical === 'bot') container.style.top = (screenH - boxH - margin) + 'px';
-  else container.style.top = ((screenH - boxH) / 2) + 'px';
-}
-
 // ─── Play animation ───────────────────────────────────────────────────────────
 function playPreviewAnimation() {
   const d = workingDesigns[currentType];
@@ -2314,30 +1978,12 @@ function playPreviewAnimation() {
   }, 50);
 }
 
-// ─── Position grid ────────────────────────────────────────────────────────────
-document.getElementById('position-grid').addEventListener('click', e => {
-  const cell = e.target.closest('.pos-cell');
-  if (!cell) return;
-  document.querySelectorAll('.pos-cell').forEach(c => c.classList.remove('active'));
-  cell.classList.add('active');
-  // Clear custom drag position when grid is clicked
-  if (workingDesigns[currentType]) {
-    workingDesigns[currentType].card_custom_x = null;
-    workingDesigns[currentType].card_custom_y = null;
-  }
-  updatePreview();
-});
-
 // ─── Range display updates ────────────────────────────────────────────────────
 document.getElementById('ctrl-username-size').addEventListener('input', function() {
   document.getElementById('val-username-size').textContent = this.value + 'px';
   updatePreview();
 });
 document.getElementById('ctrl-animation-speed').addEventListener('input', function() {
-  updatePreview();
-});
-document.getElementById('ctrl-card-width').addEventListener('input', function() {
-  document.getElementById('val-card-width').textContent = this.value + 'px';
   updatePreview();
 });
 document.getElementById('ctrl-border-radius').addEventListener('input', function() {
@@ -2421,6 +2067,8 @@ document.querySelectorAll('.theme-preset').forEach(btn => {
 
 function renderSponsorList() {
   const list = document.getElementById('sponsor-list');
+  // The edit window's Images tab says how many images there are (public/js/builder-cards.js)
+  if (window.ATLETA_BUILDER_CARDS) window.ATLETA_BUILDER_CARDS.renderTabValues();
   if (sponsorImages.length === 0) {
     list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px;">' + I18N.noSponsors.replace(/</g, '&lt;') + '</div>';
     return;
@@ -2691,7 +2339,6 @@ function showSponsorInPreview(sponsor) {
 
   wrap.appendChild(img);
   container.appendChild(wrap);
-  setTimeout(() => updateOverlayGuide(), 100);
 }
 
 function replaySponsorAnimation() {
@@ -2716,128 +2363,6 @@ updateSideIconGrid(workingDesigns['follow']);
 updatePreview();
 renderSponsorList();
 document.getElementById('sp-rotation-toggle').checked = sponsorRotationEnabled;
-
-// Re-position card on window resize
-window.addEventListener('resize', () => {
-  const d = workingDesigns[currentType];
-  positionCard(d.card_position, d.card_width);
-});
-
-// ─── Drag overlay card ──────────────────────────────────────────
-let isDragging = false;
-let isResizing = false;
-let dragOffsetX = 0;
-let dragOffsetY = 0;
-let resizeStartX = 0;
-let resizeStartWidth = 0;
-
-const dragTarget = document.getElementById('preview-card-container');
-const dragScreen = document.getElementById('preview-screen');
-
-dragTarget.style.cursor = 'grab';
-
-// Resize handles
-document.querySelectorAll('.resize-handle').forEach(handle => {
-  handle.addEventListener('mousedown', e => {
-    e.stopPropagation();
-    e.preventDefault();
-    isResizing = true;
-    dragTarget.classList.add('resizing');
-    resizeStartX = e.clientX;
-    const scale = dragScreen.offsetWidth / 1920;
-    resizeStartWidth = workingDesigns[currentType]?.card_width || 420;
-  });
-});
-
-dragTarget.addEventListener('mousedown', e => {
-  if (isResizing) return;
-  if (e.target.closest('.resize-handle')) return;
-  isDragging = true;
-  dragTarget.style.cursor = 'grabbing';
-  const rect = dragTarget.getBoundingClientRect();
-  dragOffsetX = e.clientX - rect.left;
-  dragOffsetY = e.clientY - rect.top;
-  e.preventDefault();
-});
-
-document.addEventListener('mousemove', e => {
-  if (isResizing) {
-    const scale = dragScreen.offsetWidth / 1920;
-    const deltaX = (e.clientX - resizeStartX) / scale;
-    let newWidth = Math.round(resizeStartWidth + deltaX);
-    newWidth = Math.max(200, Math.min(900, newWidth));
-
-    // Update the width control and preview
-    document.getElementById('ctrl-card-width').value = newWidth;
-    document.getElementById('val-card-width').textContent = newWidth + 'px';
-    workingDesigns[currentType].card_width = newWidth;
-
-    // Update visible element width: the card, the object, or the sponsor image
-    const card = document.getElementById('preview-card');
-    const objHost = document.getElementById('preview-object-host');
-    const sponsorWrap = dragTarget.querySelector('.preview-sponsor-wrap');
-    card.style.width = newWidth + 'px';
-    objHost.style.width = newWidth + 'px';
-    sizeLookHost(objHost, previewObjectFor(currentType), newWidth);
-    if (sponsorWrap) sponsorWrap.style.width = newWidth + 'px';
-
-    // A card anchored to the right, bottom or centre grows from there, as it does live
-    positionCard(workingDesigns[currentType].card_position, newWidth);
-    updateOverlayGuide();
-    return;
-  }
-
-  if (!isDragging) return;
-  const screenRect = dragScreen.getBoundingClientRect();
-  let x = e.clientX - screenRect.left - dragOffsetX;
-  let y = e.clientY - screenRect.top - dragOffsetY;
-
-  // Clamp within screen bounds
-  x = Math.max(0, Math.min(x, screenRect.width - 50));
-  y = Math.max(0, Math.min(y, screenRect.height - 30));
-
-  dragTarget.style.left = x + 'px';
-  dragTarget.style.top = y + 'px';
-  dragTarget.style.transform = `scale(${dragScreen.offsetWidth / 1920})`;
-  dragTarget.style.transformOrigin = 'top left';
-
-  // Deselect position grid since user is custom-positioning
-  document.querySelectorAll('.pos-cell, .pos-dot').forEach(c => c.classList.remove('active'));
-});
-
-document.addEventListener('mouseup', e => {
-  if (isResizing) {
-    isResizing = false;
-    dragTarget.classList.remove('resizing');
-    return;
-  }
-
-  if (!isDragging) return;
-  isDragging = false;
-  dragTarget.style.cursor = 'grab';
-
-  // Calculate which grid position is closest and update
-  const screenRect = dragScreen.getBoundingClientRect();
-  const x = parseInt(dragTarget.style.left) || 0;
-  const y = parseInt(dragTarget.style.top) || 0;
-  const xRatio = x / screenRect.width;
-  const yRatio = y / screenRect.height;
-
-  // Map to 3x3 grid
-  let hPos = xRatio < 0.33 ? 'left' : xRatio > 0.66 ? 'right' : 'center';
-  let vPos = yRatio < 0.33 ? 'top' : yRatio > 0.66 ? 'bot' : 'mid';
-  const newPos = `${vPos}-${hPos}`;
-
-  // Update position grid UI
-  document.querySelectorAll('.pos-cell, .pos-dot').forEach(c => c.classList.remove('active'));
-  const matchCell = document.querySelector(`.pos-cell[data-pos="${newPos}"], .pos-dot[data-pos="${newPos}"]`);
-  if (matchCell) matchCell.classList.add('active');
-
-  // Update working design with grid position AND exact x/y percentages
-  workingDesigns[currentType].card_position = newPos;
-  workingDesigns[currentType].card_custom_x = x / screenRect.width;
-  workingDesigns[currentType].card_custom_y = y / screenRect.height;
-});
 </script>
 
 <!-- Theme Popup Modal -->
