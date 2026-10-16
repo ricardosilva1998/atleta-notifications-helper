@@ -256,7 +256,7 @@ describe('the looks (alert styles)', () => {
   });
 
   test('the page loads the core and every family\'s fonts in one stylesheet', () => {
-    assert.match(builder, /<script src="\/js\/builder-styles-core\.js"><\/script>/);
+    assert.match(builder, /<script src="\/js\/builder-styles-core\.js\?v=<%= coreVersion %>"><\/script>/);
     assert.match(builder, /<link rel="stylesheet" href="<%= styleFontsHref %>">/);
   });
 
