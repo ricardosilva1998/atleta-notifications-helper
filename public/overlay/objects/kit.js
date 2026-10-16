@@ -11,7 +11,8 @@
  *     overlay and the builder preview alike (one function, so the two draw the same thing)
  *   - accentVars(): the colour variables a slot carries when the streamer picked a colour
  *   - sizeOf(): the number a picture grows with ("grows with the amount" off: a middle value)
- *   - the looks' synthesized sounds, played through the overlay's AudioContext and volume
+ *   - the looks' sounds, played through the overlay's AudioContext and volume: recordings (two
+ *     versions each, sounds/manifest.js), with the synthesized ones as their fallback
  * Dual-exported: a browser global for <script src>, CommonJS for node:test. No build step.
  */
 (function (root) {
@@ -260,6 +261,78 @@
     if (!fn || !audio.ctx) return false;
     try { fn(); return true; } catch (e) { return false; }
   }
+
+  // ── Recorded sounds ───────────────────────────────────────────────────
+  // Every look sound is a recording (public/overlay/objects/sounds/, listed by sounds/manifest.js,
+  // which scripts/look-sounds.js writes): its default recording, and a second version under
+  // '<key>.2' that a streamer may pick instead. A recording plays through the AudioContext and volume
+  // setAudio() was given. A sound whose recording cannot load plays its synthesized version (the
+  // function its family registered), so an alert is never silent; one that loads too late for its
+  // alert (LATE_MS) is skipped.
+  var SECOND = '.2';
+  var LATE_MS = 1500;
+  var FILES = {};
+  var recordings = {};
+  var soundBase = '/overlay/objects/sounds/';
+  function setSoundBase(url) { soundBase = String(url); }
+  // { key: [default file, second version's file] }, paths under soundBase. A key whose family did not
+  // register is passed over.
+  function registerSoundFiles(table) {
+    Object.keys(table || {}).forEach(function (key) {
+      var files = table[key], synth = SOUNDS[key], family = SOUND_FAMILIES[key];
+      if (typeof synth !== 'function' || !family || !files || typeof files[0] !== 'string') return;
+      FILES[key] = files[0];
+      SOUNDS[key] = recorded(key, synth);
+      if (typeof files[1] === 'string') {
+        FILES[key + SECOND] = files[1];
+        SOUNDS[key + SECOND] = recorded(key + SECOND, synth);
+        SOUND_FAMILIES[key + SECOND] = family;
+      }
+    });
+  }
+  function isSecondVersion(key) {
+    return typeof key === 'string' && key.slice(-SECOND.length) === SECOND && Object.prototype.hasOwnProperty.call(FILES, key);
+  }
+  function secondVersionOf(key) { return Object.prototype.hasOwnProperty.call(FILES, key + SECOND) ? key + SECOND : null; }
+  // The decoded recording, fetched once (null when it cannot load; the next ask tries again).
+  function loadRecording(key) {
+    var c = audio.ctx;
+    if (!c || !Object.prototype.hasOwnProperty.call(FILES, key) || typeof fetch !== 'function') return null;
+    if (!recordings[key]) {
+      recordings[key] = fetch(soundBase + FILES[key]).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.arrayBuffer();
+      }).then(function (bytes) {
+        return new Promise(function (resolve, reject) {
+          var decoding = c.decodeAudioData(bytes, resolve, reject);
+          if (decoding && typeof decoding.then === 'function') decoding.then(resolve, reject);
+        });
+      }).catch(function () {
+        delete recordings[key];
+        return null;
+      });
+    }
+    return recordings[key];
+  }
+  // Starts loading the recordings of these sounds ('today', 'none' and unknown keys are passed over),
+  // so the first alert's sound is ready when it comes.
+  function preloadSounds(keys) { (keys || []).forEach(function (key) { loadRecording(key); }); }
+  function recorded(key, synth) {
+    return function () {
+      var c = audio.ctx, asked = Date.now(), pending = loadRecording(key);
+      if (!pending) { synth(); return; }
+      pending.then(function (buffer) {
+        if (Date.now() - asked > LATE_MS) return;
+        if (!buffer) { try { synth(); } catch (e) { /* nothing to play */ } return; }
+        var src = c.createBufferSource(), g = c.createGain();
+        src.buffer = buffer;
+        g.gain.value = audio.volume();
+        src.connect(g);
+        g.connect(c.destination);
+        src.start();
+      });
+    };
+  }
   function level(v) { return Math.max(0.0001, (v || 0.1) * audio.volume()); }
   function envelope(g, t0, v, a, d) { g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(level(v), t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d); }
   function tone(o) {
@@ -304,6 +377,8 @@
     sizeOf: sizeOf, lookData: lookData, slotVars: slotVars, DEFAULT_LOOKS: DEFAULT_LOOKS, effectFor: effectFor, soundFor: soundFor,
     registerFamily: registerFamily, fontNames: fontNames, register: register, looksOf: looksOf,
     setAudio: setAudio, registerSound: registerSound, playSound: playSound, tone: tone, noise: noise, engine: engine,
+    soundFiles: FILES, registerSoundFiles: registerSoundFiles, preloadSounds: preloadSounds, setSoundBase: setSoundBase,
+    isSecondVersion: isSecondVersion, secondVersionOf: secondVersionOf,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = KIT;
   if (root) root.ATLETA_KIT = KIT;

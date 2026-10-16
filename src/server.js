@@ -112,10 +112,13 @@ app.use(cookieParser());
 // Bodies up to 100 kb; the routes allowed more are listed in bodyParsers.js.
 mountBodyParsers(app);
 
-// Static files — no-cache for overlay assets so OBS gets fresh JS/CSS after deploy
+// Static files — no-cache for overlay assets so OBS gets fresh JS/CSS after deploy. The looks'
+// recordings carry their content hash in their name (scripts/look-sounds.js), so they keep for a year.
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   setHeaders: (res, filePath) => {
-    if (filePath.includes('/overlay/')) {
+    if (filePath.includes('/overlay/objects/sounds/') && filePath.endsWith('.mp3')) {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (filePath.includes('/overlay/')) {
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
   }

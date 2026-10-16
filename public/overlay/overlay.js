@@ -127,6 +127,14 @@ function alertTimer(fn, ms) {
   return id;
 }
 
+// The recordings the six alerts' looks will play (kit.js): loading starts when the designs arrive, so
+// the first alert's sound is ready when it comes. Today's sound and silence have none.
+function loadDesignSounds() {
+  const kit = window.ATLETA_KIT;
+  if (!kit || typeof kit.preloadSounds !== 'function') return;
+  kit.preloadSounds(kit.ALERTS.map((type) => kit.soundFor(objectFor(type), overlayDesigns[type])));
+}
+
 // Load Google Fonts used by custom designs
 const loadedFonts = new Set();
 function loadDesignFonts(designs) {
@@ -408,6 +416,7 @@ function connectSSE() {
       if (data.designs) {
         overlayDesigns = data.designs;
         loadDesignFonts(data.designs);
+        loadDesignSounds();
       }
       return;
     }
@@ -419,6 +428,7 @@ function connectSSE() {
       if (data.designs) {
         overlayDesigns = data.designs;
         loadDesignFonts(data.designs);
+        loadDesignSounds();
       }
       // Sent after a custom sound is uploaded or removed
       if (data.sounds) overlayConfig.sounds = data.sounds;

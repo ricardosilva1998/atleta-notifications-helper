@@ -11,6 +11,8 @@ const OBJECTS_DIR = path.join(__dirname, '..', '..', 'public', 'overlay', 'objec
 const KIT = require(path.join(OBJECTS_DIR, 'kit.js'));
 fs.readdirSync(path.join(OBJECTS_DIR, 'styles')).filter((f) => f.endsWith('.js')).sort()
   .forEach((f) => require(path.join(OBJECTS_DIR, 'styles', f)));
+// The sounds' recordings (two versions each), after the families whose sounds they record.
+require(path.join(OBJECTS_DIR, 'sounds', 'manifest.js'));
 
 // Looks made for one streamer, found by their Twitch user id (never a row number). Only they see
 // it in the builder, and the save refuses it for anyone else.
@@ -77,20 +79,23 @@ function familyStyles(familyKey) {
 }
 
 // Families in the gallery's order, every public look id, and the sound keys a design may name
-// ('today': the alert's sound before release A; 'none': silent).
+// ('today': the alert's sound before release A; 'none': silent; '<key>.2': a sound's second recording).
 function familyKeys() { return Object.keys(KIT.families).sort((a, b) => KIT.families[a].order - KIT.families[b].order); }
 function lookIds() { return KIT.ALERTS.flatMap((alert) => KIT.looksOf(alert).map((look) => look.key)); }
 function soundKeys() { return ['today', 'none'].concat(Object.keys(KIT.sounds).sort()); }
-// The looks' sounds by family, in the gallery's order: [{ family, sounds: [key, …] }].
+// The looks' sounds by family, in the gallery's order: [{ family, sounds: [key, …] }], one entry per
+// sound (its second version, secondVersionOf(key), is listed next to it by the builder).
 function soundGroups() {
-  return familyKeys().map((family) => ({ family, sounds: Object.keys(KIT.sounds).filter((key) => KIT.soundFamilies[key] === family) }))
+  return familyKeys().map((family) => ({ family, sounds: Object.keys(KIT.sounds).filter((key) => KIT.soundFamilies[key] === family && !KIT.isSecondVersion(key)) }))
     .filter((group) => group.sounds.length);
 }
+// A sound's second recording ('<key>.2'), or null.
+function secondVersionOf(key) { return KIT.secondVersionOf(key); }
 // The Google Fonts specs (for one stylesheet link) of the given families.
 function fontsOf(families) {
   return [...new Set(families.flatMap((key) => (KIT.families[key] ? KIT.families[key].fonts : [])))];
 }
 
 module.exports = {
-  ALERTS: KIT.ALERTS, PRIVATE_STYLES, STANDALONE_STYLES, DEFAULT_STYLES, isAlert, lookOf, canUseStyle, galleryFor, familyStyles, familyKeys, lookIds, soundKeys, soundGroups, fontsOf,
+  ALERTS: KIT.ALERTS, PRIVATE_STYLES, STANDALONE_STYLES, DEFAULT_STYLES, isAlert, lookOf, canUseStyle, galleryFor, familyStyles, familyKeys, lookIds, soundKeys, soundGroups, secondVersionOf, fontsOf,
 };

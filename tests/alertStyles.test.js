@@ -32,12 +32,25 @@ describe('the catalogue', () => {
     for (const id of styles.lookIds()) assert.ok(sounds.includes(styles.lookOf(id).sound), `${id}: ${styles.lookOf(id).sound}`);
   });
 
-  test('every look\'s sound is in a family\'s group, each once', () => {
+  test('every look\'s sound is in a family\'s group, each once; its second recording is not grouped but may be named', () => {
     const grouped = styles.soundGroups().flatMap((g) => g.sounds);
     assert.equal(new Set(grouped).size, grouped.length);
-    assert.deepEqual([...grouped].sort(), styles.soundKeys().filter((k) => k !== 'today' && k !== 'none'));
+    const named = styles.soundKeys().filter((k) => k !== 'today' && k !== 'none');
+    assert.deepEqual([...grouped].sort(), named.filter((k) => !K.isSecondVersion(k)));
+    for (const key of grouped) assert.ok(named.includes(styles.secondVersionOf(key)), `${key}: its second recording`);
+    assert.equal(styles.secondVersionOf('today'), null);
     assert.deepEqual(styles.soundGroups().map((g) => g.family).slice(0, 2), ['samurai', 'racing']);
     assert.ok(styles.soundGroups()[0].sounds.includes('samuraiBell'));
+  });
+
+  test('a picked Samurai preset plays its own recording; an alert with no look keeps today\'s sound', () => {
+    const own = { 'follow-samurai': 'samuraiBlade', 'subscriber-samurai': 'samuraiTaiko', 'bits-samurai': 'samuraiTally', 'donation-samurai': 'samuraiKoto', 'raid-samurai': 'samuraiTaiko3' };
+    for (const [id, sound] of Object.entries(own)) {
+      assert.equal(styles.lookOf(id).sound, sound, id);
+      assert.equal(K.soundFor(styles.lookOf(id), {}), sound, id);
+    }
+    const objects = require('../public/overlay/objects/index.js');
+    for (const type of ['follow', 'subscription', 'bits', 'donation', 'raid']) assert.equal(K.soundFor(objects[type], {}), 'today', type);
   });
 
   test('the fonts of a family, once each', () => {

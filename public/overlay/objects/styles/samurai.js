@@ -12,17 +12,19 @@
 
   K.registerFamily({ key: 'samurai', order: 0, fonts: ['Noto+Serif+JP:wght@700'] });
 
-  // [event type, style id, seconds until its entrance has finished]
+  // [event type, style id, seconds until its entrance has finished, its sound]
   [
-    ['follow', 'follow-samurai', 0.8], ['subscription', 'subscriber-samurai', 1.35], ['bits', 'bits-samurai', 1.1],
-    ['donation', 'donation-samurai', 1.2], ['raid', 'raid-samurai', 1.0],
+    ['follow', 'follow-samurai', 0.8, 'samuraiBlade'], ['subscription', 'subscriber-samurai', 1.35, 'samuraiTaiko'],
+    ['bits', 'bits-samurai', 1.1, 'samuraiTally'], ['donation', 'donation-samurai', 1.2, 'samuraiKoto'],
+    ['raid', 'raid-samurai', 1.0, 'samuraiTaiko3'],
   ].forEach(function (p) {
     var object = OBJECTS[p[0]];
     K.register({
       key: p[1], eventType: p[0], family: 'samurai', preset: true,
       anim: object.anim, exit: object.exit, len: p[2],
-      // Today's sound and no screen effect, as today; the streamer can pick others.
-      sound: 'today', fx: 'none', grows: false,
+      // A streamer who picks the look gets its Samurai recording; an alert with no look picked still
+      // draws today's object (index.js) with today's sound. No screen effect, as today.
+      sound: p[3], fx: 'none', grows: false,
       controls: { colour: 'accent', label: false, speed: false },
       render: object.render,
     });
@@ -42,6 +44,11 @@
       K.tone({ f: 95 - i * 8, f2: 46, d: 0.45, v: 0.5, a: 0.003, t: t });
       K.noise({ ft: 'lowpass', f: 480, d: 0.08, v: 0.22, t: t });
     });
+  });
+  K.registerSound('samuraiTally', 'samurai', function () {
+    K.noise({ ft: 'highpass', f: 2400, f2: 7000, d: 0.2, v: 0.12, a: 0.01, t: 0.04 });
+    [0.12, 0.2, 0.28, 0.36].forEach(function (t) { K.noise({ ft: 'bandpass', f: 1800, q: 3, d: 0.04, v: 0.2, t: t }); });
+    K.noise({ ft: 'bandpass', f: 2600, q: 2, d: 0.08, v: 0.35, t: 0.68 });
   });
   K.registerSound('samuraiKoto', 'samurai', function () {
     [392, 523, 587, 784].forEach(function (f, i) { K.tone({ f: f, d: 0.9, v: 0.09, type: 'triangle', a: 0.002, t: 0.55 + i * 0.1 }); });

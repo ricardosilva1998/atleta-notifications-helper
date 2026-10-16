@@ -407,3 +407,30 @@ Watch after release:
   chat announcements (on by default) and their texts.
 - **The on-stream bar** is a new OBS browser source (its link is on the Polls & predictions card and on the
   OBS overlay card; recommended size 600 x 700). It is empty while nothing runs.
+
+## Recorded look sounds
+
+What changes when it deploys (docs/features/look-sounds.md):
+- Every alert look plays a recorded sound instead of a synthesized one, and the Overlay Builder's sound list offers
+  each sound twice: "<name>" (the version the owner kept) and "<name> (version 2)". 312 MP3s, about 13 MB in the
+  image, under `/overlay/objects/sounds/`, served with a one-year cache (their names carry their content hash).
+- Nothing stored changes: no column, no migration. A saved `style_sound` keeps working; the new `<key>.2` values only
+  exist once a streamer picks a second version.
+- An alert with no look picked keeps today's object and today's engine sound. A streamer who picked one of the five
+  Samurai presets now hears its Samurai recording instead of today's sound; every other look's sound is now its
+  recording.
+- Six sounds have new names in all seven languages (rcNumber, rcNitro, upshift, pb, samuraiTaiko, samuraiTaiko3),
+  because their sounds changed on the owner's notes.
+- The recordings sit at −16 LUFS, about the level of the default engine sounds; the old synthesized look sounds were
+  about 18 dB quieter, so a streamer who turned a look up in OBS may want it lower.
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and `/overlay/objects/styles.js` ends with `sounds/manifest.js` registering 156 sounds.
+2. A recording answers 200 with `Cache-Control: public, max-age=31536000, immutable`, e.g.
+   `/overlay/objects/sounds/racing/` plus the `rcFlyby` file named in the manifest.
+3. In the Overlay Builder, pick Racing's Fly-by for the follow: ▶ plays the V10 fly-by; pick "Fly-by whoosh
+   (version 2)", save, and press Test: OBS plays the second version.
+4. An alert with no look still plays the engine sound in OBS.
+
+Rolling back is safe: older code does not know the `<key>.2` values and plays the look's own (synthesized) sound
+for them, and the recordings are simply not fetched.

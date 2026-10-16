@@ -2873,6 +2873,9 @@ describe('the overlay builder page and a slow Twitch', () => {
     assert.equal(data.looks['follow-racing'].title, t('en', 'overlayBuilder.looks.follow-racing.title'));
     assert.deepEqual(data.families.slice(0, 2).map((f) => [f.key, f.name]), [['samurai', t('en', 'overlayBuilder.families.samurai.name')], ['racing', t('en', 'overlayBuilder.families.racing.name')]]);
     assert.ok(data.sounds[0].sounds.some((s) => s.key === 'samuraiBell' && s.name === t('en', 'overlayBuilder.sounds.samuraiBell')));
+    const bell = data.sounds[0].sounds.findIndex((s) => s.key === 'samuraiBell');
+    assert.deepEqual(data.sounds[0].sounds[bell + 1], { key: 'samuraiBell.2', name: t('en', 'overlayBuilder.soundVersion', { name: t('en', 'overlayBuilder.sounds.samuraiBell') }) },
+      'each sound is followed by its second recording');
     assert.equal(data.fonts[0], 'System Default');
     // One stylesheet with every family's fonts, each font once, today's first: the gallery draws every family.
     const { familyKeys, fontsOf } = require('../services/alertStyles');

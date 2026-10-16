@@ -30,7 +30,7 @@ const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCo
 const { testCooldown } = require('../services/testCooldown');
 const { EVENT_DEFAULTS, OVERLAY_FONTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
-const { ALERTS: STYLED_ALERTS, DEFAULT_STYLES, canUseStyle, familyStyles, galleryFor, familyKeys, soundGroups, fontsOf } = require('../services/alertStyles');
+const { ALERTS: STYLED_ALERTS, DEFAULT_STYLES, canUseStyle, familyStyles, galleryFor, familyKeys, soundGroups, secondVersionOf, fontsOf } = require('../services/alertStyles');
 const { findStreamThumbnail, youtubeLiveStatus } = require('../services/pageLookups');
 const { ANALYSES_PER_DAY, analysisBlockedReason, dailyWindowStart, staleBefore } = require('../services/issueAnalysis');
 const { twitchRowsDue, youtubeRowsDue, backfillInBackground } = require('../services/channelInfoBackfill');
@@ -2712,7 +2712,15 @@ function builderStyleData(streamer, t) {
     gallery,
     looks,
     families: familyKeys().map((key) => ({ key, name: t(`overlayBuilder.families.${key}.name`), desc: t(`overlayBuilder.families.${key}.desc`) })),
-    sounds: soundGroups().map(({ family, sounds }) => ({ family, sounds: sounds.map((key) => ({ key, name: t(`overlayBuilder.sounds.${key}`) })) })),
+    // Each sound, then its second recording when it has one ("<name> (version 2)")
+    sounds: soundGroups().map(({ family, sounds }) => ({
+      family,
+      sounds: sounds.flatMap((key) => {
+        const name = t(`overlayBuilder.sounds.${key}`);
+        const second = secondVersionOf(key);
+        return second ? [{ key, name }, { key: second, name: t('overlayBuilder.soundVersion', { name }) }] : [{ key, name }];
+      }),
+    })),
     fonts: OVERLAY_FONTS,
   };
 }

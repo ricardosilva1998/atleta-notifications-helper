@@ -1027,6 +1027,13 @@ describe('the screen effect and the sound of a look (alert styles)', () => {
     return () => JSON.parse(overlay.run('JSON.stringify(window.played)')); // an array of this realm
   };
 
+  test('the overlay starts loading the recordings its six alerts will play when the designs arrive', () => {
+    const overlay = loadOverlay({ styles: true });
+    overlay.run('window.preloaded = []; window.ATLETA_KIT.preloadSounds = (keys) => window.preloaded.push(keys.slice());');
+    overlay.send({ type: 'config-update', designs: { follow: design({ style: 'follow-racing' }), raid: design({ style: 'raid-racing', style_sound: 'rcConvoy.2' }) } });
+    assert.deepEqual(JSON.parse(overlay.run('JSON.stringify(window.preloaded)')), [['rcFlyby', 'today', 'today', 'today', 'rcConvoy.2', 'rcVictory']]);
+  });
+
   test('an alert nobody has restyled plays no effect, whatever an older builder saved, and today\'s sound', () => {
     const overlay = loadOverlay({ styles: true, designs: { follow: design({ screen_effect: 'confetti' }) } });
     const played = listen(overlay);
