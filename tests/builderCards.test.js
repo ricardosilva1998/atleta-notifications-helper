@@ -12,6 +12,7 @@ const vm = require('node:vm');
 
 const SOURCE = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
 const CORE = require('../public/js/builder-styles-core.js');
+const PLACEMENT = require('../public/overlay/placement.js');
 
 // The page script in a context of its own; `globals` are what the view's inline script defines.
 function load(globals = {}) {
@@ -20,6 +21,7 @@ function load(globals = {}) {
     setTimeout: (...a) => setTimeout(...a),
     clearTimeout: (...a) => clearTimeout(...a),
     ATLETA_BUILDER_STYLES: CORE,
+    ATLETA_PLACEMENT: PLACEMENT,
     ATLETA_KIT: { lookData: (look, sample) => sample, slotVars: (look, d) => ({ '--spd': String(d.animation_speed || 1) }) },
     ...globals,
   });
@@ -256,7 +258,8 @@ describe('a loop with nothing to play', () => {
 // A fake page: the window's elements by id (nothing else, so the cards are not drawn at load), elements
 // that keep their children, attributes and listeners, and a document that takes keydown listeners.
 const EDITOR_IDS = ['editor', 'editor-back', 'editor-icon', 'editor-title', 'editor-close', 'editor-tabs', 'editor-side',
-  'editor-msg', 'editor-reset', 'editor-cancel', 'editor-done', 'stage', 'stage-inner', 'stage-bg',
+  'editor-msg', 'editor-reset', 'editor-cancel', 'editor-done', 'stage', 'stage-inner', 'stage-bg', 'stage-slot', 'fx-layer',
+  'stage-replay', 'stage-sound-loop',
   'pane-animation', 'pane-customize', 'pane-sound', 'pane-location', 'pane-images', 'pane-design',
   // the Animation and Customize tabs
   'anim-chips', 'anim-gallery', 'custom-preview', 'custom-slot', 'custom-nothing', 'custom-row-accent', 'custom-row-racing',
@@ -307,6 +310,9 @@ const TEXTS = {
   'window.done': 'Done', 'tabs.animation': 'Animation', 'tabs.customize': 'Customize', 'tabs.sound': 'Sound', 'tabs.location': 'Location',
   'tabs.images': 'Images', 'tabs.design': 'Design', 'cards.editSponsors': 'Edit sponsor images', 'cards.images': '{{count}} images',
   'cards.free': 'Free position', 'cards.uploaded': 'Your uploaded sound', 'sound.today': 'Classic engine sound', 'sound.none': 'No sound',
+  'window.replay': 'Replay with sound', 'window.soundLoop': 'Sound on every loop',
+  'place.fixed': 'Fixed spot', 'place.fixedHint': 'Pick one of nine places', 'place.free': 'Free position', 'place.freeHint': 'Drag it on the preview',
+  'place.fixedNote': 'The alert sits 16 px from the edges.', 'place.freeNote': 'Drag the alert on the preview.', 'place.size': 'Size', 'place.width': '{{px}} px wide',
   'place.top': 'Top', 'place.mid': 'Middle', 'place.bot': 'Bottom', 'place.left': 'left', 'place.center': 'centre', 'place.right': 'right',
   resetConfirm: 'Reset "{{name}}" to default settings?', resetDone: 'Reset to default', saveFailed: 'Save failed', saveFailedWith: 'Save failed: {{error}}',
   'custom.nothing': 'This look has no settings of its own: pick its sound in the Sound tab.', 'custom.ownColour': 'Use the look\'s own',
@@ -1173,6 +1179,201 @@ describe('the Sound tab', () => {
     page.CARDS.openEditor('follow');
     page.CARDS.setTab('sound');
     assert.equal(allRows(page.document).length, 56, 'a new window shows every theme again');
+    page.CARDS.closeEditor({ force: true });
+  });
+});
+
+describe('the Location tab', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }));
+  afterEach(() => mock.timers.reset());
+
+  // The stage as the page has it: a 960 px wide column (half the 1920 canvas), the slot as OBS lays it out
+  // (420 x 120), the particles and sounds recorded.
+  function locPage(options = {}) {
+    const played = [], spawned = [], oldEffects = [];
+    const kit = {
+      lookData: (look, sample) => sample, slotVars: () => ({}), soundFor: (look) => look.sound,
+      effectFor: () => options.effect || 'smoke', setAudio() {}, playSound: (key) => { played.push(key); return true; },
+    };
+    class FakeAudio { constructor() { this.state = 'running'; } resume() {} }
+    const page = loadPage({
+      ...options,
+      extra: {
+        ATLETA_KIT: kit, AudioContext: FakeAudio,
+        ATLETA_FX: { KINDS: ['smoke'], spawn: (layer, kind, opts) => { spawned.push([kind, opts.scale]); return []; } },
+        renderScreenEffect: (effect, target) => oldEffects.push([effect, target]),
+        ...(options.extra || {}),
+      },
+    });
+    const stage = page.document.getElementById('stage'), slot = page.document.getElementById('stage-slot');
+    stage.clientWidth = 960;
+    stage.getBoundingClientRect = () => ({ left: 0, top: 0 });
+    slot.offsetWidth = 420;
+    slot.offsetHeight = 120;
+    slot.captured = [];
+    slot.setPointerCapture = (id) => slot.captured.push(id);
+    return { ...page, played, spawned, oldEffects, stage, slot };
+  }
+  const walk = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => walk(c, out)); return out; };
+  const inPane = (document) => walk(document.getElementById('pane-location'));
+  const cellOf = (document, pos) => inPane(document).find((n) => n.getAttribute('data-pos') === pos);
+  const modeOf = (document, mode) => inPane(document).find((n) => n.getAttribute('data-mode') === mode);
+  const openLocation = (page) => { page.CARDS.openEditor('follow'); page.CARDS.setTab('location'); };
+  const FREE = { event_type: 'follow', card_position: 'top-center', card_custom_x: 0.2, card_custom_y: 0.3 };
+
+  test('a fixed spot clears the free position', () => {
+    const page = locPage({ rows: [FREE] });
+    openLocation(page);
+    assert.equal(modeOf(page.document, 'free').getAttribute('aria-pressed'), 'true');
+    cellOf(page.document, 'bot-right').fire('click');
+    assert.equal(page.CARDS.draft.card_position, 'bot-right');
+    assert.equal(page.CARDS.draft.card_custom_x, null);
+    assert.equal(page.CARDS.draft.card_custom_y, null);
+    assert.equal(modeOf(page.document, 'fixed').getAttribute('aria-pressed'), 'true');
+    assert.equal(cellOf(page.document, 'bot-right').getAttribute('aria-pressed'), 'true');
+    assert.equal(cellOf(page.document, 'top-center').getAttribute('aria-pressed'), 'false');
+    assert.equal(page.CARDS.tabValue('location'), 'Bottom right', 'the tab bar says where it sits');
+    assert.equal(page.slot.style.right, '16px', 'the stage slot moved there');
+    assert.equal(page.slot.style.bottom, '16px');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('switching to free position starts where the alert sits now', () => {
+    const page = locPage({ rows: [{ event_type: 'follow', card_position: 'bot-right', card_width: 420 }] });
+    openLocation(page);
+    assert.equal(modeOf(page.document, 'fixed').getAttribute('aria-pressed'), 'true');
+    modeOf(page.document, 'free').fire('click');
+    // 1920 - 16 - 420 from the left, 1080 - 16 - 120 from the top, as fractions of the screen
+    assert.equal(page.CARDS.draft.card_custom_x, CORE.clampFree(1920 - 16 - 420, 1080 - 16 - 120, 420, 120).x);
+    assert.equal(page.CARDS.draft.card_custom_x, 0.773);
+    assert.equal(page.CARDS.draft.card_custom_y, 0.874);
+    assert.equal(page.CARDS.draft.card_position, 'bot-right', 'the fixed spot is kept for the way back');
+    assert.equal(modeOf(page.document, 'free').getAttribute('aria-pressed'), 'true');
+    assert.equal(page.CARDS.tabValue('location'), 'Free position');
+    assert.ok(page.stage.classList.contains('dragging-on'), 'the alert takes the pointer');
+    modeOf(page.document, 'fixed').fire('click');
+    assert.equal(page.CARDS.draft.card_custom_x, null);
+    assert.ok(!page.stage.classList.contains('dragging-on'));
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('dragging keeps the alert on the screen and stores fractions', () => {
+    const page = locPage({ rows: [{ event_type: 'follow', card_position: 'top-center', card_custom_x: 0, card_custom_y: 0 }] });
+    openLocation(page);
+    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 7 });
+    assert.deepEqual(page.slot.captured, [7], 'the pointer is captured');
+    page.slot.fire('pointermove', { clientX: -50, clientY: 1000 });   // (-100, 2000) on the 1920 x 1080 stage
+    assert.equal(page.CARDS.draft.card_custom_x, 0);
+    assert.equal(page.CARDS.draft.card_custom_y, Math.round(960 / 1080 * 1000) / 1000);
+    page.slot.fire('pointermove', { clientX: 400, clientY: 100 });    // (800, 200)
+    assert.equal(page.CARDS.draft.card_custom_x, Math.round(800 / 1920 * 1000) / 1000);
+    assert.equal(page.CARDS.draft.card_custom_y, Math.round(200 / 1080 * 1000) / 1000);
+    page.slot.fire('pointerup', {});
+    const before = page.CARDS.draft.card_custom_x;
+    page.slot.fire('pointermove', { clientX: 10, clientY: 10 });
+    assert.equal(page.CARDS.draft.card_custom_x, before, 'nothing moves after the pointer is released');
+    assert.ok(page.CARDS.isDirty());
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the pointer grabs the alert where it was touched, and a fixed spot cannot be dragged', () => {
+    const page = locPage({ rows: [{ event_type: 'follow', card_position: 'top-center', card_custom_x: 0.5, card_custom_y: 0.5 }] });
+    openLocation(page);
+    // the alert's corner is (960, 540); touching 30 px right of and 20 px below it keeps that offset
+    page.slot.fire('pointerdown', { clientX: (960 + 30) / 2, clientY: (540 + 20) / 2, pointerId: 1 });
+    page.slot.fire('pointermove', { clientX: (200 + 30) / 2, clientY: (100 + 20) / 2 });
+    assert.equal(page.CARDS.draft.card_custom_x, Math.round(200 / 1920 * 1000) / 1000);
+    assert.equal(page.CARDS.draft.card_custom_y, Math.round(100 / 1080 * 1000) / 1000);
+    page.slot.fire('pointerup', {});
+    modeOf(page.document, 'fixed').fire('click');
+    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 2 });
+    page.slot.fire('pointermove', { clientX: 300, clientY: 300 });
+    assert.equal(page.CARDS.draft.card_custom_x, null, 'no drag in fixed mode');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the size slider spans the placement bounds and sets the width', () => {
+    const page = locPage();
+    openLocation(page);
+    const slider = inPane(page.document).find((n) => n.id === 'loc-width');
+    assert.equal(slider.type, 'range');
+    assert.equal(slider.getAttribute('min'), '200');
+    assert.equal(slider.getAttribute('max'), '900');
+    assert.equal(slider.getAttribute('step'), '10');
+    assert.equal(Number(slider.value), 420);
+    slider.value = '640';
+    slider.fire('input');
+    assert.equal(page.CARDS.draft.card_width, 640);
+    assert.equal(page.slot.style.width, '640px', 'the stage slot follows');
+    assert.equal(page.slot.style.getPropertyValue('--zw'), String(640 / 420));
+    assert.ok(inPane(page.document).some((n) => n.textContent === '640 px wide'));
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the stage slot carries the placement, the screen width for cars and the look class', () => {
+    const page = locPage();
+    openLocation(page);
+    assert.equal(page.slot.style.left, '50%');
+    assert.equal(page.slot.style.top, '16px');
+    assert.equal(page.slot.style.width, '420px');
+    assert.equal(page.slot.style.getPropertyValue('--fw'), '1920px');
+    assert.ok(page.slot.classList.contains('look'), 'a look is drawn for 420 px and scaled');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the alert loops on the stage with its effect while the tab is open, and everything stops when the tab or window closes', () => {
+    const page = locPage();
+    openLocation(page);
+    assert.ok(page.slot.classList.contains('playing'), 'plays at once');
+    assert.deepEqual(page.spawned, [['smoke', 1]], 'the look\'s effect, drawn on the 1920 stage');
+    advance(1000 + 2400 + 500 + 50 + 800 + 10);   // the entrance, the hold, the exit, the pause
+    assert.equal(page.spawned.length, 2, 'it plays again');
+    page.CARDS.setTab('sound');
+    assert.ok(!page.slot.classList.contains('playing'), 'the slot is emptied when the tab changes');
+    advance(20000);
+    assert.equal(page.spawned.length, 2, 'no timer is left');
+    page.CARDS.setTab('location');
+    assert.equal(page.spawned.length, 3);
+    assert.ok(page.slot.classList.contains('playing'));
+    page.CARDS.closeEditor({ force: true });
+    assert.ok(!page.slot.classList.contains('playing'), 'and when the window closes');
+    advance(20000);
+    assert.equal(page.spawned.length, 3);
+  });
+
+  test('an older effect goes through the page\'s own screen effect, on the stage, with the draft', () => {
+    const page = locPage({ effect: 'confetti' });
+    openLocation(page);
+    assert.deepEqual(page.spawned, []);
+    assert.equal(page.oldEffects.length, 1);
+    assert.equal(page.oldEffects[0][0], 'confetti');
+    assert.equal(page.oldEffects[0][1].screen, page.stage);
+    assert.equal(page.oldEffects[0][1].design, page.CARDS.draft);
+    assert.equal(page.oldEffects[0][1].type, 'follow');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('Replay plays the sound once; "Sound on every loop" plays it every time', () => {
+    const page = locPage();
+    openLocation(page);
+    assert.deepEqual(page.played, [], 'a loop is silent by default');
+    page.document.getElementById('stage-replay').fire('click');
+    assert.deepEqual(page.played, ['glFollow']);
+    advance(5000);
+    assert.deepEqual(page.played, ['glFollow'], 'the next loops stay silent');
+    page.document.getElementById('stage-sound-loop').checked = true;
+    advance(10000);
+    assert.ok(page.played.length >= 3, 'every loop plays it');
+    assert.ok(page.played.every((key) => key === 'glFollow'));
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('a sound the streamer uploaded for the alert is not replaced by the look\'s on the stage', () => {
+    const page = locPage();
+    page.g.BUILDER.uploadedSounds = { follow: true };
+    openLocation(page);
+    page.document.getElementById('stage-replay').fire('click');
+    assert.deepEqual(page.played, []);
     page.CARDS.closeEditor({ force: true });
   });
 });

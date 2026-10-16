@@ -233,6 +233,15 @@ describe('numbers match the builder\'s controls', () => {
     }
     // Resizing the card by dragging clamps to 200-900 (see the mousemove handler).
     assert.match(builder, /Math\.max\(200, Math\.min\(900, newWidth\)\)/);
+
+    // The Location tab's size slider (#loc-width) is built by public/js/builder-cards.js from placement.js's bounds.
+    const placement = require(path.join(root, 'public', 'overlay', 'placement.js'));
+    const cards = fs.readFileSync(path.join(root, 'public', 'js', 'builder-cards.js'), 'utf8');
+    assert.match(cards, /range\.id = 'loc-width'/, 'the slider is built where this test reads it');
+    assert.match(cards, /range\.setAttribute\('min', String\(P\.MIN_WIDTH\)\)/);
+    assert.match(cards, /range\.setAttribute\('max', String\(P\.MAX_WIDTH\)\)/);
+    assert.ok(FIELD_SPECS.card_width.min <= placement.MIN_WIDTH && FIELD_SPECS.card_width.max >= placement.MAX_WIDTH,
+      `card_width: #loc-width runs ${placement.MIN_WIDTH}-${placement.MAX_WIDTH}, the server allows ${FIELD_SPECS.card_width.min}-${FIELD_SPECS.card_width.max}`);
   });
 });
 

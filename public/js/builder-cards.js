@@ -4,7 +4,8 @@
  * The Overlay Builder's alert cards (docs/superpowers/specs/2026-10-16-overlay-builder-cards-design.md):
  * one card per alert, each looping the look it is set to on a faux stream, with its sound and its place,
  * Test in OBS and Edit alert, and the edit window Edit alert opens (Done saves the alert), with its
- * Animation tab (the alert's looks, each looping) and Customize tab (what the picked look takes). The page-free
+ * Animation tab (the alert's looks, each looping), Customize tab (what the picked look takes), Sound tab and Location tab
+ * (fixed spot or free drag, and the width, on the stage beside it). The page-free
  * rules are window.ATLETA_BUILDER_STYLES
  * (public/js/builder-styles-core.js); the looks are drawn with the files the OBS overlay uses
  * (objects/kit.js and the joined family files), picked with the view's previewObjectFor().
@@ -1201,6 +1202,231 @@
     playLookSound(key);
   }
 
+  // ── The stage ──
+  // The wide stream preview beside the Location and Design tabs: a 1920x1080 screen (#stage-inner, scaled to
+  // the column by a ResizeObserver) with the alert in #stage-slot, laid out by placement.js as OBS lays it out,
+  // looping with its screen effect. What the slot plays comes from CARDS.stageContent() ({ look, design, sample };
+  // the look of the edit window's alert by default), so a tab whose alert is not a look can play its own. The
+  // loop runs only while the tab that shows the stage is open: stopStage() empties the slot and removes the
+  // particles.
+  var stageLooper = null;
+  var stageHeight = 0;          // the slot's last measured height on the 1920 stage, for when it is empty between loops
+  var stageForceSound = false;  // Replay: the next play makes its sound
+
+  function stageSlot() { return el('stage-slot'); }
+  function stageScale() {
+    var stage = el('stage');
+    return stage && stage.clientWidth > 0 ? stage.clientWidth / 1920 : 1;
+  }
+  function clearStageFx() {
+    var layer = el('fx-layer'), stage = el('stage');
+    if (layer) layer.innerHTML = '';
+    // The page's older effects (confetti, gold, money, robots, tire marks) are children of the stage itself.
+    if (stage && stage.querySelectorAll) Array.prototype.forEach.call(stage.querySelectorAll('.preview-fx'), function (n) { n.remove(); });
+  }
+  // The look's screen effect: the five of fx.js are drawn on the 1920 layer as OBS draws them; the older ones
+  // by the page's renderScreenEffect, on the stage and with the draft's amount, size and direction.
+  function stageEffect(look, design) {
+    clearStageFx();
+    var K = kit();
+    if (!K || !look) return;
+    var effect = K.effectFor(look, design);
+    if (!effect || effect === 'none') return;
+    if (root.ATLETA_FX && root.ATLETA_FX.KINDS.indexOf(effect) >= 0) root.ATLETA_FX.spawn(el('fx-layer'), effect, { scale: 1 });
+    else if (typeof renderScreenEffect === 'function') renderScreenEffect(effect, { screen: el('stage'), design: design, type: CARDS.editing });
+  }
+  function stageOnPlay(look, design) {
+    var slot = stageSlot();
+    if (slot && slot.offsetHeight) stageHeight = slot.offsetHeight;
+    stageEffect(look, design);
+    var every = el('stage-sound-loop');
+    var withSound = stageForceSound || !!(every && every.checked);
+    stageForceSound = false;
+    // A sound the streamer uploaded wins in OBS (overlay settings): the look's would only mislead.
+    if (withSound && kit() && !(builder().uploadedSounds || {})[CARDS.editing]) playLookSound(kit().soundFor(look, design));
+  }
+  function stageLoop() {
+    var slot = stageSlot();
+    if (!stageLooper && slot) {
+      stageLooper = new Looper(slot, function () { return CARDS.stageContent(); }, { hold: 2400, gap: 800, onPlay: stageOnPlay });
+    }
+    return stageLooper;
+  }
+  // Puts the slot where the draft says, as OBS does (placement.js): the inline edges, the width, and a look drawn
+  // for 420 px scaled to it (--zw; today's objects and the legacy cards reflow instead).
+  function placeStage() {
+    var slot = stageSlot(), P = root.ATLETA_PLACEMENT;
+    if (!slot || !P || !CARDS.draft) return;
+    var look = CARDS.stageContent().look, placement = P.placementOf(CARDS.draft), style = P.slotStyle(placement);
+    Object.keys(style).forEach(function (name) { slot.style[name] = style[name]; });
+    slot.classList.toggle('look', !!(look && look.family && !look.preset));
+    slot.style.setProperty('--zw', String(placement.width / LOOK_WIDTH));
+    slot.style.setProperty('--fw', '1920px');
+  }
+  function startStage() {
+    var loop = stageLoop();
+    if (!loop) return;
+    placeStage();
+    loop.restart();
+  }
+  function stopStage() {
+    if (stageLooper) stageLooper.stop();
+    clearStageFx();
+    var stage = el('stage');
+    if (stage) stage.classList.remove('dragging-on');
+    drag = null;
+  }
+  function replayStage() {
+    stageForceSound = true;
+    var loop = stageLoop();
+    if (loop && loop.running) loop.restart();
+  }
+
+  // ── The Location tab ──
+  // Fixed spot (one of nine, 16 px from the edges) or free position (dragged on the stage, stored as fractions of
+  // the screen), and the width. Switching to free starts where the alert sits now; a spot clears the free position.
+  var locRefs = null;       // the controls of the tab, to mark the state
+  var drag = null;          // { k, dx, dy }: the stage's scale and where in the alert the pointer took hold
+
+  function isFree() { return !!CARDS.draft && core().placeSummary(CARDS.draft).free; }
+  function slotSize() {
+    var slot = stageSlot(), P = root.ATLETA_PLACEMENT;
+    return {
+      w: (slot && slot.offsetWidth) || P.placementOf(CARDS.draft).width,
+      h: (slot && slot.offsetHeight) || stageHeight || 0,
+    };
+  }
+  // The fractions of the screen the alert's top-left corner is at now (a fixed spot's), kept on the stage.
+  function cornerNow() {
+    var P = root.ATLETA_PLACEMENT, placement = P.placementOf(CARDS.draft), size = slotSize();
+    var x = placement.horizontal === 'left' ? P.MARGIN : placement.horizontal === 'right' ? 1920 - P.MARGIN - size.w : (1920 - size.w) / 2;
+    var y = placement.vertical === 'top' ? P.MARGIN : placement.vertical === 'bot' ? 1080 - P.MARGIN - size.h : (1080 - size.h) / 2;
+    return core().clampFree(x, y, size.w, size.h);
+  }
+  function syncLocation() {
+    if (!locRefs || !CARDS.draft) return;
+    var place = core().placeSummary(CARDS.draft), width = root.ATLETA_PLACEMENT.placementOf(CARDS.draft).width;
+    locRefs.fixed.setAttribute('aria-pressed', String(!place.free));
+    locRefs.free.setAttribute('aria-pressed', String(place.free));
+    locRefs.cells.forEach(function (cell, i) { cell.setAttribute('aria-pressed', String(!place.free && place.cell === i)); });
+    locRefs.grid.classList.toggle('off', place.free);
+    locRefs.note.textContent = text(place.free ? 'place.freeNote' : 'place.fixedNote');
+    locRefs.widthValue.textContent = text('place.width', { px: width });
+    if (locRefs.width !== (root.document && root.document.activeElement)) locRefs.width.value = String(width);
+    var stage = el('stage');
+    if (stage) stage.classList.toggle('dragging-on', place.free && CARDS.tab === 'location');
+  }
+  // A change to where the alert sits: into the draft, then the controls, the stage and the tab bar.
+  function setPlace(changes) {
+    if (!CARDS.editing || !CARDS.draft) return;
+    Object.assign(CARDS.draft, changes);
+    syncLocation();
+    placeStage();
+    renderTabValues();
+  }
+  function renderLocation() {
+    var pane = el('pane-location'), P = root.ATLETA_PLACEMENT;
+    if (!pane || !P || !CARDS.editing || !CARDS.draft) return;
+    pane.innerHTML = '';
+    var refs = { cells: [] };
+
+    var modes = make('div', 'loc-mode');
+    [['fixed', 'place.fixed', 'place.fixedHint'], ['free', 'place.free', 'place.freeHint']].forEach(function (m) {
+      var button = make('button');
+      button.type = 'button';
+      button.setAttribute('data-mode', m[0]);
+      button.appendChild(make('b', null, text(m[1])));
+      button.appendChild(make('small', null, text(m[2])));
+      button.addEventListener('click', function () {
+        if (m[0] === 'free') {
+          if (isFree()) return;
+          var at = cornerNow();   // starts where the alert sits now
+          setPlace({ card_custom_x: at.x, card_custom_y: at.y });
+        } else {
+          if (!isFree()) return;
+          setPlace({ card_custom_x: null, card_custom_y: null });
+        }
+      });
+      modes.appendChild(button);
+      refs[m[0]] = button;
+    });
+    pane.appendChild(modes);
+
+    var grid = make('div', 'loc-grid');
+    grid.setAttribute('role', 'group');
+    POSITIONS.forEach(function (pos) {
+      var parts = pos.split('-');
+      var cell = make('button', 'loc-cell');
+      cell.type = 'button';
+      cell.setAttribute('data-pos', pos);
+      cell.setAttribute('aria-label', text('place.' + parts[0]) + ' ' + text('place.' + parts[1]));
+      cell.appendChild(make('span'));
+      cell.addEventListener('click', function () { setPlace({ card_position: pos, card_custom_x: null, card_custom_y: null }); });
+      grid.appendChild(cell);
+      refs.cells.push(cell);
+    });
+    pane.appendChild(grid);
+    refs.grid = grid;
+    refs.note = make('p', 'loc-note');
+    pane.appendChild(refs.note);
+
+    var field = make('div', 'cz-field');
+    var label = make('label', 'cz-lbl');
+    label.setAttribute('for', 'loc-width');
+    label.appendChild(make('span', null, text('place.size')));
+    refs.widthValue = make('span');
+    label.appendChild(refs.widthValue);
+    var range = make('input');
+    range.type = 'range';
+    range.id = 'loc-width';
+    range.setAttribute('min', String(P.MIN_WIDTH));
+    range.setAttribute('max', String(P.MAX_WIDTH));
+    range.setAttribute('step', '10');
+    range.addEventListener('input', function (e) { setPlace({ card_width: Number(e.target.value) }); });
+    field.appendChild(label);
+    field.appendChild(range);
+    pane.appendChild(field);
+    refs.width = range;
+
+    locRefs = refs;
+    syncLocation();
+  }
+  function showLocation() {
+    renderLocation();
+    startStage();
+    syncLocation();
+  }
+  function hideLocation() {
+    stopStage();
+    locRefs = null;
+  }
+
+  // Dragging the alert on the stage (free position only): the pointer is captured, the corner follows it kept on
+  // the screen (STYLE_CORE.clampFree) and the draft stores fractions.
+  function dragStart(e) {
+    var stage = el('stage');
+    if (CARDS.tab !== 'location' || !isFree() || !stage) return;
+    var k = stageScale(), box = stage.getBoundingClientRect(), custom = root.ATLETA_PLACEMENT.placementOf(CARDS.draft).custom;
+    drag = { k: k, dx: (e.clientX - box.left) / k - custom.x * 1920, dy: (e.clientY - box.top) / k - custom.y * 1080 };
+    var slot = stageSlot();
+    if (slot && slot.setPointerCapture) { try { slot.setPointerCapture(e.pointerId); } catch (err) { /* no pointer to capture (a synthetic event) */ } }
+    if (e.preventDefault) e.preventDefault();
+  }
+  function dragMove(e) {
+    var stage = el('stage');
+    if (!drag || !stage || !CARDS.draft) return;
+    var box = stage.getBoundingClientRect(), size = slotSize();
+    var at = core().clampFree((e.clientX - box.left) / drag.k - drag.dx, (e.clientY - box.top) / drag.k - drag.dy, size.w, size.h);
+    CARDS.draft.card_custom_x = at.x;
+    CARDS.draft.card_custom_y = at.y;
+    placeStage();
+  }
+  function dragEnd() {
+    if (!drag) return;
+    drag = null;
+    renderTabValues();
+  }
+
   // ?tab=<card> opens that card's window, when the page shows the card.
   function openFromUrl(search) {
     var Params = root.URLSearchParams;
@@ -1238,6 +1464,14 @@
     }
     var bg = el('stage-bg'), thumb = builder().streamThumbnail;
     if (bg && thumb) bg.style.backgroundImage = 'url(' + JSON.stringify(String(thumb)) + ')';
+    on('stage-replay', function () { replayStage(); });
+    var slot = stageSlot();
+    if (slot) {
+      slot.addEventListener('pointerdown', dragStart);
+      slot.addEventListener('pointermove', dragMove);
+      slot.addEventListener('pointerup', dragEnd);
+      slot.addEventListener('pointercancel', dragEnd);
+    }
     bindCustomize();
   }
 
@@ -1251,11 +1485,15 @@
     renderAnimation: renderAnimation, renderCustomize: renderCustomize, pickLook: pickLook, useFamily: useFamily,
     // The Sound tab
     renderSound: renderSound, pickSound: pickSound,
+    // The Location tab and the stage beside it (stageContent is what the stage plays: a tab whose alert is not a look replaces it)
+    renderLocation: renderLocation, placeStage: placeStage,
+    stageContent: function () { return { look: draftLook(), design: CARDS.draft || {}, sample: sampleOf(CARDS.editing) }; },
     editing: null, draft: null, draftStyle: null, tab: null,
     panes: {
       animation: { show: renderAnimation, hide: stopGallery },
       customize: { show: renderCustomize, hide: stopCustomize },
       sound: { show: renderSound },
+      location: { show: showLocation, hide: hideLocation },
     },
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CARDS;
