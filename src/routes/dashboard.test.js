@@ -2864,6 +2864,17 @@ describe('the overlay builder page and a slow Twitch', () => {
     }
   });
 
+  test('hands the page which alerts have an uploaded sound, and the cards\' texts in the streamer\'s language', async () => {
+    const { locals } = (await builder()).json();
+    const uploaded = JSON.parse(locals.uploadedSounds);
+    assert.deepEqual(Object.keys(uploaded).sort(), ['bits', 'donation', 'follow', 'giveaway_winner', 'raid', 'subscription', 'yt_giftmember', 'yt_member', 'yt_superchat']);
+    assert.ok(Object.values(uploaded).every((v) => v === false));
+    const texts = JSON.parse(locals.builderTexts);
+    assert.equal(texts['tabs.customize'], 'Customize');
+    assert.equal(texts['sound.today'], 'Classic engine sound');
+    assert.equal(texts['window.title'], 'Edit the {{alert}} alert');
+  });
+
   test('hands the Style section each alert\'s gallery, the default looks, the families, sounds and fonts, named in the streamer\'s language', async () => {
     const { locals } = (await builder()).json();
     const data = JSON.parse(locals.styleData);
