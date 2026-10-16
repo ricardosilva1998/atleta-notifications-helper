@@ -207,6 +207,31 @@ describe('Twitch\'s refusals', () => {
     assert.deepEqual(affiliateFlags, [[7, { affiliate_status: 'ok' }]]);
   });
 
+  // The route answers a start with the card's status line, computed from the streamer it passed: once Twitch took the
+  // start, that line must not say "Needs Twitch Affiliate or Partner" beside the running poll.
+  test('the streamer the caller passed carries the flag Twitch\'s answer stored', async () => {
+    const flagged = streamer({ cp_affiliate_status: 'not_affiliate' });
+    answers.push({ status: 200, body: { data: [poll] } });
+    await polls.createPoll(flagged, value);
+    assert.equal(flagged.cp_affiliate_status, 'ok');
+    const refusedOne = streamer();
+    answers.push(refused(403, 'The broadcaster must be a partner or affiliate'));
+    await code(polls.createPoll(refusedOne, value));
+    assert.equal(refusedOne.cp_affiliate_status, 'not_affiliate');
+  });
+
+  // Reads answer not_affiliate too, and the card and the bar ask every few seconds: one write, not one per read.
+  test('a not-Affiliate refusal is stored only when the stored flag is not already not_affiliate', async () => {
+    const message = 'The broadcaster must be a partner or affiliate';
+    answers.push(refused(403, message), refused(403, message), refused(403, message));
+    await code(polls.latestPoll(streamer({ cp_affiliate_status: 'not_affiliate' })));
+    assert.deepEqual(affiliateFlags, []);
+    const s = streamer();
+    await code(polls.latestPoll(s));
+    await code(polls.latestPrediction(s));
+    assert.deepEqual(affiliateFlags, [[7, { affiliate_status: 'not_affiliate' }]]);
+  });
+
   test('one already running when starting: running; a text AutoMod refuses: automod', async () => {
     answers.push(refused(400, 'The broadcaster already has a poll that\'s running; you may not create another poll until the current poll completes.'));
     assert.equal(await code(polls.createPoll(streamer(), value)), 'running');

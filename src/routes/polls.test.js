@@ -44,10 +44,15 @@ const predictionOf = (value, over = {}) => ({
   outcomes: value.choices.map((title, i) => ({ id: `o${i + 1}`, title, users: 0, channel_points: 0, color: i ? 'PINK' : 'BLUE' })), ...over,
 });
 const LAP = { title: 'Clean lap?', durationSeconds: 60, choices: ['Clean', 'Chaos'] };
+// As the real client does, a start Twitch takes sets the not-Affiliate flag of the streamer it was given back to 'ok'.
+const started = (s, result) => result.then((answered) => {
+  if (s.cp_affiliate_status === 'not_affiliate') s.cp_affiliate_status = 'ok';
+  return answered;
+});
 const twitchPollsStub = {
   PollsError,
-  createPoll: (s, value) => answer('createPoll', [s.id, value], pollOf(value)),
-  createPrediction: (s, value) => answer('createPrediction', [s.id, value], predictionOf(value)),
+  createPoll: (s, value) => started(s, answer('createPoll', [s.id, value], pollOf(value))),
+  createPrediction: (s, value) => started(s, answer('createPrediction', [s.id, value], predictionOf(value))),
   endPoll: (s, id) => answer('endPoll', [s.id, id], pollOf({ title: 'Top 5?', durationSeconds: 60, choices: ['Yes', 'No'] }, { id, status: 'TERMINATED', ended_at: iso(Date.now()) })),
   lockPrediction: (s, id) => answer('lockPrediction', [s.id, id], predictionOf(LAP, { id, status: 'LOCKED', locked_at: iso(Date.now()) })),
   resolvePrediction: (s, id, outcomeId) => answer('resolvePrediction', [s.id, id, outcomeId], predictionOf(LAP, { id, status: 'RESOLVED', winning_outcome_id: outcomeId, ended_at: iso(Date.now()) })),
@@ -210,6 +215,13 @@ describe('starting', () => {
     assert.equal(res.json().live.poll.state, 'running');
     assert.deepEqual(res.json().live.status, { text: t('en', 'cards.polls.status.pollRunning'), tone: 'ok' });
     assert.deepEqual(said, [[id, 'Poll: Top 5 finish? — vote now! (2:00 to vote)']]);
+  });
+
+  test('a start Twitch takes after a not-Affiliate refusal answers the running poll\'s status line, not the setup step', async () => {
+    const id = addStreamer({ cp_affiliate_status: 'not_affiliate' });
+    const res = await start(id, poll);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json().live.status, { text: t('en', 'cards.polls.status.pollRunning'), tone: 'ok' });
   });
 
   test('a one-off prediction starts without being saved', async () => {

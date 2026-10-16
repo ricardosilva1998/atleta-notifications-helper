@@ -10,8 +10,9 @@
 //   needs_reconnect  no linked channel or token, the two permissions missing, a token Twitch refuses twice, or a grant
 //                    Twitch no longer accepts (the shared refresh clears its permissions)
 //   not_affiliate    Twitch allows polls and predictions to Affiliates and Partners only: recognised by the message,
-//                    since Twitch documents no status for it; the flag the rewards card reads is stored, and a start
-//                    that works sets it back to 'ok' (the rewards client's value)
+//                    since Twitch documents no status for it; the flag the rewards card reads is stored (when it
+//                    changes), and a start that works sets it back to 'ok' (the rewards client's value), on the stored
+//                    row and on the streamer the caller passed
 //   running          a start while one of the same kind runs
 //   automod          a title or choice Twitch's AutoMod refused
 //   changed          an end, lock, result or cancel of one whose status changed meanwhile
@@ -93,13 +94,22 @@ async function helix(streamer, method, urlPath, body, { creating = false } = {})
     if (err instanceof PollsError) throw err;
     throw new PollsError('twitch_failed', err && err.message);
   }
+  // The not-Affiliate flag (the one the rewards card reads) is written only when it changes: reads answer not_affiliate
+  // too, every few seconds. The streamer the caller passed gets it as well: the route's status line for this answer
+  // reads it, so after a start Twitch took it no longer says "Needs Twitch Affiliate or Partner".
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const code = codeFor(res.status, data && data.message, creating);
-    if (code === 'not_affiliate') db.updateStreamerCpSync(streamer.id, { affiliate_status: 'not_affiliate' });
+    if (code === 'not_affiliate' && streamer.cp_affiliate_status !== 'not_affiliate') {
+      db.updateStreamerCpSync(streamer.id, { affiliate_status: 'not_affiliate' });
+      streamer.cp_affiliate_status = 'not_affiliate';
+    }
     throw new PollsError(code, `${res.status} ${(data && data.message) || ''}`.trim());
   }
-  if (creating && streamer.cp_affiliate_status === 'not_affiliate') db.updateStreamerCpSync(streamer.id, { affiliate_status: 'ok' });
+  if (creating && streamer.cp_affiliate_status === 'not_affiliate') {
+    db.updateStreamerCpSync(streamer.id, { affiliate_status: 'ok' });
+    streamer.cp_affiliate_status = 'ok';
+  }
   return data;
 }
 
