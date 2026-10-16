@@ -1,11 +1,12 @@
 'use strict';
 
-// The voices a streamer can pick for reading tips aloud: a short, curated list per language (ElevenLabs voices, one
-// model for all seven languages). `preview` is the URL of the voice's recorded sample in public/tts/previews/ (the
-// language's default line read with "Atleta", 25 euros and the sample message, named by its content hash, so it is
-// cached a year). The first voice of a language is its default. English uses ElevenLabs' own premade voices; the
-// other languages use native speakers from ElevenLabs' voice library (rate 1, no live moderation, at least a year's
-// notice before their owner can withdraw them). How a voice and its preview are added: docs/features/tip-tts.md.
+// The voices a streamer can pick for reading tips aloud: a short, curated list per language (ElevenLabs voices; the
+// model is config.tts.model except where MODEL_BY_LANGUAGE below names another). `preview` is the URL of the voice's
+// recorded sample in public/tts/previews/ (the language's default line read with "Atleta", 25 euros and the sample
+// message, named by its content hash, so it is cached a year). The first voice of a language is its default. English
+// uses ElevenLabs' own premade voices; the other languages use native speakers from ElevenLabs' voice library (rate 1,
+// no live moderation, at least a year's notice before their owner can withdraw them). How a voice and its preview are
+// added: docs/features/tip-tts.md.
 
 const TTS_LANGUAGES = Object.freeze(['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja']);
 
@@ -19,11 +20,11 @@ const LIST = {
     { id: 'bIHbv24MWmeRgasZH58o', name: 'Will', gender: 'male', preview: '/tts/previews/bIHbv24MWmeRgasZH58o.en.9ea3566b.mp3' },
   ],
   pt: [
-    { id: 'IOntNi3WhlrGbqLWGi61', name: 'Beatriz (Portugal)', gender: 'female', preview: '/tts/previews/IOntNi3WhlrGbqLWGi61.pt.0346568d.mp3' },
-    { id: 'DMcOknq8n1B6XshFIJKJ', name: 'Patrício (Portugal)', gender: 'male', preview: '/tts/previews/DMcOknq8n1B6XshFIJKJ.pt.87cb3e60.mp3' },
-    { id: '33B4UnXyTNbgLmdEDh5P', name: 'Keren (Brasil)', gender: 'female', preview: '/tts/previews/33B4UnXyTNbgLmdEDh5P.pt.7d10d204.mp3' },
-    { id: '36rVQA1AOIPwpA3Hg1tC', name: 'Matheus (Brasil)', gender: 'male', preview: '/tts/previews/36rVQA1AOIPwpA3Hg1tC.pt.bf1c9fab.mp3' },
-    { id: 'RGymW84CSmfVugnA5tvA', name: 'Roberta (Brasil)', gender: 'female', preview: '/tts/previews/RGymW84CSmfVugnA5tvA.pt.ef89c53b.mp3' },
+    { id: 'IOntNi3WhlrGbqLWGi61', name: 'Beatriz (Portugal)', gender: 'female', preview: '/tts/previews/IOntNi3WhlrGbqLWGi61.pt.207d99fc.mp3' },
+    { id: 'DMcOknq8n1B6XshFIJKJ', name: 'Patrício (Portugal)', gender: 'male', preview: '/tts/previews/DMcOknq8n1B6XshFIJKJ.pt.fa49440a.mp3' },
+    { id: '33B4UnXyTNbgLmdEDh5P', name: 'Keren (Brasil)', gender: 'female', preview: '/tts/previews/33B4UnXyTNbgLmdEDh5P.pt.b96949fa.mp3' },
+    { id: '36rVQA1AOIPwpA3Hg1tC', name: 'Matheus (Brasil)', gender: 'male', preview: '/tts/previews/36rVQA1AOIPwpA3Hg1tC.pt.7a5f6fc5.mp3' },
+    { id: 'RGymW84CSmfVugnA5tvA', name: 'Roberta (Brasil)', gender: 'female', preview: '/tts/previews/RGymW84CSmfVugnA5tvA.pt.76b96301.mp3' },
   ],
   es: [
     { id: '1eHrpOW5l98cxiSRjbzJ', name: 'Raquel (España)', gender: 'female', preview: '/tts/previews/1eHrpOW5l98cxiSRjbzJ.es.dcba6462.mp3' },
@@ -76,4 +77,13 @@ function isVoice(lang, id) {
   return Object.hasOwn(VOICES, lang) && VOICES[lang].some((voice) => voice.id === id);
 }
 
-module.exports = { TTS_LANGUAGES, VOICES, defaultVoice, isVoice };
+// The model a language is spoken with, where it is not the configured one (config.tts.model). Portuguese uses Turbo
+// v2.5: Multilingual v2 pulls every Portuguese voice towards a Brazilian accent, and Turbo keeps the Portugal voices
+// Portuguese (the owner compared the five models by ear, 2026-10-16). Its previews are recorded with it too.
+const MODEL_BY_LANGUAGE = Object.freeze({ pt: 'eleven_turbo_v2_5' });
+
+function modelFor(lang, fallback) {
+  return Object.hasOwn(MODEL_BY_LANGUAGE, lang) ? MODEL_BY_LANGUAGE[lang] : fallback;
+}
+
+module.exports = { TTS_LANGUAGES, VOICES, MODEL_BY_LANGUAGE, defaultVoice, isVoice, modelFor };

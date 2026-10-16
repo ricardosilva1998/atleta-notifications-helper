@@ -11,7 +11,7 @@ const path = require('path');
 const { t } = require('../i18n');
 const { createTestCooldown } = require('./testCooldown');
 const tipVoice = require('./tipVoice');
-const { defaultVoice } = require('./ttsVoices');
+const { defaultVoice, modelFor } = require('./ttsVoices');
 
 const NOW = Date.UTC(2026, 9, 16, 12, 0, 0);
 const AUDIO = Buffer.from('ID3-fake-mp3-bytes');
@@ -124,6 +124,17 @@ describe('announceWithVoice', () => {
     assert.deepEqual(emitted, [{ url: `/overlay/tts/tok-${streamer.id}/${UUID1}.mp3`, volume: 0.6 }]);
     assert.deepEqual(calls.status, [['paypal', 'ORDER-1', 'read']]);
     assert.equal(calls.errors.length, 0);
+  });
+
+  test('Portuguese is spoken with Turbo v2.5 (it keeps a Portugal voice Portuguese); other languages use the configured model', async () => {
+    const pt = makeDeps();
+    await tipVoice.announceWithVoice(makeStreamer({ tts_language: 'pt' }), donation(), { emitAlert: () => {}, deps: pt.deps });
+    assert.equal(pt.calls.synth[0].opts.model, 'eleven_turbo_v2_5');
+    assert.equal(modelFor('pt', 'm'), 'eleven_turbo_v2_5');
+    const en = makeDeps();
+    await tipVoice.announceWithVoice(makeStreamer({ tts_language: 'en' }), donation(), { emitAlert: () => {}, deps: en.deps });
+    assert.equal(en.calls.synth[0].opts.model, 'm');
+    assert.equal(modelFor('en', 'm'), 'm');
   });
 
   test("the streamer's own monthly limit is used when an admin set one", async () => {
