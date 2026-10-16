@@ -2372,6 +2372,7 @@
   "overlayBuilder.window.saving": "Enregistrement…",
   "overlayBuilder.window.leave": "Fermer sans enregistrer vos modifications ?",
   "overlayBuilder.window.replay": "Rejouer avec le son",
+  "overlayBuilder.window.replayPlain": "Rejouer",
   "overlayBuilder.window.soundLoop": "Son à chaque boucle",
   "overlayBuilder.window.loopHint": "L'aperçu tourne en boucle pour que vous voyiez toute l'animation.",
   "overlayBuilder.tabs.animation": "Animation",

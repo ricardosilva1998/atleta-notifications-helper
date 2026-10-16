@@ -2875,6 +2875,33 @@ describe('the overlay builder page and a slow Twitch', () => {
     assert.equal(texts['window.title'], 'Edit the {{alert}} alert');
   });
 
+  // public/js/builder-cards.js reads its texts from window.BUILDER_TEXTS with text('…'); a key BUILDER_TEXT_KEYS does
+  // not list would show as an empty string only when its moment comes. The script's source is read: every key it names
+  // (in a text() call, or as a quoted key it hands to text() through a table or a choice), and every key it builds from
+  // a prefix ('place.' with the parts of POSITIONS, 'tabs.' with PANES), must be in the table the page gets.
+  test('every text the cards\' script reads is in the table the page gives it', async () => {
+    const { locals } = (await builder()).json();
+    const texts = JSON.parse(locals.builderTexts);
+    const source = realFs.readFileSync(path.join(SRC, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
+    const reads = new Set();
+    for (const [, key] of source.matchAll(/\btext\('([\w.]+)'\s*[,)]/g)) reads.add(key);
+    // Keys handed to text() indirectly (SOUND_TAGS, a ternary, the Location tab's mode table): every quoted
+    // name.key under one of the namespaces the direct calls use.
+    const spaces = new Set([...reads].filter((key) => key.includes('.')).map((key) => key.split('.')[0]));
+    for (const [, key] of source.matchAll(/'([a-z]+\.[A-Za-z]+)'/g)) if (spaces.has(key.split('.')[0])) reads.add(key);
+    const prefixes = new Set([...source.matchAll(/\btext\('([\w.]+\.)'\s*\+/g)].map((m) => m[1]));
+    assert.deepEqual([...prefixes].sort(), ['place.', 'tabs.'], 'the prefixes this test knows how to expand');
+    const list = (name) => JSON.parse(source.match(new RegExp(`var ${name} = (\\[[^\\]]*\\]);`))[1].replace(/'/g, '"'));
+    for (const position of list('POSITIONS')) for (const part of position.split('-')) reads.add(`place.${part}`);
+    for (const pane of list('PANES')) reads.add(`tabs.${pane}`);
+    assert.ok(reads.size >= 60, `the scan finds the texts the script reads (${reads.size})`);
+    for (const key of ['window.replayPlain', 'style.listenToday', 'sound.silent', 'place.freeNote', 'style.mine', 'place.mid', 'tabs.design']) {
+      assert.ok(reads.has(key), `the scan sees ${key}`);
+    }
+    const missing = [...reads].filter((key) => !(key in texts) || !texts[key]);
+    assert.deepEqual(missing, [], 'texts the script reads that BUILDER_TEXT_KEYS does not list');
+  });
+
   test('hands the Style section each alert\'s gallery, the default looks, the families, sounds and fonts, named in the streamer\'s language', async () => {
     const { locals } = (await builder()).json();
     const data = JSON.parse(locals.styleData);

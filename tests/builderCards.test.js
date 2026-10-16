@@ -157,6 +157,24 @@ describe('the loop', () => {
     lp.stop();
   });
 
+  test('the offset is for a loop\'s first start only: restart() and a later start() play at once', () => {
+    const { Looper } = load();
+    const slot = element();
+    let draws = 0;
+    const lp = new Looper(slot, () => ({ look: { ...LOOK, render: () => { draws += 1; return '<i></i>'; } }, design: {}, sample: {} }),
+      { hold: 2000, gap: 700, offset: 900 });
+    lp.start();
+    advance(900);
+    assert.equal(draws, 1);
+    lp.restart();
+    assert.equal(draws, 2, 'a picked tile plays again at once');
+    assert.ok(slot.classList.contains('playing'));
+    lp.stop();
+    lp.start();
+    assert.equal(draws, 3, 'a tile scrolled back in plays at once');
+    lp.stop();
+  });
+
   test('restart() plays again at once', () => {
     const { Looper } = load();
     const slot = element();
@@ -326,6 +344,7 @@ const TEXTS = {
   'sound.thisLook': 'This look', 'sound.own': 'Own sound', 'sound.second': 'Version 2', 'sound.silent': 'Silent', 'sound.current': 'Current',
   'sound.search': 'Search sounds…', 'sound.both': 'both recordings', 'sound.listen': 'Listen',
   'sound.uploaded': 'You uploaded a sound for this alert, so OBS plays it instead of the look\'s sound.', 'sound.uploadedLink': 'Overlay settings',
+  'style.listenToday': 'Today\'s sound plays in OBS: use Test to hear it.', 'window.replayPlain': 'Replay',
 };
 const GLASS = { ...LOOK, key: 'follow-glass', sound: 'glFollow' };
 const RACING = { ...LOOK, key: 'follow-racing', family: 'racing', sound: 'rcFollow' };
@@ -1023,6 +1042,82 @@ describe('the Customize tab', () => {
     assert.equal(page.renders(), 0);
     page.CARDS.closeEditor({ force: true });
   });
+
+  // The window sends one request at a time: a save landing after the family route would keep the draft's settings
+  // on the server while the family's answer overwrites the card's row.
+  const LOCKED = ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close', 'custom-all-six'];
+  test('while "Use <theme> for all six" is on its way, Done and Reset send nothing and the window waits for it', async () => {
+    let resolve;
+    const pending = new Promise((r) => { resolve = r; });
+    const page = realPage({ saved: { follow: 'follow-racing' }, answers: [{ pending }] });
+    const { CARDS, document, calls, confirms } = page;
+    CARDS.openEditor('follow');
+    CARDS.setTab('customize');
+    const family = CARDS.useFamily();
+    assert.equal(calls.length, 1);
+    for (const id of LOCKED) assert.equal(document.getElementById(id).disabled, true, id);
+    assert.equal((await CARDS.saveDraft()).ok, false);
+    assert.equal((await CARDS.resetDraft()).ok, false);
+    document.fire('keydown', { key: 'Escape' });
+    document.getElementById('editor-cancel').fire('click');
+    document.getElementById('editor-close').fire('click');
+    assert.equal(CARDS.closeEditor(), false);
+    assert.equal(calls.length, 1, 'no save or reset sent');
+    assert.equal(confirms.length, 1, 'only the family\'s question');
+    assert.ok(isOpen(document));
+    resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, designs: { follow: { event_type: 'follow', style: 'follow-racing' } } }) });
+    assert.equal((await family).ok, true);
+    for (const id of LOCKED) assert.equal(document.getElementById(id).disabled, false, id);
+    CARDS.closeEditor({ force: true });
+  });
+
+  test('while Done\'s save or Reset is on its way, "Use <theme> for all six" (and the other) sends nothing', async () => {
+    for (const first of ['save', 'reset']) {
+      let resolve;
+      const pending = new Promise((r) => { resolve = r; });
+      const page = realPage({ saved: { follow: 'follow-racing' }, answers: [{ pending }] });
+      const { CARDS, document, calls, confirms } = page;
+      CARDS.openEditor('follow');
+      CARDS.setTab('customize');
+      const running = first === 'save' ? CARDS.saveDraft() : CARDS.resetDraft();
+      for (const id of LOCKED) assert.equal(document.getElementById(id).disabled, true, `${first}: ${id}`);
+      assert.equal((await CARDS.useFamily()).ok, false);
+      assert.equal((await (first === 'save' ? CARDS.resetDraft() : CARDS.saveDraft())).ok, false);
+      assert.equal(CARDS.closeEditor(), false, first);
+      assert.equal(calls.length, 1, `${first}: nothing else sent`);
+      assert.equal(confirms.length, first === 'reset' ? 1 : 0, `${first}: no other question`);
+      resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+      assert.equal((await running).ok, true);
+      for (const id of LOCKED) assert.equal(document.getElementById(id).disabled, false, `${first}: ${id} again`);
+      CARDS.closeEditor({ force: true });
+    }
+  });
+
+  // A request with no answer in 20 s ends as one that failed (the dashboard cards' rule).
+  test('save, Reset and "Use <theme> for all six" give up after 20 s and free the window', async () => {
+    const timeouts = [];
+    const signal = { aborted: false };
+    const page = realPage({ saved: { follow: 'follow-racing' }, extra: { AbortSignal: { timeout: (ms) => { timeouts.push(ms); return signal; } } } });
+    const { CARDS, document, calls } = page;
+    CARDS.openEditor('follow');
+    CARDS.setTab('customize');
+    CARDS.__context.fetch = (url, opts) => {
+      calls.push({ url, opts });
+      const error = new Error('The operation was aborted due to timeout');
+      error.name = 'TimeoutError';
+      return Promise.reject(error);
+    };
+    assert.equal((await CARDS.saveDraft()).ok, false);
+    assert.equal((await CARDS.resetDraft()).ok, false);
+    assert.equal((await CARDS.useFamily()).ok, false);
+    assert.deepEqual(calls.map((c) => c.url), ['/dashboard/overlay-builder/save', '/dashboard/overlay-builder/reset', '/dashboard/overlay-builder/family']);
+    assert.ok(calls.every((c) => c.opts.signal === signal), 'each request carries the deadline');
+    assert.deepEqual(timeouts, [20000, 20000, 20000]);
+    assert.equal(document.getElementById('editor-msg').textContent, 'That did not work. Please try again.');
+    for (const id of LOCKED) assert.equal(document.getElementById(id).disabled, false, id);
+    assert.ok(isOpen(document));
+    CARDS.closeEditor({ force: true });
+  });
 });
 
 describe('the Sound tab', () => {
@@ -1108,6 +1203,21 @@ describe('the Sound tab', () => {
     assert.equal(page.CARDS.draft.style_sound, 'none');
     assert.equal(page.played.length, 3, 'the engine sound and silence play nothing here');
     assert.ok(page.CARDS.isDirty());
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the classic engine sound and "No sound" have nothing to listen to here: their ▶ is off', () => {
+    const page = soundPage();
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    const mine = groupNamed(page.document, 'This look');
+    const today = playOf(rowOf(page.document, 'today', mine));
+    assert.equal(today.disabled, true);
+    assert.equal(today.getAttribute('title'), 'Today\'s sound plays in OBS: use Test to hear it.');
+    const none = playOf(rowOf(page.document, 'none', mine));
+    assert.equal(none.disabled, true);
+    assert.equal(none.getAttribute('title'), null);
+    assert.equal(playOf(rowOf(page.document, 'glFollow', mine)).disabled, false);
     page.CARDS.closeEditor({ force: true });
   });
 
@@ -1262,7 +1372,7 @@ describe('the Location tab', () => {
   test('dragging keeps the alert on the screen and stores fractions', () => {
     const page = locPage({ rows: [{ event_type: 'follow', card_position: 'top-center', card_custom_x: 0, card_custom_y: 0 }] });
     openLocation(page);
-    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 7 });
+    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 7, button: 0 });
     assert.deepEqual(page.slot.captured, [7], 'the pointer is captured');
     page.slot.fire('pointermove', { clientX: -50, clientY: 1000 });   // (-100, 2000) on the 1920 x 1080 stage
     assert.equal(page.CARDS.draft.card_custom_x, 0);
@@ -1282,13 +1392,13 @@ describe('the Location tab', () => {
     const page = locPage({ rows: [{ event_type: 'follow', card_position: 'top-center', card_custom_x: 0.5, card_custom_y: 0.5 }] });
     openLocation(page);
     // the alert's corner is (960, 540); touching 30 px right of and 20 px below it keeps that offset
-    page.slot.fire('pointerdown', { clientX: (960 + 30) / 2, clientY: (540 + 20) / 2, pointerId: 1 });
+    page.slot.fire('pointerdown', { clientX: (960 + 30) / 2, clientY: (540 + 20) / 2, pointerId: 1, button: 0 });
     page.slot.fire('pointermove', { clientX: (200 + 30) / 2, clientY: (100 + 20) / 2 });
     assert.equal(page.CARDS.draft.card_custom_x, Math.round(200 / 1920 * 1000) / 1000);
     assert.equal(page.CARDS.draft.card_custom_y, Math.round(100 / 1080 * 1000) / 1000);
     page.slot.fire('pointerup', {});
     modeOf(page.document, 'fixed').fire('click');
-    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 2 });
+    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 2, button: 0 });
     page.slot.fire('pointermove', { clientX: 300, clientY: 300 });
     assert.equal(page.CARDS.draft.card_custom_x, null, 'no drag in fixed mode');
     page.CARDS.closeEditor({ force: true });
@@ -1370,6 +1480,34 @@ describe('the Location tab', () => {
     page.CARDS.closeEditor({ force: true });
   });
 
+  test('Replay while the stage is not playing leaves no sound waiting for the next loop', () => {
+    const page = locPage();
+    openLocation(page);
+    page.CARDS.setTab('sound');
+    page.document.getElementById('stage-replay').fire('click');
+    page.CARDS.setTab('location');
+    assert.deepEqual(page.played, [], 'the stage starts silent again');
+    page.document.getElementById('stage-replay').fire('click');
+    assert.deepEqual(page.played, ['glFollow']);
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('only the main button of the primary pointer drags the alert', () => {
+    const page = locPage({ rows: [{ event_type: 'follow', card_position: 'top-center', card_custom_x: 0.5, card_custom_y: 0.5 }] });
+    openLocation(page);
+    page.slot.fire('pointerdown', { clientX: 480, clientY: 270, pointerId: 1, button: 2, isPrimary: true });
+    page.slot.fire('pointermove', { clientX: 100, clientY: 100 });
+    assert.equal(page.CARDS.draft.card_custom_x, 0.5, 'not with the secondary button');
+    page.slot.fire('pointerdown', { clientX: 480, clientY: 270, pointerId: 2, button: 0, isPrimary: false });
+    page.slot.fire('pointermove', { clientX: 100, clientY: 100 });
+    assert.equal(page.CARDS.draft.card_custom_x, 0.5, 'not with a second finger');
+    assert.deepEqual(page.slot.captured, []);
+    page.slot.fire('pointerdown', { clientX: 480, clientY: 270, pointerId: 3, button: 0, isPrimary: true });
+    page.slot.fire('pointermove', { clientX: 100, clientY: 100 });
+    assert.notEqual(page.CARDS.draft.card_custom_x, 0.5, 'the main button drags');
+    page.CARDS.closeEditor({ force: true });
+  });
+
   test('a sound the streamer uploaded for the alert is not replaced by the look\'s on the stage', () => {
     const page = locPage();
     page.g.BUILDER.uploadedSounds = { follow: true };
@@ -1433,10 +1571,16 @@ describe('the legacy cards: the sponsor images and the YouTube alerts keep today
 
   test('the sponsor images window has Images, Design and Location, and Images holds today\'s sponsor controls', () => {
     const images = between('id="pane-images"', 'id="pane-design"');
-    for (const id of ['sp-rotation-toggle', 'ctrl-sponsor-animation', 'sponsor-list', 'sp-upload-zone', 'sp-file-input', 'sp-upload-name', 'sp-upload-dur', 'sp-upload-btn']) {
+    for (const id of ['sp-rotation-toggle', 'sponsor-list', 'sp-upload-zone', 'sp-file-input', 'sp-upload-name', 'sp-upload-dur', 'sp-upload-btn']) {
       assert.ok(images.includes(`id="${id}"`), id);
     }
+    assert.ok(!images.includes('id="ctrl-sponsor-animation"'), 'the image animation is a design property, saved by Done');
     const design = between('id="pane-design"', 'id="editor-side"');
+    // The image animation opens the Design tab (the sponsor images' only; the YouTube alerts' Design tab hides it).
+    assert.ok(design.indexOf('id="ctrl-sponsor-animation"') > 0 && design.indexOf('id="ctrl-sponsor-animation"') < design.indexOf('id="section-theme"'), 'at the top of Design');
+    assert.match(design, /<select id="ctrl-sponsor-animation"[^>]*onchange="updatePreview\(\); replaySponsorAnimation\(\);"/, 'it still previews as it changes');
+    for (const value of ['fade', 'slide-left', 'slide-right', 'slide-up', 'drop-down', 'zoom', 'none']) assert.ok(design.includes(`<option value="${value}">`), value);
+    assert.match(VIEW, /\.ed:not\(\[data-card="timed"\]\) \.sp-anim-row \{ display: none; \}/, 'only the sponsor images show it');
     for (const id of ['section-theme', 'section-text', 'section-sideicon', 'section-animation', 'row-border-radius', 'ctrl-border-radius',
       'ctrl-bg-color', 'ctrl-event-label', 'ctrl-detail-text', 'side-icon-grid', 'ctrl-entrance-animation', 'ctrl-screen-effect']) {
       assert.ok(design.includes(`id="${id}"`), id);
@@ -1452,6 +1596,25 @@ describe('the legacy cards: the sponsor images and the YouTube alerts keep today
     assert.ok(page.log.includes('renderSponsorList'), 'the list is drawn');
     assert.equal(page.document.getElementById('sp-rotation-toggle').checked, true, 'the rotation switch says whether the rotation is on');
     assert.equal(page.document.getElementById('editor-side').hidden, true, 'no stage on Images');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the stage of a legacy card has a plain Replay, without "Sound on every loop" and the loop hint', () => {
+    assert.match(VIEW, /\.ed\.legacy \.stage-loop, \.ed\.legacy \.stage-hint \{ display: none; \}/);
+    assert.match(VIEW, /<label class="cz-check stage-loop"><input type="checkbox" id="stage-sound-loop">/);
+    const page = legacyPage();
+    const editor = page.document.getElementById('editor'), replay = page.document.getElementById('stage-replay');
+    for (const type of ['timed', 'yt_member']) {
+      page.CARDS.openEditor(type);
+      assert.ok(editor.classList.contains('legacy'), type);
+      assert.equal(editor.getAttribute('data-card'), type);
+      assert.equal(replay.textContent, '↻ Replay', type);
+      page.CARDS.closeEditor({ force: true });
+    }
+    page.CARDS.openEditor('follow');
+    assert.ok(!editor.classList.contains('legacy'), 'an alert with a look plays its sound');
+    assert.equal(editor.getAttribute('data-card'), 'follow');
+    assert.equal(replay.textContent, '↻ Replay with sound');
     page.CARDS.closeEditor({ force: true });
   });
 
@@ -1540,7 +1703,7 @@ describe('the legacy cards: the sponsor images and the YouTube alerts keep today
     slider.fire('input');
     assert.equal(page.controls.card_width, 640);
     pane.find((n) => n.getAttribute('data-mode') === 'free').fire('click');
-    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 });
+    page.slot.fire('pointerdown', { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
     page.slot.fire('pointermove', { clientX: 100, clientY: 50 });
     page.slot.fire('pointerup', {});
     assert.equal(page.controls.card_custom_x, page.CARDS.draft.card_custom_x, 'a drag too');

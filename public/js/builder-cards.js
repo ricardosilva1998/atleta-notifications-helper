@@ -28,8 +28,9 @@
   // ── A looping preview of a look in a slot ──
   // get() -> { look, design, sample }. Plays the entrance, holds, plays the exit at the look's speed,
   // pauses, and again. opts: { hold = 2000, gap = 700, offset = 0, onPlay(look, design) }; an offset
-  // delays the first play only, so a gallery never pauses all at once. Nothing a look does escapes: one
-  // that throws while drawing leaves the slot empty for that loop, and the loop goes on.
+  // delays the loop's very first play only (not a restart, nor a start after a stop), so a gallery never
+  // pauses all at once. Nothing a look does escapes: one that throws while drawing leaves the slot empty
+  // for that loop, and the loop goes on.
   function Looper(slot, get, opts) {
     this.slot = slot;
     this.get = get;
@@ -37,6 +38,7 @@
     this.timers = [];
     this.vars = [];     // the slot variables the last play set (kit.slotVars)
     this.running = false;
+    this.started = false;   // whether it has started once: the offset is spent
   }
   Looper.prototype.later = function (fn, ms) {
     var self = this;
@@ -53,7 +55,8 @@
   Looper.prototype.start = function () {
     if (this.running) return;
     this.running = true;
-    var self = this, offset = Number(this.opts.offset) || 0;
+    var self = this, offset = this.started ? 0 : Number(this.opts.offset) || 0;
+    this.started = true;
     if (offset > 0) this.later(function () { self.cycle(); }, offset);
     else this.cycle();
   };
@@ -438,7 +441,19 @@
   var opened = null;        // { design, style } as the window opened (or was last stored): isDirty() compares
   var tabValues = {};       // the value span of each tab in the bar
   var opener = null;        // what had the focus, given back on close
-  var saving = false;
+  // The window's request on its way ('save', 'reset' or 'family'): one at a time, and while it runs the window's
+  // buttons wait (LOCKED) and the window stays open, so what the server stores and what the page shows agree.
+  var busyWith = null;
+  var LOCKED = ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close', 'custom-all-six'];
+  function lockWindow(what) {
+    busyWith = what || null;
+    LOCKED.map(el).filter(Boolean).forEach(function (button) { button.disabled = !!busyWith; });
+  }
+  // A request with no answer in 20 s ends as one that failed (the dashboard cards' rule).
+  function deadline() {
+    var Signal = root.AbortSignal;
+    return Signal && typeof Signal.timeout === 'function' ? Signal.timeout(20000) : undefined;
+  }
 
   function el(id) { return root.document ? root.document.getElementById(id) : null; }
   function copy(design) { return Object.assign({}, design || {}); }
@@ -612,6 +627,13 @@
     var title = el('editor-title'), icon = el('editor-icon');
     if (title) title.textContent = type === 'timed' ? text('cards.editSponsors') : text('window.title', { alert: cardName(type) });
     if (icon) icon.textContent = CARD_ICONS[type] || '';
+    // A legacy card's stage has no loop and no sound (the page's card plays its entrance): the view hides "Sound on
+    // every loop" and the loop hint (.ed.legacy), and Replay says only that; the image animation is the sponsor
+    // images' (data-card).
+    dialog.classList.toggle('legacy', isLegacy(type));
+    dialog.setAttribute('data-card', type);
+    var replay = el('stage-replay');
+    if (replay) replay.textContent = '↻ ' + text(isLegacy(type) ? 'window.replayPlain' : 'window.replay');
     showMessage('');
     buildTabs(type);
     pauseCards();
@@ -624,13 +646,14 @@
     if (first && first.focus) first.focus();
   }
 
-  // Closes the window; with edits, and not forced, only once the streamer agrees to lose them. While
-  // Done's save is on its way it stays open (Esc, Cancel, ✕ and the backdrop wait): the save will land.
+  // Closes the window; with edits, and not forced, only once the streamer agrees to lose them. While one of
+  // its requests is on its way (Done, Reset, "Use <theme> for all six") it stays open (Esc, Cancel, ✕ and the
+  // backdrop wait): the answer will land.
   function closeEditor(options) {
     var force = !!(options && options.force);
     var type = CARDS.editing;
     if (!type) return true;
-    if (saving && !force) return false;
+    if (busyWith && !force) return false;
     if (!force && isDirty() && !root.confirm(text('window.leave'))) return false;
     if (CARDS.tab) paneHook(CARDS.tab, 'hide');
     restoreSavedLook(type);
@@ -676,19 +699,15 @@
   // window closes; a refusal keeps the window open with the route's message.
   function saveDraft() {
     var type = CARDS.editing;
-    if (!type || saving) return Promise.resolve({ ok: false });
+    if (!type || busyWith) return Promise.resolve({ ok: false });
     // A legacy card saves what the page's controls hold (its Design tab edits them, not the draft).
     var design = (isLegacy(type) && legacyValues()) || copy(CARDS.draft), style = CARDS.draftStyle;
     var done = el('editor-done');
-    // The window's other ways out wait for the answer too.
-    var buttons = ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close'].map(el).filter(Boolean);
-    saving = true;
-    buttons.forEach(function (button) { button.disabled = true; });
+    lockWindow('save');
     if (done) done.textContent = text('window.saving');
     showMessage('');
     function finish(result) {
-      saving = false;
-      buttons.forEach(function (button) { button.disabled = false; });
+      lockWindow(null);
       if (done) done.textContent = text('window.done');
       return result;
     }
@@ -696,6 +715,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(core().savePayload(type, design, style)),
+      signal: deadline(),
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok || !data || !data.ok) {
@@ -727,19 +747,26 @@
   // the alert keeps its saved look (its own settings start again); the window shows that, unedited.
   function resetDraft() {
     var type = CARDS.editing;
-    if (!type || saving) return Promise.resolve({ ok: false });   // not while Done's save is on its way
+    if (!type || busyWith) return Promise.resolve({ ok: false });   // not while another request is on its way
     if (!root.confirm(text('resetConfirm', { name: cardName(type) }))) return Promise.resolve({ ok: false });
+    lockWindow('reset');
+    function finish(result) {
+      lockWindow(null);
+      return result;
+    }
     return fetch('/dashboard/overlay-builder/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eventType: type }),
+      signal: deadline(),
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok || !data || !data.ok) {
           var error = (data && data.error) || text('saveFailed');
           showMessage(error, true);
-          return { ok: false, error: error };
+          return finish({ ok: false, error: error });
         }
+        finish(null);
         var savedStyle = (pageGlobal('SAVED_STYLES') || {})[type];
         storeRow(type, savedStyle ? { event_type: type, style: savedStyle } : null);
         restoreSavedLook(type);
@@ -758,7 +785,7 @@
     }).catch(function (e) {
       var error = text('saveFailedWith', { error: e && e.message });
       showMessage(error, true);
-      return { ok: false, error: error };
+      return finish({ ok: false, error: error });
     });
   }
 
@@ -1011,25 +1038,22 @@
   // transaction on the server), after a question naming it. Every stored row is taken as the page's, and the
   // cards are drawn again; the open alert takes the stored look and its settings and keeps what was edited
   // and not saved (STYLE_CORE.lookApplied). The window stays open on the new look.
-  var familyBusy = false;
   function useFamily() {
     var type = CARDS.editing, look = draftLook();
     var family = look && look.family ? familyOf(look.family) : null;
-    if (!type || !family || saving || familyBusy) return Promise.resolve({ ok: false });
+    if (!type || !family || busyWith) return Promise.resolve({ ok: false });
     if (!root.confirm(text('custom.allSixConfirm', { family: family.name }))) return Promise.resolve({ ok: false });
-    var button = el('custom-all-six');
-    familyBusy = true;
-    if (button) button.disabled = true;
+    lockWindow('family');
     showMessage('');
     function finish(result) {
-      familyBusy = false;
-      if (button) button.disabled = false;
+      lockWindow(null);
       return result;
     }
     return fetch('/dashboard/overlay-builder/family', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ family: family.key }),
+      signal: deadline(),
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok || !data || !data.ok || !data.designs) {
@@ -1095,7 +1119,10 @@
     var play = make('button', 'play', '▶');
     play.type = 'button';
     play.setAttribute('aria-label', text('sound.listen'));
-    play.setAttribute('title', text('sound.listen'));
+    // The engine sound lives in OBS only and "No sound" has nothing to hear: their ▶ is off.
+    play.disabled = key === 'today' || key === 'none';
+    if (key === 'today') play.setAttribute('title', text('style.listenToday'));
+    else if (key !== 'none') play.setAttribute('title', text('sound.listen'));
     play.addEventListener('click', function () {
       play.classList.add('on');
       setTimeout(function () { play.classList.remove('on'); }, 1500);
@@ -1356,6 +1383,7 @@
       if (CARDS.editing === 'timed') callPage('stopSponsorPreview');
     }
     if (stageLooper) stageLooper.stop();
+    stageForceSound = false;
     clearStageFx();
     var stage = el('stage');
     if (stage) stage.classList.remove('dragging-on');
@@ -1364,9 +1392,10 @@
   function replayStage() {
     var content = CARDS.stageContent();
     if (content && content.element) { callPage('playPreviewAnimation'); return; }   // a legacy card: its entrance
-    stageForceSound = true;
     var loop = stageLoop();
-    if (loop && loop.running) loop.restart();
+    if (!loop || !loop.running) return;   // nothing plays: no sound waits for the next start
+    stageForceSound = true;
+    loop.restart();
   }
 
   // ── The Location tab ──
@@ -1493,6 +1522,7 @@
   // the screen (STYLE_CORE.clampFree) and the draft stores fractions.
   function dragStart(e) {
     var stage = el('stage');
+    if (e.button !== 0 || e.isPrimary === false) return;   // the main button of the primary pointer only
     if (CARDS.tab !== 'location' || !isFree() || !stage) return;
     var k = stageScale(), box = stage.getBoundingClientRect(), custom = root.ATLETA_PLACEMENT.placementOf(CARDS.draft).custom;
     drag = { k: k, dx: (e.clientX - box.left) / k - custom.x * 1920, dy: (e.clientY - box.top) / k - custom.y * 1080 };

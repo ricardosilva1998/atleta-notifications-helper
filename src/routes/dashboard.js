@@ -2734,7 +2734,7 @@ const BUILDER_TEXT_KEYS = [
   'overlayBuilder.cards.rotationOff', 'overlayBuilder.cards.images', 'overlayBuilder.cards.twitch',
   'overlayBuilder.cards.youtube', 'overlayBuilder.cards.other', 'overlayBuilder.window.title',
   'overlayBuilder.window.close', 'overlayBuilder.window.cancel', 'overlayBuilder.window.done',
-  'overlayBuilder.window.saving', 'overlayBuilder.window.leave', 'overlayBuilder.window.replay',
+  'overlayBuilder.window.saving', 'overlayBuilder.window.leave', 'overlayBuilder.window.replay', 'overlayBuilder.window.replayPlain',
   'overlayBuilder.window.soundLoop', 'overlayBuilder.window.loopHint', 'overlayBuilder.tabs.animation',
   'overlayBuilder.tabs.customize', 'overlayBuilder.tabs.sound', 'overlayBuilder.tabs.location',
   'overlayBuilder.tabs.images', 'overlayBuilder.tabs.design', 'overlayBuilder.sound.thisLook',
@@ -2751,6 +2751,7 @@ const BUILDER_TEXT_KEYS = [
   'overlayBuilder.saveFailed', 'overlayBuilder.saveFailedWith', 'overlayBuilder.resetConfirm', 'overlayBuilder.resetDone',
   'overlayBuilder.style.all', 'overlayBuilder.style.default', 'overlayBuilder.style.mine', 'overlayBuilder.style.failed',
   'overlayBuilder.style.familyDone', 'overlayBuilder.style.labelHint', 'overlayBuilder.style.fontOwn', 'overlayBuilder.style.testSent',
+  'overlayBuilder.style.listenToday',
 ];
 const KEEP_PLACEHOLDERS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function builderTexts(t) {

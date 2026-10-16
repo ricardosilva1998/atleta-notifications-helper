@@ -2372,6 +2372,7 @@
   "overlayBuilder.window.saving": "Salvando…",
   "overlayBuilder.window.leave": "Fechar sem salvar as alterações?",
   "overlayBuilder.window.replay": "Repetir com som",
+  "overlayBuilder.window.replayPlain": "Repetir",
   "overlayBuilder.window.soundLoop": "Som a cada repetição",
   "overlayBuilder.window.loopHint": "A prévia se repete para você ver a animação inteira.",
   "overlayBuilder.tabs.animation": "Animação",

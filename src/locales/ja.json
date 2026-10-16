@@ -2372,6 +2372,7 @@
   "overlayBuilder.window.saving": "保存中…",
   "overlayBuilder.window.leave": "変更を保存せずに閉じますか？",
   "overlayBuilder.window.replay": "音つきで再生",
+  "overlayBuilder.window.replayPlain": "もう一度再生",
   "overlayBuilder.window.soundLoop": "ループのたびに音を鳴らす",
   "overlayBuilder.window.loopHint": "プレビューはループ再生されるので、アニメーション全体を確認できます。",
   "overlayBuilder.tabs.animation": "アニメーション",
