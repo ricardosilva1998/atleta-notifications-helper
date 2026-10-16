@@ -6063,15 +6063,15 @@ function getActiveTrackingGoals() {
 }
 
 // What the goal's last Twitch read said; a field the call does not give stays.
-// unavailable: null, 'needs_reconnect' or 'not_affiliate'. readbackDone: true
-// stamps readback_at (the follower read-back is done), false clears it.
+// unavailable: null, 'needs_reconnect' or 'not_affiliate'. readbackAt: when the
+// follower read-back last worked (a Date or ISO/SQLite time; null clears it).
 // capped: whether the read-back stopped at its cap.
 function setTrackingGoalTwitchState(id, state) {
   const s = state || {};
   const sets = [];
   const values = [];
   if (s.unavailable !== undefined) { sets.push('twitch_unavailable = ?'); values.push(s.unavailable || null); }
-  if (s.readbackDone !== undefined) sets.push(s.readbackDone ? "readback_at = datetime('now')" : 'readback_at = NULL');
+  if (s.readbackAt !== undefined) { sets.push('readback_at = ?'); values.push(toSqliteTime(s.readbackAt)); }
   if (s.capped !== undefined) { sets.push('readback_capped = ?'); values.push(s.capped ? 1 : 0); }
   if (!sets.length) return;
   db.prepare(`UPDATE tracking_goals SET ${sets.join(', ')} WHERE id = ?`).run(...values, id);

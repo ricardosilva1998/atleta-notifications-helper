@@ -12,8 +12,10 @@
 //   year, month, week, day (calendar or rolling), hours
 //             the follows (each viewer once) or the subs (new, gifted, resubs; a gift of 5 is 5) in Atleta's record
 //             (tracking_events) inside the goal's window, plus the nudge. A follower goal of a year, month, week or
-//             day starts by reading back from Twitch the follows of its window that the record lacks (at most 50
-//             pages; past that the goal says `capped`). Subs cannot be read back.
+//             day reads back from Twitch the follows of its window that the record lacks — in the background when it
+//             starts, again at most every 30 minutes while one of its sources is open, and after each calendar
+//             rollover — at most 50 pages; past that the goal says `capped` while its window reaches back before
+//             its start. Subs cannot be read back.
 // A calendar goal that reaches the end of its period writes it to the finished periods (reached or missed) and starts
 // over with the same target (the minute tick); an hours goal ends at its end time. A goal is reached once: the first
 // time its count passes the target it is stamped (completed_at) and the sources celebrate (justCompleted); after that
@@ -33,7 +35,8 @@ const TITLE_MAX = 60;
 const TARGET_MAX = 10000000;
 const HOURS_MAX = 720;
 const DEFAULT_COLOR = '#22c55e';
-const READ_EVERY_MS = 10 * 60 * 1000;
+const READ_EVERY_MS = 10 * 60 * 1000; // a lifetime goal's total
+const READBACK_EVERY_MS = 30 * 60 * 1000; // a period follower goal's read-back
 const READBACK_PAGES = 50; // 100 followers a page: 5,000 followers
 const MAX_ROLLS = 400; // periods written in one tick for a goal (a daily goal after a long stop)
 const TEST_REVERT_MS = 10000;
@@ -66,20 +69,28 @@ const pick = (body, ...names) => {
   return undefined;
 };
 
+// The title, target and colour of a goal (camelCase or column names), checked as parseGoalFields and
+// parseGoalEdit share them. `color` is null when none was sent.
+function parseLook(b) {
+  const title = typeof b.title === 'string' ? b.title.trim() : '';
+  if (!title || title.length > TITLE_MAX) return { error: 'bad_title' };
+
+  const target = wholeNumber(b.target);
+  if (!Number.isInteger(target) || target < 1 || target > TARGET_MAX) return { error: 'bad_target' };
+
+  let color = pick(b, 'barColor', 'bar_color', 'color');
+  if (color === undefined || color === null || color === '') color = null;
+  else if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return { error: 'bad_color' };
+  return { title, target, color };
+}
+
 // A goal as the Tracking page sends it (camelCase or column names): { ok: true, fields } with the column names
 // createTrackingGoal takes, or { ok: false, error } with the first thing that is wrong. A calendar goal needs an IANA
 // time zone; a rolling, lifetime or hours goal keeps none, and a lifetime or hours goal no mode.
 function parseGoalFields(body) {
   const b = body && typeof body === 'object' ? body : {};
-  const title = typeof b.title === 'string' ? b.title.trim() : '';
-  if (!title || title.length > TITLE_MAX) return { ok: false, error: 'bad_title' };
-
-  const target = wholeNumber(b.target);
-  if (!Number.isInteger(target) || target < 1 || target > TARGET_MAX) return { ok: false, error: 'bad_target' };
-
-  let color = pick(b, 'barColor', 'bar_color', 'color');
-  if (color === undefined || color === null || color === '') color = DEFAULT_COLOR;
-  else if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return { ok: false, error: 'bad_color' };
+  const look = parseLook(b);
+  if (look.error) return { ok: false, error: look.error };
 
   const period = b.period;
   if (!PERIODS.includes(period)) return { ok: false, error: 'bad_period' };
@@ -98,7 +109,18 @@ function parseGoalFields(body) {
     hours = wholeNumber(b.hours);
     if (!Number.isInteger(hours) || hours < 1 || hours > HOURS_MAX) return { ok: false, error: 'bad_hours' };
   }
-  return { ok: true, fields: { title, target, bar_color: color, period, mode, hours, time_zone: timeZone } };
+  return {
+    ok: true,
+    fields: { title: look.title, target: look.target, bar_color: look.color || DEFAULT_COLOR, period, mode, hours, time_zone: timeZone },
+  };
+}
+
+// An edit of the active goal: title and target (required) and colour (kept when none is sent), with
+// parseGoalFields's rules and error codes. { ok: true, fields: { title, target, bar_color|null } } or { ok: false, error }.
+function parseGoalEdit(body) {
+  const look = parseLook(body && typeof body === 'object' ? body : {});
+  if (look.error) return { ok: false, error: look.error };
+  return { ok: true, fields: { title: look.title, target: look.target, bar_color: look.color } };
 }
 
 // A time from the database (SQLite's 'YYYY-MM-DD HH:MM:SS', UTC) or a Date; null for nothing or no time.
@@ -110,7 +132,7 @@ function toDate(value) {
   return Number.isNaN(+date) ? null : date;
 }
 
-function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
+function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = console }) {
   const sources = new Map(); // `${streamerId}:${kind}` → how many of the goal's OBS sources are open
   const triedAt = new Map(); // goal id → when its last Twitch read was tried (ms on this module's clock)
   const reading = new Set(); // goal ids with a Twitch read under way
@@ -148,7 +170,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
     try {
       base = recordCount(goal, at);
     } catch (err) {
-      console.error(`[TrackingGoal] Goal ${goal.id} cannot be counted: ${err.message}`);
+      logger.error(`[TrackingGoal] Goal ${goal.id} cannot be counted: ${err.message}`);
     }
     return Math.max(0, base + (Number(goal.nudge) || 0));
   }
@@ -160,6 +182,19 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       if (streamer && streamer.cp_affiliate_status === 'not_affiliate') return 'not_affiliate';
     }
     return null;
+  }
+
+  // Whether the read-back stopped at its cap AND the window still reaches back before the goal started (what came
+  // after the start is in Atleta's record: a rolling window that has moved past the start, a later calendar period).
+  function cappedNow(goal, at) {
+    if (!goal.readback_capped || !readsBack(goal)) return false;
+    const started = toDate(goal.started_at);
+    if (!started) return true;
+    try {
+      return +countWindow(goal, at).start < +started;
+    } catch {
+      return true;
+    }
   }
 
   // The shape the OBS source and the Tracking page get — only what they draw.
@@ -184,7 +219,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       period: goal.period,
       mode: hasCountedPeriod(goal) ? goal.mode : null,
       unavailable,
-      capped: !!goal.readback_capped,
+      capped: cappedNow(goal, at),
     };
   }
 
@@ -207,7 +242,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
         && db.setTrackingGoalCompleted(payload.id)) {
       justCompleted = true;
       payload = progressOf(goal.streamer_id, goal.kind);
-      console.log(`[TrackingGoal] ${goal.kind} goal "${goal.title}" reached for streamer ${goal.streamer_id}`);
+      logger.log(`[TrackingGoal] ${goal.kind} goal "${goal.title}" reached for streamer ${goal.streamer_id}`);
     }
     const message = { type: 'track_goal', goal: payload };
     if (payload && payload.current !== null && added > 0) message.added = added;
@@ -232,7 +267,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       const code = err && UNAVAILABLE.has(err.code) ? err.code : 'twitch_failed';
       if (code === 'twitch_failed' && !failing.has(key)) {
         failing.add(key);
-        console.warn(`[TrackingGoal] ${what} for streamer ${streamerId}: Twitch did not answer (${err && err.message}); keeping what was there`);
+        logger.warn(`[TrackingGoal] ${what} for streamer ${streamerId}: Twitch did not answer (${err && err.message}); keeping what was there`);
       }
       return { ok: false, code };
     }
@@ -242,7 +277,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
     (streamer) => (kind === 'follow' ? twitch.followerTotal(streamer) : twitch.subscriberTotal(streamer)));
 
   // Reads back the follows of the goal's window and writes the ones the record lacks. Returns the goal's new Twitch
-  // state for setTrackingGoalTwitchState (a read Twitch does not answer changes nothing but leaves it to do).
+  // state for setTrackingGoalTwitchState, or null when Twitch did not answer (nothing changes; it is tried again).
   async function readBack(streamerId, goal, at) {
     const since = countWindow(goal, at).start;
     const result = await ask(streamerId, 'follow', 'Follower read-back',
@@ -250,25 +285,25 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
     if (result.ok) {
       const { followers, complete } = result.value || {};
       const written = db.backfillTrackingFollows(streamerId, followers, since);
-      if (written) console.log(`[TrackingGoal] Read back ${written} follows for streamer ${streamerId}${complete ? '' : ' (capped)'}`);
-      return { unavailable: null, readbackDone: true, capped: !complete };
+      if (written) logger.log(`[TrackingGoal] Read back ${written} follows for streamer ${streamerId}${complete ? '' : ' (capped)'}`);
+      return { unavailable: null, readbackAt: at, capped: !complete };
     }
-    if (result.code !== 'twitch_failed') return { unavailable: result.code, readbackDone: false };
-    return { readbackDone: false };
+    return result.code === 'twitch_failed' ? null : { unavailable: result.code };
   }
 
   function noteUnavailable(goal, code) {
     if (code && goal.twitch_unavailable !== code) {
-      console.log(`[TrackingGoal] ${goal.kind} goal of streamer ${goal.streamer_id}: ${code}`);
+      logger.log(`[TrackingGoal] ${goal.kind} goal of streamer ${goal.streamer_id}: ${code}`);
     }
   }
 
   // ── Lifecycle ──
 
-  // Starts a goal of this kind (ending the active one). A lifetime goal reads the Twitch total first: a token without
-  // the scope or a channel without subs starts it showing that, while a read Twitch does not answer refuses the start
-  // (rejects with code 'twitch_failed') and leaves the active goal as it was. A follower goal of a year, month, week
-  // or day reads back the follows of its window first. `fields` come from parseGoalFields. Resolves to the payload.
+  // Starts a goal of this kind (ending the active one). A lifetime goal reads the Twitch total first (one request): a
+  // token without the scope or a channel without subs starts it showing that, while a read Twitch does not answer
+  // refuses the start (rejects with code 'twitch_failed') and leaves the active goal as it was. A follower goal of a
+  // year, month, week or day starts at once from the record and reads back the follows of its window in the
+  // background. `fields` come from parseGoalFields. Resolves to the payload.
   async function startGoal(streamer, kind, fields) {
     if (!KINDS.includes(kind)) throw new Error(`unknown goal kind: ${kind}`);
     const streamerId = streamer.id;
@@ -289,8 +324,6 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       } else {
         state = { unavailable: result.code };
       }
-    } else if (readsBack(draft)) {
-      state = await readBack(streamerId, draft, at);
     }
 
     const goal = db.createTrackingGoal(streamerId, kind, goalFields);
@@ -299,7 +332,11 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       noteUnavailable(goal, state.unavailable);
     }
     triedAt.set(goal.id, +at);
-    return settle(goal);
+    const payload = settle(goal);
+    // The read-back can take up to 50 requests: the goal counts from the record at once, and its sources get the
+    // new count when the read-back is done.
+    if (readsBack(goal)) refreshFromTwitch(goal, at);
+    return payload;
   }
 
   // Writes a follow or a sub to the record (whether or not a goal is active: the stream report reads it too) and,
@@ -315,22 +352,21 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       if (!goal) return;
       settle(goal, shownCount(goal, at) - before);
     } catch (err) {
-      console.error('[TrackingGoal] recordEvent error:', err.message);
+      logger.error('[TrackingGoal] recordEvent error:', err.message);
     }
   }
 
-  // Changes the active goal's title, target and colour (what `fields` leaves out stays); the period cannot change.
-  // Null when there is no active goal of that kind.
-  function editGoal(streamerId, kind, fields) {
+  // Changes the active goal's title, target and colour (the colour stays when none is sent; the period cannot
+  // change). `body` is checked with parseGoalEdit. { ok: true, goal: payload } or { ok: false, error } with
+  // parseGoalEdit's codes or 'not_found' (no active goal of that kind).
+  function editGoal(streamerId, kind, body) {
+    const parsed = parseGoalEdit(body);
+    if (!parsed.ok) return parsed;
     const goal = db.getActiveTrackingGoal(streamerId, kind);
-    if (!goal) return null;
-    const f = fields || {};
-    db.updateTrackingGoal(goal.id, streamerId, {
-      title: f.title !== undefined ? f.title : goal.title,
-      target: f.target !== undefined ? f.target : goal.target,
-      bar_color: pick(f, 'bar_color', 'barColor') || goal.bar_color,
-    });
-    return settle(goal);
+    if (!goal) return { ok: false, error: 'not_found' };
+    const { title, target, bar_color: color } = parsed.fields;
+    db.updateTrackingGoal(goal.id, streamerId, { title, target, bar_color: color || goal.bar_color });
+    return { ok: true, goal: settle(goal) };
   }
 
   // Moves the shown count by a whole number (a calendar goal's current period only); never below 0. Null for no
@@ -374,24 +410,34 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       rolled = true;
     }
     if (!rolled) return null;
-    // The new period starts after the read-back: Atleta's record holds all of it.
-    if (readsBack(row) && (row.readback_capped || !row.readback_at)) {
-      db.setTrackingGoalTwitchState(row.id, { readbackDone: true, capped: false });
+    // A follower goal reads back its new period as soon as one of its sources is open (follows around the rollover
+    // that EventSub missed).
+    if (readsBack(row)) {
+      db.setTrackingGoalTwitchState(row.id, { readbackAt: null, capped: false });
+      triedAt.delete(row.id);
       row = db.getActiveTrackingGoal(row.streamer_id, row.kind) || row;
     }
     return row;
   }
 
-  // Whether the goal should ask Twitch now: one of its sources is open, nothing is being read, it has something to
-  // read (a lifetime total; a follower read-back not done yet or that said reconnect), and its last read was tried
-  // 10 minutes ago or more.
+  // Whether the goal should ask Twitch now: one of its sources is open, nothing is being read, and it has something
+  // to read — a lifetime total last read (or tried) 10 minutes ago or more, or a follower read-back last done (or
+  // tried) 30 minutes ago or more; right after a calendar rollover the read-back is due at once.
   function readDue(goal, at) {
     if (!sources.get(keyOf(goal.streamer_id, goal.kind)) || reading.has(goal.id)) return false;
-    const lifetime = goal.period === 'lifetime';
-    if (!lifetime && !(readsBack(goal) && (!goal.readback_at || goal.twitch_unavailable))) return false;
-    const readAt = lifetime ? toDate(goal.lifetime_read_at) : null;
-    const last = Math.max(triedAt.get(goal.id) || 0, readAt ? +readAt : 0);
-    return +at - last >= READ_EVERY_MS;
+    let every;
+    let doneAt;
+    if (goal.period === 'lifetime') {
+      every = READ_EVERY_MS;
+      doneAt = toDate(goal.lifetime_read_at);
+    } else if (readsBack(goal)) {
+      every = READBACK_EVERY_MS;
+      doneAt = toDate(goal.readback_at);
+    } else {
+      return false;
+    }
+    const last = Math.max(triedAt.get(goal.id) || 0, doneAt ? +doneAt : 0);
+    return +at - last >= every;
   }
 
   async function refreshFromTwitch(goal, at) {
@@ -417,7 +463,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       const fresh = db.getActiveTrackingGoal(goal.streamer_id, goal.kind);
       if (fresh && fresh.id === goal.id) settle(fresh);
     } catch (err) {
-      console.error(`[TrackingGoal] Twitch read for goal ${goal.id} failed: ${err.message}`);
+      logger.error(`[TrackingGoal] Twitch read for goal ${goal.id} failed: ${err.message}`);
     } finally {
       reading.delete(goal.id);
     }
@@ -431,7 +477,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
     try {
       goals = db.getActiveTrackingGoals();
     } catch (err) {
-      console.error('[TrackingGoal] tick error:', err.message);
+      logger.error('[TrackingGoal] tick error:', err.message);
       return;
     }
     const active = new Set(goals.map((g) => g.id));
@@ -444,7 +490,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
       try {
         if (goal.period === 'hours') {
           if (+at >= +windowFor(goal, at).end && db.endTrackingGoal(goal.id, goal.streamer_id).changes > 0) {
-            console.log(`[TrackingGoal] ${goal.kind} goal "${goal.title}" of streamer ${goal.streamer_id} ended (its hours are over)`);
+            logger.log(`[TrackingGoal] ${goal.kind} goal "${goal.title}" of streamer ${goal.streamer_id} ended (its hours are over)`);
             broadcast(goal.streamer_id, goal.kind);
           }
           continue;
@@ -459,7 +505,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now }) {
         }
         if (readDue(row, at)) reads.push(refreshFromTwitch(row, at));
       } catch (err) {
-        console.error(`[TrackingGoal] tick error for goal ${goal.id}:`, err.message);
+        logger.error(`[TrackingGoal] tick error for goal ${goal.id}:`, err.message);
       }
     }
     await Promise.all(reads);
@@ -540,8 +586,10 @@ module.exports = {
   KINDS,
   channel,
   parseGoalFields,
+  parseGoalEdit,
   createTrackingGoals,
   READ_EVERY_MS,
+  READBACK_EVERY_MS,
   TEST_REVERT_MS,
   startGoal: (...args) => instance().startGoal(...args),
   progressOf: (...args) => instance().progressOf(...args),

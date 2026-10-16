@@ -16,6 +16,7 @@ const realFs = require('fs');
 let db;
 let createTrackingGoals;
 let parseGoalFields;
+let parseGoalEdit;
 let counter = 0;
 
 before(() => {
@@ -39,7 +40,7 @@ before(() => {
     console.error = error;
     Module._load = origLoad;
   }
-  ({ createTrackingGoals, parseGoalFields } = require('./trackingGoals'));
+  ({ createTrackingGoals, parseGoalFields, parseGoalEdit } = require('./trackingGoals'));
 });
 
 const MIN = 60e3;
@@ -63,9 +64,9 @@ function insertEventAt(streamerId, kind, createdAt, over = {}) {
 const twitchError = (code) => Object.assign(new Error(`stub ${code}`), { code });
 
 // A world: the service with stubbed Twitch reads (each answer is a value, an Error to throw, or a function of the
-// streamer), the bus events it emitted, and the clock.
+// streamer), the bus events it emitted, what it logged, and the clock.
 function setup({ t = Date.now(), followerTotal = 0, subscriberTotal = 0, followersSince = { followers: [], complete: true } } = {}) {
-  const world = { t, emitted: [], calls: [], answers: { followerTotal, subscriberTotal, followersSince } };
+  const world = { t, emitted: [], calls: [], logs: [], answers: { followerTotal, subscriberTotal, followersSince } };
   const answer = (name) => async (streamer, ...args) => {
     world.calls.push({ name, streamer, args });
     const a = world.answers[name];
@@ -78,6 +79,7 @@ function setup({ t = Date.now(), followerTotal = 0, subscriberTotal = 0, followe
     twitch: { followerTotal: answer('followerTotal'), subscriberTotal: answer('subscriberTotal'), followersSince: answer('followersSince') },
     emit: (channel, payload) => world.emitted.push({ channel, payload }),
     now: () => world.t,
+    logger: Object.fromEntries(['log', 'warn', 'error'].map((level) => [level, (...args) => world.logs.push({ level, text: args.join(' ') })])),
   });
   world.last = () => world.emitted[world.emitted.length - 1];
   world.reads = (name) => world.calls.filter((c) => c.name === name).length;
@@ -90,13 +92,8 @@ const fields = (over = {}) => {
   return parsed.fields;
 };
 
-const quiet = async (fn) => {
-  const { log, error, warn } = console;
-  console.log = () => {};
-  console.error = () => {};
-  console.warn = () => {};
-  try { return await fn(); } finally { console.log = log; console.error = error; console.warn = warn; }
-};
+// The background read-back a period follower goal starts: the stubs answer at once, so one turn finishes it.
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('parseGoalFields', () => {
   test('reads a calendar month goal in a time zone, under camelCase or column names', () => {
@@ -132,6 +129,18 @@ describe('parseGoalFields', () => {
     for (const [over, error] of cases) assert.deepEqual(parseGoalFields({ ...base, ...over }), { ok: false, error }, JSON.stringify(over));
     assert.deepEqual(parseGoalFields(null), { ok: false, error: 'bad_title' });
     assert.equal(parseGoalFields({ ...base, title: 'y'.repeat(60), target: 10000000 }).ok, true);
+  });
+});
+
+describe('parseGoalEdit', () => {
+  test('takes title, target and colour with the same rules and codes; no colour keeps the goal\'s', () => {
+    assert.deepEqual(parseGoalEdit({ title: ' Next ', target: '60', barColor: '#ff0000', period: 'decade' }),
+      { ok: true, fields: { title: 'Next', target: 60, bar_color: '#ff0000' } });
+    assert.deepEqual(parseGoalEdit({ title: 'x', target: 5 }), { ok: true, fields: { title: 'x', target: 5, bar_color: null } });
+    assert.deepEqual(parseGoalEdit({ title: 'x', target: 0 }), { ok: false, error: 'bad_target' });
+    assert.deepEqual(parseGoalEdit({ title: '', target: 5 }), { ok: false, error: 'bad_title' });
+    assert.deepEqual(parseGoalEdit({ title: 'x', target: 5, color: 'blue' }), { ok: false, error: 'bad_color' });
+    assert.deepEqual(parseGoalEdit(undefined), { ok: false, error: 'bad_title' });
   });
 });
 
@@ -194,8 +203,8 @@ describe('lifetime goals', () => {
   test('a token without the scope shows needs_reconnect, a channel without subs not_affiliate — never current: 0', async () => {
     const s = addStreamer();
     const w = setup({ followerTotal: twitchError('needs_reconnect'), subscriberTotal: twitchError('not_affiliate') });
-    const follow = await quiet(() => w.tg.startGoal({ id: s }, 'follow', fields()));
-    const sub = await quiet(() => w.tg.startGoal({ id: s }, 'sub', fields()));
+    const follow = await w.tg.startGoal({ id: s }, 'follow', fields());
+    const sub = await w.tg.startGoal({ id: s }, 'sub', fields());
     assert.equal(follow.unavailable, 'needs_reconnect');
     assert.equal(follow.current, null);
     assert.equal(sub.unavailable, 'not_affiliate');
@@ -210,7 +219,7 @@ describe('lifetime goals', () => {
     const w = setup({ followerTotal: 10 });
     const first = await w.tg.startGoal({ id: s }, 'follow', fields({ title: 'First' }));
     w.answers.followerTotal = twitchError('twitch_failed');
-    await quiet(() => assert.rejects(w.tg.startGoal({ id: s }, 'follow', fields({ title: 'Second' })), { code: 'twitch_failed' }));
+    await assert.rejects(w.tg.startGoal({ id: s }, 'follow', fields({ title: 'Second' })), { code: 'twitch_failed' });
     assert.equal(w.tg.progressOf(s, 'follow').id, first.id);
     assert.equal(w.tg.progressOf(s, 'follow').title, 'First');
   });
@@ -247,14 +256,14 @@ describe('lifetime goals', () => {
 
     w.t += 11 * MIN;
     w.answers.followerTotal = twitchError('twitch_failed');
-    await quiet(() => w.tg.tick());
+    await w.tg.tick();
     assert.equal(w.reads('followerTotal'), 2);
     assert.equal(w.tg.progressOf(s, 'follow').current, 100);
     assert.equal(w.tg.progressOf(s, 'follow').unavailable, null);
 
     w.t += 11 * MIN;
     w.answers.followerTotal = twitchError('needs_reconnect');
-    await quiet(() => w.tg.tick());
+    await w.tg.tick();
     assert.equal(w.tg.progressOf(s, 'follow').unavailable, 'needs_reconnect');
     assert.equal(w.tg.progressOf(s, 'follow').current, null);
 
@@ -263,6 +272,30 @@ describe('lifetime goals', () => {
     await w.tg.tick();
     assert.equal(w.tg.progressOf(s, 'follow').unavailable, null);
     assert.equal(w.tg.progressOf(s, 'follow').current, 140);
+  });
+});
+
+describe('logging', () => {
+  test('a read Twitch does not answer is logged once while reads keep failing, and again after one worked', async () => {
+    const s = addStreamer();
+    const w = setup({ followerTotal: 100 });
+    await w.tg.startGoal({ id: s }, 'follow', fields());
+    w.tg.connected(s, 'follow', +1);
+    const failures = () => w.logs.filter((l) => l.level === 'warn' && /did not answer/.test(l.text)).length;
+    w.answers.followerTotal = twitchError('twitch_failed');
+    for (let i = 0; i < 3; i++) {
+      w.t += 11 * MIN;
+      await w.tg.tick();
+    }
+    assert.equal(w.reads('followerTotal'), 4);
+    assert.equal(failures(), 1);
+    w.answers.followerTotal = 120;
+    w.t += 11 * MIN;
+    await w.tg.tick();
+    w.answers.followerTotal = twitchError('twitch_failed');
+    w.t += 11 * MIN;
+    await w.tg.tick();
+    assert.equal(failures(), 2);
   });
 });
 
@@ -347,10 +380,11 @@ describe('rolling goals', () => {
     insertEventAt(s, 'follow', sqlite(t - 6 * DAY), { twitchUserId: 'a' });
     insertEventAt(s, 'follow', sqlite(t - DAY), { twitchUserId: 'b' });
     const start = await w.tg.startGoal({ id: s }, 'follow', fields({ target: 2, period: 'week', mode: 'rolling' }));
+    await flush();
     assert.equal(w.calls[0].args[0], new Date(t - 7 * DAY).toISOString());
     assert.equal(start.current, 2);
     assert.equal(start.completed, true);
-    assert.equal(w.last().payload.justCompleted, true);
+    assert.equal(w.emitted.filter((e) => e.payload.justCompleted).length, 1, 'the start celebrated, the read-back did not again');
 
     w.t = t + 1.5 * DAY;
     const later = w.tg.progressOf(s, 'follow');
@@ -400,33 +434,101 @@ describe('the follower read-back of a period goal', () => {
     { userId: '1', login: 'a', followedAt: '2026-10-03T10:00:00Z' },
   ];
 
-  test('starting mid-month records the follows Atleta lacks, once; a second start does not double them', async () => {
+  test('the goal starts at once from the record; the read-back then records the follows Atleta lacks, once', async () => {
     const s = addStreamer();
     insertEventAt(s, 'follow', '2026-10-10 09:00:02', { twitchUserId: '2' });
     const w = setup({ t: Date.parse('2026-10-16T12:00:00Z'), followersSince: { followers, complete: true } });
     const payload = await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'Europe/Lisbon' }));
+    assert.equal(payload.current, 1, 'from the record, before the read-back is done');
+    await flush();
     assert.equal(w.calls[0].args[0], '2026-09-30T23:00:00.000Z');
-    assert.equal(payload.current, 3);
-    assert.equal(payload.capped, false);
+    assert.equal(w.calls[0].args[1], 50);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 3);
+    assert.equal(w.last().payload.goal.current, 3, 'the sources get the new count');
+    assert.equal(w.last().payload.added, undefined, 'a read-back is no new follow to pop');
     const rows = () => db.db.prepare("SELECT twitch_user_id AS id, username, created_at FROM tracking_events WHERE streamer_id = ? AND kind = 'follow' ORDER BY created_at").all(s);
     assert.deepEqual(rows(), [
       { id: '1', username: 'a', created_at: '2026-10-03 10:00:00' },
       { id: '2', username: 'x', created_at: '2026-10-10 09:00:02' },
       { id: '3', username: 'c', created_at: '2026-10-15 08:00:00' },
     ]);
-    const again = await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'Europe/Lisbon' }));
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'Europe/Lisbon' }));
+    await flush();
     assert.equal(rows().length, 3);
-    assert.equal(again.current, 3);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 3);
   });
 
-  test('a read-back stopped at its cap says so (capped), until the next period starts', async () => {
+  test('a start does not wait for the read-back', async () => {
     const s = addStreamer();
-    const w = setup({ t: Date.parse('2026-10-16T12:00:00Z'), followersSince: { followers, complete: false } });
-    const payload = await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
-    assert.equal(w.calls[0].args[1], 50);
-    assert.equal(payload.capped, true);
+    let answer;
+    const w = setup({ followersSince: () => new Promise((resolve) => { answer = resolve; }) });
+    const payload = await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'week', mode: 'rolling' }));
+    assert.equal(payload.current, 0);
+    assert.notEqual(db.getActiveTrackingGoal(s, 'follow'), null);
+    answer({ followers: [{ userId: '1', login: 'a', followedAt: new Date(w.t - HOUR).toISOString() }], complete: true });
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow').current, 1);
+  });
+
+  test('read back again at most every 30 minutes while a source is open, recording only what the record lacks', async () => {
+    const s = addStreamer();
+    const t = Date.parse('2026-10-16T12:00:00Z');
+    const w = setup({ t, followersSince: { followers, complete: true } });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
+    await flush();
+    w.answers.followersSince = { followers: [{ userId: '9', login: 'missed', followedAt: '2026-10-16T12:10:00Z' }, ...followers], complete: true };
+    w.t = t + 31 * MIN;
+    await w.tg.tick();
+    assert.equal(w.reads('followersSince'), 1, 'no source open: no read-back');
+    w.tg.connected(s, 'follow', +1);
+    w.t = t + 29 * MIN;
+    await w.tg.tick();
+    assert.equal(w.reads('followersSince'), 1, 'not within 30 minutes');
+    w.t = t + 31 * MIN;
+    await w.tg.tick();
+    assert.equal(w.reads('followersSince'), 2);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 4);
+    assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM tracking_events WHERE streamer_id = ? AND kind = 'follow'").get(s).n, 4);
+    w.t = t + 45 * MIN;
+    await w.tg.tick();
+    assert.equal(w.reads('followersSince'), 2);
+  });
+
+  test('after a calendar rollover the new period is read back as soon as a source is open', async () => {
+    const s = addStreamer();
+    const w = setup({ t: Date.parse('2026-10-31T23:50:00Z'), followersSince: { followers: [], complete: true } });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
+    await flush();
+    w.tg.connected(s, 'follow', +1);
+    w.answers.followersSince = { followers: [{ userId: '7', login: 'g', followedAt: '2026-11-01T00:00:10Z' }], complete: true };
     w.t = Date.parse('2026-11-01T00:00:30Z');
     await w.tg.tick();
+    assert.equal(w.reads('followersSince'), 2);
+    assert.equal(w.calls[1].args[0], '2026-11-01T00:00:00.000Z');
+    assert.equal(w.tg.progressOf(s, 'follow').current, 1);
+  });
+
+  test('a read-back stopped at its cap says so (capped), until the next calendar period starts', async () => {
+    const s = addStreamer();
+    const w = setup({ t: Date.parse('2026-10-16T12:00:00Z'), followersSince: { followers, complete: false } });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow').capped, true);
+    w.t = Date.parse('2026-11-01T00:00:30Z');
+    await w.tg.tick();
+    assert.equal(w.tg.progressOf(s, 'follow').capped, false);
+  });
+
+  test('a rolling goal stops saying capped once its whole window is in Atleta\'s record', async () => {
+    const s = addStreamer();
+    const t = Date.now();
+    const w = setup({ t, followersSince: { followers: [], complete: false } });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'week', mode: 'rolling' }));
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow').capped, true);
+    w.t = t + 6 * DAY;
+    assert.equal(w.tg.progressOf(s, 'follow').capped, true);
+    w.t = t + 7 * DAY + MIN;
     assert.equal(w.tg.progressOf(s, 'follow').capped, false);
   });
 
@@ -434,36 +536,36 @@ describe('the follower read-back of a period goal', () => {
     const s = addStreamer();
     const t = Date.parse('2026-10-16T12:00:00Z');
     const w = setup({ t, followersSince: twitchError('needs_reconnect') });
-    const payload = await quiet(() => w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' })));
-    assert.equal(payload.unavailable, 'needs_reconnect');
-    assert.equal(payload.current, null);
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, 'needs_reconnect');
+    assert.equal(w.tg.progressOf(s, 'follow').current, null);
+    assert.equal(w.last().payload.goal.unavailable, 'needs_reconnect');
 
     w.answers.followersSince = { followers, complete: true };
     w.tg.connected(s, 'follow', +1);
-    w.t = t + 5 * MIN;
+    w.t = t + 20 * MIN;
     await w.tg.tick();
-    assert.equal(w.reads('followersSince'), 1, 'not again within 10 minutes');
-    w.t = t + 11 * MIN;
+    assert.equal(w.reads('followersSince'), 1, 'not again within 30 minutes');
+    w.t = t + 31 * MIN;
     await w.tg.tick();
     assert.equal(w.reads('followersSince'), 2);
     assert.equal(w.tg.progressOf(s, 'follow').unavailable, null);
     assert.equal(w.tg.progressOf(s, 'follow').current, 3);
-    w.t = t + 30 * MIN;
-    await w.tg.tick();
-    assert.equal(w.reads('followersSince'), 2, 'a read-back that worked is not repeated');
   });
 
-  test('a read-back Twitch does not answer still starts the goal from Atleta\'s record and is tried again later', async () => {
+  test('a read-back Twitch does not answer leaves the goal counting from Atleta\'s record and is tried again later', async () => {
     const s = addStreamer();
     const t = Date.parse('2026-10-16T12:00:00Z');
     insertEventAt(s, 'follow', '2026-10-10 09:00:00', { twitchUserId: '2' });
     const w = setup({ t, followersSince: twitchError('twitch_failed') });
-    const payload = await quiet(() => w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' })));
-    assert.equal(payload.unavailable, null);
-    assert.equal(payload.current, 1);
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'month', mode: 'calendar', timeZone: 'UTC' }));
+    await flush();
+    assert.equal(w.tg.progressOf(s, 'follow').unavailable, null);
+    assert.equal(w.tg.progressOf(s, 'follow').current, 1);
     w.answers.followersSince = { followers, complete: true };
     w.tg.connected(s, 'follow', +1);
-    w.t = t + 11 * MIN;
+    w.t = t + 31 * MIN;
     await w.tg.tick();
     assert.equal(w.tg.progressOf(s, 'follow').current, 3);
   });
@@ -488,15 +590,31 @@ describe('editing, nudging and ending', () => {
     const w = setup({ followerTotal: 50 });
     await w.tg.startGoal({ id: s }, 'follow', fields({ target: 40 }));
     assert.equal(w.tg.progressOf(s, 'follow').completed, true);
-    const edited = w.tg.editGoal(s, 'follow', { title: 'Next', target: 60, bar_color: '#ff0000' });
+    const result = w.tg.editGoal(s, 'follow', { title: 'Next', target: 60, barColor: '#ff0000' });
+    assert.equal(result.ok, true);
+    const edited = result.goal;
     assert.equal(edited.completed, false);
     assert.equal(edited.title, 'Next');
     assert.equal(edited.barColor, '#ff0000');
     assert.equal(edited.period, 'lifetime', 'the period stays');
     assert.equal(w.last().payload.justCompleted, false);
-    w.tg.editGoal(s, 'follow', { title: 'Next', target: 45, bar_color: '#ff0000' });
+    w.tg.editGoal(s, 'follow', { title: 'Next', target: 45 });
     assert.equal(w.last().payload.justCompleted, true);
-    assert.equal(w.tg.editGoal(s, 'sub', { title: 'x', target: 1, bar_color: '#000000' }), null);
+    assert.equal(w.tg.progressOf(s, 'follow').barColor, '#ff0000', 'no colour sent: the colour stays');
+    assert.deepEqual(w.tg.editGoal(s, 'sub', { title: 'x', target: 1 }), { ok: false, error: 'not_found' });
+  });
+
+  test('an edit with a bad target (or title, or colour) is refused and changes nothing', async () => {
+    const s = addStreamer();
+    const w = setup({ followerTotal: 5 });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ target: 40 }));
+    const sent = w.emitted.length;
+    assert.deepEqual(w.tg.editGoal(s, 'follow', { title: 'Next', target: 0 }), { ok: false, error: 'bad_target' });
+    assert.deepEqual(w.tg.editGoal(s, 'follow', { title: 'Next', target: 'lots' }), { ok: false, error: 'bad_target' });
+    assert.deepEqual(w.tg.editGoal(s, 'follow', { title: '', target: 50 }), { ok: false, error: 'bad_title' });
+    assert.deepEqual(w.tg.editGoal(s, 'follow', { title: 'Next', target: 50, barColor: 'red' }), { ok: false, error: 'bad_color' });
+    assert.equal(w.tg.progressOf(s, 'follow').target, 40);
+    assert.equal(w.emitted.length, sent);
   });
 
   test('ending a goal clears its bar and touches only that kind', async () => {

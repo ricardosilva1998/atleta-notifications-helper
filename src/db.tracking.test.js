@@ -218,11 +218,11 @@ describe('goals', () => {
     assert.deepEqual(state(), { twitch_unavailable: null, readback_at: null, readback_capped: 0 });
     db.setTrackingGoalTwitchState(g.id, { unavailable: 'needs_reconnect' });
     assert.deepEqual(state(), { twitch_unavailable: 'needs_reconnect', readback_at: null, readback_capped: 0 });
-    db.setTrackingGoalTwitchState(g.id, { readbackDone: true, capped: true });
+    db.setTrackingGoalTwitchState(g.id, { readbackAt: new Date('2026-10-16T12:30:00.700Z'), capped: true });
     assert.equal(state().twitch_unavailable, 'needs_reconnect');
-    assert.match(state().readback_at, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+    assert.equal(state().readback_at, '2026-10-16 12:30:00');
     assert.equal(state().readback_capped, 1);
-    db.setTrackingGoalTwitchState(g.id, { unavailable: null, readbackDone: false, capped: false });
+    db.setTrackingGoalTwitchState(g.id, { unavailable: null, readbackAt: null, capped: false });
     assert.deepEqual(state(), { twitch_unavailable: null, readback_at: null, readback_capped: 0 });
     db.setTrackingGoalTwitchState(g.id, {});
     assert.deepEqual(state(), { twitch_unavailable: null, readback_at: null, readback_capped: 0 });
