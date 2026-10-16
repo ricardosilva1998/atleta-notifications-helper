@@ -6,7 +6,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { createShoutouts, isShoutoutCommand, shoutoutLine, RAID_MIN_VIEWERS } = require('./shoutouts');
+const { createShoutouts, shoutouts, isShoutoutCommand, shoutoutLine, RAID_MIN_VIEWERS } = require('./shoutouts');
 
 const NOW = Date.parse('2026-10-15T20:00:00Z');
 const TEMPLATE = 'Go check out {name}! They were last streaming {game}: {link}';
@@ -15,7 +15,10 @@ const OTHER_LINE = 'Go check out OtherStreamer! They were last streaming iRacing
 function setup({ streamer = {} } = {}) {
   const world = {
     t: NOW, said: [], lookups: [], logged: [], failing: false,
-    streamer: { id: 7, twitch_username: 'mychannel', shoutout_command_enabled: 1, shoutout_raid_enabled: 1, shoutout_raid_min_viewers: 5, shoutout_template: TEMPLATE, ...streamer },
+    streamer: {
+      id: 7, twitch_username: 'mychannel', chatbot_enabled: 1, shoutout_command_enabled: 1, shoutout_raid_enabled: 1,
+      shoutout_raid_min_viewers: 5, shoutout_template: TEMPLATE, ...streamer,
+    },
     channels: {
       otherstreamer: { login: 'otherstreamer', name: 'OtherStreamer', game: 'iRacing', title: 'Endurance night' },
       mychannel: { login: 'mychannel', name: 'MyChannel', game: 'Assetto Corsa', title: 'Hotlaps' },
@@ -146,6 +149,16 @@ describe('after a raid', () => {
     assert.deepEqual([...small.lookups, ...off.lookups, ...nameless.lookups], []);
   });
 
+  // The chat dispatcher posts nothing while the chatbot is off: the raider is not looked up, and their minute stays
+  // free for a moderator's !so once the chatbot is back on.
+  test('with the chatbot off: nothing is looked up and the raider\'s minute stays free', async () => {
+    const w = setup({ streamer: { chatbot_enabled: 0 } });
+    assert.equal(await w.so.afterRaid(7, { login: 'otherstreamer', viewers: 50 }), 'off');
+    assert.deepEqual([w.lookups, w.said], [[], []]);
+    w.streamer.chatbot_enabled = 1;
+    assert.equal(await w.so.fromCommand(w.streamer, '!so otherstreamer'), 'sent');
+  });
+
   test('the !so switch does not matter for raids', async () => {
     const w = setup({ streamer: { shoutout_command_enabled: 0 } });
     await w.so.afterRaid(7, { login: 'otherstreamer', viewers: 5 });
@@ -183,5 +196,62 @@ describe('memory', () => {
     w.t += 9 * 60000;
     w.so.sweep();
     assert.deepEqual(w.so.size, { names: 0, shoutouts: 0 });
+  });
+});
+
+// The app's own instance looks a channel up with Twitch's Get Users, then Get Channel Information; the two share one
+// 10-second deadline, so Test in chat answers before the page gives up (20 s). Twitch and the chat bot are stubs.
+describe('the app\'s lookup', () => {
+  async function withTwitch(t, users, channels, fn) {
+    const Module = require('module');
+    const FILE = require.resolve('./shoutouts');
+    const real = AbortSignal.timeout;
+    const deadlines = [];
+    t.mock.method(AbortSignal, 'timeout', (ms) => { deadlines.push(ms); return real.call(AbortSignal, ms); });
+    const asked = [];
+    const sent = [];
+    const stubs = {
+      './twitch': {
+        getUserProfile: async (login, options) => { asked.push(['user', login, options && options.signal]); return users[login] || null; },
+        getChannelInfo: async (id, options) => { asked.push(['channel', id, options && options.signal]); return channels[id] || null; },
+      },
+      './twitchChat': { chatManager: { sendMessage: (streamerId, text, opts) => sent.push([streamerId, text, opts.priority]) } },
+    };
+    const load = Module._load;
+    Module._load = function (request, parent, isMain) {
+      if (parent && parent.filename === FILE && Object.hasOwn(stubs, request)) return stubs[request];
+      return load.call(this, request, parent, isMain);
+    };
+    try {
+      return { outcome: await fn(), asked, sent, deadlines };
+    } finally {
+      Module._load = load;
+    }
+  }
+  const streamer = (login) => ({ id: 7, twitch_username: login, shoutout_template: '{name} | {game} | {title} | {link}' });
+
+  test('the display name, the game and the title, from two requests under one deadline', async (t) => {
+    const { outcome, asked, sent, deadlines } = await withTwitch(t,
+      { synthetic_one: { id: '4242', login: 'synthetic_one', display_name: 'Synthetic_One', profile_image_url: 'https://example.invalid/a.png' } },
+      { 4242: { gameName: 'iRacing', title: 'Endurance night' } },
+      () => shoutouts.testInChat(streamer('Synthetic_One')));
+    assert.equal(outcome, 'sent');
+    assert.deepEqual(sent, [[7, 'Synthetic_One | iRacing | Endurance night | https://twitch.tv/synthetic_one', 'high']]);
+    assert.deepEqual(asked.map(([what, arg]) => [what, arg]), [['user', 'synthetic_one'], ['channel', '4242']]);
+    assert.ok(asked[0][2] instanceof AbortSignal, 'the requests have a deadline');
+    assert.equal(asked[1][2], asked[0][2], 'one deadline for both');
+    assert.deepEqual(deadlines, [10000]);
+  });
+
+  test('no display name: the login; no channel information: no game and no title; no such user: nothing posted', async (t) => {
+    const { outcome, sent } = await withTwitch(t,
+      { synthetic_two: { id: '4343', login: 'synthetic_two', display_name: '' } }, {},
+      () => shoutouts.testInChat(streamer('synthetic_two')));
+    assert.equal(outcome, 'sent');
+    assert.deepEqual(sent, [[7, 'synthetic_two |  |  | https://twitch.tv/synthetic_two', 'high']]);
+    const missing = await withTwitch(t, {}, {}, () => shoutouts.testInChat(streamer('synthetic_three')));
+    assert.equal(missing.outcome, 'unknown');
+    assert.deepEqual(missing.asked.map(([what]) => what), ['user'], 'Get Channel Information is not asked for');
+    assert.deepEqual(missing.sent, []);
   });
 });

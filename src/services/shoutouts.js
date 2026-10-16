@@ -79,10 +79,11 @@ function createShoutouts({ lookup, send, getStreamer, log = console.warn, now = 
   }
 
   // EventSub's raid ({ login, viewers, … }): a shoutout for the raider when the streamer has it on and the raid
-  // brought at least their minimum of viewers.
+  // brought at least their minimum of viewers. While the chatbot is off nothing could be posted, so the raider is not
+  // looked up and their minute stays free.
   async function afterRaid(streamerId, raid) {
     const streamer = getStreamer(streamerId);
-    if (!streamer || !streamer.shoutout_raid_enabled) return 'off';
+    if (!streamer || !streamer.shoutout_raid_enabled || !streamer.chatbot_enabled) return 'off';
     const minimum = Number(streamer.shoutout_raid_min_viewers) || 1;
     if (!(Number(raid && raid.viewers) >= minimum)) return 'small';
     const login = normalizeTwitchLogin((raid && raid.login) || '');
@@ -110,13 +111,17 @@ function createShoutouts({ lookup, send, getStreamer, log = console.warn, now = 
 }
 
 // The app's instance. Twitch, the chat bot and the database are required when first used: they load the app's
-// config, which this file's unit tests do without.
+// config, which this file's unit tests do without. A lookup is Twitch's Get Users, then Get Channel Information,
+// under one deadline for both (and for the app token they may wait for): Test in chat waits for them, and the
+// dashboard gives up at 20 seconds.
+const LOOKUP_DEADLINE_MS = 10 * 1000;
 const shoutouts = createShoutouts({
   lookup: async (login) => {
     const twitch = require('./twitch');
-    const user = await twitch.getUserProfile(login);
+    const options = { signal: AbortSignal.timeout(LOOKUP_DEADLINE_MS) };
+    const user = await twitch.getUserProfile(login, options);
     if (!user) return null;
-    const info = await twitch.getChannelInfo(user.id);
+    const info = await twitch.getChannelInfo(user.id, options);
     return { login: user.login, name: user.display_name || user.login, game: (info && info.gameName) || '', title: (info && info.title) || '' };
   },
   send: (streamerId, text, priority) => require('./twitchChat').chatManager.sendMessage(streamerId, text, { priority }),
