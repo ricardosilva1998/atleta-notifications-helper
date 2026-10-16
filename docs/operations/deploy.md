@@ -312,7 +312,9 @@ Watch after release:
 
 - The first real not-Affiliate refusal: Twitch documents no status for it, so it is recognised by Twitch's
   message. Check that its `[Polls]` line in the log says `not_affiliate`, and that the card, once reloaded,
-  offers Check again.
+  offers Check again. If the line says `refused` instead, Twitch worded it without "affiliate" or "partner":
+  the card then asks to check the question, the choices and the channel's settings, and the line shows
+  Twitch's words.
 - A channel that is not an Affiliate but has the two permissions: whether Twitch accepts the seven poll and
   prediction subscriptions for it. If it refuses, each EventSub connection of that streamer logs seven
   `[EventSub] Failed to subscribe …` lines; nothing else changes.
