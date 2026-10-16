@@ -315,6 +315,9 @@ const TEXTS = {
   'style.all': 'All', 'style.default': 'Default', 'style.mine': 'Made for you', 'style.failed': 'That did not work. Please try again.',
   'style.familyDone': '{{family}} is now on all six alerts, and saved.', 'style.labelHint': 'Empty: the look\'s own words',
   'style.fontOwn': 'The look\'s own font', 'style.testSent': 'Sent to OBS, which plays what you saved last.',
+  'sound.thisLook': 'This look', 'sound.own': 'Own sound', 'sound.second': 'Version 2', 'sound.silent': 'Silent', 'sound.current': 'Current',
+  'sound.search': 'Search sounds…', 'sound.both': 'both recordings', 'sound.listen': 'Listen',
+  'sound.uploaded': 'You uploaded a sound for this alert, so OBS plays it instead of the look\'s sound.', 'sound.uploadedLink': 'Overlay settings',
 };
 const GLASS = { ...LOOK, key: 'follow-glass', sound: 'glFollow' };
 const RACING = { ...LOOK, key: 'follow-racing', family: 'racing', sound: 'rcFollow' };
@@ -1010,6 +1013,161 @@ describe('the Customize tab', () => {
     assert.equal(page.document.getElementById('editor-msg').textContent, 'Unknown family');
     assert.equal(page.g.SAVED_STYLES.subscription, undefined);
     assert.equal(page.renders(), 0);
+    page.CARDS.closeEditor({ force: true });
+  });
+});
+
+describe('the Sound tab', () => {
+  // The real sounds, as the server hands them to the page (routes/dashboard.js builderStyleData), with the keys as names.
+  const SOUNDS = ALERT_STYLE_SERVICE.soundGroups().map(({ family, sounds }) => ({
+    family,
+    sounds: sounds.flatMap((key) => (ALERT_STYLE_SERVICE.secondVersionOf(key) ? [{ key, name: key }, { key: ALERT_STYLE_SERVICE.secondVersionOf(key), name: key + ' (version 2)' }] : [{ key, name: key }])),
+  }));
+  function soundPage(options = {}) {
+    const played = [];
+    const kit = { ...KIT, setAudio() {}, playSound: (key) => { played.push(key); return true; } };
+    class FakeAudio { constructor() { this.state = 'running'; } resume() {} }
+    const data = realStyleData(options.streamer || {});
+    data.looks['follow-glass'] = { title: 'Pill' };
+    data.sounds = SOUNDS;
+    const page = realPage({ ...options, extra: { STYLE_DATA: data, ATLETA_KIT: kit, AudioContext: FakeAudio, ...(options.extra || {}) } });
+    return { ...page, played };
+  }
+  const walk = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => walk(c, out)); return out; };
+  const inPane = (document) => walk(document.getElementById('pane-sound'));
+  const rowsIn = (node) => walk(node).filter((n) => n.className === 'snd');
+  const allRows = (document) => rowsIn(document.getElementById('pane-sound'));
+  const groupNamed = (document, name) => inPane(document).find((n) => n.className === 'snd-group' && textOf(n.children[0]).startsWith(name));
+  const rowOf = (document, key, group) => rowsIn(group || document.getElementById('pane-sound')).find((r) => r.getAttribute('data-key') === key);
+  const pickOf = (row) => row.children.find((c) => c.className === 'snd-pick');
+  const playOf = (row) => row.children.find((c) => c.className === 'play');
+
+  test('lists "This look" then only this alert\'s sounds, by theme, each labelled with the alert and its look', () => {
+    const page = soundPage();
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    assert.equal(page.document.getElementById('editor-side').hidden, true, 'no stage');
+    const rows = allRows(page.document);
+    assert.equal(rows.length, 4 + 52);
+    const mine = groupNamed(page.document, 'This look');
+    assert.deepEqual(rowsIn(mine).map((r) => r.getAttribute('data-key')), ['glFollow', 'glFollow.2', 'today', 'none']);
+    const outside = rows.filter((r) => !rowsIn(mine).includes(r));
+    assert.equal(outside.length, 52);
+    const owners = CORE.soundOwners(KIT.styles);
+    for (const r of outside) assert.equal(CORE.ownerOfSound(r.getAttribute('data-key'), owners).eventType, 'follow', r.getAttribute('data-key'));
+    const glass = groupNamed(page.document, 'Glass');
+    assert.match(textOf(glass.children[0]), /both recordings/);
+    const row = rowOf(page.document, 'glFollow', glass);
+    const tag = walk(row).find((n) => /^snd-tag/.test(n.className));
+    assert.match(textOf(tag), new RegExp(page.CARDS.CARD_ICONS.follow + ' Follow'), 'the alert\'s badge');
+    assert.match(textOf(tag), /Pill/, 'the look');
+    const line = walk(tag).find((n) => n.className === 'tag-txt');
+    assert.equal(line.getAttribute('title'), 'Pill · Own sound', 'the full text is in the title');
+    assert.match(textOf(rowOf(page.document, 'none', mine)), /Silent/);
+    assert.match(textOf(rowOf(page.document, 'glFollow', mine)), /Pill . Own sound/);
+    assert.match(textOf(rowOf(page.document, 'glFollow.2', mine)), /Version 2/);
+    assert.equal(pickOf(rowOf(page.document, 'glFollow', mine)).getAttribute('aria-pressed'), 'true', 'the look\'s own sound is the one in use');
+    assert.equal(pickOf(rowOf(page.document, 'none', mine)).getAttribute('aria-pressed'), 'false');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('picking a row stores its key and plays it, and the look\'s own sound stores null', () => {
+    const page = soundPage();
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    const glass = groupNamed(page.document, 'Glass');
+    const racing = groupNamed(page.document, 'Racing');
+    pickOf(rowOf(page.document, 'rcFlyby', racing)).fire('click');
+    assert.equal(page.CARDS.draft.style_sound, 'rcFlyby');
+    assert.deepEqual(page.played, ['rcFlyby']);
+    assert.equal(page.CARDS.tabValue('sound'), 'rcFlyby');
+    assert.equal(page.document.getElementById('editor-tabs').children[2].children[1].textContent, 'rcFlyby', 'the tab bar shows it');
+    assert.equal(pickOf(rowOf(page.document, 'rcFlyby', racing)).getAttribute('aria-pressed'), 'true');
+    assert.equal(pickOf(rowOf(page.document, 'glFollow', glass)).getAttribute('aria-pressed'), 'false');
+    pickOf(rowOf(page.document, 'glFollow.2', glass)).fire('click');
+    assert.equal(page.CARDS.draft.style_sound, 'glFollow.2');
+    pickOf(rowOf(page.document, 'glFollow', glass)).fire('click');
+    assert.equal(page.CARDS.draft.style_sound, null, 'the look\'s own sound is stored as null');
+    assert.deepEqual(page.played, ['rcFlyby', 'glFollow.2', 'glFollow']);
+    pickOf(rowOf(page.document, 'today', groupNamed(page.document, 'This look'))).fire('click');
+    assert.equal(page.CARDS.draft.style_sound, 'today');
+    pickOf(rowOf(page.document, 'none', groupNamed(page.document, 'This look'))).fire('click');
+    assert.equal(page.CARDS.draft.style_sound, 'none');
+    assert.equal(page.played.length, 3, 'the engine sound and silence play nothing here');
+    assert.ok(page.CARDS.isDirty());
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the play button listens without picking', () => {
+    const page = soundPage();
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    const row = rowOf(page.document, 'rcFlyby', groupNamed(page.document, 'Racing'));
+    assert.equal(playOf(row).getAttribute('aria-label'), 'Listen');
+    playOf(row).fire('click');
+    assert.deepEqual(page.played, ['rcFlyby']);
+    assert.equal(page.CARDS.draft.style_sound ?? null, null, 'nothing was picked');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('a saved sound from another alert shows as "Current" and a save sends it unchanged', async () => {
+    const page = soundPage({ saved: { bits: 'bits-glass' }, rows: [{ event_type: 'bits', style: 'bits-glass', style_sound: 'glFollow' }] });
+    page.CARDS.openEditor('bits');
+    page.CARDS.setTab('sound');
+    const mine = groupNamed(page.document, 'This look');
+    const first = rowsIn(mine)[0];
+    assert.equal(first.getAttribute('data-key'), 'glFollow');
+    assert.match(textOf(first), /Current/);
+    assert.match(textOf(first), new RegExp(page.CARDS.CARD_ICONS.follow + ' Follow'), 'labelled with the alert it was made for');
+    assert.equal(pickOf(first).getAttribute('aria-pressed'), 'true');
+    assert.equal(allRows(page.document).filter((r) => r.getAttribute('data-key') === 'glFollow').length, 1, 'bits do not list follow\'s sounds otherwise');
+    await page.CARDS.saveDraft();
+    assert.equal(JSON.parse(page.calls[0].opts.body).design.style_sound, 'glFollow');
+  });
+
+  test('an uploaded sound for the alert shows the notice with a link to the overlay settings', () => {
+    const page = soundPage({ extra: { BUILDER: { features: {}, uploadedSounds: { follow: true, bits: false } } } });
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    const notice = inPane(page.document).find((n) => n.className === 'snd-notice');
+    assert.ok(notice);
+    assert.match(textOf(notice), /You uploaded a sound for this alert/);
+    const link = walk(notice).find((n) => n.tagName === 'A');
+    assert.equal(link.getAttribute('href'), '/dashboard/overlay');
+    assert.equal(link.textContent, 'Overlay settings');
+    page.CARDS.closeEditor({ force: true });
+    page.CARDS.openEditor('bits');
+    page.CARDS.setTab('sound');
+    assert.ok(!inPane(page.document).some((n) => n.className === 'snd-notice'), 'no notice without an upload');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('the search box filters rows by name, and a theme chip shows only that theme (and "This look")', () => {
+    const page = soundPage();
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    const input = inPane(page.document).find((n) => n.tagName === 'INPUT');
+    assert.equal(input.getAttribute('placeholder'), 'Search sounds…');
+    input.value = 'RCFLYBY';
+    input.fire('input');
+    assert.deepEqual(allRows(page.document).map((r) => r.getAttribute('data-key')), ['rcFlyby', 'rcFlyby.2']);
+    assert.ok(!groupNamed(page.document, 'This look'), 'a group with no match is gone');
+    input.value = '';
+    input.fire('input');
+    assert.equal(allRows(page.document).length, 56);
+
+    const chips = inPane(page.document).filter((n) => n.className === 'anim-chip');
+    assert.equal(chips[0].textContent, 'All');
+    assert.equal(chips.length, 27, 'all, and the 26 themes that have a follow sound');
+    chips.find((c) => c.getAttribute('data-family') === 'racing').fire('click');
+    assert.equal(allRows(page.document).length, 4 + 2);
+    assert.ok(groupNamed(page.document, 'Racing'));
+    assert.ok(!groupNamed(page.document, 'Glass'));
+    assert.equal(inPane(page.document).filter((n) => n.className === 'anim-chip').find((c) => c.getAttribute('data-family') === 'racing').getAttribute('aria-pressed'), 'true');
+    page.CARDS.closeEditor({ force: true });
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('sound');
+    assert.equal(allRows(page.document).length, 56, 'a new window shows every theme again');
     page.CARDS.closeEditor({ force: true });
   });
 });

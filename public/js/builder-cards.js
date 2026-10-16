@@ -602,6 +602,8 @@
     opened = { design: copy(CARDS.draft), style: CARDS.draftStyle };
     CARDS.tab = null;
     animFamily = 'all';
+    soundFamily = 'all';
+    soundQuery = '';
 
     var title = el('editor-title'), icon = el('editor-icon');
     if (title) title.textContent = type === 'timed' ? text('cards.editSponsors') : text('window.title', { alert: cardName(type) });
@@ -768,6 +770,9 @@
     return node;
   }
 
+  // The alert's icon and name, as a badge ("🏁 Follow").
+  function alertBadge(type) { return make('span', 'ev-badge', (CARD_ICONS[type] || '') + ' ' + cardName(type)); }
+
   // ── The Animation tab ──
   // Theme chips ("All" and each family that has a look for this alert) and a gallery of this alert's looks
   // in the server's order (STYLE_CORE.orderGallery: made for the streamer, the default, the C1 with the
@@ -839,7 +844,7 @@
       words.appendChild(make('div', 'anim-name', ((styleData().looks || {})[entry.id] || {}).title || entry.id));
       var family = familyOf(look.family);
       if (family) words.appendChild(make('div', 'anim-fam', family.name));
-      words.appendChild(make('span', 'ev-badge', (CARD_ICONS[type] || '') + ' ' + cardName(type)));
+      words.appendChild(alertBadge(type));
       tile.appendChild(preview);
       tile.appendChild(words);
       tile.addEventListener('click', function () { pickLook(entry.id); });
@@ -1051,6 +1056,149 @@
     });
   }
 
+  // ── The Sound tab ──
+  // A search box, theme chips, then "This look" (its own sound, its version 2, the classic engine sound, no
+  // sound, and a saved sound of another alert as "Current": STYLE_CORE.thisLookRows) and only this alert's
+  // sounds by theme (STYLE_CORE.soundGroupsFor). Each row has a ▶ that listens without picking and a button
+  // that picks (the look's own sound is stored as null) and plays; its second line names the alert and the
+  // look the sound was made for. No stage. A sound the streamer uploaded for the alert wins in OBS: a notice.
+  var soundFamily = 'all';
+  var soundQuery = '';
+  var soundBox = null;        // where the groups are drawn
+  var soundRows = [];         // [{ key, pick }] of the groups drawn, to mark the one in use
+
+  function soundNameOf(key) {
+    if (key === 'today') return text('sound.today');
+    if (key === 'none') return text('sound.none');
+    var groups = styleData().sounds || [];
+    for (var i = 0; i < groups.length; i++) {
+      for (var j = 0; j < groups[i].sounds.length; j++) if (groups[i].sounds[j].key === key) return groups[i].sounds[j].name;
+    }
+    return key;
+  }
+  function soundOwners() { return core().soundOwners(root.ATLETA_OBJECT_STYLES || {}); }
+  // The second line's words after the look: the engine sound needs none, its name says it.
+  var SOUND_TAGS = { own: 'sound.own', second: 'sound.second', none: 'sound.silent', current: 'sound.current' };
+
+  function soundRow(key, tag, owners, current) {
+    var owner = core().ownerOfSound(key, owners);
+    var row = make('div', 'snd');
+    row.setAttribute('data-key', key);
+    var play = make('button', 'play', '▶');
+    play.type = 'button';
+    play.setAttribute('aria-label', text('sound.listen'));
+    play.setAttribute('title', text('sound.listen'));
+    play.addEventListener('click', function () {
+      play.classList.add('on');
+      setTimeout(function () { play.classList.remove('on'); }, 1500);
+      playLookSound(key);
+    });
+    var pick = make('button', 'snd-pick');
+    pick.type = 'button';
+    pick.setAttribute('aria-pressed', String(current === key));
+    pick.appendChild(make('div', 'snd-name', soundNameOf(key)));
+    var words = [owner && ((styleData().looks || {})[owner.look.key] || {}).title || (owner && owner.look.key), SOUND_TAGS[tag] && text(SOUND_TAGS[tag])].filter(Boolean).join(' · ');
+    if (owner || words) {
+      var line = make('div', 'snd-tag' + (tag === 'own' ? ' own' : ''));
+      if (owner) line.appendChild(alertBadge(owner.eventType));
+      var label = make('span', 'tag-txt', words);
+      label.setAttribute('title', words);
+      line.appendChild(label);
+      pick.appendChild(line);
+    }
+    pick.addEventListener('click', function () { pickSound(key); });
+    row.appendChild(play);
+    row.appendChild(pick);
+    soundRows.push({ key: key, pick: pick });
+    return row;
+  }
+  function soundGroup(title, note, rows) {
+    var group = make('div', 'snd-group');
+    var head = make('h4', 'snd-head', title);
+    if (note) head.appendChild(make('small', null, note));
+    group.appendChild(head);
+    var list = make('div', 'snd-list');
+    rows.forEach(function (r) { list.appendChild(r); });
+    group.appendChild(list);
+    return group;
+  }
+  function renderSoundList() {
+    var type = CARDS.editing, look = draftLook();
+    if (!soundBox || !type || !CARDS.draft) return;
+    soundBox.innerHTML = '';
+    soundRows = [];
+    var owners = soundOwners(), all = styleData().sounds || [];
+    var alertGroups = core().soundGroupsFor(type, all, owners);
+    var current = kit() ? kit().soundFor(look, CARDS.draft) : null;
+    var query = soundQuery.trim().toLowerCase();
+    function shown(key) { return !query || soundNameOf(key).toLowerCase().indexOf(query) >= 0; }
+
+    var mine = core().thisLookRows(look, CARDS.draft.style_sound, all, alertGroups).filter(function (r) { return shown(r.key); });
+    if (mine.length) {
+      soundBox.appendChild(soundGroup(text('sound.thisLook'), '', mine.map(function (r) { return soundRow(r.key, r.tag, owners, current); })));
+    }
+    alertGroups.forEach(function (g) {
+      if (soundFamily !== 'all' && g.family !== soundFamily) return;
+      var sounds = g.sounds.filter(function (s) { return shown(s.key); });
+      if (!sounds.length) return;
+      var family = familyOf(g.family);
+      soundBox.appendChild(soundGroup(family ? family.name : g.family, g.sounds.length === 2 ? text('sound.both') : '',
+        sounds.map(function (s) { return soundRow(s.key, look && s.key === look.sound ? 'own' : '', owners, current); })));
+    });
+  }
+  function markSound() {
+    var look = draftLook(), current = kit() && CARDS.draft ? kit().soundFor(look, CARDS.draft) : null;
+    soundRows.forEach(function (r) { r.pick.setAttribute('aria-pressed', String(r.key === current)); });
+  }
+
+  function renderSound() {
+    var pane = el('pane-sound'), type = CARDS.editing;
+    if (!pane || !type || !CARDS.draft) return;
+    pane.innerHTML = '';
+    if ((builder().uploadedSounds || {})[type]) {
+      var notice = make('p', 'snd-notice', text('sound.uploaded') + ' ');
+      var link = make('a', null, text('sound.uploadedLink'));
+      link.setAttribute('href', '/dashboard/overlay');
+      notice.appendChild(link);
+      pane.appendChild(notice);
+    }
+    var search = make('input', 'snd-search');
+    search.type = 'search';
+    search.value = soundQuery;
+    search.setAttribute('placeholder', text('sound.search'));
+    search.setAttribute('aria-label', text('sound.search'));
+    search.addEventListener('input', function (e) { soundQuery = String(e.target.value || ''); renderSoundList(); });
+    pane.appendChild(search);
+
+    var owners = soundOwners();
+    var families = core().soundGroupsFor(type, styleData().sounds || [], owners).map(function (g) { return g.family; });
+    if (soundFamily !== 'all' && families.indexOf(soundFamily) < 0) soundFamily = 'all';
+    var chips = make('div', 'anim-chips');
+    ['all'].concat(families).forEach(function (key) {
+      var family = familyOf(key);
+      var chip = make('button', 'anim-chip', key === 'all' ? text('style.all') : (family ? family.name : key));
+      chip.type = 'button';
+      chip.setAttribute('data-family', key);
+      chip.setAttribute('aria-pressed', String(soundFamily === key));
+      chip.addEventListener('click', function () { soundFamily = key; renderSound(); });
+      chips.appendChild(chip);
+    });
+    pane.appendChild(chips);
+    soundBox = make('div', 'snd-groups');
+    pane.appendChild(soundBox);
+    renderSoundList();
+  }
+
+  // Picks a sound for the draft (the look's own is stored as null: it follows the look), and plays it.
+  function pickSound(key) {
+    var look = draftLook();
+    if (!CARDS.editing || !CARDS.draft) return;
+    CARDS.draft.style_sound = look && key === look.sound ? null : key;
+    markSound();
+    renderTabValues();
+    playLookSound(key);
+  }
+
   // ?tab=<card> opens that card's window, when the page shows the card.
   function openFromUrl(search) {
     var Params = root.URLSearchParams;
@@ -1099,10 +1247,13 @@
     isDirty: isDirty, tabValue: tabValue, renderTabValues: renderTabValues, draftLook: draftLook, openFromUrl: openFromUrl,
     // The Animation and Customize tabs
     renderAnimation: renderAnimation, renderCustomize: renderCustomize, pickLook: pickLook, useFamily: useFamily,
+    // The Sound tab
+    renderSound: renderSound, pickSound: pickSound,
     editing: null, draft: null, draftStyle: null, tab: null,
     panes: {
       animation: { show: renderAnimation, hide: stopGallery },
       customize: { show: renderCustomize, hide: stopCustomize },
+      sound: { show: renderSound },
     },
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CARDS;
