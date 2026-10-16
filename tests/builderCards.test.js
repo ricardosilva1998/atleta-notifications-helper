@@ -311,7 +311,7 @@ const ARCADE = { ...LOOK, key: 'follow-arcade', family: 'arcade', sound: 'arFoll
 
 // The page script with a fake page and the view's globals. `answers` are what fetch returns, in order;
 // every call is kept in `calls`.
-function loadPage({ saved = {}, rows = [], answers = [], confirmAnswer = true, features = {} } = {}) {
+function loadPage({ saved = {}, rows = [], answers = [], confirmAnswer = true, features = {}, extra = {} } = {}) {
   const calls = [];
   const confirms = [];
   const document = fakeDocument();
@@ -349,6 +349,7 @@ function loadPage({ saved = {}, rows = [], answers = [], confirmAnswer = true, f
     },
     BUILDER: { features, uploadedSounds: {} },
     BUILDER_TEXTS: TEXTS,
+    ...extra,
   };
   const CARDS = load(g);
   let renders = 0;
@@ -504,6 +505,80 @@ describe('the edit window', () => {
     assert.equal(CARDS.isDirty(), true, 'another look is an edit');
     CARDS.closeEditor({ force: true });
     assert.equal(confirms.length, 2, 'force: no question');
+  });
+
+  test('while Done\'s save is on its way the window stays: Esc, Cancel, ✕, the backdrop and Reset wait for it', async () => {
+    let resolve;
+    const pending = new Promise((r) => { resolve = r; });
+    const { CARDS, g, document, calls, confirms } = loadPage({ saved: { follow: 'follow-glass' }, answers: [{ pending }] });
+    CARDS.openEditor('follow');
+    CARDS.draftStyle = 'follow-racing';
+    const saving = CARDS.saveDraft();
+    for (const id of ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close']) assert.equal(document.getElementById(id).disabled, true, id);
+    document.fire('keydown', { key: 'Escape' });
+    document.getElementById('editor-cancel').fire('click');
+    document.getElementById('editor-close').fire('click');
+    document.getElementById('editor-back').fire('click');
+    assert.equal(CARDS.closeEditor(), false);
+    assert.deepEqual({ ...(await CARDS.resetDraft()) }, { ok: false });
+    assert.deepEqual(confirms, [], 'no question: the save will land');
+    assert.equal(calls.length, 1, 'no reset sent');
+    assert.ok(isOpen(document));
+    assert.equal(CARDS.editing, 'follow');
+    CARDS.openEditor('timed');
+    assert.equal(CARDS.editing, 'follow', 'no other card opens over it');
+    resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+    assert.equal((await saving).ok, true);
+    assert.ok(!isOpen(document));
+    assert.equal(g.SAVED_STYLES.follow, 'follow-racing');
+    for (const id of ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close']) assert.equal(document.getElementById(id).disabled, false, id);
+  });
+
+  test('a save that lands after its window was closed leaves the window open now alone', async () => {
+    let resolve;
+    const pending = new Promise((r) => { resolve = r; });
+    const { CARDS, g, document } = loadPage({ saved: { follow: 'follow-glass' }, answers: [{ pending }] });
+    CARDS.openEditor('follow');
+    CARDS.draftStyle = 'follow-racing';
+    const saving = CARDS.saveDraft();
+    CARDS.closeEditor({ force: true });   // only a forced close passes while saving
+    CARDS.openEditor('timed');
+    CARDS.draft.card_width = 640;
+    resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+    await saving;
+    assert.equal(g.SAVED_STYLES.follow, 'follow-racing', 'the follow alert is stored');
+    assert.equal(CARDS.editing, 'timed', 'the sponsor window stays open');
+    assert.equal(CARDS.draft.card_width, 640, 'with its edits');
+    assert.ok(isOpen(document));
+  });
+
+  test('the card loops stop while the window is open and the ones on screen start again when it closes', () => {
+    let observed;
+    class FakeObserver {
+      constructor(callback, options) { observed = { callback, options, targets: [] }; }
+      observe(el) { observed.targets.push(el); }
+      unobserve() {}
+    }
+    const { CARDS, document } = loadPage({ extra: { IntersectionObserver: FakeObserver } });
+    const looper = () => ({ starts: 0, stops: 0, start() { this.starts += 1; }, stop() { this.stops += 1; } });
+    const [a, b, c] = [{}, {}, {}];
+    const [la, lb, lc] = [looper(), looper(), looper()];
+    CARDS.watch(a, la);
+    CARDS.watch(b, lb);
+    CARDS.watch(c, lc);
+    assert.equal(observed.options.rootMargin, '80px');
+    assert.ok('root' in observed.options, 'observed inside the cards\' scrolling page');
+    observed.callback([{ target: a, isIntersecting: true }, { target: c, isIntersecting: false }]);
+    assert.deepEqual([la.starts, lb.starts, lc.starts], [1, 0, 0]);
+
+    CARDS.openEditor('follow');
+    assert.ok(la.stops >= 1 && lb.stops >= 1, 'stopped');
+    observed.callback([{ target: b, isIntersecting: true }]);
+    assert.equal(lb.starts, 0, 'a card scrolled into view stays still behind the window');
+
+    CARDS.closeEditor();
+    assert.ok(!isOpen(document));
+    assert.deepEqual([la.starts, lb.starts, lc.starts], [2, 1, 0], 'the cards on screen play again; the one off screen does not');
   });
 
   test('Esc, the close button, Cancel and the backdrop close the window', () => {

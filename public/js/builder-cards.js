@@ -252,6 +252,7 @@
       }
     });
   }
+  // A card's loop (anything with start() and stop()), run while the card is on screen and no window is open.
   function watch(el, lp) {
     loopers.set(el, lp);
     if (!observer && root.IntersectionObserver) {
@@ -615,11 +616,13 @@
     if (first && first.focus) first.focus();
   }
 
-  // Closes the window; with edits, and not forced, only once the streamer agrees to lose them.
+  // Closes the window; with edits, and not forced, only once the streamer agrees to lose them. While
+  // Done's save is on its way it stays open (Esc, Cancel, ✕ and the backdrop wait): the save will land.
   function closeEditor(options) {
     var force = !!(options && options.force);
     var type = CARDS.editing;
     if (!type) return true;
+    if (saving && !force) return false;
     if (!force && isDirty() && !root.confirm(text('window.leave'))) return false;
     if (CARDS.tab) paneHook(CARDS.tab, 'hide');
     restoreSavedLook(type);
@@ -635,9 +638,9 @@
     setUrlTab(null);
     resumeCards();
     // The focus goes back where it was; when the cards were drawn again, to this card's Edit button.
-    var back = opener;
-    if (back && back.isConnected === false && root.document.querySelector) back = root.document.querySelector('.ecard[data-card="' + type + '"] [data-act="edit"]');
-    if (back && back.focus) back.focus();
+    var focusTo = opener;
+    if (focusTo && focusTo.isConnected === false && root.document.querySelector) focusTo = root.document.querySelector('.ecard[data-card="' + type + '"] [data-act="edit"]');
+    if (focusTo && focusTo.focus) focusTo.focus();
     opener = null;
     return true;
   }
@@ -666,12 +669,16 @@
     if (!type || saving) return Promise.resolve({ ok: false });
     var design = copy(CARDS.draft), style = CARDS.draftStyle;
     var done = el('editor-done');
+    // The window's other ways out wait for the answer too.
+    var buttons = ['editor-done', 'editor-reset', 'editor-cancel', 'editor-close'].map(el).filter(Boolean);
     saving = true;
-    if (done) { done.disabled = true; done.textContent = text('window.saving'); }
+    buttons.forEach(function (button) { button.disabled = true; });
+    if (done) done.textContent = text('window.saving');
     showMessage('');
     function finish(result) {
       saving = false;
-      if (done) { done.disabled = false; done.textContent = text('window.done'); }
+      buttons.forEach(function (button) { button.disabled = false; });
+      if (done) done.textContent = text('window.done');
       return result;
     }
     return fetch('/dashboard/overlay-builder/save', {
@@ -695,7 +702,7 @@
         storeRow(type, row);
         finish(null);
         CARDS.renderCards();
-        closeEditor({ force: true });
+        if (CARDS.editing === type) closeEditor({ force: true });   // never another card's window
         return { ok: true };
       });
     }).catch(function (e) {
@@ -709,7 +716,7 @@
   // the alert keeps its saved look (its own settings start again); the window shows that, unedited.
   function resetDraft() {
     var type = CARDS.editing;
-    if (!type) return Promise.resolve({ ok: false });
+    if (!type || saving) return Promise.resolve({ ok: false });   // not while Done's save is on its way
     if (!root.confirm(text('resetConfirm', { name: cardName(type) }))) return Promise.resolve({ ok: false });
     return fetch('/dashboard/overlay-builder/reset', {
       method: 'POST',
@@ -784,7 +791,7 @@
 
   var CARDS = {
     Looper: Looper, fitAlert: fitAlert, designOf: designOf, shownCards: shownCards, renderCards: renderCards,
-    CARD_ICONS: CARD_ICONS,
+    CARD_ICONS: CARD_ICONS, watch: watch,
     // The edit window (the cards call CARDS.openEditor, late-bound)
     openEditor: openEditor, closeEditor: closeEditor, setTab: setTab, saveDraft: saveDraft, resetDraft: resetDraft,
     isDirty: isDirty, tabValue: tabValue, renderTabValues: renderTabValues, draftLook: draftLook, openFromUrl: openFromUrl,
