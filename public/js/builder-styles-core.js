@@ -93,24 +93,6 @@
     return body;
   }
 
-  // The Sound row lists the sounds by theme (docs/features/look-sounds.md). The theme it shows: the one
-  // the streamer is browsing, else the saved sound's, else the look's own family's, else the first.
-  // `groups` is the page's [{ family, sounds: [{ key, name }] }] (each sound followed by its version 2).
-  function soundThemeOf(browsing, styleSound, look, groups) {
-    var families = groups.map(function (g) { return g.family; });
-    if (browsing && families.indexOf(browsing) >= 0) return browsing;
-    for (var i = 0; i < groups.length; i++) {
-      if (groups[i].sounds.some(function (s) { return s.key === styleSound; })) return groups[i].family;
-    }
-    if (look && look.family && families.indexOf(look.family) >= 0) return look.family;
-    return families.length ? families[0] : null;
-  }
-  // A theme's sounds, in the page's order ([] for a theme it does not have).
-  function soundsOfTheme(theme, groups) {
-    for (var i = 0; i < groups.length; i++) if (groups[i].family === theme) return groups[i].sounds.slice();
-    return [];
-  }
-
   // --- The alert cards and the edit window ---
 
   // The cards of the builder's grid, in order: the six alerts with looks, the timed messages and the
@@ -219,7 +201,6 @@
   var CORE = {
     STYLED_ALERTS: STYLED_ALERTS, isStyled: isStyled, withLook: withLook, lookApplied: lookApplied, shownStyle: shownStyle, untouched: untouched,
     controlsFor: controlsFor, orderGallery: orderGallery, filterGallery: filterGallery, savePayload: savePayload,
-    soundThemeOf: soundThemeOf, soundsOfTheme: soundsOfTheme,
     CARD_TYPES: CARD_TYPES, tabsFor: tabsFor, cardForTab: cardForTab, soundOwners: soundOwners, ownerOfSound: ownerOfSound,
     soundGroupsFor: soundGroupsFor, thisLookRows: thisLookRows, speedOf: speedOf, loopTimings: loopTimings, placeSummary: placeSummary, clampFree: clampFree,
   };
