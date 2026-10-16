@@ -302,13 +302,14 @@ router.get('/poll/events/:token', (req, res) => {
 });
 
 // The bar's texts: pollbar.* in the language the link names. {{count}}, {{points}} and {{viewers}} stay for the bar to
-// fill in (POLL_BAR_FIELDS); exactly one vote takes voteOne or pollFootOne.
+// fill in (POLL_BAR_FIELDS); exactly one vote takes voteOne or pollFootOne, exactly one viewer pointsViewerOne or
+// winnerOne.
 const POLL_BAR_TEXTS = Object.freeze({
   poll: 'pollbar.poll', prediction: 'pollbar.prediction', locked: 'pollbar.locked', result: 'pollbar.result',
   votes: 'pollbar.votes', voteOne: 'pollbar.voteOne', pointsViewers: 'pollbar.pointsViewers', pollFoot: 'pollbar.pollFoot',
-  pollFootOne: 'pollbar.pollFootOne',
-  predictionFoot: 'pollbar.predictionFoot', winners: 'pollbar.winners', tie: 'pollbar.tie', noVotes: 'pollbar.noVotes',
-  cancelled: 'pollbar.cancelled',
+  pollFootOne: 'pollbar.pollFootOne', pointsViewerOne: 'pollbar.pointsViewerOne',
+  predictionFoot: 'pollbar.predictionFoot', winners: 'pollbar.winners', winnerOne: 'pollbar.winnerOne', tie: 'pollbar.tie',
+  noVotes: 'pollbar.noVotes', cancelled: 'pollbar.cancelled',
 });
 const POLL_BAR_FIELDS = Object.freeze({ count: '{{count}}', points: '{{points}}', viewers: '{{viewers}}' });
 

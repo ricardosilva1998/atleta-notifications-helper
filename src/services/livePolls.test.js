@@ -147,6 +147,13 @@ describe('what the bot says', () => {
     assert.deepEqual(bare.said, ['ban everyone']);
   });
 
+  test('a prediction whose winning outcome nobody picked has no result line', () => {
+    const w = setup();
+    w.lp.onEvent(7, 'channel.prediction.end', { ...predictionEnd('resolved'), winning_outcome_id: 'o2', outcomes: [outcomes[0], { ...outcomes[1], users: 0, channel_points: 0 }] });
+    assert.equal(w.lp.snapshot(7).prediction.result, 'won');
+    assert.deepEqual(w.said, []);
+  });
+
   test('a tie names every tied choice; a poll nobody voted in has no result line', () => {
     const tie = setup();
     tie.lp.onEvent(7, 'channel.poll.end', { ...pollEnd, choices: choices(5, 5) });

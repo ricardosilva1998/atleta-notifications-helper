@@ -5137,6 +5137,8 @@ describe('the working cards\' script', () => {
     assert.equal(T.polls.endNow, t('en', 'cards.polls.endNow'));
     assert.equal(T.polls.outcomeWon, t('en', 'cards.polls.outcomeWon', { outcome: '{{outcome}}' }), 'a text with a field the script fills');
     assert.equal(T.polls.voteOne, t('en', 'cards.polls.voteOne', { count: '{{count}}' }), 'exactly one vote reads as one');
+    assert.equal(T.polls.resultPredictionWonOne, t('en', 'cards.polls.result.predictionWonOne', { outcome: '{{outcome}}', points: '{{points}}' }));
+    assert.equal(T.polls.resultPredictionWonNobody, t('en', 'cards.polls.result.predictionWonNobody', { outcome: '{{outcome}}' }));
     assert.equal(T.shoutoutExample, t('en', 'cards.shoutouts.example', { line: '{{line}}' }));
   });
 

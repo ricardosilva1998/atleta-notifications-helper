@@ -15,9 +15,11 @@ const rules = require('../src/services/pollRules');
 const NOW = Date.parse('2026-10-15T20:00:00Z');
 const TEXTS = {
   poll: 'Poll', prediction: 'Prediction', locked: 'Locked', result: 'Result', votes: '{{count}} votes', voteOne: '{{count}} vote',
-  pointsViewers: '{{points}} points · {{viewers}} viewers', pollFoot: '{{count}} votes · vote in the chat\'s poll box',
+  pointsViewers: '{{points}} points · {{viewers}} viewers', pointsViewerOne: '{{points}} points · 1 viewer',
+  pollFoot: '{{count}} votes · vote in the chat\'s poll box',
   pollFootOne: '{{count}} vote · vote in the chat\'s poll box',
-  predictionFoot: '{{count}} points at stake', winners: '{{viewers}} viewers share {{points}} points', tie: 'Tie',
+  predictionFoot: '{{count}} points at stake', winners: '{{viewers}} viewers share {{points}} points',
+  winnerOne: '1 viewer gets {{points}} points', tie: 'Tie',
   noVotes: 'No votes', cancelled: 'Cancelled — points refunded',
 };
 const OPTIONS = {
@@ -87,6 +89,26 @@ describe('what the bar shows', () => {
     delete plural.pollFootOne;
     const older = model.render(view('poll', { options, total: 1 }), NOW, plural, 'en');
     assert.deepEqual([older.rows[0].extra, older.footer], ['1 votes', '1 votes · vote in the chat\'s poll box'], 'texts without the singular');
+  });
+
+  test('a prediction\'s winning outcome nobody picked: the row is marked, without a line under it', () => {
+    const options = [{ ...OPTIONS.prediction[0], won: false }, { ...OPTIONS.prediction[1], users: 0, points: 0, percent: 0, won: true }];
+    const drawn = model.render(view('prediction', { state: 'ended', endsAt: null, endedAt: NOW, result: 'won', options }), NOW, TEXTS, 'en');
+    assert.deepEqual(drawn.rows.map((r) => [r.won, r.lost, r.extra]), [[false, true, ''], [true, false, '']]);
+  });
+
+  test('exactly one viewer reads as one: under a running outcome and under the winner; the plural without a singular text', () => {
+    const options = [{ ...OPTIONS.prediction[0], users: 1, points: 300 }, OPTIONS.prediction[1]];
+    const running = model.render(view('prediction', { options }), NOW, TEXTS, 'en');
+    assert.deepEqual(running.rows.map((r) => r.extra), ['300 points · 1 viewer', '5,100 points · 9 viewers']);
+    const won = options.map((o, i) => ({ ...o, won: i === 0 }));
+    const result = view('prediction', { state: 'ended', endsAt: null, endedAt: NOW, result: 'won', options: won, total: 5400 });
+    assert.equal(model.render(result, NOW, TEXTS, 'en').rows[0].extra, '1 viewer gets 5,400 points');
+    const plural = { ...TEXTS };
+    delete plural.pointsViewerOne;
+    delete plural.winnerOne;
+    assert.equal(model.render(view('prediction', { options }), NOW, plural, 'en').rows[0].extra, '300 points · 1 viewers', 'texts without the singular');
+    assert.equal(model.render(result, NOW, plural, 'en').rows[0].extra, '1 viewers share 5,400 points');
   });
 
   test('a result shows for 10 seconds; with both on, the prediction; nothing otherwise', () => {

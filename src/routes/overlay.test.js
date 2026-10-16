@@ -360,8 +360,8 @@ describe('the Polls & predictions bar', () => {
     const fields = { count: '{{count}}', points: '{{points}}', viewers: '{{viewers}}' };
     assert.ok(pt.text.includes(`"winners":${JSON.stringify(t('pt', 'pollbar.winners', fields))}`), 'the numbers are filled in by the bar');
     assert.ok(t('pt', 'pollbar.winners', fields).includes('{{viewers}}'));
-    for (const name of ['voteOne', 'pollFootOne']) {
-      assert.ok(pt.text.includes(`"${name}":${JSON.stringify(t('pt', `pollbar.${name}`, fields))}`), `${name}: exactly one vote reads as one`);
+    for (const name of ['voteOne', 'pollFootOne', 'pointsViewerOne', 'winnerOne']) {
+      assert.ok(pt.text.includes(`"${name}":${JSON.stringify(t('pt', `pollbar.${name}`, fields))}`), `${name}: exactly one reads as one`);
     }
     assert.match(pt.text, /\/overlay\/pollModel\.js/);
     for (const lang of ['xx', '']) assert.match((await get(`/overlay/poll/${token}?lang=${lang}`)).text, /<html lang="en">/);

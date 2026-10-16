@@ -181,6 +181,14 @@ describe('announcement', () => {
       { textKey: 'prediction_cancel_template', values: { title: 'Clean lap?' } });
   });
 
+  test('a prediction whose winning outcome nobody picked has no result line, like a poll without votes', () => {
+    const nobody = prediction({ status: 'resolved', winning_outcome_id: 'o2', ended_at: iso(NOW), outcomes: [{ id: 'o1', title: 'Clean', users: 18, channel_points: 12400 }, { id: 'o2', title: 'Chaos', users: 0, channel_points: 0 }] });
+    assert.equal(nobody.result, 'won');
+    assert.equal(rules.announcement(nobody, 'end', NOW), null);
+    const one = prediction({ status: 'resolved', winning_outcome_id: 'o2', ended_at: iso(NOW), outcomes: [{ id: 'o1', title: 'Clean', users: 18, channel_points: 12400 }, { id: 'o2', title: 'Chaos', users: 1, channel_points: 50 }] });
+    assert.deepEqual(rules.announcement(one, 'end', NOW).values, { title: 'Clean lap?', outcome: 'Chaos', winners: 1, points: 12450 }, 'one viewer still gets the streamer\'s line');
+  });
+
   test('the six texts are the six columns, each with its label and variables', () => {
     assert.deepEqual(rules.CHAT_TEXTS.map((c) => c.key), ['poll_start_template', 'poll_end_template', 'prediction_start_template', 'prediction_lock_template', 'prediction_end_template', 'prediction_cancel_template']);
     for (const c of rules.CHAT_TEXTS) assert.ok(Object.hasOwn(en, c.label), c.label);

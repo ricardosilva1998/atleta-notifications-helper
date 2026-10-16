@@ -111,14 +111,20 @@
     return `${(template.choices || []).join(' / ')} · ${pollTime(Number(template.durationSeconds) || 0, P)}`;
   }
 
-  // The card's line for a poll or prediction that ended (shown 30 seconds), or ''.
+  // The card's line for a poll or prediction that ended (shown 30 seconds), or ''. A prediction's winning outcome that
+  // nobody, or exactly one viewer, picked has its own line when the table has it (the plural line otherwise).
   function pollResultLine(view, P, locale) {
     if (!view || view.state !== 'ended') return '';
     const number = (n) => Number(n || 0).toLocaleString(locale || 'en');
     const won = (view.options || []).filter((option) => option.won);
     if (view.result === 'canceled') return fill(P.resultCancelled, {});
     if (won.length === 0) return fill(P.resultNone, {});
-    if (view.kind === 'prediction') return fill(P.resultPredictionWon, { outcome: won[0].title, winners: number(won[0].users), points: number(view.total) });
+    if (view.kind === 'prediction') {
+      const users = Number(won[0].users) || 0;
+      if (users === 0 && P.resultPredictionWonNobody) return fill(P.resultPredictionWonNobody, { outcome: won[0].title });
+      if (users === 1 && P.resultPredictionWonOne) return fill(P.resultPredictionWonOne, { outcome: won[0].title, points: number(view.total) });
+      return fill(P.resultPredictionWon, { outcome: won[0].title, winners: number(users), points: number(view.total) });
+    }
     if (view.result === 'tie') return fill(P.resultTie, { winner: won.map((option) => option.title).join(' / ') });
     return fill(P.resultPollWon, { winner: won[0].title, percent: won[0].percent, votes: number(won[0].votes) });
   }

@@ -142,6 +142,8 @@ describe('the Polls & predictions card', () => {
     minutes: '{{minutes}} min', seconds: '{{seconds}} s',
     resultPollWon: '{{winner}} won with {{percent}}% of the votes ({{votes}})', resultTie: 'Tie: {{winner}}', resultNone: 'Nobody voted',
     resultPredictionWon: '{{outcome}} wins — {{winners}} viewers share {{points}} points',
+    resultPredictionWonOne: '{{outcome}} wins — 1 viewer gets {{points}} points',
+    resultPredictionWonNobody: '{{outcome}} wins — nobody picked it',
     resultCancelled: 'Cancelled — everyone got their points back',
   };
   const ended = (kind, result, options, total = 0) => ({ kind, state: 'ended', result, options, total });
@@ -161,6 +163,18 @@ describe('the Polls & predictions card', () => {
     assert.equal(core.pollResultLine(ended('prediction', 'canceled', [{ title: 'Clean' }]), P, 'en'), 'Cancelled — everyone got their points back');
     assert.equal(core.pollResultLine({ kind: 'poll', state: 'running', options: [] }, P, 'en'), '');
     assert.equal(core.pollResultLine(null, P, 'en'), '');
+  });
+
+  test('a prediction\'s winner that nobody picked, or exactly one viewer picked; the plural without those texts', () => {
+    const won = (users) => ended('prediction', 'won', [{ title: 'Clean', users: 18 }, { title: 'Chaos', users, won: true }], 18000);
+    assert.equal(core.pollResultLine(won(0), P, 'en'), 'Chaos wins — nobody picked it');
+    assert.equal(core.pollResultLine(won(1), P, 'en'), 'Chaos wins — 1 viewer gets 18,000 points');
+    assert.equal(core.pollResultLine(won(2), P, 'en'), 'Chaos wins — 2 viewers share 18,000 points');
+    const plural = { ...P };
+    delete plural.resultPredictionWonOne;
+    delete plural.resultPredictionWonNobody;
+    assert.equal(core.pollResultLine(won(1), plural, 'en'), 'Chaos wins — 1 viewers share 18,000 points');
+    assert.equal(core.pollResultLine(won(0), plural, 'en'), 'Chaos wins — 0 viewers share 18,000 points');
   });
 
   test('it asks again every 2 seconds while something runs or just ended, else every 10', () => {

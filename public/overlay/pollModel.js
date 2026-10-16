@@ -30,15 +30,17 @@
 
   // What to draw for a view: the label, the title, the corner (the time left, Locked, or Result), each row (its title,
   // percent, the line under its bar, its colour, and whether it leads, won or lost) and the footer, with the bar's
-  // texts ({{count}}, {{points}} and {{viewers}} filled in) and the numbers written for `locale`. Exactly one vote
-  // takes the singular text (voteOne, pollFootOne) when the texts have it.
+  // texts ({{count}}, {{points}} and {{viewers}} filled in) and the numbers written for `locale`. Exactly one vote or
+  // one viewer takes the singular text (voteOne, pollFootOne, pointsViewerOne, winnerOne) when the texts have it; a
+  // winning outcome nobody picked has no line under it.
   function render(view, now, texts, locale) {
     if (!view) return null;
     const isPoll = view.kind === 'poll';
     const ended = view.state === 'ended';
     const number = (n) => Number(n || 0).toLocaleString(locale || 'en');
     const fill = (text, values) => String(text || '').replace(/\{\{(\w+)\}\}/g, (all, key) => (key in values ? number(values[key]) : all));
-    const votes = (plural, one, count) => fill(Number(count) === 1 && one ? one : plural, { count });
+    const textFor = (n, plural, one) => (Number(n) === 1 && one ? one : plural); // the singular text for exactly one
+    const votes = (plural, one, count) => fill(textFor(count, plural, one), { count });
     let corner = { type: 'time', text: view.endsAt !== null ? clock(view.endsAt - now) : '' };
     if (view.state === 'locked') corner = { type: 'locked', text: texts.locked || '' };
     else if (ended) corner = { type: 'result', text: texts.result || '' };
@@ -46,9 +48,13 @@
     const someWon = view.options.some((o) => o.won);
     const rows = view.options.map((o) => {
       let extra = '';
-      if (isPoll) extra = votes(texts.votes, texts.voteOne, o.votes);
-      else if (ended && o.won) extra = fill(texts.winners, { viewers: o.users, points: view.total });
-      else if (!ended) extra = fill(texts.pointsViewers, { points: o.points, viewers: o.users });
+      if (isPoll) {
+        extra = votes(texts.votes, texts.voteOne, o.votes);
+      } else if (!ended) {
+        extra = fill(textFor(o.users, texts.pointsViewers, texts.pointsViewerOne), { points: o.points, viewers: o.users });
+      } else if (o.won && o.users > 0) {
+        extra = fill(textFor(o.users, texts.winners, texts.winnerOne), { viewers: o.users, points: view.total });
+      }
       return {
         title: o.title, percent: o.percent, color: o.color || null, extra,
         lead: isPoll && !ended && most > 0 && o.votes === most,

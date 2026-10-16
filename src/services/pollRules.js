@@ -180,7 +180,8 @@ function formatClock(ms) {
 }
 
 // The bot's line for a moment of a poll or prediction ('start', 'lock', 'end'): the column of the streamer's text and
-// the values it is filled with, or null when nothing is said (a poll's lock; a result without votes or winner).
+// the values it is filled with, or null when nothing is said (a poll's lock; a result without votes or winner, or
+// whose winning outcome nobody picked).
 function announcement(view, phase, now) {
   if (!view) return null;
   const time = view.endsAt === null ? '' : formatClock(view.endsAt - now);
@@ -195,7 +196,7 @@ function announcement(view, phase, now) {
   if (phase !== 'end') return null;
   if (view.result === 'canceled') return { textKey: 'prediction_cancel_template', values: { title: view.title } };
   const winner = view.options.find((o) => o.won);
-  if (!winner) return null;
+  if (!winner || !winner.users) return null;
   return { textKey: 'prediction_end_template', values: { title: view.title, outcome: winner.title, winners: winner.users, points: view.total } };
 }
 
