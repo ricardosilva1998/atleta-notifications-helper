@@ -1,9 +1,12 @@
 'use strict';
 
 // Twitch's polls and predictions for a streamer (Helix, with the streamer's broadcaster token): start, end, lock,
-// resolve, cancel, and the newest of each. A token Twitch refuses is refreshed once, through the refresh the follow
-// checks share (twitch.refreshBroadcasterTokenShared: one at a time per streamer). Twitch's refusals become the codes
-// the Polls & predictions card shows (PollsError.code; their texts are pollRules.ERRORS):
+// resolve, cancel, and the newest of each. A stored token past its expiry is refreshed before the request, and a token
+// Twitch refuses is refreshed once, through the refresh the follow checks share (twitch.refreshBroadcasterTokenShared:
+// one at a time per streamer); one refresh per call at most. A call has one deadline, 15 seconds for the request, a
+// refresh and the request again together (each request still has its own 10); past it the caller stops waiting (a
+// refresh goes on with its own timeout). Twitch's refusals become the codes the Polls & predictions card shows
+// (PollsError.code; their texts are pollRules.ERRORS):
 //   needs_reconnect  no linked channel or token, the two permissions missing, a token Twitch refuses twice, or a grant
 //                    Twitch no longer accepts (the shared refresh clears its permissions)
 //   not_affiliate    Twitch allows polls and predictions to Affiliates and Partners only: recognised by the message,
@@ -13,8 +16,8 @@
 //   automod          a title or choice Twitch's AutoMod refused
 //   changed          an end, lock, result or cancel of one whose status changed meanwhile
 //   not_found        a prediction or outcome Twitch does not know
-//   twitch_failed    no answer within 10 seconds, no network, a token refresh that failed for a moment, or anything
-//                    else Twitch refuses (the route logs it)
+//   twitch_failed    no answer in time (a request's 10 seconds, the call's 15), no network, a token refresh that
+//                    failed for a moment, or anything else Twitch refuses (the route logs it)
 
 const config = require('../config');
 const db = require('../db');
@@ -22,6 +25,21 @@ const { refreshBroadcasterTokenShared, hasPollsScope } = require('./twitch');
 
 const HELIX_BASE = 'https://api.twitch.tv/helix';
 const HELIX_TIMEOUT_MS = 10_000;
+const CALL_DEADLINE_MS = 15_000; // the whole call: the request, a token refresh and the request again
+
+// Settles like `promise`, or rejects once `signal` aborts: the caller stops waiting for a refresh other callers share,
+// which goes on with its own timeout.
+function beforeDeadline(promise, signal) {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+}
 
 class PollsError extends Error {
   constructor(code, detail) {
@@ -45,27 +63,29 @@ async function helix(streamer, method, urlPath, body, { creating = false } = {})
   if (!streamer || !streamer.twitch_user_id || !streamer.broadcaster_access_token || !hasPollsScope(streamer)) {
     throw new PollsError('needs_reconnect');
   }
+  const deadline = AbortSignal.timeout(CALL_DEADLINE_MS);
   const send = (token) => fetch(`${HELIX_BASE}${urlPath}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, 'Client-Id': config.twitch.clientId, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+    signal: AbortSignal.any([AbortSignal.timeout(HELIX_TIMEOUT_MS), deadline]),
   });
+  const refresh = async () => {
+    try {
+      return await beforeDeadline(refreshBroadcasterTokenShared(streamer), deadline);
+    } catch (err) {
+      // Only a grant Twitch no longer accepts asks for a reconnect (the shared refresh has cleared the permissions);
+      // a refresh that failed for a moment (a 5xx or a 429, no answer, no network) is Twitch failing this once.
+      if (err && err.code === 'INVALID_REFRESH_TOKEN') throw new PollsError('needs_reconnect', err.message);
+      throw new PollsError('twitch_failed', err && err.message);
+    }
+  };
   let res;
   try {
-    res = await send(streamer.broadcaster_access_token);
-    if (res.status === 401) {
-      let fresh;
-      try {
-        fresh = await refreshBroadcasterTokenShared(streamer);
-      } catch (err) {
-        // Only a grant Twitch no longer accepts asks for a reconnect (the shared refresh has cleared the permissions);
-        // a refresh that failed for a moment (a 5xx or a 429, no answer, no network) is Twitch failing this once.
-        if (err && err.code === 'INVALID_REFRESH_TOKEN') throw new PollsError('needs_reconnect', err.message);
-        throw new PollsError('twitch_failed', err && err.message);
-      }
-      res = await send(fresh);
-    }
+    // A token past its expiry is refreshed first (no 401 round trip); one Twitch refuses is refreshed once.
+    const expired = !!streamer.broadcaster_token_expires_at && Date.now() >= streamer.broadcaster_token_expires_at;
+    res = await send(expired ? await refresh() : streamer.broadcaster_access_token);
+    if (res.status === 401 && !expired) res = await send(await refresh());
   } catch (err) {
     if (err instanceof PollsError) throw err;
     throw new PollsError('twitch_failed', err && err.message);
@@ -126,5 +146,6 @@ async function latestPrediction(streamer) {
 }
 
 module.exports = {
-  PollsError, createPoll, endPoll, latestPoll, createPrediction, lockPrediction, resolvePrediction, cancelPrediction, latestPrediction,
+  PollsError, CALL_DEADLINE_MS, createPoll, endPoll, latestPoll, createPrediction, lockPrediction, resolvePrediction,
+  cancelPrediction, latestPrediction,
 };

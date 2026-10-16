@@ -14,12 +14,14 @@ const FILE = path.join(__dirname, 'twitchPolls.js');
 const affiliateFlags = [];
 const refreshes = [];
 let refreshFailure = null; // what the shared token refresh throws, or null while it works
+let refreshGate = null; // a promise the shared token refresh waits for (a refresh Twitch answers late), or null
 const stubs = {
   '../config': { twitch: { clientId: 'synthetic-client-id' } },
   '../db': { updateStreamerCpSync: (id, fields) => affiliateFlags.push([id, fields]) },
   './twitch': {
     refreshBroadcasterTokenShared: async (streamer) => {
       refreshes.push(streamer.id);
+      if (refreshGate) await refreshGate;
       if (refreshFailure) throw refreshFailure;
       return 'fresh-token';
     },
@@ -52,6 +54,7 @@ beforeEach(() => {
   affiliateFlags.length = 0;
   refreshes.length = 0;
   refreshFailure = null;
+  refreshGate = null;
   global.fetch = async (url, opts) => {
     calls.push({ url: String(url), method: opts.method, body: opts.body ? JSON.parse(opts.body) : null, auth: opts.headers.Authorization, signal: opts.signal });
     const next = answers.shift() || { status: 200, body: { data: [] } };
@@ -70,6 +73,11 @@ const refused = (status, message) => ({ status, body: { error: 'Bad Request', st
 // What the shared refresh throws for a grant Twitch no longer accepts (twitch.js: the token endpoint answered 400).
 const deadGrant = () => Object.assign(new Error('Token refresh failed: 400'), { code: 'INVALID_REFRESH_TOKEN' });
 const code = async (promise) => { try { await promise; } catch (err) { return err.code; } return 'resolved'; };
+// For one test, the call's deadline (15 s) lasts `ms`; each request's own 10 s stays as it is.
+function shortDeadline(t, ms) {
+  const real = AbortSignal.timeout;
+  t.mock.method(AbortSignal, 'timeout', (wanted) => real.call(AbortSignal, wanted === 15000 ? ms : wanted));
+}
 
 describe('what is sent to Twitch', () => {
   test('a poll: its choices, its time and its channel-points voting; the answer is Twitch\'s poll', async () => {
@@ -141,6 +149,29 @@ describe('the broadcaster token', () => {
     }
     assert.deepEqual(refreshes, [7, 7, 7]);
     assert.equal(calls.length, 3, 'nothing is sent again after a refresh that failed');
+  });
+
+  test('a stored token past its expiry is refreshed before the first request, so Twitch never has to refuse it', async () => {
+    answers.push({ status: 200, body: { data: [poll] } }, { status: 200, body: { data: [poll] } });
+    assert.deepEqual(await polls.createPoll(streamer({ broadcaster_token_expires_at: Date.now() - 1000 }), value), poll);
+    assert.deepEqual(refreshes, [7]);
+    assert.deepEqual(calls.map((c) => c.auth), ['Bearer fresh-token']);
+    await polls.createPoll(streamer({ broadcaster_token_expires_at: Date.now() + 60000 }), value);
+    assert.deepEqual(refreshes, [7], 'a token that has not expired is sent as it is');
+    assert.equal(calls[1].auth, 'Bearer old-token');
+  });
+
+  test('a token refreshed ahead that Twitch still refuses asks for a reconnect (one refresh per call); a refresh ahead that fails sends nothing', async () => {
+    const expired = () => streamer({ broadcaster_token_expires_at: 1 });
+    answers.push({ status: 401, body: {} });
+    assert.equal(await code(polls.latestPoll(expired())), 'needs_reconnect');
+    assert.deepEqual(refreshes, [7]);
+    assert.equal(calls.length, 1);
+    refreshFailure = deadGrant();
+    assert.equal(await code(polls.latestPoll(expired())), 'needs_reconnect');
+    refreshFailure = new Error('Token refresh failed: 503');
+    assert.equal(await code(polls.latestPoll(expired())), 'twitch_failed');
+    assert.equal(calls.length, 1, 'nothing is sent after a refresh that failed');
   });
 
   test('without both permissions (or a linked channel, or a token) nothing is sent', async () => {
@@ -219,5 +250,46 @@ describe('Twitch\'s refusals', () => {
     } finally {
       AbortSignal.timeout = realTimeout;
     }
+  });
+});
+
+// The card's script gives up after 20 seconds; a call waits for the request, a token refresh and the request again,
+// each with its own 10 seconds, so the whole call has one deadline of 15 seconds (CALL_DEADLINE_MS).
+describe('one deadline for the whole call', () => {
+  test('is 15 seconds', () => {
+    assert.equal(polls.CALL_DEADLINE_MS, 15000);
+  });
+
+  test('a request Twitch never answers ends at the call\'s deadline: twitch_failed', { timeout: 5000 }, async (t) => {
+    shortDeadline(t, 40);
+    answers.push('hang');
+    assert.equal(await code(polls.createPoll(streamer(), value)), 'twitch_failed');
+  });
+
+  test('a 401, then a retry Twitch never answers: the call gives up at its deadline, not each request at its own', { timeout: 5000 }, async (t) => {
+    shortDeadline(t, 60);
+    answers.push({ status: 401, body: {} }, 'hang');
+    assert.equal(await code(polls.createPoll(streamer(), value)), 'twitch_failed');
+    assert.deepEqual(calls.map((c) => c.auth), ['Bearer old-token', 'Bearer fresh-token']);
+    assert.equal(calls[1].signal.aborted, true);
+  });
+
+  test('a token refresh Twitch does not answer: the start answers twitch_failed at the deadline; the refresh goes on alone and nothing more is sent', { timeout: 5000 }, async (t) => {
+    shortDeadline(t, 40);
+    let release;
+    refreshGate = new Promise((resolve) => { release = resolve; });
+    answers.push({ status: 401, body: { message: 'Invalid OAuth token' } });
+    assert.equal(await code(polls.createPoll(streamer(), value)), 'twitch_failed');
+    assert.deepEqual(refreshes, [7]);
+    refreshFailure = new Error('Token refresh failed: 503'); // it fails later, at its own timeout: nobody waits for it
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(calls.length, 1, 'nothing is sent once the caller stopped waiting');
+    refreshGate = new Promise((resolve) => { release = resolve; });
+    refreshFailure = null;
+    assert.equal(await code(polls.latestPoll(streamer({ broadcaster_token_expires_at: 1 }))), 'twitch_failed', 'a refresh ahead too');
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(calls.length, 1);
   });
 });
