@@ -3,9 +3,10 @@
 // The voices a streamer can pick for reading tips aloud: a short, curated list per language (ElevenLabs voices; the
 // model is config.tts.model except where MODEL_BY_LANGUAGE below names another). `preview` is the URL of the voice's
 // recorded sample in public/tts/previews/ (the language's default line read with "Atleta", 25 euros and the sample
-// message, named by its content hash, so it is cached a year). The first voice of a language is its default. English uses ElevenLabs' own premade voices; the
-// other languages use native speakers from ElevenLabs' voice library (rate 1, no live moderation, at least a year's
-// notice before their owner can withdraw them). How a voice and its preview are added: docs/features/tip-tts.md.
+// message, named by its content hash, so it is cached a year). The first voice of a language is its default. English
+// uses ElevenLabs' own premade voices; the other languages use native speakers from ElevenLabs' voice library (rate 1,
+// no live moderation, at least a year's notice before their owner can withdraw them). How a voice and its preview are
+// added: docs/features/tip-tts.md.
 
 const TTS_LANGUAGES = Object.freeze(['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja']);
 
