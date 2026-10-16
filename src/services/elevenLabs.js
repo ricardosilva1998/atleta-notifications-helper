@@ -1,0 +1,87 @@
+'use strict';
+
+// ElevenLabs client for reading tips aloud: text to speech (synthesize) and the
+// characters left on the account (remainingCredits). Every call takes its
+// fetch, key and model as options so the tests never touch the network; the
+// defaults come from config.tts, read only when a call needs them. The key goes
+// out in one header and is never put in an error or a log line.
+
+const API = 'https://api.elevenlabs.io/v1';
+const CREDITS_TTL_MS = 10 * 60 * 1000;
+const CREDITS_TIMEOUT_MS = 10 * 1000;
+
+const SIMILARITY_BOOST = 0.75;
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+function ttsConfig() {
+  return require('../config').tts;
+}
+
+// expressiveness 0-1: 0 is steady and even, 1 the livelier delivery (lower stability, more style).
+function voiceSettings(speed, expressiveness) {
+  return {
+    stability: round2(0.85 - 0.6 * expressiveness),
+    similarity_boost: SIMILARITY_BOOST,
+    style: round2(0.6 * expressiveness),
+    speed,
+    use_speaker_boost: true,
+  };
+}
+
+async function synthesize({ voiceId, text, speed, expressiveness, lang }, options = {}) {
+  const {
+    fetch = globalThis.fetch,
+    apiKey = ttsConfig().apiKey,
+    model = ttsConfig().model,
+    timeoutMs = 15000,
+  } = options;
+  if (!apiKey) throw new Error('no_key');
+
+  let res;
+  try {
+    res = await fetch(`${API}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+      body: JSON.stringify({ text, model_id: model, language_code: lang, voice_settings: voiceSettings(speed, expressiveness) }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) throw new Error(`elevenlabs_${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    // A refusal keeps its status; a network failure or a timeout becomes one code, so no detail of the request travels.
+    if (/^elevenlabs_\d+$/.test(err && err.message)) throw err;
+    throw new Error('elevenlabs_failed');
+  }
+}
+
+// The last good read and when it was made (module state; resetCredits is for the tests).
+let credits = { value: null, at: 0 };
+
+function resetCredits() {
+  credits = { value: null, at: 0 };
+}
+
+// Characters left this billing period (limit minus used), read at most every 10 minutes.
+// A failed read answers the last value known, null when there is none.
+async function remainingCredits({ fetch = globalThis.fetch, apiKey = ttsConfig().apiKey, now = Date.now } = {}) {
+  if (!apiKey) return credits.value;
+  const t = now();
+  if (credits.value !== null && t - credits.at < CREDITS_TTL_MS) return credits.value;
+  try {
+    const res = await fetch(`${API}/user/subscription`, {
+      headers: { 'xi-api-key': apiKey },
+      signal: AbortSignal.timeout(CREDITS_TIMEOUT_MS),
+    });
+    if (!res.ok) return credits.value;
+    const body = await res.json();
+    if (!Number.isFinite(body.character_limit) || !Number.isFinite(body.character_count)) return credits.value;
+    const left = body.character_limit - body.character_count;
+    credits = { value: left, at: t };
+    return left;
+  } catch {
+    return credits.value;
+  }
+}
+
+module.exports = { voiceSettings, synthesize, remainingCredits, resetCredits };
