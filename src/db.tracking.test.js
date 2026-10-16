@@ -328,6 +328,18 @@ describe('goals', () => {
     assert.equal(db.getTrackingGoalHistory(s, 'follow', 2).length, 2);
     assert.deepEqual(db.getTrackingGoalHistory(s, 'sub'), [], 'the sub goal is still active');
   });
+
+  test('an ended goal in the history says whether it was reached (completed_at), so the page can show reached or missed', () => {
+    const s = addStreamer();
+    const missed = db.createTrackingGoal(s, 'sub', goalFields({ title: 'Missed', period: 'lifetime', mode: null, time_zone: null }));
+    db.endTrackingGoal(missed.id, s);
+    const reached = db.createTrackingGoal(s, 'sub', goalFields({ title: 'Reached', period: 'lifetime', mode: null, time_zone: null }));
+    assert.equal(db.setTrackingGoalCompleted(reached.id), true);
+    db.endTrackingGoal(reached.id, s);
+    const byTitle = Object.fromEntries(db.getTrackingGoalHistory(s, 'sub').map((h) => [h.title, h]));
+    assert.equal(byTitle.Missed.completed_at, null);
+    assert.match(byTitle.Reached.completed_at, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+  });
 });
 
 describe('trackers', () => {
@@ -356,6 +368,18 @@ describe('trackers', () => {
     assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 1, color: null } });
     db.setTrackerSetting(s, 'top_tipper', { enabled: false });
     assert.equal(Object.keys(db.getTrackerSettings(s)).length, 2);
+  });
+
+  test('ensureTrackerSettings writes a row, on and with no colour, for each tracker that has none, and leaves the others', () => {
+    const s = addStreamer();
+    db.setTrackerSetting(s, 'latest_tip', { enabled: false, color: '#ff00aa' });
+    assert.equal(db.ensureTrackerSettings(s, ['latest_follower', 'latest_tip', 'top_tipper']), 2);
+    assert.deepEqual(db.getTrackerSettings(s), {
+      latest_follower: { enabled: 1, color: null },
+      latest_tip: { enabled: 0, color: '#ff00aa' },
+      top_tipper: { enabled: 1, color: null },
+    });
+    assert.equal(db.ensureTrackerSettings(s, ['latest_follower', 'latest_tip', 'top_tipper']), 0, 'a second time writes nothing');
   });
 });
 

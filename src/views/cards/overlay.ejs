@@ -1,6 +1,6 @@
 <%# The OBS overlay card (with features.overlays; dashboardCards.js overlayCard()): the alerts' on/off switch, the
     browser source link (masked until the eye is clicked), each alert's switch, seconds on screen and test, and the
-    volume. %>
+    volume; its foot links the Overlay Builder, the Tracking page (goal bars and trackers) and the sounds. %>
 <section class="card wc-card" id="card-overlay" data-card="overlay" aria-labelledby="card-overlay-title">
   <div class="wc-head">
     <div class="wc-icon" style="background: rgba(224,64,251,0.13); color: #e040fb"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></div>
@@ -41,5 +41,5 @@
     <div class="wc-volume"><svg class="i sm" aria-hidden="true"><use href="#i-vol"/></svg><%= t('cards.overlay.volume') %><input type="range" min="0" max="100" step="1" value="<%= card.volume %>" data-setting="overlay_volume" data-scale="100" aria-label="<%= t('cards.overlay.volume') %>"><span class="v" data-volume-label><%= card.volume %>%</span></div>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><a href="/dashboard/overlay-builder"><%= t('cards.overlay.look') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/overlay"><%= t('cards.overlay.sounds') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <div class="wc-foot"><a href="/dashboard/overlay-builder"><%= t('cards.overlay.look') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/tracking"><%= t('tracking.title') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><a href="/dashboard/overlay"><%= t('cards.overlay.sounds') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
 </section>

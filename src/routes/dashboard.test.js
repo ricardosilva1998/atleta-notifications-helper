@@ -3707,6 +3707,7 @@ describe('with the OBS overlay features switched off', () => {
     '/dashboard/overlay': 'overlay-config',
     '/dashboard/overlay-builder': 'overlay-builder',
     '/dashboard/redemptions': 'redemptions-config',
+    '/dashboard/tracking': 'tracking',
     '/dashboard/vtuber-preview': 'vtuber',
   };
 
@@ -3800,7 +3801,7 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
   };
   // A link or form that leads a streamer into the overlays: their pages, the Builder's sponsor list, the
   // tip goal, the VTuber, or an OBS link.
-  const INTO_OVERLAYS = /\/dashboard\/(?:overlay|redemptions|vtuber|api\/vtuber|sponsors)|\/dashboard\/donations\/goal|\/overlay\/|\/vtuber\//;
+  const INTO_OVERLAYS = /\/dashboard\/(?:overlay|redemptions|tracking|api\/tracking|vtuber|api\/vtuber|sponsors)|\/dashboard\/donations\/goal|\/overlay\/|\/vtuber\//;
   // Words that say a page is about the overlays.
   const OVERLAY_WORDS = /overlay|vtuber|browser source|\bOBS\b|channel point|experimental/i;
   const noOverlays = (html, label) => {
@@ -3856,7 +3857,7 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       const streamer = streamerWithEverything();
       const res = await request('GET', '/dashboard', { streamer });
       const page = body(res.text);
-      for (const href of ['/dashboard/overlay', '/dashboard/overlay-builder', '/dashboard/redemptions']) assert.ok(page.includes(`href="${href}"`), href);
+      for (const href of ['/dashboard/overlay', '/dashboard/overlay-builder', '/dashboard/tracking', '/dashboard/redemptions']) assert.ok(page.includes(`href="${href}"`), href);
       for (const key of ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental', 'dashboard.youtube.overlayDesc',
         'cards.overlay.source', 'cards.donations.goal', 'cards.sponsors.images', 'dashboard.kick.comingSoon']) {
         assert.ok(page.includes(esc(t('en', key))), key);

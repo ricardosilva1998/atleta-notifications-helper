@@ -5958,13 +5958,13 @@ function getActiveTrackingGoal(streamerId, kind) {
 }
 
 // The goals that ended and the periods a calendar goal finished, newest first,
-// as one list: { type: 'goal', ... } rows from tracking_goals and
-// { type: 'period', ... } rows with their goal's title, each with `at`, the
-// time it ended.
+// as one list: { type: 'goal', ... } rows from tracking_goals (completed_at:
+// when it was reached, null when it never was) and { type: 'period', ... } rows
+// with their goal's title, each with `at`, the time it ended.
 function getTrackingGoalHistory(streamerId, kind, limit) {
   const max = Math.max(1, Math.floor(Number(limit)) || 10);
   const goals = db.prepare(`
-    SELECT 'goal' AS type, id, title, target, bar_color, period, mode, started_at, ended_at, ended_at AS at
+    SELECT 'goal' AS type, id, title, target, bar_color, period, mode, started_at, ended_at, completed_at, ended_at AS at
     FROM tracking_goals WHERE streamer_id = ? AND kind = ? AND status = 'ended'
     ORDER BY ended_at DESC, id DESC LIMIT ?
   `).all(streamerId, kind, max);
@@ -6160,6 +6160,15 @@ function getTrackerSettings(streamerId) {
     out[r.tracker] = { enabled: r.enabled, color: r.color };
   }
   return out;
+}
+
+// Writes a row (on, no colour) for each of `trackers` the streamer has none
+// for, leaving the rows there are; returns how many it wrote. The Tracking page
+// does this on its first visit, so the trackers that are on by default count as
+// in use (TRACKING_IN_USE reads the rows).
+function ensureTrackerSettings(streamerId, trackers) {
+  const insert = db.prepare('INSERT OR IGNORE INTO tracker_settings (streamer_id, tracker, enabled, color) VALUES (?, ?, 1, NULL)');
+  return db.transaction(() => trackers.reduce((written, tracker) => written + insert.run(streamerId, tracker).changes, 0))();
 }
 
 // Creates or changes a tracker's row; what the call does not name stays as it
@@ -6649,6 +6658,7 @@ module.exports = {
   clearTrackerValues,
   getTrackerSettings,
   setTrackerSetting,
+  ensureTrackerSettings,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
   // GET /health: throws when the database cannot answer (or has been closed).

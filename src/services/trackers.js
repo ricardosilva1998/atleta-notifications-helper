@@ -21,6 +21,7 @@
 const bus = require('./overlayBus');
 
 const TRACKERS = ['latest_follower', 'latest_sub', 'latest_tip', 'latest_raid', 'latest_bits', 'top_tipper'];
+const DEFAULT_COLOR = '#9146FF'; // a tracker with no colour of its own: the Atleta purple
 const NAME_MAX = 100;
 const NO_STREAM_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -128,7 +129,20 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     return parsed(db.getTrackerValues(streamerId)[tracker]);
   }
 
-  return { onEvent, onTip, topTipper, values, valueOf };
+  // Every tracker's settings, in TRACKERS order, as its source draws them: { enabled, color, ownColor }. A tracker
+  // with no row is on; a colour that is not #rrggbb (or none) is DEFAULT_COLOR, and ownColor says one is stored.
+  function settings(streamerId) {
+    const rows = db.getTrackerSettings(streamerId);
+    const out = {};
+    for (const tracker of TRACKERS) {
+      const row = rows[tracker];
+      const own = !!row && typeof row.color === 'string' && /^#[0-9a-f]{6}$/i.test(row.color);
+      out[tracker] = { enabled: row ? !!row.enabled : true, color: own ? row.color : DEFAULT_COLOR, ownColor: own };
+    }
+    return out;
+  }
+
+  return { onEvent, onTip, topTipper, values, valueOf, settings };
 }
 
 // The app's instance. The database is required when first used: it loads the app's config, which this file's unit
@@ -146,6 +160,7 @@ function instance() {
 
 module.exports = {
   TRACKERS,
+  DEFAULT_COLOR,
   channel,
   createTrackers,
   onEvent: (...args) => instance().onEvent(...args),
@@ -153,4 +168,5 @@ module.exports = {
   topTipper: (...args) => instance().topTipper(...args),
   values: (...args) => instance().values(...args),
   valueOf: (...args) => instance().valueOf(...args),
+  settings: (...args) => instance().settings(...args),
 };

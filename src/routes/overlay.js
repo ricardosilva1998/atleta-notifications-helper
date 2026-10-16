@@ -288,7 +288,6 @@ const trackingGoals = require('../services/trackingGoals');
 const trackers = require('../services/trackers');
 
 const GOAL_SOURCES = Object.freeze({ followers: 'follow', subs: 'sub' });
-const TRACKER_COLOR = '#9146FF';
 
 // The sources' texts: tracking.source.* in the language the link names; {{count}} stays for the page to fill in. The
 // tracker titles are named by tracker, the unavailable texts by trackingGoals' code.
@@ -329,11 +328,10 @@ function sendTrackingPage(req, res, title, pageConfig) {
   res.send(trackingPageHtml(req, title, pageConfig));
 }
 
-// A tracker's settings as its source draws them: no row is on; a colour that is not #rrggbb is the Atleta purple.
+// A tracker's settings as its source draws them (trackers.settings: no row is on, no colour is the Atleta purple).
 function trackerSettingsOf(streamerId, tracker) {
-  const row = db.getTrackerSettings(streamerId)[tracker];
-  const color = row && typeof row.color === 'string' && /^#[0-9a-f]{6}$/i.test(row.color) ? row.color : TRACKER_COLOR;
-  return { enabled: row ? !!row.enabled : true, color };
+  const { enabled, color } = trackers.settings(streamerId)[tracker];
+  return { enabled, color };
 }
 
 // Opens a Tracking source's event stream: `first` (the config and what it shows now), then every event on `channel`

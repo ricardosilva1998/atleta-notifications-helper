@@ -204,3 +204,18 @@ describe('the top tipper', () => {
     assert.deepEqual(setup().tr.topTipper(id), { name: 'NoCurrency', amount: 4, currency: 'GBP' });
   });
 });
+
+describe('the trackers\' settings', () => {
+  test('settings() gives all six as their sources draw them: no row is on in the Atleta purple, a stored colour is kept', () => {
+    const s = addStreamer();
+    const world = setup();
+    db.setTrackerSetting(s, 'latest_tip', { enabled: false, color: '#ff00aa' });
+    db.setTrackerSetting(s, 'latest_raid', { color: 'red' });
+    const settings = world.tr.settings(s);
+    assert.deepEqual(Object.keys(settings), trackers.TRACKERS);
+    assert.equal(trackers.DEFAULT_COLOR, '#9146FF');
+    assert.deepEqual(settings.latest_follower, { enabled: true, color: '#9146FF', ownColor: false });
+    assert.deepEqual(settings.latest_tip, { enabled: false, color: '#ff00aa', ownColor: true });
+    assert.deepEqual(settings.latest_raid, { enabled: true, color: '#9146FF', ownColor: false }, 'a colour that is not #rrggbb is the default');
+  });
+});
