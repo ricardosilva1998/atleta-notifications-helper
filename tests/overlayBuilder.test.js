@@ -107,32 +107,6 @@ describe('the card width slider', () => {
   });
 });
 
-describe('the Sound row, by theme', () => {
-  test('a theme dropdown comes before the sound list, and the list holds the look\'s own, today\'s, none, then one theme\'s sounds', () => {
-    assert.match(builder, /<select id="style-sound-theme" aria-label="<%= t\('overlayBuilder\.style\.soundTheme'\) %>"><\/select>\s*<select id="style-sound"><\/select>/);
-    assert.match(functionSource('syncStyleControls'), /STYLE_CORE\.soundThemeOf\(soundTheme, d\.style_sound, look, STYLE_DATA\.sounds\)/);
-    const vm = require('node:vm');
-    const node = () => ({ children: [], dataset: {}, set textContent(_) { this.children = []; }, append(...n) { this.children.push(...n); }, appendChild(n) { this.children.push(n); return n; } });
-    const list = node();
-    const context = vm.createContext({
-      document: { getElementById: (id) => (id === 'style-sound' ? list : null), createElement: () => Object.assign(node(), { label: '' }) },
-      Option: function Option(text, value) { this.text = text; this.value = value; },
-      I18N: { style: { soundOwn: 'Own', soundToday: 'Today', soundNone: 'None' } },
-      STYLE_DATA: {
-        families: [{ key: 'racing', name: 'Racing' }],
-        sounds: [{ family: 'racing', sounds: [{ key: 'rcFlyby', name: 'Fly-by' }, { key: 'rcFlyby.2', name: 'Fly-by (version 2)' }] }],
-      },
-      STYLE_CORE: require('../public/js/builder-styles-core.js'),
-    });
-    vm.runInContext(functionSource('familyName') + '\n' + functionSource('fillSoundList'), context);
-    vm.runInContext("fillSoundList('racing'); fillSoundList('racing')", context);
-    assert.deepEqual(list.children.slice(0, 3).map((o) => o.value), ['', 'today', 'none']);
-    assert.equal(list.children.length, 4, 'built once for the same theme');
-    assert.equal(list.children[3].label, 'Racing');
-    assert.deepEqual(list.children[3].children.map((o) => [o.value, o.text]), [['rcFlyby', 'Fly-by'], ['rcFlyby.2', 'Fly-by (version 2)']]);
-  });
-});
-
 describe('the font picker', () => {
   // The first entry of the list is named by a translation ("System Default"); a font's own name is stored as it is.
   test('prints each name as text, not inside the markup it builds for the item', () => {
@@ -254,27 +228,30 @@ describe("an alert's saved style (andre_vilela_'s C1)", () => {
   });
 });
 
-describe('the Style section (alert styles)', () => {
+// The looks, their settings and their sound are the edit window's Animation, Customize and Sound tabs
+// (public/js/builder-cards.js, tested in tests/builderCards.test.js: picking a look, what Customize shows,
+// "Use <theme> for all six alerts"); these read what stays in the page.
+describe('the looks (alert styles)', () => {
   const vm = require('node:vm');
+  const cards = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'builder-cards.js'), 'utf8');
 
-  test('Test plays the look in OBS without a thank-you in the Twitch chat (chat: false)', () => {
-    assert.match(functionSource('testLook'), /body: JSON\.stringify\(\{ chat: false \}\)/);
+  test('a card\'s Test plays the alert in OBS without a thank-you in the Twitch chat (chat: false)', () => {
+    const test = /function testInObs\([\s\S]*?\n {2}\}\n/.exec(cards);
+    assert.ok(test, 'testInObs exists');
+    assert.match(test[0], /body: JSON\.stringify\(\{ chat: false \}\)/);
   });
 
-  test('"Use <family> for all six" keeps every tab\'s unsaved edits: only the look and its settings come from the server', () => {
-    const source = functionSource('useStyleFamily');
-    assert.match(source, /workingDesigns\[type\] = STYLE_CORE\.lookApplied\(/);
-    assert.ok(!source.includes('workingDesigns[type] = Object.assign({}, EVENT_DEFAULTS[type], row)'), 'the saved row no longer replaces the working design');
-  });
-
-  test('opens the six alerts\' tabs, above the card controls it replaces', () => {
-    const style = builder.indexOf('id="section-style"');
-    assert.ok(style > 0 && style < builder.indexOf('id="section-theme"'));
+  test('the Style section is gone: its controls are the Customize tab\'s, in the edit window', () => {
+    assert.ok(!builder.includes('id="section-style"'));
     assert.ok(!builder.includes('phase1-notice'), 'the notice saying colours would come back is gone: they are here');
+    const pane = builder.slice(builder.indexOf('id="pane-customize"'), builder.indexOf('id="pane-sound"'));
+    for (const id of ['style-accent', 'style-racing-card', 'style-racing-accent', 'style-racing-name', 'style-racing-font', 'style-label', 'style-speed', 'style-effect', 'style-grows', 'custom-all-six']) {
+      assert.ok(pane.includes(`id="${id}"`), id);
+    }
   });
 
   test('a control the look does not take is really hidden (its row\'s display rule does not win over [hidden])', () => {
-    assert.match(builder, /#section-style \[hidden\] \{ display: none; \}/);
+    assert.match(builder, /#pane-customize \[hidden\] \{ display: none; \}/);
   });
 
   test('the page loads the core and every family\'s fonts in one stylesheet', () => {
@@ -286,17 +263,7 @@ describe('the Style section (alert styles)', () => {
     assert.match(builder, /STYLE_CORE\.STYLED_ALERTS\.forEach\(t => \{ workingDesigns\[t\] = STYLE_CORE\.untouched\(t, workingDesigns\[t\], SAVED_STYLES\[t\]\); \}\);/);
   });
 
-  test('a picked look starts from its own settings and is drawn again', () => {
-    const src = functionSource('pickLook');
-    assert.match(src, /STYLE_CORE\.withLook\(getControlValues\(\), previous, id\)/);
-    assert.match(src, /renderedObjectType = null/);
-  });
-
-  test('the controls write the fields the save sends, and mirror today\'s hidden controls', () => {
-    const src = functionSource('initStyleControls');
-    for (const [id, mirror] of [['style-speed', 'ctrl-animation-speed'], ['style-effect', 'ctrl-screen-effect'], ['style-racing-card', 'ctrl-bg-color'], ['style-racing-accent', 'ctrl-accent-color']]) {
-      assert.ok(src.includes(`'${id}'`) && src.includes(`'${mirror}'`), `${id} -> ${mirror}`);
-    }
+  test('today\'s controls still carry the look\'s fields', () => {
     const values = functionSource('getControlValues');
     for (const field of ['style_accent', 'style_label', 'style_sound', 'style_grows']) assert.ok(values.includes(`${field}:`), field);
   });

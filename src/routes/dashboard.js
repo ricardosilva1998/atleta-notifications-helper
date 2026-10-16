@@ -2696,7 +2696,7 @@ router.delete('/giveaways/:id', (req, res) => {
 
 // --- Overlay Builder ---
 
-// What the builder's Style section is handed (alert styles): each alert's gallery (a look made for
+// What the builder's edit window is handed for the looks (alert styles): each alert's gallery (a look made for
 // this streamer first), the default looks, the families and the sounds in the gallery's order, every
 // name in the streamer's language, and the fonts Racing's name can take. The page has every family's
 // code (styles.js), so it draws the looks itself.
@@ -2749,6 +2749,8 @@ const BUILDER_TEXT_KEYS = [
   'overlayBuilder.place.top', 'overlayBuilder.place.mid', 'overlayBuilder.place.bot',
   'overlayBuilder.place.left', 'overlayBuilder.place.center', 'overlayBuilder.place.right',
   'overlayBuilder.saveFailed', 'overlayBuilder.saveFailedWith', 'overlayBuilder.resetConfirm', 'overlayBuilder.resetDone',
+  'overlayBuilder.style.all', 'overlayBuilder.style.default', 'overlayBuilder.style.mine', 'overlayBuilder.style.failed',
+  'overlayBuilder.style.familyDone', 'overlayBuilder.style.labelHint', 'overlayBuilder.style.fontOwn', 'overlayBuilder.style.testSent',
 ];
 const KEEP_PLACEHOLDERS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function builderTexts(t) {
@@ -2781,7 +2783,7 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
     eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
     // The joined alert looks' version (services/alertStyleBundle.js), as the OBS overlay asks for them
     stylesVersion: alertStyleBundle().version,
-    // The Style section, and every family's fonts in one stylesheet
+    // The looks' gallery, sounds and fonts for the edit window, and every family's fonts in one stylesheet
     styleData: JSON.stringify(builderStyleData(req.streamer, res.locals.t)).replace(/</g, '\\u003c'),
     // Which alerts have a sound the streamer uploaded (OBS plays it instead of the look's sound), and the cards' texts
     uploadedSounds: JSON.stringify(customSounds.soundStatus(req.streamer).custom).replace(/</g, '\\u003c'),

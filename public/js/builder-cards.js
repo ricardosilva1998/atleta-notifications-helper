@@ -3,7 +3,8 @@
 /**
  * The Overlay Builder's alert cards (docs/superpowers/specs/2026-10-16-overlay-builder-cards-design.md):
  * one card per alert, each looping the look it is set to on a faux stream, with its sound and its place,
- * Test in OBS and Edit alert, and the edit window Edit alert opens (Done saves the alert). The page-free
+ * Test in OBS and Edit alert, and the edit window Edit alert opens (Done saves the alert), with its
+ * Animation tab (the alert's looks, each looping) and Customize tab (what the picked look takes). The page-free
  * rules are window.ATLETA_BUILDER_STYLES
  * (public/js/builder-styles-core.js); the looks are drawn with the files the OBS overlay uses
  * (objects/kit.js and the joined family files), picked with the view's previewObjectFor().
@@ -298,7 +299,6 @@
   // ▶ Test in OBS: the saved alert plays in OBS (the overlay's test route, no test thank-you in the Twitch
   // chat), and the card's preview plays again with its sound.
   function testInObs(type, msg) {
-    var texts = pageTexts().style || {};
     msg.textContent = '';
     return fetch('/dashboard/overlay/test/' + encodeURIComponent(type), {
       method: 'POST',
@@ -306,9 +306,9 @@
       body: JSON.stringify({ chat: false }),
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
-        msg.textContent = res.ok ? (texts.testSent || '') : (data.error || texts.failed || '');
+        msg.textContent = res.ok ? text('style.testSent') : (data.error || text('style.failed'));
       });
-    }).catch(function () { msg.textContent = texts.failed || ''; });
+    }).catch(function () { msg.textContent = text('style.failed'); });
   }
 
   function alertCard(doc, type) {
@@ -442,11 +442,12 @@
   // The design an alert's window edits: its working design without the stored row's own columns (the
   // look travels next to the design, in the save's `style`).
   var ROW_COLUMNS = ['id', 'streamer_id', 'event_type', 'style', 'design_version', 'created_at'];
-  function draftOf(type) {
-    var design = copy(designOf(type));
-    ROW_COLUMNS.forEach(function (column) { delete design[column]; });
-    return design;
+  function withoutRowColumns(design) {
+    var out = copy(design);
+    ROW_COLUMNS.forEach(function (column) { delete out[column]; });
+    return out;
   }
+  function draftOf(type) { return withoutRowColumns(designOf(type)); }
   function pageGlobal(name) {
     if (name === 'SAVED_STYLES') return typeof SAVED_STYLES !== 'undefined' ? SAVED_STYLES : null;
     if (name === 'ALERT_STYLES') return typeof ALERT_STYLES !== 'undefined' ? ALERT_STYLES : null;
@@ -600,6 +601,7 @@
     CARDS.draftStyle = core().isStyled(type) ? shownStyleOf(type) : null;
     opened = { design: copy(CARDS.draft), style: CARDS.draftStyle };
     CARDS.tab = null;
+    animFamily = 'all';
 
     var title = el('editor-title'), icon = el('editor-icon');
     if (title) title.textContent = type === 'timed' ? text('cards.editSponsors') : text('window.title', { alert: cardName(type) });
@@ -750,6 +752,305 @@
     });
   }
 
+  function lookById(id) {
+    var styles = root.ATLETA_OBJECT_STYLES || {};
+    return typeof id === 'string' && Object.prototype.hasOwnProperty.call(styles, id) ? styles[id] : null;
+  }
+  function familyOf(key) {
+    return key ? (styleData().families || []).filter(function (f) { return f.key === key; })[0] || null : null;
+  }
+  function sampleOf(type) { return (typeof PREVIEW_DATA !== 'undefined' && PREVIEW_DATA[type]) || {}; }
+  // An element with a class and, when given, its text.
+  function make(tag, className, content) {
+    var node = root.document.createElement(tag);
+    if (className) node.className = className;
+    if (content != null) node.textContent = content;
+    return node;
+  }
+
+  // ── The Animation tab ──
+  // Theme chips ("All" and each family that has a look for this alert) and a gallery of this alert's looks
+  // in the server's order (STYLE_CORE.orderGallery: made for the streamer, the default, the C1 with the
+  // streamer's name, then the families), each tile looping its look. A tile plays only while it is on screen
+  // (an IntersectionObserver on the window's scrolling pane), its first play 450 ms after its neighbour's, so
+  // the gallery never pauses all at once; the tab's hide and the window's close stop them all.
+  var animFamily = 'all';
+  var galleryTiles = [];      // [{ id, tile, looper }]
+  var galleryObserver = null;
+
+  function galleryOf(type) {
+    return core().orderGallery((styleData().gallery || {})[type], type, styleData().defaults);
+  }
+  function stopGallery() {
+    galleryTiles.forEach(function (t) { t.looper.stop(); });
+    galleryTiles = [];
+    if (galleryObserver) galleryObserver.disconnect();
+    galleryObserver = null;
+  }
+  // The picked tile plays with the window's own settings; the others in the streamer's colour, at normal speed.
+  function tileDesign(id) {
+    var draft = CARDS.draft || {};
+    return id === CARDS.draftStyle ? draft : { style_accent: draft.style_accent, animation_speed: 1 };
+  }
+  function renderAnimation() {
+    stopGallery();
+    var type = CARDS.editing, chips = el('anim-chips'), box = el('anim-gallery');
+    if (!type || !chips || !box) return;
+    var entries = galleryOf(type);
+    var families = (styleData().families || []).filter(function (f) { return entries.some(function (e) { return e.family === f.key; }); });
+    if (animFamily !== 'all' && !families.some(function (f) { return f.key === animFamily; })) animFamily = 'all';
+
+    chips.innerHTML = '';
+    [{ key: 'all', name: text('style.all') }].concat(families).forEach(function (family) {
+      var chip = make('button', 'anim-chip', family.name);
+      chip.type = 'button';
+      chip.setAttribute('data-family', family.key);
+      chip.setAttribute('aria-pressed', String(animFamily === family.key));
+      chip.addEventListener('click', function () { animFamily = family.key; renderAnimation(); });
+      chips.appendChild(chip);
+    });
+
+    box.innerHTML = '';
+    var scroller = root.document.querySelector ? root.document.querySelector('.ed-main') : null;
+    if (root.IntersectionObserver) {
+      galleryObserver = new root.IntersectionObserver(function (seen) {
+        seen.forEach(function (entry) {
+          var t = galleryTiles.filter(function (g) { return g.tile === entry.target; })[0];
+          if (!t) return;
+          if (entry.isIntersecting) t.looper.start();
+          else t.looper.stop();
+        });
+      }, { root: scroller, rootMargin: '120px' });
+    }
+    core().filterGallery(entries, animFamily).forEach(function (entry) {
+      var look = lookById(entry.id);
+      if (!look || look.eventType !== type) return;   // its family's file did not load
+      var index = galleryTiles.length;
+      var tile = make('button', 'anim-tile');
+      tile.type = 'button';
+      tile.setAttribute('data-look', entry.id);
+      tile.setAttribute('aria-pressed', String(entry.id === CARDS.draftStyle));
+      var preview = make('div', 'anim-prev');
+      preview.appendChild(make('div', 'stream-bg'));
+      if (entry.badge) preview.appendChild(make('span', 'anim-badge', text(entry.badge === 'mine' ? 'style.mine' : 'style.default')));
+      var slot = make('div', 'mini-slot');
+      preview.appendChild(slot);
+      var words = make('div', 'anim-txt');
+      words.appendChild(make('div', 'anim-name', ((styleData().looks || {})[entry.id] || {}).title || entry.id));
+      var family = familyOf(look.family);
+      if (family) words.appendChild(make('div', 'anim-fam', family.name));
+      words.appendChild(make('span', 'ev-badge', (CARD_ICONS[type] || '') + ' ' + cardName(type)));
+      tile.appendChild(preview);
+      tile.appendChild(words);
+      tile.addEventListener('click', function () { pickLook(entry.id); });
+      fitAlert(slot, look, 210);
+      var looper = new Looper(slot, function () {
+        return { look: look, design: tileDesign(entry.id), sample: sampleOf(type) };
+      }, { hold: 1600, gap: 600, offset: (index % 6) * 450 });
+      galleryTiles.push({ id: entry.id, tile: tile, looper: looper });
+      box.appendChild(tile);
+      if (galleryObserver) galleryObserver.observe(tile);
+      else looper.start();
+    });
+  }
+
+  // Picks one of this alert's looks: its settings start afresh (STYLE_CORE.withLook; where it sits, its
+  // width and Racing's colours stay), the page shows it until the window closes, and its sound plays once.
+  function pickLook(id) {
+    var type = CARDS.editing, look = lookById(id);
+    if (!type || !CARDS.draft || !look || look.key !== id || look.eventType !== type) return;
+    var previous = CARDS.draftStyle;
+    CARDS.draft = core().withLook(CARDS.draft, previous, id);
+    CARDS.draftStyle = id;
+    var shown = pageGlobal('ALERT_STYLES');
+    if (shown) shown[type] = id;
+    galleryTiles.forEach(function (t) {
+      t.tile.setAttribute('aria-pressed', String(t.id === id));
+      if ((t.id === id || t.id === previous) && t.looper.running) t.looper.restart();
+    });
+    renderTabValues();
+    if (kit()) playLookSound(kit().soundFor(look, CARDS.draft));
+  }
+
+  // ── The Customize tab ──
+  // What the picked look takes (STYLE_CORE.controlsFor), beside the look looping large (no stream): its
+  // colour, or Racing's card, accent and name colours and font; its main text; its speed; its screen effect;
+  // growing with the amount. A look with none of these (the C1s) says so. A change goes into the draft:
+  // the colour applies at once (kit.slotVars), the others play the look again. "Use <theme> for all six
+  // alerts" is the family route, at once, after a question.
+  var customLooper = null;
+  var fontsFilled = false;
+  var ROWS = ['accent', 'racing', 'label', 'speed', 'effect', 'grows'];
+
+  function customSlot() { return el('custom-slot'); }
+  function fitCustom() {
+    var slot = customSlot(), box = el('custom-preview'), look = draftLook();
+    if (!slot || !look) return;
+    var width = box && box.clientWidth ? box.clientWidth * 0.9 : 0;
+    fitAlert(slot, look, width ? Math.round(Math.min(640, Math.max(280, width))) : LOOK_WIDTH);
+  }
+  function stopCustomize() { if (customLooper) customLooper.stop(); }
+  function replayCustom() {
+    if (!customLooper || CARDS.tab !== 'customize') return;
+    fitCustom();
+    customLooper.restart();
+  }
+  // The colour (and the speed) as slot variables, without playing the look again.
+  function applyCustomVars() {
+    var slot = customSlot(), look = draftLook(), K = kit();
+    if (!slot || !look || !K || !look.family) return;
+    var vars = K.slotVars(look, CARDS.draft);
+    Object.keys(vars).forEach(function (name) { slot.style.setProperty(name, vars[name]); });
+  }
+  function setValue(id, value) {
+    var node = el(id);
+    if (node && node !== root.document.activeElement) node.value = value;
+  }
+  function syncCustomize() {
+    var draft = CARDS.draft || {}, look = draftLook(), show = core().controlsFor(look);
+    ROWS.forEach(function (row) { var node = el('custom-row-' + row); if (node) node.hidden = !show[row]; });
+    var nothing = el('custom-nothing');
+    if (nothing) {
+      nothing.hidden = ROWS.some(function (row) { return show[row]; });
+      nothing.textContent = text('custom.nothing');
+    }
+    setValue('style-accent', draft.style_accent || '#9146FF');
+    var own = el('style-accent-own'), shownColour = el('style-accent-val');
+    if (own) { own.hidden = !draft.style_accent; own.textContent = text('custom.ownColour'); }
+    if (shownColour) shownColour.textContent = draft.style_accent || text('custom.ownColours');
+    setValue('style-racing-card', draft.bg_color || '#1a1a3e');
+    setValue('style-racing-accent', draft.accent_color || '#8888cc');
+    setValue('style-racing-name', draft.username_color || draft.text_color || '#ffffff');
+    setValue('style-racing-font', draft.username_font_family || 'System Default');
+    setValue('style-label', (show.racing ? draft.event_label : draft.style_label) || '');
+    var label = el('style-label');
+    if (label) label.setAttribute('placeholder', text('style.labelHint'));
+    var speed = core().speedOf(look, draft);
+    setValue('style-speed', speed);
+    var speedValue = el('val-style-speed');
+    if (speedValue) speedValue.textContent = speed + '×';
+    setValue('style-effect', draft.screen_effect || 'default');
+    var grows = el('style-grows');
+    if (grows) grows.checked = draft.style_grows !== 0;
+    var family = look && look.family ? familyOf(look.family) : null;
+    var allSix = el('custom-all-six');
+    if (allSix) {
+      allSix.hidden = !family;
+      allSix.textContent = family ? text('custom.allSix', { family: family.name }) : '';
+    }
+  }
+  function renderCustomize() {
+    if (!CARDS.editing) return;
+    syncCustomize();
+    var slot = customSlot();
+    if (!slot) return;
+    if (!customLooper) {
+      customLooper = new Looper(slot, function () {
+        return { look: draftLook(), design: CARDS.draft || {}, sample: sampleOf(CARDS.editing) };
+      }, { hold: 2200, gap: 700 });
+    }
+    fitCustom();
+    customLooper.restart();
+  }
+  // One of the look's settings changed: into the draft, then the controls, the tab bar, and the preview
+  // (`replay`: play the look again; otherwise only its slot variables change).
+  function setSetting(field, value, replay) {
+    if (!CARDS.editing || !CARDS.draft) return;
+    CARDS.draft[field] = value;
+    syncCustomize();
+    renderTabValues();
+    if (replay) replayCustom();
+    else applyCustomVars();
+  }
+  function bindCustomize() {
+    function on(id, type, fn) { var node = el(id); if (node) node.addEventListener(type, fn); }
+    var fonts = el('style-racing-font');
+    if (fonts && !fontsFilled) {
+      fontsFilled = true;
+      (styleData().fonts || []).forEach(function (font) {
+        var option = make('option', null, font === 'System Default' ? text('style.fontOwn') : font);
+        option.value = font;
+        fonts.appendChild(option);
+      });
+    }
+    on('style-accent', 'input', function (e) { setSetting('style_accent', String(e.target.value).toUpperCase()); });
+    on('style-accent-own', 'click', function () { setSetting('style_accent', null); });
+    on('style-racing-card', 'input', function (e) { setSetting('bg_color', e.target.value); });
+    on('style-racing-accent', 'input', function (e) { setSetting('accent_color', e.target.value); });
+    on('style-racing-name', 'input', function (e) { setSetting('username_color', e.target.value); });
+    ['style-racing-card', 'style-racing-accent', 'style-racing-name'].forEach(function (id) { on(id, 'change', replayCustom); });
+    on('style-racing-font', 'change', function (e) { setSetting('username_font_family', e.target.value === 'System Default' ? null : e.target.value, true); });
+    // Racing's main text is today's event_label; the other looks' is their own style_label.
+    on('style-label', 'input', function (e) {
+      setSetting(core().controlsFor(draftLook()).racing ? 'event_label' : 'style_label', e.target.value);
+    });
+    on('style-label', 'change', replayCustom);
+    on('style-speed', 'input', function (e) { setSetting('animation_speed', parseFloat(e.target.value)); });
+    on('style-speed', 'change', replayCustom);
+    on('style-effect', 'change', function (e) { setSetting('screen_effect', e.target.value, true); });
+    on('style-grows', 'change', function (e) { setSetting('style_grows', e.target.checked ? 1 : 0, true); });
+    on('custom-all-six', 'click', function () { useFamily(); });
+    var box = el('custom-preview');
+    if (box && root.ResizeObserver) new root.ResizeObserver(function () { if (CARDS.tab === 'customize') fitCustom(); }).observe(box);
+  }
+
+  // "Use <theme> for all six alerts": the picked look's family, stored at once for the six alerts (one
+  // transaction on the server), after a question naming it. Every stored row is taken as the page's, and the
+  // cards are drawn again; the open alert takes the stored look and its settings and keeps what was edited
+  // and not saved (STYLE_CORE.lookApplied). The window stays open on the new look.
+  var familyBusy = false;
+  function useFamily() {
+    var type = CARDS.editing, look = draftLook();
+    var family = look && look.family ? familyOf(look.family) : null;
+    if (!type || !family || saving || familyBusy) return Promise.resolve({ ok: false });
+    if (!root.confirm(text('custom.allSixConfirm', { family: family.name }))) return Promise.resolve({ ok: false });
+    var button = el('custom-all-six');
+    familyBusy = true;
+    if (button) button.disabled = true;
+    showMessage('');
+    function finish(result) {
+      familyBusy = false;
+      if (button) button.disabled = false;
+      return result;
+    }
+    return fetch('/dashboard/overlay-builder/family', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ family: family.key }),
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || !data || !data.ok || !data.designs) {
+          showMessage((data && data.error) || text('style.failed'), true);
+          return finish({ ok: false });
+        }
+        var saved = pageGlobal('SAVED_STYLES') || {}, shown = pageGlobal('ALERT_STYLES') || {};
+        var defaults = typeof EVENT_DEFAULTS !== 'undefined' ? EVENT_DEFAULTS : {};
+        Object.keys(data.designs).forEach(function (alert) {
+          var row = data.designs[alert];
+          if (!row || !row.style) return;
+          storeRow(alert, row);
+          saved[alert] = shown[alert] = row.style;
+          if (alert !== CARDS.editing) return;
+          var stored = Object.assign({}, defaults[alert] || {}, row);
+          CARDS.draft = withoutRowColumns(core().lookApplied(CARDS.draft, stored));
+          CARDS.draftStyle = row.style;
+          if (opened) opened = { design: withoutRowColumns(core().lookApplied(opened.design, stored)), style: row.style };
+        });
+        finish(null);
+        CARDS.renderCards();
+        if (CARDS.editing === type) {
+          showMessage(text('style.familyDone', { family: family.name }));
+          renderTabValues();
+          if (CARDS.tab) paneHook(CARDS.tab, 'show');
+        }
+        return { ok: true };
+      });
+    }).catch(function () {
+      showMessage(text('style.failed'), true);
+      return finish({ ok: false });
+    });
+  }
+
   // ?tab=<card> opens that card's window, when the page shows the card.
   function openFromUrl(search) {
     var Params = root.URLSearchParams;
@@ -787,6 +1088,7 @@
     }
     var bg = el('stage-bg'), thumb = builder().streamThumbnail;
     if (bg && thumb) bg.style.backgroundImage = 'url(' + JSON.stringify(String(thumb)) + ')';
+    bindCustomize();
   }
 
   var CARDS = {
@@ -795,7 +1097,13 @@
     // The edit window (the cards call CARDS.openEditor, late-bound)
     openEditor: openEditor, closeEditor: closeEditor, setTab: setTab, saveDraft: saveDraft, resetDraft: resetDraft,
     isDirty: isDirty, tabValue: tabValue, renderTabValues: renderTabValues, draftLook: draftLook, openFromUrl: openFromUrl,
-    editing: null, draft: null, draftStyle: null, tab: null, panes: {},
+    // The Animation and Customize tabs
+    renderAnimation: renderAnimation, renderCustomize: renderCustomize, pickLook: pickLook, useFamily: useFamily,
+    editing: null, draft: null, draftStyle: null, tab: null,
+    panes: {
+      animation: { show: renderAnimation, hide: stopGallery },
+      customize: { show: renderCustomize, hide: stopCustomize },
+    },
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CARDS;
   if (root) root.ATLETA_BUILDER_CARDS = CARDS;

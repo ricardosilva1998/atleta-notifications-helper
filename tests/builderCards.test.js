@@ -257,7 +257,12 @@ describe('a loop with nothing to play', () => {
 // that keep their children, attributes and listeners, and a document that takes keydown listeners.
 const EDITOR_IDS = ['editor', 'editor-back', 'editor-icon', 'editor-title', 'editor-close', 'editor-tabs', 'editor-side',
   'editor-msg', 'editor-reset', 'editor-cancel', 'editor-done', 'stage', 'stage-inner', 'stage-bg',
-  'pane-animation', 'pane-customize', 'pane-sound', 'pane-location', 'pane-images', 'pane-design'];
+  'pane-animation', 'pane-customize', 'pane-sound', 'pane-location', 'pane-images', 'pane-design',
+  // the Animation and Customize tabs
+  'anim-chips', 'anim-gallery', 'custom-preview', 'custom-slot', 'custom-nothing', 'custom-row-accent', 'custom-row-racing',
+  'custom-row-label', 'custom-row-speed', 'custom-row-effect', 'custom-row-grows', 'style-accent', 'style-accent-own', 'style-accent-val',
+  'style-racing-card', 'style-racing-accent', 'style-racing-name', 'style-racing-font', 'style-label', 'style-speed', 'val-style-speed',
+  'style-effect', 'style-grows', 'custom-all-six'];
 
 function fakeElement(doc, tag) {
   const el = element();
@@ -304,6 +309,12 @@ const TEXTS = {
   'cards.free': 'Free position', 'cards.uploaded': 'Your uploaded sound', 'sound.today': 'Classic engine sound', 'sound.none': 'No sound',
   'place.top': 'Top', 'place.mid': 'Middle', 'place.bot': 'Bottom', 'place.left': 'left', 'place.center': 'centre', 'place.right': 'right',
   resetConfirm: 'Reset "{{name}}" to default settings?', resetDone: 'Reset to default', saveFailed: 'Save failed', saveFailedWith: 'Save failed: {{error}}',
+  'custom.nothing': 'This look has no settings of its own: pick its sound in the Sound tab.', 'custom.ownColour': 'Use the look\'s own',
+  'custom.ownColours': 'The look\'s own colours', 'custom.allSix': 'Use {{family}} for all six alerts',
+  'custom.allSixConfirm': 'Use {{family}} for all six alerts? Each alert starts this theme\'s look with its own settings.',
+  'style.all': 'All', 'style.default': 'Default', 'style.mine': 'Made for you', 'style.failed': 'That did not work. Please try again.',
+  'style.familyDone': '{{family}} is now on all six alerts, and saved.', 'style.labelHint': 'Empty: the look\'s own words',
+  'style.fontOwn': 'The look\'s own font', 'style.testSent': 'Sent to OBS, which plays what you saved last.',
 };
 const GLASS = { ...LOOK, key: 'follow-glass', sound: 'glFollow' };
 const RACING = { ...LOOK, key: 'follow-racing', family: 'racing', sound: 'rcFollow' };
@@ -553,11 +564,12 @@ describe('the edit window', () => {
   });
 
   test('the card loops stop while the window is open and the ones on screen start again when it closes', () => {
-    let observed;
+    let observed;   // the cards' observer (the first one made; the window's gallery makes its own)
     class FakeObserver {
-      constructor(callback, options) { observed = { callback, options, targets: [] }; }
+      constructor(callback, options) { if (!observed) observed = { callback, options, targets: [] }; }
       observe(el) { observed.targets.push(el); }
       unobserve() {}
+      disconnect() {}
     }
     const { CARDS, document } = loadPage({ extra: { IntersectionObserver: FakeObserver } });
     const looper = () => ({ starts: 0, stops: 0, start() { this.starts += 1; }, stop() { this.stops += 1; } });
@@ -655,5 +667,349 @@ describe('the edit window', () => {
 
     page = loadPage({ features: { youtube: true } });
     assert.equal(page.CARDS.openFromUrl('?tab=yt_member'), 'yt_member');
+  });
+});
+
+// ── The Animation and Customize tabs ──
+// The real looks and galleries where the order or a look's controls matter (the server's galleryFor, which loads
+// every family and the C1 into the kit); the stub looks above where a look has to play.
+const KIT = require('../public/overlay/objects/kit.js');
+const ALERT_STYLE_SERVICE = require('../src/services/alertStyles.js');
+
+// Every text of an element and of everything in it, in order.
+function textOf(node) { return [node.textContent || ''].concat((node.children || []).map(textOf)).join(' ').replace(/\s+/g, ' ').trim(); }
+const children = (document, id) => document.getElementById(id).children;
+
+// What the server hands the page (routes/dashboard.js builderStyleData), with each title and family named by its id.
+function realStyleData(streamer) {
+  const gallery = {};
+  const looks = {};
+  for (const type of ALERT_STYLE_SERVICE.ALERTS) {
+    gallery[type] = ALERT_STYLE_SERVICE.galleryFor(type, streamer);
+    for (const { id } of gallery[type]) looks[id] = { title: id };
+  }
+  return {
+    defaults: ALERT_STYLE_SERVICE.DEFAULT_STYLES, gallery, looks, sounds: [], fonts: ['System Default', 'Inter'],
+    families: ALERT_STYLE_SERVICE.familyKeys().map((key) => ({ key, name: key[0].toUpperCase() + key.slice(1) })),
+  };
+}
+function realPage(options = {}) {
+  const defaults = {};
+  for (const type of ALERT_STYLE_SERVICE.ALERTS) defaults[type] = { card_width: 420, card_position: 'top-center', screen_effect: 'default', animation_speed: 1 };
+  return loadPage({
+    ...options,
+    extra: {
+      STYLE_DATA: realStyleData(options.streamer || {}), ATLETA_OBJECT_STYLES: KIT.styles, ATLETA_KIT: KIT,
+      EVENT_DEFAULTS: defaults, ...(options.extra || {}),
+    },
+  });
+}
+// An IntersectionObserver the test drives: `fire(target, on)` says a tile came on or left the screen.
+function fakeObserver() {
+  const made = [];
+  class FakeObserver {
+    constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; this.disconnected = false; made.push(this); }
+    observe(el) { this.targets.push(el); }
+    unobserve(el) { this.targets = this.targets.filter((t) => t !== el); }
+    disconnect() { this.disconnected = true; this.targets = []; }
+    fire(target, on) { this.callback([{ target, isIntersecting: on }]); }
+  }
+  return { FakeObserver, made, last: () => made[made.length - 1] };
+}
+
+describe('the Animation tab', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }));
+  afterEach(() => mock.timers.reset());
+
+  test('the gallery lists this alert\'s looks only, made-for-you first, then the default, the C1 with your name, then the families', () => {
+    const io = fakeObserver();
+    const page = realPage({ streamer: { twitch_user_id: '632557806' }, extra: { IntersectionObserver: io.FakeObserver } });
+    page.CARDS.openEditor('donation');
+    assert.equal(page.CARDS.tab, 'animation');
+    const ids = children(page.document, 'anim-gallery').map((tile) => tile.getAttribute('data-look'));
+    assert.equal(ids[0], 'donation-c1');
+    assert.equal(ids[1], 'donation-glass');
+    const c1 = ids.indexOf('donation-c1-channel');
+    assert.ok(c1 > 1, 'the C1 with your name is listed');
+    ids.forEach((id, i) => { if (id.startsWith('donation-') && !['donation-c1', 'donation-c1-channel', 'donation-glass'].includes(id)) assert.ok(c1 < i, id); });
+    assert.equal(ids.length, page.g.STYLE_DATA.gallery.donation.length, 'every look of the gallery has its tile');
+    const tiles = children(page.document, 'anim-gallery');
+    assert.match(textOf(tiles[0]), /Made for you/);
+    assert.match(textOf(tiles[1]), /Default/);
+    assert.match(textOf(tiles[1]), /Glass/, 'the theme');
+    assert.match(textOf(tiles[1]), new RegExp(page.CARDS.CARD_ICONS.donation), 'the alert\'s badge');
+    assert.equal(tiles[0].getAttribute('aria-pressed'), 'false');
+    assert.equal(tiles[1].getAttribute('aria-pressed'), 'true', 'the look the window shows (the default: none is stored)');
+    page.CARDS.closeEditor({ force: true });
+
+    page.CARDS.openEditor('follow');
+    const follow = children(page.document, 'anim-gallery').map((tile) => tile.getAttribute('data-look'));
+    const allowed = page.g.STYLE_DATA.gallery.follow.map((e) => e.id);
+    assert.ok(follow.length > 0);
+    for (const id of follow) assert.ok(allowed.includes(id), id + ' belongs to the follow alert');
+    assert.ok(!follow.includes('donation-c1-channel'));
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('theme chips: all, then each family that has a look for this alert, in the families\' order; a chip filters the gallery', () => {
+    const io = fakeObserver();
+    const page = realPage({ extra: { IntersectionObserver: io.FakeObserver } });
+    page.CARDS.openEditor('donation');
+    const chips = children(page.document, 'anim-chips');
+    assert.equal(chips[0].textContent, 'All');
+    assert.deepEqual(chips.slice(1).map((c) => c.getAttribute('data-family')), ALERT_STYLE_SERVICE.familyKeys(), 'the C1 has no theme of its own');
+    assert.equal(chips[0].getAttribute('aria-pressed'), 'true');
+    const racing = chips.find((c) => c.getAttribute('data-family') === 'racing');
+    racing.fire('click');
+    assert.deepEqual(children(page.document, 'anim-gallery').map((t) => t.getAttribute('data-look')), ['donation-racing']);
+    assert.equal(children(page.document, 'anim-chips').find((c) => c.getAttribute('data-family') === 'racing').getAttribute('aria-pressed'), 'true');
+    page.CARDS.closeEditor({ force: true });
+    page.CARDS.openEditor('donation');
+    assert.ok(children(page.document, 'anim-gallery').length > 1, 'a new window shows every theme again');
+    page.CARDS.closeEditor({ force: true });
+  });
+
+  test('a tile loops only while it is on screen, its start a little apart from its neighbours\', and stops with the tab', () => {
+    const io = fakeObserver();
+    const page = loadPage({
+      saved: { follow: 'follow-glass' },
+      extra: {
+        IntersectionObserver: io.FakeObserver,
+        STYLE_DATA: {
+          looks: { 'follow-glass': { title: 'Pill' }, 'follow-racing': { title: 'Pit board' }, 'follow-arcade': { title: 'Coin' } },
+          families: [{ key: 'glass', name: 'Glass' }, { key: 'racing', name: 'Racing' }, { key: 'arcade', name: 'Arcade' }],
+          defaults: { follow: 'follow-glass' }, sounds: [],
+          gallery: { follow: [{ id: 'follow-glass', family: 'glass' }, { id: 'follow-racing', family: 'racing' }, { id: 'follow-arcade', family: 'arcade' }] },
+        },
+      },
+    });
+    page.CARDS.openEditor('follow');
+    const observer = io.last();
+    const tiles = children(page.document, 'anim-gallery');
+    assert.equal(observer.targets.length, 3, 'every tile is watched');
+    const slotOf = (tile) => tile.children[0].children.find((c) => c.className === 'mini-slot');
+    for (const tile of tiles) assert.ok(!slotOf(tile).classList.contains('playing'), 'nothing plays before it is seen');
+    observer.fire(tiles[0], true);
+    observer.fire(tiles[1], true);
+    assert.ok(slotOf(tiles[0]).classList.contains('playing'), 'the first tile plays at once');
+    assert.ok(!slotOf(tiles[1]).classList.contains('playing'), 'the second waits');
+    advance(450);
+    assert.ok(slotOf(tiles[1]).classList.contains('playing'), 'and starts 450 ms later');
+    assert.ok(!slotOf(tiles[2]).classList.contains('playing'), 'off screen: still');
+    observer.fire(tiles[0], false);
+    assert.ok(!slotOf(tiles[0]).classList.contains('playing'), 'a tile that leaves the screen stops');
+
+    page.CARDS.setTab('customize');
+    assert.ok(observer.disconnected, 'the tab\'s observer is gone');
+    for (const tile of tiles) assert.equal(slotOf(tile).innerHTML, '', 'every tile is stopped');
+    page.CARDS.setTab('animation');
+    const again = io.last();
+    assert.notEqual(again, observer);
+    again.fire(children(page.document, 'anim-gallery')[0], true);
+    page.CARDS.closeEditor({ force: true });
+    assert.ok(again.disconnected, 'closing the window stops the gallery');
+  });
+
+  test('picking a look starts its settings afresh and keeps where it sits', () => {
+    const io = fakeObserver();
+    const sounds = [];
+    class FakeAudio { constructor() { this.state = 'running'; } resume() {} }
+    const kit = {
+      lookData: (look, sample) => sample, slotVars: () => ({}),
+      soundFor: (look, d) => (d && d.style_sound) || (look && look.sound) || 'none',
+      setAudio() {}, playSound: (key) => sounds.push(key),
+    };
+    const page = loadPage({
+      saved: { follow: 'follow-glass' },
+      extra: {
+        IntersectionObserver: io.FakeObserver, AudioContext: FakeAudio, ATLETA_KIT: kit,
+        STYLE_DATA: {
+          looks: { 'follow-glass': { title: 'Pill' }, 'follow-racing': { title: 'Pit board' } }, families: [], sounds: [],
+          defaults: { follow: 'follow-glass' }, gallery: { follow: [{ id: 'follow-glass', family: 'glass' }, { id: 'follow-racing', family: 'racing' }] },
+        },
+      },
+    });
+    page.CARDS.openEditor('follow');
+    Object.assign(page.CARDS.draft, { style_accent: '#FF0000', animation_speed: 1.5, card_position: 'bot-left' });
+    page.CARDS.pickLook('follow-racing');
+    assert.equal(page.CARDS.draft.style_accent, null);
+    assert.equal(page.CARDS.draft.animation_speed, 1);
+    assert.equal(page.CARDS.draft.card_position, 'bot-left');
+    assert.equal(page.CARDS.draftStyle, 'follow-racing');
+    assert.equal(page.g.ALERT_STYLES.follow, 'follow-racing', 'the page shows it while the window is open');
+    assert.deepEqual(sounds, ['rcFollow'], 'its sound plays once');
+    assert.equal(page.CARDS.tabValue('animation'), 'Pit board');
+    assert.deepEqual(children(page.document, 'anim-gallery').map((t) => t.getAttribute('aria-pressed')), ['false', 'true']);
+
+    // A click on a tile picks it too; a look of another alert never does.
+    children(page.document, 'anim-gallery')[0].fire('click');
+    assert.equal(page.CARDS.draftStyle, 'follow-glass');
+    page.g.ATLETA_OBJECT_STYLES['bits-x'] = { ...LOOK, key: 'bits-x', eventType: 'bits' };
+    page.CARDS.pickLook('bits-x');
+    assert.equal(page.CARDS.draftStyle, 'follow-glass');
+    page.CARDS.closeEditor({ force: true });
+    assert.equal(page.g.ALERT_STYLES.follow, 'follow-glass', 'Cancel puts the saved look back');
+  });
+});
+
+describe('the Customize tab', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }));
+  afterEach(() => mock.timers.reset());
+
+  const ROWS = ['accent', 'racing', 'label', 'speed', 'effect', 'grows'];
+  const shown = (document) => ROWS.filter((row) => !document.getElementById('custom-row-' + row).hidden);
+
+  test('Customize shows only what the picked look takes', () => {
+    const page = realPage({ saved: { donation: 'donation-c1-channel', raid: 'raid-racing' } });
+    const { CARDS, document } = page;
+    CARDS.openEditor('follow');
+    CARDS.setTab('customize');
+    assert.deepEqual(shown(document), ['accent', 'label', 'speed', 'effect'], 'follow-glass: colour, main text, speed, effect; no grows');
+    assert.equal(document.getElementById('custom-nothing').hidden, true);
+    assert.equal(document.getElementById('custom-all-six').hidden, false);
+    assert.equal(document.getElementById('custom-all-six').textContent, 'Use Glass for all six alerts');
+    assert.equal(document.getElementById('style-accent-val').textContent, 'The look\'s own colours');
+    assert.equal(document.getElementById('style-accent-own').hidden, true, 'nothing to go back to');
+    assert.equal(document.getElementById('style-label').getAttribute('placeholder'), 'Empty: the look\'s own words');
+    CARDS.closeEditor({ force: true });
+
+    CARDS.openEditor('bits');
+    CARDS.setTab('customize');
+    assert.deepEqual(shown(document), ['accent', 'label', 'speed', 'effect', 'grows'], 'bits-glass: grows with the amount too');
+    assert.equal(document.getElementById('style-grows').checked, true);
+    CARDS.closeEditor({ force: true });
+
+    CARDS.openEditor('raid');
+    CARDS.setTab('customize');
+    assert.deepEqual(shown(document), ['racing', 'label', 'speed', 'effect', 'grows'], 'Racing: its card, accent and name colours and font');
+    CARDS.closeEditor({ force: true });
+
+    CARDS.openEditor('donation');
+    CARDS.setTab('customize');
+    assert.deepEqual(shown(document), [], 'the C1 with your name: nothing');
+    assert.equal(document.getElementById('custom-nothing').hidden, false);
+    assert.equal(document.getElementById('custom-nothing').textContent, TEXTS['custom.nothing']);
+    assert.equal(document.getElementById('custom-all-six').hidden, true, 'no theme to use for all six');
+    CARDS.closeEditor({ force: true });
+  });
+
+  test('a change goes into the draft; the colour applies at once, the rest replays the look', () => {
+    const page = realPage({ saved: { raid: 'raid-racing' } });
+    const { CARDS, document } = page;
+    const slot = document.getElementById('custom-slot');
+    CARDS.openEditor('follow');
+    CARDS.setTab('customize');
+    assert.ok(slot.classList.contains('playing'), 'the picked look loops beside the controls');
+    assert.ok(slot.classList.contains('look'), 'drawn for 420 px and scaled');
+
+    document.getElementById('style-accent').value = '#00ff00';
+    document.getElementById('style-accent').fire('input');
+    assert.equal(CARDS.draft.style_accent, '#00FF00');
+    assert.equal(slot.style.getPropertyValue('--a'), KIT.slotVars(KIT.styles['follow-glass'], { style_accent: '#00FF00' })['--a'], 'the colour applies at once');
+    assert.equal(document.getElementById('style-accent-val').textContent, '#00FF00');
+    assert.equal(document.getElementById('style-accent-own').hidden, false);
+    document.getElementById('style-accent-own').fire('click');
+    assert.equal(CARDS.draft.style_accent, null, 'the look\'s own colour');
+
+    advance(1200);   // the look has entered and holds
+    document.getElementById('style-speed').value = '1.5';
+    document.getElementById('style-speed').fire('input');
+    assert.equal(CARDS.draft.animation_speed, 1.5);
+    assert.equal(document.getElementById('val-style-speed').textContent, '1.5×');
+    document.getElementById('style-speed').fire('change');
+    assert.equal(slot.style.getPropertyValue('--spd'), '1.5', 'played again at the new speed');
+
+    document.getElementById('style-label').value = 'Welcome!';
+    document.getElementById('style-label').fire('input');
+    assert.equal(CARDS.draft.style_label, 'Welcome!');
+    document.getElementById('style-effect').value = 'sparks';
+    document.getElementById('style-effect').fire('change');
+    assert.equal(CARDS.draft.screen_effect, 'sparks');
+    assert.equal(CARDS.isDirty(), true);
+    CARDS.closeEditor({ force: true });
+    assert.equal(slot.innerHTML, '', 'the preview stops with the window');
+
+    CARDS.openEditor('raid');
+    CARDS.setTab('customize');
+    document.getElementById('style-label').value = 'Pit crew!';
+    document.getElementById('style-label').fire('input');
+    assert.equal(CARDS.draft.event_label, 'Pit crew!', 'Racing\'s main text is today\'s event_label');
+    document.getElementById('style-racing-card').value = '#112233';
+    document.getElementById('style-racing-card').fire('input');
+    assert.equal(CARDS.draft.bg_color, '#112233');
+    document.getElementById('style-racing-font').value = 'System Default';
+    document.getElementById('style-racing-font').fire('change');
+    assert.equal(CARDS.draft.username_font_family, null, 'the look\'s own font');
+    CARDS.openEditor('bits');   // asks first (the stub answers yes)
+    CARDS.setTab('customize');
+    document.getElementById('style-grows').checked = false;
+    document.getElementById('style-grows').fire('change');
+    assert.equal(CARDS.draft.style_grows, 0);
+    CARDS.closeEditor({ force: true });
+  });
+
+  test('"Use <theme> for all six" asks, posts the family, and every card takes the stored rows', async () => {
+    const ALERTS = ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner'];
+    const racing = ALERT_STYLE_SERVICE.familyStyles('racing');
+    const designs = {};
+    for (const type of ALERTS) {
+      designs[type] = { id: 9, streamer_id: 3, event_type: type, style: racing[type], card_width: 500, style_accent: null, style_label: null, style_sound: null, style_grows: null, screen_effect: 'default', animation_speed: 1 };
+    }
+    const page = realPage({
+      saved: { follow: 'follow-racing' },
+      rows: [{ event_type: 'follow', style: 'follow-racing', card_width: 500, animation_speed: 1.5 }],
+      answers: [{ status: 200, body: { ok: true, designs } }],
+    });
+    const { CARDS, g, document, calls, confirms } = page;
+    CARDS.openEditor('follow');
+    CARDS.setTab('customize');
+    CARDS.draft.card_width = 640;   // an edit not saved yet
+    assert.equal(CARDS.draft.animation_speed, 1.5);
+    const button = document.getElementById('custom-all-six');
+    assert.equal(button.textContent, 'Use Racing for all six alerts');
+    const result = await CARDS.useFamily();
+    assert.equal(result.ok, true);
+    assert.deepEqual(confirms, ['Use Racing for all six alerts? Each alert starts this theme\'s look with its own settings.']);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, '/dashboard/overlay-builder/family');
+    assert.equal(calls[0].opts.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].opts.body), { family: 'racing' });
+    for (const type of ALERTS) {
+      assert.equal(g.SAVED_STYLES[type], racing[type], type);
+      assert.equal(g.ALERT_STYLES[type], racing[type], type);
+      assert.equal(g.SERVER_DESIGNS.find((r) => r.event_type === type).style, racing[type], 'the card reads the stored row: ' + type);
+      assert.equal(g.SAVED_DESIGNS[type].style, racing[type]);
+    }
+    assert.equal(page.renders(), 1, 'the cards are drawn again');
+    assert.ok(isOpen(document), 'the window stays open');
+    assert.equal(CARDS.draftStyle, 'follow-racing');
+    for (const field of ['style_accent', 'style_label', 'style_sound', 'style_grows', 'screen_effect', 'animation_speed']) {
+      assert.equal(CARDS.draft[field], designs.follow[field], 'the open alert takes the stored look\'s settings: ' + field);
+    }
+    assert.equal(CARDS.draft.card_width, 640, 'and keeps what was edited and not saved (lookApplied)');
+    assert.ok(!('style' in CARDS.draft) && !('id' in CARDS.draft), 'the draft holds the design only');
+    assert.equal(document.getElementById('editor-msg').textContent, 'Racing is now on all six alerts, and saved.');
+    assert.equal(CARDS.isDirty(), true, 'the unsaved width is still an edit');
+    CARDS.draft.card_width = 500;
+    assert.equal(CARDS.isDirty(), false, 'the look is stored: not an edit');
+    CARDS.closeEditor({ force: true });
+  });
+
+  test('"Use <theme> for all six": a declined question sends nothing; a refusal changes nothing', async () => {
+    let page = realPage({ saved: { follow: 'follow-racing' }, confirmAnswer: false });
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('customize');
+    assert.equal((await page.CARDS.useFamily()).ok, false);
+    assert.equal(page.calls.length, 0);
+    page.CARDS.closeEditor({ force: true });
+
+    page = realPage({ saved: { follow: 'follow-racing' }, answers: [{ status: 400, body: { ok: false, error: 'Unknown family' } }] });
+    page.CARDS.openEditor('follow');
+    page.CARDS.setTab('customize');
+    assert.equal((await page.CARDS.useFamily()).ok, false);
+    assert.equal(page.document.getElementById('editor-msg').textContent, 'Unknown family');
+    assert.equal(page.g.SAVED_STYLES.subscription, undefined);
+    assert.equal(page.renders(), 0);
+    page.CARDS.closeEditor({ force: true });
   });
 });
