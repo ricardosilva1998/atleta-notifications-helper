@@ -522,11 +522,13 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
 
   // ── Test mode (the Tracking page's test buttons) ──
   // Shows a simulated state on the live bar without touching the database, then reverts to the real state after
-  // 10 s, so a forgotten test never leaves fake numbers on stream. `added` (1–1000, default 1) adds to the real count;
-  // `reach` fills the bar and celebrates. Without an active goal a sample bar is drawn (titled `title`), then cleared.
+  // 10 s, so a forgotten test never leaves fake numbers on stream. `added` (1–1000, default 1) adds to the real count,
+  // or `share` that part of the target (at least 1, at most 1000); `reach` fills the bar and celebrates. Without an
+  // active goal a sample bar is drawn (titled `title`), then cleared. Returns the message it emitted (the Tracking page
+  // draws the same in its preview), or null for a kind that is not a goal's.
 
   function sendTest(streamerId, kind, input) {
-    if (!KINDS.includes(kind)) return false;
+    if (!KINDS.includes(kind)) return null;
     const i = input || {};
     const base = progressOf(streamerId, kind) || {
       id: 'test', kind, title: String(i.title || '').trim().slice(0, TITLE_MAX), current: 0, target: TEST_SAMPLE_TARGET,
@@ -538,7 +540,8 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     if (i.reach) {
       current = Math.max(target, base.current || 0);
     } else {
-      const n = wholeNumber(i.added);
+      const share = Number(i.share);
+      const n = share > 0 && share <= 1 ? Math.max(1, Math.round(target * share)) : wholeNumber(i.added);
       added = Number.isInteger(n) && n >= 1 ? Math.min(n, TEST_ADDED_MAX) : 1;
       current = (base.current || 0) + added;
     }
@@ -554,7 +557,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     const timer = setTimeout(() => { testTimers.delete(key); broadcast(streamerId, kind); }, TEST_REVERT_MS);
     timer.unref();
     testTimers.set(key, timer);
-    return true;
+    return message;
   }
 
   // Drops any test state at once and shows the real goal again.

@@ -409,7 +409,11 @@ router.get('/tracker/:tracker/events/:token', (req, res) => {
 
   const first = [{ type: 'config', serverVersion: SERVER_INSTANCE_ID, settings: trackerSettingsOf(streamer.id, tracker) }];
   try {
-    first.push({ type: 'tracker', tracker, value: trackers.valueOf(streamer.id, tracker) });
+    const value = { type: 'tracker', tracker, value: trackers.valueOf(streamer.id, tracker) };
+    // Subs need an Affiliate or Partner channel: Latest sub says it is not available on one known not to be
+    // (cp_affiliate_status, as the rewards and polls cards read it).
+    if (tracker === 'latest_sub' && streamer.cp_affiliate_status === 'not_affiliate') value.unavailable = 'not_affiliate';
+    first.push(value);
   } catch (err) {
     console.error(`[Overlay] Tracker ${tracker} for streamer ${streamer.id} cannot be read:`, err.message);
   }

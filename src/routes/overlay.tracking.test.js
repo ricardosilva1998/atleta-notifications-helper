@@ -285,6 +285,21 @@ describe('a tracker\'s stream', () => {
     assert.deepEqual(stream.messages()[1], { type: 'tracker', tracker: 'latest_bits', value: null });
   });
 
+  test('Latest sub on a channel that is not an Affiliate is told so (not_affiliate); its other trackers and an Affiliate\'s are not', async () => {
+    const { id, token } = addStreamer();
+    db.db.prepare("UPDATE streamers SET cp_affiliate_status = 'not_affiliate' WHERE id = ?").run(id);
+    const sub = await openStream(`/overlay/tracker/latest_sub/events/${token}`);
+    await until(() => sub.messages().length >= 2, 'config and value');
+    assert.deepEqual(sub.messages()[1], { type: 'tracker', tracker: 'latest_sub', value: null, unavailable: 'not_affiliate' });
+    const follower = await openStream(`/overlay/tracker/latest_follower/events/${token}`);
+    await until(() => follower.messages().length >= 2, 'config and value');
+    assert.deepEqual(follower.messages()[1], { type: 'tracker', tracker: 'latest_follower', value: null });
+    const other = addStreamer();
+    const affiliate = await openStream(`/overlay/tracker/latest_sub/events/${other.token}`);
+    await until(() => affiliate.messages().length >= 2, 'config and value');
+    assert.deepEqual(affiliate.messages()[1], { type: 'tracker', tracker: 'latest_sub', value: null });
+  });
+
   test('a stored tracker\'s source works out only its own value (no top-tipper lookup)', async () => {
     const { id, token } = addStreamer();
     db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run(`OwnChan${id}`, id);

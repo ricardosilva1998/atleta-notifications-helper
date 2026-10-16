@@ -1639,9 +1639,11 @@ router.post('/api/tracking/goal/:kind/end', trackingKind, (req, res) => {
   trackingAnswer(req, res);
 });
 
-// The test buttons: { test: 'small' | 'reach' | 'reset' }. Small and reach play on the live bar for 10 s (never
-// saved; without a goal a sample bar titled in the page's language) and share the test buttons' cooldown; reset
+// The test buttons: { test: 'small' | 'reach' | 'reset' }. Small (5% of the target, as the tip goal's) and reach
+// play on the live bar for 10 s (never saved; without a goal a sample bar titled in the page's language) and share
+// the test buttons' cooldown; the answer carries the message the bar got, which the page draws in its preview. Reset
 // shows the real bar again at once and waits for nothing.
+const TRACKING_TEST_SHARE = 0.05;
 router.post('/api/tracking/goal/:kind/test', trackingKind, (req, res) => {
   const { kind } = req.params;
   const test = req.body && req.body.test;
@@ -1656,14 +1658,12 @@ router.post('/api/tracking/goal/:kind/test', trackingKind, (req, res) => {
     res.set('Retry-After', String(seconds));
     return trackingRefusal(res, 'too_fast', { seconds });
   }
-  const goal = trackingGoals.progressOf(req.streamer.id, kind);
-  const target = goal && goal.target > 0 ? goal.target : 10;
-  trackingGoals.sendTest(req.streamer.id, kind, {
+  const message = trackingGoals.sendTest(req.streamer.id, kind, {
     reach: test === 'reach',
-    added: Math.max(1, Math.round(target * 0.1)),
+    share: test === 'small' ? TRACKING_TEST_SHARE : undefined,
     title: res.locals.t(TRACKING_GOAL_TITLES[kind]),
   });
-  res.json({ ok: true, revertMs: trackingGoals.TEST_REVERT_MS });
+  res.json({ ok: true, revertMs: trackingGoals.TEST_REVERT_MS, message });
 });
 
 // A tracker's switch and colour ({ enabled?: boolean, color?: '#rrggbb' | null }; null or '' is its default colour).

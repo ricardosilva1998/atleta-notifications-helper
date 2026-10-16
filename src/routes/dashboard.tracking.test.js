@@ -332,6 +332,19 @@ describe('the goals', () => {
     assert.equal(st.goals.follow.history[0].reached, true);
   });
 
+  test('a test answers with the message the live bar got, so the preview draws the same; "small" is 5% of the target', async () => {
+    const s = addStreamer();
+    await request('POST', '/dashboard/api/tracking/goal/follow', { streamer: s, body: { ...MONTHLY, target: 200 } });
+    let answer;
+    const sent = await heard(`trackgoal:${s}:follow`, async () => {
+      answer = (await request('POST', '/dashboard/api/tracking/goal/follow/test', { streamer: s, body: { test: 'small' } })).json();
+    });
+    assert.deepEqual(answer.message, sent[0]);
+    assert.equal(answer.message.added, 10);
+    assert.equal(answer.message.goal.title, 'Road to 50');
+    assert.equal(answer.revertMs, 10000);
+  });
+
   test('the test buttons play on the bar (a sample one titled in the page\'s language without a goal), share the test cooldown, and reset at once', async () => {
     const s = addStreamer();
     const sent = await heard(`trackgoal:${s}:follow`, async () => {
@@ -342,6 +355,7 @@ describe('the goals', () => {
     assert.equal(sent.length, 1);
     assert.equal(sent[0].test, true);
     assert.equal(sent[0].goal.title, t('en', 'tracking.goal.follow.title'));
+    assert.equal(sent[0].added, 1, 'the sample bar: 5% of its target, at least 1');
 
     const fast = await request('POST', '/dashboard/api/tracking/goal/sub/test', { streamer: s, body: { test: 'reach' } });
     assert.equal(fast.status, 429);
@@ -405,6 +419,34 @@ describe('the trackers', () => {
     assert.equal(st.trackers.latest_follower.value, null);
     assert.equal(st.notAffiliate, true);
     assert.equal((await state(addStreamer())).notAffiliate, false);
+  });
+});
+
+// ── One streamer's routes reach only their own Tracking ──
+
+describe('another streamer', () => {
+  test('cannot see, change, test or end a streamer\'s goal, nor change their trackers', async () => {
+    const a = addStreamer();
+    const b = addStreamer();
+    await request('GET', '/dashboard/tracking', { streamer: a });
+    await request('POST', '/dashboard/api/tracking/goal/follow', { streamer: a, body: MONTHLY });
+    const before = db.getActiveTrackingGoal(a, 'follow');
+
+    assert.equal((await state(b)).goals.follow.goal, null, 'b sees no goal');
+    assert.equal((await request('PATCH', '/dashboard/api/tracking/goal/follow', { streamer: b, body: { title: 'Hijacked', target: 1 } })).status, 404);
+    assert.equal((await request('POST', '/dashboard/api/tracking/goal/follow/nudge', { streamer: b, body: { delta: 5 } })).status, 404);
+    assert.equal((await request('POST', '/dashboard/api/tracking/goal/follow/end', { streamer: b })).status, 404);
+    const tested = await heard(`trackgoal:${a}:follow`, async () => {
+      await request('POST', '/dashboard/api/tracking/goal/follow/test', { streamer: b, body: { test: 'reach' } });
+    });
+    assert.deepEqual(tested, [], 'a\'s bar heard nothing');
+    const told = await heard(`tracker:${a}`, async () => {
+      await request('POST', '/dashboard/api/tracking/tracker/latest_tip', { streamer: b, body: { enabled: false, color: '#ff00aa' } });
+    });
+    assert.deepEqual(told, [], 'a\'s sources heard nothing');
+
+    assert.deepEqual(db.getActiveTrackingGoal(a, 'follow'), before, 'a\'s goal is as it was');
+    assert.deepEqual(db.getTrackerSettings(a).latest_tip, { enabled: 1, color: null }, 'a\'s tracker is as it was');
   });
 });
 

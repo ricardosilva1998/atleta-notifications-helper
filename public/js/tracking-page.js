@@ -37,8 +37,9 @@
   function show(el, on) { if (el) el.hidden = !on; }
 
   // ── Requests ──
-  // A redirect (to sign in, which leads off the site) or a 401/403 page means the session ended; an answer that is not
-  // JSON did not work; no answer in 20 s counts as no network.
+  // A redirect (to sign in, which leads off the site) or a 401/403 answer (a CSRF refusal included) means the session
+  // ended and the page must be reloaded; an answer that is not JSON did not work; no answer in 20 s counts as no
+  // network.
   function api(method, url, body) {
     var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, REQUEST_MS) : null;
@@ -49,12 +50,14 @@
       options.body = JSON.stringify(body);
     }
     return fetch(url, options).then(function (res) {
-      if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) return { ok: false, text: T.sessionEnded };
+      if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400) || res.status === 401 || res.status === 403) {
+        return { ok: false, text: T.sessionEnded };
+      }
       return res.json().then(function (json) {
         if (json && json.ok) return json;
         return { ok: false, error: json && json.error, text: refusalText(json) };
       }, function () {
-        return { ok: false, text: res.status === 401 || res.status === 403 ? T.sessionEnded : T.failed };
+        return { ok: false, text: T.failed };
       });
     }, function () {
       return { ok: false, text: T.offline };
@@ -227,7 +230,8 @@
 
   function goalUrl(kind, rest) { return '/dashboard/api/tracking/goal/' + kind + (rest || ''); }
 
-  // The test buttons: the preview plays what the live bar plays (the server's sendTest), for 10 s.
+  // The test buttons: the preview draws the message the live bar got (the route answers with it), for as long as the
+  // live bar shows it.
   function runTest(kind, test) {
     var card = goalCards[kind];
     var note = $(card, '[data-test-status]');
@@ -244,29 +248,11 @@
     api('POST', goalUrl(kind, '/test'), { test: test }).then(function (answer) {
       if (!answer.ok) { message(card, answer.text); return; }
       message(card, '');
-      var base = state.goals[kind].goal || formGoal(kind, card);
-      var target = base.target > 0 ? base.target : 10;
-      var shown = base.current || 0;
-      var msg;
-      if (test === 'reach') {
-        shown = Math.max(target, shown);
-        msg = { justCompleted: true };
-      } else {
-        var added = Math.max(1, Math.round(target * 0.1));
-        shown += added;
-        msg = { added: added, justCompleted: false };
-      }
-      var goal = {};
-      for (var k in base) goal[k] = base[k];
-      goal.current = shown;
-      goal.percent = Math.min(100, Math.round((shown / target) * 10000) / 100);
-      goal.completed = !!base.completed || shown >= target;
-      goal.unavailable = null;
+      if (!answer.message) return;
       card._testing = true;
-      msg.type = 'track_goal';
-      msg.goal = goal;
-      post($(card, '[data-preview]'), msg);
-      var left = Math.round(TEST_MS / 1000);
+      post($(card, '[data-preview]'), answer.message);
+      var testMs = Number(answer.revertMs) > 0 ? Number(answer.revertMs) : TEST_MS;
+      var left = Math.round(testMs / 1000);
       note.textContent = fill(T.testing, { seconds: left });
       card._testTick = setInterval(function () {
         left -= 1;
@@ -277,7 +263,7 @@
         card._testing = false;
         note.textContent = note._default;
         previewGoal(kind);
-      }, TEST_MS);
+      }, testMs);
     });
   }
 
@@ -337,32 +323,53 @@
     }
   }
 
-  // The preview always draws the tracker (switched off it only hides on stream), in the colour shown.
+  // The preview always draws the tracker (switched off it only hides on stream), in the colour shown; Latest sub on a
+  // channel that is not an Affiliate shows what its OBS source shows.
   function previewTracker(tracker, color) {
     var card = trackerCards[tracker];
     var tr = state.trackers[tracker];
     var frame = $(card, '[data-preview]');
     post(frame, { type: 'tracker_settings', tracker: tracker, enabled: true, color: color || tr.color });
-    post(frame, { type: 'tracker', tracker: tracker, value: tr.value || sample(tracker) });
+    var msg = { type: 'tracker', tracker: tracker, value: tr.value || sample(tracker) };
+    if (tracker === 'latest_sub' && state.notAffiliate) msg.unavailable = 'not_affiliate';
+    post(frame, msg);
   }
 
-  function renderTracker(tracker) {
+  function renderTracker(tracker, force) {
     var card = trackerCards[tracker];
     var tr = state.trackers[tracker];
     if (!tr.enabled) setStatus(card, T.trackerOff, 'off');
     else if (tr.value && tr.value.name) setStatus(card, fill(T.trackerShows, { name: tr.value.name }), 'ok');
     else setStatus(card, T.trackerNothing, 'off');
-    $(card, '[data-enabled]').checked = !!tr.enabled;
-    $(card, '[data-color]').value = tr.color;
+    // A switch or colour the streamer is using (focused, or with a save under way) is left as it is, unless a refused
+    // save puts it back (`force`).
+    var toggle = $(card, '[data-enabled]');
+    var color = $(card, '[data-color]');
+    if (force || (!card._saving && document.activeElement !== toggle)) toggle.checked = !!tr.enabled;
+    if (force || (!card._saving && document.activeElement !== color)) color.value = tr.color;
     show($(card, '[data-color-reset]'), !!tr.ownColor);
     show($(card, '[data-note="notAffiliate"]'), state.notAffiliate);
     previewTracker(tracker);
   }
 
+  // One save at a time per tracker: its switch, colour and reset are disabled until the answer is in, so an older
+  // answer can never land after a newer change. A refusal flips the inputs back to what is stored.
   function saveTracker(tracker, change) {
     var card = trackerCards[tracker];
-    return act(card, 'POST', '/dashboard/api/tracking/tracker/' + tracker, change, T.saved).then(function (done) {
-      if (!done) renderTracker(tracker); // flips back to what is stored
+    var inputs = $$(card, '[data-enabled], [data-color], [data-color-reset]');
+    card._saving = true;
+    inputs.forEach(function (el) { el.disabled = true; });
+    return api('POST', '/dashboard/api/tracking/tracker/' + tracker, change).then(function (answer) {
+      card._saving = false;
+      inputs.forEach(function (el) { el.disabled = false; });
+      if (!answer.ok) {
+        message(card, answer.text);
+        renderTracker(tracker, true);
+        return;
+      }
+      state = answer.state;
+      renderAll(false);
+      message(card, T.saved, true);
     });
   }
 
@@ -380,7 +387,7 @@
 
   function renderAll(refill) {
     Object.keys(goalCards).forEach(function (kind) { renderGoal(kind, refill); });
-    Object.keys(trackerCards).forEach(renderTracker);
+    Object.keys(trackerCards).forEach(function (tracker) { renderTracker(tracker, false); });
   }
 
   $$(document, '[data-copy]').forEach(function (b) {

@@ -669,14 +669,15 @@ describe('test mode', () => {
     const w = setup({ followerTotal: 10 });
     await w.tg.startGoal({ id: s }, 'follow', fields({ target: 20 }));
     t.mock.timers.enable({ apis: ['setTimeout'] });
-    assert.equal(w.tg.sendTest(s, 'follow', { added: 3 }), true);
+    const sent = w.tg.sendTest(s, 'follow', { added: 3 });
+    assert.deepEqual(sent, w.last().payload, 'it returns the message it emitted (the page draws it in its preview)');
     assert.deepEqual(w.last().payload, {
       type: 'track_goal', test: true, added: 3, justCompleted: false,
       goal: { ...w.tg.progressOf(s, 'follow'), current: 13, percent: 65 },
     });
     assert.equal(w.tg.progressOf(s, 'follow').current, 10, 'nothing saved');
 
-    assert.equal(w.tg.sendTest(s, 'follow', { reach: true }), true);
+    assert.equal(w.tg.sendTest(s, 'follow', { reach: true }), w.last().payload);
     assert.equal(w.last().payload.goal.current, 20);
     assert.equal(w.last().payload.goal.completed, true);
     assert.equal(w.last().payload.justCompleted, true);
@@ -692,7 +693,7 @@ describe('test mode', () => {
     const s = addStreamer();
     const w = setup();
     t.mock.timers.enable({ apis: ['setTimeout'] });
-    assert.equal(w.tg.sendTest(s, 'sub', { added: 1, title: 'Sample' }), true);
+    assert.equal(w.tg.sendTest(s, 'sub', { added: 1, title: 'Sample' }), w.last().payload);
     const sample = w.last().payload.goal;
     assert.equal(sample.title, 'Sample');
     assert.equal(sample.kind, 'sub');
@@ -703,7 +704,19 @@ describe('test mode', () => {
     const after = w.emitted.length;
     t.mock.timers.tick(10000);
     assert.equal(w.emitted.length, after, 'the revert timer was cleared');
-    assert.equal(w.tg.sendTest(s, 'raid', {}), false);
+    assert.equal(w.tg.sendTest(s, 'raid', {}), null);
+  });
+
+  test('a share of the target adds that part of it (at least 1, at most 1000), from the goal or the sample bar', async () => {
+    const s = addStreamer();
+    const w = setup();
+    assert.equal(w.tg.sendTest(s, 'follow', { share: 0.05 }).added, 1, 'the sample bar (target 10): 5% is at least 1');
+    w.tg.endTest(s, 'follow');
+    await w.tg.startGoal({ id: s }, 'follow', fields({ target: 200 }));
+    assert.equal(w.tg.sendTest(s, 'follow', { share: 0.05 }).added, 10);
+    await w.tg.startGoal({ id: s }, 'follow', fields({ target: 1000000 }));
+    assert.equal(w.tg.sendTest(s, 'follow', { share: 0.05 }).added, 1000, 'the cap');
+    w.tg.endTest(s, 'follow');
   });
 });
 

@@ -69,6 +69,14 @@
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
+/* Not available for the channel: the text in place of a name, quieter and allowed to wrap */
+.trk-card.unavailable .trk-name {
+  font-weight: 600;
+  font-size: 15px;
+  white-space: normal;
+  opacity: 0.75;
+}
+
 .trk-detail {
   flex-shrink: 0;
   font-weight: 600;

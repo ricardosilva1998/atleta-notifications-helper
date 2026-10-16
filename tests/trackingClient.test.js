@@ -232,6 +232,23 @@ describe('a tracker', () => {
     assert.ok(card.classList.contains('slide'), 'it slides in');
   });
 
+  test('a tracker that is not available for the channel shows its title and the text, whatever value it had', () => {
+    const { api, root } = loadTracking({ page: { source: 'tracker', tracker: 'latest_sub', demo: true } });
+    api.handle({ type: 'tracker', tracker: 'latest_sub', value: null, unavailable: 'not_affiliate' });
+    const card = find(root, 'trk-card');
+    assert.ok(card, 'drawn although there is no value');
+    assert.ok(card.classList.contains('unavailable'));
+    assert.equal(find(root, 'trk-title').textContent, 'Latest sub');
+    assert.equal(find(root, 'trk-name').textContent, 'Not available for this channel');
+    assert.equal(find(root, 'trk-detail').textContent, '');
+    api.applyTrackerSettings({ enabled: false });
+    assert.equal(root.children.length, 0, 'switched off: hidden as ever');
+    api.applyTrackerSettings({ enabled: true });
+    api.handle({ type: 'tracker', tracker: 'latest_sub', value: { name: 'subber', months: 2, tier: '1' } });
+    assert.equal(find(root, 'trk-name').textContent, 'subber', 'a sub arriving shows the sub again');
+    assert.ok(!find(root, 'trk-card').classList.contains('unavailable'));
+  });
+
   test('a name with markup in it is shown as text', () => {
     const { api, root } = loadTracking();
     api.renderTracker('latest_follower', { name: '<b>x</b>' });

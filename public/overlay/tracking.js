@@ -195,7 +195,7 @@
   // ── A tracker ──────────────────────────────────────────────────────────
 
   let trackerSettings = { enabled: true, color: TRACKER_COLOR };
-  let lastTracker = null; // { tracker, value }: what the last message said, drawn again when the settings change
+  let lastTracker = null; // { tracker, value, unavailable }: the last message, drawn again when the settings change
   let shownKey = null;
 
   // What the line under the name says for each tracker.
@@ -214,12 +214,16 @@
 
   function draw() {
     const shown = lastTracker;
-    if (!shown || !trackerSettings.enabled || !TRACKERS.includes(shown.tracker) || !shown.value || !shown.value.name) {
+    // Not available for the channel (Latest sub without an Affiliate channel): the title and that text instead.
+    const unavailable = shown && shown.unavailable && texts[shown.unavailable] ? texts[shown.unavailable] : '';
+    if (!shown || !trackerSettings.enabled || !TRACKERS.includes(shown.tracker)
+        || (!unavailable && (!shown.value || !shown.value.name))) {
       root.textContent = '';
       shownKey = null;
       return;
     }
-    const { tracker, value } = shown;
+    const { tracker } = shown;
+    const value = unavailable ? { name: unavailable } : shown.value;
     let card = root.querySelector('.trk-card');
     if (!card) {
       root.textContent = '';
@@ -233,17 +237,19 @@
       root.appendChild(card);
     }
     card.style.setProperty('--track-color', trackerSettings.color);
+    card.classList.toggle('unavailable', !!unavailable);
     root.querySelector('.trk-title').textContent = texts[tracker] || '';
     root.querySelector('.trk-name').textContent = String(value.name);
-    root.querySelector('.trk-detail').textContent = detailOf(tracker, value);
+    root.querySelector('.trk-detail').textContent = unavailable ? '' : detailOf(tracker, value);
     const key = tracker + '\n' + JSON.stringify(value);
     if (key !== shownKey) replay(card, 'slide');
     shownKey = key;
   }
 
-  // Draws a tracker's value (services/trackers.js); hidden while it is empty or the tracker is switched off.
-  function renderTracker(tracker, value) {
-    lastTracker = { tracker, value };
+  // Draws a tracker's value (services/trackers.js); hidden while it is empty or the tracker is switched off. With
+  // `unavailable` (a trackingGoals code, not_affiliate) its text stands in for the value.
+  function renderTracker(tracker, value, unavailable) {
+    lastTracker = { tracker, value, unavailable: unavailable || null };
     draw();
   }
 
@@ -276,7 +282,7 @@
     if (page.source === 'tracker') {
       // A source shows its own tracker; a preview, whichever the dashboard posts.
       if (page.tracker && data.tracker !== page.tracker) return;
-      if (data.type === 'tracker') renderTracker(data.tracker, data.value);
+      if (data.type === 'tracker') renderTracker(data.tracker, data.value, data.unavailable);
       else if (data.type === 'tracker_settings') applyTrackerSettings(data);
     }
   }
