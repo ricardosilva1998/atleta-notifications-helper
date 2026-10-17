@@ -34,9 +34,11 @@
   </div>
   <div class="wc-msg" data-msg hidden></div>
   <% if (!card.setup) { %>
-  <div class="wc-foot">
-    <% if (card.servers.length === 1) { %><a href="/dashboard/guild/<%= card.servers[0].guildId %>?tab=discord"><%= t('cards.discord.welcome') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><% } %>
-    <a href="#tab-discord" data-open-tab="discord"><%= t('cards.discord.addServer') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a>
+  <% const _tiles = [];
+     if (card.servers.length === 1) _tiles.push({ href: '/dashboard/guild/' + card.servers[0].guildId + '?tab=discord', icon: 'i-chat', title: t('cards.discord.welcome'), hint: t('cards.tiles.welcomeHint') });
+     _tiles.push({ href: '#tab-discord', openTab: 'discord', icon: 'i-plus', title: t('cards.discord.addServer'), hint: t('cards.tiles.addServerHint') }); %>
+  <div class="wc-foot wc-foot-tiles">
+    <%- include('_tiles', { label: t('dashboard.cards.discord.title'), tiles: _tiles }) %>
     <span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span>
   </div>
   <% } %>

@@ -37,7 +37,7 @@
     </div>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><a href="/dashboard/tracking"><%= t('cards.tracking.more') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <div class="wc-foot wc-foot-tiles"><%- include('_tiles', { label: t('tracking.title'), tiles: [{ href: '/dashboard/tracking', icon: 'i-poll', title: t('cards.tiles.trackingPage'), hint: t('cards.tiles.trackingHint') }] }) %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
   <template id="tpl-track-goal">
     <div class="wc-editor wc-tg-editor">
       <div class="wc-tg-head"><span class="ic" data-tg-icon></span><div><h4 id="wc-dialog-title" data-title></h4><small data-tg-intro></small></div></div>

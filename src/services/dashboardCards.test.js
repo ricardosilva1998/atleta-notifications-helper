@@ -367,7 +367,7 @@ describe('Chat protection', () => {
       ['mod_symbol_spam_enabled', 'cards.protection.symbols', false],
     ]);
     assert.deepEqual([card.filters[1].hint, card.filters[1].hintParams], ['cards.protection.bannedHint', { count: 3 }]);
-    assert.deepEqual(card.modLog, { key: 'cards.protection.modLog', params: { count: 4 } });
+    assert.deepEqual(card.modLog, { key: 'cards.tiles.modLogHint', params: { count: 4 } });
     assert.deepEqual(build({ streamer: { mod_link_protection_enabled: 0 } }).protection.status, { key: 'cards.protection.status.off', params: {}, tone: 'off' });
   });
 
