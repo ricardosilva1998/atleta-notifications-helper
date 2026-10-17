@@ -2971,6 +2971,16 @@ describe('the overlay builder page and a slow Twitch', () => {
     assert.ok(page.includes(`<link rel="stylesheet" href="/overlay/objects/styles.css?v=${bundle().version}">`));
   });
 
+  test('asks for its own scripts at their content\'s version, so a browser never mixes a cached one with a new one', async () => {
+    const crypto = require('crypto');
+    const versionOf = (file) => crypto.createHash('sha256').update(realFs.readFileSync(path.join(__dirname, '..', '..', 'public', 'js', file))).digest('hex').slice(0, 12);
+    const page = (await request('GET', '/dashboard/overlay-builder', { streamer: id })).text;
+    for (const file of ['builder-styles-core.js', 'builder-cards.js']) {
+      assert.ok(page.includes(`<script src="/js/${file}?v=${versionOf(file)}"></script>`), file);
+      assert.ok(!page.includes(`<script src="/js/${file}"></script>`), `${file} is not asked for without its version`);
+    }
+  });
+
   test("hands the page the streamer's Twitch name for the C1's rear window, as JSON for its inline script", async () => {
     const { locals } = (await builder()).json();
     assert.equal(locals.channel, '"SOMESTREAMER"');
