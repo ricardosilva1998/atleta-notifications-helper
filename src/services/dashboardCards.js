@@ -35,13 +35,15 @@ const THANK_YOUS = [
 
 // The OBS overlay's alerts: their streamers columns (overlay_<column>_enabled, overlay_<column>_duration) and
 // the type their test button sends (OVERLAY_TEST_EVENTS in routes/dashboard.js).
+// icon and short: the OBS overlay card's test button for the alert (an id in views/cards/_icons.ejs; its colour is the
+// .wc-test.<column> rule in _style.ejs).
 const ALERTS = [
-  { column: 'follow', label: 'cards.events.follow', test: 'follow' },
-  { column: 'sub', label: 'cards.events.sub', test: 'subscription' },
-  { column: 'bits', label: 'cards.events.bits', test: 'bits' },
-  { column: 'donation', label: 'cards.events.donation', test: 'donation' },
-  { column: 'raid', label: 'cards.events.raid', test: 'raid' },
-  { column: 'giveaway', label: 'cards.events.giveaway', test: 'giveaway_winner' },
+  { column: 'follow', label: 'cards.events.follow', test: 'follow', icon: 'i-heart', short: 'cards.overlay.testName.follow' },
+  { column: 'sub', label: 'cards.events.sub', test: 'subscription', icon: 'i-star', short: 'cards.overlay.testName.sub' },
+  { column: 'bits', label: 'cards.events.bits', test: 'bits', icon: 'i-gem', short: 'cards.overlay.testName.bits' },
+  { column: 'donation', label: 'cards.events.donation', test: 'donation', icon: 'i-coin', short: 'cards.overlay.testName.donation' },
+  { column: 'raid', label: 'cards.events.raid', test: 'raid', icon: 'i-users', short: 'cards.overlay.testName.raid' },
+  { column: 'giveaway', label: 'cards.events.giveaway', test: 'giveaway_winner', icon: 'i-gift', short: 'cards.overlay.testName.giveaway' },
 ];
 const SECONDS = [5, 8, 10, 12, 15, 20, 30];
 const LONG_SECONDS = [...SECONDS, 45, 60]; // the giveaway winner may stay up to 60 s
@@ -172,6 +174,9 @@ function overlayCard({ streamer, overlay, polls }) {
     return {
       label: a.label,
       test: a.test,
+      icon: a.icon,
+      short: a.short,
+      tone: a.column,
       switchKey: `overlay_${a.column}_enabled`,
       durationKey,
       on: !!streamer[`overlay_${a.column}_enabled`],

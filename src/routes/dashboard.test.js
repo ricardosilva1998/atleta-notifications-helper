@@ -3869,7 +3869,7 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       const page = body(res.text);
       for (const href of ['/dashboard/overlay', '/dashboard/overlay-builder', '/dashboard/tracking', '/dashboard/redemptions']) assert.ok(page.includes(`href="${href}"`), href);
       for (const key of ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental', 'dashboard.youtube.overlayDesc',
-        'cards.overlay.source', 'cards.donations.goal', 'cards.sponsors.images', 'dashboard.kick.comingSoon']) {
+        'cards.overlay.sources', 'cards.donations.goal', 'cards.sponsors.images', 'dashboard.kick.comingSoon']) {
         assert.ok(page.includes(esc(t('en', key))), key);
       }
       assert.ok(page.includes('data-tab="experimental"') && page.includes('id="tab-experimental"'));
@@ -5192,6 +5192,30 @@ describe('the working cards on the page', () => {
     assert.match(overlay, /<select class="wc-select sm" data-setting="overlay_raid_duration"[^>]*>[\s\S]*?<option value="7" selected>/);
     assert.match(overlay, /value="24" data-setting="overlay_volume" data-scale="100"/);
     assert.match(cardOf(html, 'protection'), /data-setting="mod_caps_enabled" checked>/);
+  });
+
+  test('the OBS overlay card: test buttons first, then the alerts, the volume, the folded browser sources and three tiles', async () => {
+    const id = linkedStreamer({ overlay_enabled: 1, overlay_bits_enabled: 0, overlay_raid_duration: 7, overlay_token: 'synthetic-token-wcp-order' });
+    const overlay = cardOf(await pane(id), 'overlay');
+    const at = (needle) => { const i = overlay.indexOf(needle); assert.ok(i > 0, needle); return i; };
+    assert.ok(at('class="wc-tests') < at('data-count="alerts"'), 'the test buttons come before the alert rows');
+    assert.ok(at('data-volume-label') < at('<details class="wc-sources"'), 'the links come after the volume');
+    assert.ok(at('<details class="wc-sources"') < at('class="wc-tiles"'));
+    const tests = overlay.match(/<button type="button" class="wc-test [^"]*" data-alert-test="[^"]+"/g) || [];
+    assert.deepEqual(tests.map((b) => b.match(/data-alert-test="([^"]+)"/)[1]), ['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner']);
+    assert.match(overlay, /class="wc-test bits is-off" data-alert-test="bits" data-test-for="overlay_bits_enabled"/);
+    for (const icon of ['i-heart', 'i-star', 'i-gem', 'i-coin', 'i-users', 'i-gift']) assert.ok(overlay.includes(`<use href="#${icon}"/>`), icon);
+    assert.match(overlay, /<small data-secs-for="overlay_raid_duration">7 s<\/small>/);
+    assert.ok(!/class="wc-row wc-alert[\s\S]*?data-alert-test/.test(overlay.slice(at('data-count="alerts"'))), 'the rows have no test button of their own');
+    assert.match(overlay, /<details class="wc-sources" data-remember="overlay_sources_open">/, 'folded, remembered in the browser');
+    assert.ok(overlay.includes(esc(t('en', 'cards.overlay.linkCount.other', { count: 2 }))));
+    const tiles = overlay.slice(at('class="wc-tiles"'));
+    assert.deepEqual((tiles.match(/<a class="wc-tile" href="([^"]+)"/g) || []).map((a) => a.match(/href="([^"]+)"/)[1]), ['/dashboard/overlay-builder', '/dashboard/tracking', '/dashboard/overlay']);
+    // Without a link yet the section is open, with the button that makes one.
+    const noLink = cardOf(await pane(linkedStreamer()), 'overlay');
+    assert.match(noLink, /<details class="wc-sources" open>/);
+    assert.ok(!noLink.includes('data-remember'));
+    for (const icon of ['i-heart', 'i-star', 'i-gem', 'i-coin', 'i-users', 'i-palette']) assert.ok((await pane(id)).includes(`<symbol id="${icon}"`), `${icon} is in the icon set`);
   });
 
   test('the cards that need the chatbot fade while it is off and say why', async () => {
