@@ -2416,6 +2416,7 @@
   "tts.sample.message": "今日は最高のレースでした！",
   "cards.donations.ttsSwitch": "投げ銭を読み上げる",
   "cards.donations.ttsOn": "{{amount}}以上の投げ銭を読み上げ中 · {{limit}} 文字中 {{used}} 文字",
+  "tracking.past.ended": "終了",
   "tracking.title": "トラッキング",
   "tracking.intro": "フォローとサブの目標バーと、最新のフォロワー・サブ・投げ銭・レイド・ビッツを表示する小さなトラッカー。どれも OBS の独立したブラウザソースです。",
   "tracking.noLink": "目標バーとトラッカーには OBS リンクが必要です。オーバーレイ設定ページで作成してください。",

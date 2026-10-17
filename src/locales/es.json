@@ -2416,6 +2416,7 @@
   "tts.sample.message": "¡Gran carrera hoy!",
   "cards.donations.ttsSwitch": "Leer donaciones en voz alta",
   "cards.donations.ttsOn": "Leyendo donaciones desde {{amount}} · {{used}} de {{limit}} caracteres",
+  "tracking.past.ended": "Finalizado",
   "tracking.title": "Seguimiento",
   "tracking.intro": "Barras de objetivo para tus follows y subs, y pequeños trackers de tu último seguidor, sub, propina, raid y bits. Cada uno es una fuente de navegador propia en OBS.",
   "tracking.noLink": "Tus barras de objetivo y trackers necesitan tu enlace de OBS, que creas en la página de ajustes del overlay.",

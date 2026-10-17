@@ -15,33 +15,53 @@ const ROLLING_DAYS = { year: 365, month: 30, week: 7, day: 1 };
 const DAY_MS = 86400e3;
 const HOUR_MS = 3600e3;
 
-// One formatter per zone (building one is the slow part). The zone names that
-// reach here passed Intl's own check, so this holds at most the IANA list.
+// One formatter per zone (building one is the slow part), kept under the
+// zone's canonical name (Intl's: 'europe/lisbon' is Europe/Lisbon, US/Pacific
+// is America/Los_Angeles), so it holds at most the IANA list however a name is
+// spelled. A name that is not canonical costs one probe each time it is asked.
 const formatters = new Map();
 
+function buildFormatter(timeZone) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+  });
+}
+
+// Throws (RangeError) for a name Intl does not know.
 function formatterFor(timeZone) {
   let f = formatters.get(timeZone);
   if (!f) {
-    f = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hourCycle: 'h23',
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: 'numeric', minute: 'numeric', second: 'numeric',
-    });
-    formatters.set(timeZone, f);
+    const canonical = new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
+    f = formatters.get(canonical);
+    if (!f) {
+      f = buildFormatter(canonical);
+      formatters.set(canonical, f);
+    }
   }
   return f;
 }
 
+// The zone's canonical name, or null when Intl does not know it (or none is given).
+function canonicalTimeZone(tz) {
+  if (typeof tz !== 'string' || !tz) return null;
+  try {
+    return formatterFor(tz).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
 // Whether Intl accepts the name (IANA names such as Europe/Lisbon, and UTC).
 function isTimeZone(tz) {
-  if (typeof tz !== 'string' || !tz) return false;
-  try {
-    formatterFor(tz);
-    return true;
-  } catch {
-    return false;
-  }
+  return canonicalTimeZone(tz) !== null;
+}
+
+// The zones the formatters are kept for (for the tests).
+function formatterZones() {
+  return [...formatters.keys()];
 }
 
 // The zone's offset from UTC at an instant, in ms (east of UTC is positive).
@@ -148,4 +168,4 @@ function nextRollover(goal, now) {
   return null;
 }
 
-module.exports = { PERIODS, MODES, ROLLING_DAYS, isTimeZone, windowFor, nextRollover };
+module.exports = { PERIODS, MODES, ROLLING_DAYS, isTimeZone, canonicalTimeZone, formatterZones, windowFor, nextRollover };

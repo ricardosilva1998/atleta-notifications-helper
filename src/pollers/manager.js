@@ -17,6 +17,7 @@ const { getLatestVideos, getLiveVideos, quotaBackoffActive } = require('../servi
 const { chunk } = require('../services/chunk');
 const { exclusiveRun } = require('./exclusiveRun');
 const { planMilestoneCheck } = require('./milestones');
+const trackers = require('../services/trackers');
 
 // --- Twitch polling (channel-centric) ---
 
@@ -81,6 +82,8 @@ async function pollTwitchLiveChannel(twitchUsername, stream) {
 
   if (result.kind === 'started' || result.kind === 'replaced') {
     console.log(`[TwitchLive] ${twitchUsername} went LIVE — "${result.stateUpdate.stream_title}" (${result.stateUpdate.stream_category})`);
+    // Tracking: the top tipper of the stream starts over now (the new start is stored above).
+    trackers.streamStarted(twitchUsername);
   } else if (result.kind === 'resumed') {
     console.log(`[TwitchLive] ${twitchUsername} is live again with the broadcast announced before — not announcing it twice`);
   } else if (result.kind === 'ended') {

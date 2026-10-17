@@ -2416,6 +2416,7 @@
   "tts.sample.message": "Tolles Rennen heute!",
   "cards.donations.ttsSwitch": "Spenden vorlesen",
   "cards.donations.ttsOn": "Spenden werden ab {{amount}} vorgelesen · {{used}} von {{limit}} Zeichen",
+  "tracking.past.ended": "Beendet",
   "tracking.title": "Tracking",
   "tracking.intro": "Zielbalken für deine Follows und Subs und kleine Tracker für deinen neuesten Follower, Sub, Tip, Raid und Bits. Jeder ist eine eigene Browserquelle in OBS.",
   "tracking.noLink": "Deine Zielbalken und Tracker brauchen deinen OBS-Link, den du auf der Seite mit den Overlay-Einstellungen erstellst.",

@@ -120,6 +120,28 @@ describe('the follow and sub record', () => {
     const left = db.db.prepare('SELECT twitch_user_id FROM tracking_events WHERE streamer_id = ?').all(s).map((r) => r.twitch_user_id);
     assert.deepEqual(left, ['keep']);
   });
+
+  // A follower goal's count runs on every follow and every tick while a source is open; with the Twitch id in the
+  // index it never reads the table's rows.
+  test('the record\'s index covers a follow count: (streamer, kind, time, Twitch id), the older three-column one gone', () => {
+    const columns = db.db.prepare("PRAGMA index_info('idx_tracking_events_streamer_kind_date_user')").all().map((c) => c.name);
+    assert.deepEqual(columns, ['streamer_id', 'kind', 'created_at', 'twitch_user_id']);
+    assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND name = 'idx_tracking_events_streamer_kind_date'").get().n, 0);
+    const plan = db.db.prepare(`EXPLAIN QUERY PLAN SELECT COUNT(DISTINCT NULLIF(twitch_user_id, '')) FROM tracking_events
+      WHERE streamer_id = ? AND kind = 'follow' AND created_at >= ? AND created_at < ?`).all(1, '2026-10-01 00:00:00', '2026-11-01 00:00:00');
+    assert.match(plan.map((p) => p.detail).join(' | '), /USING COVERING INDEX idx_tracking_events_streamer_kind_date_user/);
+  });
+
+  test('deleteTrackingEvents removes one streamer\'s whole record (another Twitch account linked) and no one else\'s', () => {
+    const s = addStreamer();
+    const other = addStreamer();
+    insertEventAt(s, 'follow', '2026-10-05 10:00:00', { twitchUserId: '1' });
+    insertEventAt(s, 'sub', '2026-10-06 10:00:00', { subType: 'new' });
+    insertEventAt(other, 'follow', '2026-10-05 10:00:00', { twitchUserId: '1' });
+    assert.equal(db.deleteTrackingEvents(s), 2);
+    assert.equal(n('tracking_events', s), 0);
+    assert.equal(n('tracking_events', other), 1);
+  });
 });
 
 describe('goals', () => {
@@ -327,6 +349,27 @@ describe('goals', () => {
     assert.equal(history[2].period_end, '2026-09-01 00:00:00');
     assert.equal(db.getTrackingGoalHistory(s, 'follow', 2).length, 2);
     assert.deepEqual(db.getTrackingGoalHistory(s, 'sub'), [], 'the sub goal is still active');
+  });
+
+  test('an ended goal keeps the count it showed (final_count): ended by hand, or replaced by a new goal; the history carries it and the time zone', () => {
+    const s = addStreamer();
+    const g = db.createTrackingGoal(s, 'follow', goalFields({ title: 'By hand' }));
+    assert.equal(g.final_count, null);
+    db.endTrackingGoal(g.id, s, 7);
+    const replaced = db.createTrackingGoal(s, 'sub', goalFields({ title: 'Replaced' }));
+    db.createTrackingGoal(s, 'sub', goalFields({ title: 'Replacing' }), { replacedCount: 12 });
+    const final = (id) => db.db.prepare('SELECT final_count FROM tracking_goals WHERE id = ?').get(id).final_count;
+    assert.equal(final(g.id), 7);
+    assert.equal(final(replaced.id), 12);
+    const quiet = db.createTrackingGoal(s, 'follow', goalFields({ title: 'No count' }));
+    db.endTrackingGoal(quiet.id, s);
+    assert.equal(final(quiet.id), null, 'no count given (an unavailable goal) stays unknown');
+
+    const history = db.getTrackingGoalHistory(s, 'follow');
+    assert.deepEqual(history.map((h) => [h.title, h.final_count, h.time_zone]), [['No count', null, 'Europe/Lisbon'], ['By hand', 7, 'Europe/Lisbon']]);
+    const m = db.createTrackingGoal(s, 'follow', goalFields({ title: 'Rolled' }));
+    db.rollTrackingGoal(m.id, { periodStart: '2026-08-31T23:00:00Z', periodEnd: '2026-09-30T23:00:00Z', count: 3, target: 100, reached: false, nextStart: '2026-09-30T23:00:00Z' });
+    assert.equal(db.getTrackingGoalHistory(s, 'follow').find((h) => h.type === 'period').time_zone, 'Europe/Lisbon');
   });
 
   test('an ended goal in the history says whether it was reached (completed_at), so the page can show reached or missed', () => {

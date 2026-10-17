@@ -26,11 +26,21 @@
     return String(text == null ? '' : text).replace(/\{\{(\w+)\}\}/g, function (_, k) { return values && values[k] != null ? values[k] : ''; });
   }
   var numberFormat = (function () { try { return new Intl.NumberFormat(lang); } catch (e) { return new Intl.NumberFormat('en'); } })();
-  var dateFormat = (function () { try { return new Intl.DateTimeFormat(lang, { dateStyle: 'medium' }); } catch (e) { return new Intl.DateTimeFormat('en'); } })();
+  // Dates in the page's language; a calendar goal's past periods in the goal's own time zone (one formatter per zone).
+  var dateFormats = {};
+  function dateFormat(timeZone) {
+    var key = timeZone || '';
+    if (!dateFormats[key]) {
+      try { dateFormats[key] = new Intl.DateTimeFormat(lang, timeZone ? { dateStyle: 'medium', timeZone: timeZone } : { dateStyle: 'medium' }); } catch (e) {
+        try { dateFormats[key] = new Intl.DateTimeFormat(lang, { dateStyle: 'medium' }); } catch (e2) { dateFormats[key] = new Intl.DateTimeFormat('en'); }
+      }
+    }
+    return dateFormats[key];
+  }
   function num(n) { return numberFormat.format(Number(n) || 0); }
-  function day(iso) {
+  function day(iso, timeZone) {
     var d = iso ? new Date(iso) : null;
-    return d && !isNaN(d) ? dateFormat.format(d) : '';
+    return d && !isNaN(d) ? dateFormat(timeZone).format(d) : '';
   }
   function $(root, sel) { return root.querySelector(sel); }
   function $$(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
@@ -154,16 +164,18 @@
     rows.forEach(function (row) {
       var li = document.createElement('li');
       var name = document.createElement('span');
-      name.textContent = (row.reached ? '🏁 ' : '') + row.title;
+      var result = row.result || (row.reached ? 'reached' : 'missed');
+      name.textContent = (result === 'reached' ? '🏁 ' : '') + row.title;
       var right = document.createElement('span');
       right.className = 'when';
       var count = row.count == null ? fill(T.pastTarget, { target: num(row.target) }) : fill(T.pastCount, { count: num(row.count), target: num(row.target) });
-      var when = [day(row.start), day(row.end)].filter(Boolean).join(' – ');
+      // A period's end is its last moment (the server takes 1 ms off the next period's start): its last day shows.
+      var when = [day(row.start, row.timeZone), day(row.end, row.timeZone)].filter(Boolean).join(' – ');
       right.textContent = count + ' · ' + when + ' · ';
-      var result = document.createElement('span');
-      result.className = row.reached ? 'hit' : 'miss';
-      result.textContent = row.reached ? T.pastReached : T.pastMissed;
-      right.appendChild(result);
+      var badge = document.createElement('span');
+      badge.className = result === 'reached' ? 'hit' : 'miss';
+      badge.textContent = result === 'reached' ? T.pastReached : (result === 'ended' ? T.pastEnded : T.pastMissed);
+      right.appendChild(badge);
       li.appendChild(name);
       li.appendChild(right);
       list.appendChild(li);

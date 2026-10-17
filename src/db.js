@@ -2149,6 +2149,18 @@ function getEnabledStreamerTwitchLogins() {
   return _getEnabledStreamerTwitchLogins.all().map((r) => r.login);
 }
 
+// The ids of the enabled streamers whose linked Twitch login is this one,
+// whatever its case (Tracking: who is told that their stream started).
+function getEnabledStreamerIdsByTwitchLogin(login) {
+  const name = login == null ? '' : String(login).trim();
+  if (!name) return [];
+  return db.prepare(`
+    SELECT id FROM streamers
+    WHERE COALESCE(enabled, 1) = 1 AND LOWER(twitch_username) = LOWER(?)
+    ORDER BY id
+  `).all(name).map((r) => r.id);
+}
+
 function updateChannelState(twitchUsername, updates) {
   const peakViewers = updates.peak_viewers ?? 0;
   _updateChannelState.run(
@@ -4076,7 +4088,10 @@ try {
       FOREIGN KEY (streamer_id) REFERENCES streamers(id)
     )
   `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_tracking_events_streamer_kind_date ON tracking_events(streamer_id, kind, created_at)`);
+  // The Twitch id makes it a covering index for a follow count (each account once) and the read-back's lookup; it
+  // replaces the three-column index of the first builds, which nothing else needs.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tracking_events_streamer_kind_date_user ON tracking_events(streamer_id, kind, created_at, twitch_user_id)`);
+  db.exec(`DROP INDEX IF EXISTS idx_tracking_events_streamer_kind_date`);
   db.exec(`
     CREATE TABLE IF NOT EXISTS tracking_goals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4145,9 +4160,12 @@ try {
 // number); readback_at is when a period follower goal's read-back of the
 // follows before its start succeeded (null: still to do); readback_capped is 1
 // when that read-back stopped at its cap with more followers left.
+// final_count is the count a goal showed when it ended (by hand, at the end of
+// its hours, replaced by a new goal, or another Twitch account linked), for the
+// past goals; null while it runs, and when it showed no number (unavailable).
 try {
   const cols = db.prepare('PRAGMA table_info(tracking_goals)').all().map((c) => c.name);
-  for (const [col, type] of [['twitch_unavailable', 'TEXT'], ['readback_at', 'TEXT'], ['readback_capped', 'INTEGER NOT NULL DEFAULT 0']]) {
+  for (const [col, type] of [['twitch_unavailable', 'TEXT'], ['readback_at', 'TEXT'], ['readback_capped', 'INTEGER NOT NULL DEFAULT 0'], ['final_count', 'INTEGER']]) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE tracking_goals ADD COLUMN ${col} ${type}`);
   }
 } catch (e) { _migrationLog('tracking_goals twitch state', e); }
@@ -5968,6 +5986,13 @@ function countTrackingEvents(streamerId, kind, start, end, { subTypes } = {}) {
   return db.prepare(`SELECT COALESCE(SUM(count), 0) AS n FROM tracking_events WHERE ${where.join(' AND ')}`).get(...params).n;
 }
 
+// The streamer's whole follow/sub record (their linked Twitch account changed:
+// the previous channel's follows and subs must not count for the new one).
+// Returns how many rows went.
+function deleteTrackingEvents(streamerId) {
+  return db.prepare('DELETE FROM tracking_events WHERE streamer_id = ?').run(streamerId).changes;
+}
+
 function cleanupOldTrackingEvents() {
   const result = db.prepare("DELETE FROM tracking_events WHERE created_at < datetime('now', '-400 days')").run();
   if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} tracking events older than 400 days`);
@@ -5987,17 +6012,19 @@ function getActiveTrackingGoal(streamerId, kind) {
 
 // The goals that ended and the periods a calendar goal finished, newest first,
 // as one list: { type: 'goal', ... } rows from tracking_goals (completed_at:
-// when it was reached, null when it never was) and { type: 'period', ... } rows
-// with their goal's title, each with `at`, the time it ended.
+// when it was reached, null when it never was; final_count: the count it showed
+// when it ended) and { type: 'period', ... } rows with their goal's title, each
+// with `at`, the time it ended, and the goal's time_zone.
 function getTrackingGoalHistory(streamerId, kind, limit) {
   const max = Math.max(1, Math.floor(Number(limit)) || 10);
   const goals = db.prepare(`
-    SELECT 'goal' AS type, id, title, target, bar_color, period, mode, started_at, ended_at, completed_at, ended_at AS at
+    SELECT 'goal' AS type, id, title, target, bar_color, period, mode, time_zone, started_at, ended_at, completed_at,
+      final_count, ended_at AS at
     FROM tracking_goals WHERE streamer_id = ? AND kind = ? AND status = 'ended'
     ORDER BY ended_at DESC, id DESC LIMIT ?
   `).all(streamerId, kind, max);
   const periods = db.prepare(`
-    SELECT 'period' AS type, p.id, p.goal_id, g.title, g.bar_color, g.period, g.mode,
+    SELECT 'period' AS type, p.id, p.goal_id, g.title, g.bar_color, g.period, g.mode, g.time_zone,
       p.period_start, p.period_end, p.count, p.target, p.reached, p.period_end AS at
     FROM tracking_goal_periods p JOIN tracking_goals g ON g.id = p.goal_id
     WHERE p.streamer_id = ? AND g.kind = ?
@@ -6011,11 +6038,13 @@ function getTrackingGoalHistory(streamerId, kind, limit) {
 // Starting a goal ends the active one of the same kind (one active goal per
 // streamer and kind); the other kind is left alone. fields: title, target,
 // bar_color, period, mode, hours, time_zone, period_start, lifetime_total.
-function createTrackingGoal(streamerId, kind, fields) {
+// replacedCount: the count the goal it replaces showed (its final_count; null
+// or none when it showed no number).
+function createTrackingGoal(streamerId, kind, fields, { replacedCount = null } = {}) {
   return db.transaction(() => {
     db.prepare(
-      "UPDATE tracking_goals SET status = 'ended', ended_at = datetime('now') WHERE streamer_id = ? AND kind = ? AND status = 'active'"
-    ).run(streamerId, kind);
+      "UPDATE tracking_goals SET status = 'ended', ended_at = datetime('now'), final_count = ? WHERE streamer_id = ? AND kind = ? AND status = 'active'"
+    ).run(finalCountOf(replacedCount), streamerId, kind);
     const lifetimeTotal = goalField(fields, 'lifetime_total', 'lifetimeTotal');
     const result = db.prepare(`
       INSERT INTO tracking_goals (streamer_id, kind, title, target, bar_color, period, mode, hours, time_zone,
@@ -6060,10 +6089,17 @@ function nudgeTrackingGoal(id, streamerId, delta, floor) {
   return db.prepare("SELECT * FROM tracking_goals WHERE id = ? AND streamer_id = ? AND status = 'active'").get(id, streamerId) || null;
 }
 
-function endTrackingGoal(id, streamerId) {
+// A count a goal ended with: a whole number of 0 or more, else null (unknown).
+function finalCountOf(value) {
+  const n = Number(value);
+  return value == null || value === '' || !Number.isFinite(n) ? null : Math.max(0, Math.floor(n));
+}
+
+// finalCount: the count the goal showed as it ended (null or none: it showed no number).
+function endTrackingGoal(id, streamerId, finalCount = null) {
   return db.prepare(
-    "UPDATE tracking_goals SET status = 'ended', ended_at = datetime('now') WHERE id = ? AND streamer_id = ? AND status = 'active'"
-  ).run(id, streamerId);
+    "UPDATE tracking_goals SET status = 'ended', ended_at = datetime('now'), final_count = ? WHERE id = ? AND streamer_id = ? AND status = 'active'"
+  ).run(finalCountOf(finalCount), id, streamerId);
 }
 
 // A calendar goal's period is over: writes it to the finished periods and
@@ -6377,6 +6413,7 @@ module.exports = {
   getChannelState,
   findChannelState,
   getEnabledStreamerTwitchLogins,
+  getEnabledStreamerIdsByTwitchLogin,
   updateChannelState,
   addWatchedYoutubeChannel,
   removeWatchedYoutubeChannel,
@@ -6720,6 +6757,7 @@ module.exports = {
   recordTrackingEvent,
   countTrackingEvents,
   cleanupOldTrackingEvents,
+  deleteTrackingEvents,
   getActiveTrackingGoal,
   getTrackingGoalHistory,
   createTrackingGoal,

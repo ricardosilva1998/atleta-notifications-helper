@@ -174,3 +174,20 @@ test('isTimeZone accepts IANA names and refuses others', () => {
   assert.ok(!P.isTimeZone(undefined));
   assert.ok(!P.isTimeZone(42));
 });
+
+// A zone typed in another case, or under an older alias, is the same zone: the goal stores the canonical name, and the
+// formatters are kept once per zone (never once per spelling).
+test('canonicalTimeZone gives Intl\'s name for a zone (case and aliases), null for no zone; the formatters are kept by it', () => {
+  assert.equal(P.canonicalTimeZone('europe/lisbon'), 'Europe/Lisbon');
+  assert.equal(P.canonicalTimeZone('US/Pacific'), 'America/Los_Angeles');
+  assert.equal(P.canonicalTimeZone('Mars/Base'), null);
+  assert.equal(P.canonicalTimeZone(''), null);
+  assert.equal(P.canonicalTimeZone(null), null);
+  for (const spelling of ['EUROPE/LISBON', 'europe/lisbon', 'Europe/Lisbon', 'eUrOpE/lIsBoN']) P.isTimeZone(spelling);
+  const now = Date.parse('2026-10-16T12:00:00Z');
+  assert.deepEqual(P.windowFor({ period: 'month', mode: 'calendar', time_zone: 'europe/lisbon' }, now),
+    P.windowFor({ period: 'month', mode: 'calendar', time_zone: 'Europe/Lisbon' }, now));
+  const zones = P.formatterZones();
+  assert.ok(zones.includes('Europe/Lisbon'));
+  assert.deepEqual(zones.filter((z) => z.toLowerCase() === 'europe/lisbon'), ['Europe/Lisbon']);
+});

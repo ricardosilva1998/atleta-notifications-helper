@@ -2416,6 +2416,7 @@
   "tts.sample.message": "Great race today!",
   "cards.donations.ttsSwitch": "Read tips aloud",
   "cards.donations.ttsOn": "Reading tips from {{amount}} · {{used}} of {{limit}} characters",
+  "tracking.past.ended": "Ended",
   "tracking.title": "Tracking",
   "tracking.intro": "Goal bars for your follows and subs, and small trackers of your latest follower, sub, tip, raid and bits. Each one is its own browser source in OBS.",
   "tracking.noLink": "Your goal bars and trackers need your OBS link, which you make on the overlay settings page.",

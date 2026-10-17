@@ -227,6 +227,30 @@ describe('the top tipper', () => {
     addTip(id, 'NoCurrency', 4, null);
     assert.deepEqual(setup().tr.topTipper(id), { name: 'NoCurrency', amount: 4, currency: 'GBP' });
   });
+
+  // A source opened before the stream started showed the last stream's top tipper; nothing else tells it the stream
+  // changed until the first tip of the new one.
+  test('streamStarted(login): every enabled streamer linked to that login is told the new stream\'s top tipper at once', () => {
+    const id = addStreamer({ donation_currency: 'EUR', twitch_username: 'Shared_Login' });
+    addStreamer({ donation_currency: 'EUR', twitch_username: 'shared_login', enabled: 0 });
+    addStreamer({ donation_currency: 'EUR' });
+    const start = Date.now() - 3 * HOUR;
+    addTip(id, 'LastStream', 9, 'EUR', sqlite(start + HOUR));
+    setStream(id, { live: true, startedAt: new Date(start).toISOString(), lastStartedAt: new Date(start).toISOString() });
+    const w = setup();
+    assert.deepEqual(w.tr.topTipper(id), { name: 'LastStream', amount: 9, currency: 'EUR' });
+
+    const next = Date.now() - 60e3;
+    setStream(id, { live: true, startedAt: new Date(next).toISOString(), lastStartedAt: new Date(next).toISOString() });
+    w.tr.streamStarted('SHARED_LOGIN');
+
+    assert.deepEqual(w.emitted, [{ channel: `tracker:${id}`, payload: { type: 'tracker', tracker: 'top_tipper', value: null } }],
+      'the disabled account and the other streamer are not told');
+    w.emitted.length = 0;
+    w.tr.streamStarted('');
+    w.tr.streamStarted(null);
+    assert.deepEqual(w.emitted, []);
+  });
 });
 
 describe('clearing the trackers', () => {

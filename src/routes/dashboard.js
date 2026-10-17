@@ -1487,8 +1487,8 @@ const TRACKING_TEXT_KEYS = {
   periodLifetime: 'tracking.short.lifetime', periodYear: 'tracking.short.year', periodMonth: 'tracking.short.month',
   periodWeek: 'tracking.short.week', periodDay: 'tracking.short.day', periodHours: 'tracking.short.hours',
   modeCalendar: 'tracking.short.calendar', modeRolling: 'tracking.short.rolling',
-  pastReached: 'tracking.past.reached', pastMissed: 'tracking.past.missed', pastCount: 'tracking.past.count',
-  pastTarget: 'tracking.past.target', pastEmpty: 'tracking.past.empty',
+  pastReached: 'tracking.past.reached', pastMissed: 'tracking.past.missed', pastEnded: 'tracking.past.ended',
+  pastCount: 'tracking.past.count', pastTarget: 'tracking.past.target', pastEmpty: 'tracking.past.empty',
   trackerShows: 'tracking.tracker.shows', trackerNothing: 'tracking.tracker.nothing', trackerOff: 'tracking.tracker.off',
   sampleName: 'tracking.tracker.sampleName', copied: 'tracking.copied', saved: 'tracking.saved',
   testing: 'tracking.goal.testing', endConfirm: 'tracking.goal.endConfirm',
@@ -1518,15 +1518,28 @@ const isoOf = (value) => {
   return m ? `${m[1]}T${m[2]}Z` : String(value);
 };
 
-// A past goal or finished period as the page lists it: reached or missed, and, for a period, its count.
+// A past goal or finished period as the page lists it. result: 'reached' or 'missed'; a calendar goal ended in the
+// middle of its period did not miss it, so it is 'ended' unless it was reached (a finished period stays reached or
+// missed). count: a period's count, or the count a goal showed when it ended (null when it showed none). A period's
+// end is its last moment (the stored end is the next period's start), so the page shows its last day; timeZone is a
+// calendar goal's, which the page shows the days in.
+const CALENDAR_PERIODS = new Set(['year', 'month', 'week', 'day']);
 function trackingHistoryRow(h) {
   const period = h.type === 'period';
+  const reached = period ? !!h.reached : !!h.completed_at;
+  const calendar = CALENDAR_PERIODS.has(h.period) && h.mode === 'calendar';
+  let result = reached ? 'reached' : 'missed';
+  if (!period && !reached && calendar) result = 'ended';
+  let end = isoOf(h.at);
+  if (period && end && Number.isFinite(Date.parse(end))) end = new Date(Date.parse(end) - 1).toISOString();
   return {
     title: h.title, period: h.period, mode: h.mode, target: h.target,
-    count: period ? h.count : null,
-    reached: period ? !!h.reached : !!h.completed_at,
+    count: period ? h.count : (h.final_count == null ? null : h.final_count),
+    reached,
+    result,
     start: isoOf(period ? h.period_start : h.started_at),
-    end: isoOf(h.at),
+    end,
+    timeZone: calendar && h.time_zone ? h.time_zone : null,
   };
 }
 

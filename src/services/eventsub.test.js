@@ -847,6 +847,27 @@ describe('the follow/sub record and the trackers (Tracking)', () => {
     assert.deepEqual(effects.records.map((r) => r.kind), ['follow', 'sub', 'sub']);
   });
 
+  // Both promise never to throw; if one ever did, the alert and the thank-you that follow must still go out.
+  test('a goal record or a tracker that throws costs neither the alert nor the thank-you', async () => {
+    const goals = stubs['./trackingGoals'];
+    const trackersStub = stubs['./trackers'];
+    const { recordEvent } = goals;
+    const { onEvent } = trackersStub;
+    goals.recordEvent = () => { throw new Error('synthetic record failure'); };
+    trackersStub.onEvent = () => { throw new Error('synthetic tracker failure'); };
+    try {
+      const socket = await connected();
+      socket.receive(notification('channel.follow', { user_id: '5001', user_name: 'Fan' }));
+      socket.receive(notification('channel.raid', { from_broadcaster_user_name: 'Raider', from_broadcaster_user_login: 'raider', from_broadcaster_user_id: '9002', viewers: 3 }));
+      assert.deepEqual(effects.overlay.map((e) => e.event.type), ['follow', 'raid']);
+      assert.deepEqual(effects.chat.map((c) => c.type), ['follow', 'raid']);
+      assert.deepEqual(effects.raidProtection, [1]);
+    } finally {
+      goals.recordEvent = recordEvent;
+      trackersStub.onEvent = onEvent;
+    }
+  });
+
   test('redemptions and polls reach neither', async () => {
     pollsScope = true;
     const socket = await connected();

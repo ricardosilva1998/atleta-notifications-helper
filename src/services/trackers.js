@@ -14,7 +14,8 @@
 // (donation_currency) since the stream started — the channel_state of the streamer's linked login, which the live
 // poller keeps for every enabled streamer's own channel: while live its stream_started_at, once it is over the last
 // stream's start (last_stream_started_at, kept until the next stream starts) — else over the last 12 hours. Names are
-// grouped whatever their case and "Anonymous" is left out; other currencies are never added in.
+// grouped whatever their case and "Anonymous" is left out; other currencies are never added in. When the poller sees
+// the stream start, the open sources are told at once (streamStarted, from pollers/manager.js).
 //
 // Linking another Twitch account clears the stored values (clear(), from accountLifecycle.twitchAccountChanged).
 //
@@ -115,6 +116,17 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     }
   }
 
+  // The live poller saw this login's stream start (a new broadcast, or another one replacing it): the top tipper of
+  // every enabled streamer linked to it starts over, so a source opened before the stream does not keep showing the
+  // last stream's donor until the first tip. Never throws.
+  function streamStarted(login) {
+    try {
+      for (const streamerId of db.getEnabledStreamerIdsByTwitchLogin(login)) broadcast(streamerId, 'top_tipper', topTipper(streamerId));
+    } catch (err) {
+      logger.error('[Trackers] streamStarted error:', err.message);
+    }
+  }
+
   // Removes the streamer's stored values and tells the open sources (the five stored ones empty, the top tipper as it
   // stands now), so nothing shows another channel's numbers after the linked Twitch account changed.
   function clear(streamerId) {
@@ -161,7 +173,7 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     return out;
   }
 
-  return { onEvent, onTip, topTipper, clear, values, valueOf, settings };
+  return { onEvent, onTip, streamStarted, topTipper, clear, values, valueOf, settings };
 }
 
 // The app's instance. The database is required when first used: it loads the app's config, which this file's unit
@@ -186,6 +198,7 @@ module.exports = {
   createTrackers,
   onEvent: (...args) => instance().onEvent(...args),
   onTip: (...args) => instance().onTip(...args),
+  streamStarted: (...args) => instance().streamStarted(...args),
   topTipper: (...args) => instance().topTipper(...args),
   clear: (...args) => instance().clear(...args),
   values: (...args) => instance().values(...args),

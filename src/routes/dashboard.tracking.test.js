@@ -291,7 +291,7 @@ describe('the goals', () => {
     assert.equal(res.json().state.goals.follow.goal.unavailable, 'needs_reconnect');
   });
 
-  test('edit, nudge and end: the state follows; the ended goal is a past goal, missed; ending stops the connections', async () => {
+  test('edit, nudge and end: the state follows; the ended calendar goal is a past goal, ended, with its count; ending stops the connections', async () => {
     const s = addStreamer();
     await request('POST', '/dashboard/api/tracking/goal/follow', { streamer: s, body: MONTHLY });
     managerCalls.length = 0;
@@ -315,6 +315,11 @@ describe('the goals', () => {
     assert.equal(st.goals.follow.history.length, 1);
     assert.equal(st.goals.follow.history[0].title, 'Road to 60');
     assert.equal(st.goals.follow.history[0].reached, false);
+    // Ruling 12: a calendar goal ended in the middle of its period did not miss it.
+    assert.equal(st.goals.follow.history[0].result, 'ended');
+    assert.equal(st.goals.follow.history[0].count, 3, 'the count it showed when it ended');
+    assert.equal(st.goals.follow.history[0].target, 60);
+    assert.equal(st.goals.follow.history[0].timeZone, 'Europe/Lisbon');
     assert.deepEqual(eventSubCalls(), [['eventsub.stop', s]]);
 
     for (const [method, route] of [['PATCH', ''], ['POST', '/nudge'], ['POST', '/end']]) {
@@ -330,6 +335,28 @@ describe('the goals', () => {
     await request('POST', '/dashboard/api/tracking/goal/follow/nudge', { streamer: s, body: { delta: 2 } });
     const st = (await request('POST', '/dashboard/api/tracking/goal/follow/end', { streamer: s })).json().state;
     assert.equal(st.goals.follow.history[0].reached, true);
+    assert.equal(st.goals.follow.history[0].result, 'reached');
+    assert.equal(st.goals.follow.history[0].count, 2);
+  });
+
+  test('a lifetime goal ended unreached is missed, with its count; it has no time zone', async () => {
+    const s = addStreamer();
+    await request('POST', '/dashboard/api/tracking/goal/follow', { streamer: s, body: LIFETIME });
+    const row = (await request('POST', '/dashboard/api/tracking/goal/follow/end', { streamer: s })).json().state.goals.follow.history[0];
+    assert.deepEqual([row.result, row.reached, row.count, row.target, row.timeZone], ['missed', false, 120, 500, null]);
+  });
+
+  // The page shows a finished period's days in the goal's time zone, the last one included: September in Lisbon runs
+  // from 2026-08-31T23:00Z up to (not including) 2026-09-30T23:00Z, so its last moment is 22:59:59.999Z on the 30th.
+  test('a finished period keeps reached or missed, with its count, its first moment and its last (inclusive), and the time zone', async () => {
+    const s = addStreamer();
+    const g = db.createTrackingGoal(s, 'follow', { title: 'Monthly', target: 50, bar_color: '#22c55e', period: 'month', mode: 'calendar', time_zone: 'Europe/Lisbon', period_start: '2026-08-31T23:00:00Z' });
+    db.rollTrackingGoal(g.id, { periodStart: '2026-08-31T23:00:00Z', periodEnd: '2026-09-30T23:00:00Z', count: 12, target: 50, reached: false, nextStart: '2026-09-30T23:00:00Z' });
+    const row = (await state(s)).goals.follow.history[0];
+    assert.deepEqual(row, {
+      title: 'Monthly', period: 'month', mode: 'calendar', target: 50, count: 12, reached: false, result: 'missed',
+      start: '2026-08-31T23:00:00Z', end: '2026-09-30T22:59:59.999Z', timeZone: 'Europe/Lisbon',
+    });
   });
 
   test('a test answers with the message the live bar got, so the preview draws the same; "small" is 5% of the target', async () => {

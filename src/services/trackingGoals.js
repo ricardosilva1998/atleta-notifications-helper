@@ -17,16 +17,17 @@
 //             rollover — at most 50 pages; past that the goal says `capped` while its window reaches back before
 //             its start. Subs cannot be read back.
 // A calendar goal that reaches the end of its period writes it to the finished periods (reached or missed) and starts
-// over with the same target (the minute tick); an hours goal ends at its end time. A goal is reached once: the first
-// time its count passes the target it is stamped (completed_at) and the sources celebrate (justCompleted); after that
-// the bar stays full, except a rolling goal's, which follows its count while staying reached, until an edit changes
-// the target. A goal whose Twitch read says the token lacks the scope, or that the channel has no subs, shows that
-// (`unavailable`) instead of a number.
+// over with the same target (the minute tick); an hours goal ends at its end time. A goal that ends (by hand, at the
+// end of its hours, replaced by a new one, or another Twitch account linked) keeps the count it showed (final_count). A
+// goal is reached once: the first time its count passes the target it is stamped (completed_at) and the sources
+// celebrate (justCompleted); after that the bar stays full, except a rolling goal's, which follows its count while
+// staying reached, until an edit changes the target. A goal whose Twitch read says the token lacks the scope, or that
+// the channel has no subs, shows that (`unavailable`) instead of a number.
 //
 // The database and Twitch are handed in (createTrackingGoals), so the unit tests run this on an in-memory database
 // with Twitch stubbed and a clock of their own; the app's instance requires them when first used.
 
-const { PERIODS, MODES, ROLLING_DAYS, isTimeZone, windowFor } = require('./goalPeriods');
+const { PERIODS, MODES, ROLLING_DAYS, canonicalTimeZone, windowFor } = require('./goalPeriods');
 const bus = require('./overlayBus');
 
 const KINDS = ['follow', 'sub'];
@@ -40,6 +41,7 @@ const READBACK_EVERY_MS = 30 * 60 * 1000; // a period follower goal's read-back
 const READBACK_PAGES = 50; // 100 followers a page: 5,000 followers
 const MAX_ROLLS = 400; // periods written in one tick for a goal (a daily goal after a long stop)
 const TEST_REVERT_MS = 10000;
+const START_DEADLINE_MS = 15000; // a lifetime start's Twitch read, refresh and retry included (the page waits 20 s)
 const TICK_EVERY_MS = 60 * 1000; // the minute tick (startTicks)
 const TEST_SAMPLE_TARGET = 10;
 const TEST_ADDED_MAX = 1000;
@@ -87,7 +89,8 @@ function parseLook(b) {
 
 // A goal as the Tracking page sends it (camelCase or column names): { ok: true, fields } with the column names
 // createTrackingGoal takes, or { ok: false, error } with the first thing that is wrong. A calendar goal needs an IANA
-// time zone; a rolling, lifetime or hours goal keeps none, and a lifetime or hours goal no mode.
+// time zone, stored under its canonical name (europe/lisbon is Europe/Lisbon); a rolling, lifetime or hours goal keeps
+// none, and a lifetime or hours goal no mode.
 function parseGoalFields(body) {
   const b = body && typeof body === 'object' ? body : {};
   const look = parseLook(b);
@@ -103,8 +106,8 @@ function parseGoalFields(body) {
     if (b.mode !== undefined && b.mode !== null && b.mode !== '') mode = b.mode;
     if (!MODES.includes(mode)) return { ok: false, error: 'bad_mode' };
     if (mode === 'calendar') {
-      timeZone = pick(b, 'timeZone', 'time_zone');
-      if (!isTimeZone(timeZone)) return { ok: false, error: 'bad_zone' };
+      timeZone = canonicalTimeZone(pick(b, 'timeZone', 'time_zone'));
+      if (!timeZone) return { ok: false, error: 'bad_zone' };
     }
   } else if (period === 'hours') {
     hours = wholeNumber(b.hours);
@@ -184,6 +187,12 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
       if (streamer && streamer.cp_affiliate_status === 'not_affiliate') return 'not_affiliate';
     }
     return null;
+  }
+
+  // The count a goal ends with (its final_count, for the past goals): what its bar shows, or null when it shows no
+  // number (unavailable).
+  function finalCount(goal, at) {
+    return unavailableOf(goal) ? null : shownCount(goal, at);
   }
 
   // Whether the read-back stopped at its cap AND the window still reaches back before the goal started (what came
@@ -275,16 +284,44 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     }
   }
 
-  const readTotal = (streamerId, kind) => ask(streamerId, kind, `${kind} total`,
-    (streamer) => (kind === 'follow' ? twitch.followerTotal(streamer) : twitch.subscriberTotal(streamer)));
+  // `signal` (optional): the caller's deadline for the whole read.
+  const readTotal = (streamerId, kind, signal) => ask(streamerId, kind, `${kind} total`,
+    (streamer) => (kind === 'follow' ? twitch.followerTotal(streamer, { signal }) : twitch.subscriberTotal(streamer, { signal })));
+
+  // A total read with one deadline (START_DEADLINE_MS) for all of it: past it the read is called off (its requests and
+  // the wait for a token refresh end) and it answers as Twitch not answering ({ ok: false, code: 'twitch_failed' }).
+  function readTotalBefore(streamerId, kind, ms) {
+    const controller = new AbortController();
+    let timer = null;
+    const late = new Promise((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        logger.warn(`[TrackingGoal] ${kind} total for streamer ${streamerId}: no answer within ${ms / 1000} s; the start is refused`);
+        resolve({ ok: false, code: 'twitch_failed' });
+      }, ms);
+    });
+    return Promise.race([readTotal(streamerId, kind, controller.signal), late]).finally(() => clearTimeout(timer));
+  }
 
   // Reads back the follows of the goal's window and writes the ones the record lacks. Returns the goal's new Twitch
   // state for setTrackingGoalTwitchState, or null when Twitch did not answer (nothing changes; it is tried again).
+  // The answer is written only while the goal is still the active one and the streamer is still linked to the
+  // channel that was read: a read-back takes up to 50 requests, and meanwhile the goal may end or another Twitch
+  // account may be linked (which ends the goal and removes the record) — then nothing changes (null).
   async function readBack(streamerId, goal, at) {
     const since = countWindow(goal, at).start;
-    const result = await ask(streamerId, 'follow', 'Follower read-back',
-      (streamer) => twitch.followersSince(streamer, since.toISOString(), READBACK_PAGES));
+    let readUserId = null;
+    const result = await ask(streamerId, 'follow', 'Follower read-back', (streamer) => {
+      readUserId = streamer ? streamer.twitch_user_id : null;
+      return twitch.followersSince(streamer, since.toISOString(), READBACK_PAGES);
+    });
     if (result.ok) {
+      const active = db.getActiveTrackingGoal(streamerId, 'follow');
+      const streamer = db.getStreamerById(streamerId);
+      if (!active || active.id !== goal.id || !streamer || String(streamer.twitch_user_id) !== String(readUserId)) {
+        logger.log(`[TrackingGoal] Follower read-back for streamer ${streamerId} dropped: its goal ended or the linked Twitch account changed`);
+        return null;
+      }
       const { followers, complete } = result.value || {};
       const written = db.backfillTrackingFollows(streamerId, followers, since);
       if (written) logger.log(`[TrackingGoal] Read back ${written} follows for streamer ${streamerId}${complete ? '' : ' (capped)'}`);
@@ -305,7 +342,9 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
   // token without the scope or a channel without subs starts it showing that, while a read Twitch does not answer
   // refuses the start (rejects with code 'twitch_failed') and leaves the active goal as it was. A follower goal of a
   // year, month, week or day starts at once from the record and reads back the follows of its window in the
-  // background. `fields` come from parseGoalFields. Resolves to the payload.
+  // background. The lifetime read has one 15 s deadline (refresh and retry included): past it the start is refused
+  // with twitch_failed, so the page (which waits 20 s) always gets the answer. `fields` come from parseGoalFields.
+  // Resolves to the payload.
   async function startGoal(streamer, kind, fields) {
     if (!KINDS.includes(kind)) throw new Error(`unknown goal kind: ${kind}`);
     const streamerId = streamer.id;
@@ -316,7 +355,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     const goalFields = { ...fields, period_start: draft.period_start || null };
     let state = null;
     if (fields.period === 'lifetime') {
-      const result = await readTotal(streamerId, kind);
+      const result = await readTotalBefore(streamerId, kind, START_DEADLINE_MS);
       if (result.ok) {
         goalFields.lifetime_total = Number(result.value) || 0;
       } else if (result.code === 'twitch_failed') {
@@ -328,7 +367,10 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
       }
     }
 
-    const goal = db.createTrackingGoal(streamerId, kind, goalFields);
+    // The goal this one replaces keeps the count it showed (worked out right before it ends, with no wait between).
+    const previous = db.getActiveTrackingGoal(streamerId, kind);
+    const replacedCount = previous ? finalCount(previous, clock()) : null;
+    const goal = db.createTrackingGoal(streamerId, kind, goalFields, { replacedCount });
     if (state) {
       db.setTrackingGoalTwitchState(goal.id, state);
       noteUnavailable(goal, state.unavailable);
@@ -388,7 +430,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
   function endGoal(streamerId, kind) {
     const goal = db.getActiveTrackingGoal(streamerId, kind);
     if (!goal) return false;
-    const ended = db.endTrackingGoal(goal.id, streamerId).changes > 0;
+    const ended = db.endTrackingGoal(goal.id, streamerId, finalCount(goal, clock())).changes > 0;
     broadcast(streamerId, kind);
     return ended;
   }
@@ -494,7 +536,7 @@ function createTrackingGoals({ db, twitch, emit, now = Date.now, logger = consol
     for (const goal of goals) {
       try {
         if (goal.period === 'hours') {
-          if (+at >= +windowFor(goal, at).end && db.endTrackingGoal(goal.id, goal.streamer_id).changes > 0) {
+          if (+at >= +windowFor(goal, at).end && db.endTrackingGoal(goal.id, goal.streamer_id, finalCount(goal, at)).changes > 0) {
             logger.log(`[TrackingGoal] ${goal.kind} goal "${goal.title}" of streamer ${goal.streamer_id} ended (its hours are over)`);
             broadcast(goal.streamer_id, goal.kind);
           }

@@ -433,8 +433,10 @@ function trackingError(code, message) {
 // refreshed first and a 401 refreshes once more, then the call is retried. The
 // returned reader keeps the token it ended with, so a read of several pages
 // refreshes at most once. `onStatus` may turn an answer into an error code
-// before the generic mapping.
-function broadcasterReader(streamer, scope, onStatus) {
+// before the generic mapping. `signal` (optional) is the caller's own deadline
+// for the whole read: it ends each request (next to its 10 s) and the wait for
+// a token refresh, either way as twitch_failed.
+function broadcasterReader(streamer, scope, onStatus, signal) {
   if (!streamer || !streamer.twitch_user_id) {
     throw trackingError('needs_reconnect', 'Twitch is not linked');
   }
@@ -448,10 +450,10 @@ function broadcasterReader(streamer, scope, onStatus) {
   async function refresh() {
     refreshed = true;
     try {
-      token = await refreshBroadcasterTokenShared(streamer);
+      token = await untilAborted(refreshBroadcasterTokenShared(streamer), signal);
     } catch (err) {
-      if (err.code === 'INVALID_REFRESH_TOKEN') throw trackingError('needs_reconnect', 'Twitch refused the refresh token');
-      throw trackingError('twitch_failed', `Token refresh failed: ${err.message}`);
+      if (err && err.code === 'INVALID_REFRESH_TOKEN') throw trackingError('needs_reconnect', 'Twitch refused the refresh token');
+      throw trackingError('twitch_failed', `Token refresh failed: ${err && err.message}`);
     }
   }
 
@@ -459,10 +461,10 @@ function broadcasterReader(streamer, scope, onStatus) {
     try {
       return await fetch(url, {
         headers: { Authorization: `Bearer ${token}`, 'Client-Id': config.twitch.clientId },
-        signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+        signal: signal ? AbortSignal.any([AbortSignal.timeout(HELIX_TIMEOUT_MS), signal]) : AbortSignal.timeout(HELIX_TIMEOUT_MS),
       });
     } catch (err) {
-      throw trackingError('twitch_failed', `Twitch did not answer: ${err.message}`);
+      throw trackingError('twitch_failed', `Twitch did not answer: ${err && err.message}`);
     }
   };
   return async function read(url) {
@@ -489,17 +491,18 @@ function broadcasterReader(streamer, scope, onStatus) {
 
 // Followers need the broadcaster's own token; a 403 means the token is not the
 // broadcaster's (or a moderator's), which only a reconnect fixes.
-const followersReader = (streamer) => broadcasterReader(streamer, FOLLOWERS_SCOPE, (status) => (status === 403 ? 'needs_reconnect' : null));
+const followersReader = (streamer, signal) => broadcasterReader(streamer, FOLLOWERS_SCOPE, (status) => (status === 403 ? 'needs_reconnect' : null), signal);
 
-async function followerTotal(streamer) {
-  const read = followersReader(streamer);
+// The totals take { signal }: the caller's deadline for the whole read (a goal's start).
+async function followerTotal(streamer, { signal } = {}) {
+  const read = followersReader(streamer, signal);
   const params = new URLSearchParams({ broadcaster_id: streamer.twitch_user_id, first: '1' });
   const data = await read(`https://api.twitch.tv/helix/channels/followers?${params}`);
   return Number(data && data.total) || 0;
 }
 
-async function subscriberTotal(streamer) {
-  const read = broadcasterReader(streamer, SUBSCRIPTIONS_SCOPE, (status) => (status === 400 || status === 403 ? 'not_affiliate' : null));
+async function subscriberTotal(streamer, { signal } = {}) {
+  const read = broadcasterReader(streamer, SUBSCRIPTIONS_SCOPE, (status) => (status === 400 || status === 403 ? 'not_affiliate' : null), signal);
   const params = new URLSearchParams({ broadcaster_id: streamer.twitch_user_id, first: '1' });
   const data = await read(`https://api.twitch.tv/helix/subscriptions?${params}`);
   return Number(data && data.total) || 0;

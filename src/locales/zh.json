@@ -2416,6 +2416,7 @@
   "tts.sample.message": "今天的比赛太棒了！",
   "cards.donations.ttsSwitch": "朗读打赏",
   "cards.donations.ttsOn": "朗读 {{amount}} 起的打赏 · 已用 {{used}} / {{limit}} 个字符",
+  "tracking.past.ended": "已结束",
   "tracking.title": "追踪",
   "tracking.intro": "为你的关注和订阅设置目标进度条，并用小型追踪器显示最新的关注者、订阅、打赏、突袭和 Bits。每一个都是 OBS 中独立的浏览器来源。",
   "tracking.noLink": "目标进度条和追踪器需要你的 OBS 链接，请在叠加层设置页面创建。",

@@ -104,6 +104,10 @@ const discordStub = {
   buildIracingResultEmbed: () => ({}),
 };
 
+// Tracking's trackers: the manager tells them when a channel's stream starts.
+const streamStarts = [];
+const trackersStub = { streamStarted: (login) => streamStarts.push(login) };
+
 const noopPollers = ['./twitchClips', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed', './iracingResults'];
 
 let db;
@@ -127,6 +131,7 @@ before(() => {
       if (request === '../services/iracing') return { isConfigured: () => false };
       if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/youtubeLiveChat') return chatManagerStub;
+      if (request === '../services/trackers') return trackersStub;
       if (noopPollers.includes(request)) return {};
     }
     if (from === LIVE_FILE) {
@@ -196,6 +201,7 @@ beforeEach(() => {
   for (const list of Object.values(calls)) list.length = 0;
   sent.length = 0;
   logs.length = 0;
+  streamStarts.length = 0;
   liveStreams = {};
   failBatch = null;
   holdBatches = null;
@@ -323,6 +329,24 @@ describe('pollAllTwitchLive: the streamers\' own channels', () => {
     assert.deepEqual(sent, [], 'no go-live post, recap or milestone for a channel no server watches');
     assert.equal(calls.getFollowerCount.length, 0, 'no milestone check');
     assert.equal(calls.getSubscriberCount.length, 0);
+  });
+
+  // The top tipper of the stream starts over when the stream does, so a tracker source opened before it went live does
+  // not keep the last stream's donor until the first tip.
+  test('a stream that starts, or another broadcast that replaces it, tells the trackers once; one still running does not', async () => {
+    addStreamer({ twitch_username: 'own_channel' });
+    liveStreams.own_channel = stream('own_channel');
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel']);
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel'], 'the same broadcast still live');
+    liveStreams.own_channel = stream('own_channel', { id: '4000000002', started_at: new Date(Date.now() - 60e3).toISOString() });
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel', 'own_channel'], 'another broadcast replaced it');
+    delete liveStreams.own_channel;
+    await pollTwitchLive();
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel', 'own_channel'], 'an end tells nothing');
   });
 
   test('the channel list is logged once, not on every poll', async () => {

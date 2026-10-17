@@ -48,7 +48,7 @@ function reply(status, body) {
 function stubFetch(handler, refresh) {
   calls = [];
   global.fetch = async (url, opts = {}) => {
-    const call = { url: String(url), auth: opts.headers && opts.headers.Authorization };
+    const call = { url: String(url), auth: opts.headers && opts.headers.Authorization, signal: opts.signal };
     calls.push(call);
     if (call.url.startsWith('https://id.twitch.tv/oauth2/token')) {
       return refresh ? refresh() : reply(200, { access_token: 'new-token', refresh_token: 'new-refresh', expires_in: 3600 });
@@ -179,6 +179,28 @@ describe('followerTotal / subscriberTotal', () => {
     await assert.rejects(() => twitch.followerTotal(streamer()), { code: 'twitch_failed' });
     stubFetch(() => { const e = new Error('timed out'); e.name = 'TimeoutError'; throw e; });
     await assert.rejects(() => twitch.subscriberTotal(streamer()), { code: 'twitch_failed' });
+  });
+});
+
+// A lifetime goal's start has one deadline for its whole read (services/trackingGoals.js): its signal ends the request
+// and the wait for a token refresh, so the start answers before the page gives up.
+describe('a caller\'s deadline (signal)', () => {
+  test('reaches the request: aborting it aborts the fetch', async () => {
+    stubFetch(() => reply(200, { total: 3 }));
+    const controller = new AbortController();
+    assert.equal(await twitch.followerTotal(streamer(), { signal: controller.signal }), 3);
+    controller.abort();
+    assert.equal(helix()[0].signal.aborted, true);
+  });
+
+  test('ends the wait for a token refresh that hangs: twitch_failed', async () => {
+    stubFetch(() => reply(200, { total: 3 }), () => new Promise(() => {}));
+    const controller = new AbortController();
+    // Its own streamer id: the hung refresh stays in the shared refresh lock.
+    const read = twitch.subscriberTotal(streamer({ id: 77, broadcaster_token_expires_at: Date.now() - 1000 }), { signal: controller.signal });
+    setImmediate(() => controller.abort());
+    await assert.rejects(read, { code: 'twitch_failed' });
+    assert.equal(helix().length, 0);
   });
 });
 

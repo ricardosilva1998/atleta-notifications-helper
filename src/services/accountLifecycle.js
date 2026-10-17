@@ -75,15 +75,16 @@ function stopLiveServices(streamerId, services, { pauseYoutubeChat = false } = {
 
 // Restarts what the streamer had switched on, under the same conditions the
 // managers use when the app boots. The event connections (EventSub,
-// StreamElements, the sponsor rotation) serve the overlay and the chatbot, so
-// either one being on starts them (db.getOverlayOrChatbotStreamers); each
+// StreamElements, the sponsor rotation) serve the overlay, the chatbot and
+// Tracking, so any one of them in use starts them
+// (db.getOverlayOrChatbotStreamers, db.usesTracking); each
 // keeps its own condition: EventSub needs the broadcaster authorization,
 // StreamElements its token, and the sponsor manager starts only the rotations
 // the streamer switched on.
 function startLiveServices(streamerId, services) {
   const streamer = services.db.getStreamerById(streamerId);
   if (!streamer) return;
-  if (streamer.overlay_enabled || streamer.chatbot_enabled) {
+  if (streamer.overlay_enabled || streamer.chatbot_enabled || services.db.usesTracking(streamerId)) {
     if (streamer.broadcaster_access_token) {
       attempt('EventSub start', streamerId, () => services.eventSubManager.startForStreamer(streamerId));
     }
@@ -140,7 +141,9 @@ function removeAccount(streamerId, services = liveServices()) {
 // broadcaster authorization that belonged to the previous account). What ran for
 // that account stops: EventSub; the poll and prediction the Polls & predictions
 // card and the bar showed are forgotten (an open bar clears, and the card reads
-// the new channel); the active follower and sub goals end and the trackers are
+// the new channel); the active follower and sub goals end (each keeping the
+// count it showed), the record of the previous channel's follows and subs is
+// removed (a goal started later must not count them) and the trackers are
 // cleared (their open sources too), so nothing shows the previous channel's
 // numbers; and the chat bot leaves the previous channel
 // (previousUsername, which the database no longer holds) and joins the new one
@@ -153,6 +156,7 @@ function twitchAccountChanged(streamerId, previousUsername, services = twitchSer
   for (const kind of services.trackingGoals.KINDS) {
     attempt('Tracking goal end', streamerId, () => services.trackingGoals.endGoal(streamerId, kind));
   }
+  attempt('Tracking record removal', streamerId, () => services.db.deleteTrackingEvents(streamerId));
   attempt('Trackers clear', streamerId, () => services.trackers.clear(streamerId));
   if (previousUsername) {
     attempt('Twitch chat leave', streamerId, () => services.chatManager.partChannel(previousUsername));

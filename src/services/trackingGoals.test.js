@@ -111,6 +111,13 @@ describe('parseGoalFields', () => {
     assert.equal(parseGoalFields({ title: 'x', target: 5, period: 'day', mode: 'rolling', timeZone: 'Mars/Base' }).fields.time_zone, null);
   });
 
+  test('stores a time zone under its canonical name, whatever case or alias was sent', () => {
+    const zone = (timeZone) => parseGoalFields({ title: 'x', target: 5, period: 'month', mode: 'calendar', timeZone }).fields.time_zone;
+    assert.equal(zone('europe/lisbon'), 'Europe/Lisbon');
+    assert.equal(zone('US/Pacific'), 'America/Los_Angeles');
+    assert.equal(zone('utc'), 'UTC');
+  });
+
   test('refuses a time zone that is not an IANA name (Mars/Base), or none, for a calendar goal', () => {
     assert.deepEqual(parseGoalFields({ title: 'x', target: 5, period: 'month', mode: 'calendar', timeZone: 'Mars/Base' }), { ok: false, error: 'bad_zone' });
     assert.deepEqual(parseGoalFields({ title: 'x', target: 5, period: 'year', mode: 'calendar' }), { ok: false, error: 'bad_zone' });
@@ -222,6 +229,27 @@ describe('lifetime goals', () => {
     await assert.rejects(w.tg.startGoal({ id: s }, 'follow', fields({ title: 'Second' })), { code: 'twitch_failed' });
     assert.equal(w.tg.progressOf(s, 'follow').id, first.id);
     assert.equal(w.tg.progressOf(s, 'follow').title, 'First');
+  });
+
+  // The Tracking page gives up on a request after 20 s; the start's read (a refresh and a retry included) has one
+  // 15 s deadline, so the page always gets the answer.
+  test('a start whose Twitch read takes past 15 s is refused with twitch_failed at 15 s, and the read is called off', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const s = addStreamer();
+    let signal;
+    const w = setup({ followerTotal: (streamer, options) => { signal = options && options.signal; return new Promise(() => {}); } });
+    let outcome = null;
+    w.tg.startGoal({ id: s }, 'follow', fields()).then(() => { outcome = 'started'; }, (err) => { outcome = err.code; });
+    await flush();
+    t.mock.timers.tick(14999);
+    await flush();
+    assert.equal(outcome, null, 'still waiting just before the deadline');
+    assert.equal(signal.aborted, false);
+    t.mock.timers.tick(1);
+    await flush();
+    assert.equal(outcome, 'twitch_failed');
+    assert.equal(signal.aborted, true, 'the read is called off');
+    assert.equal(db.getActiveTrackingGoal(s, 'follow'), null, 'nothing started');
   });
 
   test('tick re-reads a total older than 10 minutes only while a source is connected', async () => {
@@ -470,6 +498,24 @@ describe('the follower read-back of a period goal', () => {
     assert.equal(w.tg.progressOf(s, 'follow').current, 1);
   });
 
+  // A read-back can take up to 50 requests; meanwhile the goal may end, or the streamer may link another Twitch
+  // account (which ends it and removes the record). The previous channel's followers must not be written then.
+  test('a read-back answered after its goal ended, or after another Twitch account was linked, writes nothing', async () => {
+    for (const change of ['ended', 'relinked']) {
+      const s = addStreamer();
+      let answer;
+      const w = setup({ followersSince: () => new Promise((resolve) => { answer = resolve; }) });
+      await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'week', mode: 'rolling' }));
+      const goal = db.getActiveTrackingGoal(s, 'follow');
+      if (change === 'ended') w.tg.endGoal(s, 'follow');
+      else db.db.prepare('UPDATE streamers SET twitch_user_id = ?, twitch_username = ? WHERE id = ?').run('99999', 'newchan', s);
+      answer({ followers: [{ userId: '1', login: 'a', followedAt: new Date(w.t - HOUR).toISOString() }], complete: true });
+      await flush();
+      assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM tracking_events WHERE streamer_id = ?').get(s).n, 0, change);
+      assert.equal(db.db.prepare('SELECT readback_at FROM tracking_goals WHERE id = ?').get(goal.id).readback_at, null, change);
+    }
+  });
+
   test('read back again at most every 30 minutes while a source is open, recording only what the record lacks', async () => {
     const s = addStreamer();
     const t = Date.parse('2026-10-16T12:00:00Z');
@@ -627,6 +673,40 @@ describe('editing, nudging and ending', () => {
     assert.equal(w.tg.progressOf(s, 'follow'), null);
     assert.notEqual(w.tg.progressOf(s, 'sub'), null);
     assert.equal(w.tg.endGoal(s, 'follow'), false);
+  });
+
+  // The past goals list "count / target", as the tip goal's do.
+  test('a goal keeps the count it showed when it ends: by hand, at the end of its hours, replaced by a new one; unavailable is no count', async () => {
+    const final = (id) => db.db.prepare('SELECT final_count FROM tracking_goals WHERE id = ?').get(id).final_count;
+    const s = addStreamer();
+    const w = setup({ followerTotal: 120, subscriberTotal: twitchError('needs_reconnect') });
+
+    await w.tg.startGoal({ id: s }, 'follow', fields());
+    w.tg.nudgeGoal(s, 'follow', 5);
+    const byHand = db.getActiveTrackingGoal(s, 'follow');
+    w.tg.endGoal(s, 'follow');
+    assert.equal(final(byHand.id), 125);
+
+    insertEventAt(s, 'follow', sqlite(w.t - HOUR), { twitchUserId: '1' });
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'week', mode: 'rolling' }));
+    await flush();
+    w.tg.nudgeGoal(s, 'follow', 2);
+    const replaced = db.getActiveTrackingGoal(s, 'follow');
+    await w.tg.startGoal({ id: s }, 'follow', fields({ period: 'hours', hours: 2 }));
+    await flush();
+    assert.equal(final(replaced.id), 3, 'the replaced goal: one follow and the nudge');
+
+    const hours = db.getActiveTrackingGoal(s, 'follow');
+    w.tg.recordEvent(s, 'follow', { twitchUserId: '2' });
+    w.t += 2 * HOUR + MIN;
+    await w.tg.tick();
+    assert.equal(db.getActiveTrackingGoal(s, 'follow'), null);
+    assert.equal(final(hours.id), 1, 'the follow of its hours');
+
+    await w.tg.startGoal({ id: s }, 'sub', fields());
+    const unavailable = db.getActiveTrackingGoal(s, 'sub');
+    w.tg.endGoal(s, 'sub');
+    assert.equal(final(unavailable.id), null);
   });
 });
 

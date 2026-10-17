@@ -360,17 +360,26 @@ class EventSubClient {
     try { db.logOverlayEvent(this.streamerId, alert.type, alert.data?.username, alert.data); } catch (e) {}
 
     // Tracking: follows and subs go to Atleta's record (and the goals that count them), and the five events to the
-    // trackers. Neither throws, whatever the overlay and chatbot switches say.
+    // trackers, whatever the overlay and chatbot switches say. Neither should throw; if one ever does, the thank-you
+    // below still goes out.
     const recordKind = RECORD_KINDS[alert.type];
     if (recordKind && record) {
-      trackingGoals.recordEvent(this.streamerId, recordKind, {
-        subType: record.subType || null,
-        twitchUserId: record.userId || null,
-        username: alert.data?.username,
-        count: record.count || 1,
-      });
+      try {
+        trackingGoals.recordEvent(this.streamerId, recordKind, {
+          subType: record.subType || null,
+          twitchUserId: record.userId || null,
+          username: alert.data?.username,
+          count: record.count || 1,
+        });
+      } catch (e) {
+        console.error(`[EventSub] Tracking record failed for streamer ${this.streamerId}:`, e.message);
+      }
     }
-    trackers.onEvent(this.streamerId, alert);
+    try {
+      trackers.onEvent(this.streamerId, alert);
+    } catch (e) {
+      console.error(`[EventSub] Trackers failed for streamer ${this.streamerId}:`, e.message);
+    }
 
     // Emit to chat service
     chatManager.sendEventMessage(this.streamerId, alert.type, alert.data);
