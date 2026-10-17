@@ -3869,7 +3869,7 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       const page = body(res.text);
       for (const href of ['/dashboard/overlay', '/dashboard/overlay-builder', '/dashboard/tracking', '/dashboard/redemptions']) assert.ok(page.includes(`href="${href}"`), href);
       for (const key of ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental', 'dashboard.youtube.overlayDesc',
-        'cards.overlay.sources', 'cards.tracking.tipTitle', 'cards.sponsors.images', 'dashboard.kick.comingSoon']) {
+        'cards.overlay.sources', 'cards.tracking.tipTitle', 'cards.tiles.sponsorImages', 'dashboard.kick.comingSoon']) {
         assert.ok(page.includes(esc(t('en', key))), key);
       }
       assert.ok(page.includes('data-tab="experimental"') && page.includes('id="tab-experimental"'));
@@ -5288,7 +5288,7 @@ describe('the working cards on the page', () => {
     assert.ok(card.includes('Marta · €10.00'), 'an amount in its currency');
     assert.ok(card.includes(esc(t('en', 'cards.tracking.nothingYet'))));
     assert.equal((card.match(/data-tracker-test="\w+"/g) || []).length, 6);
-    assert.match(card, /<a href="\/dashboard\/tracking">/);
+    assert.match(card, /<a class="wc-tile" href="\/dashboard\/tracking">/);
     assert.ok(card.includes('<template id="tpl-track-goal">'));
   });
 
@@ -5365,11 +5365,26 @@ describe('the working cards on the page', () => {
     assert.ok(!rowHtml('alwayson').includes(hint), rowHtml('alwayson'));
   });
 
-  test('the Commands and Sponsor messages cards link their full pages from their foot', async () => {
-    const html = await pane(linkedStreamer({ chatbot_enabled: 1 }));
-    const foot = (name) => { const card = cardOf(html, name); return card.slice(card.indexOf('<div class="wc-foot">')); };
-    assert.match(foot('commands'), new RegExp(`^<div class="wc-foot"><a href="/dashboard/chatbot\\?tab=commands">${esc(t('en', 'cards.commands.allSettings'))} <svg`));
-    assert.ok(foot('sponsors').includes(`<a href="/dashboard/timed-notifications">${esc(t('en', 'cards.sponsors.allSettings'))} <svg`));
+  test('the cards link their full pages as tiles at their foot: an icon, a name and a hint, one across or two to a row', async () => {
+    const html = await pane(linkedStreamer({ chatbot_enabled: 1, overlay_token: 'synthetic-token-wcp-tiles' }));
+    const tilesOf = (name) => {
+      const card = cardOf(html, name);
+      const foot = card.slice(card.indexOf('<div class="wc-foot wc-foot-tiles">'));
+      assert.ok(foot.startsWith('<div class="wc-foot wc-foot-tiles">'), `${name} has a tile foot`);
+      return [...foot.matchAll(/<a class="wc-tile" href="([^"]+)"[^>]*><svg class="i" aria-hidden="true"><use href="#(i-[a-z]+)"\/><\/svg><span class="tt">([^<]+)<\/span><small>([^<]+)<\/small><\/a>/g)].map((m) => [m[1], m[2], m[3], m[4]]);
+    };
+    assert.deepEqual(tilesOf('commands'), [['/dashboard/chatbot?tab=commands', 'i-gear', esc(t('en', 'cards.tiles.allSettings')), esc(t('en', 'cards.tiles.commandsHint'))]]);
+    assert.match(cardOf(html, 'commands'), /<nav class="wc-tiles one"/, 'one tile goes across the card');
+    assert.deepEqual(tilesOf('sponsors').map((tile) => tile[0]), ['/dashboard/timed-notifications', '/dashboard/overlay-builder?tab=timed']);
+    assert.match(cardOf(html, 'sponsors'), /<nav class="wc-tiles" aria-label=/, 'two tiles to a row');
+    assert.deepEqual(tilesOf('protection').map((tile) => [tile[0], tile[1]]), [['/dashboard/chatbot/mod-log', 'i-list'], ['/dashboard/chatbot?tab=moderation', 'i-gear']]);
+    assert.equal(tilesOf('protection')[0][3], esc(t('en', 'cards.tiles.modLogHint', { count: 0 })), 'the mod log tile counts this week');
+    for (const name of ['chatbot', 'donations', 'giveaways', 'rewards', 'tracking']) assert.ok(tilesOf(name).length >= 1, name);
+    for (const name of ['chatbot', 'commands', 'sponsors', 'protection', 'giveaways', 'rewards', 'donations', 'tracking']) {
+      const card = cardOf(html, name);
+      const foot = card.slice(card.indexOf('<div class="wc-foot'));
+      assert.ok(!foot.includes('href="#i-right"'), `${name}: no old › link left in its foot`);
+    }
   });
 
   test('cards that are not set up show their one step: link Twitch, add a PayPal email, connect Spotify', async () => {

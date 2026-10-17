@@ -1,0 +1,8 @@
+<%# The pages a working card leads to, as tiles (an icon, a name and a short hint), as on the OBS overlay card: two to a
+    row, or one across the card. `tiles`: [{ href, icon, title, hint, openTab? }] with their texts already translated
+    (openTab: a dashboard tab the tile opens instead, data-open-tab); `label`: the card's name, for the nav. %>
+<nav class="wc-tiles<%= tiles.length === 1 ? ' one' : '' %>" aria-label="<%= label %>">
+<% for (const tile of tiles) { %>
+  <a class="wc-tile" href="<%= tile.href %>"<% if (tile.openTab) { %> data-open-tab="<%= tile.openTab %>"<% } %>><svg class="i" aria-hidden="true"><use href="#<%= tile.icon %>"/></svg><span class="tt"><%= tile.title %></span><small><%= tile.hint %></small></a>
+<% } %>
+</nav>

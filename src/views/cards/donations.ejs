@@ -36,5 +36,5 @@
   <% } %>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><a href="/dashboard/donations"><%= t('cards.donations.paypal') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <div class="wc-foot wc-foot-tiles"><%- include('_tiles', { label: t('dashboard.cards.donations.title'), tiles: [{ href: '/dashboard/donations', icon: 'i-dollar', title: t('cards.donations.paypal'), hint: t('cards.tiles.donationsHint') }] }) %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
 </section>

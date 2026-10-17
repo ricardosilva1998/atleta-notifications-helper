@@ -25,7 +25,7 @@
   <% } %>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><a href="/dashboard/chatbot"><%= t('cards.chatbot.allSettings') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <div class="wc-foot wc-foot-tiles"><%- include('_tiles', { label: t('dashboard.cards.chatbot.title'), tiles: [{ href: '/dashboard/chatbot', icon: 'i-gear', title: t('cards.tiles.allSettings'), hint: t('cards.tiles.chatbotHint') }] }) %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
   <template id="tpl-thankyou">
     <div class="wc-editor">
       <h4 id="wc-dialog-title" data-title></h4>

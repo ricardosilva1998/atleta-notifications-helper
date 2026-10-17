@@ -30,5 +30,5 @@
     </div>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><a href="/dashboard/giveaways"><%= t('cards.giveaways.past') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+  <div class="wc-foot wc-foot-tiles"><%- include('_tiles', { label: t('dashboard.cards.giveaways'), tiles: [{ href: '/dashboard/giveaways', icon: 'i-clock', title: t('cards.giveaways.past'), hint: t('cards.tiles.giveawaysHint') }] }) %></div>
 </section>

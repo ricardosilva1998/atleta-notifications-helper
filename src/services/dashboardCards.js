@@ -370,7 +370,7 @@ function protectionCard({ streamer, bot, bannedWords, modActionsThisWeek }) {
     // Twitch told the bot, in the streamer's channel, that it is not a moderator there (moderatorStatus()).
     moderatorNote: !!streamer.chatbot_enabled && bot.moderator === false && !!bot.username,
     botName: bot.username || '',
-    modLog: label('cards.protection.modLog', { count: modActionsThisWeek }),
+    modLog: label('cards.tiles.modLogHint', { count: modActionsThisWeek }),
     counts: {},
   };
 }

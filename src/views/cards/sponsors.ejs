@@ -24,7 +24,9 @@
     <% if (card.messages.some((m) => m.extra)) { %><button type="button" class="wc-more" data-show-all="wc-sponsors"><%= t('cards.common.showAll', { count: card.messages.length }) %></button><% } %>
   </div>
   <div class="wc-msg" data-msg hidden></div>
-  <div class="wc-foot"><a href="/dashboard/timed-notifications"><%= t('cards.sponsors.allSettings') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><% if (card.imagesLink) { %><a href="/dashboard/overlay-builder?tab=timed"><%= t('cards.sponsors.images') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><% } %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <% const _tiles = [{ href: '/dashboard/timed-notifications', icon: 'i-gear', title: t('cards.tiles.allSettings'), hint: t('cards.tiles.sponsorsHint') }];
+     if (card.imagesLink) _tiles.push({ href: '/dashboard/overlay-builder?tab=timed', icon: 'i-image', title: t('cards.tiles.sponsorImages'), hint: t('cards.tiles.sponsorImagesHint') }); %>
+  <div class="wc-foot wc-foot-tiles"><%- include('_tiles', { label: t('sponsors.title'), tiles: _tiles }) %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
   <template id="tpl-sponsor">
     <div class="wc-editor">
       <h4 id="wc-dialog-title" data-title></h4>
