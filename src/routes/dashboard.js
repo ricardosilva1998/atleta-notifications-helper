@@ -3106,6 +3106,18 @@ const BUILDER_TEXT_KEYS = [
   'overlayBuilder.style.listenToday',
 ];
 const KEEP_PLACEHOLDERS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
+// The builder's own scripts are asked for at their content's version (public/js/ is cached for hours): a browser
+// that kept the previous release's builder-styles-core.js would otherwise run it with the new builder-cards.js.
+// Read once per process, as the files only change with a deploy.
+const builderScriptVersions = {};
+function builderScriptVersion(file) {
+  if (!builderScriptVersions[file]) {
+    const bytes = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'js', file));
+    builderScriptVersions[file] = require('crypto').createHash('sha256').update(bytes).digest('hex').slice(0, 12);
+  }
+  return builderScriptVersions[file];
+}
+
 function builderTexts(t) {
   const texts = {};
   for (const key of BUILDER_TEXT_KEYS) texts[key.slice('overlayBuilder.'.length)] = t(key, KEEP_PLACEHOLDERS);
@@ -3136,6 +3148,9 @@ router.get('/overlay-builder', overlayPage, async (req, res) => {
     eventDefaults: JSON.stringify(EVENT_DEFAULTS).replace(/</g, '\\u003c'),
     // The joined alert looks' version (services/alertStyleBundle.js), as the OBS overlay asks for them
     stylesVersion: alertStyleBundle().version,
+    // The builder's own scripts, at their content's version
+    coreVersion: builderScriptVersion('builder-styles-core.js'),
+    cardsVersion: builderScriptVersion('builder-cards.js'),
     // The looks' gallery, sounds and fonts for the edit window, and every family's fonts in one stylesheet
     styleData: JSON.stringify(builderStyleData(req.streamer, res.locals.t)).replace(/</g, '\\u003c'),
     // Which alerts have a sound the streamer uploaded (OBS plays it instead of the look's sound), and the cards' texts

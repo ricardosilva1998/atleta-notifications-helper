@@ -24,7 +24,7 @@
   <script src="/overlay/fx.js"></script>
   <!-- The looks: every family's fonts in one stylesheet, and their rules (builder-styles-core.js) -->
   <link rel="stylesheet" href="<%= styleFontsHref %>">
-  <script src="/js/builder-styles-core.js"></script>
+  <script src="/js/builder-styles-core.js?v=<%= coreVersion %>"></script>
   <!-- Where an alert sits, read from a saved design: shared with the live OBS overlay -->
   <script src="/overlay/placement.js"></script>
   <style>
@@ -3366,7 +3366,7 @@ window.BUILDER = {
 };
 window.BUILDER_TEXTS = <%- builderTexts %>;
 </script>
-<script src="/js/builder-cards.js"></script>
+<script src="/js/builder-cards.js?v=<%= cardsVersion %>"></script>
 
 </body>
 </html>
