@@ -285,3 +285,63 @@ describe('the trackers\' settings', () => {
     assert.deepEqual(settings.latest_raid, { enabled: true, color: '#9146FF', ownColor: false }, 'a colour that is not #rrggbb is the default');
   });
 });
+
+describe('testing a tracker', () => {
+  // The revert timer is handed in, so the test runs it when it likes.
+  function setupWithTimers() {
+    const w = setup();
+    w.timers = [];
+    w.tr = trackers.createTrackers({
+      db,
+      emit: (channel, payload) => w.emitted.push({ channel, payload }),
+      now: () => w.t,
+      setTimer: (fn, ms) => { const timer = { fn, ms, cleared: false, unref() {} }; w.timers.push(timer); return timer; },
+      clearTimer: (timer) => { if (timer) timer.cleared = true; },
+    });
+    return w;
+  }
+
+  test('a sample per tracker, named as asked, its money in the tip page\'s currency', () => {
+    assert.deepEqual(trackers.sampleValue('latest_follower', { name: 'Viewer', currency: 'USD' }), { name: 'Viewer' });
+    assert.deepEqual(trackers.sampleValue('latest_sub', { name: 'Viewer' }), { name: 'Viewer', months: 6, tier: '1' });
+    assert.deepEqual(trackers.sampleValue('latest_tip', { name: 'Viewer', currency: 'USD' }), { name: 'Viewer', amount: 10, currency: 'USD' });
+    assert.deepEqual(trackers.sampleValue('latest_raid', { name: 'Viewer' }), { name: 'Viewer', viewers: 42 });
+    assert.deepEqual(trackers.sampleValue('latest_bits', { name: 'Viewer' }), { name: 'Viewer', amount: 500 });
+    assert.deepEqual(trackers.sampleValue('top_tipper', { name: 'Viewer', currency: 'EUR' }), { name: 'Viewer', amount: 25, currency: 'EUR' });
+    assert.equal(trackers.sampleValue('nope', { name: 'Viewer' }), null);
+  });
+
+  test('shows the sample on the source for 10 s, stores nothing, then the real value comes back', () => {
+    const id = addStreamer({ donation_currency: 'gbp' });
+    const w = setupWithTimers();
+    w.tr.onEvent(id, { type: 'raid', data: { username: 'RealRaider', viewers: 7 } });
+    w.emitted.length = 0;
+    const sent = w.tr.sendTest(id, 'latest_raid', { name: 'Viewer' });
+    assert.deepEqual(sent, { type: 'tracker', tracker: 'latest_raid', value: { name: 'Viewer', viewers: 42 }, test: true });
+    assert.deepEqual(w.emitted, [{ channel: `tracker:${id}`, payload: sent }]);
+    assert.deepEqual(JSON.parse(db.getTrackerValues(id).latest_raid), { name: 'RealRaider', viewers: 7 }, 'the stored value is untouched');
+    assert.equal(w.timers.length, 1);
+    assert.equal(w.timers[0].ms, trackers.TEST_REVERT_MS);
+    assert.equal(trackers.TEST_REVERT_MS, 10000);
+    w.emitted.length = 0;
+    w.timers[0].fn();
+    assert.deepEqual(w.emitted, [{ channel: `tracker:${id}`, payload: { type: 'tracker', tracker: 'latest_raid', value: { name: 'RealRaider', viewers: 7 } } }]);
+    // The tip trackers' sample is in the tip page's currency
+    assert.deepEqual(w.tr.sendTest(id, 'top_tipper', { name: 'Viewer' }).value, { name: 'Viewer', amount: 25, currency: 'GBP' });
+  });
+
+  test('a second test of the same tracker restarts its 10 s; a tracker that does not exist sends nothing', () => {
+    const id = addStreamer();
+    const w = setupWithTimers();
+    w.tr.sendTest(id, 'latest_follower', { name: 'Viewer' });
+    w.tr.sendTest(id, 'latest_follower', { name: 'Viewer' });
+    assert.equal(w.timers.length, 2);
+    assert.equal(w.timers[0].cleared, true);
+    assert.equal(w.timers[1].cleared, false);
+    w.emitted.length = 0;
+    assert.equal(w.tr.sendTest(id, 'nope', { name: 'Viewer' }), null);
+    assert.deepEqual(w.emitted, []);
+    w.timers[1].fn();
+    assert.deepEqual(w.emitted, [{ channel: `tracker:${id}`, payload: { type: 'tracker', tracker: 'latest_follower', value: null } }], 'no value stored: the source hides again');
+  });
+});

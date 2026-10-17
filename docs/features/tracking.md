@@ -182,10 +182,30 @@ channel writes nothing when it answers.
 Removing an account deletes the five Tracking tables' rows (`STREAMER_OWNED_ROWS`; `tracking_goal_periods` before
 `tracking_goals`). Disabling one makes the sources answer like an unknown token.
 
+## The Tracking card
+
+The dashboard's Twitch tab has a **Tracking** working card of its own, after the OBS Overlay card (`views/cards/tracking.ejs`,
+`public/js/dashboard-tracking.js`, its data from `trackingCard()` in `services/dashboardCards.js`, fed by `gatherCards()`
+with the Tracking state and links; only while `features.overlays` is on):
+
+- **Goal bars:** for the follower goal and the sub goal, the running goal's bar (its colour, title, period, "count / target"
+  or Reconnect / Not available), **Test** (the goal reached on the OBS bar for 10 s, `test: 'reach'`), copy the OBS link,
+  **Edit** and **End goal**; with no goal running, copy the link and **Start a goal**. The bars are drawn by the script from
+  the card's `data-goals` and again from each route's answer.
+- **The goal pop-up** (`tpl-track-goal`): a live preview of the bar on a stream-like background, the title (with the
+  kind's placeholder), the target with − / + and quick picks (followers 50, 100, 500, 1,000; subs 10, 25, 50, 100), five
+  colour swatches and any colour; for a new goal also the period as chips (All time, Yearly, Monthly, Weekly, Daily,
+  Hours), Calendar or Rolling with the time zone (the browser's by default) or the hours, and for a sub goal over a period
+  the silent-renewals note. Edit changes only the title, target and colour. It calls the same routes as the page.
+- **Trackers:** the six, each with its switch (`POST tracker/:tracker`), its last value (the name and its detail, an
+  amount in its currency; "Not available" for Latest sub on a channel that is not an Affiliate), **▶** (a sample on its
+  source for 10 s, `POST tracker/:tracker/test`) and copy the OBS link.
+- The foot links the Tracking page for the trackers' colours and the past goals. The OBS links' token is only in the
+  copy buttons and the card's data, never printed as text.
+
 ## The page
 
-`/dashboard/tracking` (`views/tracking.ejs`, `public/js/tracking-page.js`; linked as "Tracking" from the OBS overlay
-working card, next to the Overlay Builder): a card for the follower goal, one for the sub goal, then one per tracker.
+`/dashboard/tracking` (`views/tracking.ejs`, `public/js/tracking-page.js`; linked from the Tracking card's foot): a card for the follower goal, one for the sub goal, then one per tracker.
 A goal card has a live preview, Test buttons, the start form (title, target, colour, period, mode, hours, time zone)
 or the running goal's edit form, nudge and End, the OBS link with Copy, and the past goals (the last ten, each with
 "count / target" (only the target for a goal that showed no number), its days and Reached, Missed or Ended: a
@@ -197,8 +217,10 @@ account the OBS links are replaced by a note and a link to set it up.
 JSON routes under `/dashboard/api/tracking/` (all answer `{ ok: true, state }` or `{ ok: false, error }`, except the
 test route: `{ ok: true, revertMs, message }` for a test, the message the live bar got, which the page draws in its
 preview, and `{ ok: true }` for `reset`; the page refreshes from `GET state` every 30 s while its tab is shown): `POST goal/:kind` (start), `PATCH goal/:kind` (edit),
-`POST goal/:kind/nudge`, `POST goal/:kind/end`, `POST goal/:kind/test`, `POST tracker/:tracker` (`{ enabled, color }`)
-and `GET state`. Refusal codes: `bad_title`, `bad_target`, `bad_color`, `bad_period`, `bad_mode`, `bad_hours`,
+`POST goal/:kind/nudge`, `POST goal/:kind/end`, `POST goal/:kind/test`, `POST tracker/:tracker` (`{ enabled, color }`),
+`POST tracker/:tracker/test` (the card's ▶: `trackers.sendTest()` shows `trackers.sampleValue()` named "Viewer" in the
+page's language, amounts in the tip page's currency, on the source for 10 s and stores nothing; `{ ok: true, revertMs }`;
+it shares the test buttons' cooldown) and `GET state`. Refusal codes: `bad_title`, `bad_target`, `bad_color`, `bad_period`, `bad_mode`, `bad_hours`,
 `bad_zone`, `bad_delta`, `bad_switch`, `bad_test`, `not_found`, `too_fast`, `twitch_failed`. The page's texts come from
 `window.TRACKING_TEXTS` (the `tracking.*` namespace in all seven locales), the sources' from `tracking.source.*`.
 

@@ -13,8 +13,8 @@ const { RAID_MIN_VIEWERS, shoutoutLine } = require('./shoutouts');
 
 // The cards in reading order, which is also their order on a phone. The OBS overlay and rewards cards are left out
 // while the overlay features are off; the Multistream card comes last while the relay is set up.
-const ORDER = ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify'];
-const OVERLAY_CARDS = new Set(['overlay', 'rewards']);
+const ORDER = ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify'];
+const OVERLAY_CARDS = new Set(['overlay', 'tracking', 'rewards']);
 
 const label = (key, params = {}) => ({ key, params });
 const missing = (key, params = {}) => ({ key, params, warn: true });
@@ -200,6 +200,61 @@ function overlayCard({ streamer, overlay, polls }) {
     alerts,
     volume: Math.round(volumeOf(streamer.overlay_volume) * 100),
     counts: { alerts: nOfM(alerts.filter((a) => a.on).length, alerts.length) },
+  };
+}
+
+// The Tracking card: the follower and sub goal bars and the six trackers (services/trackingGoals.js, trackers.js),
+// each with its OBS link. `tracking` is what the Tracking page's state route answers (trackingState() in
+// routes/dashboard.js) plus the links (null without an overlay token). The goals are drawn by the page script from
+// `goals` (public/js/dashboard-tracking.js); a tracker's line is its last value: the name, and a detail as a text key
+// with its count, or an amount with its currency (the view formats it in the page's language).
+const TRACKER_LABELS = {
+  latest_follower: 'tracking.source.latestFollower', latest_sub: 'tracking.source.latestSub', latest_tip: 'tracking.source.latestTip',
+  latest_raid: 'tracking.source.latestRaid', latest_bits: 'tracking.source.latestBits', top_tipper: 'tracking.source.topTipper',
+};
+const counted = (key, oneKey, n) => (Number(n) === 1 && oneKey ? label(oneKey) : label(key, { count: Number(n) || 0 }));
+function trackerLine(tracker, value) {
+  if (!value || !value.name) return null;
+  const line = { name: String(value.name), detail: null, money: null };
+  if (tracker === 'latest_sub') {
+    if (Number(value.gifted) > 0) line.detail = counted('tracking.source.gifted', null, value.gifted);
+    else if (Number(value.months) > 0) line.detail = counted('tracking.source.months', 'tracking.source.monthOne', value.months);
+  } else if (tracker === 'latest_raid') line.detail = counted('tracking.source.viewers', 'tracking.source.viewerOne', value.viewers);
+  else if (tracker === 'latest_bits') line.detail = counted('tracking.source.bits', 'tracking.source.bitOne', value.amount);
+  else if (tracker === 'latest_tip' || tracker === 'top_tipper') line.money = { amount: Number(value.amount) || 0, currency: value.currency || null };
+  return line;
+}
+function trackingCard({ tracking }) {
+  const t = tracking || {};
+  const links = t.links || null;
+  const goals = {};
+  for (const kind of ['follow', 'sub']) {
+    const entry = (t.goals && t.goals[kind]) || {};
+    goals[kind] = { goal: entry.goal || null, hours: entry.hours || null, timeZone: entry.timeZone || null, url: links ? links.goals[kind] : null };
+  }
+  const trackers = Object.keys(TRACKER_LABELS).map((id) => {
+    const row = (t.trackers && t.trackers[id]) || {};
+    return {
+      id,
+      label: TRACKER_LABELS[id],
+      on: row.enabled !== false,
+      url: links ? links.trackers[id] : null,
+      unavailable: id === 'latest_sub' && !!t.notAffiliate,
+      line: trackerLine(id, row.value),
+    };
+  });
+  const running = Object.values(goals).filter((g) => g.goal).length;
+  const on = trackers.filter((r) => r.on).length;
+  let st;
+  if (!links) st = status('cards.tracking.status.noLink', 'warn');
+  else st = status('cards.tracking.status.summary', running || on ? 'ok' : 'off', { goals: running, trackers: on, total: trackers.length });
+  return {
+    status: st,
+    hasLink: !!links,
+    notAffiliate: !!t.notAffiliate,
+    goals,
+    trackers,
+    counts: { trackers: nOfM(on, trackers.length) },
   };
 }
 
@@ -460,7 +515,7 @@ function multistreamCard({ streamer }) {
 }
 
 const BUILDERS = {
-  chatbot: chatbotCard, discord: discordCard, overlay: overlayCard, commands: commandsCard, sponsors: sponsorsCard,
+  chatbot: chatbotCard, discord: discordCard, overlay: overlayCard, tracking: trackingCard, commands: commandsCard, sponsors: sponsorsCard,
   donations: donationsCard, protection: protectionCard, giveaways: giveawaysCard, rewards: rewardsCard, spotify: spotifyCard,
   shoutouts: shoutoutsCard, polls: pollsCard,
   multistream: multistreamCard,

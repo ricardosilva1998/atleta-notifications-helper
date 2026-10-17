@@ -879,6 +879,43 @@ function toggleStats(guildId) {
       goalAmount: t('cards.donations.goalAmount', { raised: '{{raised}}', target: '{{target}}' }),
       goalHint: t('cards.donations.goalHint', { raised: '{{raised}}', currency: '{{currency}}' }),
       confirmEndGoal: t('donations.goal.endConfirm'),
+      tracking: {
+        kindTitle: { follow: t('tracking.goal.follow.title'), sub: t('tracking.goal.sub.title') },
+        startTitle: { follow: t('cards.tracking.startTitle.follow'), sub: t('cards.tracking.startTitle.sub') },
+        editTitle: { follow: t('cards.tracking.editTitle.follow'), sub: t('cards.tracking.editTitle.sub') },
+        intro: { follow: t('tracking.goal.follow.intro'), sub: t('tracking.goal.sub.intro') },
+        placeholder: { follow: t('tracking.goal.follow.titlePlaceholder'), sub: t('tracking.goal.sub.titlePlaceholder') },
+        start: t('tracking.goal.start'),
+        save: t('tracking.goal.save'),
+        startGoal: t('cards.tracking.startGoal'),
+        editGoal: t('cards.tracking.editGoal'),
+        endGoal: t('tracking.goal.end'),
+        endConfirm: t('tracking.goal.endConfirm'),
+        test: t('tracking.goal.testLabel'),
+        testGoal: t('cards.tracking.testGoal'),
+        copyLink: t('cards.tracking.copyLink'),
+        running: t('tracking.status.running', { current: '{{current}}', target: '{{target}}' }),
+        reached: t('tracking.status.reached', { current: '{{current}}', target: '{{target}}' }),
+        reconnect: t('tracking.status.reconnect'),
+        notAvailable: t('tracking.status.notAvailable'),
+        lifetime: t('tracking.short.lifetime'),
+        year: t('tracking.short.year'),
+        month: t('tracking.short.month'),
+        week: t('tracking.short.week'),
+        day: t('tracking.short.day'),
+        hours: t('tracking.short.hours', { count: '{{count}}' }),
+        hoursChip: t('cards.tracking.hoursChip'),
+        calendar: t('tracking.short.calendar'),
+        rolling: t('tracking.short.rolling'),
+        otherColor: t('cards.tracking.otherColor'),
+        tested: t('cards.tracking.tested'),
+        errors: {
+          bad_title: t('tracking.error.bad_title'), bad_target: t('tracking.error.bad_target'), bad_color: t('tracking.error.bad_color'),
+          bad_period: t('tracking.error.bad_period'), bad_mode: t('tracking.error.bad_mode'), bad_zone: t('tracking.error.bad_zone'),
+          bad_hours: t('tracking.error.bad_hours'), bad_switch: t('tracking.error.bad_switch'), bad_test: t('tracking.error.bad_test'),
+          not_found: t('tracking.error.not_found'), too_fast: t('tracking.error.too_fast', { seconds: '{{seconds}}' }), twitch_failed: t('tracking.error.twitch_failed'),
+        },
+      },
     });
   }
 %>
@@ -887,6 +924,7 @@ function toggleStats(guildId) {
 <script src="/js/dashboard-cards.js"></script>
 <script src="/overlay/pollModel.js"></script>
 <script src="/js/dashboard-polls.js"></script>
+<% if (features.overlays) { %><script src="/js/dashboard-tracking.js"></script><% } %>
 
 <script>
   const tabs = document.querySelectorAll('.tab-btn');

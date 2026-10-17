@@ -428,6 +428,21 @@ describe('the trackers', () => {
     assert.deepEqual(eventSubCalls(), [['eventsub.start', s]]);
   });
 
+  test('a test shows a sample on the source (named in the page\'s language), stores nothing, shares the test cooldown', async () => {
+    const s = addStreamer();
+    const sent = await heard(`tracker:${s}`, async () => {
+      const res = await request('POST', '/dashboard/api/tracking/tracker/latest_bits/test', { streamer: s, body: {} });
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.json(), { ok: true, revertMs: 10000 });
+    });
+    assert.deepEqual(sent, [{ type: 'tracker', tracker: 'latest_bits', value: { name: t('en', 'tracking.tracker.sampleName'), amount: 500 }, test: true }]);
+    assert.equal(db.getTrackerValues(s).latest_bits, undefined, 'nothing stored');
+    const fast = await request('POST', '/dashboard/api/tracking/tracker/latest_tip/test', { streamer: s, body: {} });
+    assert.equal(fast.status, 429);
+    assert.equal(fast.json().error, 'too_fast');
+    assert.equal((await request('POST', '/dashboard/api/tracking/tracker/constructor/test', { streamer: addStreamer(), body: {} })).status, 404);
+  });
+
   test('refusals: an unknown tracker is 404; a bad switch or colour, or nothing to change, is 400', async () => {
     const s = addStreamer();
     assert.equal((await request('POST', '/dashboard/api/tracking/tracker/constructor', { streamer: s, body: { enabled: true } })).status, 404);

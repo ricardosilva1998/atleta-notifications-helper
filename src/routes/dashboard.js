@@ -401,6 +401,8 @@ function gatherCards(req, discord, lang) {
       // The bar's texts follow the dashboard's language when the link is copied.
       barUrl: s.overlay_token ? `${config.app.url}/overlay/poll/${s.overlay_token}?lang=${encodeURIComponent(lang || 'en')}` : null,
     },
+    // The Tracking card: the Tracking page's state and the sources' links (only while the overlay features are on).
+    tracking: config.features.overlays ? { ...trackingState(s), links: trackingLinks(req, s, lang || 'en') } : null,
     giveaway: giveaway ? { ...giveaway, entryCount: db.getEntryCount(giveaway.id) } : null,
     spotifyConnected: !!s.spotify_access_token,
     multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
@@ -1702,6 +1704,21 @@ router.post('/api/tracking/tracker/:tracker', (req, res) => {
   require('../services/overlayBus').emit(trackers.channel(req.streamer.id), { type: 'tracker_settings', tracker, enabled, color });
   syncTrackingConnections(req.streamer, before);
   trackingAnswer(req, res);
+});
+
+// A tracker's test (the Tracking card's ▶): a sample on its source for 10 s, never stored, named in the page's
+// language; it shares the test buttons' cooldown.
+router.post('/api/tracking/tracker/:tracker/test', (req, res) => {
+  const { tracker } = req.params;
+  if (!trackers.TRACKERS.includes(tracker)) return trackingRefusal(res, 'not_found');
+  const waitMs = testCooldown.take(req.streamer.id);
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000);
+    res.set('Retry-After', String(seconds));
+    return trackingRefusal(res, 'too_fast', { seconds });
+  }
+  trackers.sendTest(req.streamer.id, tracker, { name: res.locals.t('tracking.tracker.sampleName') });
+  res.json({ ok: true, revertMs: trackers.TEST_REVERT_MS });
 });
 
 // The currency and minimum are used to build PayPal orders and are written into

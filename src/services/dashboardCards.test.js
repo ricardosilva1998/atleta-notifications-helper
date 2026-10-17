@@ -19,6 +19,23 @@ const server = (over = {}) => ({
   ...over,
 });
 
+// What gatherCards() hands the Tracking card: the Tracking state (no goal, every tracker on with no value) and the links.
+function trackingInput(over = {}) {
+  const base = 'https://atleta.example/overlay';
+  const ids = ['latest_follower', 'latest_sub', 'latest_tip', 'latest_raid', 'latest_bits', 'top_tipper'];
+  return {
+    goals: { follow: { goal: null, timeZone: null, hours: null, history: [] }, sub: { goal: null, timeZone: null, hours: null, history: [] } },
+    trackers: Object.fromEntries(ids.map((id) => [id, { enabled: true, color: '#9146FF', ownColor: false, value: null }])),
+    currency: 'EUR',
+    notAffiliate: false,
+    links: {
+      goals: { follow: `${base}/goal/followers/tok?lang=en`, sub: `${base}/goal/subs/tok?lang=en` },
+      trackers: Object.fromEntries(ids.map((id) => [id, `${base}/tracker/${id}/tok?lang=en`])),
+    },
+    ...over,
+  };
+}
+
 function input(over = {}) {
   const streamer = {
     id: 1, twitch_user_id: '1001', twitch_username: 'synthetic_channel', chatbot_enabled: 1,
@@ -57,6 +74,7 @@ function input(over = {}) {
     multistreamAvailable: false,
     pollTemplates: [],
     polls: { hasScope: true, live: { poll: null, prediction: null, serverNow: Date.parse('2026-10-14T12:00:00Z') }, barUrl: 'https://atleta.example/overlay/poll/synthetic-token?lang=en' },
+    tracking: trackingInput(),
     ...over,
     streamer,
   };
@@ -65,16 +83,17 @@ const build = (over) => buildCards(input(over));
 const keyOf = (status) => status && status.key;
 
 describe('the cards and their order', () => {
-  test('twelve cards in reading order while the overlay features are on', () => {
-    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
+  test('thirteen cards in reading order while the overlay features are on', () => {
+    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
     assert.deepEqual(build().order, ORDER);
     assert.equal(build().chatbotOn, true);
   });
 
-  test('without the overlay features the OBS overlay and rewards cards are left out; Multistream comes last while the relay is set up', () => {
+  test('without the overlay features the OBS overlay, Tracking and rewards cards are left out; Multistream comes last while the relay is set up', () => {
     const off = build({ features: { overlays: false } });
     assert.deepEqual(off.order, ['chatbot', 'discord', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'spotify']);
     assert.equal(off.overlay, undefined);
+    assert.equal(off.tracking, undefined);
     assert.equal(off.rewards, undefined);
     const relay = build({ multistreamAvailable: true, streamer: { multistream_enabled: 1 } });
     assert.equal(relay.order.at(-1), 'multistream');
@@ -520,9 +539,60 @@ describe('cardTexts', () => {
   test('translates each status and count, gives plain counts as they are, and leaves the giveaway card to the page', () => {
     const t = (key, params) => `${key}${params && Object.keys(params).length ? JSON.stringify(params) : ''}`;
     const texts = cardTexts(build({ commands: [{ id: 1, command: 'discord', response: 'x', cooldown: 5 }] }), t);
-    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'polls', 'rewards', 'spotify']);
+    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'polls', 'rewards', 'spotify']);
     assert.deepEqual(texts.chatbot, { status: { text: 'cards.chatbot.status.online{"channel":"synthetic_channel"}', tone: 'ok' }, counts: { thankYous: 'cards.common.nOfM{"on":5,"total":6}' } });
     assert.deepEqual(texts.commands.counts, { commands: '1', builtins: 'cards.common.nOfM{"on":1,"total":13}' });
     assert.deepEqual(texts.spotify, { status: { text: 'dashboard.status.connected', tone: 'ok' }, counts: {} });
+  });
+});
+
+describe('Tracking', () => {
+  const goal = { id: 4, kind: 'sub', title: 'Road to 50', current: 17, target: 50, percent: 34, completed: false, barColor: '#a56bff', period: 'month', mode: 'calendar', unavailable: null };
+
+  test('every tracker with its switch, link and last value; the goals with their links; the status counts both', () => {
+    const tr = trackingInput();
+    tr.trackers.latest_bits.enabled = false;
+    tr.trackers.latest_sub.value = { name: 'Loyal', months: 14, tier: '2' };
+    tr.trackers.latest_raid.value = { name: 'Raider', viewers: 1 };
+    tr.trackers.latest_bits.value = { name: 'Cheerer', amount: 500 };
+    tr.trackers.top_tipper.value = { name: 'Marta', amount: 25, currency: 'EUR' };
+    tr.goals.sub = { goal, timeZone: 'Europe/Lisbon', hours: null, history: [] };
+    const card = build({ tracking: tr }).tracking;
+    assert.deepEqual(card.status, { key: 'cards.tracking.status.summary', params: { goals: 1, trackers: 5, total: 6 }, tone: 'ok' });
+    assert.deepEqual(card.counts.trackers, { key: 'cards.common.nOfM', params: { on: 5, total: 6 } });
+    assert.deepEqual(card.trackers.map((r) => [r.id, r.label, r.on]), [
+      ['latest_follower', 'tracking.source.latestFollower', true], ['latest_sub', 'tracking.source.latestSub', true],
+      ['latest_tip', 'tracking.source.latestTip', true], ['latest_raid', 'tracking.source.latestRaid', true],
+      ['latest_bits', 'tracking.source.latestBits', false], ['top_tipper', 'tracking.source.topTipper', true],
+    ]);
+    assert.equal(card.trackers[0].url, 'https://atleta.example/overlay/tracker/latest_follower/tok?lang=en');
+    assert.equal(card.trackers[0].line, null, 'nothing yet');
+    assert.deepEqual(card.trackers[1].line, { name: 'Loyal', detail: { key: 'tracking.source.months', params: { count: 14 } }, money: null });
+    assert.deepEqual(card.trackers[3].line.detail, { key: 'tracking.source.viewerOne', params: {} }, 'one viewer');
+    assert.deepEqual(card.trackers[4].line.detail, { key: 'tracking.source.bits', params: { count: 500 } });
+    assert.deepEqual(card.trackers[5].line, { name: 'Marta', detail: null, money: { amount: 25, currency: 'EUR' } });
+    assert.equal(card.goals.follow.goal, null);
+    assert.equal(card.goals.follow.url, 'https://atleta.example/overlay/goal/followers/tok?lang=en');
+    assert.deepEqual(card.goals.sub, { goal, hours: null, timeZone: 'Europe/Lisbon', url: 'https://atleta.example/overlay/goal/subs/tok?lang=en' });
+  });
+
+  test('a gift on the latest sub; Latest sub not available for a channel that is not an Affiliate', () => {
+    const tr = trackingInput({ notAffiliate: true });
+    tr.trackers.latest_sub.value = { name: 'Gifter', gifted: 5 };
+    const card = build({ tracking: tr }).tracking;
+    assert.deepEqual(card.trackers[1].line.detail, { key: 'tracking.source.gifted', params: { count: 5 } });
+    assert.equal(card.trackers[1].unavailable, true);
+    assert.equal(card.trackers[0].unavailable, false);
+  });
+
+  test('without an OBS link: the status says so and nothing has a link; everything off is grey', () => {
+    const noLink = build({ tracking: trackingInput({ links: null }) }).tracking;
+    assert.deepEqual(noLink.status, { key: 'cards.tracking.status.noLink', params: {}, tone: 'warn' });
+    assert.equal(noLink.hasLink, false);
+    assert.ok(noLink.trackers.every((r) => r.url === null));
+    assert.equal(noLink.goals.sub.url, null);
+    const tr = trackingInput();
+    for (const row of Object.values(tr.trackers)) row.enabled = false;
+    assert.equal(build({ tracking: tr }).tracking.status.tone, 'off');
   });
 });
