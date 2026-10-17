@@ -586,8 +586,8 @@ After the deploy (while no streamer is live):
    revert after 10 s. End the goals if they were only for the check.
 4. Within a few minutes the log's `[TwitchLive] Polling N channels` line (after the next boot) names the streamers'
    own channels, and no `[TwitchLive] Could not check …` line repeats (a failing batch leaves channels as they were).
-5. While a streamer with Tracking set up goes live: their `channel_state` gets `stream_started_at`, and their Top tipper
-   resets for that stream.
+5. While a streamer with Tracking set up goes live: their `channel_state` gets `stream_started_at`, and an open Top
+   tipper source resets for that stream within the minute (nobody until the first tip of the new stream).
 
 Watch after release:
 - `[TwitchLive] Could not check N channel(s)` after the first deploy (the batches are larger): the app token's
@@ -595,6 +595,23 @@ Watch after release:
 - A `[TrackingGoal]` line saying a total or a read-back did not answer: the goal keeps the last total and tries again at
   its next read (10 minutes for lifetime totals, 30 for follower read-backs).
 
-Rolling back is safe: the new tables and the column stay and older code ignores them (nothing older reads or writes
-them); the Tracking sources and page simply stop existing, and OBS shows a blank source until it is removed. The record
-and goals are kept for when the release comes back.
+Rolling back, with one catch. The new tables and the column stay and older code reads and writes none of them; the
+Tracking sources and page stop existing, and OBS shows a blank source until it is removed. **But an older build's
+account Remove (Admin → Users → Remove) can fail on the new tables' foreign keys**: all five point at `streamers`, and
+an older build does not know to clear them first. A build since 2026-10-13 (d9dd7b3, today's `main`) clears unknown
+rows that point at the streamer, so it removes a streamer with tracker values or goals, but not one whose calendar goal
+has finished a period: those rows also point at the goal, the goal goes first, and SQLite refuses
+(`FOREIGN KEY constraint failed`; the whole removal is undone and the admin gets the error page, after the account's
+live connections were already stopped). A build from before 2026-10-13 fails for every streamer with any Tracking row,
+which once the seed has run is nearly every active streamer (the seed writes their tracker values; a first visit to
+the Tracking page writes their tracker settings). So after a rollback, before anyone removes an account, either roll
+forward again, or (after a backup, `backup-restore.md`) drop the Tracking tables in the running container
+(`railway ssh`, from `/app`), in this order (the finished periods point at the goals):
+
+```sh
+cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');for (const t of ['tracking_goal_periods','tracking_goals','tracking_events','tracker_values','tracker_settings']) d.exec('DROP TABLE IF EXISTS ' + t);console.log('dropped')"
+```
+
+That throws away the record, the goals and the trackers' values and settings. If the release comes back later, its
+first boot creates the tables again, empty; the tracker seed has run already (its name stays in `data_migrations`), so
+the trackers fill from the next events and tips, not from the past ones.

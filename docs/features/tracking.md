@@ -57,8 +57,10 @@ ones. `src/services/trackingGoals.js` holds it all; `src/services/goalPeriods.js
 
 - **Calendar** is the local period that contains now, in the goal's own IANA time zone: this year from 1 January, this
   month from the 1st, this week from Monday, this day from 00:00. The zone is chosen on the goal (the page offers the
-  browser's, `Intl.DateTimeFormat().resolvedOptions().timeZone`) and checked against `Intl` (`isTimeZone`); a bad name
-  answers `bad_zone`. Boundaries are local midnight, DST days included (a day when the clocks go back lasts 25 hours).
+  browser's, `Intl.DateTimeFormat().resolvedOptions().timeZone`) and stored under `Intl`'s canonical name
+  (`canonicalTimeZone` in `goalPeriods.js`: `europe/lisbon` is stored as `Europe/Lisbon`, `US/Pacific` as
+  `America/Los_Angeles`; its formatters are kept once per canonical zone); a name `Intl` does not know answers
+  `bad_zone`. Boundaries are local midnight, DST days included (a day when the clocks go back lasts 25 hours).
 - **Rolling** is the last 365, 30, 7 or 1 days up to now (`ROLLING_DAYS`): an event drops out when it gets older than
   the window, so the bar can fall back under the target.
 - **Rollover.** A calendar goal is one goal that counts per period. The minute tick (`trackingGoals.startTicks()`,
@@ -67,6 +69,9 @@ ones. `src/services/trackingGoals.js` holds it all; `src/services/goalPeriods.js
   (a rollover resets it). A goal that was stopped for a long time catches up period by period (at most 400 in one
   tick).
 - **Hours** goals end by themselves at `started_at + hours` (the tick) and join the past goals, reached or missed.
+- **Ending.** A goal that ends (End on the page, the end of its hours, a new goal of its kind replacing it, or another
+  Twitch account linked) keeps the count it showed then (`tracking_goals.final_count`; null when it showed no number,
+  "Reconnect Twitch" or "not available"). The past goals list it as "count / target".
 - **Reached.** The first time the count passes the target the goal is stamped (`completed_at`) and the sources play the
   celebration once. A lifetime or hours goal then stays full until ended (or until an edit changes the target); a
   calendar goal starts over at its rollover; a rolling goal keeps its celebration but follows its live count.
@@ -79,7 +84,8 @@ ones. `src/services/trackingGoals.js` holds it all; `src/services/goalPeriods.js
   total), plus the nudge. The total is read when the goal starts and again at most every 10 minutes while one of the
   goal's sources is open, so ended subs come off and the number does not drift. A read Twitch does not answer keeps the
   last total.
-- **Atleta's record** (`tracking_events`, kept 400 days, cleaned every 6 hours by `db.cleanupOldTrackingEvents()`).
+- **Atleta's record** (`tracking_events`, kept 400 days, cleaned every 6 hours by `db.cleanupOldTrackingEvents()`;
+  its index `(streamer_id, kind, created_at, twitch_user_id)` covers a follow count, so a count never reads the rows).
   Every follow and sub that EventSub delivers is also written there: the kind, the sub type (`new`, `resub`, `gift`),
   the Twitch user id, the name, a count (a gift of 5 is 5) and the time. `overlay_events` only keeps 30 days, which is
   why the record exists. A follow counts once per account (a re-follow inside the window does not count twice); a sub,
@@ -88,7 +94,8 @@ ones. `src/services/trackingGoals.js` holds it all; `src/services/goalPeriods.js
 - **Follower read-back.** Twitch lists followers with `followed_at`, so a follower goal of a year, month, week or day
   reads back the follows of its window that the record lacks (they are recorded once, so starting a goal again does not
   double them): in the background when the goal starts, again at most every **30 minutes** while one of its sources is
-  open, and after each calendar rollover. The read is capped at **5,000 followers (50 pages of 100)**; past that the
+  open, and after each calendar rollover. An answer that comes back after the goal ended, or after the streamer linked
+  another Twitch account, is dropped: nothing is written. The read is capped at **5,000 followers (50 pages of 100)**; past that the
   goal counts from what Atleta recorded while its window reaches back before its start, and the follower card says so
   (`capped`).
 - **Subs cannot be read back** (Twitch lists current subs, not when they subbed). A period sub goal counts from the
@@ -104,6 +111,9 @@ ones. `src/services/trackingGoals.js` holds it all; `src/services/goalPeriods.js
   is refreshed first, a 401 refreshes once), 10 s per request. They reject with a `code`: `needs_reconnect`,
   `not_affiliate` or `twitch_failed` (no answer in time, no network, 429, 5xx). A lifetime goal cannot start without the
   total: its start is refused with `twitch_failed`, and the page says "Twitch did not answer. Try again in a moment."
+  The start's read has **one 15 s deadline** for all of it, a token refresh and the retry included (the totals take a
+  `signal`, which ends the requests and the wait for the refresh), so the start always answers before the page gives up
+  at 20 s.
 
 ### Tests on the live bar
 
@@ -131,7 +141,10 @@ shows a sample until the first value comes).
 groups donor names case-insensitively ("Bob" and "bob" are one donor), and leaves "Anonymous" out. "This stream" starts
 when the streamer's own channel went live (`channel_state.stream_started_at`); once the stream is over it keeps showing
 that stream (`last_stream_started_at`, kept until the next stream starts), so a new stream resets it; with no stream
-ever seen it uses the last 12 hours. The stream start comes from the live poller, which since this release also checks
+ever seen it uses the last 12 hours. When the live poller sees a stream start (a new broadcast, or another replacing
+it), every enabled streamer linked to that login gets the new stream's top tipper at once (`trackers.streamStarted()`,
+from `src/pollers/manager.js`), so a source opened before going live does not keep the last stream's donor until the
+first tip. The stream start comes from the live poller, which since this release also checks
 every enabled streamer's own channel (below).
 
 `src/services/trackers.js` holds the trackers (`onEvent` for the Twitch events as `eventsub.js` normalizes them,
@@ -147,8 +160,10 @@ first goal or tracker comes on and the last goes off. Gaps (the socket down, sco
 goals heal on their next Twitch read-back, sub goals do not.
 
 `eventsub.js` keeps the follower's `user_id` (de-duplication), marks the sub type, and after logging the event calls
-`trackingGoals.recordEvent()` and `trackers.onEvent()`; tips call `trackers.onTip()` from `src/routes/tip.js` and
-`src/services/streamelements.js`.
+`trackingGoals.recordEvent()` and `trackers.onEvent()`, each in its own `try`, so the chat thank-you after them goes
+out whatever they do; tips call `trackers.onTip()` from `src/routes/tip.js` and `src/services/streamelements.js`.
+Enabling a disabled account starts the connection again for Tracking too (`accountLifecycle.enableAccount` reads
+`db.usesTracking`), as the boot and the dashboard do.
 
 ## Own-channel polling
 
@@ -160,7 +175,10 @@ milestones) still goes only to a channel's watchers: an unwatched own channel on
 ## Account changes
 
 `accountLifecycle.twitchAccountChanged()` (linking a different Twitch account, or having yours taken) ends the
-streamer's active goals and clears the trackers, so nothing shows another channel's numbers; an open source empties.
+streamer's active goals (each keeping the count it showed), then removes the streamer's whole record of follows and subs
+(`db.deleteTrackingEvents`: a goal started later must not count the previous channel's), and clears the trackers, so
+nothing shows another channel's numbers; an open source empties. A follower read-back still under way for the old
+channel writes nothing when it answers.
 Removing an account deletes the five Tracking tables' rows (`STREAMER_OWNED_ROWS`; `tracking_goal_periods` before
 `tracking_goals`). Disabling one makes the sources answer like an unknown token.
 
@@ -169,12 +187,16 @@ Removing an account deletes the five Tracking tables' rows (`STREAMER_OWNED_ROWS
 `/dashboard/tracking` (`views/tracking.ejs`, `public/js/tracking-page.js`; linked as "Tracking" from the OBS overlay
 working card, next to the Overlay Builder): a card for the follower goal, one for the sub goal, then one per tracker.
 A goal card has a live preview, Test buttons, the start form (title, target, colour, period, mode, hours, time zone)
-or the running goal's edit form, nudge and End, the OBS link with Copy, and the past goals (the last ten, reached or
-missed). A tracker card has its preview, switch, colour (with "default colour") and OBS link. With no linked Twitch
+or the running goal's edit form, nudge and End, the OBS link with Copy, and the past goals (the last ten, each with
+"count / target" (only the target for a goal that showed no number), its days and Reached, Missed or Ended: a
+calendar goal ended in the middle of its period is Ended, not Missed, while each period it finished stays Reached or
+Missed). A finished period's days are shown in the goal's time zone, its last day included (the route sends its end
+as the last moment, 1 ms before the next period starts: September in Lisbon reads, in English, "Sep 1, 2026 – Sep 30, 2026"). A tracker card has its preview, switch, colour (with "default colour") and OBS link. With no linked Twitch
 account the OBS links are replaced by a note and a link to set it up.
 
-JSON routes under `/dashboard/api/tracking/` (all answer `{ ok: true, state }` or `{ ok: false, error }`; the page
-refreshes from `GET state` every 30 s while its tab is shown): `POST goal/:kind` (start), `PATCH goal/:kind` (edit),
+JSON routes under `/dashboard/api/tracking/` (all answer `{ ok: true, state }` or `{ ok: false, error }`, except the
+test route: `{ ok: true, revertMs, message }` for a test, the message the live bar got, which the page draws in its
+preview, and `{ ok: true }` for `reset`; the page refreshes from `GET state` every 30 s while its tab is shown): `POST goal/:kind` (start), `PATCH goal/:kind` (edit),
 `POST goal/:kind/nudge`, `POST goal/:kind/end`, `POST goal/:kind/test`, `POST tracker/:tracker` (`{ enabled, color }`)
 and `GET state`. Refusal codes: `bad_title`, `bad_target`, `bad_color`, `bad_period`, `bad_mode`, `bad_hours`,
 `bad_zone`, `bad_delta`, `bad_switch`, `bad_test`, `not_found`, `too_fast`, `twitch_failed`. The page's texts come from
