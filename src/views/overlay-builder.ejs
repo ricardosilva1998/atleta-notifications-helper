@@ -66,35 +66,34 @@
     }
     h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); letter-spacing: -0.02em; }
 
-    /* ── Top nav ── */
+    /* ── Top bar: the way back and the actions on one row, the title under them ── */
     .top-nav {
-      height: var(--header-height);
       border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      padding: 0 20px;
-      gap: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 14px 20px 16px;
       background: var(--bg-surface);
       flex-shrink: 0;
       z-index: 100;
     }
+    .top-nav .tn-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .top-nav .tn-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
     .top-nav .back-link {
-      display: flex; align-items: center; gap: 6px;
+      display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+      border-radius: 10px; background: var(--bg-elevated); border: 1px solid var(--border);
       color: var(--text-secondary); text-decoration: none;
-      font-size: 13px; font-family: var(--font-display); font-weight: 500;
-      transition: color 0.2s;
+      font-size: 12.5px; font-family: var(--font-display); font-weight: 600;
+      transition: color 0.2s, border-color 0.2s; flex: none;
     }
-    .top-nav .back-link:hover { color: var(--text-primary); }
-    .top-nav .sep { color: var(--text-muted); }
-    .top-nav h1 { font-size: 15px; font-weight: 700; color: var(--text-primary); }
-    .top-nav .spacer { flex: 1; }
-    .top-nav .overlay-urls-btn {
-      position: relative; padding: 6px 14px; font-size: 12px; font-family: var(--font-display);
+    .top-nav .back-link:hover { color: var(--text-primary); border-color: var(--accent); }
+    .top-nav .tn-btn {
+      position: relative; height: 34px; padding: 0 14px; font-size: 12.5px; font-family: var(--font-display);
       font-weight: 600; background: var(--bg-elevated); border: 1px solid var(--border);
-      color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer;
-      transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+      color: var(--text-primary); border-radius: 10px; cursor: pointer; text-decoration: none;
+      transition: border-color 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 7px; min-width: 0;
     }
-    .top-nav .overlay-urls-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .top-nav .tn-btn svg { color: var(--accent-hover, #a56bff); flex: none; }
+    .top-nav .tn-btn span { overflow: hidden; text-overflow: ellipsis; }
+    .top-nav .tn-btn:hover { border-color: var(--accent); background: var(--bg-hover, var(--bg-elevated)); }
     .urls-dropdown {
       display: none; position: absolute; top: 100%; right: 0; margin-top: 6px;
       background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -117,16 +116,19 @@
     }
     .urls-dropdown .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    .nav-title { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; flex: 0 1 auto; }
-    .nav-sub { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .top-nav h1, .top-nav a, .top-nav .overlay-urls-btn { white-space: nowrap; }
+    .nav-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .nav-title h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); line-height: 1.15; margin: 0; }
+    .nav-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+    .top-nav .back-link, .top-nav .tn-btn { white-space: nowrap; }
     @media (max-width: 760px) {
-      .top-nav { gap: 10px; padding: 0 16px; }
-      .nav-sub, .top-nav .sep { display: none; }
-      .nav-title { flex: none; }
-      #sounds-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-      /* The back link keeps its chevron; its label stays for screen readers */
-      .back-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .top-nav { padding: 12px 16px 14px; }
+      .nav-title h1 { font-size: 21px; }
+      .urls-dropdown { right: 0; min-width: min(380px, calc(100vw - 32px)); }
+    }
+    @media (max-width: 520px) {
+      /* On a phone the two actions keep their icons; their names stay for screen readers */
+      .top-nav .tn-btn { padding: 0 11px; }
+      .top-nav .tn-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     }
 
     /* ── The alert cards (public/js/builder-cards.js) ── */
@@ -810,25 +812,20 @@
 </head>
 <body>
 
-<!-- Top nav -->
+<!-- Top bar: the way back and the two actions on top, the page's title under them -->
 <nav class="top-nav">
+  <div class="tn-row">
   <a href="/dashboard" class="back-link">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     <span class="back-label"><%= t('nav.dashboard') %></span>
   </a>
-  <span class="sep">/</span>
-  <div class="nav-title">
-    <h1><%= t('overlayBuilder.heading') %></h1>
-    <span class="nav-sub"><%= t('overlayBuilder.cards.subtitle') %></span>
-  </div>
-  <span class="sep">/</span>
-  <a id="sounds-link" href="/dashboard/overlay" style="font-size:13px;color:var(--text-secondary);font-family:var(--font-display);font-weight:500;"><%= t('overlayBuilder.settingsLink') %></a>
-  <div class="spacer"></div>
+  <div class="tn-actions">
+  <a id="sounds-link" class="tn-btn" href="/dashboard/overlay"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span><%= t('overlayBuilder.settingsLink') %></span></a>
   <% if (overlayUrl) { %>
   <div style="position:relative;">
-    <button class="overlay-urls-btn" onclick="document.getElementById('urls-dd').classList.toggle('open')">
+    <button class="overlay-urls-btn tn-btn" aria-haspopup="true" onclick="document.getElementById('urls-dd').classList.toggle('open')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-      <%= t('overlayBuilder.obsUrls') %>
+      <span><%= t('overlayBuilder.obsUrls') %></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
     <div class="urls-dropdown" id="urls-dd">
       <label><%= t('overlayBuilder.alertsOverlay') %></label>
@@ -862,6 +859,12 @@
   </div>
   <script>document.addEventListener('click', e => { if (!e.target.closest('.overlay-urls-btn') && !e.target.closest('.urls-dropdown')) document.getElementById('urls-dd').classList.remove('open'); });</script>
   <% } %>
+  </div>
+  </div>
+  <div class="nav-title">
+    <h1><%= t('overlayBuilder.heading') %></h1>
+    <span class="nav-sub"><%= t('overlayBuilder.cards.subtitle') %></span>
+  </div>
 </nav>
 
 <!-- The alert cards: each loops its look; Edit alert opens its edit window (public/js/builder-cards.js) -->
