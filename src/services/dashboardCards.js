@@ -203,7 +203,8 @@ function overlayCard({ streamer, overlay, polls }) {
   };
 }
 
-// The Tracking card: the follower and sub goal bars and the six trackers (services/trackingGoals.js, trackers.js),
+// The Tracking card: the follower, sub and tip goal bars and the six trackers (services/trackingGoals.js, tipGoals.js,
+// trackers.js),
 // each with its OBS link. `tracking` is what the Tracking page's state route answers (trackingState() in
 // routes/dashboard.js) plus the links (null without an overlay token). The goals are drawn by the page script from
 // `goals` (public/js/dashboard-tracking.js); a tracker's line is its last value: the name, and a detail as a text key
@@ -232,6 +233,10 @@ function trackingCard({ tracking }) {
     const entry = (t.goals && t.goals[kind]) || {};
     goals[kind] = { goal: entry.goal || null, hours: entry.hours || null, timeZone: entry.timeZone || null, url: links ? links.goals[kind] : null };
   }
+  // The tip goal (services/tipGoals.js toPayload: amounts in its own currency), and the tip page's currency, which a
+  // new tip goal starts in.
+  const tip = t.tip || {};
+  goals.tip = { goal: tip.goal || null, url: links ? links.tip || null : null, currency: tip.pageCurrency || 'EUR', currencies: tip.currencies || ['EUR'] };
   const trackers = Object.keys(TRACKER_LABELS).map((id) => {
     const row = (t.trackers && t.trackers[id]) || {};
     return {
@@ -323,7 +328,7 @@ function tipVoiceOf(streamer, tts, currency, hasEmail, overlays) {
   };
 }
 
-function donationsCard({ streamer, tips, tipGoal, features, appUrl, now, tts }) {
+function donationsCard({ streamer, tips, features, appUrl, now, tts }) {
   const hasEmail = !!streamer.paypal_email;
   const on = !!streamer.donation_page_enabled;
   const tipUrl = streamer.twitch_username ? `${appUrl}/tip/${encodeURIComponent(streamer.twitch_username)}` : null;
@@ -333,12 +338,6 @@ function donationsCard({ streamer, tips, tipGoal, features, appUrl, now, tts }) 
   else if (!tipUrl) st = status('cards.donations.status.noTwitch', 'warn');
   else st = status('cards.donations.status.on', 'ok', { count: tips.count90d });
   const currency = streamer.donation_currency || 'EUR';
-  let goal = null;
-  if (tipGoal) {
-    const current = Number(tipGoal.current_amount) || 0;
-    const target = Number(tipGoal.target_amount) || 0;
-    goal = { title: tipGoal.title, current, target, currency: tipGoal.currency || 'EUR', percent: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0 };
-  }
   const voice = tipVoiceOf(streamer, tts, currency, hasEmail, !!features.overlays);
   return {
     setup: hasEmail ? null : 'paypal',
@@ -347,8 +346,6 @@ function donationsCard({ streamer, tips, tipGoal, features, appUrl, now, tts }) 
     tipUrl,
     tipShown: tipUrl ? tipUrl.replace(/^https?:\/\//, '') : null,
     currency,
-    showGoal: !!features.overlays,
-    goal,
     recent: tips.recent.map((d) => ({
       id: d.id, amount: Number(d.amount) || 0, currency: d.currency || currency, name: d.donor_name || '', message: d.message || '', ago: ago(d.created_at, now),
     })),

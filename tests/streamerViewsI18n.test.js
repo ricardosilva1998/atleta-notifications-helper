@@ -54,6 +54,7 @@ const PAGE_WORDS = {
   ],
   'chatbot-config': ['socials'], // the example in the command-name placeholder
   'overlay-config': ['eyJhbGciOi'], // the example in the StreamElements token placeholder
+  tracking: ['USD', 'GBP', 'BRL', 'CAD', 'AUD'], // the tip goal's currency menu lists the codes it counts in
 };
 
 // ── 1. The page source ───────────────────────────────────────────────────
@@ -233,9 +234,18 @@ const trackingState = (over = {}) => ({
   notAffiliate: false,
   ...over,
 });
-const trackingPage = (state, links) => ({
+// The tip goal's section (views/sections/tip-goal.ejs, tipGoalSection() in routes/dashboard.js): a running goal with a
+// past one, its OBS link, an error and the currency warning; or none at all.
+const TIP_GOAL_RUNNING = {
+  activeGoal: { id: 1, title: 'TitleText', currency: 'EUR', target_amount: 100, current_amount: 5, bar_color: '#22c55e', completed_at: null },
+  goalHistory: [{ title: 'TitleText', currency: 'EUR', current_amount: 5, target_amount: 10, completed_at: 'x', ended_at: '2026-09-01 00:00:00', created_at: '2026-08-01 00:00:00' }],
+  goalOverlayUrl: 'https://app.test/overlay/goal/tok123', goalError: 'ErrorText', goalCurrencyWarning: 'ErrorText',
+};
+const TIP_GOAL_NONE = { activeGoal: null, goalHistory: [], goalOverlayUrl: null, goalError: null, goalCurrencyWarning: null };
+const trackingPage = (state, links, tip = TIP_GOAL_RUNNING) => ({
   streamer, lang: 'en', state, trackerList: TRACKERS, links,
   trackingData: JSON.stringify({ state, lang: 'en' }), trackingTexts: JSON.stringify({ statusNone: 'x' }),
+  ...tip,
 });
 const TRACKING_LINKS = {
   goals: { follow: 'https://app.test/overlay/goal/followers/tok123?lang=en', sub: 'https://app.test/overlay/goal/subs/tok123?lang=en' },
@@ -243,7 +253,7 @@ const TRACKING_LINKS = {
 };
 PAGE_LOCALS.tracking = [
   trackingPage(trackingState(), TRACKING_LINKS),
-  trackingPage(trackingState({ notAffiliate: true }), null),
+  trackingPage(trackingState({ notAffiliate: true }), null, TIP_GOAL_NONE),
 ];
 PAGE_LOCALS['account-disabled'] = [{ streamer: null }];
 // The account page shows YouTube's channels and posts only while YouTube is (features.youtube): each sample both ways.

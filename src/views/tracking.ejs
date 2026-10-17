@@ -116,6 +116,8 @@
 </section>
 <% } %>
 
+<%- include('sections/tip-goal') %>
+
 <div class="trk-trackers">
 <% for (const tracker of trackerList) { const _tr = state.trackers[tracker]; const _tt = _trackerTexts[tracker]; %>
 <section class="card trk-card trk-tracker animate-in" id="tracker-<%= tracker %>" data-tracker="<%= tracker %>" aria-labelledby="tracker-<%= tracker %>-title">

@@ -424,8 +424,9 @@ describe('while the overlay features are off, the pages say nothing about the ov
   test('switched on, they ask for the texts about them again', async () => {
     const wanted = {
       dashboard: ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental',
-        'dashboard.youtube.overlayDesc', 'cards.overlay.sources', 'cards.donations.goal', 'cards.sponsors.images'],
-      'donation-settings': ['donations.settings.intro', 'donations.goal.title', 'donations.goal.testLive', 'donations.goalOverlay.title', 'donations.goal.past'],
+        'dashboard.youtube.overlayDesc', 'cards.overlay.sources', 'cards.tracking.tipTitle', 'cards.sponsors.images'],
+      // The tip goal itself moved to the Tracking page (views/sections/tip-goal.ejs); the page links there.
+      'donation-settings': ['donations.settings.intro', 'donations.goal.moved', 'donations.goal.movedLink'],
       'timed-notifications': ['sponsors.intro', 'sponsors.builderLink'],
     };
     for (const page of OVERLAY_SWITCH_PAGES) {

@@ -657,69 +657,6 @@
     focusAfterDelete(card, 'sponsor', next);
   });
 
-  // ── The tip goal ──
-
-  function money(amount, currency) {
-    try {
-      return new Intl.NumberFormat(document.documentElement.lang || 'en', { style: 'currency', currency: currency || 'EUR' }).format(Number(amount) || 0);
-    } catch (e) {
-      return (Number(amount) || 0).toFixed(2) + ' ' + (currency || '');
-    }
-  }
-  function showGoal(card, goal) {
-    const box = $('[data-goal]', card);
-    box.hidden = !goal;
-    $('[data-goal-none]', card).hidden = !!goal;
-    $('[data-goal-button]', card).textContent = goal ? T.edit : T.startGoal;
-    if (goal) {
-      const current = Number(goal.current_amount) || 0;
-      const target = Number(goal.target_amount) || 0;
-      Object.assign(box.dataset, { title: goal.title, current: String(current), target: String(target), currency: goal.currency });
-      $('[data-goal-title]', box).textContent = goal.title;
-      $('[data-goal-amount]', box).textContent = core.fill(T.goalAmount, { raised: money(current, goal.currency), target: money(target, goal.currency) });
-      $('[data-goal-bar]', box).style.width = (target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0) + '%';
-    }
-    repack();
-  }
-  onClick('[data-edit="goal"]', (button) => {
-    const card = button.closest('.wc-card');
-    const box = $('[data-goal]', card);
-    const running = !box.hidden;
-    openEditor('tpl-goal', button.dataset.title, button, (editor) => {
-      $('[data-field="title"]', editor).value = running ? box.dataset.title : '';
-      $('[data-field="target_amount"]', editor).value = running ? box.dataset.target : '';
-      $('[data-goal-hint]', editor).textContent = core.fill(T.goalHint, { raised: money(running ? box.dataset.current : 0, box.dataset.currency), currency: box.dataset.currency });
-      const end = $('[data-goal-end]', editor);
-      if (!running) {
-        end.hidden = true;
-        return;
-      }
-      end.addEventListener('click', async () => {
-        if (!window.confirm(T.confirmEndGoal)) return;
-        const answer = await call('POST', '/dashboard/api/tip-goal/end', {});
-        if (!answer.ok) {
-          dialogMessage(editor, answer);
-          return;
-        }
-        showGoal(card, null);
-        closeEditor(editor);
-        clearMessage(card);
-        showSaved(card);
-      });
-    }, async (editor) => {
-      const body = { title: $('[data-field="title"]', editor).value, target_amount: $('[data-field="target_amount"]', editor).value };
-      const answer = running ? await call('PATCH', '/dashboard/api/tip-goal', body) : await call('POST', '/dashboard/api/tip-goal', body);
-      if (!answer.ok) {
-        dialogMessage(editor, answer);
-        return false;
-      }
-      showGoal(card, answer.data.goal);
-      clearMessage(card);
-      showSaved(card);
-      return true;
-    });
-  });
-
   // ── Test buttons ──
 
   onClick('[data-alert-test]', async (button) => {

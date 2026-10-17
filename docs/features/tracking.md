@@ -188,7 +188,8 @@ The dashboard's Twitch tab has a **Tracking** working card of its own, after the
 `public/js/dashboard-tracking.js`, its data from `trackingCard()` in `services/dashboardCards.js`, fed by `gatherCards()`
 with the Tracking state and links; only while `features.overlays` is on):
 
-- **Goal bars:** for the follower goal and the sub goal, the running goal's bar (its colour, title, period, "count / target"
+- **Goal bars:** for the follower goal, the sub goal and the tip goal (moved here from the Donations card and page on
+  2026-10-17; `services/tipGoals.js`, its OBS source `/overlay/goal/<token>`, its routes `/dashboard/api/tip-goal`), the running goal's bar (its colour, title, period, "count / target"
   or Reconnect / Not available), **Test** (the goal reached on the OBS bar for 10 s, `test: 'reach'`), copy the OBS link,
   **Edit** and **End goal**; with no goal running, copy the link and **Start a goal**. The bars are drawn by the script from
   the card's `data-goals` and again from each route's answer.
@@ -200,7 +201,13 @@ with the Tracking state and links; only while `features.overlays` is on):
 - **Trackers:** the six, each with its switch (`POST tracker/:tracker`), its last value (the name and its detail, an
   amount in its currency; "Not available" for Latest sub on a channel that is not an Affiliate), **▶** (a sample on its
   source for 10 s, `POST tracker/:tracker/test`) and copy the OBS link.
-- The foot links the Tracking page for the trackers' colours and the past goals. The OBS links' token is only in the
+- The tip goal uses the same pop-up without the period: title, target (money, quick picks 50/100/250/500), colour, and
+  for a new goal its currency (the six `TIP_GOAL_CURRENCIES`, the tip page's first) and what was already raised. Its Test
+  is `POST /dashboard/api/tip-goal/test`; End is `POST /dashboard/api/tip-goal/end`.
+- The foot links the Tracking page for the trackers' colours and the past goals. The Tracking page also holds the tip
+  goal's full section (`views/sections/tip-goal.ejs`: preview and tests, edit with colour, the +/− correction, End, start
+  with currency and starting amount, OBS link, currency warning, past goals); its forms post to
+  `/dashboard/donations/goal*` and come back to `/dashboard/tracking#tip-goal`. The OBS links' token is only in the
   copy buttons and the card's data, never printed as text.
 
 ## The page
