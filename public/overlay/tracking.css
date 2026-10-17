@@ -1,0 +1,101 @@
+/* The Tracking sources (public/overlay/tracking.js). A goal bar is the tip goal's card, drawn by goal.css, which the
+   page loads first; this adds what the Tracking sources need around it, and the trackers' compact cards in the same
+   style. Recommended source sizes: a goal bar 800 x 160, a tracker 400 x 120. */
+
+#tracking-root {
+  padding: 40px 16px 16px;
+}
+
+/* A goal Twitch cannot count for: its text where the numbers go */
+.goal-card.unavailable .goal-current {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  font-size: 15px;
+}
+.goal-card.unavailable .goal-sep,
+.goal-card.unavailable .goal-target { display: none; }
+
+/* ── A tracker ─────────────────────────────────────────────────────────── */
+
+.trk-card {
+  --track-color: #9146FF;
+  position: relative;
+  display: inline-block;
+  min-width: 220px;
+  max-width: 100%;
+  background: linear-gradient(135deg, rgba(15, 15, 20, 0.92), rgba(28, 28, 38, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 16px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 16px color-mix(in srgb, var(--track-color) 25%, transparent);
+  color: #fff;
+  overflow: hidden;
+}
+
+.trk-accent {
+  position: absolute;
+  top: 0; left: 16px; right: 16px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--track-color);
+  box-shadow: 0 0 10px var(--track-color);
+}
+
+.trk-title {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--track-color);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.trk-value {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.trk-name {
+  font-weight: 800;
+  font-size: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Not available for the channel: the text in place of a name, quieter and allowed to wrap */
+.trk-card.unavailable .trk-name {
+  font-weight: 600;
+  font-size: 15px;
+  white-space: normal;
+  opacity: 0.75;
+}
+
+.trk-detail {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.trk-detail:empty { display: none; }
+
+/* A new value slides in from the left, its text after the card */
+.trk-card.slide { animation: trk-slide 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+.trk-card.slide .trk-value { animation: trk-text 0.55s ease-out; }
+
+@keyframes trk-slide {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes trk-text {
+  0%, 30% { opacity: 0; transform: translateX(-10px); }
+  100% { opacity: 1; transform: none; }
+}

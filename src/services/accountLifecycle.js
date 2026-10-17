@@ -35,13 +35,16 @@ function liveServices() {
 // `services.now` is for tests.
 const nowOf = (services) => (typeof services.now === 'function' ? services.now() : Date.now());
 
-// The two managers a change of Twitch account touches, and the polls the card and the bar show.
+// The two managers a change of Twitch account touches, the polls the card and the bar show, and the Tracking goals
+// and trackers.
 function twitchServices() {
   return {
     db: require('../db'),
     eventSubManager: require('./eventsub').eventSubManager,
     chatManager: require('./twitchChat').chatManager,
     livePolls: require('./livePolls').livePolls,
+    trackingGoals: require('./trackingGoals'),
+    trackers: require('./trackers'),
   };
 }
 
@@ -72,15 +75,16 @@ function stopLiveServices(streamerId, services, { pauseYoutubeChat = false } = {
 
 // Restarts what the streamer had switched on, under the same conditions the
 // managers use when the app boots. The event connections (EventSub,
-// StreamElements, the sponsor rotation) serve the overlay and the chatbot, so
-// either one being on starts them (db.getOverlayOrChatbotStreamers); each
+// StreamElements, the sponsor rotation) serve the overlay, the chatbot and
+// Tracking, so any one of them in use starts them
+// (db.getOverlayOrChatbotStreamers, db.usesTracking); each
 // keeps its own condition: EventSub needs the broadcaster authorization,
 // StreamElements its token, and the sponsor manager starts only the rotations
 // the streamer switched on.
 function startLiveServices(streamerId, services) {
   const streamer = services.db.getStreamerById(streamerId);
   if (!streamer) return;
-  if (streamer.overlay_enabled || streamer.chatbot_enabled) {
+  if (streamer.overlay_enabled || streamer.chatbot_enabled || services.db.usesTracking(streamerId)) {
     if (streamer.broadcaster_access_token) {
       attempt('EventSub start', streamerId, () => services.eventSubManager.startForStreamer(streamerId));
     }
@@ -137,7 +141,11 @@ function removeAccount(streamerId, services = liveServices()) {
 // broadcaster authorization that belonged to the previous account). What ran for
 // that account stops: EventSub; the poll and prediction the Polls & predictions
 // card and the bar showed are forgotten (an open bar clears, and the card reads
-// the new channel); and the chat bot leaves the previous channel
+// the new channel); the active follower and sub goals end (each keeping the
+// count it showed), the record of the previous channel's follows and subs is
+// removed (a goal started later must not count them) and the trackers are
+// cleared (their open sources too), so nothing shows the previous channel's
+// numbers; and the chat bot leaves the previous channel
 // (previousUsername, which the database no longer holds) and joins the new one
 // if the chat bot is on. EventSub is not started again: there is no
 // authorization to connect with until the streamer gives one for the new
@@ -145,6 +153,11 @@ function removeAccount(streamerId, services = liveServices()) {
 function twitchAccountChanged(streamerId, previousUsername, services = twitchServices()) {
   attempt('EventSub stop', streamerId, () => services.eventSubManager.stopForStreamer(streamerId));
   attempt('Polls forget', streamerId, () => services.livePolls.forget(streamerId));
+  for (const kind of services.trackingGoals.KINDS) {
+    attempt('Tracking goal end', streamerId, () => services.trackingGoals.endGoal(streamerId, kind));
+  }
+  attempt('Tracking record removal', streamerId, () => services.db.deleteTrackingEvents(streamerId));
+  attempt('Trackers clear', streamerId, () => services.trackers.clear(streamerId));
   if (previousUsername) {
     attempt('Twitch chat leave', streamerId, () => services.chatManager.partChannel(previousUsername));
   }

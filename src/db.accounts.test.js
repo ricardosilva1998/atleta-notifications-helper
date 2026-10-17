@@ -91,6 +91,8 @@ function fillStreamer(id) {
   for (const table of streamerTables()) {
     const values = { streamer_id: id, ...PLACEHOLDER_EXCEPTIONS[table] };
     if (table === 'sessions') values.sid = `sid-${id}-${++counter}`;
+    // A finished period hangs off its streamer's own goal (tracking_goals is filled just before it).
+    if (table === 'tracking_goal_periods') values.goal_id = sql.prepare('SELECT id FROM tracking_goals WHERE streamer_id = ?').get(id).id;
     insertRow(table, values);
   }
   const giveaway = sql.prepare('SELECT id FROM giveaways WHERE streamer_id = ?').get(id).id;

@@ -40,7 +40,7 @@ class FakeWebSocket {
 }
 
 let streamers;
-const effects = { overlay: [], overlayLog: [], chat: [], raidProtection: [], redemptions: [], polls: [], shoutouts: [] };
+const effects = { overlay: [], overlayLog: [], chat: [], raidProtection: [], redemptions: [], polls: [], shoutouts: [], records: [], trackers: [] };
 let pollsScope = false; // what the stubbed hasPollsScope answers
 let subscribeCalls;
 
@@ -68,6 +68,8 @@ const stubs = {
     },
   },
   './redemptionDispatcher': { handleRedemption: async (streamerId, data) => { effects.redemptions.push({ streamerId, data }); } },
+  './trackingGoals': { recordEvent: (streamerId, kind, ev) => effects.records.push({ streamerId, kind, ev }) },
+  './trackers': { onEvent: (streamerId, normalized) => effects.trackers.push({ streamerId, normalized }) },
 };
 
 let eventSubManager;
@@ -789,5 +791,91 @@ describe('polls and predictions', () => {
     assert.deepEqual(effects.overlay, []);
     assert.deepEqual(effects.overlayLog, []);
     assert.deepEqual(effects.chat, []);
+  });
+});
+
+describe('the follow/sub record and the trackers (Tracking)', () => {
+  test('a follow is recorded with the follower\'s Twitch id; the alert, stats row and thank-you are as before', async () => {
+    const socket = await connected();
+    socket.receive(notification('channel.follow', { user_id: '5001', user_login: 'fan', user_name: 'Fan' }));
+    assert.deepEqual(effects.records, [{ streamerId: 1, kind: 'follow', ev: { subType: null, twitchUserId: '5001', username: 'Fan', count: 1 } }]);
+    assert.deepEqual(effects.overlay.map((e) => e.event), [{ type: 'follow', data: { username: 'Fan' }, isGift: false }]);
+    assert.deepEqual(effects.overlayLog, [{ streamerId: 1, type: 'follow', username: 'Fan' }]);
+    assert.deepEqual(effects.chat, [{ streamerId: 1, type: 'follow', data: { username: 'Fan' } }]);
+  });
+
+  test('a new sub is \'new\'; a sub message is \'resub\' past its first month, else \'new\'', async () => {
+    const socket = await connected();
+    socket.receive(notification('channel.subscribe', { user_id: '5002', user_name: 'First', tier: '1000', is_gift: false }));
+    socket.receive(notification('channel.subscription.message', {
+      user_id: '5003', user_name: 'Loyal', tier: '1000', cumulative_months: 5, message: { text: 'synthetic' },
+    }));
+    socket.receive(notification('channel.subscription.message', { user_id: '5004', user_name: 'Shared', tier: '1000', cumulative_months: 1, message: null }));
+    assert.deepEqual(effects.records.map((r) => [r.kind, r.ev.subType, r.ev.twitchUserId, r.ev.username, r.ev.count]), [
+      ['sub', 'new', '5002', 'First', 1],
+      ['sub', 'resub', '5003', 'Loyal', 1],
+      ['sub', 'new', '5004', 'Shared', 1],
+    ]);
+    assert.deepEqual(effects.overlay[1].event.data, { username: 'Loyal', tier: '1', months: 5, message: 'synthetic' }, 'the alert\'s data is unchanged');
+  });
+
+  test('a gift of 5 is one record of count 5; its recipients are not recorded', async () => {
+    const socket = await connected();
+    socket.receive(notification('channel.subscription.gift', { user_id: '5005', user_name: 'Gifter', total: 5, tier: '1000', is_anonymous: false }));
+    for (const name of ['R1', 'R2', 'R3', 'R4', 'R5']) socket.receive(notification('channel.subscribe', { user_name: name, tier: '1000', is_gift: true }));
+    assert.deepEqual(effects.records, [{ streamerId: 1, kind: 'sub', ev: { subType: 'gift', twitchUserId: '5005', username: 'Gifter', count: 5 } }]);
+    assert.deepEqual(effects.overlay[0].event.data, { username: 'Gifter', tier: '1', amount: 5, message: 'Gifted 5 subs!' });
+  });
+
+  test('an anonymous gift is recorded without the gifter\'s id', async () => {
+    const socket = await connected();
+    socket.receive(notification('channel.subscription.gift', { user_id: null, user_name: null, total: 2, tier: '1000', is_anonymous: true }));
+    assert.deepEqual(effects.records, [{ streamerId: 1, kind: 'sub', ev: { subType: 'gift', twitchUserId: null, username: 'Anonymous', count: 2 } }]);
+  });
+
+  test('the five alert events reach the trackers once each, as the alerts got them; bits and raids are not recorded', async () => {
+    const socket = await connected();
+    socket.receive(notification('channel.follow', { user_id: '5001', user_name: 'Fan' }));
+    socket.receive(notification('channel.subscribe', { user_id: '5002', user_name: 'First', tier: '1000', is_gift: false }));
+    socket.receive(notification('channel.subscription.gift', { user_id: '5005', user_name: 'Gifter', total: 3, tier: '1000', is_anonymous: false }));
+    socket.receive(notification('channel.cheer', { user_name: 'Cheerer', bits: 100, is_anonymous: false, message: 'gg' }));
+    const raid = notification('channel.raid', { from_broadcaster_user_name: 'Raider', from_broadcaster_user_login: 'raider', from_broadcaster_user_id: '9002', viewers: 42 });
+    socket.receive(raid);
+    socket.receive(raid); // a repeat
+    assert.deepEqual(effects.trackers.map((t) => t.normalized.type), ['follow', 'subscription', 'giftsub', 'bits', 'raid']);
+    assert.deepEqual(effects.trackers[4].normalized, { type: 'raid', data: { username: 'Raider', viewers: 42, login: 'raider', userId: '9002' } });
+    assert.deepEqual(effects.records.map((r) => r.kind), ['follow', 'sub', 'sub']);
+  });
+
+  // Both promise never to throw; if one ever did, the alert and the thank-you that follow must still go out.
+  test('a goal record or a tracker that throws costs neither the alert nor the thank-you', async () => {
+    const goals = stubs['./trackingGoals'];
+    const trackersStub = stubs['./trackers'];
+    const { recordEvent } = goals;
+    const { onEvent } = trackersStub;
+    goals.recordEvent = () => { throw new Error('synthetic record failure'); };
+    trackersStub.onEvent = () => { throw new Error('synthetic tracker failure'); };
+    try {
+      const socket = await connected();
+      socket.receive(notification('channel.follow', { user_id: '5001', user_name: 'Fan' }));
+      socket.receive(notification('channel.raid', { from_broadcaster_user_name: 'Raider', from_broadcaster_user_login: 'raider', from_broadcaster_user_id: '9002', viewers: 3 }));
+      assert.deepEqual(effects.overlay.map((e) => e.event.type), ['follow', 'raid']);
+      assert.deepEqual(effects.chat.map((c) => c.type), ['follow', 'raid']);
+      assert.deepEqual(effects.raidProtection, [1]);
+    } finally {
+      goals.recordEvent = recordEvent;
+      trackersStub.onEvent = onEvent;
+    }
+  });
+
+  test('redemptions and polls reach neither', async () => {
+    pollsScope = true;
+    const socket = await connected();
+    socket.receive(notification('channel.poll.begin', { id: 'poll-2', title: 'Top 5?', choices: [] }));
+    socket.receive(notification('channel.channel_points_custom_reward_redemption.add', {
+      id: 'redemption-1', reward: { id: 'reward-1', title: 'Hydrate', cost: 100 }, user_name: 'Viewer', user_id: '5009', status: 'unfulfilled',
+    }));
+    assert.deepEqual(effects.records, []);
+    assert.deepEqual(effects.trackers, []);
   });
 });

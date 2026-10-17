@@ -18,6 +18,7 @@ const SWITCH_MIGRATION = 'cp_rewards_enabled_for_existing_rewards';
 const SESSION_HASH_MIGRATION = 'hash_web_session_ids';
 const DURATIONS_MIGRATION = 'longer_alert_durations';
 const C1_MIGRATION = 'c1_donation_for_andre_vilela';
+const TRACKERS_SEED = 'tracking_seed_trackers';
 
 let tmpDir;
 before(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-data-migrations-')); });
@@ -59,7 +60,7 @@ function boot(file, inspect, stubs = {}) {
   return errors;
 }
 
-const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|longer_alert_durations|c1_donation_for_andre_vilela/i.test(line));
+const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|longer_alert_durations|c1_donation_for_andre_vilela|tracking_seed_trackers/i.test(line));
 
 test('a fresh database boots twice: each data migration is recorded once, without errors', () => {
   const file = path.join(tmpDir, 'fresh.db');
@@ -68,7 +69,7 @@ test('a fresh database boots twice: each data migration is recorded once, withou
 
   const raw = new RealDatabase(file);
   try {
-    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION].sort());
+    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED].sort());
   } finally {
     raw.close();
   }
@@ -231,4 +232,37 @@ test('a database from before the live poller kept a stream id gets the two colum
     assert.equal(row.offline_polls, 1);
   });
   assert.deepEqual(stateErrors(again), []);
+});
+
+test('a database from before the Tracking release gets the last stream\'s start, and its trackers filled once from what it has', () => {
+  const file = path.join(tmpDir, 'before-tracking.db');
+  boot(file); // the schema production will have
+
+  // Production before the release: no last_stream_started_at, the seed never ran, a follow and a tip recorded.
+  let streamerId;
+  const raw = new RealDatabase(file);
+  try {
+    raw.exec('ALTER TABLE channel_state DROP COLUMN last_stream_started_at');
+    raw.prepare('DELETE FROM data_migrations WHERE name = ?').run(TRACKERS_SEED);
+    streamerId = Number(raw.prepare("INSERT INTO streamers (discord_user_id, discord_username) VALUES ('600000000000000091', 'tracking_streamer')").run().lastInsertRowid);
+    raw.prepare("INSERT INTO overlay_events (streamer_id, event_type, username, data, created_at) VALUES (?, 'follow', 'FirstFan', '{\"username\":\"FirstFan\"}', datetime('now', '-1 hour'))").run(streamerId);
+    raw.prepare("INSERT INTO donations (streamer_id, source, donor_name, amount, currency) VALUES (?, 'paypal', 'Tipper', 4, 'EUR')").run(streamerId);
+  } finally {
+    raw.close();
+  }
+
+  const errors = boot(file, (db) => {
+    assert.ok(db.db.pragma('table_info(channel_state)').map((c) => c.name).includes('last_stream_started_at'));
+    const values = db.getTrackerValues(streamerId);
+    assert.deepEqual(JSON.parse(values.latest_follower), { name: 'FirstFan' });
+    assert.deepEqual(JSON.parse(values.latest_tip), { name: 'Tipper', amount: 4, currency: 'EUR' });
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM tracking_goals').get().n, 0, 'no goal is created');
+    db.clearTrackerValues(streamerId); // as a change of Twitch account would
+  });
+  assert.deepEqual(ownErrors(errors), []);
+
+  // Once: the next boot does not fill them again.
+  boot(file, (db) => {
+    assert.deepEqual(db.getTrackerValues(streamerId), {});
+  });
 });

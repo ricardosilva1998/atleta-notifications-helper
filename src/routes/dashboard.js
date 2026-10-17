@@ -43,6 +43,8 @@ const { TTS_ERRORS, TTS_STATUS_TEXTS, checkTtsSettings, lastErrorKey } = require
 const { TTS_LANGUAGES, VOICES, defaultVoice, isVoice } = require('../services/ttsVoices');
 const { defaultTemplates } = require('../services/tipSpeech');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
+const trackingGoals = require('../services/trackingGoals');
+const trackers = require('../services/trackers');
 const { t: translateIn } = require('../i18n');
 
 const router = Router();
@@ -892,15 +894,28 @@ router.get('/overlay', overlayPage, (req, res) => {
 
 // EventSub (the Twitch events behind the overlay's alerts and the chatbot's
 // thank-yous), StreamElements and the sponsor rotation run while the overlay or
-// the chatbot is on; the managers start them at boot on the same rule
-// (db.getOverlayOrChatbotStreamers). A save that changes one of the two
-// switches goes through here: `wasNeeded` and `needed` say whether either was
-// on before and is on after. They are started when the first of the two comes
-// on, stopped when the last one goes off, and left alone while the other switch
-// keeps them needed. Settings reach an open OBS source as they are saved, so
+// the chatbot is on, or while the streamer uses Tracking (an active follower or
+// sub goal, or a tracker switched on: trackingInUse); the managers start them
+// at boot on the same rule (db.getOverlayOrChatbotStreamers). A save that
+// changes one of these goes through here: `wasNeeded` and `needed` say whether
+// any was on before and is on after. They are started when the first comes on,
+// stopped when the last one goes off, and left alone while another keeps them
+// needed. Settings reach an open OBS source as they are saved, so
 // nothing else reconnects Twitch (a restart drops events for a second or two);
 // the StreamElements connection also follows its token, when that is added,
 // replaced or removed (streamElementsChanged).
+// Whether the streamer's Tracking needs the event connections (see above). A
+// database error counts as needed: stopping Twitch's events by mistake loses
+// them, keeping them a little longer costs nothing.
+function trackingInUse(streamerId) {
+  try {
+    return db.usesTracking(streamerId);
+  } catch (e) {
+    console.error(`[Dashboard] Tracking check failed for streamer ${streamerId}:`, e.message);
+    return true;
+  }
+}
+
 function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt, streamElementsChanged = false }) {
   // Each step runs on its own, so one that fails does not keep the others from running.
   const attempt = (what, fn) => {
@@ -940,9 +955,10 @@ router.post('/overlay', (req, res) => {
   db.updateOverlayConfig(req.streamer.id, columns);
   pushOverlayConfig(req.streamer.id);
 
+  const tracking = trackingInUse(req.streamer.id);
   syncLiveConnections(req.streamer.id, {
-    wasNeeded: wasEnabled || chatbotOn,
-    needed: !!columns.overlay_enabled || chatbotOn,
+    wasNeeded: wasEnabled || chatbotOn || tracking,
+    needed: !!columns.overlay_enabled || chatbotOn || tracking,
     streamElementsJwt,
     streamElementsChanged: 'streamelements_jwt' in columns,
   });
@@ -1029,7 +1045,7 @@ function pushOverlayConfig(streamerId) {
 }
 
 // What follows a working card's save (POST /dashboard/settings), once per save: the chat bot joins or leaves
-// the channel, the Twitch event connections start or stop (needed while the overlay or the chatbot is on),
+// the channel, the Twitch event connections start or stop (needed while the overlay or the chatbot is on, or Tracking is in use),
 // an open OBS overlay gets the new settings, the sponsor chat rotation restarts.
 function runSettingFollowUps({ before, after, steps }) {
   const id = after.id;
@@ -1043,8 +1059,9 @@ function runSettingFollowUps({ before, after, steps }) {
         console.error('[Dashboard] Chatbot start/stop error:', e.message);
       }
     }
-    const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled);
-    const needed = !!(after.overlay_enabled || after.chatbot_enabled);
+    const tracking = trackingInUse(id);
+    const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled) || tracking;
+    const needed = !!(after.overlay_enabled || after.chatbot_enabled) || tracking;
     if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed, streamElementsJwt: after.streamelements_jwt });
   }
   if (steps.has('overlay')) {
@@ -1446,6 +1463,247 @@ router.post('/donations/goal/:id/end', (req, res) => {
   goalRedirect(res);
 });
 
+// --- Tracking (services/trackingGoals.js, services/trackers.js) ---
+// The follower goal, the sub goal and the six trackers, each its own OBS source (routes/overlay.js), managed on
+// /dashboard/tracking. Its script talks to the JSON routes under /dashboard/api/tracking/: each answers
+// { ok: true, state } (what the page draws, trackingState) or { ok: false, error: <code> }, and the page shows the
+// code's text from its own table (TRACKING_TEXT_KEYS.errors). An active goal or a tracker switched on keeps the
+// streamer's event connections running (db.usesTracking), so a change that starts or ends the last of them goes
+// through syncLiveConnections.
+
+const TRACKING_REFUSALS = Object.freeze({
+  bad_title: 400, bad_target: 400, bad_color: 400, bad_period: 400, bad_mode: 400, bad_zone: 400, bad_hours: 400,
+  bad_delta: 400, bad_switch: 400, bad_test: 400, not_found: 404, too_fast: 429, twitch_failed: 502,
+});
+function trackingRefusal(res, error, extra) {
+  res.status(TRACKING_REFUSALS[error] || 400).json({ ok: false, error, ...extra });
+}
+
+// The texts public/js/tracking-page.js reads, as window.TRACKING_TEXTS: name → key ({{placeholders}} kept for the
+// script), and the refusals' texts under `errors`, by code.
+const TRACKING_TEXT_KEYS = {
+  statusNone: 'tracking.status.none', statusRunning: 'tracking.status.running', statusReached: 'tracking.status.reached',
+  statusReconnect: 'tracking.status.reconnect', statusNotAvailable: 'tracking.status.notAvailable',
+  periodLifetime: 'tracking.short.lifetime', periodYear: 'tracking.short.year', periodMonth: 'tracking.short.month',
+  periodWeek: 'tracking.short.week', periodDay: 'tracking.short.day', periodHours: 'tracking.short.hours',
+  modeCalendar: 'tracking.short.calendar', modeRolling: 'tracking.short.rolling',
+  pastReached: 'tracking.past.reached', pastMissed: 'tracking.past.missed', pastEnded: 'tracking.past.ended',
+  pastCount: 'tracking.past.count', pastTarget: 'tracking.past.target', pastEmpty: 'tracking.past.empty',
+  trackerShows: 'tracking.tracker.shows', trackerNothing: 'tracking.tracker.nothing', trackerOff: 'tracking.tracker.off',
+  sampleName: 'tracking.tracker.sampleName', copied: 'tracking.copied', saved: 'tracking.saved',
+  testing: 'tracking.goal.testing', endConfirm: 'tracking.goal.endConfirm',
+  failed: 'tracking.error.failed', sessionEnded: 'tracking.error.session', offline: 'tracking.error.offline',
+};
+const TRACKING_ERROR_KEYS = {
+  bad_title: 'tracking.error.bad_title', bad_target: 'tracking.error.bad_target', bad_color: 'tracking.error.bad_color',
+  bad_period: 'tracking.error.bad_period', bad_mode: 'tracking.error.bad_mode', bad_zone: 'tracking.error.bad_zone',
+  bad_hours: 'tracking.error.bad_hours', bad_delta: 'tracking.error.bad_delta', bad_switch: 'tracking.error.bad_switch',
+  bad_test: 'tracking.error.bad_test', not_found: 'tracking.error.not_found', too_fast: 'tracking.error.too_fast',
+  twitch_failed: 'tracking.error.twitch_failed',
+};
+// The sample bar a test draws without a goal is titled with the goal's name.
+const TRACKING_GOAL_TITLES = { follow: 'tracking.goal.follow.title', sub: 'tracking.goal.sub.title' };
+function trackingTexts(t) {
+  const texts = {};
+  for (const [name, key] of Object.entries(TRACKING_TEXT_KEYS)) texts[name] = t(key, KEEP_PLACEHOLDERS);
+  texts.errors = {};
+  for (const [code, key] of Object.entries(TRACKING_ERROR_KEYS)) texts.errors[code] = t(key, KEEP_PLACEHOLDERS);
+  return texts;
+}
+
+// A time as SQLite writes it ('YYYY-MM-DD HH:MM:SS', UTC) as ISO, for the page to show in its own language.
+const isoOf = (value) => {
+  if (!value) return null;
+  const m = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)$/.exec(String(value));
+  return m ? `${m[1]}T${m[2]}Z` : String(value);
+};
+
+// A past goal or finished period as the page lists it. result: 'reached' or 'missed'; a calendar goal ended in the
+// middle of its period did not miss it, so it is 'ended' unless it was reached (a finished period stays reached or
+// missed). count: a period's count, or the count a goal showed when it ended (null when it showed none). A period's
+// end is its last moment (the stored end is the next period's start), so the page shows its last day; timeZone is a
+// calendar goal's, which the page shows the days in.
+const CALENDAR_PERIODS = new Set(['year', 'month', 'week', 'day']);
+function trackingHistoryRow(h) {
+  const period = h.type === 'period';
+  const reached = period ? !!h.reached : !!h.completed_at;
+  const calendar = CALENDAR_PERIODS.has(h.period) && h.mode === 'calendar';
+  let result = reached ? 'reached' : 'missed';
+  if (!period && !reached && calendar) result = 'ended';
+  let end = isoOf(h.at);
+  if (period && end && Number.isFinite(Date.parse(end))) end = new Date(Date.parse(end) - 1).toISOString();
+  return {
+    title: h.title, period: h.period, mode: h.mode, target: h.target,
+    count: period ? h.count : (h.final_count == null ? null : h.final_count),
+    reached,
+    result,
+    start: isoOf(period ? h.period_start : h.started_at),
+    end,
+    timeZone: calendar && h.time_zone ? h.time_zone : null,
+  };
+}
+
+// What the page draws: each goal's payload (trackingGoals.progressOf, null without one) with its time zone and
+// hours and its past goals; each tracker's settings and value; the tip page's currency (the tip trackers' sample)
+// and whether the channel is known not to be an Affiliate (the sub goal and the Latest sub tracker say so).
+function trackingState(streamer) {
+  const goals = {};
+  for (const kind of trackingGoals.KINDS) {
+    const row = db.getActiveTrackingGoal(streamer.id, kind);
+    goals[kind] = {
+      goal: row ? trackingGoals.progressOf(streamer.id, kind) : null,
+      timeZone: row ? row.time_zone : null,
+      hours: row ? row.hours : null,
+      history: db.getTrackingGoalHistory(streamer.id, kind, 10).map(trackingHistoryRow),
+    };
+  }
+  const settings = trackers.settings(streamer.id);
+  const values = trackers.values(streamer.id);
+  const list = {};
+  for (const tracker of trackers.TRACKERS) list[tracker] = { ...settings[tracker], value: values[tracker] };
+  return {
+    goals,
+    trackers: list,
+    currency: String(streamer.donation_currency || 'EUR').toUpperCase(),
+    notAffiliate: streamer.cp_affiliate_status === 'not_affiliate',
+  };
+}
+
+// After a Tracking change: starts or stops the event connections when the streamer's Tracking was what kept them
+// needed, or now is (`before`: trackingInUse ahead of the change). The overlay and the chatbot keep them as they are.
+function syncTrackingConnections(streamer, before) {
+  const others = !!streamer.overlay_enabled || !!streamer.chatbot_enabled;
+  const wasNeeded = others || before;
+  const needed = others || trackingInUse(streamer.id);
+  if (wasNeeded !== needed) syncLiveConnections(streamer.id, { wasNeeded, needed, streamElementsJwt: streamer.streamelements_jwt });
+}
+
+// The OBS links of the goals and the trackers, in the page's language; null without an overlay token.
+function trackingLinks(req, streamer, lang) {
+  if (!streamer.overlay_token) return null;
+  const base = `${config.app.url || `${req.protocol}://${req.get('host')}`}/overlay`;
+  const token = encodeURIComponent(streamer.overlay_token);
+  const q = `?lang=${encodeURIComponent(lang)}`;
+  return {
+    goals: { follow: `${base}/goal/followers/${token}${q}`, sub: `${base}/goal/subs/${token}${q}` },
+    trackers: Object.fromEntries(trackers.TRACKERS.map((tracker) => [tracker, `${base}/tracker/${tracker}/${token}${q}`])),
+  };
+}
+
+const trackingKind = (req, res, next) => (trackingGoals.KINDS.includes(req.params.kind) ? next() : trackingRefusal(res, 'not_found'));
+const trackingAnswer = (req, res) => res.json({ ok: true, state: trackingState(db.getStreamerById(req.streamer.id) || req.streamer) });
+
+// The page. Its first visit writes the six trackers' rows (on, no colour), so the trackers that are on by default
+// count as in use and keep the event connections running for a source opened before anything else is set.
+router.get('/tracking', overlayPage, (req, res) => {
+  const streamer = req.streamer;
+  const before = trackingInUse(streamer.id);
+  if (db.ensureTrackerSettings(streamer.id, trackers.TRACKERS) > 0) syncTrackingConnections(streamer, before);
+  const lang = res.locals.lang || 'en';
+  const state = trackingState(streamer);
+  res.render('tracking', {
+    streamer,
+    lang,
+    state,
+    trackerList: trackers.TRACKERS,
+    links: trackingLinks(req, streamer, lang),
+    trackingData: JSON.stringify({ state, lang }),
+    trackingTexts: JSON.stringify(trackingTexts(res.locals.t)),
+  });
+});
+
+router.get('/api/tracking/state', trackingAnswer);
+
+// Start a goal (ending the active one of its kind). A lifetime goal reads Twitch's total first: no answer refuses
+// the start (twitch_failed) and leaves the running goal as it was.
+router.post('/api/tracking/goal/:kind', trackingKind, async (req, res) => {
+  const parsed = trackingGoals.parseGoalFields(req.body);
+  if (!parsed.ok) return trackingRefusal(res, parsed.error);
+  const before = trackingInUse(req.streamer.id);
+  try {
+    await trackingGoals.startGoal(req.streamer, req.params.kind, parsed.fields);
+  } catch (err) {
+    if (err && err.code === 'twitch_failed') return trackingRefusal(res, 'twitch_failed');
+    throw err;
+  }
+  syncTrackingConnections(req.streamer, before);
+  trackingAnswer(req, res);
+});
+
+// Change the active goal's title, target and colour.
+router.patch('/api/tracking/goal/:kind', trackingKind, (req, res) => {
+  const result = trackingGoals.editGoal(req.streamer.id, req.params.kind, req.body);
+  if (!result.ok) return trackingRefusal(res, result.error);
+  trackingAnswer(req, res);
+});
+
+// Move the shown count by hand ({ delta }: a whole number other than 0; negative takes away).
+router.post('/api/tracking/goal/:kind/nudge', trackingKind, (req, res) => {
+  const delta = req.body && req.body.delta;
+  if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10000000) return trackingRefusal(res, 'bad_delta');
+  if (!trackingGoals.nudgeGoal(req.streamer.id, req.params.kind, delta)) return trackingRefusal(res, 'not_found');
+  trackingAnswer(req, res);
+});
+
+router.post('/api/tracking/goal/:kind/end', trackingKind, (req, res) => {
+  const before = trackingInUse(req.streamer.id);
+  if (!trackingGoals.endGoal(req.streamer.id, req.params.kind)) return trackingRefusal(res, 'not_found');
+  syncTrackingConnections(req.streamer, before);
+  trackingAnswer(req, res);
+});
+
+// The test buttons: { test: 'small' | 'reach' | 'reset' }. Small (5% of the target, as the tip goal's) and reach
+// play on the live bar for 10 s (never saved; without a goal a sample bar titled in the page's language) and share
+// the test buttons' cooldown; the answer carries the message the bar got, which the page draws in its preview. Reset
+// shows the real bar again at once and waits for nothing.
+const TRACKING_TEST_SHARE = 0.05;
+router.post('/api/tracking/goal/:kind/test', trackingKind, (req, res) => {
+  const { kind } = req.params;
+  const test = req.body && req.body.test;
+  if (test === 'reset') {
+    trackingGoals.endTest(req.streamer.id, kind);
+    return res.json({ ok: true });
+  }
+  if (test !== 'small' && test !== 'reach') return trackingRefusal(res, 'bad_test');
+  const waitMs = testCooldown.take(req.streamer.id);
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000);
+    res.set('Retry-After', String(seconds));
+    return trackingRefusal(res, 'too_fast', { seconds });
+  }
+  const message = trackingGoals.sendTest(req.streamer.id, kind, {
+    reach: test === 'reach',
+    share: test === 'small' ? TRACKING_TEST_SHARE : undefined,
+    title: res.locals.t(TRACKING_GOAL_TITLES[kind]),
+  });
+  res.json({ ok: true, revertMs: trackingGoals.TEST_REVERT_MS, message });
+});
+
+// A tracker's switch and colour ({ enabled?: boolean, color?: '#rrggbb' | null }; null or '' is its default colour).
+// The open sources hide or recolour at once (tracker_settings on its bus channel).
+router.post('/api/tracking/tracker/:tracker', (req, res) => {
+  const { tracker } = req.params;
+  if (!trackers.TRACKERS.includes(tracker)) return trackingRefusal(res, 'not_found');
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const change = {};
+  if (body.enabled !== undefined) {
+    if (typeof body.enabled !== 'boolean') return trackingRefusal(res, 'bad_switch');
+    change.enabled = body.enabled;
+  }
+  if (body.color !== undefined) {
+    if (body.color === null || body.color === '') change.color = null;
+    else if (typeof body.color === 'string' && /^#[0-9a-f]{6}$/i.test(body.color)) change.color = body.color.toLowerCase();
+    else return trackingRefusal(res, 'bad_color');
+  }
+  if (!Object.keys(change).length) return trackingRefusal(res, 'bad_switch');
+  const before = trackingInUse(req.streamer.id);
+  db.setTrackerSetting(req.streamer.id, tracker, change);
+  const { enabled, color } = trackers.settings(req.streamer.id)[tracker];
+  require('../services/overlayBus').emit(trackers.channel(req.streamer.id), { type: 'tracker_settings', tracker, enabled, color });
+  syncTrackingConnections(req.streamer, before);
+  trackingAnswer(req, res);
+});
+
 // The currency and minimum are used to build PayPal orders and are written into
 // the tip page's script, so they are validated here, not only by the form.
 router.post('/donations', (req, res) => {
@@ -1558,16 +1816,16 @@ router.post('/chatbot', (req, res) => {
 
   // The chatbot's thank-yous and sponsor messages need the event connections as
   // the overlay does (see syncLiveConnections): switching the chatbot on starts
-  // them unless the overlay already has, switching it off stops them unless the
-  // overlay still needs them. A save that leaves the switch where it was
+  // them unless the overlay or Tracking already has, switching it off stops them
+  // unless the overlay or Tracking still needs them. A save that leaves the switch where it was
   // changes nothing.
   const chatbotWasOn = !!req.streamer.chatbot_enabled;
   const chatbotIsOn = !!b.chatbot_enabled;
   if (chatbotWasOn !== chatbotIsOn) {
-    const overlayOn = !!req.streamer.overlay_enabled;
+    const otherwiseNeeded = !!req.streamer.overlay_enabled || trackingInUse(req.streamer.id);
     syncLiveConnections(req.streamer.id, {
-      wasNeeded: overlayOn || chatbotWasOn,
-      needed: overlayOn || chatbotIsOn,
+      wasNeeded: otherwiseNeeded || chatbotWasOn,
+      needed: otherwiseNeeded || chatbotIsOn,
       streamElementsJwt: req.streamer.streamelements_jwt,
     });
   }

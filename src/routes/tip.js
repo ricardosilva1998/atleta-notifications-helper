@@ -73,9 +73,9 @@ function tipError(res, streamer, reason) {
   renderTipPage(res, streamer, { status, error: message });
 }
 
-// A new PayPal donation: overlay alert, overlay stats, tip goal and chat thank-you. The overlay alert waits for its
-// voice when the tip is read aloud (services/tipVoice.js, up to 15 s, one tip at a time per streamer); nothing here
-// waits for it, so the viewer's return page and everything else stay immediate.
+// A new PayPal donation: overlay alert, overlay stats, tip goal, trackers and chat thank-you. The overlay alert waits
+// for its voice when the tip is read aloud (services/tipVoice.js, up to 15 s, one tip at a time per streamer); nothing
+// here waits for it, so the viewer's return page and everything else stay immediate.
 function announceTip(streamer, d) {
   try {
     const bus = require('../services/overlayBus');
@@ -87,7 +87,7 @@ function announceTip(streamer, d) {
     }).catch((e) => console.error('[Tip] Overlay alert error:', e.message));
   } catch (e) { console.error('[Tip] Overlay alert error:', e.message); }
   try { db.logOverlayEvent(streamer.id, 'donation', d.donorName, { amount: d.amount, currency: d.currency }); } catch (e) {}
-  require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency);
+  countTip(streamer, d);
   try {
     const { chatManager } = require('../services/twitchChat');
     chatManager.sendEventMessage(streamer.id, 'donation', {
@@ -96,6 +96,13 @@ function announceTip(streamer, d) {
       message: d.message,
     });
   } catch (e) {}
+}
+
+// A tip just recorded in the donation history counts toward the tip goal and
+// the trackers (Latest tip, Top tipper). Neither throws.
+function countTip(streamer, d) {
+  require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency);
+  require('../services/trackers').onTip(streamer.id, { name: d.donorName, amount: d.amount, currency: d.currency });
 }
 
 // A PayPal tip into the donation history: true for a new row, false if it was
@@ -238,8 +245,9 @@ router.get('/:username/success', async (req, res) => {
 // ─── Daily reconcile, run by the donation cleanup in index.js ────────────────
 
 // Tips PayPal captured that the return page never recorded are recorded and
-// counted toward the goal, without the alert or the chat thank-you (see
-// reconcilePendingTips in services/tipCapture.js). Resolves to how many it recovered.
+// counted toward the goal and the trackers, without the alert or the chat
+// thank-you (see reconcilePendingTips in services/tipCapture.js). Resolves to
+// how many it recovered.
 function reconcileTips() {
   return reconcilePendingTips({
     listUnfinished: () => db.getUnfinishedPendingTips(),
@@ -247,7 +255,7 @@ function reconcileTips() {
     getOrder: getPayPalOrder,
     logDonation: logPayPalDonation,
     markCaptured: markTipCaptured,
-    recordGoal: (streamer, d) => require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency),
+    recordGoal: countTip,
     log: (line) => console.log(line),
     logError: (line) => console.error(line),
   });

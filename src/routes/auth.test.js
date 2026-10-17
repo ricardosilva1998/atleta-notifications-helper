@@ -37,6 +37,7 @@ let port;
 const saved = {};
 const logs = [];
 const eventSubStarts = [];
+const rechecks = []; // trackingGoals.recheck: [streamer id, the scopes stored when it was called]
 const twitchEvents = []; // what a change of Twitch account stopped, left and joined, in order
 let failingManager = null; // a name from twitchEvents that throws instead, to see the redirect survive it
 
@@ -97,6 +98,9 @@ before(async () => {
     }
     if (from === AUTH_FILE && request === '../services/eventsub') {
       return { eventSubManager: { startForStreamer: (id) => eventSubStarts.push(id) } };
+    }
+    if (from === AUTH_FILE && request === '../services/trackingGoals') {
+      return { recheck: async (id) => { rechecks.push([id, db.getStreamerById(id).broadcaster_scopes]); } };
     }
     // The real accountLifecycle.js runs; only the connection managers it calls are recorded.
     if (from === LIFECYCLE_FILE && request === './eventsub') {
@@ -172,6 +176,7 @@ beforeEach(() => {
   logs.length = 0;
   calls.length = 0;
   eventSubStarts.length = 0;
+  rechecks.length = 0;
   twitchEvents.length = 0;
   failingManager = null;
   answers = {};
@@ -509,6 +514,8 @@ describe('broadcaster authorization', () => {
     assert.equal(streamer.broadcaster_scopes, 'bits:read moderator:read:followers', 'what was granted, not what was asked for');
     assert.match(rawRow(id).broadcaster_refresh_token, /^enc:v1:/);
     assert.deepEqual(eventSubStarts, [id]);
+    // The follower and sub goals read Twitch again at once, with the new scopes, so "Reconnect Twitch" clears.
+    assert.deepEqual(rechecks, [[id, 'bits:read moderator:read:followers']]);
   });
 
   test('a token of another Twitch account is refused: nothing stored, nothing restarted, and the dashboard says why', async () => {
@@ -524,6 +531,7 @@ describe('broadcaster authorization', () => {
     assert.equal(row.broadcaster_refresh_token, null);
     assert.equal(row.broadcaster_scopes, 'bits:read', 'scopes unchanged');
     assert.deepEqual(eventSubStarts, []);
+    assert.deepEqual(rechecks, [], 'no goal reads Twitch again');
     const warning = logs.find(([level, line]) => level === 'warn' && line.includes('Broadcaster authorization refused'));
     assert.ok(warning, JSON.stringify(logs));
     assert.ok(!warning[1].includes('other-account-access') && !warning[1].includes('other-account-refresh'), 'no token in the log');

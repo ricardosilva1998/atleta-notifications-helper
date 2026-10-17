@@ -33,6 +33,8 @@ const PAGES = [
   'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
   // the home page: the streamer tools' features
   'home',
+  // the Tracking page: the follower and sub goals and the six trackers (an overlay page, linked from the OBS overlay card)
+  'tracking',
 ];
 
 // Words that are not the page's own wording and may stay in every page: product names and units.
@@ -215,6 +217,34 @@ const PAGE_LOCALS = {
     { ...multistreamPage, isLive: false, twitchAuthorized: false, query: { error: 'relay' }, multistream: { multistream_enabled: 0 } },
   ],
 };
+// The Tracking page's data, as trackingState() in routes/dashboard.js gives it: a running goal, none, and every tracker.
+const TRACKERS = ['latest_follower', 'latest_sub', 'latest_tip', 'latest_raid', 'latest_bits', 'top_tipper'];
+const trackingState = (over = {}) => ({
+  goals: {
+    follow: {
+      goal: { id: 1, kind: 'follow', title: 'TitleText', current: 12, target: 50, percent: 24, completed: false, barColor: '#22c55e', period: 'month', mode: 'calendar', unavailable: null, capped: true },
+      timeZone: 'UTC', hours: null,
+      history: [{ title: 'TitleText', period: 'month', mode: 'calendar', target: 50, count: 51, reached: true, start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z' }],
+    },
+    sub: { goal: null, timeZone: null, hours: null, history: [] },
+  },
+  trackers: Object.fromEntries(TRACKERS.map((tracker, i) => [tracker, { enabled: i % 2 === 0, color: '#9146FF', ownColor: i === 1, value: i === 0 ? { name: 'tester' } : null }])),
+  currency: 'EUR',
+  notAffiliate: false,
+  ...over,
+});
+const trackingPage = (state, links) => ({
+  streamer, lang: 'en', state, trackerList: TRACKERS, links,
+  trackingData: JSON.stringify({ state, lang: 'en' }), trackingTexts: JSON.stringify({ statusNone: 'x' }),
+});
+const TRACKING_LINKS = {
+  goals: { follow: 'https://app.test/overlay/goal/followers/tok123?lang=en', sub: 'https://app.test/overlay/goal/subs/tok123?lang=en' },
+  trackers: Object.fromEntries(TRACKERS.map((tracker) => [tracker, `https://app.test/overlay/tracker/${tracker}/tok123?lang=en`])),
+};
+PAGE_LOCALS.tracking = [
+  trackingPage(trackingState(), TRACKING_LINKS),
+  trackingPage(trackingState({ notAffiliate: true }), null),
+];
 PAGE_LOCALS['account-disabled'] = [{ streamer: null }];
 // The account page shows YouTube's channels and posts only while YouTube is (features.youtube): each sample both ways.
 PAGE_LOCALS.account = PAGE_LOCALS.account.flatMap((locals) => [true, false].map((youtube) => ({ ...locals, features: { youtube } })));

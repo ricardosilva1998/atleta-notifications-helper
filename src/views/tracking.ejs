@@ -1,0 +1,211 @@
+<%- include('header', { title: t('tracking.title'), streamer: streamer }) %>
+<%# The Tracking page (routes/dashboard.js GET /tracking): the follower goal, the sub goal and the six trackers, each
+    an OBS browser source of its own (routes/overlay.js). Every card has a live preview (the token-less demos, driven
+    by public/js/tracking-page.js with postMessage) and its OBS link; a goal card has the start form, or the running
+    goal's edit, nudge and end, its test buttons and its past goals; a tracker card its switch and colour. What the
+    cards show comes from `state` (trackingState); the script keeps it up to date with the JSON routes under
+    /dashboard/api/tracking/. %>
+<%
+  const _goals = [
+    { kind: 'follow', title: t('tracking.goal.follow.title'), intro: t('tracking.goal.follow.intro'), placeholder: t('tracking.goal.follow.titlePlaceholder') },
+    { kind: 'sub', title: t('tracking.goal.sub.title'), intro: t('tracking.goal.sub.intro'), placeholder: t('tracking.goal.sub.titlePlaceholder') },
+  ];
+  const _trackerTexts = {
+    latest_follower: { title: t('tracking.source.latestFollower'), intro: t('tracking.tracker.intro.latestFollower') },
+    latest_sub: { title: t('tracking.source.latestSub'), intro: t('tracking.tracker.intro.latestSub') },
+    latest_tip: { title: t('tracking.source.latestTip'), intro: t('tracking.tracker.intro.latestTip') },
+    latest_raid: { title: t('tracking.source.latestRaid'), intro: t('tracking.tracker.intro.latestRaid') },
+    latest_bits: { title: t('tracking.source.latestBits'), intro: t('tracking.tracker.intro.latestBits') },
+    top_tipper: { title: t('tracking.source.topTipper'), intro: t('tracking.tracker.intro.topTipper') },
+  };
+  const _periods = [
+    ['lifetime', t('tracking.period.lifetime')], ['year', t('tracking.period.year')], ['month', t('tracking.period.month')],
+    ['week', t('tracking.period.week')], ['day', t('tracking.period.day')], ['hours', t('tracking.period.hours')],
+  ];
+  const _q = '?lang=' + encodeURIComponent(lang);
+%>
+
+<a href="/dashboard" class="trk-back">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+  <%= t('guild.backToDashboard') %>
+</a>
+<h2 class="trk-h animate-in"><%= t('tracking.title') %></h2>
+<p class="trk-intro"><%= t('tracking.intro') %></p>
+
+<% if (!links) { %>
+  <div class="alert alert-warning trk-nolink" role="status">
+    <span><%= t('tracking.noLink') %></span>
+    <a href="/dashboard/overlay" class="btn btn-secondary trk-btn"><%= t('tracking.noLinkAction') %></a>
+  </div>
+<% } %>
+
+<% for (const g of _goals) { const _g = state.goals[g.kind]; const _active = !!_g.goal; %>
+<section class="card trk-card animate-in" id="goal-<%= g.kind %>" data-kind="<%= g.kind %>" aria-labelledby="goal-<%= g.kind %>-title">
+  <div class="trk-head">
+    <div class="trk-icon" aria-hidden="true">
+      <% if (g.kind === 'follow') { %><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+      <% } else { %><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><% } %>
+    </div>
+    <div class="trk-titles">
+      <h3 class="trk-title" id="goal-<%= g.kind %>-title"><%= g.title %></h3>
+      <span class="trk-status" data-status></span>
+    </div>
+  </div>
+  <p class="trk-text"><%= g.intro %></p>
+
+  <div class="trk-stage"><iframe data-preview src="/overlay/goal-demo/tracking<%= _q %>" title="<%= t('tracking.goal.previewTitle') %>" class="trk-frame goal"></iframe></div>
+  <div class="trk-tests" role="group" aria-label="<%= t('tracking.goal.testLabel') %>">
+    <span class="trk-label"><%= t('tracking.goal.testLabel') %></span>
+    <button type="button" class="btn btn-secondary trk-btn" data-test="small"><%= t('tracking.goal.testSmall') %></button>
+    <button type="button" class="btn btn-secondary trk-btn" data-test="reach"><%= t('tracking.goal.testReach') %></button>
+    <button type="button" class="btn btn-secondary trk-btn" data-test="reset"><%= t('tracking.goal.testReset') %></button>
+  </div>
+  <p class="trk-small" data-test-status aria-live="polite"><%= t('tracking.goal.testNote') %></p>
+
+  <div class="trk-note warn" data-note="reconnect" hidden><span><%= t('tracking.goal.needsReconnect') %></span> <a href="/auth/broadcaster"><%= t('tracking.reconnect') %></a></div>
+  <% if (g.kind === 'follow') { %>
+  <div class="trk-note" data-note="capped" hidden><%= t('tracking.goal.follow.capped') %></div>
+  <% } else { %>
+  <div class="trk-note warn" data-note="notAffiliate"<%= state.notAffiliate ? '' : ' hidden' %>><%= t('tracking.notAffiliate') %></div>
+  <div class="trk-note" data-note="silent" hidden><%= t('tracking.goal.sub.silentRenewals') %></div>
+  <% } %>
+
+  <div data-active<%= _active ? '' : ' hidden' %>>
+    <p class="trk-summary" data-summary></p>
+    <form data-edit class="trk-grid">
+      <div class="form-group"><label for="goal-<%= g.kind %>-edit-title"><%= t('tracking.goal.field.title') %></label><input id="goal-<%= g.kind %>-edit-title" type="text" name="title" maxlength="60" required value="<%= _active ? _g.goal.title : '' %>"></div>
+      <div class="form-group"><label for="goal-<%= g.kind %>-edit-target"><%= t('tracking.goal.field.target') %></label><input id="goal-<%= g.kind %>-edit-target" type="number" name="target" min="1" max="10000000" step="1" required value="<%= _active ? _g.goal.target : '' %>"></div>
+      <div class="form-group"><label for="goal-<%= g.kind %>-edit-color"><%= t('tracking.goal.field.color') %></label><input id="goal-<%= g.kind %>-edit-color" type="color" name="color" value="<%= _active ? _g.goal.barColor : '#22c55e' %>" class="trk-color"></div>
+      <div class="trk-actions"><button type="submit" class="btn btn-secondary trk-btn"><%= t('tracking.goal.save') %></button></div>
+    </form>
+    <div class="trk-nudge">
+      <span class="trk-label"><%= t('tracking.goal.nudge') %></span>
+      <button type="button" class="btn btn-secondary trk-btn" data-nudge="-1" aria-label="<%= t('tracking.goal.nudge') %>: −1">−1</button>
+      <button type="button" class="btn btn-secondary trk-btn" data-nudge="1" aria-label="<%= t('tracking.goal.nudge') %>: +1">+1</button>
+      <input type="number" step="1" data-nudge-amount aria-label="<%= t('tracking.goal.nudge') %>" class="trk-num">
+      <button type="button" class="btn btn-secondary trk-btn" data-nudge-apply><%= t('tracking.goal.apply') %></button>
+      <button type="button" class="btn btn-secondary trk-btn trk-end" data-end><%= t('tracking.goal.end') %></button>
+    </div>
+    <p class="trk-small"><%= t('tracking.goal.nudgeHint') %></p>
+  </div>
+
+  <form data-start class="trk-grid"<%= _active ? ' hidden' : '' %>>
+    <div class="form-group"><label for="goal-<%= g.kind %>-title"><%= t('tracking.goal.field.title') %></label><input id="goal-<%= g.kind %>-title" type="text" name="title" maxlength="60" required placeholder="<%= g.placeholder %>"></div>
+    <div class="form-group"><label for="goal-<%= g.kind %>-target"><%= t('tracking.goal.field.target') %></label><input id="goal-<%= g.kind %>-target" type="number" name="target" min="1" max="10000000" step="1" required placeholder="100"></div>
+    <div class="form-group"><label for="goal-<%= g.kind %>-color"><%= t('tracking.goal.field.color') %></label><input id="goal-<%= g.kind %>-color" type="color" name="color" value="#22c55e" class="trk-color"></div>
+    <div class="form-group"><label for="goal-<%= g.kind %>-period"><%= t('tracking.goal.field.period') %></label>
+      <select id="goal-<%= g.kind %>-period" name="period"><% for (const [value, label] of _periods) { %><option value="<%= value %>"<%= value === 'month' ? ' selected' : '' %>><%= label %></option><% } %></select></div>
+    <div class="form-group" data-row="mode"><label for="goal-<%= g.kind %>-mode"><%= t('tracking.goal.field.mode') %></label>
+      <select id="goal-<%= g.kind %>-mode" name="mode"><option value="calendar"><%= t('tracking.mode.calendar') %></option><option value="rolling"><%= t('tracking.mode.rolling') %></option></select></div>
+    <div class="form-group" data-row="hours" hidden><label for="goal-<%= g.kind %>-hours"><%= t('tracking.goal.field.hours') %></label><input id="goal-<%= g.kind %>-hours" type="number" name="hours" min="1" max="720" step="1" value="4"></div>
+    <div class="form-group" data-row="zone"><label for="goal-<%= g.kind %>-zone"><%= t('tracking.goal.field.timeZone') %></label><input id="goal-<%= g.kind %>-zone" type="text" name="timeZone" list="tracking-zones" autocomplete="off" spellcheck="false" value="UTC"><span class="trk-hint"><%= t('tracking.goal.timeZoneHint') %></span></div>
+    <div class="trk-actions"><button type="submit" class="btn btn-primary trk-btn"><%= t('tracking.goal.start') %></button></div>
+  </form>
+
+  <div class="trk-msg" data-msg role="status" hidden></div>
+
+  <div class="trk-sec"><span class="trk-label"><%= t('tracking.obsLink') %></span></div>
+  <% if (links) { %>
+  <div class="trk-link"><input type="text" readonly data-link value="<%= links.goals[g.kind] %>" aria-label="<%= t('tracking.obsLink') %>"><button type="button" class="btn btn-secondary trk-btn" data-copy><%= t('tracking.copy') %></button></div>
+  <% } else { %>
+  <p class="trk-small"><%= t('tracking.noLink') %></p>
+  <% } %>
+
+  <div class="trk-sec"><span class="trk-label"><%= t('tracking.goal.past') %></span></div>
+  <ul class="trk-past" data-history></ul>
+</section>
+<% } %>
+
+<div class="trk-trackers">
+<% for (const tracker of trackerList) { const _tr = state.trackers[tracker]; const _tt = _trackerTexts[tracker]; %>
+<section class="card trk-card trk-tracker animate-in" id="tracker-<%= tracker %>" data-tracker="<%= tracker %>" aria-labelledby="tracker-<%= tracker %>-title">
+  <div class="trk-head">
+    <div class="trk-titles">
+      <h3 class="trk-title" id="tracker-<%= tracker %>-title"><%= _tt.title %></h3>
+      <span class="trk-status" data-status></span>
+    </div>
+    <label class="pill-toggle" title="<%= t('tracking.tracker.switch') %>"><input type="checkbox" role="switch" data-enabled aria-label="<%= t('tracking.tracker.switch') %>: <%= _tt.title %>"<%= _tr.enabled ? ' checked' : '' %>><span class="slider"></span></label>
+  </div>
+  <p class="trk-text"><%= _tt.intro %></p>
+  <% if (tracker === 'latest_sub') { %><div class="trk-note warn" data-note="notAffiliate"<%= state.notAffiliate ? '' : ' hidden' %>><%= t('tracking.notAffiliate') %></div><% } %>
+  <div class="trk-stage"><iframe data-preview src="/overlay/tracker-demo<%= _q %>" title="<%= t('tracking.tracker.previewTitle') %>" class="trk-frame tracker"></iframe></div>
+  <div class="trk-colorrow">
+    <label for="tracker-<%= tracker %>-color"><%= t('tracking.tracker.color') %></label>
+    <input id="tracker-<%= tracker %>-color" type="color" data-color value="<%= _tr.color %>" class="trk-color">
+    <button type="button" class="btn btn-secondary trk-btn" data-color-reset<%= _tr.ownColor ? '' : ' hidden' %>><%= t('tracking.tracker.defaultColor') %></button>
+  </div>
+  <div class="trk-msg" data-msg role="status" hidden></div>
+  <% if (links) { %>
+  <div class="trk-link"><input type="text" readonly data-link value="<%= links.trackers[tracker] %>" aria-label="<%= t('tracking.obsLink') %>: <%= _tt.title %>"><button type="button" class="btn btn-secondary trk-btn" data-copy><%= t('tracking.copy') %></button></div>
+  <% } %>
+</section>
+<% } %>
+</div>
+
+<datalist id="tracking-zones"></datalist>
+
+<script>window.TRACKING_DATA = <%- trackingData.replace(/</g, '\\u003c') %>; window.TRACKING_TEXTS = <%- trackingTexts.replace(/</g, '\\u003c') %>;</script>
+<script src="/js/tracking-page.js"></script>
+
+<style>
+  .trk-back { color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+  .trk-h { margin: 16px 0 8px; font-size: 24px; font-weight: 700; }
+  .trk-intro { color: var(--text-secondary); font-size: 14px; margin-bottom: 20px; }
+  .trk-nolink { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+  .trk-card { margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .trk-card [hidden] { display: none !important; }
+  .trk-head { display: flex; align-items: center; gap: 12px; }
+  .trk-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; background: rgba(145,70,255,0.13); color: var(--accent); }
+  .trk-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .trk-titles { display: flex; flex-direction: column; min-width: 0; }
+  .trk-title { font: 700 16px var(--font-display); margin: 0; line-height: 1.2; }
+  .trk-status { font-size: 12px; font-weight: 600; color: var(--success); overflow-wrap: anywhere; }
+  .trk-status.off { color: var(--text-muted); }
+  .trk-status.warn { color: var(--warning); }
+  .trk-head .pill-toggle { margin-left: auto; }
+  .trk-text { color: var(--text-muted); font-size: 13px; margin: 0; }
+  .trk-small { color: var(--text-muted); font-size: 12px; margin: 0; }
+  .trk-hint { display: block; color: var(--text-muted); font-size: 11px; margin-top: 4px; }
+  .trk-label { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+  .trk-sec { margin-top: 4px; }
+  .trk-stage { background: repeating-conic-gradient(#1a1a22 0 25%, #22222c 0 50%) 0 0 / 20px 20px; border-radius: var(--radius-sm); overflow: hidden; }
+  .trk-frame { display: block; width: 100%; border: 0; }
+  .trk-frame.goal { height: 150px; }
+  .trk-frame.tracker { height: 110px; }
+  .trk-tests, .trk-nudge, .trk-colorrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .trk-colorrow label { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+  .trk-btn { font-size: 12px !important; padding: 6px 12px !important; }
+  .trk-end { color: var(--danger); margin-left: auto; }
+  .trk-num { width: 90px; padding: 6px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px; }
+  .trk-color { width: 100%; height: 40px; padding: 2px; }
+  .trk-colorrow .trk-color { width: 56px; height: 32px; }
+  .trk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px; align-items: start; }
+  .trk-grid .form-group { margin-bottom: 0; }
+  .trk-grid .form-group input, .trk-grid .form-group select { width: 100%; }
+  .trk-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+  .trk-summary { font-size: 13px; color: var(--text-secondary); margin: 0 0 8px; }
+  .trk-note { font-size: 13px; color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+  .trk-note.warn { color: var(--warning); border-color: var(--warning); background: var(--warning-bg); }
+  .trk-note a { color: var(--accent-hover); font-weight: 600; }
+  .trk-msg { font-size: 13px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--danger); }
+  .trk-msg.ok { background: var(--success-bg); color: var(--success); }
+  .trk-link { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .trk-link input { flex: 1; min-width: 0; padding: 8px 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px; }
+  .trk-past { list-style: none; margin: 0; padding: 0; }
+  .trk-past li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; flex-wrap: wrap; }
+  .trk-past li:first-child { border-top: 0; }
+  .trk-past .when { color: var(--text-muted); }
+  .trk-past .hit { color: var(--success); font-weight: 600; }
+  .trk-past .miss { color: var(--text-muted); font-weight: 600; }
+  .trk-trackers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 16px; align-items: start; }
+  .trk-trackers .trk-card { margin-bottom: 0; }
+  .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .pill-toggle input { opacity: 0; width: 0; height: 0; }
+  .pill-toggle .slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg-elevated); border-radius: 24px; border: 1px solid var(--border); transition: 0.3s; }
+  .pill-toggle .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+  .pill-toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .pill-toggle input:checked + .slider:before { transform: translateX(20px); }
+  .pill-toggle input:focus-visible + .slider { box-shadow: 0 0 0 3px rgba(145,70,255,.35); }
+</style>
+
+<%- include('footer') %>

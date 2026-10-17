@@ -104,6 +104,10 @@ const discordStub = {
   buildIracingResultEmbed: () => ({}),
 };
 
+// Tracking's trackers: the manager tells them when a channel's stream starts.
+const streamStarts = [];
+const trackersStub = { streamStarted: (login) => streamStarts.push(login) };
+
 const noopPollers = ['./twitchClips', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed', './iracingResults'];
 
 let db;
@@ -127,6 +131,7 @@ before(() => {
       if (request === '../services/iracing') return { isConfigured: () => false };
       if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/youtubeLiveChat') return chatManagerStub;
+      if (request === '../services/trackers') return trackersStub;
       if (noopPollers.includes(request)) return {};
     }
     if (from === LIVE_FILE) {
@@ -196,6 +201,7 @@ beforeEach(() => {
   for (const list of Object.values(calls)) list.length = 0;
   sent.length = 0;
   logs.length = 0;
+  streamStarts.length = 0;
   liveStreams = {};
   failBatch = null;
   holdBatches = null;
@@ -204,9 +210,11 @@ beforeEach(() => {
   configStub.youtube.apiKey = '';
   for (const level of ['log', 'warn', 'error']) { saved[level] = console[level]; console[level] = (...args) => logs.push(`${level}: ${args.join(' ')}`); }
 
-  streamerA = addStreamer({ twitch_username: 'streamer_a', broadcaster_access_token: 'token-a' });
-  streamerB = addStreamer({ twitch_username: 'streamer_b', broadcaster_access_token: 'token-b' });
-  disabled = addStreamer({ twitch_username: 'streamer_off', broadcaster_access_token: 'token-off' });
+  // No Twitch account linked: the live poller also asks about every enabled streamer's own channel, so the tests
+  // that are about it link one themselves.
+  streamerA = addStreamer({ broadcaster_access_token: 'token-a' });
+  streamerB = addStreamer({ broadcaster_access_token: 'token-b' });
+  disabled = addStreamer({ broadcaster_access_token: 'token-off' });
   db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(disabled);
   claim(G1, streamerA);
   claim(G2, streamerA);
@@ -276,6 +284,79 @@ describe('pollAllTwitchLive: one request for a batch of channels', () => {
     assert.equal(db.getChannelState(login(120)).offline_polls, 1, 'the other batch was processed: a first miss');
     assert.ok(logs.some((l) => /Could not check 100 channel\(s\): Twitch API error: 500/.test(l)), logs.join('\n'));
     assert.deepEqual(typesSent(), [], 'no recap for a stream nobody saw end');
+  });
+});
+
+// ── Every enabled streamer's own channel (Tracking) ─────────────────────────
+// The top tipper of the stream needs to know when the streamer's own stream started, whether or not a server
+// watches the channel; what the poller posts still goes only to watchers.
+
+describe('pollAllTwitchLive: the streamers\' own channels', () => {
+  test('an enabled streamer\'s own channel is asked about though no server watches it; a disabled account\'s is not; a watched one only once', async () => {
+    addStreamer({ twitch_username: 'Own_Channel' });
+    addStreamer({ twitch_username: 'off_channel', enabled: 0 });
+    addStreamer({ twitch_username: 'watched_too' });
+    watch(G1, streamerA, 'watched_too');
+    addStreamer({ twitch_username: '' });
+
+    await pollTwitchLive();
+
+    assert.deepEqual(calls.getStreams.length, 1);
+    assert.deepEqual(calls.getStreams.flat().sort(), ['own_channel', 'watched_too']);
+  });
+
+  test('an unwatched own channel that goes live and ends gets its stream stored, and nothing is posted or counted', async () => {
+    addStreamer({ twitch_username: 'own_channel', broadcaster_access_token: 'token-own' });
+    db.getChannelState('own_channel');
+    db.updateChannelState('own_channel', { twitch_broadcaster_id: '778' }); // so the recap and milestone paths run as far as they can
+    liveStreams.own_channel = stream('own_channel');
+
+    await pollTwitchLive();
+    const live = db.getChannelState('own_channel');
+    assert.equal(live.is_live, 1);
+    assert.equal(live.stream_started_at, liveStreams.own_channel.started_at);
+    assert.equal(live.last_stream_started_at, liveStreams.own_channel.started_at);
+
+    const startedAt = liveStreams.own_channel.started_at;
+    delete liveStreams.own_channel;
+    await pollTwitchLive();
+    await pollTwitchLive(); // the second empty answer ends it
+
+    const ended = db.getChannelState('own_channel');
+    assert.equal(ended.is_live, 0);
+    assert.equal(ended.stream_started_at, null, 'the session is cleared');
+    assert.equal(ended.last_stream_started_at, startedAt, 'the last stream\'s start is kept');
+    assert.deepEqual(sent, [], 'no go-live post, recap or milestone for a channel no server watches');
+    assert.equal(calls.getFollowerCount.length, 0, 'no milestone check');
+    assert.equal(calls.getSubscriberCount.length, 0);
+  });
+
+  // The top tipper of the stream starts over when the stream does, so a tracker source opened before it went live does
+  // not keep the last stream's donor until the first tip.
+  test('a stream that starts, or another broadcast that replaces it, tells the trackers once; one still running does not', async () => {
+    addStreamer({ twitch_username: 'own_channel' });
+    liveStreams.own_channel = stream('own_channel');
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel']);
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel'], 'the same broadcast still live');
+    liveStreams.own_channel = stream('own_channel', { id: '4000000002', started_at: new Date(Date.now() - 60e3).toISOString() });
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel', 'own_channel'], 'another broadcast replaced it');
+    delete liveStreams.own_channel;
+    await pollTwitchLive();
+    await pollTwitchLive();
+    assert.deepEqual(streamStarts, ['own_channel', 'own_channel'], 'an end tells nothing');
+  });
+
+  test('the channel list is logged once, not on every poll', async () => {
+    addStreamer({ twitch_username: 'own_channel' });
+    manager.pollAllTwitchLive._logged = false; // as after a boot
+    await pollTwitchLive();
+    await pollTwitchLive();
+    await pollTwitchLive();
+    assert.equal(logs.filter((l) => /own_channel/.test(l)).length, 1, logs.join('\n'));
+    assert.ok(logs.some((l) => /\[TwitchLive\] Polling 1 channels: own_channel/.test(l)), logs.join('\n'));
   });
 });
 
