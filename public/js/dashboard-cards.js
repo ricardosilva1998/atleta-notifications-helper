@@ -132,11 +132,16 @@
       const key = control.dataset.setting;
       if (key && !control.dataset.guildId && !control.dataset.id) {
         $$('[data-dim-with="' + key + '"]').forEach((el) => el.classList.toggle('wc-dim', !on));
+        $$('[data-test-for="' + key + '"]').forEach((el) => el.classList.toggle('is-off', !on));
         if (key === 'chatbot_enabled') $$('[data-needs-chatbot]').forEach((card) => card.classList.toggle('needs-bot', !on));
       }
     } else if (control.type === 'range') {
       const label = $('[data-volume-label]', control.parentNode);
       if (label) label.textContent = control.value + '%';
+    } else if (control.tagName === 'SELECT' && control.dataset.setting) {
+      // An alert's seconds also show on its test button (the OBS overlay card).
+      const option = control.options[control.selectedIndex];
+      $$('[data-secs-for="' + control.dataset.setting + '"]').forEach((el) => { if (option) el.textContent = option.textContent; });
     }
   }
   function settingBody(control, value) {
@@ -175,6 +180,16 @@
   });
   grid.addEventListener('input', (event) => {
     if (event.target.type === 'range' && event.target.dataset.setting) reflect(event.target);
+  });
+
+  // A folded section that remembers, in this browser, whether it was left open (the OBS overlay card's links).
+  $$('details[data-remember]', grid).forEach((details) => {
+    const key = 'wc_' + details.dataset.remember;
+    try { if (localStorage.getItem(key) === '1') details.open = true; } catch (e) { /* no storage: folded */ }
+    details.addEventListener('toggle', () => {
+      try { localStorage.setItem(key, details.open ? '1' : '0'); } catch (e) { /* no storage */ }
+      repack();
+    });
   });
 
   // ── Clicks: the first handler that knows the element takes it ──

@@ -191,6 +191,7 @@ describe('OBS overlay', () => {
       ['cards.events.raid', 'overlay_raid_enabled', 'overlay_raid_duration', true, 7, 'raid'],
       ['cards.events.giveaway', 'overlay_giveaway_enabled', 'overlay_giveaway_duration', true, 60, 'giveaway_winner'],
     ]);
+    assert.deepEqual(card.alerts.map((a) => [a.icon, a.tone, a.short]), [['i-heart', 'follow', 'cards.overlay.testName.follow'], ['i-star', 'sub', 'cards.overlay.testName.sub'], ['i-gem', 'bits', 'cards.overlay.testName.bits'], ['i-coin', 'donation', 'cards.overlay.testName.donation'], ['i-users', 'raid', 'cards.overlay.testName.raid'], ['i-gift', 'giveaway', 'cards.overlay.testName.giveaway']]);
     assert.deepEqual(card.alerts[0].choices, [5, 8, 10, 12, 15, 20, 30]);
     assert.deepEqual(card.alerts[4].choices, [5, 7, 8, 10, 12, 15, 20, 30], 'a saved 7 stays a choice');
     assert.deepEqual(card.alerts[5].choices, [5, 8, 10, 12, 15, 20, 30, 45, 60], 'the giveaway winner may stay up to 60 s');

@@ -424,7 +424,7 @@ describe('while the overlay features are off, the pages say nothing about the ov
   test('switched on, they ask for the texts about them again', async () => {
     const wanted = {
       dashboard: ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental',
-        'dashboard.youtube.overlayDesc', 'cards.overlay.source', 'cards.donations.goal', 'cards.sponsors.images'],
+        'dashboard.youtube.overlayDesc', 'cards.overlay.sources', 'cards.donations.goal', 'cards.sponsors.images'],
       'donation-settings': ['donations.settings.intro', 'donations.goal.title', 'donations.goal.testLive', 'donations.goalOverlay.title', 'donations.goal.past'],
       'timed-notifications': ['sponsors.intro', 'sponsors.builderLink'],
     };
