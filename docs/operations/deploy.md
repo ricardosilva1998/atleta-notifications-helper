@@ -536,3 +536,65 @@ After the deploy (while no streamer is live):
 Rolling back is safe: the new columns and table stay and older code ignores them; voice files left in `data/tts/` are
 not served and can be deleted.
 
+
+## Tracking (goal bars and trackers)
+
+What changes when it deploys (`docs/features/tracking.md`):
+- **At boot**, on the existing database: five new tables (`tracking_events`, `tracking_goals`, `tracking_goal_periods`,
+  `tracker_values`, `tracker_settings`), created quietly, and one new `channel_state` column. The log shows
+  `[DB] Added last_stream_started_at column to channel_state` once and **no** `[DB migration]` line, on the first boot
+  and on every boot after. Nothing is added to `streamers`.
+- **The tracker seed runs once** (`_runOnce('tracking_seed_trackers')`, recorded in `data_migrations`): it fills each
+  streamer's Latest follower, sub, tip, raid and bits from the newest `overlay_events` row of that kind (the last 30
+  days) and the newest `donations` row (the log shows `[DB] Filled N tracker value(s) from the last events and tips`
+  once, when N is above 0). It creates no goal and writes nothing else.
+- **Own channels are polled every minute now.** `pollAllTwitchLive` asks Twitch about every enabled streamer's own
+  linked channel as well as the watched ones, so the `[TwitchLive] Polling N channels: …` line (once per boot) grows to
+  the union and the minute's `/streams` batches grow with it (100 logins per request; for roughly as many streamers as
+  watched channels, about double the logins, so at most a few more requests a minute). A channel nobody watches only
+  gets its `channel_state`; nothing is posted for it. When such a stream ends the recap is still built, which is two
+  Helix calls (clips and the VOD lookup) per stream end that nobody receives, and no follower count is read for it
+  (no watcher token). A watched own channel costs nothing extra.
+- **No new variable**, and no change to the Railway settings. A streamer with an active goal or a switched-on tracker
+  keeps an EventSub connection even with the overlay and the chatbot off, so the boot line
+  `[EventSub] Started N connections` can count more streamers than before once streamers set Tracking up (a new streamer
+  has none until then).
+- **The record grows** (`tracking_events`, one row per follow or sub, kept 400 days, cleaned every 6 hours). Rows only
+  appear for streamers whose EventSub connection runs, so growth is small at first.
+
+What streamers see:
+- **Everyone:** a dashboard tab open across the deploy needs one reload. The OBS overlay card has a new link,
+  **Tracking** (only while `features.overlays` is on), to `/dashboard/tracking`.
+- **The Tracking page** (new): a follower goal and a sub goal (lifetime, calendar or rolling year, month, week or day,
+  or hours, in a time zone they choose), six trackers (Latest follower, sub, tip, raid, bits; Top tipper), each its own
+  OBS browser source with a preview and a Copy button. Latest follower, sub, tip, raid and bits already show their last
+  value from the seed.
+- **"Reconnect Twitch"** on a goal means the broadcaster authorization lacks `moderator:read:followers` or
+  `channel:read:subscriptions` (a connection made before them): it asks for a fresh one, as the other cards do. A
+  channel without subs sees the sub goal and Latest sub as "not available".
+- A period sub goal counts only the subs EventSub delivers (new, gifted, resubs announced in chat): a silent renewal is
+  not counted, and the card says so. A lifetime sub goal uses Twitch's own total.
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200; the boot log has the `last_stream_started_at` line and the `Filled N tracker value(s)` line
+   once and no `[DB migration]` line; a second boot (or a restart) prints no `[DB]` line for Tracking at all.
+2. `/overlay/tracking.js` and `/overlay/tracking.css` answer 200 (`no-store`, like the rest of `/overlay/`), and
+   `/overlay/tracker/latest_follower/<an overlay token>` answers 200 (an unknown token or tracker answers 404).
+3. `/dashboard/tracking` opens from the OBS overlay card. Start a monthly calendar follower goal: its bar draws and the
+   status line shows the count; start a lifetime sub goal: it shows Twitch's current total (a Twitch outage answers
+   "Twitch did not answer", and the goal is not started). Press Test on both with the OBS sources open: they play and
+   revert after 10 s. End the goals if they were only for the check.
+4. Within a few minutes the log's `[TwitchLive] Polling N channels` line (after the next boot) names the streamers'
+   own channels, and no `[TwitchLive] Could not check …` line repeats (a failing batch leaves channels as they were).
+5. While a streamer with Tracking set up goes live: their `channel_state` gets `stream_started_at`, and their Top tipper
+   resets for that stream.
+
+Watch after release:
+- `[TwitchLive] Could not check N channel(s)` after the first deploy (the batches are larger): the app token's
+  `/streams` budget is shared with the watchers' polls.
+- A `[TrackingGoal]` line saying a total or a read-back did not answer: the goal keeps the last total and tries again at
+  its next read (10 minutes for lifetime totals, 30 for follower read-backs).
+
+Rolling back is safe: the new tables and the column stay and older code ignores them (nothing older reads or writes
+them); the Tracking sources and page simply stop existing, and OBS shows a blank source until it is removed. The record
+and goals are kept for when the release comes back.
