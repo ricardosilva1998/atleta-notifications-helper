@@ -1,0 +1,67 @@
+<%# The Tracking card (with features.overlays; dashboardCards.js trackingCard()): the follower and sub goal bars, drawn
+    by public/js/dashboard-tracking.js from data-goals (Test, the OBS link, Start or Edit in a pop-up with a live
+    preview, End), and the six trackers, each with its switch, last value, test and OBS link. The Tracking page keeps
+    the trackers' colours and the past goals. %>
+<section class="card wc-card" id="card-tracking" data-card="tracking" aria-labelledby="card-tracking-title" data-goals="<%= JSON.stringify(card.goals) %>" data-not-affiliate="<%= card.notAffiliate ? '1' : '' %>">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(79,209,255,0.13); color: #4fd1ff"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg></div>
+    <div><h3 class="wc-title" id="card-tracking-title"><%= t('tracking.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+  </div>
+  <div class="wc-body">
+    <% if (!card.hasLink) { %>
+    <div class="wc-note"><span><%= t('tracking.noLink') %></span><a href="/dashboard/overlay"><%= t('tracking.noLinkAction') %></a></div>
+    <% } %>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.tracking.goalBars') %></span><span class="wc-count"><%= t('cards.tracking.eachSource') %></span></div>
+    <div class="wc-tgoals" data-goal-list>
+      <div class="wc-tgoal empty" data-goal="follow"><span class="nm"><%= t('tracking.goal.follow.title') %></span></div>
+      <div class="wc-tgoal empty" data-goal="sub"><span class="nm"><%= t('tracking.goal.sub.title') %></span></div>
+    </div>
+    <div class="wc-sec"><span class="wc-label"><%= t('cards.tracking.trackers') %></span><span class="wc-count" data-count="trackers"><%= t(card.counts.trackers.key, card.counts.trackers.params) %></span></div>
+    <div class="wc-list">
+      <% for (const r of card.trackers) { %>
+      <div class="wc-row wc-tracker<%= r.on ? '' : ' is-off' %>" data-tracker="<%= r.id %>">
+        <label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('tracking.tracker.switch') %>: <%= t(r.label) %>" data-tracker-switch="<%= r.id %>" <%= r.on ? 'checked' : '' %>><span class="slider"></span></label>
+        <span class="who"><span class="nm"><%= t(r.label) %></span>
+        <% if (r.unavailable) { %>
+        <span class="txt muted"><%= t('tracking.status.notAvailable') %></span>
+        <% } else if (r.line) { %>
+        <span class="txt"><%= r.line.name %><% if (r.line.detail) { %> · <%= t(r.line.detail.key, r.line.detail.params) %><% } else if (r.line.money) { %> · <% let _m; try { _m = r.line.money.currency ? new Intl.NumberFormat(lang, { style: 'currency', currency: r.line.money.currency }).format(r.line.money.amount) : new Intl.NumberFormat(lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.line.money.amount); } catch (e) { _m = (r.line.money.currency ? r.line.money.currency + ' ' : '') + Number(r.line.money.amount).toFixed(2); } %><%= _m %><% } %></span>
+        <% } else { %>
+        <span class="txt muted"><%= t('cards.tracking.nothingYet') %></span>
+        <% } %></span>
+        <button type="button" class="wc-ib" data-tracker-test="<%= r.id %>" title="<%= t('cards.tracking.testTracker') %>" aria-label="<%= t('cards.tracking.testTracker') %>: <%= t(r.label) %>"><svg class="i sm" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <% if (r.url) { %><button type="button" class="wc-ib" data-track-copy="<%= r.url %>" title="<%= t('cards.tracking.copyLink') %>" aria-label="<%= t('cards.tracking.copyLink') %>: <%= t(r.label) %>"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg></button><% } %>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot"><a href="/dashboard/tracking"><%= t('cards.tracking.more') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+  <template id="tpl-track-goal">
+    <div class="wc-editor wc-tg-editor">
+      <div class="wc-tg-head"><span class="ic" data-tg-icon></span><div><h4 id="wc-dialog-title" data-title></h4><small data-tg-intro></small></div></div>
+      <div class="wc-tg-stage"><span class="tag"><%= t('cards.tracking.preview') %></span>
+        <div class="wc-tg-bar" data-tg-preview><div class="h"><span data-tg-ptitle></span><span data-tg-pcount></span></div><div class="track"><i data-tg-pfill></i></div><div class="s" data-tg-pperiod></div></div>
+      </div>
+      <label class="wc-field"><span><%= t('tracking.goal.field.title') %></span><input class="wc-input" data-field="title" maxlength="60"></label>
+      <div class="wc-tg-row">
+        <div class="wc-field"><span><%= t('tracking.goal.field.target') %></span>
+          <div class="wc-tg-stepper"><button type="button" data-tg-step="-1" aria-label="−">−</button><input class="wc-input" data-field="target" type="number" min="1" max="10000000" step="1" inputmode="numeric" aria-label="<%= t('tracking.goal.field.target') %>"><button type="button" data-tg-step="1" aria-label="+">+</button></div>
+          <div class="wc-tg-quick" data-tg-quick></div>
+        </div>
+        <div class="wc-field"><span><%= t('tracking.goal.field.color') %></span>
+          <div class="wc-tg-swatches" data-tg-swatches role="radiogroup" aria-label="<%= t('tracking.goal.field.color') %>"></div>
+        </div>
+      </div>
+      <div class="wc-field" data-tg-new><span><%= t('tracking.goal.field.mode') %></span><div class="wc-tg-chips" data-tg-periods></div></div>
+      <div class="wc-field" data-tg-hours-row hidden><span><%= t('tracking.goal.field.hours') %></span><input class="wc-input wc-tg-hours" data-field="hours" type="number" min="1" max="720" step="1" inputmode="numeric"></div>
+      <div class="wc-tg-row" data-tg-mode-row hidden>
+        <div class="wc-tg-seg" role="radiogroup" aria-label="<%= t('tracking.goal.field.mode') %>"><button type="button" data-tg-mode="calendar" title="<%= t('tracking.mode.calendar') %>"><%= t('cards.tracking.calendar') %></button><button type="button" data-tg-mode="rolling" title="<%= t('tracking.mode.rolling') %>"><%= t('cards.tracking.rolling') %></button></div>
+        <label class="wc-field grow" data-tg-zone-row><span><%= t('tracking.goal.field.timeZone') %></span><select class="wc-select" data-field="timeZone"></select></label>
+      </div>
+      <p class="wc-note wc-tg-hint" data-tg-subhint hidden><span><%= t('tracking.goal.sub.silentRenewals') %></span></p>
+      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save></button></div>
+      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
+    </div>
+  </template>
+</section>

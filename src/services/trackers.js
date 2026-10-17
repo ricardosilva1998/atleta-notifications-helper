@@ -28,6 +28,7 @@ const TRACKERS = ['latest_follower', 'latest_sub', 'latest_tip', 'latest_raid', 
 const DEFAULT_COLOR = '#9146FF'; // a tracker with no colour of its own: the Atleta purple
 const NAME_MAX = 100;
 const NO_STREAM_WINDOW_MS = 12 * 60 * 60 * 1000;
+const TEST_REVERT_MS = 10000; // a test's sample stays this long, then the real value comes back
 
 function channel(streamerId) {
   return `tracker:${streamerId}`;
@@ -64,7 +65,22 @@ function valueOfTip(tip) {
   };
 }
 
-function createTrackers({ db, emit, now = Date.now, logger = console }) {
+// What a test shows on a tracker's source (the Tracking card's ▶): the sample viewer `name`, with the tip trackers'
+// amounts in `currency` (the tip page's). null for a tracker that does not exist.
+function sampleValue(tracker, { name, currency } = {}) {
+  switch (tracker) {
+    case 'latest_follower': return { name };
+    case 'latest_sub': return { name, months: 6, tier: '1' };
+    case 'latest_tip': return { name, amount: 10, currency };
+    case 'latest_raid': return { name, viewers: 42 };
+    case 'latest_bits': return { name, amount: 500 };
+    case 'top_tipper': return { name, amount: 25, currency };
+    default: return null;
+  }
+}
+
+function createTrackers({ db, emit, now = Date.now, logger = console, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  const testTimers = new Map(); // `${streamerId}:${tracker}` → the timer that brings the real value back
   function broadcast(streamerId, tracker, value) {
     emit(channel(streamerId), { type: 'tracker', tracker, value });
   }
@@ -134,6 +150,30 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     for (const tracker of TRACKERS) broadcast(streamerId, tracker, tracker === 'top_tipper' ? topTipper(streamerId) : null);
   }
 
+  // A test (the Tracking card's ▶): the source shows a sample for TEST_REVERT_MS, then the real value again. Nothing is
+  // stored; a test of the same tracker during those seconds starts them over. Returns the message the source got, or
+  // null for a tracker that does not exist.
+  function sendTest(streamerId, tracker, { name } = {}) {
+    if (!TRACKERS.includes(tracker)) return null;
+    const streamer = db.getStreamerById(streamerId);
+    const currency = String((streamer && streamer.donation_currency) || 'EUR').toUpperCase();
+    const message = { type: 'tracker', tracker, value: sampleValue(tracker, { name: nameOf(name), currency }), test: true };
+    emit(channel(streamerId), message);
+    const key = `${streamerId}:${tracker}`;
+    clearTimer(testTimers.get(key));
+    const timer = setTimer(() => {
+      testTimers.delete(key);
+      try {
+        broadcast(streamerId, tracker, valueOf(streamerId, tracker));
+      } catch (err) {
+        logger.error('[Trackers] test revert error:', err.message);
+      }
+    }, TEST_REVERT_MS);
+    if (timer && typeof timer.unref === 'function') timer.unref();
+    testTimers.set(key, timer);
+    return message;
+  }
+
   // A stored value read back: null when none, or one that cannot be read.
   function parsed(text) {
     if (text == null) return null;
@@ -173,7 +213,7 @@ function createTrackers({ db, emit, now = Date.now, logger = console }) {
     return out;
   }
 
-  return { onEvent, onTip, streamStarted, topTipper, clear, values, valueOf, settings };
+  return { onEvent, onTip, streamStarted, topTipper, clear, values, valueOf, settings, sendTest };
 }
 
 // The app's instance. The database is required when first used: it loads the app's config, which this file's unit
@@ -192,7 +232,9 @@ function instance() {
 module.exports = {
   TRACKERS,
   DEFAULT_COLOR,
+  TEST_REVERT_MS,
   channel,
+  sampleValue,
   valueOfEvent,
   valueOfTip,
   createTrackers,
@@ -204,4 +246,5 @@ module.exports = {
   values: (...args) => instance().values(...args),
   valueOf: (...args) => instance().valueOf(...args),
   settings: (...args) => instance().settings(...args),
+  sendTest: (...args) => instance().sendTest(...args),
 };

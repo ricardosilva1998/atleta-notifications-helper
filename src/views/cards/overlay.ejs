@@ -1,7 +1,7 @@
 <%# The OBS overlay card (with features.overlays; dashboardCards.js overlayCard()): the alerts' on/off switch, a test
     button per alert (its seconds follow the select below), each alert's switch and seconds, the volume, the browser
     sources for OBS folded away (masked until the eye is clicked; open while there is no link yet), and tiles to the
-    Overlay Builder, the Tracking page (goal bars and trackers) and the sounds. %>
+    Overlay Builder and the sounds (the goal bars and trackers have their own card, cards/tracking.ejs). %>
 <% const linkCount = (card.url ? 1 : 0) + (card.pollBar ? 1 : 0); %>
 <section class="card wc-card" id="card-overlay" data-card="overlay" aria-labelledby="card-overlay-title">
   <div class="wc-head">
@@ -57,7 +57,6 @@
     </details>
     <nav class="wc-tiles" aria-label="<%= t('dashboard.cards.overlay.title') %>">
       <a class="wc-tile" href="/dashboard/overlay-builder"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg><span class="tt"><%= t('cards.overlay.look') %></span><small><%= t('cards.overlay.lookHint') %></small></a>
-      <a class="wc-tile" href="/dashboard/tracking"><svg class="i" aria-hidden="true"><use href="#i-poll"/></svg><span class="tt"><%= t('tracking.title') %></span><small><%= t('cards.overlay.trackingHint') %></small></a>
       <a class="wc-tile" href="/dashboard/overlay"><svg class="i" aria-hidden="true"><use href="#i-vol"/></svg><span class="tt"><%= t('cards.overlay.sounds') %></span><small><%= t('cards.overlay.soundsHint') %></small></a>
     </nav>
   </div>

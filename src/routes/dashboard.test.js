@@ -4099,7 +4099,7 @@ describe('the dashboard puts Twitch first', () => {
     try {
       const html = (await request('GET', '/dashboard', { streamer: linked({ overlay_token: 'synthetic-token-first-1' }) })).text;
       assert.deepEqual(twitchCardTitles(html), [t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'), t('en', 'dashboard.cards.overlay.title'),
-        t('en', 'cards.commands.title'), t('en', 'cards.shoutouts.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'),
+        t('en', 'tracking.title'), t('en', 'cards.commands.title'), t('en', 'cards.shoutouts.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'),
         t('en', 'cards.protection.title'), t('en', 'dashboard.cards.giveaways'), esc(t('en', 'cards.polls.title')), t('en', 'dashboard.cards.cpRewards'),
         'Spotify', t('en', 'dashboard.cards.multistream.title')]);
     } finally {
@@ -4111,7 +4111,7 @@ describe('the dashboard puts Twitch first', () => {
     const pane = dashboardPane((await request('GET', '/dashboard', { streamer: linked({ chatbot_enabled: 1 }) })).text, 'twitch')
       .replace(/<template\b[\s\S]*?<\/template>/g, ' '); // the pop-ups' own buttons
     const cards = pane.split('<section class="card wc-card').slice(1);
-    assert.equal(cards.length, 12);
+    assert.equal(cards.length, 13);
     for (const card of cards) {
       const title = (card.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/) || [])[1];
       assert.match(card, /<\/h3><span class="wc-status[^"]*" data-status>[^<]+<\/span>/, `${title}: a status line under its title`);
@@ -5109,7 +5109,7 @@ describe('the data of the working cards', () => {
     db.addSponsorMessage(id, 'Partner line', null);
     const l = await locals(id);
     assert.equal(l.wideLayout, true);
-    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
+    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
     assert.equal(l.cards.polls.setup, 'reconnect', 'Twitch has not given the two permissions yet');
     assert.equal(l.cards.shoutouts.status.key, 'cards.shoutouts.status.off');
     assert.deepEqual(l.cards.commands.commands.map((c) => c.name), ['discord']);
@@ -5194,7 +5194,7 @@ describe('the working cards on the page', () => {
     assert.match(cardOf(html, 'protection'), /data-setting="mod_caps_enabled" checked>/);
   });
 
-  test('the OBS overlay card: test buttons first, then the alerts, the volume, the folded browser sources and three tiles', async () => {
+  test('the OBS overlay card: test buttons first, then the alerts, the volume, the folded browser sources and two tiles', async () => {
     const id = linkedStreamer({ overlay_enabled: 1, overlay_bits_enabled: 0, overlay_raid_duration: 7, overlay_token: 'synthetic-token-wcp-order' });
     const overlay = cardOf(await pane(id), 'overlay');
     const at = (needle) => { const i = overlay.indexOf(needle); assert.ok(i > 0, needle); return i; };
@@ -5210,12 +5210,36 @@ describe('the working cards on the page', () => {
     assert.match(overlay, /<details class="wc-sources" data-remember="overlay_sources_open">/, 'folded, remembered in the browser');
     assert.ok(overlay.includes(esc(t('en', 'cards.overlay.linkCount.other', { count: 2 }))));
     const tiles = overlay.slice(at('class="wc-tiles"'));
-    assert.deepEqual((tiles.match(/<a class="wc-tile" href="([^"]+)"/g) || []).map((a) => a.match(/href="([^"]+)"/)[1]), ['/dashboard/overlay-builder', '/dashboard/tracking', '/dashboard/overlay']);
+    assert.deepEqual((tiles.match(/<a class="wc-tile" href="([^"]+)"/g) || []).map((a) => a.match(/href="([^"]+)"/)[1]), ['/dashboard/overlay-builder', '/dashboard/overlay']);
     // Without a link yet the section is open, with the button that makes one.
     const noLink = cardOf(await pane(linkedStreamer()), 'overlay');
     assert.match(noLink, /<details class="wc-sources" open>/);
     assert.ok(!noLink.includes('data-remember'));
     for (const icon of ['i-heart', 'i-star', 'i-gem', 'i-coin', 'i-users', 'i-palette']) assert.ok((await pane(id)).includes(`<symbol id="${icon}"`), `${icon} is in the icon set`);
+  });
+
+  test('the Tracking card: the goal bars for its script, each tracker with its switch, last value, test and link; the page for the rest', async () => {
+    const id = linkedStreamer({ overlay_token: 'synthetic-token-wcp-track', donation_currency: 'EUR' });
+    db.setTrackerSetting(id, 'latest_bits', { enabled: false });
+    db.setTrackerValue(id, 'latest_raid', { name: '<b>Raider</b>', viewers: 42 });
+    db.setTrackerValue(id, 'latest_tip', { name: 'Marta', amount: 10, currency: 'EUR' });
+    const card = cardOf(await pane(id), 'tracking');
+    const goals = JSON.parse(card.match(/data-goals="([^"]*)"/)[1].replace(/&#34;/g, '"').replace(/&amp;/g, '&'));
+    assert.deepEqual(Object.keys(goals), ['follow', 'sub']);
+    assert.equal(goals.follow.goal, null);
+    assert.match(goals.sub.url, /\/overlay\/goal\/subs\/synthetic-token-wcp-track\?lang=en$/);
+    const rows = card.match(/<div class="wc-row wc-tracker[^"]*" data-tracker="\w+">/g) || [];
+    assert.deepEqual(rows.map((r) => r.match(/data-tracker="(\w+)"/)[1]), ['latest_follower', 'latest_sub', 'latest_tip', 'latest_raid', 'latest_bits', 'top_tipper']);
+    assert.match(card, /class="wc-row wc-tracker is-off" data-tracker="latest_bits"/);
+    assert.match(card, /data-tracker-switch="latest_bits" >/);
+    assert.match(card, /data-tracker-switch="latest_raid" checked>/);
+    assert.ok(card.includes(`${esc('<b>Raider</b>')} · ${t('en', 'tracking.source.viewers', { count: 42 })}`), 'the name as text, with its detail');
+    assert.ok(!card.includes('<b>Raider</b>'));
+    assert.ok(card.includes('Marta · €10.00'), 'an amount in its currency');
+    assert.ok(card.includes(esc(t('en', 'cards.tracking.nothingYet'))));
+    assert.equal((card.match(/data-tracker-test="\w+"/g) || []).length, 6);
+    assert.match(card, /<a href="\/dashboard\/tracking">/);
+    assert.ok(card.includes('<template id="tpl-track-goal">'));
   });
 
   test('the cards that need the chatbot fade while it is off and say why', async () => {
@@ -5233,9 +5257,15 @@ describe('the working cards on the page', () => {
     const overlay = cardOf(html, 'overlay');
     assert.match(overlay, /<code class="wc-link" data-masked="[^"]*\/overlay\/•{12}" data-shown="[^"]*\/overlay\/synthetic-token-wcp-mask">[^<]*\/overlay\/•{12}<\/code>/);
     assert.match(overlay, /data-copy="[^"]*\/overlay\/synthetic-token-wcp-mask"/);
-    // The token is on the tab exactly four times (data-shown and data-copy of the alerts' link and of the poll bar's,
-    // both in the OBS overlay card; the Polls & predictions card shows the bar's link only once it can start polls).
-    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 4);
+    // The token is on the tab exactly twelve times: four in the OBS overlay card (data-shown and data-copy of the
+    // alerts' link and of the poll bar's; the Polls & predictions card shows the bar's link only once it can start
+    // polls), and eight in the Tracking card, never as text: the six trackers' copy buttons and the two goal bars'
+    // links in its data-goals.
+    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 12);
+    const tracking = cardOf(html, 'tracking');
+    assert.equal(tracking.split('synthetic-token-wcp-mask').length - 1, 8);
+    assert.equal((tracking.match(/data-track-copy="[^"]*synthetic-token-wcp-mask[^"]*"/g) || []).length, 6);
+    assert.ok(!/>[^<]*synthetic-token-wcp-mask/.test(tracking), 'never printed as text');
     const noLink = cardOf(await pane(linkedStreamer()), 'overlay');
     assert.ok(noLink.includes('action="/dashboard/overlay/generate-token"') && noLink.includes(esc(t('en', 'cards.overlay.createLink'))));
   });
@@ -5261,7 +5291,7 @@ describe('the working cards on the page', () => {
   test('every pop-up\'s message box is an alert, so a refused save is said to a screen reader while the pop-up is open', async () => {
     const html = await pane(linkedStreamer({ chatbot_enabled: 1, paypal_email: 'tips@example.test' }));
     const boxes = html.match(/<div class="wc-msg"[^>]*data-dialog-msg[^>]*>/g) || [];
-    assert.equal(boxes.length, 5, 'one in each of the five editors: thank-you, command, built-ins, sponsor message, tip goal');
+    assert.equal(boxes.length, 6, 'one in each of the six editors: thank-you, command, built-ins, sponsor message, tip goal, tracking goal');
     for (const box of boxes) assert.match(box, /\brole="alert"/, box);
   });
 
@@ -5446,14 +5476,15 @@ describe('the working cards\' script', () => {
   // The script reads its texts from window.ATLETA_CARD_TEXTS as T.name, T.name.sub or, for a group kept under a short
   // name (const G = T.giveaway), G.sub. A text the table does not hold would show as "undefined" only when its moment
   // comes, so the script's source is read here and each text it reads is looked up in the table the page gives it.
-  // The helpers in dashboard-cards-core.js are read too: they take the polls card's texts as P (T.polls).
+  // The helpers in dashboard-cards-core.js are read too: they take the polls card's texts as P (T.polls). The Tracking
+  // card's script keeps its group as K (T.tracking).
   test('every text the page script reads is in the table the page gives it', async () => {
     const { features } = require('../config');
     const before = features.overlays;
     features.overlays = true;
     try {
       const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
-      const source = ['dashboard-cards.js', 'dashboard-polls.js', 'dashboard-cards-core.js']
+      const source = ['dashboard-cards.js', 'dashboard-polls.js', 'dashboard-tracking.js', 'dashboard-cards-core.js']
         .map((name) => realFs.readFileSync(path.join(SRC, '..', 'public', 'js', name), 'utf8')).join('\n');
       const reads = new Set();
       for (const [, name, sub] of source.matchAll(/\bT\.(\w+)(?:\.(\w+))?/g)) {
