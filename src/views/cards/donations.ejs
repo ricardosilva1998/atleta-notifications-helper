@@ -1,7 +1,6 @@
-<%# The Donations card (dashboardCards.js donationsCard()): the tip page's switch and link, the tip goal (with the
-    overlay features; edited in a pop-up through /dashboard/api/tip-goal), reading tips aloud (its switch, while the
-    site offers it, and its line while it is on) and the latest tips. Without a PayPal email it shows the step to add
-    one. %>
+<%# The Donations card (dashboardCards.js donationsCard()): the tip page's switch and link, reading tips aloud (its
+    switch, while the site offers it, and its line while it is on) and the latest tips. Without a PayPal email it shows
+    the step to add one. The tip goal is on the Tracking card (cards/tracking.ejs). %>
 <% const _money = (amount, currency) => { try { return new Intl.NumberFormat(lang, { style: 'currency', currency: currency || 'EUR' }).format(Number(amount) || 0); } catch (e) { return `${(Number(amount) || 0).toFixed(2)} ${currency || ''}`.trim(); } }; %>
 <section class="card wc-card" id="card-donations" data-card="donations" aria-labelledby="card-donations-title">
   <div class="wc-head">
@@ -21,14 +20,6 @@
       <a class="btn btn-secondary wc-btn" href="<%= card.tipUrl %>" target="_blank" rel="noopener" title="<%= t('cards.donations.openPage') %>" aria-label="<%= t('cards.donations.openPage') %>"><svg class="i sm" aria-hidden="true"><use href="#i-ext"/></svg></a>
     </div>
     <% } %>
-    <% if (card.showGoal) { const _goal = card.goal; %>
-    <div class="wc-sec"><span class="wc-label"><%= t('cards.donations.goal') %></span><button type="button" class="btn btn-secondary wc-btn xs" data-edit="goal" data-title="<%= t('cards.donations.goal') %>"><svg class="i sm" aria-hidden="true"><use href="#i-pen"/></svg><span data-goal-button><%= _goal ? t('cards.common.edit') : t('cards.donations.startGoal') %></span></button></div>
-    <div class="wc-goal" data-goal data-title="<%= _goal ? _goal.title : '' %>" data-current="<%= _goal ? _goal.current : 0 %>" data-target="<%= _goal ? _goal.target : '' %>" data-currency="<%= _goal ? _goal.currency : card.currency %>"<%= _goal ? '' : ' hidden' %>>
-      <div class="top"><b data-goal-title><%= _goal ? _goal.title : '' %></b><em><%= t('cards.donations.goalOnStream') %></em><span data-goal-amount><%= _goal ? t('cards.donations.goalAmount', { raised: _money(_goal.current, _goal.currency), target: _money(_goal.target, _goal.currency) }) : '' %></span></div>
-      <div class="wc-progress"><span data-goal-bar style="width: <%= _goal ? _goal.percent : 0 %>%"></span></div>
-    </div>
-    <p class="wc-hint" data-goal-none<%= _goal ? ' hidden' : '' %>><%= t('cards.donations.noGoal') %></p>
-    <% } %>
     <% if (card.tts) { %>
     <div class="wc-sw<%= card.tts.on ? ' is-on' : '' %>"><span><%= t('cards.donations.ttsSwitch') %><small data-count="tts"><%= card.counts.tts.text !== undefined ? card.counts.tts.text : t(card.counts.tts.key, card.counts.tts.params) %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('cards.donations.ttsSwitch') %>" data-setting="tts_enabled" <%= card.tts.on ? 'checked' : '' %>><span class="slider"></span></label></div>
     <% } %>
@@ -46,18 +37,4 @@
   </div>
   <div class="wc-msg" data-msg hidden></div>
   <div class="wc-foot"><a href="/dashboard/donations"><%= t('cards.donations.paypal') %> <svg class="i sm" aria-hidden="true"><use href="#i-right"/></svg></a><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
-  <% if (card.showGoal && !card.setup) { %>
-  <template id="tpl-goal">
-    <div class="wc-editor">
-      <h4 id="wc-dialog-title" data-title></h4>
-      <div class="wc-fields">
-        <label class="wc-field grow"><span><%= t('cards.donations.goalTitle') %></span><input class="wc-input" data-field="title" maxlength="60"></label>
-        <label class="wc-field"><span><%= t('cards.donations.goalTarget') %></span><input class="wc-input" data-field="target_amount" type="number" min="1" step="0.01" inputmode="decimal"></label>
-      </div>
-      <p class="wc-hint" data-goal-hint></p>
-      <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn wc-left wc-danger" data-goal-end><%= t('cards.donations.endGoal') %></button><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save><%= t('cards.common.save') %></button></div>
-      <div class="wc-msg" data-dialog-msg role="alert" hidden></div>
-    </div>
-  </template>
-  <% } %>
 </section>

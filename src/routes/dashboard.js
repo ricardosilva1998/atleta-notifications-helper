@@ -390,7 +390,6 @@ function gatherCards(req, discord, lang) {
     modActionsThisWeek: db.countModLog(s.id),
     sponsorMessages: db.getSponsorMessages(s.id),
     tips: { recent: db.getDonations(s.id, { sinceDays: 90, limit: 3 }), count90d: db.countDonations(s.id, { sinceDays: 90 }) },
-    tipGoal: db.getActiveTipGoal(s.id),
     tts: { available: Boolean(config.tts.apiKey), used: db.getTtsUsage(s.id, utcMonth()), limit: ttsLimitOf(s), lang },
     rewards: db.getRewards(s.id).filter((r) => !isPendingDelete(r)),
     rewardsAccess: { hasScope: hasRedemptionScope(s) },
@@ -402,7 +401,11 @@ function gatherCards(req, discord, lang) {
       barUrl: s.overlay_token ? `${config.app.url}/overlay/poll/${s.overlay_token}?lang=${encodeURIComponent(lang || 'en')}` : null,
     },
     // The Tracking card: the Tracking page's state and the sources' links (only while the overlay features are on).
-    tracking: config.features.overlays ? { ...trackingState(s), links: trackingLinks(req, s, lang || 'en') } : null,
+    tracking: config.features.overlays ? {
+      ...trackingState(s),
+      links: trackingLinks(req, s, lang || 'en'),
+      tip: { goal: require('../services/tipGoals').toPayload(db.getActiveTipGoal(s.id)), pageCurrency: tipPageCurrency(s), currencies: TIP_GOAL_CURRENCIES },
+    } : null,
     giveaway: giveaway ? { ...giveaway, entryCount: db.getEntryCount(giveaway.id) } : null,
     spotifyConnected: !!s.spotify_access_token,
     multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
@@ -1148,34 +1151,61 @@ router.delete('/api/commands/:id', (req, res) => {
 // The Polls & predictions card's JSON routes (routes/polls.js), behind this router's login.
 router.use(require('./polls'));
 
-// The Donations card's tip goal: start, edit (title and target; the bar keeps its colour) and end.
+// The Tracking card's tip goal: start (title, target, bar colour, currency and what was already raised), edit (title,
+// target and colour; a colour not sent is kept), end, and a test of the goal reached on the OBS bar.
 function goalJsonError(res, status, code) {
   res.status(status).json({ ok: false, code, error: errorMessage(GOAL_ERRORS, code, res.locals.t) });
 }
+const colorOf = (b) => (b.bar_color !== undefined ? b.bar_color : b.barColor);
+// The tip page's currency when it is one a tip goal can count in, else EUR: a new tip goal starts in it.
+const tipPageCurrency = (streamer) => (TIP_GOAL_CURRENCIES.includes(streamer.donation_currency) ? streamer.donation_currency : 'EUR');
 
 router.post('/api/tip-goal', (req, res) => {
   const b = req.body || {};
-  const fields = parseTipGoalFields({ title: b.title, target_amount: b.target_amount });
+  const fields = parseTipGoalFields({ title: b.title, target_amount: b.target_amount, bar_color: colorOf(b) });
   if (fields.error) return goalJsonError(res, 400, fields.error);
-  const currency = TIP_GOAL_CURRENCIES.includes(req.streamer.donation_currency) ? req.streamer.donation_currency : 'EUR';
-  const goal = db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: 0 });
-  require('../services/tipGoals').broadcast(req.streamer.id);
-  res.status(201).json({ ok: true, goal });
+  const currency = TIP_GOAL_CURRENCIES.includes(b.currency) ? b.currency : tipPageCurrency(req.streamer);
+  const start = Math.round(parseFloat(b.current_amount) * 100) / 100;
+  const raised = Number.isFinite(start) && start > 0 ? Math.min(start, 10000000) : 0;
+  const goal = db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: raised });
+  const tipGoals = require('../services/tipGoals');
+  tipGoals.broadcast(req.streamer.id);
+  res.status(201).json({ ok: true, goal, view: tipGoals.toPayload(goal) }); // view: the goal as its bar draws it
 });
 
 router.patch('/api/tip-goal', (req, res) => {
   const goal = db.getActiveTipGoal(req.streamer.id);
   if (!goal) return goalJsonError(res, 404, 'not_found');
   const b = req.body || {};
+  const color = colorOf(b);
   const fields = parseTipGoalFields({
     title: b.title !== undefined ? b.title : goal.title,
     target_amount: b.target_amount !== undefined ? b.target_amount : goal.target_amount,
-    bar_color: goal.bar_color,
+    bar_color: typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color) ? color : goal.bar_color,
   });
   if (fields.error) return goalJsonError(res, 400, fields.error);
   const updated = db.updateTipGoal(goal.id, req.streamer.id, fields);
-  require('../services/tipGoals').broadcast(req.streamer.id);
-  res.json({ ok: true, goal: updated });
+  const tipGoals = require('../services/tipGoals');
+  tipGoals.broadcast(req.streamer.id);
+  res.json({ ok: true, goal: updated, view: tipGoals.toPayload(updated) });
+});
+
+// Test: the goal reached on the live bar for 10 s (never saved; without a goal a sample bar in the tip page's
+// currency, titled in the page's language). It shares the test buttons' cooldown.
+router.post('/api/tip-goal/test', (req, res) => {
+  const waitMs = testCooldown.take(req.streamer.id);
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000);
+    res.set('Retry-After', String(seconds));
+    return res.status(429).json({ ok: false, code: 'too_fast', seconds, error: res.locals.t('tracking.error.too_fast', { seconds }) });
+  }
+  const tipGoals = require('../services/tipGoals');
+  const goal = db.getActiveTipGoal(req.streamer.id);
+  const sample = goal
+    ? { title: goal.title, target: goal.target_amount, current: goal.target_amount, currency: goal.currency, barColor: goal.bar_color }
+    : { title: res.locals.t('cards.tracking.tipTitle'), target: 100, current: 100, currency: tipPageCurrency(req.streamer) };
+  tipGoals.sendTest(req.streamer.id, { goal: sample, justCompleted: true });
+  res.json({ ok: true, revertMs: tipGoals.TEST_REVERT_MS });
 });
 
 router.post('/api/tip-goal/end', (req, res) => {
@@ -1238,26 +1268,30 @@ router.get('/overlay/sounds/status', (req, res) => {
 // --- Chatbot Config ---
 
 // Donation settings page
+// The tip goal's section of the Tracking page (views/sections/tip-goal.ejs): the active goal, the past ones, its OBS
+// link, the error code a goal form came back with, and the warning when the goal counts in another currency than the
+// tip page's (PayPal tips only count toward a goal in the tip page's currency).
+function tipGoalSection(req, t) {
+  const activeGoal = db.getActiveTipGoal(req.streamer.id);
+  const mismatch = goalCurrencyMismatch(activeGoal, req.streamer);
+  return {
+    activeGoal,
+    goalHistory: db.getTipGoalHistory(req.streamer.id, 10),
+    goalOverlayUrl: req.streamer.overlay_token ? `${config.app.url}/overlay/goal/${req.streamer.overlay_token}` : null,
+    goalError: errorMessage(GOAL_ERRORS, req.query.goal_error, t),
+    goalCurrencyWarning: mismatch ? t('donations.goal.currencyMismatch', mismatch) : null,
+  };
+}
+
 router.get('/donations', (req, res) => {
   const t = res.locals.t;
-  const goalOverlayUrl = req.streamer.overlay_token
-    ? `${config.app.url}/overlay/goal/${req.streamer.overlay_token}`
-    : null;
-  const activeGoal = db.getActiveTipGoal(req.streamer.id);
-  // PayPal tips only count toward a goal in the tip page's currency
-  const mismatch = goalCurrencyMismatch(activeGoal, req.streamer);
   res.render('donation-settings', {
     streamer: req.streamer,
     appUrl: config.app.url,
-    activeGoal,
-    goalHistory: db.getTipGoalHistory(req.streamer.id, 10),
-    goalOverlayUrl,
     // Only known error codes from the URL become messages; anything else shows nothing
     settingsError: errorMessage(SETTINGS_ERRORS, req.query.error, t, {
       min: MIN_AMOUNT_FLOOR.toFixed(2), max: MIN_AMOUNT_CEIL, length: PAYPAL_EMAIL_MAX,
     }),
-    goalError: errorMessage(GOAL_ERRORS, req.query.goal_error, t),
-    goalCurrencyWarning: mismatch ? t('donations.goal.currencyMismatch', mismatch) : null,
     tts: ttsSection(req.streamer, t),
     ttsError: errorMessage(TTS_ERRORS, req.query.error, t),
     ttsSaved: req.query.saved === 'tts',
@@ -1413,9 +1447,9 @@ router.post('/donations/history/:id/delete', (req, res) => {
 
 // --- Tip goals ---
 
-// `error` is a GOAL_ERRORS code (services/donationSettings.js), shown translated on the page.
+// `error` is a GOAL_ERRORS code (services/donationSettings.js), shown translated on the Tracking page's tip goal section.
 function goalRedirect(res, error) {
-  res.redirect('/dashboard/donations' + (error ? `?goal_error=${encodeURIComponent(error)}` : '') + '#tip-goal');
+  res.redirect('/dashboard/tracking' + (error ? `?goal_error=${encodeURIComponent(error)}` : '') + '#tip-goal');
 }
 
 router.post('/donations/goal', (req, res) => {
@@ -1588,6 +1622,7 @@ function trackingLinks(req, streamer, lang) {
   const q = `?lang=${encodeURIComponent(lang)}`;
   return {
     goals: { follow: `${base}/goal/followers/${token}${q}`, sub: `${base}/goal/subs/${token}${q}` },
+    tip: `${base}/goal/${token}`, // the tip goal's bar (public/overlay/goal.js), the same link as before Tracking had it
     trackers: Object.fromEntries(trackers.TRACKERS.map((tracker) => [tracker, `${base}/tracker/${tracker}/${token}${q}`])),
   };
 }
@@ -1611,6 +1646,7 @@ router.get('/tracking', overlayPage, (req, res) => {
     links: trackingLinks(req, streamer, lang),
     trackingData: JSON.stringify({ state, lang }),
     trackingTexts: JSON.stringify(trackingTexts(res.locals.t)),
+    ...tipGoalSection(req, res.locals.t),
   });
 });
 

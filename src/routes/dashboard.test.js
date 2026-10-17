@@ -3869,7 +3869,7 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       const page = body(res.text);
       for (const href of ['/dashboard/overlay', '/dashboard/overlay-builder', '/dashboard/tracking', '/dashboard/redemptions']) assert.ok(page.includes(`href="${href}"`), href);
       for (const key of ['dashboard.cards.overlay.title', 'dashboard.cards.cpRewards', 'dashboard.vtuber.title', 'dashboard.tab.experimental', 'dashboard.youtube.overlayDesc',
-        'cards.overlay.sources', 'cards.donations.goal', 'cards.sponsors.images', 'dashboard.kick.comingSoon']) {
+        'cards.overlay.sources', 'cards.tracking.tipTitle', 'cards.sponsors.images', 'dashboard.kick.comingSoon']) {
         assert.ok(page.includes(esc(t('en', key))), key);
       }
       assert.ok(page.includes('data-tab="experimental"') && page.includes('id="tab-experimental"'));
@@ -3916,13 +3916,27 @@ describe('with the OBS overlay features switched off, the pages show nothing of 
       assert.ok(page.includes(esc(t('en', 'donations.settings.introChat'))));
     });
 
-    test('switched on, the tip goal, its preview and its OBS link are there', async () => {
+    test('switched on, the page says the tip goal moved to Tracking, and the Tracking page has it: its form, preview, OBS link and past goals', async () => {
       features.overlays = true;
-      const res = await request('GET', '/dashboard/donations', { streamer: streamerWithGoal() });
-      const page = body(res.text);
-      for (const there of ['id="tip-goal"', '/overlay/goal-demo', `/overlay/goal/synthetic-token-off-4-${made}`, 'Synthetic second goal', 'Synthetic goal title', esc(t('en', 'donations.settings.intro'))]) {
-        assert.ok(page.includes(there), there);
+      const id = streamerWithGoal();
+      const donations = body((await request('GET', '/dashboard/donations', { streamer: id })).text);
+      for (const gone of ['id="tip-goal"', 'goal-form', '/overlay/goal-demo', 'Synthetic second goal']) assert.ok(!donations.includes(gone), gone);
+      assert.ok(donations.includes(esc(t('en', 'donations.goal.moved'))) && donations.includes('href="/dashboard/tracking#tip-goal"'));
+      assert.ok(donations.includes(esc(t('en', 'donations.settings.intro'))));
+      const tracking = body((await request('GET', '/dashboard/tracking', { streamer: id })).text);
+      for (const there of ['id="tip-goal"', 'id="goal-form"', '/overlay/goal-demo', `/overlay/goal/synthetic-token-off-4-${made}`, 'Synthetic second goal', 'Synthetic goal title', esc(t('en', 'donations.goal.past'))]) {
+        assert.ok(tracking.includes(there), there);
       }
+    });
+
+    test('the goal\'s forms come back to the Tracking page, with a refusal\'s code', async () => {
+      features.overlays = true;
+      const id = streamerWithGoal();
+      const ok = await request('POST', '/dashboard/donations/goal', { streamer: id, form: { title: 'Synthetic third goal', target_amount: '30', currency: 'EUR' } });
+      assert.equal(ok.status, 302);
+      assert.equal(ok.headers.location, '/dashboard/tracking#tip-goal');
+      const refused = await request('POST', '/dashboard/donations/goal', { streamer: id, form: { title: '', target_amount: '30' } });
+      assert.equal(refused.headers.location, '/dashboard/tracking?goal_error=title_required#tip-goal');
     });
   });
 
@@ -5039,7 +5053,42 @@ describe('a sponsor message edit changes only what it is given', () => {
   });
 });
 
-describe('the Donations card\'s tip goal (JSON)', () => {
+describe('the Tracking card\'s tip goal (JSON)', () => {
+  test('a start takes the bar colour, a currency of the six and what was already raised; an edit can change the colour', async () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const started = (await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'Sim rig', target_amount: 1000, barColor: '#ff6b9a', currency: 'GBP', current_amount: '120.456' } })).json().goal;
+    assert.deepEqual([started.bar_color, started.currency, started.current_amount], ['#ff6b9a', 'GBP', 120.46]);
+    const odd = (await request('POST', '/dashboard/api/tip-goal', { streamer: id, body: { title: 'Odd', target_amount: 50, barColor: 'red', currency: 'XXX', current_amount: -5 } })).json().goal;
+    assert.deepEqual([odd.bar_color, odd.currency, odd.current_amount], ['#22c55e', 'EUR', 0], 'an unknown colour, currency or a negative start falls back');
+    const recoloured = (await request('PATCH', '/dashboard/api/tip-goal', { streamer: id, body: { barColor: '#4fd1ff' } })).json().goal;
+    assert.deepEqual([recoloured.bar_color, recoloured.title, recoloured.target_amount], ['#4fd1ff', 'Odd', 50]);
+  });
+
+  test('a test plays the goal reached on the bar (a sample without a goal), never saved, sharing the test cooldown', async () => {
+    const bus = require('../services/overlayBus');
+    const id = addStreamer({ donation_currency: 'USD' });
+    const heard = [];
+    const listener = (msg) => heard.push(msg);
+    bus.on(`tipgoal:${id}`, listener);
+    try {
+      const res = await request('POST', '/dashboard/api/tip-goal/test', { streamer: id, body: { test: 'reach' } });
+      assert.equal(res.status, 200);
+      assert.equal(res.json().revertMs, 10000);
+      assert.equal(heard.length, 1);
+      assert.equal(heard[0].test, true);
+      assert.equal(heard[0].justCompleted, true);
+      assert.deepEqual([heard[0].goal.title, heard[0].goal.currency, heard[0].goal.completed], [t('en', 'cards.tracking.tipTitle'), 'USD', true]);
+      assert.equal(db.getActiveTipGoal(id), null, 'nothing saved');
+      const fast = await request('POST', '/dashboard/api/tip-goal/test', { streamer: id, body: { test: 'reach' } });
+      assert.equal(fast.status, 429);
+      assert.equal(fast.json().code, 'too_fast');
+      assert.ok(fast.json().error.length > 0);
+    } finally {
+      bus.off(`tipgoal:${id}`, listener);
+    }
+  });
+
+
   test('starts a goal in the tip page\'s currency, edits it keeping its bar colour, and ends it', async () => {
     const bus = require('../services/overlayBus');
     const id = addStreamer({ donation_currency: 'USD' });
@@ -5225,7 +5274,8 @@ describe('the working cards on the page', () => {
     db.setTrackerValue(id, 'latest_tip', { name: 'Marta', amount: 10, currency: 'EUR' });
     const card = cardOf(await pane(id), 'tracking');
     const goals = JSON.parse(card.match(/data-goals="([^"]*)"/)[1].replace(/&#34;/g, '"').replace(/&amp;/g, '&'));
-    assert.deepEqual(Object.keys(goals), ['follow', 'sub']);
+    assert.deepEqual(Object.keys(goals), ['follow', 'sub', 'tip']);
+    assert.match(goals.tip.url, /\/overlay\/goal\/synthetic-token-wcp-track$/);
     assert.equal(goals.follow.goal, null);
     assert.match(goals.sub.url, /\/overlay\/goal\/subs\/synthetic-token-wcp-track\?lang=en$/);
     const rows = card.match(/<div class="wc-row wc-tracker[^"]*" data-tracker="\w+">/g) || [];
@@ -5257,13 +5307,13 @@ describe('the working cards on the page', () => {
     const overlay = cardOf(html, 'overlay');
     assert.match(overlay, /<code class="wc-link" data-masked="[^"]*\/overlay\/•{12}" data-shown="[^"]*\/overlay\/synthetic-token-wcp-mask">[^<]*\/overlay\/•{12}<\/code>/);
     assert.match(overlay, /data-copy="[^"]*\/overlay\/synthetic-token-wcp-mask"/);
-    // The token is on the tab exactly twelve times: four in the OBS overlay card (data-shown and data-copy of the
+    // The token is on the tab exactly thirteen times: four in the OBS overlay card (data-shown and data-copy of the
     // alerts' link and of the poll bar's; the Polls & predictions card shows the bar's link only once it can start
-    // polls), and eight in the Tracking card, never as text: the six trackers' copy buttons and the two goal bars'
+    // polls), and nine in the Tracking card, never as text: the six trackers' copy buttons and the three goal bars'
     // links in its data-goals.
-    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 12);
+    assert.equal(html.split('synthetic-token-wcp-mask').length - 1, 13);
     const tracking = cardOf(html, 'tracking');
-    assert.equal(tracking.split('synthetic-token-wcp-mask').length - 1, 8);
+    assert.equal(tracking.split('synthetic-token-wcp-mask').length - 1, 9);
     assert.equal((tracking.match(/data-track-copy="[^"]*synthetic-token-wcp-mask[^"]*"/g) || []).length, 6);
     assert.ok(!/>[^<]*synthetic-token-wcp-mask/.test(tracking), 'never printed as text');
     const noLink = cardOf(await pane(linkedStreamer()), 'overlay');
@@ -5291,7 +5341,7 @@ describe('the working cards on the page', () => {
   test('every pop-up\'s message box is an alert, so a refused save is said to a screen reader while the pop-up is open', async () => {
     const html = await pane(linkedStreamer({ chatbot_enabled: 1, paypal_email: 'tips@example.test' }));
     const boxes = html.match(/<div class="wc-msg"[^>]*data-dialog-msg[^>]*>/g) || [];
-    assert.equal(boxes.length, 6, 'one in each of the six editors: thank-you, command, built-ins, sponsor message, tip goal, tracking goal');
+    assert.equal(boxes.length, 5, 'one in each of the five editors: thank-you, command, built-ins, sponsor message, tracking goal (the tip goal\'s too)');
     for (const box of boxes) assert.match(box, /\brole="alert"/, box);
   });
 
@@ -5330,7 +5380,7 @@ describe('the working cards on the page', () => {
     assert.ok(cardOf(html, 'spotify').includes('href="/auth/spotify"'));
   });
 
-  test('a running giveaway shows its panel; the tip goal and the latest tips are on the donations card', async () => {
+  test('a running giveaway shows its panel; the latest tips are on the donations card, the tip goal on the Tracking card', async () => {
     const id = linkedStreamer({ chatbot_enabled: 1, paypal_email: 'tips@example.test', donation_page_enabled: 1, donation_currency: 'EUR' });
     const row = db.insertGiveaway({ streamer_id: id, keyword: 'synthetic', status: 'open', duration_seconds: 300, winners_count: 2, ends_at: new Date(Date.now() + 300e3).toISOString() });
     db.createTipGoal(id, { title: 'New wheel', target_amount: 1000, currency: 'EUR', bar_color: '#22c55e', current_amount: 101 });
@@ -5340,7 +5390,8 @@ describe('the working cards on the page', () => {
     assert.match(gw, /class="card wc-card gw-running"/);
     assert.ok(gw.includes(`data-giveaway-id="${row.id}"`) && gw.includes('<code data-gw-keyword>!synthetic</code>'));
     const donations = cardOf(html, 'donations');
-    assert.ok(donations.includes('data-title="New wheel"') && donations.includes('style="width: 10%"'));
+    assert.ok(!donations.includes('New wheel'), 'no goal on the Donations card');
+    assert.ok(cardOf(html, 'tracking').includes('New wheel'), 'the goal is in the Tracking card\'s data-goals');
     assert.ok(donations.includes('Synthetic Donor') && donations.includes('Great race'));
   });
 
@@ -5448,7 +5499,7 @@ describe('the working cards\' script', () => {
     assert.equal(T.showAll, t('en', 'cards.common.showAll', { count: '{{count}}' }), 'a text with a field the script fills');
     assert.equal(T.giveaway.pickAgain, t('en', 'cards.giveaways.pickAgain'));
     assert.equal(T.giveaway.confirmEnd, t('en', 'giveaways.confirm.close'), 'End without a winner asks what the giveaways page asks');
-    assert.equal(T.confirmEndGoal, t('en', 'donations.goal.endConfirm'), 'End the goal asks what the donations page asks');
+    assert.equal(T.tracking.kindTitle.tip, t('en', 'cards.tracking.tipTitle'), 'the tip goal is a Tracking card goal');
     assert.equal(T.saveFirst, t('en', 'cards.chatbot.saveFirst'), 'a thank-you test with an unsaved text asks to save first');
     const modelTag = html.indexOf('<script src="/overlay/pollModel.js"></script>');
     const pollsTag = html.indexOf('<script src="/js/dashboard-polls.js"></script>');
@@ -5467,7 +5518,7 @@ describe('the working cards\' script', () => {
     features.overlays = false;
     try {
       const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
-      for (const key of ['alertSent', 'rewardPlayed', 'startGoal', 'goalAmount', 'goalHint', 'confirmEndGoal']) assert.ok(!(key in T), key);
+      for (const key of ['alertSent', 'rewardPlayed', 'tracking']) assert.ok(!(key in T), key);
     } finally {
       features.overlays = true;
     }

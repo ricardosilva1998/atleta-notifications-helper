@@ -1,6 +1,7 @@
 'use strict';
 
-// The Tracking card (views/cards/tracking.ejs). The two goal bars are drawn here from the card's data-goals (each with
+// The Tracking card (views/cards/tracking.ejs). The three goal bars (follower, sub, tip) are drawn here from the card's
+// data-goals (each with
 // Test, its OBS link, Edit and End, or Start a goal), and again from the Tracking routes' answer after a change. Start
 // and Edit open the pop-up (template tpl-track-goal): a live preview of the bar on top, the title, the target with
 // − / + and quick picks, colour swatches, and for a new goal the period as chips, calendar or rolling, the time zone or
@@ -17,11 +18,14 @@
   const { $, $$, core, call } = ui;
   const fill = core.fill;
   const locale = document.documentElement.lang || 'en';
-  const KINDS = ['follow', 'sub'];
-  const ICONS = { follow: 'i-heart', sub: 'i-star' };
+  const KINDS = ['follow', 'sub', 'tip'];
+  const ICONS = { follow: 'i-heart', sub: 'i-star', tip: 'i-coin' };
   const SWATCHES = ['#9146ff', '#ff6b9a', '#4fd1ff', '#3ecf8e', '#f7c948'];
-  const QUICK = { follow: [50, 100, 500, 1000], sub: [10, 25, 50, 100] };
-  const DEFAULT_TARGET = { follow: 100, sub: 50 };
+  const QUICK = { follow: [50, 100, 500, 1000], sub: [10, 25, 50, 100], tip: [50, 100, 250, 500] };
+  const DEFAULT_TARGET = { follow: 100, sub: 50, tip: 100 };
+  const DEFAULT_COLOR = { follow: SWATCHES[0], sub: SWATCHES[0], tip: SWATCHES[3] };
+  // The tip goal (services/tipGoals.js) has its own routes and counts money; the follower and sub goals are Tracking's.
+  const goalUrl = (kind, rest) => (kind === 'tip' ? '/dashboard/api/tip-goal' : '/dashboard/api/tracking/goal/' + kind) + (rest || '');
   const PERIODS = ['lifetime', 'year', 'month', 'week', 'day', 'hours'];
   const COUNTED = ['year', 'month', 'week', 'day'];
   const TARGET_MAX = 10000000;
@@ -70,10 +74,15 @@
     const name = K[goal.period] || '';
     return goal.mode ? name + ' · ' + (K[goal.mode] || goal.mode) : name;
   }
-  function countText(goal) {
+  function money(n, currency) {
+    try { return new Intl.NumberFormat(locale, { style: 'currency', currency: currency || 'EUR' }).format(Number(n) || 0); } catch (e) { return (Number(n) || 0).toFixed(2) + ' ' + (currency || ''); }
+  }
+  function countText(goal, kind) {
     if (goal.unavailable === 'needs_reconnect') return K.reconnect;
     if (goal.unavailable) return K.notAvailable;
-    const params = { current: num(goal.current), target: num(goal.target) };
+    const params = kind === 'tip'
+      ? { current: money(goal.current, goal.currency), target: money(goal.target, goal.currency) }
+      : { current: num(goal.current), target: num(goal.target) };
     return fill(goal.completed ? K.reached : K.running, params);
   }
   function flash(target) {
@@ -108,7 +117,7 @@
       if (isColor(goal.barColor)) box.style.setProperty('--bar', goal.barColor);
       // The title, then which goal and its period; the bar; the count, then Test, the link, Edit and End.
       const top = el('div', 'top');
-      top.append(el('b', 'tt', goal.title), el('small', null, K.kindTitle[kind] + ' · ' + periodText(goal, entry.hours)));
+      top.append(el('b', 'tt', goal.title), el('small', null, kind === 'tip' ? K.kindTitle[kind] + ' · ' + (goal.currency || '') : K.kindTitle[kind] + ' · ' + periodText(goal, entry.hours)));
       const bar = el('div', 'bar');
       const fillBar = el('i');
       fillBar.style.width = goal.unavailable ? '0%' : Math.max(0, Math.min(100, Number(goal.percent) || 0)) + '%';
@@ -122,16 +131,16 @@
       const edit = button('wc-ib', null, { 'data-goal-edit': kind, title: K.editGoal, 'aria-label': K.editGoal + ': ' + K.kindTitle[kind] });
       edit.appendChild(icon('i-pen', true));
       acts.append(edit, button('btn btn-secondary wc-btn xs wc-danger', K.endGoal, { 'data-goal-end': kind }));
-      bottom.append(el('b', goal.unavailable ? 'count long' : 'count', countText(goal)), acts);
+      bottom.append(el('b', goal.unavailable ? 'count long' : 'count', countText(goal, kind)), acts);
       box.append(top, bar, bottom);
     }
     ui.repack();
   }
 
-  // After a Tracking route answered with its state: the goals again (keeping their links).
+  // After a Tracking route answered with its state: the follower and sub goals again (keeping their links).
   function takeState(state) {
     if (!state || !state.goals) return;
-    for (const kind of KINDS) {
+    for (const kind of ['follow', 'sub']) {
       const next = state.goals[kind] || {};
       goals[kind] = { ...(goals[kind] || {}), goal: next.goal || null, hours: next.hours || null, timeZone: next.timeZone || null };
     }
@@ -140,9 +149,15 @@
 
   // ── Buttons ──
 
+  // After a tip goal route answered: its bar as the route drew it (null once ended).
+  function takeTip(view) {
+    goals.tip = { ...(goals.tip || {}), goal: view || null };
+    renderGoals();
+  }
+
   ui.onClick('[data-goal-test]', async (b) => {
     b.disabled = true;
-    const answer = await call('POST', '/dashboard/api/tracking/goal/' + b.dataset.goalTest + '/test', { test: 'reach' });
+    const answer = await call('POST', goalUrl(b.dataset.goalTest, '/test'), { test: 'reach' });
     b.disabled = false;
     if (!answer.ok) return ui.showMessage(card, words(answer));
     ui.clearMessage(card);
@@ -171,11 +186,13 @@
   ui.onClick('[data-goal-end]', async (b) => {
     if (!window.confirm(K.endConfirm)) return;
     b.disabled = true;
-    const answer = await call('POST', '/dashboard/api/tracking/goal/' + b.dataset.goalEnd + '/end', {});
+    const kind = b.dataset.goalEnd;
+    const answer = await call('POST', goalUrl(kind, '/end'), {});
     b.disabled = false;
     if (!answer.ok) return ui.showMessage(card, words(answer));
     ui.clearMessage(card);
-    takeState(answer.data.state);
+    if (kind === 'tip') takeTip(null);
+    else takeState(answer.data.state);
     ui.showSaved(card);
     ui.refreshSoon();
   });
@@ -220,8 +237,9 @@
     const entry = goals[kind] || {};
     const current = editing ? entry.goal : null;
     if (editing && !current) return;
+    const tip = kind === 'tip';
     const state = {
-      color: current && isColor(current.barColor) ? current.barColor.toLowerCase() : SWATCHES[0],
+      color: current && isColor(current.barColor) ? current.barColor.toLowerCase() : DEFAULT_COLOR[kind],
       period: 'month',
       mode: 'calendar',
     };
@@ -238,14 +256,32 @@
       title.value = current ? current.title : '';
       target.value = String(current ? current.target : DEFAULT_TARGET[kind]);
       hours.value = '24';
+      const currency = $('[data-field="currency"]', editor);
+      const raised = $('[data-field="current_amount"]', editor);
+      if (tip) {
+        target.step = '0.01';
+        target.min = '0.01';
+        target.setAttribute('inputmode', 'decimal');
+        currency.value = (current && current.currency) || entry.currency || 'EUR';
+      }
+      // The goal's numbers as the bar shows them: money for the tip goal.
+      const shownNumber = (n) => (tip ? money(n, current ? current.currency : currency.value) : num(n));
 
       const preview = () => {
-        const n = Math.min(TARGET_MAX, Math.max(1, Math.floor(Number(target.value)) || 1));
-        const shown = current ? Math.min(n, Number(current.current) || 0) : Math.round(n * 0.34);
+        const typed = Number(target.value);
+        const n = Math.min(TARGET_MAX, tip ? Math.max(0.01, typed || 1) : Math.max(1, Math.floor(typed) || 1));
+        let shown;
+        if (current) shown = Math.min(n, Number(current.current) || 0);
+        else if (tip && Number(raised.value) > 0) shown = Math.min(n, Number(raised.value));
+        else shown = tip ? Math.round(n * 34) / 100 : Math.round(n * 0.34);
         $('[data-tg-preview]', editor).style.setProperty('--bar', state.color);
         $('[data-tg-ptitle]', editor).textContent = title.value.trim() || K.kindTitle[kind];
-        $('[data-tg-pcount]', editor).textContent = num(shown) + ' / ' + num(n);
+        $('[data-tg-pcount]', editor).textContent = shownNumber(shown) + ' / ' + shownNumber(n);
         $('[data-tg-pfill]', editor).style.width = Math.min(100, (shown / n) * 100) + '%';
+        if (tip) {
+          $('[data-tg-pperiod]', editor).textContent = K.kindTitle[kind];
+          return;
+        }
         const goal = current || { period: state.period, mode: COUNTED.includes(state.period) ? state.mode : null };
         $('[data-tg-pperiod]', editor).textContent = periodText(goal, current ? entry.hours : hours.value);
       };
@@ -291,13 +327,14 @@
         const counted = COUNTED.includes(state.period);
         $$('[data-tg-period]', periodBox).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tgPeriod === state.period)));
         $$('[data-tg-mode]', editor).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tgMode === state.mode)));
-        $('[data-tg-hours-row]', editor).hidden = editing || state.period !== 'hours';
-        $('[data-tg-mode-row]', editor).hidden = editing || !counted;
+        $('[data-tg-hours-row]', editor).hidden = editing || tip || state.period !== 'hours';
+        $('[data-tg-mode-row]', editor).hidden = editing || tip || !counted;
+        $('[data-tg-tip-row]', editor).hidden = editing || !tip;
         $('[data-tg-zone-row]', editor).hidden = state.mode !== 'calendar';
         $('[data-tg-subhint]', editor).hidden = editing || kind !== 'sub' || state.period === 'lifetime';
         preview();
       };
-      if (editing) {
+      if (editing || tip) {
         $('[data-tg-new]', editor).hidden = true;
       } else {
         for (const period of PERIODS) {
@@ -314,14 +351,22 @@
           zone.appendChild(option);
         }
       }
-      [title, target, hours].forEach((input) => input.addEventListener('input', preview));
+      [title, target, hours, raised].forEach((input) => input.addEventListener('input', preview));
+      currency.addEventListener('change', preview);
       showRows();
     }, async (editor) => {
       // An empty title is the goal's own name, as the preview shows it.
       const title = $('[data-field="title"]', editor).value.trim() || K.kindTitle[kind];
       const target = Number($('[data-field="target"]', editor).value);
       let answer;
-      if (editing) {
+      if (tip) {
+        const body = { title, target_amount: target, barColor: state.color };
+        if (!editing) {
+          body.currency = $('[data-field="currency"]', editor).value;
+          body.current_amount = Number($('[data-field="current_amount"]', editor).value) || 0;
+        }
+        answer = await call(editing ? 'PATCH' : 'POST', goalUrl('tip'), body);
+      } else if (editing) {
         answer = await call('PATCH', '/dashboard/api/tracking/goal/' + kind, { title, target, barColor: state.color });
       } else {
         const body = { title, target, barColor: state.color, period: state.period };
@@ -336,7 +381,8 @@
         ui.dialogMessage(editor, words(answer));
         return false;
       }
-      takeState(answer.data.state);
+      if (tip) takeTip(answer.data.view);
+      else takeState(answer.data.state);
       ui.clearMessage(card);
       ui.showSaved(card);
       ui.refreshSoon();

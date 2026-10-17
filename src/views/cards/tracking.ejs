@@ -1,4 +1,4 @@
-<%# The Tracking card (with features.overlays; dashboardCards.js trackingCard()): the follower and sub goal bars, drawn
+<%# The Tracking card (with features.overlays; dashboardCards.js trackingCard()): the follower, sub and tip goal bars, drawn
     by public/js/dashboard-tracking.js from data-goals (Test, the OBS link, Start or Edit in a pop-up with a live
     preview, End), and the six trackers, each with its switch, last value, test and OBS link. The Tracking page keeps
     the trackers' colours and the past goals. %>
@@ -15,6 +15,7 @@
     <div class="wc-tgoals" data-goal-list>
       <div class="wc-tgoal empty" data-goal="follow"><span class="nm"><%= t('tracking.goal.follow.title') %></span></div>
       <div class="wc-tgoal empty" data-goal="sub"><span class="nm"><%= t('tracking.goal.sub.title') %></span></div>
+      <div class="wc-tgoal empty" data-goal="tip"><span class="nm"><%= t('cards.tracking.tipTitle') %></span></div>
     </div>
     <div class="wc-sec"><span class="wc-label"><%= t('cards.tracking.trackers') %></span><span class="wc-count" data-count="trackers"><%= t(card.counts.trackers.key, card.counts.trackers.params) %></span></div>
     <div class="wc-list">
@@ -58,6 +59,10 @@
       <div class="wc-tg-row" data-tg-mode-row hidden>
         <div class="wc-tg-seg" role="radiogroup" aria-label="<%= t('tracking.goal.field.mode') %>"><button type="button" data-tg-mode="calendar" title="<%= t('tracking.mode.calendar') %>"><%= t('cards.tracking.calendar') %></button><button type="button" data-tg-mode="rolling" title="<%= t('tracking.mode.rolling') %>"><%= t('cards.tracking.rolling') %></button></div>
         <label class="wc-field grow" data-tg-zone-row><span><%= t('tracking.goal.field.timeZone') %></span><select class="wc-select" data-field="timeZone"></select></label>
+      </div>
+      <div class="wc-tg-row" data-tg-tip-row hidden>
+        <label class="wc-field"><span><%= t('donations.settings.currency') %></span><select class="wc-select" data-field="currency"><% for (const c of card.goals.tip.currencies) { %><option value="<%= c %>"><%= c %></option><% } %></select></label>
+        <label class="wc-field"><span><%= t('donations.goal.fieldStart') %></span><input class="wc-input wc-tg-hours" data-field="current_amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0"></label>
       </div>
       <p class="wc-note wc-tg-hint" data-tg-subhint hidden><span><%= t('tracking.goal.sub.silentRenewals') %></span></p>
       <div class="wc-actions"><button type="button" class="btn btn-secondary wc-btn" data-cancel><%= t('cards.common.cancel') %></button><button type="button" class="btn btn-primary wc-btn" data-save></button></div>

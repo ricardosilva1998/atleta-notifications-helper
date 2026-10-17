@@ -66,7 +66,6 @@ function input(over = {}) {
     modActionsThisWeek: 0,
     sponsorMessages: [],
     tips: { recent: [], count90d: 0 },
-    tipGoal: null,
     rewards: [],
     rewardsAccess: { hasScope: true },
     giveaway: null,
@@ -311,7 +310,7 @@ describe('Donations', () => {
     assert.deepEqual([card.setup, card.status], ['paypal', { key: 'cards.donations.status.setup', params: {}, tone: 'warn' }]);
   });
 
-  test('the tip page on: its link, the goal and the latest tips, each with how long ago', () => {
+  test('the tip page on: its link and the latest tips, each with how long ago; the tip goal is the Tracking card\'s', () => {
     const card = build({
       tips: {
         count90d: 7,
@@ -320,22 +319,19 @@ describe('Donations', () => {
           { id: 2, amount: 10, currency: null, donor_name: null, message: null, created_at: '2026-10-14T11:58:00.000Z' },
         ],
       },
-      tipGoal: { title: 'New wheel', current_amount: 101, target_amount: 1000, currency: 'EUR' },
     }).donations;
     assert.deepEqual(card.status, { key: 'cards.donations.status.on', params: { count: 7 }, tone: 'ok' });
     assert.deepEqual([card.setup, card.on, card.tipUrl, card.tipShown], [null, true, 'https://atleta.example/tip/synthetic_channel', 'atleta.example/tip/synthetic_channel']);
-    assert.equal(card.showGoal, true);
-    assert.deepEqual(card.goal, { title: 'New wheel', current: 101, target: 1000, currency: 'EUR', percent: 10 });
+    assert.equal('goal' in card, false);
+    assert.equal('showGoal' in card, false);
     assert.deepEqual(card.recent.map((d) => [d.id, d.amount, d.currency, d.name, d.message, d.ago]), [
       [3, 5, 'EUR', 'RacerFan', 'Great race', { key: 'nav.timeDays', params: { n: 2 } }],
       [2, 10, 'EUR', '', '', { key: 'nav.timeMinutes', params: { n: 2 } }],
     ]);
   });
 
-  test('off; no goal; the goal section only with the overlay features; no tip link without Twitch', () => {
+  test('off; no tip link without Twitch', () => {
     assert.deepEqual(build({ streamer: { donation_page_enabled: 0 } }).donations.status, { key: 'cards.donations.status.off', params: {}, tone: 'off' });
-    assert.deepEqual([build().donations.showGoal, build().donations.goal], [true, null]);
-    assert.equal(build({ features: { overlays: false } }).donations.showGoal, false);
     const noTwitch = build({ streamer: { twitch_username: null } }).donations;
     assert.deepEqual([noTwitch.tipUrl, keyOf(noTwitch.status)], [null, 'cards.donations.status.noTwitch']);
   });
@@ -574,6 +570,18 @@ describe('Tracking', () => {
     assert.equal(card.goals.follow.goal, null);
     assert.equal(card.goals.follow.url, 'https://atleta.example/overlay/goal/followers/tok?lang=en');
     assert.deepEqual(card.goals.sub, { goal, hours: null, timeZone: 'Europe/Lisbon', url: 'https://atleta.example/overlay/goal/subs/tok?lang=en' });
+  });
+
+  test('the tip goal is the third goal bar: the goal as its bar draws it, its link, the tip page\'s currency and the six it can count in', () => {
+    const tip = { id: 9, title: 'New wheel', current: 101, target: 1000, currency: 'GBP', barColor: '#3ecf8e', percent: 10.1, completed: false };
+    const tr = trackingInput({ tip: { goal: tip, pageCurrency: 'USD', currencies: ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'] } });
+    tr.links.tip = 'https://atleta.example/overlay/goal/tok';
+    const card = build({ tracking: tr }).tracking;
+    assert.deepEqual(Object.keys(card.goals), ['follow', 'sub', 'tip']);
+    assert.deepEqual(card.goals.tip, { goal: tip, url: 'https://atleta.example/overlay/goal/tok', currency: 'USD', currencies: ['EUR', 'USD', 'GBP', 'BRL', 'CAD', 'AUD'] });
+    assert.deepEqual(card.status.params, { goals: 1, trackers: 6, total: 6 }, 'a running tip goal counts as a running goal');
+    const none = build({ tracking: trackingInput({ links: null }) }).tracking.goals.tip;
+    assert.deepEqual(none, { goal: null, url: null, currency: 'EUR', currencies: ['EUR'] });
   });
 
   test('a gift on the latest sub; Latest sub not available for a channel that is not an Affiliate', () => {
