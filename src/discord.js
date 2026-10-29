@@ -272,4 +272,63 @@ function buildIracingResultEmbed(raceData) {
   });
 }
 
-module.exports = { client, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };
+// ── Coaching: direct messages, membership, invites ─────────────────────────
+
+// Runs a promise against a deadline; the timer is cleared and never keeps the process alive.
+function withDeadline(promise, ms) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('deadline')), ms);
+    if (timer.unref) timer.unref();
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
+// Sends one direct message. Never throws. 50007 (DMs closed) and 10013 (unknown user) are
+// 'unreachable'; anything else, a timeout included, is 'failed'. No mention can ping anyone.
+async function sendDirectMessage(userId, payload) {
+  if (typeof userId !== 'string' || !/^\d{17,20}$/.test(userId)) return { ok: false, reason: 'unreachable' };
+  if (!client.isReady()) return { ok: false, reason: 'not_ready' };
+  try {
+    await withDeadline(client.users.send(userId, { ...payload, allowedMentions: { parse: [] } }), 10000);
+    return { ok: true };
+  } catch (e) {
+    if (e && (e.code === 50007 || e.code === 10013)) return { ok: false, reason: 'unreachable' };
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+// Whether a user is a member of a server the bot is in: true, false, or null when that cannot be known.
+async function isGuildMember(guildId, userId) {
+  if (!client.isReady()) return null;
+  const guild = client.guilds.cache.get(String(guildId));
+  if (!guild || typeof userId !== 'string' || !/^\d{17,20}$/.test(userId)) return null;
+  if (guild.members.cache.has(userId)) return true;
+  try {
+    await withDeadline(guild.members.fetch(userId), 5000);
+    return true;
+  } catch (e) {
+    return e && e.code === 10007 ? false : null;
+  }
+}
+
+// What a saved invite code points at, from Discord's public endpoint (no bot needed).
+async function fetchInvite(code) {
+  try {
+    const res = await fetch('https://discord.com/api/v10/invites/' + encodeURIComponent(code), { signal: AbortSignal.timeout(10000) });
+    if (res.status === 404) return { ok: false, reason: 'unknown' };
+    if (!res.ok) return { ok: false, reason: 'unavailable' };
+    const body = await res.json();
+    if (!body || !body.guild || !body.guild.id) return { ok: false, reason: 'unavailable' };
+    return { ok: true, guildId: String(body.guild.id), guildName: String(body.guild.name || '') };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+function guildName(guildId) {
+  const guild = client.guilds.cache.get(String(guildId));
+  return guild ? guild.name : null;
+}
+
+module.exports = { client, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };

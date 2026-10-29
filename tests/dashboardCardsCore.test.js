@@ -186,10 +186,10 @@ describe('the Polls & predictions card', () => {
 });
 
 describe('the browser files', () => {
-  // CI's node --check covers src/ only, and these three are served as they are: a slip in the cards' script or its
-  // helpers would stop every switch from saving, one in the polls card's script would stop that card, and the rest of
-  // the suite would stay green.
-  for (const name of ['dashboard-cards-core.js', 'dashboard-cards.js', 'dashboard-polls.js']) {
+  // CI's node --check covers src/ only, and these are served as they are: a slip in the cards' script or its helpers
+  // would stop every switch from saving, one in the polls or Coaching card's script would stop that card, and the rest
+  // of the suite would stay green.
+  for (const name of ['dashboard-cards-core.js', 'dashboard-cards.js', 'dashboard-polls.js', 'dashboard-coaching.js']) {
     test(`${name} compiles`, () => {
       const file = path.join(__dirname, '..', 'public', 'js', name);
       assert.doesNotThrow(() => new vm.Script(fs.readFileSync(file, 'utf8'), { filename: file }));

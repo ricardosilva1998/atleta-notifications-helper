@@ -1,0 +1,167 @@
+<%# The public coaching booking page, /coaching/<twitch login> (routes/coaching.js; the approved look: step 1 of
+    docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html). Standalone like tip.ejs: its own <head> with the CSRF
+    token script, and no header.ejs, so no "Login with Discord" that would sign a viewer in as a streamer. The server
+    prints the frame; public/js/coaching-page.js draws the days, the times and the viewer's bookings from
+    window.COACHING_DATA (times as UTC instants, shown in the viewer's own time zone) with window.COACHING_TEXTS, and
+    puts every name and note in as text. %>
+<!DOCTYPE html>
+<html lang="<%= typeof lang !== 'undefined' ? lang : 'en' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%- include('csrf') %>
+  <title><%= t('coaching.page.title', { name: streamerName }) %></title>
+  <link rel="icon" type="image/png" href="/app-icon/honest_graphic-running-athlete-9715727.png">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0c0d14; --bg-surface: #141520; --bg-elevated: #1a1b2e; --bg-hover: #1f2037;
+      --border: rgba(255,255,255,0.06); --text-primary: #e8e6f0; --text-secondary: #8b8a9e; --text-muted: #5c5b6e;
+      --accent: #9146ff; --accent-hover: #a56bff; --accent-glow: rgba(145,70,255,0.15); --discord: #5865F2;
+      --success: #3ecf8e; --success-bg: rgba(62,207,142,0.1); --danger: #f04438; --danger-bg: rgba(240,68,56,0.1);
+      --warning: #f79009; --warning-bg: rgba(247,144,9,0.1);
+      --font-display: 'Outfit', sans-serif; --font-body: 'DM Sans', sans-serif;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { font: 13px/1.4 var(--font-body); background: var(--bg-base); color: var(--text-primary); min-height: 100vh; padding: 20px 16px 40px; -webkit-font-smoothing: antialiased; }
+    h1, h2 { font-family: var(--font-display); font-weight: 600; }
+    button { font: inherit; color: inherit; }
+    .cz { max-width: 760px; margin: 0 auto; }
+    .cz-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; align-items: start; }
+    .cz-card { background: var(--bg-surface); border-radius: 14px; box-shadow: var(--shadow-card); padding: 14px; min-width: 0; }
+    .cz-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .cz-head h1, .cz-head h2 { font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+    .cz-who { flex: 1; min-width: 0; }
+    .cz-avatar { width: 30px; height: 30px; border-radius: 50%; flex: none; object-fit: cover; background: linear-gradient(135deg, #9146ff, #ff4d6d); }
+    .cz-sub { font-size: 11px; color: var(--text-muted); }
+    .cz-seg { display: inline-flex; background: var(--bg-base); border-radius: 8px; padding: 2px; flex: none; }
+    .cz-seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--text-secondary); font-weight: 500; font-size: 12px; cursor: pointer; }
+    .cz-seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    .cz-paused { background: var(--bg-elevated); border-radius: 8px; padding: 9px 10px; color: var(--text-secondary); margin-bottom: 10px; }
+    .cz-days { display: flex; gap: 4px; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; scrollbar-width: thin; }
+    .cz-day { flex: none; width: 40px; border: 0; background: var(--bg-base); border-radius: 8px; padding: 4px 0; text-align: center; font-size: 10px; color: var(--text-secondary); cursor: pointer; }
+    .cz-day b { display: block; font: 600 14px var(--font-display); color: var(--text-primary); }
+    .cz-day.off { opacity: .3; }
+    .cz-day[aria-pressed="true"] { background: var(--accent); color: #e9dcff; opacity: 1; }
+    .cz-day[aria-pressed="true"] b { color: #fff; }
+    .cz-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px; }
+    .cz-slot { border: 0; text-align: center; padding: 6px 0; border-radius: 6px; background: var(--bg-base); font-weight: 500; cursor: pointer; }
+    .cz-slot:hover { background: var(--bg-hover); }
+    .cz-slot[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-glow); }
+    .cz-empty { color: var(--text-muted); margin-bottom: 10px; }
+    .cz-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 8px; padding: 8px 12px; font: 600 13px var(--font-body); color: #fff; background: var(--accent); cursor: pointer; text-decoration: none; text-align: center; }
+    .cz-btn:hover { background: var(--accent-hover); }
+    .cz-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .cz-btn.full { display: flex; width: 100%; }
+    .cz-btn.discord { background: var(--discord); }
+    .cz-btn.ghost { background: var(--bg-hover); color: var(--text-primary); }
+    .cz-btn.sm { padding: 4px 9px; font-size: 12px; }
+    .cz-btn.no { background: var(--danger-bg); color: var(--danger); }
+    .cz-btn:focus-visible, .cz-day:focus-visible, .cz-slot:focus-visible, .cz-seg button:focus-visible, .cz-notyou:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+    .cz-bar { display: flex; align-items: center; gap: 8px; background: var(--bg-base); border-radius: 10px; padding: 8px; }
+    .cz-bar .cz-face { width: 20px; height: 20px; border-radius: 50%; background: var(--discord); flex: none; object-fit: cover; }
+    .cz-bar .cz-txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .cz-inline { display: inline; margin: 0; }
+    .cz-notyou { background: none; border: 0; padding: 0; font-size: 11px; color: var(--text-muted); cursor: pointer; text-decoration: underline; flex: none; }
+    .cz-notyou:hover { color: var(--text-secondary); }
+    .cz-note { display: block; width: 100%; resize: vertical; min-height: 54px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--text-primary); font: 13px/1.4 var(--font-body); margin: 8px 0; }
+    .cz-note::placeholder { color: var(--text-muted); }
+    .cz-note:focus { outline: none; border-color: var(--accent); }
+    .cz-join { background: var(--warning-bg); border: 1px solid rgba(247,144,9,0.25); border-radius: 10px; padding: 10px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary); }
+    .cz-join b { color: var(--text-primary); font-family: var(--font-display); font-weight: 600; overflow-wrap: anywhere; }
+    .cz-join-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cz-hint { font-size: 12px; color: var(--warning); margin: 0 0 8px; }
+    .cz-msg { border-radius: 8px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; color: var(--danger); background: var(--danger-bg); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+    .cz-msg.ok { color: var(--success); background: var(--success-bg); }
+    .cz-msg a { color: inherit; font-weight: 600; }
+    .cz-limit { margin-top: 8px; color: var(--text-secondary); background: var(--bg-elevated); border-radius: 8px; padding: 8px 10px; }
+    .cz-group { font: 600 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 2px; }
+    .cz-line { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
+    .cz-line:first-child { border-top: 0; }
+    .cz-what { flex: 1; min-width: 0; }
+    .cz-what .t { font-weight: 600; }
+    .cz-what .cz-sub { overflow-wrap: anywhere; }
+    .cz-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--text-muted); }
+    .cz-dot.waiting { background: var(--warning); }
+    .cz-dot.confirmed { background: var(--success); }
+    .cz-pill { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--bg-elevated); color: var(--text-secondary); flex: none; }
+    .cz-pill.waiting { background: var(--warning-bg); color: var(--warning); }
+    .cz-pill.confirmed { background: var(--success-bg); color: var(--success); }
+    .cz-foot { margin-top: 18px; text-align: center; font-size: 11px; color: var(--text-muted); }
+    .cz-foot a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main class="cz">
+    <div class="cz-row">
+      <section class="cz-card" aria-labelledby="cz-title">
+        <div class="cz-head">
+          <img class="cz-avatar" src="<%= avatarUrl || '/app-icon/honest_graphic-running-athlete-9715727.png' %>" alt="">
+          <div class="cz-who">
+            <h1 id="cz-title"><%= t('coaching.page.heading', { name: streamerName }) %></h1>
+            <div class="cz-sub" id="cz-zone"></div>
+          </div>
+          <div class="cz-seg" id="cz-length" role="group" aria-label="<%= t('coaching.page.length') %>"<%= state.bookable ? '' : ' hidden' %>>
+            <button type="button" data-minutes="30" aria-pressed="false"><%= t('coaching.page.minutes30') %></button>
+            <button type="button" data-minutes="60" aria-pressed="true"><%= t('coaching.page.minutes60') %></button>
+          </div>
+        </div>
+        <p class="cz-paused" id="cz-paused"<%= state.bookable ? ' hidden' : '' %>><%= t('coaching.page.paused', { name: streamerName }) %></p>
+        <div id="cz-picker"<%= state.bookable ? '' : ' hidden' %>>
+          <div class="cz-days" id="cz-days" role="group" aria-label="<%= t('coaching.page.days') %>"></div>
+          <div class="cz-slots" id="cz-slots" role="group" aria-label="<%= t('coaching.page.times') %>"></div>
+          <p class="cz-empty" id="cz-empty" hidden></p>
+        </div>
+        <% if (!viewer) { %>
+          <a class="cz-btn discord full" href="/auth/coaching-signin?for=<%= encodeURIComponent(login) %>"><%= t('coaching.page.signIn') %></a>
+        <% } %>
+      </section>
+      <% if (viewer) { %>
+      <section class="cz-card" aria-labelledby="cz-pick">
+        <div class="cz-head" id="cz-pick-head"<%= state.bookable ? '' : ' hidden' %>>
+          <h2 id="cz-pick" class="cz-who"><%= t('coaching.page.pickTime') %></h2>
+          <span class="cz-sub" id="cz-pick-length"></span>
+        </div>
+        <div class="cz-bar">
+          <% if (viewer.avatar) { %><img class="cz-face" src="<%= viewer.avatar %>" alt=""><% } else { %><span class="cz-face"></span><% } %>
+          <div class="cz-txt"><%- rich('coaching.page.bookingAs', { name: '<b>' + esc(viewer.displayName) + '</b>' }) %></div>
+          <% if (viewer.fromStreamer) { %>
+            <a class="cz-notyou" href="/auth/coaching-signin?for=<%= encodeURIComponent(login) %>"><%= t('coaching.page.notYou') %></a>
+          <% } else { %>
+            <form method="POST" action="/auth/coaching-signout" class="cz-inline">
+              <input type="hidden" name="for" value="<%= login %>">
+              <button type="submit" class="cz-notyou"><%= t('coaching.page.notYou') %></button>
+            </form>
+          <% } %>
+        </div>
+        <div class="cz-join" id="cz-join" hidden>
+          <b id="cz-join-title"></b>
+          <span><%= t('coaching.page.joinHint', { name: streamerName }) %></span>
+          <div class="cz-join-actions">
+            <a class="cz-btn discord sm" id="cz-invite" href="#" target="_blank" rel="noopener noreferrer"><%= t('coaching.page.joinButton') %></a>
+            <button type="button" class="cz-btn ghost sm" id="cz-joined"><%= t('coaching.page.joined') %></button>
+          </div>
+        </div>
+        <div id="cz-book" hidden>
+          <textarea id="cz-note" class="cz-note" maxlength="300" rows="2" placeholder="<%= t('coaching.page.noteLabel') %>" aria-label="<%= t('coaching.page.noteLabel') %>"></textarea>
+          <p class="cz-hint" id="cz-unverified" hidden></p>
+          <button type="button" class="cz-btn full" id="cz-request" disabled><%= t('coaching.page.request') %></button>
+        </div>
+        <p class="cz-limit" id="cz-limit" hidden></p>
+        <div class="cz-msg" id="cz-msg" role="status" aria-live="polite" hidden></div>
+        <div id="cz-mine" hidden>
+          <div class="cz-group"><%= t('coaching.page.yourBookings') %></div>
+          <div id="cz-list"></div>
+        </div>
+      </section>
+      <% } %>
+    </div>
+    <p class="cz-foot"><%= t('coaching.page.poweredBy') %> <a href="/">Atleta</a></p>
+  </main>
+  <script>window.COACHING_DATA = <%- JSON.stringify(coachingData).replace(/</g, '\\u003c') %>; window.COACHING_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g, '\\u003c') %>;</script>
+  <script src="/js/coaching-core.js"></script>
+  <script src="/js/coaching-page.js"></script>
+</body>
+</html>

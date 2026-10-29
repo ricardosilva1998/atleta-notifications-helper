@@ -123,6 +123,8 @@ const DYNAMIC_KEY_FAMILIES = {
   // catalogue (services/alertStyles.js), so a new family's texts are checked as soon as its file is added
   'overlayBuilder.families.': alertStyles.familyKeys().flatMap((key) => [`${key}.name`, `${key}.desc`]),
   'overlayBuilder.looks.': alertStyles.lookIds().concat(Object.keys(alertStyles.PRIVATE_STYLES), Object.keys(alertStyles.STANDALONE_STYLES)).flatMap((id) => [`${id}.title`, `${id}.desc`]),
+  // services/coachingMessages.js: the title of each Discord message, t(`coaching.message.${kind}.title`)
+  'coaching.message.': ['accepted', 'declined', 'cancelled', 'request', 'withdrawn'].map((kind) => `${kind}.title`),
   'overlayBuilder.sounds.': alertStyles.soundGroups().flatMap((group) => group.sounds),
 };
 

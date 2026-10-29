@@ -168,4 +168,4 @@ function nextRollover(goal, now) {
   return null;
 }
 
-module.exports = { PERIODS, MODES, ROLLING_DAYS, isTimeZone, canonicalTimeZone, formatterZones, windowFor, nextRollover };
+module.exports = { PERIODS, MODES, ROLLING_DAYS, isTimeZone, canonicalTimeZone, formatterZones, windowFor, nextRollover, offsetAt, localDate };

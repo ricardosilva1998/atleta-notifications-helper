@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coaching mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg-base:#0c0d14;--bg-surface:#141520;--bg-elevated:#1a1b2e;--bg-hover:#1f2037;--border:rgba(255,255,255,0.06);--text-primary:#e8e6f0;--text-secondary:#8b8a9e;--text-muted:#5c5b6e;--accent:#9146ff;--accent-glow:rgba(145,70,255,0.15);--discord:#5865F2;--success:#3ecf8e;--success-bg:rgba(62,207,142,0.1);--danger:#f04438;--danger-bg:rgba(240,68,56,0.1);--warning:#f79009;--warning-bg:rgba(247,144,9,0.1);--shadow:0 1px 3px rgba(0,0,0,0.3),0 0 0 1px var(--border)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg-base);color:var(--text-primary);font:13px/1.4 'DM Sans',sans-serif;padding:20px 16px 48px}
+  h1,h2,h3{font-family:'Outfit',sans-serif;margin:0}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:20px}
+  .lede{color:var(--text-secondary);margin:4px 0 0}
+  .step{display:flex;align-items:baseline;gap:8px;margin:22px 0 8px}
+  .step h2{font-size:15px}.step .n{color:var(--accent);font-family:'Outfit';font-weight:700}
+  .step span.who{color:var(--text-muted);font-size:12px}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;align-items:start}
+  .card{background:var(--bg-surface);border-radius:14px;box-shadow:var(--shadow);padding:14px}
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .head h3{font-size:15px;flex:1;min-width:0}
+  .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#ff4d6d);flex:none}
+  .sub{font-size:11px;color:var(--text-muted)}
+  .seg{display:inline-flex;background:var(--bg-base);border-radius:8px;padding:2px;flex:none}
+  .seg span{padding:4px 10px;border-radius:6px;color:var(--text-secondary);font-weight:500;font-size:12px}
+  .seg span.on{background:var(--accent);color:#fff}
+  .days{display:flex;gap:4px;overflow:hidden;margin-bottom:8px}
+  .day{flex:none;width:40px;background:var(--bg-base);border-radius:8px;padding:4px 0;text-align:center;font-size:10px;color:var(--text-secondary)}
+  .day b{display:block;font:600 14px 'Outfit';color:var(--text-primary)}
+  .day.on{background:var(--accent);color:#e9dcff}.day.on b{color:#fff}
+  .day.off{opacity:.3}
+  .slots{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px}
+  .slot{text-align:center;padding:6px 0;border-radius:6px;background:var(--bg-base);font-weight:500}
+  .slot.pick{outline:2px solid var(--accent);background:var(--accent-glow)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;padding:8px 12px;font:600 13px 'DM Sans';color:#fff;background:var(--accent)}
+  .btn.full{display:flex;width:100%}
+  .btn.discord{background:var(--discord)}
+  .btn.sm{padding:4px 9px;font-size:12px}
+  .btn.ghost{background:var(--bg-hover);color:var(--text-primary)}
+  .btn.no{background:var(--danger-bg);color:var(--danger)}
+  .icon{width:26px;height:26px;border-radius:7px;display:inline-grid;place-items:center;font-weight:700}
+  .icon.ok{background:var(--success-bg);color:var(--success)}
+  .icon.no{background:var(--danger-bg);color:var(--danger)}
+  .bar{display:flex;align-items:center;gap:8px;background:var(--bg-base);border-radius:10px;padding:8px}
+  .bar .d{width:20px;height:20px;border-radius:50%;background:var(--discord);flex:none}
+  .bar .txt{flex:1;min-width:0}
+  .note{background:var(--bg-base);border-radius:8px;padding:7px 9px;color:var(--text-muted);margin:8px 0}
+  .pill{display:inline-block;font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px}
+  .pill.wait{background:var(--warning-bg);color:var(--warning)}
+  .pill.ok{background:var(--success-bg);color:var(--success)}
+  .badge{background:var(--warning);color:#1a1000;font:700 11px 'DM Sans';border-radius:999px;padding:1px 7px}
+  .line{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--border)}
+  .line:first-child{border-top:0}
+  .line .what{flex:1;min-width:0}
+  .line .t{font-weight:600}
+  .group{font:600 11px 'DM Sans';color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
+  .group:first-child{margin-top:0}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.ok{background:var(--success)}.dot.wait{background:var(--warning)}
+  .hrs{display:grid;grid-template-columns:34px 30px 1fr;gap:5px 8px;align-items:center}
+  .tg{width:26px;height:15px;border-radius:999px;background:var(--success);position:relative}
+  .tg:after{content:"";position:absolute;right:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#fff}
+  .tg.off{background:var(--bg-hover)}.tg.off:after{left:2px;right:auto;background:var(--text-muted)}
+  .rng{background:var(--bg-base);border-radius:6px;padding:4px 8px}
+  .rng.none{color:var(--text-muted)}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+  .chip{background:var(--bg-base);border-radius:999px;padding:2px 8px;font-size:11px;color:var(--text-secondary)}
+  .dm{background:#313338;border-radius:12px;padding:10px 12px;display:flex;gap:9px}
+  .dm .bot{width:30px;height:30px;border-radius:50%;background:var(--accent);flex:none}
+  .dm .name{font-weight:700;color:#fff;font-size:13px}.dm .name small{background:#5865F2;color:#fff;font-size:9px;border-radius:3px;padding:0 4px;margin-left:4px}
+  .dm .msg{color:#dbdee1}
+  .embed{border-left:3px solid var(--success);background:#2b2d31;border-radius:4px;padding:7px 10px;margin-top:5px;color:#b5bac1}
+  .embed.red{border-color:var(--danger)}.embed b{color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Coaching</h1>
+  <p class="lede">The viewer books a time, the streamer accepts it, Atleta confirms it on Discord. Mockup for the design (2026-10-29), with made-up names and times.</p>
+
+  <div class="step"><span class="n">1</span><h2>The viewer books</h2><span class="who">/coaching/andre_vilela_, linked from !coaching</span></div>
+  <div class="row">
+    <div class="card">
+      <div class="head"><div class="avatar"></div><div style="flex:1;min-width:0"><h3>Coaching with andre_vilela_</h3><div class="sub">Times in your time zone (Europe/Lisbon)</div></div><div class="seg"><span>30 min</span><span class="on">1 h</span></div></div>
+      <div class="days">
+        <div class="day">Mon<b>2</b></div><div class="day on">Tue<b>3</b></div><div class="day">Wed<b>4</b></div><div class="day off">Thu<b>5</b></div><div class="day">Fri<b>6</b></div><div class="day off">Sat<b>7</b></div><div class="day off">Sun<b>8</b></div><div class="day">Mon<b>9</b></div><div class="day">Tue<b>10</b></div>
+      </div>
+      <div class="slots">
+        <div class="slot">18:00</div><div class="slot pick">19:30</div><div class="slot">20:00</div><div class="slot">20:30</div><div class="slot">21:00</div>
+      </div>
+      <div class="btn discord full">Sign in with Discord to book</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h3>Tue 3 Nov · 19:30–20:30</h3><span class="sub">1 h</span></div>
+      <div class="bar"><div class="d"></div><div class="txt">Booking as <b>joaom_ido</b></div><span class="sub">not you?</span></div>
+      <div class="note">What do you want to work on? (optional)</div>
+      <div class="btn full">Request this time</div>
+      <div class="group" style="margin-top:14px">Your bookings</div>
+      <div class="line"><span class="dot wait"></span><div class="what"><span class="t">Tue 3 Nov, 19:30</span> <span class="sub">· 1 h</span></div><span class="pill wait">Waiting</span></div>
+      <div class="line"><span class="dot ok"></span><div class="what"><span class="t">Mon 26 Oct, 18:00</span> <span class="sub">· 30 min</span></div><span class="pill ok">Confirmed</span></div>
+    </div>
+  </div>
+
+  <div class="step"><span class="n">2</span><h2>The streamer accepts</h2><span class="who">dashboard card + schedule page</span></div>
+  <div class="row">
+    <div class="card" style="border-top:3px solid var(--accent)">
+      <div class="head"><h3>Coaching</h3><span class="badge">2 waiting</span></div>
+      <div class="line"><div class="what"><div class="t">joaom_ido · 1 h</div><div class="sub">Tue 3 Nov, 19:30 · "braking into T1 at Spa"</div></div><span class="icon ok">✓</span><span class="icon no">✕</span></div>
+      <div class="line"><div class="what"><div class="t">rafa_gt3 · 30 min</div><div class="sub">Wed 4 Nov, 18:00</div></div><span class="icon ok">✓</span><span class="icon no">✕</span></div>
+      <div class="line"><div class="what"><div class="sub">Next: <b style="color:var(--text-primary)">Mon 2 Nov, 18:00</b> with miguel_sim</div></div><span class="btn sm ghost">Schedule</span></div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h3>Schedule</h3><span class="sub">/dashboard/coaching</span></div>
+      <div class="group">Mon 2 Nov</div>
+      <div class="line"><span class="dot ok"></span><div class="what"><span class="t">18:00–19:00</span> miguel_sim</div><span class="btn sm no">Cancel</span></div>
+      <div class="group">Tue 3 Nov</div>
+      <div class="line"><span class="dot ok"></span><div class="what"><span class="t">18:30–19:30</span> pedro_r</div><span class="btn sm no">Cancel</span></div>
+      <div class="line"><span class="dot wait"></span><div class="what"><span class="t">19:30–20:30</span> joaom_ido</div><span class="icon ok">✓</span><span class="icon no">✕</span></div>
+      <div class="group">Wed 4 Nov</div>
+      <div class="line"><span class="dot wait"></span><div class="what"><span class="t">18:00–18:30</span> rafa_gt3</div><span class="icon ok">✓</span><span class="icon no">✕</span></div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h3>When I coach</h3><div class="tg"></div></div>
+      <div class="hrs">
+        <span>Mon</span><div class="tg"></div><div class="rng">18:00 – 22:00</div>
+        <span>Tue</span><div class="tg"></div><div class="rng">18:00 – 22:00</div>
+        <span>Wed</span><div class="tg"></div><div class="rng">18:00 – 22:00</div>
+        <span>Thu</span><div class="tg off"></div><div class="rng none">—</div>
+        <span>Fri</span><div class="tg"></div><div class="rng">18:00 – 22:00</div>
+        <span>Sat</span><div class="tg off"></div><div class="rng none">—</div>
+        <span>Sun</span><div class="tg off"></div><div class="rng none">—</div>
+      </div>
+      <div class="sub" style="margin-top:8px">Days off</div>
+      <div class="chips"><span class="chip">Thu 12 Nov ✕</span><span class="chip">Fri 13 Nov ✕</span><span class="chip" style="color:var(--accent)">+ Add day</span></div>
+    </div>
+  </div>
+
+  <div class="step"><span class="n">3</span><h2>Atleta tells the viewer</h2><span class="who">a Discord direct message</span></div>
+  <div class="row">
+    <div class="dm"><div class="bot"></div><div><div class="name">Atleta <small>APP</small></div><div class="msg">Your coaching with <b>andre_vilela_</b> is confirmed.</div><div class="embed"><b>Tuesday 3 November, 19:30–20:30 (Lisbon)</b><br>1 hour</div></div></div>
+    <div class="dm"><div class="bot"></div><div><div class="name">Atleta <small>APP</small></div><div class="msg"><b>andre_vilela_</b> cancelled your coaching.</div><div class="embed red"><b>Monday 2 November, 18:00–19:00 (Lisbon)</b><br>Book another time: atletanotifications.com/coaching/andre_vilela_</div></div></div>
+  </div>
+</div>
+</body>
+</html>

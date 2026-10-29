@@ -4102,7 +4102,7 @@ describe('the dashboard puts Twitch first', () => {
     const pane = dashboardPane(html, 'twitch');
     assert.deepEqual(twitchCardTitles(html), [t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'), t('en', 'cards.commands.title'),
       t('en', 'cards.shoutouts.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'), t('en', 'cards.protection.title'),
-      t('en', 'dashboard.cards.giveaways'), esc(t('en', 'cards.polls.title')), 'Spotify']);
+      t('en', 'dashboard.cards.giveaways'), t('en', 'coaching.dashboard.title'), esc(t('en', 'cards.polls.title')), 'Spotify']);
     assert.ok(pane.indexOf(`Twitch: synthetic_first_${made}`) < pane.indexOf('class="card'), 'the linked channel is above the cards');
   });
 
@@ -4114,7 +4114,7 @@ describe('the dashboard puts Twitch first', () => {
       const html = (await request('GET', '/dashboard', { streamer: linked({ overlay_token: 'synthetic-token-first-1' }) })).text;
       assert.deepEqual(twitchCardTitles(html), [t('en', 'dashboard.cards.chatbot.title'), t('en', 'dashboard.cards.discord.title'), t('en', 'dashboard.cards.overlay.title'),
         t('en', 'tracking.title'), t('en', 'cards.commands.title'), t('en', 'cards.shoutouts.title'), t('en', 'sponsors.title'), t('en', 'dashboard.cards.donations.title'),
-        t('en', 'cards.protection.title'), t('en', 'dashboard.cards.giveaways'), esc(t('en', 'cards.polls.title')), t('en', 'dashboard.cards.cpRewards'),
+        t('en', 'cards.protection.title'), t('en', 'dashboard.cards.giveaways'), t('en', 'coaching.dashboard.title'), esc(t('en', 'cards.polls.title')), t('en', 'dashboard.cards.cpRewards'),
         'Spotify', t('en', 'dashboard.cards.multistream.title')]);
     } finally {
       multistream.enabled = relay;
@@ -4125,7 +4125,7 @@ describe('the dashboard puts Twitch first', () => {
     const pane = dashboardPane((await request('GET', '/dashboard', { streamer: linked({ chatbot_enabled: 1 }) })).text, 'twitch')
       .replace(/<template\b[\s\S]*?<\/template>/g, ' '); // the pop-ups' own buttons
     const cards = pane.split('<section class="card wc-card').slice(1);
-    assert.equal(cards.length, 13);
+    assert.equal(cards.length, 14);
     for (const card of cards) {
       const title = (card.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/) || [])[1];
       assert.match(card, /<\/h3><span class="wc-status[^"]*" data-status>[^<]+<\/span>/, `${title}: a status line under its title`);
@@ -5158,7 +5158,7 @@ describe('the data of the working cards', () => {
     db.addSponsorMessage(id, 'Partner line', null);
     const l = await locals(id);
     assert.equal(l.wideLayout, true);
-    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
+    assert.deepEqual(l.cards.order, ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'coaching', 'polls', 'rewards', 'spotify']);
     assert.equal(l.cards.polls.setup, 'reconnect', 'Twitch has not given the two permissions yet');
     assert.equal(l.cards.shoutouts.status.key, 'cards.shoutouts.status.off');
     assert.deepEqual(l.cards.commands.commands.map((c) => c.name), ['discord']);
@@ -5210,6 +5210,62 @@ describe('the data of the working cards', () => {
     assert.deepEqual(body.cards.polls.status, { text: t('en', 'cards.polls.status.reconnect'), tone: 'warn' });
     assert.deepEqual(body.cards.shoutouts.status, { text: t('en', 'cards.shoutouts.status.off'), tone: 'off' });
     assert.ok(!('giveaways' in body.cards));
+  });
+
+  test('the Coaching card: its setup steps from the database (the claimed servers, not the bot\'s cache), then the requests, the next session and the link', async () => {
+    const coachingRules = require('../services/coaching');
+    const id = addStreamer();
+    assert.equal((await locals(id)).cards.coaching.setup, 'twitch');
+    db.db.prepare('UPDATE streamers SET twitch_user_id = ?, twitch_username = ? WHERE id = ?').run('tw-wc-coach', 'synthetic_wc_coach', id);
+    assert.equal((await locals(id)).cards.coaching.setup, 'server');
+    const g = '600000000000000977';
+    db.upsertGuild(g, id, 'Coaching server'); // claimed; the bot does not see it (not in its cache)
+    const before = (await locals(id)).cards.coaching;
+    assert.deepEqual([before.setup, before.bookingUrl], ['hours', null]);
+    assert.equal(before.status.key, 'cards.coaching.status.setupHours');
+    db.saveCoachingSettings(id, { timeZone: 'Europe/Lisbon', hours: coachingRules.DEFAULT_HOURS, daysOff: [], guildId: g, inviteCode: 'synthetic', whereText: '', notifyRequests: true, lang: 'en' });
+    const now = Date.now();
+    const at = (days, hour) => Math.ceil(now / 3600e3) * 3600e3 + days * 86400e3 + hour * 3600e3;
+    const viewer = (n) => ({ discordUserId: `30000000000000097${n}`, username: `synthetic_viewer_${n}`, displayName: `Viewer ${n}` });
+    const waiting = db.createCoachingBooking({ streamerId: id, viewer: viewer(1), startsAt: at(2, 0), minutes: 30, note: 'Braking at T1', lang: 'en', now }).booking;
+    const accepted = db.createCoachingBooking({ streamerId: id, viewer: viewer(2), startsAt: at(1, 0), minutes: 60, note: null, lang: 'en', now }).booking;
+    db.setCoachingBookingStatus(accepted.id, id, ['waiting'], 'confirmed', now);
+    const card = (await locals(id)).cards.coaching;
+    assert.equal(card.setup, null);
+    assert.deepEqual(card.status, { key: 'cards.coaching.status.waiting', params: { count: 1 }, tone: 'warn' });
+    assert.deepEqual(card.waiting.map((b) => [b.id, b.startsAt, b.minutes, b.viewerName, b.note]), [[waiting.id, at(2, 0), 30, 'Viewer 1', 'Braking at T1']]);
+    assert.deepEqual([card.next.id, card.next.viewerName], [accepted.id, 'Viewer 2']);
+    assert.match(card.bookingUrl, /\/coaching\/synthetic_wc_coach$/);
+    const body = (await request('GET', '/dashboard/api/cards', { streamer: id })).json();
+    assert.deepEqual(body.cards.coaching, {
+      status: { text: t('en', 'cards.coaching.status.waiting', { count: 1 }), tone: 'warn' },
+      counts: { waiting: t('en', 'cards.coaching.badge', { count: 1 }) },
+    });
+  });
+
+  test('the dashboard asks Discord about the coaching invite once it is sent, at most once an hour; the cards\' refresh never asks (Ruling 9)', async () => {
+    const coachingRules = require('../services/coaching');
+    const id = addStreamer();
+    db.db.prepare('UPDATE streamers SET twitch_user_id = ?, twitch_username = ? WHERE id = ?').run('tw-wc-invite', 'synthetic_wc_invite', id);
+    const g = '600000000000000976';
+    db.upsertGuild(g, id, 'Coaching server');
+    db.saveCoachingSettings(id, { timeZone: 'Europe/Lisbon', hours: coachingRules.DEFAULT_HOURS, daysOff: [], guildId: g, inviteCode: 'synthetic-dead', whereText: '', notifyRequests: true, lang: 'en' });
+    const guard = global.fetch;
+    const calls = [];
+    global.fetch = async (url) => { calls.push(String(url)); return { ok: false, status: 404, json: async () => ({}) }; };
+    try {
+      const page = await request('GET', '/dashboard', { streamer: id });
+      assert.equal(page.status, 200);
+      await until(() => db.getCoachingSettings(id).invite_checked_at);
+      assert.deepEqual(calls, ['https://discord.com/api/v10/invites/synthetic-dead']);
+      assert.equal(db.getCoachingSettings(id).invite_ok, 0, 'Discord does not know it: recorded as dead');
+      assert.equal((await locals(id)).cards.coaching.status.key, 'cards.coaching.status.inviteBroken', 'the next visit warns');
+      await request('GET', '/dashboard/api/cards', { streamer: id });
+      await new Promise((r) => setImmediate(r));
+      assert.equal(calls.length, 1, 'checked less than an hour ago, and the cards\' refresh never asks');
+    } finally {
+      global.fetch = guard;
+    }
   });
 
   test('only the dashboard gets the wide page', async () => {
@@ -5493,6 +5549,64 @@ describe('the working cards on the page', () => {
     }
   });
 
+  test('the Coaching card: its one setup step leads somewhere (link Twitch, the Discord tab, the coaching page)', async () => {
+    const twitchStep = cardOf(await pane(addStreamer()), 'coaching');
+    assert.ok(twitchStep.includes('href="/auth/twitch"') && twitchStep.includes(esc(t('en', 'cards.coaching.setupTwitch'))));
+    const serverStep = cardOf(await pane(linkedStreamer()), 'coaching');
+    assert.match(serverStep, /<a href="#tab-discord" data-open-tab="discord" class="btn btn-primary wc-btn block">/);
+    assert.ok(serverStep.includes(esc(t('en', 'coaching.dashboard.noServer'))));
+    const id = linkedStreamer();
+    db.upsertGuild('600000000000000978', id, 'Server');
+    const hoursStep = cardOf(await pane(id), 'coaching');
+    assert.ok(hoursStep.includes('href="/dashboard/coaching"') && hoursStep.includes(esc(t('en', 'cards.coaching.setHours'))));
+    for (const step of [twitchStep, serverStep, hoursStep]) {
+      assert.ok(!step.includes('data-coaching-open') && !step.includes('data-copy='), 'no switch or link before it is set up');
+      assert.ok(!step.includes('data-needs-chatbot'), 'it does not need the chatbot');
+    }
+  });
+
+  test('the Coaching card set up: the badge, each waiting request with ✓ and ✕, the next session, the link with Copy, the switch, the tile', async () => {
+    const coachingRules = require('../services/coaching');
+    const id = linkedStreamer();
+    const g = '600000000000000979';
+    db.upsertGuild(g, id, 'Server');
+    db.saveCoachingSettings(id, { timeZone: 'Europe/Lisbon', hours: coachingRules.DEFAULT_HOURS, daysOff: [], guildId: g, inviteCode: 'synthetic', whereText: '', notifyRequests: true, lang: 'en' });
+    const now = Date.now();
+    const at = (days) => Math.ceil(now / 3600e3) * 3600e3 + days * 86400e3;
+    const viewer = (n, displayName) => ({ discordUserId: `30000000000000098${n}`, username: `synthetic_viewer_${n}`, displayName });
+    const asked = db.createCoachingBooking({ streamerId: id, viewer: viewer(1, '<script>alert(1)</script>'), startsAt: at(2), minutes: 30, note: '<b>braking</b> @everyone', lang: 'en', now }).booking;
+    const next = db.createCoachingBooking({ streamerId: id, viewer: viewer(2, 'Synthetic Next'), startsAt: at(1), minutes: 60, note: null, lang: 'en', now }).booking;
+    db.setCoachingBookingStatus(next.id, id, ['waiting'], 'confirmed', now);
+    db.recordCoachingMessageError(next.id, 'closed_dms');
+    const card = cardOf(await pane(id), 'coaching');
+    assert.match(card, /<span class="wc-badge" data-count="waiting">[^<]+<\/span>/);
+    assert.ok(card.includes(esc(t('en', 'cards.coaching.badge', { count: 1 }))));
+    // The request: its instant for the script, the name and note as text, ✓ and ✕ with the booking's id.
+    assert.ok(card.includes(`data-booking="${asked.id}" data-at="${at(2)}" data-name="${esc('<script>alert(1)</script>')}"`));
+    assert.ok(!card.includes('<script>alert(1)</script>') && card.includes(esc('<script>alert(1)</script>')));
+    assert.ok(!card.includes('<b>braking</b>') && card.includes(esc('<b>braking</b> @everyone')));
+    assert.match(card, new RegExp(`data-coaching-act="accept" aria-label="[^"]+"`));
+    assert.match(card, new RegExp(`data-coaching-act="decline" aria-label="[^"]+"`));
+    assert.ok(card.includes(esc(t('en', 'coaching.page.minutes30'))));
+    // The next session, with what Atleta could not send.
+    assert.match(card, new RegExp(`data-coaching-next data-at="${at(1)}"`));
+    assert.ok(card.includes('Synthetic Next') && card.includes(esc(t('en', 'coaching.dashboard.messageError', { name: 'Synthetic Next' }))));
+    // The link with Copy, the switch (its own route, not /dashboard/settings) and the tile.
+    assert.match(card, /data-copy="[^"]*\/coaching\/synthetic_wcp_\d+"/);
+    assert.match(card, /<input type="checkbox" role="switch" aria-label="[^"]+" data-coaching-open checked>/);
+    assert.ok(!/data-setting=/.test(card));
+    assert.match(card, /<a class="wc-tile" href="\/dashboard\/coaching">/);
+    assert.ok(card.includes('<span class="wc-saved" data-saved'));
+    // A dead invite: the warning and the way to fix it.
+    db.recordInviteCheck(id, 'synthetic', 0, now);
+    const broken = cardOf(await pane(id), 'coaching');
+    assert.ok(broken.includes(esc(t('en', 'coaching.dashboard.inviteBroken'))) && broken.includes(esc(t('en', 'coaching.dashboard.inviteFix'))));
+    assert.ok(broken.includes(esc(t('en', 'cards.coaching.status.inviteBroken'))));
+    // Paused: the switch is off.
+    db.setCoachingOpen(id, false);
+    assert.match(cardOf(await pane(id), 'coaching'), /data-coaching-open >/);
+  });
+
   test('the OBS overlay card shows the poll bar\'s link too, masked', async () => {
     const card = cardOf(await pane(linkedStreamer({ overlay_token: 'synthetic-token-wcp-bar' })), 'overlay');
     assert.match(card, /data-masked="[^"]*\/overlay\/poll\/•{12}" data-shown="[^"]*\/overlay\/poll\/synthetic-token-wcp-bar\?lang=en"/);
@@ -5525,6 +5639,23 @@ describe('the working cards\' script', () => {
     assert.equal(T.polls.resultPredictionWonOne, t('en', 'cards.polls.result.predictionWonOne', { outcome: '{{outcome}}', points: '{{points}}' }));
     assert.equal(T.polls.resultPredictionWonNobody, t('en', 'cards.polls.result.predictionWonNobody', { outcome: '{{outcome}}' }));
     assert.equal(T.shoutoutExample, t('en', 'cards.shoutouts.example', { line: '{{line}}' }));
+    const coachingCore = html.indexOf('<script src="/js/coaching-core.js"></script>');
+    const coachingTag = html.indexOf('<script src="/js/dashboard-coaching.js"></script>');
+    assert.ok(scriptTag < coachingCore && coachingCore < coachingTag, 'the Coaching card\'s script comes after the cards\' script and the coaching helpers');
+    assert.equal(T.coaching.declineConfirm, t('en', 'coaching.dashboard.declineConfirm', { name: '{{name}}' }), 'the coaching page\'s own question');
+    assert.equal(T.coaching.messageError, t('en', 'coaching.dashboard.messageError', { name: '{{name}}' }));
+  });
+
+  test('the Coaching card\'s texts and script are there with the overlay features off too', async () => {
+    const { features } = require('../config');
+    features.overlays = false;
+    try {
+      const html = (await request('GET', '/dashboard', { streamer: addStreamer() })).text;
+      assert.ok('coaching' in table(html));
+      assert.ok(html.includes('<script src="/js/dashboard-coaching.js"></script>'));
+    } finally {
+      features.overlays = true;
+    }
   });
 
   test('the overlay texts only while the overlay features are on', async () => {
@@ -5550,7 +5681,7 @@ describe('the working cards\' script', () => {
     features.overlays = true;
     try {
       const T = table((await request('GET', '/dashboard', { streamer: addStreamer() })).text);
-      const source = ['dashboard-cards.js', 'dashboard-polls.js', 'dashboard-tracking.js', 'dashboard-cards-core.js']
+      const source = ['dashboard-cards.js', 'dashboard-polls.js', 'dashboard-tracking.js', 'dashboard-coaching.js', 'dashboard-cards-core.js']
         .map((name) => realFs.readFileSync(path.join(SRC, '..', 'public', 'js', name), 'utf8')).join('\n');
       const reads = new Set();
       for (const [, name, sub] of source.matchAll(/\bT\.(\w+)(?:\.(\w+))?/g)) {

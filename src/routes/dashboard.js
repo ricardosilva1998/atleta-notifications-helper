@@ -45,6 +45,7 @@ const { defaultTemplates } = require('../services/tipSpeech');
 const { setUserContentHeaders } = require('../services/userContentHeaders');
 const trackingGoals = require('../services/trackingGoals');
 const trackers = require('../services/trackers');
+const coachingBookings = require('../services/coachingBookings');
 const { t: translateIn } = require('../i18n');
 
 const router = Router();
@@ -377,10 +378,11 @@ function gatherCards(req, discord, lang) {
   const { hasRedemptionScope, hasPollsScope } = require('../services/twitch');
   const { livePolls } = require('../services/livePolls');
   const giveaway = db.getActiveGiveaway(s.id);
+  const now = Date.now();
   return buildCards({
     streamer: s,
     features: config.features,
-    now: Date.now(),
+    now,
     appUrl: config.app.url,
     bot: { connected: chatManager.isConnected(), moderator: chatManager.moderatorStatus(s.id), username: config.bot.twitchUsername },
     overlay: { url: s.overlay_token ? `${config.app.url}/overlay/${s.overlay_token}` : null, open: overlayPresence.isOpen(s.id) },
@@ -407,6 +409,10 @@ function gatherCards(req, discord, lang) {
       tip: { goal: require('../services/tipGoals').toPayload(db.getActiveTipGoal(s.id)), pageCurrency: tipPageCurrency(s), currencies: TIP_GOAL_CURRENCIES },
     } : null,
     giveaway: giveaway ? { ...giveaway, entryCount: db.getEntryCount(giveaway.id) } : null,
+    // The Coaching card: its setup step from the servers the streamer claimed (the database, not the bot's cache, so a
+    // Discord that is down does not undo the setup), the requests waiting and the next session; the booking page's link.
+    coaching: coachingBookings.cardData(s, { now, claimedGuildIds: db.getGuildsForStreamer(s.id).map((g) => g.guild_id) }),
+    coachingUrl: s.twitch_username ? `${config.app.url}/coaching/${encodeURIComponent(s.twitch_username)}` : null,
     spotifyConnected: !!s.spotify_access_token,
     multistreamAvailable: !!config.multistream.enabled && !!config.features.youtube,
   });
@@ -472,6 +478,11 @@ router.get('/', async (req, res) => {
   const discordNotifications = discordNotificationsCard(req.streamer,
     enrichedGuilds.map((g, i) => ({ ...g, ...serverViews[i] })), { needsReauth });
   const cards = gatherCards(req, discordNotifications, res.locals.lang);
+
+  // The Coaching card's invite: asked about once the page is sent, at most once an hour (coachingBookings.checkInvite);
+  // never inside gatherCards, which /dashboard/api/cards runs after every save.
+  const streamerId = req.streamer.id;
+  res.once('finish', () => coachingBookings.checkInviteLater(streamerId));
 
   res.render('dashboard', {
     streamer: req.streamer,
@@ -1150,6 +1161,8 @@ router.delete('/api/commands/:id', (req, res) => {
 
 // The Polls & predictions card's JSON routes (routes/polls.js), behind this router's login.
 router.use(require('./polls'));
+// The coaching page (/dashboard/coaching) and its JSON routes (routes/coachingDashboard.js), behind this router's login.
+router.use(require('./coachingDashboard'));
 
 // The Tracking card's tip goal: start (title, target, bar colour, currency and what was already raised), edit (title,
 // target and colour; a colour not sent is kept), end, and a test of the goal reached on the OBS bar.

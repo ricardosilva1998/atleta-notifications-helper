@@ -858,6 +858,15 @@ function toggleStats(guildId) {
       resultPredictionWonNobody: t('cards.polls.result.predictionWonNobody', { outcome: '{{outcome}}' }),
       resultCancelled: t('cards.polls.result.cancelled'),
     },
+    // The Coaching card (public/js/dashboard-coaching.js): the coaching page's own texts.
+    coaching: {
+      declineConfirm: t('coaching.dashboard.declineConfirm', { name: '{{name}}' }),
+      accepted: t('coaching.dashboard.accepted', { name: '{{name}}' }),
+      declined: t('coaching.dashboard.declined', { name: '{{name}}' }),
+      messageError: t('coaching.dashboard.messageError', { name: '{{name}}' }),
+      minutes30: t('coaching.page.minutes30'),
+      minutes60: t('coaching.page.minutes60'),
+    },
     giveaway: {
       running: t('cards.giveaways.status.running'),
       picked: t('cards.giveaways.status.picked'),
@@ -920,6 +929,8 @@ function toggleStats(guildId) {
 <script src="/js/dashboard-cards.js"></script>
 <script src="/overlay/pollModel.js"></script>
 <script src="/js/dashboard-polls.js"></script>
+<script src="/js/coaching-core.js"></script>
+<script src="/js/dashboard-coaching.js"></script>
 <% if (features.overlays) { %><script src="/js/dashboard-tracking.js"></script><% } %>
 
 <script>

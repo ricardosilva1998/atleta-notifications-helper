@@ -1,0 +1,201 @@
+<%- include('header', { title: t('coaching.dashboard.title'), streamer: streamer }) %>
+<%# The streamer's coaching page (routes/coachingDashboard.js GET /dashboard/coaching; the approved look: step 2 of
+    docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html). Two cards: Schedule (the bookings to come by day,
+    with Accept/Decline or Cancel, and the last 30 days) and When I coach (Bookings open, the seven weekdays, the time
+    zone, the days off, where we meet, the booking link). The server prints the frame and the form's saved values;
+    public/js/coaching-dashboard.js draws the bookings, the weekday rows and the days off from
+    window.COACHING_DASHBOARD_DATA (times as UTC instants, shown in the streamer's coaching zone) with
+    window.COACHING_DASHBOARD_TEXTS, and puts every name and note in as text. %>
+
+<a href="/dashboard" class="cd-back">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+  <%= t('guild.backToDashboard') %>
+</a>
+<h2 class="cd-h animate-in"><%= t('coaching.dashboard.title') %></h2>
+<p class="cd-intro"><%= t('coaching.dashboard.intro') %></p>
+
+<% if (!bookingUrl) { %>
+  <div class="cd-note warn" role="status"><%= t('coaching.dashboard.noTwitch') %></div>
+<% } %>
+<% if (!servers.length) { %>
+  <div class="cd-note warn" role="status"><span><%= t('coaching.dashboard.noServer') %></span> <a href="/dashboard"><%= t('coaching.dashboard.noServerAction') %></a></div>
+<% } %>
+<div class="cd-note warn" id="cd-invite-broken" role="status"<%= setUp && settings.inviteOk === false ? '' : ' hidden' %>><span><%= t('coaching.dashboard.inviteBroken') %></span> <a href="#cd-invite"><%= t('coaching.dashboard.inviteFix') %></a></div>
+
+<div class="cd-row">
+  <section class="card cd-card animate-in" aria-labelledby="cd-schedule-title">
+    <div class="cd-head">
+      <h3 class="cd-title" id="cd-schedule-title"><%= t('coaching.dashboard.schedule') %></h3>
+      <span class="cd-sub" id="cd-zone"></span>
+    </div>
+    <div id="cd-days"></div>
+    <p class="cd-empty" id="cd-empty" hidden></p>
+    <div id="cd-past-box" hidden>
+      <div class="cd-group cd-past-title"><%= t('coaching.dashboard.past') %></div>
+      <div id="cd-past"></div>
+    </div>
+    <div class="cd-msg" id="cd-schedule-msg" role="status" aria-live="polite" hidden></div>
+  </section>
+
+  <section class="card cd-card animate-in" aria-labelledby="cd-hours-title">
+    <div class="cd-head">
+      <div class="cd-titles">
+        <h3 class="cd-title" id="cd-hours-title"><%= t('coaching.dashboard.hours') %></h3>
+        <span class="cd-status" id="cd-status"></span>
+      </div>
+      <label class="pill-toggle" id="cd-open-switch" title="<%= t('coaching.dashboard.open') %>"<%= setUp ? '' : ' hidden' %>><input type="checkbox" role="switch" id="cd-open" aria-label="<%= t('coaching.dashboard.open') %>"<%= settings.open ? ' checked' : '' %>><span class="slider"></span></label>
+    </div>
+
+    <form id="cd-form" novalidate>
+      <div class="cd-hours" id="cd-hours" role="group" aria-label="<%= t('coaching.dashboard.hours') %>"></div>
+
+      <div class="form-group cd-field">
+        <label for="cd-zone-input"><%= t('coaching.dashboard.timeZone') %></label>
+        <input id="cd-zone-input" type="text" list="cd-zones" autocomplete="off" spellcheck="false" value="<%= settings.timeZone || '' %>">
+        <span class="cd-hint"><%= t('coaching.dashboard.timeZoneHint') %></span>
+      </div>
+
+      <div class="cd-label"><%= t('coaching.dashboard.daysOff') %></div>
+      <div class="cd-chips" id="cd-daysoff"></div>
+      <div class="cd-add">
+        <input type="date" id="cd-dayoff-input" aria-label="<%= t('coaching.dashboard.dayOffLabel') %>">
+        <button type="button" class="btn btn-secondary cd-btn" id="cd-dayoff-add"><%= t('coaching.dashboard.addDayOff') %></button>
+      </div>
+
+      <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.whereWeMeet') %></span></div>
+      <% if (servers.length) { %>
+      <div class="form-group cd-field">
+        <label for="cd-server"><%= t('coaching.dashboard.server') %></label>
+        <select id="cd-server"><% for (const server of servers) { %><option value="<%= server.id %>"<%= server.id === settings.guildId ? ' selected' : '' %>><%= server.name %></option><% } %></select>
+        <span class="cd-hint"><%= t('coaching.dashboard.serverHint') %></span>
+      </div>
+      <% } %>
+      <div class="form-group cd-field">
+        <label for="cd-invite"><%= t('coaching.dashboard.invite') %></label>
+        <input id="cd-invite" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="200" placeholder="<%= t('coaching.dashboard.invitePlaceholder') %>" value="<%= settings.invite %>">
+        <span class="cd-hint"><%= t('coaching.dashboard.inviteHint') %></span>
+      </div>
+      <div class="form-group cd-field">
+        <label for="cd-where"><%= t('coaching.dashboard.where') %></label>
+        <input id="cd-where" type="text" maxlength="150" autocomplete="off" placeholder="<%= t('coaching.dashboard.wherePlaceholder') %>" value="<%= settings.where %>">
+        <span class="cd-hint"><%= t('coaching.dashboard.whereHint') %></span>
+      </div>
+      <div class="cd-switchrow">
+        <div class="cd-switchtext">
+          <span class="cd-switchname"><%= t('coaching.dashboard.notify') %></span>
+          <span class="cd-hint"><%= t('coaching.dashboard.notifyHint') %></span>
+        </div>
+        <label class="pill-toggle"><input type="checkbox" role="switch" id="cd-notify" aria-label="<%= t('coaching.dashboard.notify') %>"<%= settings.notifyRequests ? ' checked' : '' %>><span class="slider"></span></label>
+      </div>
+
+      <% if (bookingUrl) { %>
+      <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.link') %></span></div>
+      <div class="cd-link" id="cd-link"<%= setUp ? '' : ' hidden' %>>
+        <input type="text" readonly id="cd-link-input" value="<%= bookingUrl %>" aria-label="<%= t('coaching.dashboard.link') %>">
+        <button type="button" class="btn btn-secondary cd-btn" id="cd-copy"><%= t('coaching.dashboard.copy') %></button>
+      </div>
+      <p class="cd-hint" id="cd-link-hint"<%= setUp ? '' : ' hidden' %>><%= t('coaching.dashboard.linkHint') %></p>
+      <p class="cd-hint" id="cd-link-later"<%= setUp ? ' hidden' : '' %>><%= t('coaching.dashboard.linkLater') %></p>
+      <% } %>
+
+      <div class="cd-msg" id="cd-hours-msg" role="status" aria-live="polite" hidden></div>
+      <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn" id="cd-save"><%= setUp ? t('coaching.dashboard.save') : t('coaching.dashboard.saveFirst') %></button></div>
+    </form>
+  </section>
+</div>
+
+<datalist id="cd-zones"></datalist>
+
+<script>window.COACHING_DASHBOARD_DATA = <%- JSON.stringify(coachingData).replace(/</g, '\\u003c') %>;
+window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g, '\\u003c') %>;</script>
+<script src="/js/coaching-core.js"></script>
+<script src="/js/coaching-dashboard.js"></script>
+
+<style>
+  .cd-back { color: var(--text-secondary); font-size: 13px; font-family: var(--font-display); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+  .cd-h { margin: 16px 0 6px; font-size: 24px; font-weight: 700; }
+  .cd-intro { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
+  [hidden] { display: none !important; }
+  .cd-note { font-size: 13px; color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; }
+  .cd-note.warn { color: var(--warning); border-color: rgba(247,144,9,0.25); background: var(--warning-bg); }
+  .cd-note a { color: var(--accent-hover); font-weight: 600; }
+  .cd-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; align-items: start; }
+  .cd-card { padding: 14px 16px; margin: 0; border-radius: 14px; box-shadow: var(--shadow-card); min-width: 0; font-size: 13px; line-height: 1.4; }
+  .cd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .cd-titles { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .cd-title { font: 600 15px var(--font-display); margin: 0 !important; flex: 1; min-width: 0; }
+  .cd-sub { font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+  .cd-status { font-size: 11px; font-weight: 600; color: var(--success); }
+  .cd-status.off { color: var(--text-muted); }
+  .cd-group { font: 600 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 2px; }
+  #cd-days > .cd-group:first-child { margin-top: 0; }
+  .cd-past-title { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .cd-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
+  .cd-group + .cd-line { border-top: 0; }
+  .cd-line.declined, .cd-line.cancelled, .cd-line.withdrawn, .cd-line.unanswered { opacity: .6; }
+  .cd-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px; background: var(--text-muted); }
+  .cd-dot.waiting { background: var(--warning); }
+  .cd-dot.confirmed { background: var(--success); }
+  .cd-what { flex: 1; min-width: 0; }
+  .cd-top { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; }
+  .cd-top .t { font-weight: 600; }
+  .cd-name { color: var(--text-primary); overflow-wrap: anywhere; }
+  .cd-what .cd-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 1px; }
+  .cd-pill { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--bg-elevated); color: var(--text-secondary); }
+  .cd-pill.waiting, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
+  .cd-pill.confirmed { background: var(--success-bg); color: var(--success); }
+  .cd-note-text { background: var(--bg-base); border-radius: 8px; padding: 5px 8px; margin-top: 5px; color: var(--text-secondary); overflow-wrap: anywhere; white-space: pre-wrap; }
+  .cd-warn { color: var(--warning); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+  .cd-acts { display: flex; gap: 4px; flex: none; }
+  .cd-icon { width: 28px; height: 28px; border-radius: 7px; border: 0; display: inline-grid; place-items: center; font: 700 14px var(--font-body); cursor: pointer; }
+  .cd-icon.ok { background: var(--success-bg); color: var(--success); }
+  .cd-icon.no { background: var(--danger-bg); color: var(--danger); }
+  .cd-sbtn { border: 0; border-radius: 8px; padding: 4px 9px; font: 600 12px var(--font-body); cursor: pointer; background: var(--danger-bg); color: var(--danger); }
+  .cd-icon:disabled, .cd-sbtn:disabled { opacity: .5; cursor: wait; }
+  .cd-icon:focus-visible, .cd-sbtn:focus-visible, .cd-chip-x:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+  .cd-empty { color: var(--text-muted); margin: 0; }
+  .cd-hours { display: grid; grid-template-columns: auto auto 1fr; gap: 5px 10px; align-items: center; margin-bottom: 14px; }
+  .cd-hrow { display: contents; }
+  .cd-wd { font-weight: 500; min-width: 30px; }
+  .cd-hrow.off .cd-wd, .cd-hrow.off .cd-rng { opacity: .45; }
+  .cd-rng { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .cd-rng select { background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; font: 13px var(--font-body); min-width: 0; }
+  .cd-rng select:disabled { cursor: not-allowed; }
+  .cd-dash { color: var(--text-muted); }
+  .cd-field { margin-bottom: 12px !important; }
+  .cd-field label { margin-bottom: 4px !important; font-size: 12px !important; }
+  .cd-field input, .cd-field select { padding: 7px 10px !important; font-size: 13px !important; }
+  .cd-hint { display: block; color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+  .cd-label { font: 600 11px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+  .cd-sec { margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cd-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  .cd-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--bg-base); border-radius: 999px; padding: 2px 4px 2px 9px; font-size: 11px; color: var(--text-secondary); }
+  .cd-chip.none { padding-right: 9px; color: var(--text-muted); }
+  .cd-chip-x { border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 0 4px; border-radius: 999px; }
+  .cd-chip-x:hover { color: var(--danger); }
+  .cd-add { display: flex; gap: 6px; align-items: center; }
+  .cd-add input { background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font: 12px var(--font-body); color-scheme: dark; }
+  .cd-btn { font-size: 12px !important; padding: 6px 12px !important; }
+  .cd-switchrow { display: flex; align-items: center; gap: 12px; }
+  .cd-switchtext { flex: 1; min-width: 0; }
+  .cd-switchname { font-weight: 600; font-size: 13px; }
+  .cd-link { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .cd-link input { flex: 1; min-width: 0; padding: 7px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px; }
+  .cd-msg { font-size: 12.5px; padding: 8px 10px; border-radius: var(--radius-sm); margin-top: 10px; background: var(--danger-bg); color: var(--danger); overflow-wrap: anywhere; }
+  .cd-msg.ok { background: var(--success-bg); color: var(--success); }
+  .cd-msg.warn { background: var(--warning-bg); color: var(--warning); }
+  .cd-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+  .pill-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .pill-toggle input { opacity: 0; width: 0; height: 0; }
+  .pill-toggle .slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg-elevated); border-radius: 24px; border: 1px solid var(--border); transition: 0.3s; }
+  .pill-toggle .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+  .pill-toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .pill-toggle input:checked + .slider:before { transform: translateX(20px); }
+  .pill-toggle input:focus-visible + .slider { box-shadow: 0 0 0 3px rgba(145,70,255,.35); }
+  .pill-toggle input:disabled + .slider { opacity: .5; cursor: wait; }
+  .pill-toggle.mini { width: 34px; height: 19px; }
+  .pill-toggle.mini .slider:before { height: 13px; width: 13px; }
+  .pill-toggle.mini input:checked + .slider:before { transform: translateX(15px); }
+</style>
+
+<%- include('footer') %>

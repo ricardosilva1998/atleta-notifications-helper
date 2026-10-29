@@ -1,0 +1,56 @@
+<%# The Coaching card (dashboardCards.js coachingCard(), from coachingBookings.cardData()), as the approved mockup's
+    step 2 draws it (docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html): the "N waiting" badge, each request
+    waiting for an answer with ✓ (Accept) and ✕ (Decline), the next accepted session, the booking link with Copy, the
+    Bookings open switch (its own route, POST /dashboard/api/coaching/open) and a tile to the coaching page. Not set up:
+    its one step (link Twitch, add Atleta to a Discord server, set the hours). A booking's time is its instant (data-at,
+    UTC milliseconds), which public/js/dashboard-coaching.js writes in this browser's time zone; names and notes are what
+    viewers typed, printed as text. It needs neither the chatbot nor the overlay features. %>
+<% const _len = (minutes) => (Number(minutes) === 30 ? t('coaching.page.minutes30') : t('coaching.page.minutes60')); %>
+<% const _next = card.next || { startsAt: '', minutes: 60, viewerName: '', messageError: null }; %>
+<% const _badge = card.counts.waiting; %>
+<section class="card wc-card" id="card-coaching" data-card="coaching" aria-labelledby="card-coaching-title">
+  <div class="wc-head">
+    <div class="wc-icon" style="background: rgba(163,230,53,0.13); color: #a3e635"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></div>
+    <div><h3 class="wc-title" id="card-coaching-title"><%= t('coaching.dashboard.title') %></h3><span class="wc-status<%= card.status.tone === 'ok' ? '' : ' ' + card.status.tone %>" data-status><%= t(card.status.key, card.status.params) %></span></div>
+    <% if (!card.setup) { %><span class="wc-badge" data-count="waiting"><%= _badge.text !== undefined ? _badge.text : t(_badge.key, _badge.params) %></span><% } %>
+  </div>
+  <div class="wc-body">
+  <% if (card.setup === 'twitch') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-twitch"/></svg></span><div><%= t('cards.coaching.setupTwitch') %></div></div>
+    <a href="/auth/twitch" class="btn btn-primary wc-btn block"><%= t('dashboard.linkTwitch') %></a>
+  <% } else if (card.setup === 'server') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-users"/></svg></span><div><%= t('coaching.dashboard.noServer') %></div></div>
+    <a href="#tab-discord" data-open-tab="discord" class="btn btn-primary wc-btn block"><%= t('cards.coaching.openDiscordTab') %></a>
+  <% } else if (card.setup === 'hours') { %>
+    <div class="wc-empty"><span class="big"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><div><%= t('cards.coaching.setupHours') %></div></div>
+    <a href="/dashboard/coaching" class="btn btn-primary wc-btn block"><%= t('cards.coaching.setHours') %></a>
+  <% } else { %>
+    <% if (card.inviteBroken) { %>
+    <div class="wc-note"><span><%= t('coaching.dashboard.inviteBroken') %></span><a href="/dashboard/coaching"><%= t('coaching.dashboard.inviteFix') %></a></div>
+    <% } %>
+    <div class="wc-list wc-coach-list" data-coaching-waiting>
+      <% for (const b of card.waiting) { %>
+      <div class="wc-row wc-coach" data-booking="<%= b.id %>" data-at="<%= b.startsAt %>" data-name="<%= b.viewerName %>">
+        <span class="who"><span class="nm"<% if (b.viewerUsername && b.viewerUsername !== b.viewerName) { %> title="@<%= b.viewerUsername %>"<% } %>><%= b.viewerName %> · <%= _len(b.minutes) %></span><span class="txt"<% if (b.note) { %> title="<%= b.note %>"<% } %>><span data-when></span><% if (b.note) { %> · “<%= b.note %>”<% } %></span></span>
+        <button type="button" class="wc-ib ok" data-coaching-act="accept" aria-label="<%= t('cards.coaching.accept', { name: b.viewerName }) %>" title="<%= t('cards.coaching.accept', { name: b.viewerName }) %>"><span aria-hidden="true">✓</span></button>
+        <button type="button" class="wc-ib no" data-coaching-act="decline" aria-label="<%= t('cards.coaching.decline', { name: b.viewerName }) %>" title="<%= t('cards.coaching.decline', { name: b.viewerName }) %>"><span aria-hidden="true">✕</span></button>
+      </div>
+      <% } %>
+    </div>
+    <p class="wc-hint" data-coaching-none<%= card.waiting.length ? ' hidden' : '' %>><%= t('cards.coaching.noRequests') %></p>
+    <div class="wc-row wc-coach is-next" data-coaching-next data-at="<%= _next.startsAt %>"<%= card.next ? '' : ' hidden' %>>
+      <span class="who"><span class="nm"><span data-name><%= _next.viewerName %></span> · <span data-length><%= _len(_next.minutes) %></span></span><span class="txt"><b class="wc-coach-tag"><%= t('cards.coaching.next') %></b> <span data-when></span></span><small class="warn" data-message-error<%= _next.messageError ? '' : ' hidden' %>><%= _next.messageError ? t('coaching.dashboard.messageError', { name: _next.viewerName }) : '' %></small></span>
+    </div>
+    <% if (card.bookingUrl) { %>
+    <div class="wc-linkbox<%= card.open ? '' : ' wc-dim' %>" data-coaching-link>
+      <code class="wc-link"><%= card.bookingUrl.replace(/^https?:\/\//, '') %></code>
+      <button type="button" class="btn btn-secondary wc-btn" data-copy="<%= card.bookingUrl %>"><svg class="i sm" aria-hidden="true"><use href="#i-copy"/></svg><span data-copy-label><%= t('dashboard.copy') %></span></button>
+      <a class="btn btn-secondary wc-btn" href="<%= card.bookingUrl %>" target="_blank" rel="noopener" title="<%= t('cards.coaching.openPage') %>" aria-label="<%= t('cards.coaching.openPage') %>"><svg class="i sm" aria-hidden="true"><use href="#i-ext"/></svg></a>
+    </div>
+    <% } %>
+    <div class="wc-sw<%= card.open ? ' is-on' : '' %>"><span><%= t('coaching.dashboard.open') %><small><%= t('cards.coaching.openHint') %></small></span><label class="pill-toggle mini"><input type="checkbox" role="switch" aria-label="<%= t('coaching.dashboard.open') %>" data-coaching-open <%= card.open ? 'checked' : '' %>><span class="slider"></span></label></div>
+  <% } %>
+  </div>
+  <div class="wc-msg" data-msg hidden></div>
+  <div class="wc-foot wc-foot-tiles"><%- include('_tiles', { label: t('coaching.dashboard.title'), tiles: [{ href: '/dashboard/coaching', icon: 'i-calendar', title: t('cards.coaching.page'), hint: t('cards.tiles.coachingHint') }] }) %><span class="wc-saved" data-saved aria-hidden="true"><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg><%= t('cards.common.saved') %></span></div>
+</section>

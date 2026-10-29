@@ -82,6 +82,23 @@ function request(urlPath, { streamer, cookie, headers: extra } = {}) {
   });
 }
 
+// A form post (the coaching sign-out form).
+function postForm(urlPath, fields, { cookie } = {}) {
+  return new Promise((resolve, reject) => {
+    const body = new URLSearchParams(fields).toString();
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) };
+    if (cookie) headers.Cookie = cookie;
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'POST', agent: false, headers }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { text += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
 const setCookies = (res) => res.headers['set-cookie'] || [];
 const cookieHeader = (res) => setCookies(res).map((c) => c.split(';')[0]).join('; ');
 const stateOf = (res) => new URL(res.headers.location).searchParams.get('state');
@@ -134,6 +151,7 @@ before(async () => {
   // As server.js.
   app.locals.secureCookie = (res, name, value, opts = {}) => res.cookie(name, value, { httpOnly: true, secure: false, sameSite: 'lax', ...opts });
   app.use(require('cookie-parser')());
+  app.use(express.urlencoded({ extended: false })); // the coaching sign-out form
   app.use((req, res, next) => {
     // What server.js's session middleware does here: log the header's streamer in.
     const id = Number(req.get('x-test-streamer'));
@@ -587,5 +605,123 @@ describe('/link', () => {
     assert.equal(res.status, 200);
     assert.ok(!res.text.includes('<img src=x onerror'), 'the name\'s own markup was printed');
     assert.ok(res.text.includes(`<strong style="color: var(--accent);">${esc(name)}</strong>`), 'the name is in the sentence, once, as text');
+  });
+});
+
+// ── Coaching: a viewer's own Discord sign-in, which never makes a streamer ──
+
+describe('the coaching sign-in', () => {
+  const DISCORD_AUTHORIZE = 'https://discord.com/oauth2/authorize';
+  const DISCORD_TOKEN = 'https://discord.com/api/oauth2/token';
+  const DISCORD_ME = 'https://discord.com/api/users/@me';
+  const VIEWER = { id: '400000000000000123', username: 'synthetic_viewer', global_name: 'Synthetic Viewer', avatar: 'abc123' };
+  const streamerCount = () => db.db.prepare('SELECT COUNT(*) AS n FROM streamers').get().n;
+  const cookieValue = (res, name) => {
+    const line = setCookies(res).find((c) => c.startsWith(`${name}=`));
+    return line ? decodeURIComponent(line.split(';')[0].slice(name.length + 1)) : null;
+  };
+  // A streamer whose booking page is up: a Twitch login and coaching hours.
+  function coachingStreamer(login) {
+    const id = addStreamer({ twitch_username: login, twitch_display_name: login });
+    db.saveCoachingSettings(id, {
+      timeZone: 'Europe/Lisbon', hours: Array.from({ length: 7 }, () => ({ on: true, start: 1080, end: 1320 })), daysOff: [],
+      guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 1, lang: 'en',
+    });
+    return id;
+  }
+
+  test('a coaching sign-in creates a viewer session and no streamers row, and goes back to the coaching page', async () => {
+    coachingStreamer('Coach_One');
+    const start = await request('/auth/coaching-signin?for=coach_one');
+    assert.equal(start.status, 302, start.text);
+    const target = new URL(start.headers.location);
+    assert.equal(`${target.origin}${target.pathname}`, DISCORD_AUTHORIZE);
+    assert.equal(target.searchParams.get('scope'), 'identify', 'identify only');
+    assert.equal(target.searchParams.get('redirect_uri'), `${require('../config').app.url}/auth/login/callback`, 'the redirect Discord already has');
+    assert.equal(cookieValue(start, 'oauth_state'), target.searchParams.get('state'));
+    assert.equal(cookieValue(start, 'oauth_purpose'), 'coaching:Coach_One', 'the stored login, in its own case');
+    assert.ok(setCookies(start).every((c) => /HttpOnly/i.test(c) && /Max-Age=600\b/.test(c)), '10 minutes, out of reach of scripts');
+
+    answers[DISCORD_TOKEN] = { status: 200, body: { access_token: 'synthetic-discord-access' } };
+    answers[DISCORD_ME] = { status: 200, body: VIEWER };
+    const before = streamerCount();
+    const res = await request(`/auth/login/callback?code=synthetic-code&state=${target.searchParams.get('state')}`, { cookie: cookieHeader(start) });
+    assert.equal(res.status, 302, res.text);
+    assert.equal(res.headers.location, '/coaching/Coach_One');
+    assert.equal(streamerCount(), before, 'no streamers row');
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM streamers WHERE discord_user_id = ?').get(VIEWER.id).n, 0);
+    assert.ok(!setCookies(res).some((c) => c.startsWith('session=')), 'no streamer session');
+    assert.ok(clearsCookie(res, 'oauth_purpose') && clearsCookie(res, 'oauth_state'));
+
+    const sid = cookieValue(res, 'viewer_session');
+    assert.match(sid, /^[0-9a-f]{64}$/);
+    const line = setCookies(res).find((c) => c.startsWith('viewer_session='));
+    assert.match(line, /Max-Age=604800\b/, '7 days');
+    assert.match(line, /Path=\//);
+    assert.match(line, /HttpOnly/i);
+    const session = db.getViewerSession(sid);
+    assert.equal(session.discord_user_id, VIEWER.id);
+    assert.equal(session.discord_username, VIEWER.username);
+    assert.equal(session.discord_display_name, VIEWER.global_name);
+    assert.equal(session.discord_avatar, `https://cdn.discordapp.com/avatars/${VIEWER.id}/${VIEWER.avatar}.png`);
+    assert.notEqual(session.sid, sid, 'the table holds the hash, not the cookie');
+    assert.deepEqual(calls.map((c) => timeoutOf.get(c.init.signal)), [10_000, 10_000], 'both Discord calls have a 10 s limit');
+  });
+
+  test('the sign-in is only for a booking page that is up', async () => {
+    const disabled = coachingStreamer('coach_off');
+    db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(disabled);
+    addStreamer({ twitch_username: 'never_coached' });
+    for (const login of ['nobody_here', 'coach_off', 'never_coached', 'a/b', '']) {
+      const res = await request(`/auth/coaching-signin?for=${encodeURIComponent(login)}`);
+      assert.equal(res.status, 404, login);
+      assert.equal(res.text, t('en', 'coaching.error.pageUnavailable'));
+      assert.deepEqual(setCookies(res), [], `${login}: no cookie`);
+    }
+  });
+
+  test('a sign-in without the purpose cookie still creates a streamer as before', async () => {
+    // A coaching sign-in left half-way: the streamer's own login forgets its purpose.
+    const start = await request('/auth/login', { cookie: 'oauth_purpose=coaching%3Acoach_one' });
+    assert.equal(start.status, 302);
+    assert.ok(clearsCookie(start, 'oauth_purpose'));
+    const state = stateOf(start);
+    answers[DISCORD_TOKEN] = { status: 200, body: { access_token: 'synthetic-discord-access' } };
+    answers[DISCORD_ME] = { status: 200, body: { ...VIEWER, id: '400000000000000456', username: 'new_streamer' } };
+    const before = streamerCount();
+    const res = await request(`/auth/login/callback?code=synthetic-code&state=${state}`, { cookie: `oauth_state=${state}` });
+    assert.equal(res.status, 302, res.text);
+    assert.equal(res.headers.location, '/dashboard');
+    assert.equal(streamerCount(), before + 1);
+    assert.ok(setCookies(res).some((c) => c.startsWith('session=')));
+    assert.ok(!setCookies(res).some((c) => c.startsWith('viewer_session=')));
+  });
+
+  test('a purpose naming a login with a slash is refused', async () => {
+    const before = streamerCount();
+    const viewers = db.db.prepare('SELECT COUNT(*) AS n FROM viewer_sessions').get().n;
+    for (const purpose of ['coaching:a/b', 'coaching:../dashboard', 'coaching:', 'coaching:x'.padEnd(40, 'y')]) {
+      const res = await request('/auth/login/callback?code=synthetic-code&state=one', {
+        cookie: `oauth_state=one; oauth_purpose=${encodeURIComponent(purpose)}`, headers: { 'x-show-keys': '1' },
+      });
+      assert.equal(res.status, 400, purpose);
+      assert.equal(res.text, '[auth.error.invalidCallback]');
+    }
+    assert.deepEqual(calls, [], 'nothing was asked of Discord');
+    assert.equal(streamerCount(), before);
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM viewer_sessions').get().n, viewers);
+  });
+
+  test('signing out deletes the viewer session and goes back to that coaching page', async () => {
+    const sid = 'f'.repeat(64);
+    db.createViewerSession(sid, { discordUserId: VIEWER.id, username: VIEWER.username }, Date.now() + 3600e3);
+    const res = await postForm('/auth/coaching-signout', { for: 'Coach_One' }, { cookie: `viewer_session=${sid}` });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, '/coaching/Coach_One');
+    assert.ok(clearsCookie(res, 'viewer_session'));
+    assert.equal(db.getViewerSession(sid), null);
+
+    const odd = await postForm('/auth/coaching-signout', { for: 'https://evil.example/x' });
+    assert.equal(odd.headers.location, '/', 'a "for" that is not a login goes home');
   });
 });
