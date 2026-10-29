@@ -127,7 +127,7 @@ test('localDateOf gives the date on the zone\'s wall', () => {
 
 test('bookingState calls a waiting booking past its start unanswered and leaves the stored states as they are', () => {
   const now = at('2026-11-02T18:00:00Z');
-  const b = (state, starts_at) => ({ state, starts_at });
+  const b = (status, starts_at) => ({ status, starts_at });
   assert.equal(C.bookingState(b('waiting', now - 1), now), 'unanswered');
   assert.equal(C.bookingState(b('waiting', now), now), 'unanswered');
   assert.equal(C.bookingState(b('waiting', now + 1), now), 'waiting');

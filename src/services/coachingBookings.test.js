@@ -7,6 +7,12 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const Module = require('module');
 
+for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) {
+  process.env[key] = process.env[key] || 'test';
+}
+// The real escapeLinkText of src/discord.js (loading it needs the config's env; it does not log in).
+const { escapeLinkText } = require('../discord');
+
 const DB_FILE = path.join(__dirname, '..', 'db.js');
 const SERVICE = path.join(__dirname, 'coachingBookings.js');
 const MSG = path.join(__dirname, 'coachingMessages.js');
@@ -22,7 +28,7 @@ const discord = {
   async isGuildMember() { return this.member; },
   async fetchInvite() { this.inviteCalls++; return this.invite; },
   guildName() { return 'Coach HQ'; },
-  escapeLinkText: (text) => String(text).replace(/[\\[\]]/g, '\\$&'),
+  escapeLinkText,
 };
 
 before(() => {

@@ -138,8 +138,8 @@ function freeStarts({ hours, timeZone, daysOff, held, now, minutes }) {
 
 // A stored 'waiting' whose start has come is 'unanswered' (never stored).
 function bookingState(booking, now) {
-  if (booking.state === 'waiting' && booking.starts_at <= now) return 'unanswered';
-  return booking.state;
+  if (booking.status === 'waiting' && booking.starts_at <= now) return 'unanswered';
+  return booking.status;
 }
 
 // Whether a booking no longer fits the streamer's hours (a day was blocked or

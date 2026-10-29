@@ -25,7 +25,7 @@ function bookingView(row, now) {
     id: row.id,
     startsAt: row.starts_at,
     minutes: row.minutes,
-    state: coaching.bookingState({ ...row, state: row.status }, now),
+    state: coaching.bookingState(row, now),
     viewerName: row.viewer_display_name || row.viewer_username,
     viewerUsername: row.viewer_username,
     viewerAvatar: row.viewer_avatar || null,

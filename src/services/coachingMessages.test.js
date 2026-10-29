@@ -5,6 +5,12 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const Module = require('module');
 
+for (const key of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) {
+  process.env[key] = process.env[key] || 'test';
+}
+// The real escapeLinkText of src/discord.js (loading it needs the config's env; it does not log in).
+const { escapeLinkText } = require('../discord');
+
 const FILE = path.join(__dirname, 'coachingMessages.js');
 let m;
 const en = require('../locales/en.json');
@@ -12,10 +18,9 @@ const t = (key, p = {}) => (en[key] || key).replace(/\{\{(\w+)\}\}/g, (_, k) => 
 
 before(() => {
   const origLoad = Module._load.bind(Module);
-  // discord.js loads the config (which exits without the env): only its escapeLinkText is used here, copied as is.
   Module._load = function (request, parent, isMain) {
     if (parent && parent.filename === FILE && request === '../discord') {
-      return { escapeLinkText: (text) => String(text).replace(/[\\[\]]/g, '\\$&') };
+      return { escapeLinkText };
     }
     return origLoad(request, parent, isMain);
   };
