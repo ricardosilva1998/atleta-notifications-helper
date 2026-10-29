@@ -197,6 +197,30 @@ app.use((req, res, next) => {
   // An account an admin disabled is not logged in anywhere (/dashboard says why).
   applyAccountStatus(req);
 
+  // Who books coaching (routes/coaching.js): a viewer's own Discord sign-in
+  // (viewer_sessions, /auth/coaching-signin) wins; otherwise a streamer signed
+  // in to the site books as their Discord account. With no web session, the
+  // viewer session's stored hash gives the page its CSRF token (csrf.js).
+  const viewerSession = req.cookies?.viewer_session ? db.getViewerSession(req.cookies.viewer_session) : null;
+  if (viewerSession) {
+    req.viewer = {
+      discordUserId: viewerSession.discord_user_id,
+      username: viewerSession.discord_username,
+      displayName: viewerSession.discord_display_name || viewerSession.discord_username,
+      avatar: viewerSession.discord_avatar || null,
+      fromStreamer: false,
+    };
+    if (!req.sessionHash) req.sessionHash = viewerSession.sid;
+  } else if (req.streamer && req.streamer.discord_user_id) {
+    req.viewer = {
+      discordUserId: req.streamer.discord_user_id,
+      username: req.streamer.discord_username,
+      displayName: req.streamer.discord_display_name || req.streamer.discord_username,
+      avatar: req.streamer.discord_avatar || null,
+      fromStreamer: true,
+    };
+  }
+
   res.locals.streamer = req.streamer || null;
   res.locals.racingUser = req.racingUser || null;
   res.locals.streamerTier = req.streamer ? db.getStreamerTier(req.streamer.id) : 'free';
@@ -280,6 +304,8 @@ app.use('/dashboard', dashboardRoutes);
 // app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);
 app.use('/tip', tipRoutes);
+// The public coaching booking page (its viewers sign in with /auth/coaching-signin).
+app.use('/coaching', require('./routes/coaching'));
 
 const racingAuthRoutes = require('./routes/racing-auth');
 const racingRoutes = require('./routes/racing');

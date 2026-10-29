@@ -3,7 +3,9 @@
 // The real src/server.js app, answering over HTTP on 127.0.0.1, on the real
 // src/db.js over an in-memory SQLite database (nothing touches data/). The
 // config is a stub, and the routers server.js mounts from routes/ are empty
-// ones, except routes/racing-auth.js (its sign-in log is checked here).
+// ones, except routes/racing-auth.js (its sign-in log is checked here) and
+// routes/coaching.js (the viewer's sign-in and its CSRF token, with a fake
+// src/discord.js).
 //
 // Requests carry X-Forwarded-For the way Railway's edge sends them: with
 // 'trust proxy' 1, its last entry is req.ip, the address that connected to the
@@ -19,6 +21,14 @@ const SERVER_FILE = path.join(__dirname, 'server.js');
 const DB_FILE = path.join(__dirname, 'db.js');
 const CONFIG_FILE = path.join(__dirname, 'config.js');
 const SPOTIFY_FILE = path.join(__dirname, 'services', 'spotify.js');
+const DISCORD_FILE = path.join(__dirname, 'discord.js');
+// The coaching page's files, which get the fake Discord below.
+const COACHING_FILES = ['routes/coaching.js', 'services/coachingBookings.js', 'services/coachingMessages.js'].map((f) => path.join(__dirname, f));
+const REAL_ROUTES = new Set(['./routes/racing-auth', './routes/coaching']);
+const discordStub = {
+  isGuildMember: async () => true, guildName: () => 'Coach HQ', sendDirectMessage: async () => ({ ok: true }),
+  fetchInvite: async () => ({ ok: false, reason: 'unavailable' }), escapeLinkText: (text) => String(text),
+};
 
 // services/spotify.js as the Racing-app routes load it (on first use): no network.
 const spotifyCalls = [];
@@ -64,11 +74,12 @@ before(async () => {
     if (parent && parent.filename === SERVER_FILE) {
       if (request === 'express') return express;
       if (request === './routes/multistream') return { dashboardRouter: realExpress.Router(), apiRouter: realExpress.Router() };
-      if (request.startsWith('./routes/') && request !== './routes/racing-auth') return realExpress.Router();
+      if (request.startsWith('./routes/') && !REAL_ROUTES.has(request)) return realExpress.Router();
     }
     let resolved = null;
     try { resolved = Module._resolveFilename(request, parent, isMain); } catch { /* not a file */ }
     if (resolved === CONFIG_FILE) return config;
+    if (resolved === DISCORD_FILE && parent && COACHING_FILES.includes(parent.filename)) return discordStub;
     return origLoad.apply(this, arguments);
   };
   try {
@@ -696,5 +707,70 @@ describe('recordings named by their content are kept a year', () => {
     assert.equal(res.status, 200);
     assert.match(res.headers['content-type'], /^audio\/mpeg/);
     assert.equal(res.headers['cache-control'], 'public, max-age=31536000, immutable');
+  });
+});
+
+describe('coaching: the viewer\'s own Discord sign-in, on the real session step and CSRF check', () => {
+  const { csrfToken } = require('./csrf');
+  const SITE = { Origin: 'http://localhost:3000' };
+  let login;
+  let streamerId;
+  const HOURS = Array.from({ length: 7 }, () => ({ on: true, start: 1080, end: 1320 }));
+
+  before(() => {
+    login = 'coach_on_server';
+    streamerId = Number(db.db.prepare("INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, twitch_username) VALUES ('300000000000009001', 'coachstreamer', 'Coach Streamer', ?)").run(login).lastInsertRowid);
+    db.db.prepare("INSERT INTO guilds (guild_id, streamer_id, guild_name) VALUES ('123', ?, 'Coach HQ')").run(streamerId);
+    db.saveCoachingSettings(streamerId, { timeZone: 'Europe/Lisbon', hours: HOURS, daysOff: [], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en' });
+  });
+  const viewerSession = (n) => {
+    const sid = String(n).repeat(64).slice(0, 64);
+    db.createViewerSession(sid, { discordUserId: `40000000000000900${n}`, username: `viewer${n}`, displayName: `Viewer ${n}` }, Date.now() + 3600e3);
+    return sid;
+  };
+  const tokenOf = (sid) => csrfToken(db.hashSessionId(sid), config.csrf.secret);
+  const bookings = () => db.db.prepare('SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ?').get(streamerId).n;
+
+  test('booking needs the CSRF token of the viewer session', async () => {
+    const sid = viewerSession(1);
+    const cookie = `viewer_session=${sid}`;
+    const state = await send('GET', `/coaching/${login}/state`, { headers: { Cookie: cookie } });
+    assert.equal(state.status, 200, state.text);
+    assert.equal(state.json.viewer.displayName, 'Viewer 1', 'the session step loaded the viewer');
+    assert.equal(state.json.viewer.fromStreamer, false);
+    const startsAt = state.json.slots[60][0];
+    const page = await send('GET', `/coaching/${login}`, { headers: { Cookie: cookie } });
+    assert.ok(page.text.includes(`data-csrf-token="${tokenOf(sid)}"`), 'the page carries the viewer session\'s token');
+
+    const before = bookings();
+    const noToken = await send('POST', `/coaching/${login}/book`, { headers: { Cookie: cookie, ...SITE }, json: { startsAt, minutes: 60 } });
+    assert.equal(noToken.status, 403, noToken.text);
+    const otherToken = await send('POST', `/coaching/${login}/book`, { headers: { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(viewerSession(2)) }, json: { startsAt, minutes: 60 } });
+    assert.equal(otherToken.status, 403, 'another session\'s token');
+    const otherSite = await send('POST', `/coaching/${login}/book`, { headers: { Cookie: cookie, Origin: 'https://evil.example', 'X-CSRF-Token': tokenOf(sid) }, json: { startsAt, minutes: 60 } });
+    assert.equal(otherSite.status, 403, 'from another site');
+    assert.equal(bookings(), before, 'nothing was booked');
+
+    const ok = await send('POST', `/coaching/${login}/book`, { headers: { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(sid) }, json: { startsAt, minutes: 60 } });
+    assert.equal(ok.status, 200, ok.text);
+    assert.equal(ok.json.ok, true);
+    assert.equal(bookings(), before + 1);
+
+    const signOut = await send('POST', '/auth/coaching-signout', { headers: { Cookie: cookie, ...SITE } });
+    assert.equal(signOut.status, 403, 'signing out needs the token too');
+  });
+
+  test('the viewer session wins over a streamer\'s web session; a streamer alone books as their Discord account', async () => {
+    const webSid = 'b'.repeat(64);
+    db.createSession(webSid, streamerId, Date.now() + 3600e3);
+    const viewerSid = viewerSession(3);
+    const both = await send('GET', `/coaching/${login}/state`, { headers: { Cookie: `session=${webSid}; viewer_session=${viewerSid}` } });
+    assert.equal(both.json.viewer.displayName, 'Viewer 3');
+    assert.equal(both.json.viewer.fromStreamer, false);
+    const asStreamer = await send('GET', `/coaching/${login}/state`, { headers: { Cookie: `session=${webSid}` } });
+    assert.deepEqual(asStreamer.json.viewer, { displayName: 'Coach Streamer', username: 'coachstreamer', avatar: null, fromStreamer: true });
+    // With both sessions the page's token is the web session's, as every other page of the site.
+    const page = await send('GET', `/coaching/${login}`, { headers: { Cookie: `session=${webSid}; viewer_session=${viewerSid}` } });
+    assert.ok(page.text.includes(`data-csrf-token="${tokenOf(webSid)}"`));
   });
 });

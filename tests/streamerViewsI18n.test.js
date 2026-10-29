@@ -35,6 +35,8 @@ const PAGES = [
   'home',
   // the Tracking page: the follower and sub goals and the six trackers (an overlay page, linked from the OBS overlay card)
   'tracking',
+  // the public coaching booking page (routes/coaching.js), which viewers open from a streamer's !coaching
+  'coaching',
 ];
 
 // Words that are not the page's own wording and may stay in every page: product names and units.
@@ -256,6 +258,21 @@ PAGE_LOCALS.tracking = [
   trackingPage(trackingState({ notAffiliate: true }), null, TIP_GOAL_NONE),
 ];
 PAGE_LOCALS['account-disabled'] = [{ streamer: null }];
+// The coaching booking page: a visitor, a viewer signed in for coaching, and a streamer of the site while bookings are paused.
+const coachingState = (over = {}) => ({
+  open: true, bookable: true, slots: { 30: [1792429200000], 60: [1792429200000] }, viewer: null, inviteUrl: 'https://discord.gg/abc',
+  guildName: 'GuildName', bookings: [], maxUpcoming: 2, horizonDays: 14, ...over,
+});
+const coachingPage = (viewer, state) => ({
+  login: 'tester_tv', streamerName: 'Tester_TV', avatarUrl: null, viewer, state,
+  coachingData: { login: 'tester_tv', name: 'Tester_TV', lang: 'en', state }, coachingTexts: { zone: 'x' },
+});
+const coachingViewer = { discordUserId: '400000000000000001', username: 'tester', displayName: 'Tester', avatar: null, fromStreamer: false };
+PAGE_LOCALS.coaching = [
+  coachingPage(null, coachingState()),
+  coachingPage(coachingViewer, coachingState({ viewer: coachingViewer })),
+  coachingPage({ ...coachingViewer, fromStreamer: true, avatar: 'https://cdn.test/a.png' }, coachingState({ open: false, bookable: false, slots: { 30: [], 60: [] } })),
+];
 // The account page shows YouTube's channels and posts only while YouTube is (features.youtube): each sample both ways.
 PAGE_LOCALS.account = PAGE_LOCALS.account.flatMap((locals) => [true, false].map((youtube) => ({ ...locals, features: { youtube } })));
 // These pages show less while the overlay features are off (features.overlays, which src/config.js has on): each of their samples is rendered both ways.
@@ -590,6 +607,7 @@ describe('data a page builds into the markup of a sentence is printed as text', 
     { page: 'multistream', what: 'the Twitch display name and the YouTube channel name', locals: { ...PAGE_LOCALS.multistream[0], streamer: { ...streamer, twitch_display_name: NAME }, youtubeChannelName: NAME }, value: NAME, sites: 2 },
     { page: 'guild-config', what: 'the broadcaster authorize link, twice', locals: { ...PAGE_LOCALS['guild-config'][0], hasBroadcasterToken: false, broadcasterAuthUrl: URL_VALUE }, value: URL_VALUE, sites: 2, around: ['href="', '"'] },
     { page: 'guild-stats', what: 'the two channel counts', locals: { ...PAGE_LOCALS['guild-stats'][0], twitchCount: NAME, youtubeCount: NAME }, value: NAME, sites: 2 },
+    { page: 'coaching', what: 'the viewer\'s Discord name in "Booking as"', locals: { ...PAGE_LOCALS.coaching[1], viewer: { ...PAGE_LOCALS.coaching[1].viewer, displayName: NAME } }, value: NAME, sites: 1 },
   ];
 
   for (const { page, what, locals, value, sites, around = ['', ''] } of CASES) {

@@ -4,6 +4,7 @@ const config = require('../config');
 const db = require('../db');
 const { signLink, verifyLink, linkSecret, LINK_TTL_SECONDS } = require('../services/linkSignature');
 const { issueOAuthState, checkOAuthState } = require('../services/oauthState');
+const { isStreamerDisabled } = require('../services/streamerAccess');
 
 const router = Router();
 
@@ -18,10 +19,14 @@ function sendText(res, status, key) {
 
 // --- Discord OAuth Login ---
 
-router.get('/login', (req, res) => {
-  const state = crypto.randomUUID();
-  req.app.locals.secureCookie(res, 'oauth_state', state, { maxAge: 600_000 });
+// A viewer who books coaching (routes/coaching.js) signs in with Discord too, through the one redirect Discord has
+// registered (/auth/login/callback). The oauth_purpose cookie, 'coaching:<twitch login>', tells the callback that the
+// sign-in is a viewer's: it then stores a viewer session (viewer_sessions, 7 days) and never a streamer.
+const COACHING_PURPOSE = 'coaching:';
+const COACHING_LOGIN = /^[A-Za-z0-9_]{1,25}$/;
+const VIEWER_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
+function discordAuthorizeUrl(state) {
   const params = new URLSearchParams({
     client_id: config.discord.clientId,
     redirect_uri: `${config.app.url}/auth/login/callback`,
@@ -29,7 +34,29 @@ router.get('/login', (req, res) => {
     scope: 'identify',
     state,
   });
-  res.redirect(`https://discord.com/oauth2/authorize?${params}`);
+  return `https://discord.com/oauth2/authorize?${params}`;
+}
+
+router.get('/login', (req, res) => {
+  const state = crypto.randomUUID();
+  req.app.locals.secureCookie(res, 'oauth_state', state, { maxAge: 600_000 });
+  // A coaching sign-in left half-way must not turn this streamer's login into a viewer's.
+  if (req.cookies?.oauth_purpose) res.clearCookie('oauth_purpose');
+  res.redirect(discordAuthorizeUrl(state));
+});
+
+// GET /auth/coaching-signin?for=<twitch login>: only for a booking page that is up (a streamer who is not disabled
+// and has set coaching up); anything else answers like that page does.
+router.get('/coaching-signin', (req, res) => {
+  const login = typeof req.query.for === 'string' ? req.query.for : '';
+  const streamer = COACHING_LOGIN.test(login) ? db.getStreamerByUsername(login) : null;
+  if (!streamer || isStreamerDisabled(streamer) || !db.getCoachingSettings(streamer.id)) {
+    return sendText(res, 404, 'coaching.error.pageUnavailable');
+  }
+  const state = crypto.randomUUID();
+  req.app.locals.secureCookie(res, 'oauth_state', state, { maxAge: 600_000 });
+  req.app.locals.secureCookie(res, 'oauth_purpose', `${COACHING_PURPOSE}${streamer.twitch_username}`, { maxAge: 600_000 });
+  res.redirect(discordAuthorizeUrl(state));
 });
 
 router.get('/login/callback', async (req, res) => {
@@ -40,6 +67,15 @@ router.get('/login/callback', async (req, res) => {
     return sendText(res, 400, 'auth.error.invalidCallback');
   }
   res.clearCookie('oauth_state');
+  // Read and cleared only once the state matched, so a stray callback cannot leave this browser's state without its
+  // purpose (a coaching sign-in must never come back as a streamer's).
+  const purpose = typeof req.cookies?.oauth_purpose === 'string' ? req.cookies.oauth_purpose : '';
+  res.clearCookie('oauth_purpose');
+  let coachingLogin = null;
+  if (purpose.startsWith(COACHING_PURPOSE)) {
+    coachingLogin = purpose.slice(COACHING_PURPOSE.length);
+    if (!COACHING_LOGIN.test(coachingLogin)) return sendText(res, 400, 'auth.error.invalidCallback');
+  }
 
   try {
     // Exchange code for token
@@ -53,6 +89,7 @@ router.get('/login/callback', async (req, res) => {
         grant_type: 'authorization_code',
         redirect_uri: `${config.app.url}/auth/login/callback`,
       }),
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!tokenRes.ok) throw new Error('Token exchange failed');
@@ -61,6 +98,7 @@ router.get('/login/callback', async (req, res) => {
     // Get Discord user identity
     const userRes = await fetch('https://discord.com/api/users/@me', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!userRes.ok) throw new Error('Failed to get user info');
@@ -69,6 +107,17 @@ router.get('/login/callback', async (req, res) => {
     const avatar = user.avatar
       ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
       : null;
+
+    // A viewer booking coaching: their own session, never a streamer (upsertStreamerDiscord is not reached).
+    if (coachingLogin) {
+      const viewerSid = crypto.randomBytes(32).toString('hex');
+      db.createViewerSession(viewerSid, {
+        discordUserId: user.id, username: user.username, displayName: user.global_name || user.username, avatar,
+      }, Date.now() + VIEWER_SESSION_MS);
+      req.app.locals.secureCookie(res, 'viewer_session', viewerSid, { maxAge: VIEWER_SESSION_MS, path: '/' });
+      console.log(`[Auth] Coaching sign-in: ${user.username} (${user.id}) for ${coachingLogin}`);
+      return res.redirect(`/coaching/${encodeURIComponent(coachingLogin)}`);
+    }
 
     // Create/update streamer record
     const streamer = db.upsertStreamerDiscord(
@@ -115,6 +164,16 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/logout', (req, res) => res.redirect('/'));
+
+// The coaching page's "not you?" (views/coaching.ejs): a POST with the CSRF token of the viewer session. Goes back to
+// the coaching page named in `for`.
+router.post('/coaching-signout', (req, res) => {
+  const sid = req.cookies?.viewer_session;
+  if (sid) db.deleteViewerSession(sid);
+  res.clearCookie('viewer_session', { path: '/' });
+  const login = req.body && typeof req.body.for === 'string' && COACHING_LOGIN.test(req.body.for) ? req.body.for : null;
+  res.redirect(login ? `/coaching/${encodeURIComponent(login)}` : '/');
+});
 
 // --- Twitch Account Linking ---
 
