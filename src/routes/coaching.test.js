@@ -41,6 +41,7 @@ const discord = {
 };
 
 let db;
+let bookings; // services/coachingBookings.js as the router loaded it
 let server;
 let port;
 const restore = {};
@@ -71,6 +72,7 @@ before(async () => {
     for (const file of [DB_FILE, ROUTE, TIP, SERVICE, MSG]) delete require.cache[file];
     db = require(DB_FILE);
     router = require(ROUTE);
+    bookings = require(SERVICE);
     tipRouter = require(TIP);
   } finally {
     Module._load = restore.load;
@@ -120,6 +122,7 @@ beforeEach(() => {
   discord.member = true;
   discord.memberCalls = 0;
   discord.guild = 'Coach HQ';
+  bookings.forgetMembers(); // no membership answer kept from another test
 });
 
 // ── HTTP ─────────────────────────────────────────────────────────────────
@@ -317,6 +320,7 @@ describe('the state', () => {
     assert.equal(state.bookable, true);
     assert.equal(state.member, true);
     assert.equal(state.maxUpcoming, coaching.MAX_UPCOMING);
+    assert.equal(state.leadMs, coaching.LEAD_MS, 'the page keeps the hour of notice when it filters the starts');
     assert.equal(state.inviteUrl, 'https://discord.gg/abc');
     assert.equal(state.guildName, 'Coach HQ');
     assert.deepEqual(state.viewer, { displayName: mine.displayName, username: mine.username, avatar: null, fromStreamer: false });
@@ -338,6 +342,27 @@ describe('the state', () => {
     assert.equal(res.json.member, null);
     assert.equal(res.json.bookable, true, 'an outage does not stop bookings');
   });
+
+  test('a non-member\'s page asks Discord once per 30 s; "I\'ve joined" (?recheck=1) asks at once, at most every 10 s (Ruling 8)', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    discord.member = false;
+    assert.equal((await get(`/coaching/${s.login}/state`, { cookie: v.cookie })).json.member, false);
+    assert.equal((await get(`/coaching/${s.login}/state`, { cookie: v.cookie })).json.member, false);
+    assert.equal(discord.memberCalls, 1, 'the second read used the kept answer');
+    discord.member = true;
+    const joined = await get(`/coaching/${s.login}/state?recheck=1`, { cookie: v.cookie });
+    assert.equal(joined.json.member, true);
+    assert.equal(discord.memberCalls, 2);
+    await get(`/coaching/${s.login}/state?recheck=1`, { cookie: v.cookie });
+    assert.equal(discord.memberCalls, 2, 'a second "I\'ve joined" within 10 s reads the kept answer');
+    const booked = await post(`/coaching/${s.login}/book`, { cookie: v.cookie, json: { startsAt: freeNow(s, 60)[0], minutes: 60 } });
+    assert.equal(booked.status, 200, booked.text);
+    assert.equal(discord.memberCalls, 2, 'the request read the answer "I\'ve joined" got');
+    const script = fs.readFileSync(PAGE_SCRIPT, 'utf8');
+    assert.match(script, /'\?recheck=1'/);
+    assert.match(script, /\$\('cz-joined'\)\.addEventListener\('click', function \(\) \{\s*message\(''\);\s*refresh\(true\)/, '"I\'ve joined" asks with ?recheck=1');
+  });
 });
 
 // ── Booking and cancelling ───────────────────────────────────────────────
@@ -358,6 +383,7 @@ describe('booking', () => {
     assert.equal(db.getViewerCoachingBookings(s.id, v.discordUserId, 0).length, 0);
 
     discord.member = true;
+    await get(`/coaching/${s.login}/state?recheck=1`, { cookie: v.cookie }); // "I've joined"
     const booked = await post(`/coaching/${s.login}/book`, { cookie: v.cookie, headers: { 'x-lang': 'pt' }, json: { startsAt, minutes: 60, note: 'braking into T1' } });
     assert.equal(booked.status, 200, booked.text);
     assert.equal(booked.json.ok, true);
@@ -419,7 +445,33 @@ describe('booking', () => {
     assert.equal(mine.json.booking.state, 'withdrawn');
     const twice = await post(`/coaching/${s.login}/bookings/${id}/cancel`, { cookie: owner.cookie });
     assert.equal(twice.status, 409);
-    assert.equal(twice.json.code, 'too_late');
+    assert.deepEqual(twice.json, { ok: false, code: 'not_active', error: errorOf('coaching.error.not_active') });
+  });
+
+  test('cancelling a booking the streamer declined answers not_active, in the page\'s language', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    const row = hold(s, v, freeNow(s, 60)[0]);
+    db.setCoachingBookingStatus(row.id, s.id, ['waiting'], 'declined', Date.now());
+    const res = await post(`/coaching/${s.login}/bookings/${row.id}/cancel`, { cookie: v.cookie, headers: { 'x-lang': 'de' } });
+    assert.equal(res.status, 409);
+    assert.deepEqual(res.json, { ok: false, code: 'not_active', error: t('de', 'coaching.error.not_active') });
+    assert.notEqual(res.json.error, 'coaching.error.not_active', 'a sentence, not its key');
+  });
+
+  test('a seventh request within 24 h answers too_many with its text (Ruling 7)', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    const startsAt = freeNow(s, 60)[0];
+    for (let i = 0; i < coaching.MAX_REQUESTS_PER_DAY; i++) {
+      const booked = await post(`/coaching/${s.login}/book`, { cookie: v.cookie, json: { startsAt, minutes: 60 } });
+      assert.equal(booked.status, 200, `request ${i + 1}: ${booked.text}`);
+      assert.equal((await post(`/coaching/${s.login}/bookings/${booked.json.booking.id}/cancel`, { cookie: v.cookie })).status, 200);
+    }
+    const seventh = await post(`/coaching/${s.login}/book`, { cookie: v.cookie, json: { startsAt, minutes: 60 } });
+    assert.equal(seventh.status, 429);
+    assert.deepEqual(seventh.json, { ok: false, code: 'too_many', error: errorOf('coaching.error.too_many') });
+    assert.notEqual(seventh.json.error, 'coaching.error.too_many', 'a sentence, not its key');
   });
 
   test('a streamer signed in to the site books as their own Discord account', async () => {

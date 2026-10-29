@@ -22,7 +22,7 @@ const PAST_DAYS = 30; // the viewer's bookings of the last 30 days are listed un
 
 const REFUSAL_STATUS = {
   signin: 401, unavailable: 404, not_found: 404, bad_length: 400, bad_note: 400,
-  not_open: 409, join_first: 409, bad_time: 409, taken: 409, limit: 409, too_late: 409,
+  not_open: 409, join_first: 409, bad_time: 409, taken: 409, limit: 409, too_late: 409, not_active: 409, too_many: 429,
 };
 // bad_time and taken read the same: a time someone holds is refused as bad_time (it is no longer a free start) before
 // the insert's own check (taken) ever sees it, and for the viewer both mean "someone was quicker".
@@ -30,7 +30,8 @@ const ERROR_KEYS = {
   signin: 'coaching.error.signin', unavailable: 'coaching.error.pageUnavailable', not_found: 'coaching.error.not_found',
   bad_length: 'coaching.error.bad_length', bad_note: 'coaching.error.bad_note', not_open: 'coaching.error.not_open',
   join_first: 'coaching.error.join_first', bad_time: 'coaching.error.taken', taken: 'coaching.error.taken',
-  limit: 'coaching.error.limit', too_late: 'coaching.error.too_late',
+  limit: 'coaching.error.limit', too_late: 'coaching.error.too_late', not_active: 'coaching.error.not_active',
+  too_many: 'coaching.error.too_many',
 };
 
 function refuse(res, code) {
@@ -107,17 +108,17 @@ function pageState(streamer, settings, viewer, now) {
       : [],
     maxUpcoming: coaching.MAX_UPCOMING,
     horizonDays: coaching.HORIZON_DAYS,
+    leadMs: coaching.LEAD_MS, // the page drops starts that come inside the hour of notice while it stays open
   };
 }
 
-// Whether the viewer is in the coaching server, from the bot's own view (one member lookup, 5 s at most): true, false,
-// or null when Discord cannot say (down, not ready), which lets them book. Asked only while something can be booked.
-async function withMembership(state, settings, viewer) {
+// Whether the viewer is in the coaching server, from the bot's own view (one member lookup, 5 s at most, its answer kept
+// 30 s: coachingBookings.isMember): true, false, or null when Discord cannot say (down, not ready), which lets them
+// book. Asked only while something can be booked. `recheck` is "I've joined": Discord is asked again at once (at most
+// every 10 s per viewer).
+async function withMembership(state, settings, viewer, recheck) {
   if (!viewer) return state;
-  let member = null;
-  if (state.bookable) {
-    try { member = await discord.isGuildMember(settings.guild_id, viewer.discordUserId); } catch (e) { member = null; }
-  }
+  const member = state.bookable ? await coachingBookings.isMember(settings.guild_id, viewer.discordUserId, { recheck }) : null;
   return { ...state, member };
 }
 
@@ -144,7 +145,7 @@ router.get('/:username/state', async (req, res) => {
   if (!page) return refuse(res, 'unavailable');
   const viewer = req.viewer || null;
   const state = pageState(page.streamer, page.settings, viewer, Date.now());
-  res.json(await withMembership(state, page.settings, viewer));
+  res.json(await withMembership(state, page.settings, viewer, req.query.recheck === '1'));
 });
 
 // JSON { startsAt, minutes, note }; the booking keeps the page's language for the viewer's Discord messages.

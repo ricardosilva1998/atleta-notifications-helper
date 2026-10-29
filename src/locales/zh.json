@@ -2475,6 +2475,8 @@
   "cards.coaching.openHint": "关闭后暂停新请求；你的时间设置会保留。",
   "cards.coaching.page": "日程和时间",
   "cards.tiles.coachingHint": "预约和每周时间",
+  "coaching.error.too_many": "你在过去 24 小时内在这里发送的申请太多了，请稍后再试。",
+  "coaching.error.not_active": "这个预约已不再有效。",
   "coaching.dashboard.title": "教练课",
   "coaching.dashboard.intro": "设置你每周上教练课的时间。观众在你的预约页面申请时间，你在这里接受或拒绝；Atleta 会在 Discord 上通知他们。",
   "coaching.dashboard.noTwitch": "请先在控制面板中关联你的 Twitch 账号：你的预约页面以你的 Twitch 频道命名。",

@@ -77,8 +77,9 @@
     });
   }
 
-  function refresh() {
-    return api('GET', base + '/state').then(function (answer) {
+  // recheck: "I've joined" asks the server to ask Discord again rather than read its kept answer.
+  function refresh(recheck) {
+    return api('GET', base + '/state' + (recheck ? '?recheck=1' : '')).then(function (answer) {
       asked = true;
       lastRead = Date.now();
       if (answer.ok) state = answer.data;
@@ -105,9 +106,9 @@
   function refusal(answer) { message(answer.text, false, answer.code === 'signin'); }
 
   // ── Drawing ──
+  // The chosen length's starts that are still at least the hour of notice away (a page left open).
   function freeStarts(now) {
-    var all = (state.slots && state.slots[minutes]) || [];
-    return all.filter(function (s) { return s > now; });
+    return C.bookableStarts((state.slots && state.slots[minutes]) || [], now, state.leadMs);
   }
 
   function render() {
@@ -260,7 +261,7 @@
   if ($('cz-joined')) {
     $('cz-joined').addEventListener('click', function () {
       message('');
-      refresh().then(function (answer) {
+      refresh(true).then(function (answer) {
         if (!answer.ok) refusal(answer);
         else if (state.member === false) message(fill(T.notJoined, fields()));
       });

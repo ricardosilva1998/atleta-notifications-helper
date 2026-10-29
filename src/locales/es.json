@@ -2475,6 +2475,8 @@
   "cards.coaching.openHint": "Desactivado, pausa las solicitudes nuevas; tus horas se mantienen.",
   "cards.coaching.page": "Agenda y horas",
   "cards.tiles.coachingHint": "Reservas y horas semanales",
+  "coaching.error.too_many": "Has enviado demasiadas solicitudes aquí en las últimas 24 horas. Inténtalo de nuevo más tarde.",
+  "coaching.error.not_active": "Esta reserva ya no está activa.",
   "coaching.dashboard.title": "Coaching",
   "coaching.dashboard.intro": "Elige las horas en las que das coaching cada semana. Los espectadores piden una hora en tu página de reservas, y tú la aceptas o la rechazas aquí; Atleta se lo dice por Discord.",
   "coaching.dashboard.noTwitch": "Primero vincula tu cuenta de Twitch en el panel: tu página de reservas lleva el nombre de tu canal de Twitch.",

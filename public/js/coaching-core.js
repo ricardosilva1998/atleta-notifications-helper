@@ -98,8 +98,15 @@
     return (bookings || []).filter(function (b) { return canCancel(b, now); }).length;
   }
 
+  // The starts a page left open still offers: at least `leadMs` from now, as the server counts them (the hour of
+  // notice, /state's leadMs); without a lead, the starts still to come.
+  function bookableStarts(starts, now, leadMs) {
+    var lead = Number(leadMs) > 0 ? Number(leadMs) : 0;
+    return (starts || []).filter(function (s) { return lead ? s >= now + lead : s > now; });
+  }
+
   var CORE = { localDate: localDate, groupByLocalDay: groupByLocalDay, daysToShow: daysToShow, timeLabel: timeLabel,
-    dayLabel: dayLabel, dateLabel: dateLabel, canCancel: canCancel, upcomingCount: upcomingCount };
+    dayLabel: dayLabel, dateLabel: dateLabel, canCancel: canCancel, upcomingCount: upcomingCount, bookableStarts: bookableStarts };
   if (typeof module !== 'undefined' && module.exports) module.exports = CORE;
   if (typeof window !== 'undefined') window.COACHING_CORE = CORE;
 })();

@@ -23,10 +23,16 @@ let db;
 let svc;
 let counter = 0;
 const discord = {
-  sent: [], sendResult: { ok: true }, member: true, invite: { ok: true, guildId: '123', guildName: 'HQ' }, inviteCalls: 0,
+  sent: [], sendResult: { ok: true }, member: true, memberCalls: 0, memberGate: null,
+  invite: { ok: true, guildId: '123', guildName: 'HQ' }, inviteCalls: 0, inviteGate: null,
   async sendDirectMessage(userId, payload) { this.sent.push({ userId, payload }); return this.sendResult; },
-  async isGuildMember() { return this.member; },
-  async fetchInvite() { this.inviteCalls++; return this.invite; },
+  async isGuildMember() {
+    this.memberCalls++;
+    if (this.memberGate) await this.memberGate;
+    if (this.member instanceof Error) throw this.member;
+    return this.member;
+  },
+  async fetchInvite() { this.inviteCalls++; if (this.inviteGate) await this.inviteGate; return this.invite; },
   guildName() { return 'Coach HQ'; },
   escapeLinkText,
 };
@@ -62,8 +68,10 @@ before(() => {
 });
 
 beforeEach(() => {
-  discord.sent = []; discord.sendResult = { ok: true }; discord.member = true; discord.inviteCalls = 0;
+  discord.sent = []; discord.sendResult = { ok: true }; discord.member = true; discord.memberCalls = 0; discord.memberGate = null;
+  discord.inviteCalls = 0; discord.inviteGate = null;
   discord.invite = { ok: true, guildId: '123', guildName: 'HQ' };
+  svc.forgetMembers(); // each test starts with no membership answer kept
 });
 
 const HOURS = Array.from({ length: 7 }, (_, i) => ({ on: i < 5, start: 1080, end: 1320 }));
@@ -89,6 +97,7 @@ function addStreamer({ settings = {}, guild = true, twitch = true } = {}) {
 const viewer = (id) => ({ discordUserId: `4000000000000000${id}`, username: `u${id}`, displayName: `U ${id}`, avatar: null });
 const ask = (s, v, over = {}, opts = {}) => svc.request(s, v, { startsAt: FREE, minutes: 60, note: 'hi', lang: 'en', ...over }, { now: NOW, ...opts });
 const tick = () => new Promise((r) => setImmediate(r));
+const coaching = require('./coaching');
 
 describe('request', () => {
   test('refuses join_first when the viewer is not in the server, and books with unverified when Discord cannot say', async () => {
@@ -96,7 +105,7 @@ describe('request', () => {
     discord.member = false;
     assert.deepEqual(await ask(s, viewer(1)), { ok: false, code: 'join_first' });
     discord.member = null;
-    const r = await ask(s, viewer(1));
+    const r = await ask(s, viewer(1), {}, { now: NOW + 30e3 }); // Discord's answer is kept 30 s
     assert.equal(r.ok, true);
     assert.equal(r.unverified, true);
     discord.member = true;
@@ -124,6 +133,32 @@ describe('request', () => {
     try { assert.equal((await ask(s, viewer(3), { startsAt: FREE + 24 * HOUR })).code, 'taken'); } finally { db.createCoachingBooking = real; }
     assert.equal((await ask(s, viewer(1), { startsAt: FREE + 24 * HOUR })).ok, true);
     assert.equal((await ask(s, viewer(1), { startsAt: FREE + 48 * HOUR })).code, 'limit');
+  });
+
+  test('book then withdraw, again and again: the seventh request in 24 h answers too_many, after twelve messages to the streamer (Ruling 7)', async () => {
+    const s = addStreamer();
+    const v = viewer(1);
+    for (let i = 0; i < coaching.MAX_REQUESTS_PER_DAY; i++) {
+      const r = await ask(s, v);
+      assert.equal(r.ok, true, `request ${i + 1}`);
+      assert.equal((await svc.withdraw(s, v, r.booking.id, { now: NOW })).ok, true, `withdrawal ${i + 1}`);
+    }
+    assert.deepEqual(await ask(s, v), { ok: false, code: 'too_many' });
+    await tick();
+    assert.equal(discord.sent.filter((m) => m.userId === s.discord_user_id).length, 12, 'six requests and six withdrawals');
+    assert.equal((await ask(s, viewer(2))).ok, true, 'another viewer still books');
+    const nextDay = await ask(s, v, { startsAt: FREE + 24 * HOUR }, { now: NOW + 24 * HOUR });
+    assert.equal(nextDay.ok, true, '24 h after the first request');
+  });
+
+  test('the time is checked before Discord is asked, and Discord is asked once per 30 s (Ruling 8)', async () => {
+    const s = addStreamer();
+    discord.member = false;
+    assert.equal((await ask(s, viewer(1), { startsAt: FREE + 3 * HOUR })).code, 'bad_time', 'a time that is not free, first');
+    assert.equal(discord.memberCalls, 0);
+    assert.equal((await ask(s, viewer(1))).code, 'join_first');
+    assert.equal((await ask(s, viewer(1))).code, 'join_first');
+    assert.equal(discord.memberCalls, 1, 'the second request read the kept answer');
   });
 
   test('messages the streamer only while notify_requests is on', async () => {
@@ -225,7 +260,72 @@ describe('answering', () => {
     assert.equal(discord.sent[0].userId, s.discord_user_id);
     assert.match(discord.sent[0].payload.embeds[0].title, /withdrew/);
     assert.equal((await ask(s, viewer(2))).ok, true);
-    assert.deepEqual(await svc.withdraw(s, v, id, { now: NOW }), { ok: false, code: 'too_late' });
+    assert.deepEqual(await svc.withdraw(s, v, id, { now: NOW }), { ok: false, code: 'not_active' }, 'withdrawn already');
+  });
+
+  test('withdrawing a booking already answered answers not_active; one that has started, too_late', async () => {
+    const a = await waiting();
+    await svc.decline(a.s, a.id, { now: NOW });
+    assert.deepEqual(await svc.withdraw(a.s, a.v, a.id, { now: NOW }), { ok: false, code: 'not_active' }, 'declined');
+    const b = await waiting(addStreamer(), viewer(2));
+    await svc.accept(b.s, b.id, { now: NOW });
+    await svc.cancel(b.s, b.id, { now: NOW });
+    assert.deepEqual(await svc.withdraw(b.s, b.v, b.id, { now: NOW }), { ok: false, code: 'not_active' }, 'cancelled');
+    const c = await waiting(addStreamer(), viewer(3));
+    assert.deepEqual(await svc.withdraw(c.s, c.v, c.id, { now: FREE }), { ok: false, code: 'too_late' });
+    assert.equal(db.getCoachingBooking(c.id, c.s.id).status, 'waiting');
+    const d = await waiting(addStreamer(), viewer(4));
+    const real = db.setCoachingBookingStatus;
+    db.setCoachingBookingStatus = () => null; // the streamer answered in between
+    try { assert.deepEqual(await svc.withdraw(d.s, d.v, d.id, { now: NOW }), { ok: false, code: 'not_active' }); } finally { db.setCoachingBookingStatus = real; }
+  });
+
+  test('a message that works after one that failed clears the warning', async () => {
+    const { s, id } = await waiting();
+    discord.sendResult = { ok: false, reason: 'unreachable' };
+    await svc.accept(s, id, { now: NOW });
+    assert.equal(db.getCoachingBooking(id, s.id).message_error, 'unreachable');
+    discord.sendResult = { ok: true };
+    const c = await svc.cancel(s, id, { now: NOW });
+    assert.equal(c.ok, true);
+    assert.equal(c.booking.messageError, null);
+    assert.equal(db.getCoachingBooking(id, s.id).message_error, null);
+  });
+});
+
+describe('membership', () => {
+  test("Discord's answer is kept 30 s per server and viewer; \"I've joined\" asks again at most every 10 s (Ruling 8)", async () => {
+    discord.member = false;
+    assert.equal(await svc.isMember('123', 'u1', { now: NOW }), false);
+    discord.member = true;
+    assert.equal(await svc.isMember('123', 'u1', { now: NOW + 29e3 }), false, 'kept');
+    assert.equal(discord.memberCalls, 1);
+    assert.equal(await svc.isMember('124', 'u1', { now: NOW + 1 }), true, 'another server is asked about on its own');
+    assert.equal(await svc.isMember('123', 'u2', { now: NOW + 1 }), true, 'and another viewer');
+    assert.equal(discord.memberCalls, 3);
+    assert.equal(await svc.isMember('123', 'u1', { now: NOW + 30e3 }), true, 'asked again after 30 s');
+    assert.equal(discord.memberCalls, 4);
+    discord.member = false;
+    assert.equal(await svc.isMember('123', 'u1', { now: NOW + 31e3, recheck: true }), false, 'a recheck asks at once');
+    assert.equal(discord.memberCalls, 5);
+    discord.member = true;
+    assert.equal(await svc.isMember('123', 'u1', { now: NOW + 40e3, recheck: true }), false, 'a second recheck within 10 s reads the kept answer');
+    assert.equal(discord.memberCalls, 5);
+    assert.equal(await svc.isMember('123', 'u1', { now: NOW + 41e3, recheck: true }), true);
+    assert.equal(discord.memberCalls, 6);
+  });
+
+  test('a lookup in progress is shared, and one that throws reads null', async () => {
+    let release;
+    discord.memberGate = new Promise((r) => { release = r; });
+    const both = Promise.all([svc.isMember('123', 'u3', { now: NOW }), svc.isMember('123', 'u3', { now: NOW + 1 })]);
+    await tick();
+    release();
+    assert.deepEqual(await both, [true, true]);
+    assert.equal(discord.memberCalls, 1);
+    discord.memberGate = null;
+    discord.member = new Error('gateway');
+    assert.equal(await svc.isMember('123', 'u4', { now: NOW }), null);
   });
 });
 
@@ -246,9 +346,29 @@ describe('checkInvite', () => {
     assert.equal(set.invite_ok, 0);
     discord.invite = { ok: false, reason: 'unavailable' };
     set = await svc.checkInvite(s.id, { now: NOW + 10 * HOUR });
-    assert.equal(set.invite_ok, 0);
-    assert.equal(set.invite_checked_at, NOW + 61 * 60e3);
+    assert.equal(set.invite_ok, 0, 'no answer keeps the last one');
+    assert.equal(set.invite_checked_at, NOW + 10 * HOUR, 'and the next question waits an hour (Ruling 9)');
+    const calls = discord.inviteCalls;
+    await svc.checkInvite(s.id, { now: NOW + 10 * HOUR + 30 * 60e3 });
+    assert.equal(discord.inviteCalls, calls);
     assert.equal(await svc.checkInvite(addStreamer({ settings: null }).id, { now: NOW }), null);
+  });
+
+  test('one check at a time per streamer: a second call gets the answer of the one in progress (Ruling 9)', async () => {
+    const s = addStreamer();
+    let release;
+    discord.inviteGate = new Promise((r) => { release = r; });
+    const first = svc.checkInvite(s.id, { now: NOW });
+    const second = svc.checkInvite(s.id, { now: NOW, force: true });
+    await tick();
+    assert.equal(discord.inviteCalls, 1);
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    assert.deepEqual([a.invite_ok, b.invite_ok], [1, 1]);
+    assert.equal(discord.inviteCalls, 1);
+    discord.inviteGate = null;
+    await svc.checkInvite(s.id, { now: NOW, force: true });
+    assert.equal(discord.inviteCalls, 2, 'once it is over, the next one asks');
   });
 });
 

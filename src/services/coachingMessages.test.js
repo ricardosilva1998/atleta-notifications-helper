@@ -54,6 +54,16 @@ describe('coachingMessages', () => {
     assert.doesNotMatch(bare.embeds[0].description, /Server:|Where:/);
   });
 
+  test("the streamer's where text and the server name arrive escaped", () => {
+    const e = m.viewerMessage('accepted', {
+      booking: booking(), streamerName: 'Coach', guildName: 'HQ [join](https://evil.example)', inviteUrl: 'https://discord.gg/abc',
+      whereText: 'Room [here](https://evil.example)', bookingUrl: 'b', t,
+    }).embeds[0];
+    assert.ok(e.description.includes(escapeLinkText('HQ [join](https://evil.example)')));
+    assert.ok(e.description.includes(escapeLinkText('Room [here](https://evil.example)')));
+    assert.ok(!e.description.includes('[join](') && !e.description.includes('[here]('));
+  });
+
   test('declined and cancelled carry the time and the booking link in red', () => {
     for (const kind of ['declined', 'cancelled']) {
       const e = m.viewerMessage(kind, { booking: booking(), streamerName: 'Coach', bookingUrl: 'https://x/coaching/coach', t }).embeds[0];

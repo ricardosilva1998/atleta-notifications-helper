@@ -90,6 +90,14 @@ describe('coaching settings', () => {
     assert.equal(db.getCoachingSettings(id).invite_ok, null);
     db.recordInviteCheck(id, 'xyz', 0, 9000);
     assert.equal(db.getCoachingSettings(id).invite_ok, 0);
+    // Discord did not answer (ok = null): the time of the check is written, the last answer stays (Ruling 9).
+    db.recordInviteCheck(id, 'xyz', null, 9500);
+    s = db.getCoachingSettings(id);
+    assert.deepEqual([s.invite_ok, s.invite_checked_at], [0, 9500]);
+    db.recordInviteCheck(id, 'xyz', 1, 9600);
+    db.recordInviteCheck(id, 'xyz', null, 9700);
+    s = db.getCoachingSettings(id);
+    assert.deepEqual([s.invite_ok, s.invite_checked_at], [1, 9700]);
   });
 });
 
@@ -113,6 +121,34 @@ describe('coaching bookings', () => {
     assert.equal(book(addStreamer(), 'V', T, 30).ok, true);
     db.setCoachingBookingStatus(first.booking.id, id, ['waiting'], 'declined', T);
     assert.equal(book(id, 'V', T + 120 * MIN, 30).ok, true);
+  });
+
+  test('createCoachingBooking refuses a seventh request of one viewer within 24 h, whatever became of the six (Ruling 7)', () => {
+    const id = addStreamer();
+    const DAY = 24 * 3600e3;
+    const first = T - 48 * 3600e3;
+    for (let i = 0; i < 6; i++) {
+      const made = book(id, 'R', T + i * 60 * MIN, 30, first + i * MIN);
+      assert.equal(made.ok, true, `request ${i + 1}`);
+      db.setCoachingBookingStatus(made.booking.id, id, ['waiting'], i % 2 ? 'withdrawn' : 'declined', first + i * MIN);
+    }
+    assert.deepEqual(book(id, 'R', T + 7 * 60 * MIN, 30, first + 10 * MIN), { ok: false, code: 'too_many' });
+    assert.deepEqual(book(id, 'R', T + 7 * 60 * MIN, 30, first + DAY - 1), { ok: false, code: 'too_many' }, 'still inside the 24 h of the first');
+    assert.equal(book(id, 'S', T + 7 * 60 * MIN, 30, first + 10 * MIN).ok, true, 'another viewer');
+    assert.equal(book(addStreamer(), 'R', T, 30, first + 10 * MIN).ok, true, "another streamer's");
+    assert.equal(book(id, 'R', T + 8 * 60 * MIN, 30, first + DAY).ok, true, 'the first request is 24 h old: five count');
+  });
+
+  test('a viewer at the limit of upcoming bookings who also made six requests reads too_many', () => {
+    const id = addStreamer();
+    const now = T - 48 * 3600e3;
+    for (let i = 0; i < 4; i++) {
+      const made = book(id, 'Q', T + i * 60 * MIN, 30, now);
+      db.setCoachingBookingStatus(made.booking.id, id, ['waiting'], 'withdrawn', now);
+    }
+    assert.equal(book(id, 'Q', T + 5 * 60 * MIN, 30, now).ok, true);
+    assert.equal(book(id, 'Q', T + 6 * 60 * MIN, 30, now).ok, true);
+    assert.deepEqual(book(id, 'Q', T + 7 * 60 * MIN, 30, now), { ok: false, code: 'too_many' }, 'cancelling one would not help');
   });
 
   test('setCoachingBookingStatus moves only from the listed states and returns null otherwise', () => {

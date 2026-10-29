@@ -2475,6 +2475,8 @@
   "cards.coaching.openHint": "Desligado, pausa os novos pedidos; as tuas horas ficam guardadas.",
   "cards.coaching.page": "Agenda e horas",
   "cards.tiles.coachingHint": "Marcações e horas semanais",
+  "coaching.error.too_many": "Enviaste demasiados pedidos aqui nas últimas 24 horas. Tenta outra vez mais tarde.",
+  "coaching.error.not_active": "Esta marcação já não está ativa.",
   "coaching.dashboard.title": "Coaching",
   "coaching.dashboard.intro": "Define as horas em que dás coaching todas as semanas. Os espectadores pedem uma hora na tua página de marcações, e tu aceitas ou recusas aqui; o Atleta avisa-os no Discord.",
   "coaching.dashboard.noTwitch": "Liga primeiro a tua conta Twitch no painel: a tua página de marcações tem o nome do teu canal Twitch.",

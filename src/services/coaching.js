@@ -13,6 +13,8 @@ const STEP_MINUTES = 30;
 const HORIZON_DAYS = 14;
 const LEAD_MS = 3600000;
 const MAX_UPCOMING = 2;
+// Requests one viewer may make of one streamer in any 24 h, whatever became of them (each messages the streamer).
+const MAX_REQUESTS_PER_DAY = 6;
 const NOTE_MAX = 300;
 const WHERE_MAX = 150;
 const DAYS_OFF_MAX = 60;
@@ -68,10 +70,10 @@ function parseInvite(text) {
   return INVITE_CODE.test(code) ? code : null;
 }
 
-// Trimmed, control characters removed (line breaks included), at most `max` code points.
+// Trimmed, each line break one space, the other control characters removed, at most `max` code points.
 function cleanText(text, max) {
   if (typeof text !== 'string') return null;
-  const clean = text.replace(/\p{Cc}/gu, '').trim();
+  const clean = text.replace(/\r\n|\r|\n/g, ' ').replace(/\p{Cc}/gu, '').trim();
   return Array.from(clean).length <= max ? clean : null;
 }
 
@@ -161,7 +163,7 @@ function bookable(settings, claimedGuildIds) {
 }
 
 module.exports = {
-  LENGTHS, STEP_MINUTES, HORIZON_DAYS, LEAD_MS, MAX_UPCOMING, NOTE_MAX, WHERE_MAX, DAYS_OFF_MAX,
+  LENGTHS, STEP_MINUTES, HORIZON_DAYS, LEAD_MS, MAX_UPCOMING, MAX_REQUESTS_PER_DAY, NOTE_MAX, WHERE_MAX, DAYS_OFF_MAX,
   INVITE_CHECK_MS, HOLDING, STATES, DEFAULT_HOURS,
   parseHours, parseDaysOff, parseInvite, parseWhere, parseNote,
   localDateOf, localInstant, freeStarts, bookingState, outsideHours, bookable,

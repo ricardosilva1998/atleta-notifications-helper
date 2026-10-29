@@ -479,6 +479,11 @@ router.get('/', async (req, res) => {
     enrichedGuilds.map((g, i) => ({ ...g, ...serverViews[i] })), { needsReauth });
   const cards = gatherCards(req, discordNotifications, res.locals.lang);
 
+  // The Coaching card's invite: asked about once the page is sent, at most once an hour (coachingBookings.checkInvite);
+  // never inside gatherCards, which /dashboard/api/cards runs after every save.
+  const streamerId = req.streamer.id;
+  res.once('finish', () => coachingBookings.checkInviteLater(streamerId));
+
   res.render('dashboard', {
     streamer: req.streamer,
     guilds: enrichedGuilds,

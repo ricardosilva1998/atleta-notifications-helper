@@ -681,15 +681,22 @@ Log lines:
 - `[Coaching] could not message streamer <id> (request|withdrawn): <reason>`: the streamer's own Discord messages did
   not go out. `unreachable` means their messages are closed or they share no server with the bot; `not_ready` that
   the bot was not connected; `failed` anything else.
-- `[Coaching] invite check for streamer <id> failed: …`: the hourly invite check threw. The page still answered, and
-  the check runs again on the next visit.
+- `[Coaching] invite check for streamer <id> failed: …`: the hourly invite check threw. The page (the dashboard or the
+  coaching page) still answered, and the check runs again on the next visit.
+
+What the release keeps from Discord and from viewers:
+- **The invite** is checked after `/dashboard` (the Coaching card) and `/dashboard/coaching` are sent, at most once an
+  hour per streamer and one check at a time. When Discord does not answer, the time of the check is written and the
+  last result kept, so it is asked again an hour later, not on every visit.
+- **Membership.** The booking page asks Discord whether a signed-in viewer is in the coaching server while bookings
+  are open, and the answer is kept 30 s per server and viewer (a request reads it too, after checking the time).
+  "I've joined" asks again at once, at most every 10 s per viewer. A lookup that does not answer in 5 s counts as
+  "cannot say", and the viewer can still book.
+- **Requests.** One viewer may send one streamer at most 6 requests in any 24 h, whatever became of them; the seventh
+  reads "You have sent too many requests here in the last 24 hours. Try again later." Each request and each withdrawal
+  messages the streamer, so this caps a book-and-withdraw loop at 12 messages a day.
 
 Watch after release:
-- The booking page asks Discord about the viewer's membership every time it reads its state, for a signed-in viewer
-  while bookings are open: on load, after each action, on "I've joined", and when the tab comes back after a minute.
-  Nothing remembers the answer yet.
-  - A lookup that does not answer in 5 s counts as "cannot say", and the viewer can still book.
-  - If the bot's Discord quota becomes a problem, add the short memo noted in the coaching branch's review.
 - The six non-English translations of the new texts are machine-made and want a native read-through.
 
 ### andre_vilela_'s step

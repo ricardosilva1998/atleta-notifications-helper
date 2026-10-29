@@ -1,8 +1,9 @@
 'use strict';
 
 // The texts of the Discord messages a coaching booking sends (pure: `t` is
-// (key, params) => string in the reader's language). Viewer-typed text goes
-// through escapeLinkText; the send itself adds allowedMentions: { parse: [] }.
+// (key, params) => string in the reader's language). Typed text (the viewer's
+// name and note, the streamer's where text, the server's name) goes through
+// escapeLinkText; the send itself adds allowedMentions: { parse: [] }.
 
 const { escapeLinkText } = require('../discord');
 
@@ -17,8 +18,8 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
     t('coaching.message.length', { minutes: booking.minutes }),
   ];
   if (kind === 'accepted') {
-    if (guildName) lines.push(t('coaching.message.server', { server: guildName }));
-    if (whereText) lines.push(t('coaching.message.where', { where: whereText }));
+    if (guildName) lines.push(t('coaching.message.server', { server: escapeLinkText(guildName) }));
+    if (whereText) lines.push(t('coaching.message.where', { where: escapeLinkText(whereText) }));
     if (inviteUrl) lines.push(t('coaching.message.invite', { url: inviteUrl }));
   } else {
     lines.push(t('coaching.message.pickAnother', { url: bookingUrl }));

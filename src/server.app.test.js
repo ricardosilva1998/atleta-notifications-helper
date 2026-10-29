@@ -773,4 +773,19 @@ describe('coaching: the viewer\'s own Discord sign-in, on the real session step 
     const page = await send('GET', `/coaching/${login}`, { headers: { Cookie: `session=${webSid}; viewer_session=${viewerSid}` } });
     assert.ok(page.text.includes(`data-csrf-token="${tokenOf(webSid)}"`));
   });
+
+  test('a disabled streamer\'s web session gives no viewer: they cannot book as their Discord account', async () => {
+    const disabledId = Number(db.db.prepare("INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, enabled) VALUES ('300000000000009002', 'offstreamer', 'Off Streamer', 0)").run().lastInsertRowid);
+    const webSid = 'c'.repeat(64);
+    db.createSession(webSid, disabledId, Date.now() + 3600e3);
+    const cookie = `session=${webSid}`;
+    const state = await send('GET', `/coaching/${login}/state`, { headers: { Cookie: cookie } });
+    assert.equal(state.status, 200, state.text);
+    assert.equal(state.json.viewer, null, 'no fromStreamer viewer');
+    const before = bookings();
+    const book = await send('POST', `/coaching/${login}/book`, { headers: { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(webSid) }, json: { startsAt: state.json.slots[60][0], minutes: 60 } });
+    assert.equal(book.status, 401, book.text);
+    assert.equal(book.json.code, 'signin');
+    assert.equal(bookings(), before, 'nothing was booked');
+  });
 });

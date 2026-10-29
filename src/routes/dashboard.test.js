@@ -5243,6 +5243,31 @@ describe('the data of the working cards', () => {
     });
   });
 
+  test('the dashboard asks Discord about the coaching invite once it is sent, at most once an hour; the cards\' refresh never asks (Ruling 9)', async () => {
+    const coachingRules = require('../services/coaching');
+    const id = addStreamer();
+    db.db.prepare('UPDATE streamers SET twitch_user_id = ?, twitch_username = ? WHERE id = ?').run('tw-wc-invite', 'synthetic_wc_invite', id);
+    const g = '600000000000000976';
+    db.upsertGuild(g, id, 'Coaching server');
+    db.saveCoachingSettings(id, { timeZone: 'Europe/Lisbon', hours: coachingRules.DEFAULT_HOURS, daysOff: [], guildId: g, inviteCode: 'synthetic-dead', whereText: '', notifyRequests: true, lang: 'en' });
+    const guard = global.fetch;
+    const calls = [];
+    global.fetch = async (url) => { calls.push(String(url)); return { ok: false, status: 404, json: async () => ({}) }; };
+    try {
+      const page = await request('GET', '/dashboard', { streamer: id });
+      assert.equal(page.status, 200);
+      await until(() => db.getCoachingSettings(id).invite_checked_at);
+      assert.deepEqual(calls, ['https://discord.com/api/v10/invites/synthetic-dead']);
+      assert.equal(db.getCoachingSettings(id).invite_ok, 0, 'Discord does not know it: recorded as dead');
+      assert.equal((await locals(id)).cards.coaching.status.key, 'cards.coaching.status.inviteBroken', 'the next visit warns');
+      await request('GET', '/dashboard/api/cards', { streamer: id });
+      await new Promise((r) => setImmediate(r));
+      assert.equal(calls.length, 1, 'checked less than an hour ago, and the cards\' refresh never asks');
+    } finally {
+      global.fetch = guard;
+    }
+  });
+
   test('only the dashboard gets the wide page', async () => {
     const id = addStreamer();
     assert.match((await request('GET', '/dashboard', { streamer: id })).text, /<div class="container container-wide">/);

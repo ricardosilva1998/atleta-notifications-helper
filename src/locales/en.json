@@ -2475,6 +2475,8 @@
   "cards.coaching.openHint": "Off pauses new requests; your hours stay.",
   "cards.coaching.page": "Schedule & hours",
   "cards.tiles.coachingHint": "Bookings and weekly hours",
+  "coaching.error.too_many": "You have sent too many requests here in the last 24 hours. Try again later.",
+  "coaching.error.not_active": "This booking is no longer active.",
   "coaching.dashboard.title": "Coaching",
   "coaching.dashboard.intro": "Set the hours you coach each week. Viewers ask for a time on your booking page, and you accept or decline it here; Atleta tells them on Discord.",
   "coaching.dashboard.noTwitch": "Link your Twitch account on the dashboard first: your booking page is named after your Twitch channel.",

@@ -53,6 +53,18 @@ describe('groupByLocalDay', () => {
   });
 });
 
+describe('bookableStarts', () => {
+  test('a page left open drops the starts that came inside the hour of notice', () => {
+    const now = Date.UTC(2026, 10, 2, 17, 0);
+    const lead = 3600e3;
+    const starts = [now + 30 * 60e3, now + lead - 1, now + lead, now + lead + HALF_HOUR];
+    assert.deepEqual(core.bookableStarts(starts, now, lead), [now + lead, now + lead + HALF_HOUR], 'as the server: at least an hour from now');
+    assert.deepEqual(core.bookableStarts(starts, now + HALF_HOUR, lead), [now + lead + HALF_HOUR], 'half an hour later');
+    assert.deepEqual(core.bookableStarts(starts, now, undefined), starts, 'without a lead from the server: the starts still to come');
+    assert.deepEqual(core.bookableStarts(null, now, lead), []);
+  });
+});
+
 describe('the labels', () => {
   test('timeLabel is HH:MM on a 24-hour clock in every language', () => {
     const midnight = Date.UTC(2026, 10, 2, 0, 0);

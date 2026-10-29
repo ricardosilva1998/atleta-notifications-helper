@@ -155,14 +155,6 @@ function bookingUrl(req, streamer) {
   return `${base}/coaching/${encodeURIComponent(streamer.twitch_username)}`;
 }
 
-// Asks Discord about the saved invite once the page is sent, at most once an hour (checkInvite keeps the hour); what
-// it learns shows on the next visit.
-function checkInviteLater(streamerId) {
-  Promise.resolve()
-    .then(() => coachingBookings.checkInvite(streamerId))
-    .catch((e) => console.error(`[Coaching] invite check for streamer ${streamerId} failed:`, e && e.message));
-}
-
 router.get('/coaching', (req, res) => {
   const streamer = req.streamer;
   const now = Date.now();
@@ -170,7 +162,9 @@ router.get('/coaching', (req, res) => {
   const servers = serverOptions(db.getGuildsForStreamer(streamer.id), settings);
   const view = settingsView(settings, now, servers);
   const link = bookingUrl(req, streamer);
-  if (settings) res.once('finish', () => checkInviteLater(streamer.id));
+  // Discord is asked about the saved invite once the page is sent, at most once an hour (checkInvite keeps the hour);
+  // what it learns shows on the next visit. The dashboard (the Coaching card) does the same.
+  if (settings) res.once('finish', () => coachingBookings.checkInviteLater(streamer.id));
   res.render('coaching-dashboard', {
     streamer,
     setUp: !!settings,

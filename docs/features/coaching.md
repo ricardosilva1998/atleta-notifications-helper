@@ -60,9 +60,12 @@ passed in.
   - A wall time the zone skips (the spring change) has no start; a time the zone repeats takes the earlier instant.
 - **Limit.** At most **2** upcoming bookings (waiting or confirmed, not started) per viewer per streamer
   (`MAX_UPCOMING`).
+- **Requests a day.** At most **6** requests per viewer per streamer in any 24 hours, whatever became of them
+  (`MAX_REQUESTS_PER_DAY`, counted by `created_at` over every status), refused with `too_many`. Each request and each
+  withdrawal messages the streamer, so booking and withdrawing again and again ends at 12 messages a day.
 - **Texts.** The viewer's note is at most **300** characters and "Where the session happens" at most **150**,
-  counted in code points. Control characters, line breaks included, are removed and the text is trimmed. A longer text
-  is refused (`bad_note`, `bad_where`), never cut.
+  counted in code points. Each line break becomes one space, the other control characters are removed and the text is
+  trimmed. A longer text is refused (`bad_note`, `bad_where`), never cut.
 - **Invite.** A `discord.gg/<code>` or `discord.com/invite/<code>` link, or the bare code (2 to 32 letters, digits or
   dashes; `parseInvite`).
 - **Bookable** (`bookable`). All of these must hold:
@@ -76,14 +79,17 @@ passed in.
 ### Two viewers at once
 
 `db.createCoachingBooking` runs as one immediate transaction:
-1. It counts the viewer's upcoming bookings (`limit`).
-2. It looks for a waiting or confirmed booking of the streamer that overlaps the requested time (`taken`).
-3. Only then does it insert.
+1. It counts the viewer's requests of the last 24 hours (`too_many`).
+2. It counts the viewer's upcoming bookings (`limit`).
+3. It looks for a waiting or confirmed booking of the streamer that overlaps the requested time (`taken`).
+4. Only then does it insert.
 
 Of two viewers asking for overlapping times at the same moment, exactly one gets it.
 
 Before that, the service refuses a time that is not among the free starts it has just worked out (`bad_time`), so
-`taken` only comes from a race. The page gives both codes the same text ("That time was just taken").
+`taken` only comes from a race. The page gives both codes the same text ("That time was just taken"). Only then does
+it ask whether the viewer is in the coaching server (`join_first`), so Discord is never asked about a time that could
+not be booked.
 
 ## The streamer's side
 
@@ -193,6 +199,9 @@ streamer can see a 15th day: Lisbon's 18:00 to 22:00 falls between 02:00 and 06:
   them.
 - The check uses the bot's own view of the server, never the viewer's token (`isGuildMember`: the member cache, then
   one member lookup by id, 5 s at most).
+- The answer is kept 30 s per server and viewer (`coachingBookings.isMember`), for the page's reads and the request
+  alike, and a lookup in progress is shared. "I've joined" (`GET /state?recheck=1`) asks Discord again at once, at
+  most once every 10 s per viewer; within those 10 s it reads the kept answer.
 
 **Paused.** When the page is not bookable (see Bookable above), it says "<streamer> is not taking new bookings right
 now." and shows no times. A signed-in viewer still sees their bookings and can cancel them, and accept, decline and
@@ -200,8 +209,11 @@ cancel keep working for the streamer.
 
 **Refreshing.** The page reads `GET /coaching/<login>/state`:
 - once on load, for the membership;
-- after every action and on "I've joined";
+- after every action, and on "I've joined" (with `?recheck=1`);
 - when its tab is shown again after a minute away.
+
+Between two reads, the page drops a start that has come inside the hour of notice (`leadMs` in the state,
+`bookableStarts` in `public/js/coaching-core.js`), as the server would refuse it.
 
 ## The viewer's sign-in
 
@@ -265,8 +277,9 @@ The Atleta bot sends them as direct messages through `src/discord.js`, the one p
   (`coaching_settings.lang`; English until then).
 - **The streamer's switch.** Both of the streamer's messages go out only while "Message me about new requests" is on
   (`notify_requests`). They go to `streamers.discord_user_id`.
-- **Viewer-typed text.** The viewer's name and note go through `escapeLinkText()`, so brackets cannot become a link.
-  With no mentions allowed, `@everyone` in a note pings nobody.
+- **Typed text.** The viewer's name and note, the streamer's "Where the session happens" and the server's name go
+  through `escapeLinkText()`, so brackets cannot become a link. With no mentions allowed, `@everyone` in a note pings
+  nobody.
 
 ### When a message cannot be delivered
 
@@ -279,7 +292,8 @@ Discord only lets a bot message someone who shares a server with it, and a perso
 What happens next depends on who it was for:
 - **A viewer's message** is awaited. Its failure reason is stored on the booking (`message_error`) and returned in
   the action's answer. The schedule and the card then say "Atleta could not message <name>: message them yourself."
-  The accept, decline or cancel still happens.
+  The accept, decline or cancel still happens. A later message to that viewer that goes out (a cancel after a failed
+  accept) clears the warning.
 - **A streamer's message** is not awaited. A failure is logged (`[Coaching] could not message streamer <id>
   (<kind>): <reason>`), and the card's badge still shows the request.
 - **A send that ran out of time** may still have been delivered, so it is never retried.
@@ -295,11 +309,14 @@ public `GET /api/v10/invites/<code>`, which needs no bot (`fetchInvite`, 10 s).
 - with no answer from Discord, the save goes through unchecked ("Saved. Discord could not check the invite right now;
   Atleta checks it again within the hour.").
 
-**When the streamer opens the coaching page:** after `/dashboard/coaching` is sent, `checkInvite` asks Discord again
-if the last check is more than an hour old (`INVITE_CHECK_MS`).
+**When the streamer opens the dashboard or the coaching page:** after `/dashboard` (the Coaching card) or
+`/dashboard/coaching` is sent, `checkInvite` asks Discord again if the last check is more than an hour old
+(`INVITE_CHECK_MS`; `checkInviteLater`, started on the response's `finish`).
 - An unknown invite, or one that now leads to another server, is recorded as dead (`invite_ok = 0`).
-- No answer records nothing.
-- The card shows what the last check found; it does not start a check itself.
+- No answer records when it asked and keeps the last result (`recordInviteCheck` with `ok = null`), so a Discord that
+  is down is asked again an hour later, not on every visit.
+- One check runs at a time per streamer; a call while one is in progress gets its answer.
+- `GET /dashboard/api/cards` (the cards' refresh after a save) never checks: `gatherCards` only reads the last result.
 
 **A dead invite.** The page and the card warn "Your invite no longer works". The booking page stops offering times
 until a new invite is saved, because the page is not bookable. Saving a different invite forgets the previous check.
@@ -317,9 +334,11 @@ general limit applies.
 | `POST /coaching/:username/bookings/:id/cancel` | the viewer's own booking, until it starts → `{ ok: true, booking }` (Withdrawn) |
 
 `GET /coaching/:username/state` answers
-`{ open, bookable, slots: { 30: [...], 60: [...] }, viewer, member, inviteUrl, guildName, bookings, maxUpcoming, horizonDays }`:
+`{ open, bookable, slots: { 30: [...], 60: [...] }, viewer, member, inviteUrl, guildName, bookings, maxUpcoming, horizonDays, leadMs }`:
 - `slots` holds the free starts as UTC milliseconds, and none while the page is not bookable;
-- `member` comes only with a viewer, and Discord is asked only while the page is bookable;
+- `member` comes only with a viewer, and Discord is asked only while the page is bookable (its answer kept 30 s;
+  `?recheck=1` asks again, see Join first);
+- `leadMs` is the hour of notice (`LEAD_MS`), for the page to drop starts that come inside it while it stays open;
 - `guildName` is the bot's name for the server, else the one stored with the claim.
 
 The sign-in routes are in `src/routes/auth.js`: `GET /auth/coaching-signin?for=<login>`, the coaching branch of
@@ -332,7 +351,8 @@ A refusal is `{ ok: false, code, error }`, the error being the code's text in th
 | `bad_length`, `bad_note` | 400 |
 | `signin` | 401 |
 | `unavailable` (the page is not up), `not_found` (another viewer's booking, or another streamer's) | 404 |
-| `not_open`, `join_first`, `bad_time`, `taken`, `limit`, `too_late` | 409 |
+| `not_open`, `join_first`, `bad_time`, `taken`, `limit`, `too_late` (the session has started), `not_active` (already answered or withdrawn) | 409 |
+| `too_many` (six requests in the last 24 hours) | 429 |
 
 403 is left to the CSRF check.
 
@@ -390,10 +410,11 @@ in the daily housekeeping of `src/index.js`).
 
 `DISCORD_DISABLED=1`, a bot that is not ready, or a Discord outage never makes a route fail:
 - the server's name falls back to the one stored with the claim;
-- the membership check answers "cannot say", and viewers can book with the warning;
+- the membership check answers "cannot say" (kept 30 s like any answer), and viewers can book with the warning;
 - a viewer's message is recorded as `not_ready` or `failed`, and a streamer's is logged;
 - the server picker keeps the saved server;
-- an invite that cannot be checked is saved unchecked.
+- an invite that cannot be checked is saved unchecked, and the hourly check that gets no answer keeps the last result
+  and waits the hour.
 
 ## Left out on purpose
 
@@ -412,17 +433,17 @@ in the daily housekeeping of `src/index.js`).
 
 | File | What it covers |
 |---|---|
-| `src/services/coaching.test.js` | hours, free starts, daylight saving (18:00 stays 18:00 local across Lisbon's 25 October change), states, inputs, bookable |
-| `src/db.coaching.test.js` | the tables, the overlap and limit transaction, the guarded status change, the 90-day cleanup, viewer sessions stored hashed |
+| `src/services/coaching.test.js` | hours, free starts, daylight saving (18:00 stays 18:00 local across Lisbon's 25 October change), states, inputs (line breaks become spaces), bookable |
+| `src/db.coaching.test.js` | the tables, the requests-a-day, limit and overlap transaction, an invite check with no answer, the guarded status change, the 90-day cleanup, viewer sessions stored hashed |
 | `src/db.accounts.test.js` | account removal, for every table with a `streamer_id` |
 | `src/discord.coaching.test.js` | direct messages and their failure reasons, the deadlines, the member and invite checks |
-| `src/services/coachingMessages.test.js`, `src/services/coachingBookings.test.js` | the messages (viewer text escaped with the real `escapeLinkText`); request, accept, decline, cancel and withdraw with their refusals; the hourly invite check; the card's data |
+| `src/services/coachingMessages.test.js`, `src/services/coachingBookings.test.js` | the messages (typed text escaped with the real `escapeLinkText`); request, accept, decline, cancel and withdraw with their refusals (book and withdraw again and again ends at `too_many`); a later message clearing the warning; the membership memo and its recheck; the hourly invite check, one at a time; the card's data |
 | `src/routes/auth.test.js` | the coaching sign-in creates a viewer session and no `streamers` row; a sign-in without the purpose still creates a streamer; a bad purpose is refused before Discord is asked |
-| `src/routes/coaching.test.js` | the page, `state`, booking and cancelling; names and notes holding `<script>` print as text |
-| `src/server.app.test.js` | a booking needs the viewer session's CSRF token, on the real `server.js` |
+| `src/routes/coaching.test.js` | the page, `state` (with `?recheck=1`), booking and cancelling (`not_active`, `too_many`); names and notes holding `<script>` print as text |
+| `src/server.app.test.js` | a booking needs the viewer session's CSRF token, on the real `server.js`; a disabled streamer's web session gives no viewer |
 | `src/routes/coachingDashboard.test.js` | the settings save, open, accept, decline and cancel, another streamer's booking, the schedule, the invite check after the page |
-| `src/services/dashboardCards.test.js`, `src/routes/dashboard.test.js`, `tests/dashboardCardsCore.test.js` | the card |
-| `tests/coachingCore.test.js` | the page's day grouping across zones |
+| `src/services/dashboardCards.test.js`, `src/routes/dashboard.test.js`, `tests/dashboardCardsCore.test.js` | the card, and the invite check after `/dashboard` is sent (never on the cards' refresh) |
+| `tests/coachingCore.test.js` | the page's day grouping across zones; the starts a page left open still offers |
 | `tests/streamerViewsI18n.test.js`, `tests/i18nViewsPart1.test.js`, `tests/i18n.test.js` | both pages and the card in all seven languages |
 
 Run the unit suite as usual: `node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"`.

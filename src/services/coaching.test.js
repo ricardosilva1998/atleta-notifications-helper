@@ -52,7 +52,9 @@ test('parseWhere and parseNote trim, drop control characters and cap by code poi
   assert.deepEqual(C.parseWhere(''), { ok: true, where: '' });
   assert.deepEqual(C.parseWhere('x'.repeat(151)), { ok: false, code: 'bad_where' });
   assert.equal(C.parseWhere('x'.repeat(150)).ok, true);
-  assert.deepEqual(C.parseNote('hi\nthere'), { ok: true, note: 'hithere' });
+  assert.deepEqual(C.parseNote('hi\nthere'), { ok: true, note: 'hi there' });
+  assert.deepEqual(C.parseNote('one\r\ntwo\rthree\nfour'), { ok: true, note: 'one two three four' }, 'each line break is one space (Ruling 10)');
+  assert.deepEqual(C.parseWhere('Voice room\n2'), { ok: true, where: 'Voice room 2' });
   assert.equal(C.parseNote('\u{1F600}'.repeat(300)).ok, true);
   assert.deepEqual(C.parseNote('\u{1F600}'.repeat(301)), { ok: false, code: 'bad_note' });
   assert.deepEqual(C.parseNote(5), { ok: false, code: 'bad_note' });

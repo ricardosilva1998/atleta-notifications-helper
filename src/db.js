@@ -5913,15 +5913,21 @@ function setCoachingOpen(streamerId, open) {
     .run(open ? 1 : 0, streamerId).changes > 0;
 }
 
-// Writes only while the stored code is still the one that was checked.
+// Writes only while the stored code is still the one that was checked. ok = null (Discord did not answer) records
+// when it was asked and keeps the last answer.
 function recordInviteCheck(streamerId, inviteCode, ok, checkedAt) {
-  db.prepare('UPDATE coaching_settings SET invite_ok = ?, invite_checked_at = ? WHERE streamer_id = ? AND invite_code = ?')
-    .run(ok ? 1 : 0, checkedAt, streamerId, inviteCode);
+  db.prepare('UPDATE coaching_settings SET invite_ok = COALESCE(?, invite_ok), invite_checked_at = ? WHERE streamer_id = ? AND invite_code = ?')
+    .run(ok == null ? null : (ok ? 1 : 0), checkedAt, streamerId, inviteCode);
 }
 
 const _HOLD_SQL = coaching.HOLDING.map((st) => `'${st}'`).join(', ');
 
+// One viewer's requests of one streamer in the last 24 h (every status), then their upcoming ones, then the overlap.
 const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, minutes, note, lang, now }) => {
+  const recent = db.prepare(
+    'SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND created_at > ?'
+  ).get(streamerId, viewer.discordUserId, now - 86400e3).n;
+  if (recent >= coaching.MAX_REQUESTS_PER_DAY) return { ok: false, code: 'too_many' };
   const upcoming = db.prepare(
     `SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND status IN (${_HOLD_SQL}) AND starts_at > ?`
   ).get(streamerId, viewer.discordUserId, now).n;
