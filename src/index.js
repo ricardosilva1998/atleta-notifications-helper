@@ -103,6 +103,7 @@ function startHousekeeping() {
   // Before old pending tips are deleted, tips PayPal captured that were never recorded are recovered.
   const cleanupDonations = async () => {
     try { db.cleanupOldDonations(); } catch (e) {}
+    try { db.cleanupOldCoachingBookings(Date.now()); } catch (e) {}
     try { await require('./routes/tip').reconcilePendingTips(); } catch (e) { console.error('[Tip] Reconcile error:', e.message); }
     try { db.cleanupOldPendingTips(); } catch (e) {}
   };

@@ -7,6 +7,7 @@ const { isAdminStreamer } = require('./adminAccess');
 const { EVENT_DEFAULTS } = require('./services/overlayDesign');
 const { DEFAULT_DURATION_SECONDS, PREVIOUS_DEFAULT_SECONDS } = require('./services/overlaySettings');
 const secretBox = require('./services/secretBox');
+const coaching = require('./services/coaching');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'bot.db');
 
@@ -1969,6 +1970,8 @@ const STREAMER_OWNED_ROWS = [
   ['tracking_events', 'streamer_id = ?'],
   ['tracker_values', 'streamer_id = ?'],
   ['tracker_settings', 'streamer_id = ?'],
+  ['coaching_bookings', 'streamer_id = ?'],
+  ['coaching_settings', 'streamer_id = ?'],
   ['vtuber_models', 'streamer_id = ?'],
   ['banned_words', 'streamer_id = ?'],
   ['donations', 'streamer_id = ?'],
@@ -4170,6 +4173,60 @@ try {
   }
 } catch (e) { _migrationLog('tracking_goals twitch state', e); }
 
+// Coaching: a streamer's weekly hours and the sessions viewers book (docs/superpowers/specs/2026-10-29-coaching-design.md).
+// viewer_sessions is the viewer's own Discord sign-in (scope identify), kept apart from the streamers' sessions.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS coaching_settings (
+      streamer_id INTEGER PRIMARY KEY,
+      open INTEGER NOT NULL DEFAULT 1,
+      time_zone TEXT NOT NULL,
+      hours TEXT NOT NULL,
+      days_off TEXT NOT NULL DEFAULT '[]',
+      guild_id TEXT,
+      invite_code TEXT,
+      invite_ok INTEGER,
+      invite_checked_at INTEGER,
+      where_text TEXT,
+      notify_requests INTEGER NOT NULL DEFAULT 1,
+      lang TEXT NOT NULL DEFAULT 'en',
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS coaching_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      streamer_id INTEGER NOT NULL,
+      viewer_discord_id TEXT NOT NULL,
+      viewer_username TEXT NOT NULL,
+      viewer_display_name TEXT,
+      viewer_avatar TEXT,
+      starts_at INTEGER NOT NULL,
+      minutes INTEGER NOT NULL,
+      note TEXT,
+      lang TEXT NOT NULL DEFAULT 'en',
+      status TEXT NOT NULL DEFAULT 'waiting',
+      message_error TEXT,
+      decided_at INTEGER,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (streamer_id) REFERENCES streamers(id)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_bookings_streamer_start ON coaching_bookings(streamer_id, starts_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_bookings_viewer ON coaching_bookings(viewer_discord_id, streamer_id, starts_at)');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_sessions (
+      sid TEXT PRIMARY KEY,
+      discord_user_id TEXT NOT NULL,
+      discord_username TEXT NOT NULL,
+      discord_display_name TEXT,
+      discord_avatar TEXT,
+      expires_at INTEGER NOT NULL
+    )
+  `);
+} catch (e) { _migrationLog('coaching tables', e); }
+
 // Migration: Donation history (365-day retention). On first creation, backfill
 // from the donation rows still in overlay_events (30-day retention) so history
 // doesn't start empty. Backfilled rows have source 'legacy' (origin unknown, no message).
@@ -5819,6 +5876,126 @@ function deleteDonation(id, streamerId) {
   return db.prepare('DELETE FROM donations WHERE id = ? AND streamer_id = ?').run(id, streamerId);
 }
 
+// ── Coaching ──────────────────────────────────────────────────────────
+
+const _coachingParse = (row) => {
+  if (!row) return null;
+  let hours = []; let daysOff = [];
+  try { hours = JSON.parse(row.hours); } catch (e) {}
+  try { daysOff = JSON.parse(row.days_off); } catch (e) {}
+  return { ...row, hours: Array.isArray(hours) ? hours : [], days_off: Array.isArray(daysOff) ? daysOff : [] };
+};
+
+function getCoachingSettings(streamerId) {
+  return _coachingParse(db.prepare('SELECT * FROM coaching_settings WHERE streamer_id = ?').get(streamerId));
+}
+
+// Upsert: the first save opens coaching, later saves keep `open`; a changed invite code forgets the last check.
+function saveCoachingSettings(streamerId, s) {
+  db.prepare(`
+    INSERT INTO coaching_settings (streamer_id, open, time_zone, hours, days_off, guild_id, invite_code, where_text, notify_requests, lang)
+    VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(streamer_id) DO UPDATE SET
+      time_zone = excluded.time_zone, hours = excluded.hours, days_off = excluded.days_off,
+      guild_id = excluded.guild_id,
+      invite_ok = CASE WHEN coaching_settings.invite_code IS excluded.invite_code THEN coaching_settings.invite_ok ELSE NULL END,
+      invite_checked_at = CASE WHEN coaching_settings.invite_code IS excluded.invite_code THEN coaching_settings.invite_checked_at ELSE NULL END,
+      invite_code = excluded.invite_code,
+      where_text = excluded.where_text, notify_requests = excluded.notify_requests, lang = excluded.lang,
+      updated_at = datetime('now')
+  `).run(streamerId, s.timeZone, JSON.stringify(s.hours || []), JSON.stringify(s.daysOff || []), s.guildId || null,
+    s.inviteCode || null, s.whereText || null, s.notifyRequests ? 1 : 0, s.lang || 'en');
+  return getCoachingSettings(streamerId);
+}
+
+function setCoachingOpen(streamerId, open) {
+  return db.prepare("UPDATE coaching_settings SET open = ?, updated_at = datetime('now') WHERE streamer_id = ?")
+    .run(open ? 1 : 0, streamerId).changes > 0;
+}
+
+// Writes only while the stored code is still the one that was checked.
+function recordInviteCheck(streamerId, inviteCode, ok, checkedAt) {
+  db.prepare('UPDATE coaching_settings SET invite_ok = ?, invite_checked_at = ? WHERE streamer_id = ? AND invite_code = ?')
+    .run(ok ? 1 : 0, checkedAt, streamerId, inviteCode);
+}
+
+const _HOLD_SQL = coaching.HOLDING.map((st) => `'${st}'`).join(', ');
+
+const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, minutes, note, lang, now }) => {
+  const upcoming = db.prepare(
+    `SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND status IN (${_HOLD_SQL}) AND starts_at > ?`
+  ).get(streamerId, viewer.discordUserId, now).n;
+  if (upcoming >= coaching.MAX_UPCOMING) return { ok: false, code: 'limit' };
+  const end = startsAt + minutes * 60000;
+  const clash = db.prepare(
+    `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND status IN (${_HOLD_SQL}) AND starts_at < ? AND starts_at + minutes * 60000 > ? LIMIT 1`
+  ).get(streamerId, end, startsAt);
+  if (clash) return { ok: false, code: 'taken' };
+  const info = db.prepare(`
+    INSERT INTO coaching_bookings (streamer_id, viewer_discord_id, viewer_username, viewer_display_name, viewer_avatar,
+      starts_at, minutes, note, lang, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)
+  `).run(streamerId, viewer.discordUserId, viewer.username, viewer.displayName || null, viewer.avatar || null,
+    startsAt, minutes, note || null, lang || 'en', now);
+  return { ok: true, booking: db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(info.lastInsertRowid) };
+});
+function createCoachingBooking(args) { return _createCoachingBooking.immediate(args); }
+
+function getCoachingBooking(id, streamerId) {
+  return db.prepare('SELECT * FROM coaching_bookings WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+function getHeldCoachingBookings(streamerId, fromMs) {
+  return db.prepare(
+    `SELECT id, starts_at AS startsAt, minutes, status FROM coaching_bookings
+     WHERE streamer_id = ? AND status IN (${_HOLD_SQL}) AND starts_at + minutes * 60000 > ? ORDER BY starts_at`
+  ).all(streamerId, fromMs);
+}
+
+function getCoachingSchedule(streamerId, fromMs, toMs) {
+  return db.prepare('SELECT * FROM coaching_bookings WHERE streamer_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at')
+    .all(streamerId, fromMs, toMs);
+}
+
+function getViewerCoachingBookings(streamerId, discordUserId, sinceMs) {
+  return db.prepare('SELECT * FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND starts_at >= ? ORDER BY starts_at')
+    .all(streamerId, discordUserId, sinceMs);
+}
+
+// Conditional move: only from one of the listed states; returns the updated row, or null.
+function setCoachingBookingStatus(id, streamerId, fromStatuses, toStatus, now) {
+  if (!fromStatuses || !fromStatuses.length) return null;
+  const marks = fromStatuses.map(() => '?').join(', ');
+  const info = db.prepare(
+    `UPDATE coaching_bookings SET status = ?, decided_at = ? WHERE id = ? AND streamer_id = ? AND status IN (${marks})`
+  ).run(toStatus, now, id, streamerId, ...fromStatuses);
+  return info.changes ? getCoachingBooking(id, streamerId) : null;
+}
+
+function recordCoachingMessageError(id, error) {
+  db.prepare('UPDATE coaching_bookings SET message_error = ? WHERE id = ?').run(error == null ? null : String(error), id);
+}
+
+function countWaitingCoaching(streamerId, now) {
+  return db.prepare("SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND status = 'waiting' AND starts_at > ?")
+    .get(streamerId, now).n;
+}
+
+function cleanupOldCoachingBookings(now) {
+  db.prepare('DELETE FROM coaching_bookings WHERE starts_at < ?').run(now - 90 * 86400e3);
+}
+
+// The viewer's own sign-in; the row holds only the hash of the cookie's id.
+function createViewerSession(sid, viewer, expiresAt) {
+  db.prepare(`INSERT OR REPLACE INTO viewer_sessions (sid, discord_user_id, discord_username, discord_display_name, discord_avatar, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)`).run(hashSessionId(sid), viewer.discordUserId, viewer.username, viewer.displayName || null, viewer.avatar || null, expiresAt);
+}
+function getViewerSession(sid) {
+  return db.prepare('SELECT * FROM viewer_sessions WHERE sid = ? AND expires_at > ?').get(hashSessionId(sid), Date.now()) || null;
+}
+function deleteViewerSession(sid) { db.prepare('DELETE FROM viewer_sessions WHERE sid = ?').run(hashSessionId(sid)); }
+function cleanExpiredViewerSessions() { db.prepare('DELETE FROM viewer_sessions WHERE expires_at <= ?').run(Date.now()); }
+
 function cleanupOldDonations() {
   const result = db.prepare("DELETE FROM donations WHERE created_at < datetime('now', '-365 days')").run();
   if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} donations older than 1 year`);
@@ -6743,6 +6920,10 @@ module.exports = {
   getDonationMonthly,
   deleteDonation,
   cleanupOldDonations,
+  getCoachingSettings, saveCoachingSettings, setCoachingOpen, recordInviteCheck,
+  createCoachingBooking, getCoachingBooking, getHeldCoachingBookings, getCoachingSchedule,
+  getViewerCoachingBookings, setCoachingBookingStatus, recordCoachingMessageError, countWaitingCoaching,
+  cleanupOldCoachingBookings, createViewerSession, getViewerSession, deleteViewerSession, cleanExpiredViewerSessions,
   createPendingTip,
   getPendingTip,
   markPendingTipCaptured,

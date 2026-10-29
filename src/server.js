@@ -1380,7 +1380,7 @@ function start() {
   db.ensureFreeSubscriptions();
 
   // Clean expired sessions every hour
-  setInterval(() => db.cleanExpiredSessions(), 60 * 60 * 1000);
+  setInterval(() => { db.cleanExpiredSessions(); db.cleanExpiredViewerSessions(); }, 60 * 60 * 1000);
 
   // Check for expired subscriptions every hour
   setInterval(() => db.expireSubscriptions(), 60 * 60 * 1000);
