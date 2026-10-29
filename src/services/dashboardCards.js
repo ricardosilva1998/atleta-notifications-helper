@@ -13,7 +13,7 @@ const { RAID_MIN_VIEWERS, shoutoutLine } = require('./shoutouts');
 
 // The cards in reading order, which is also their order on a phone. The OBS overlay and rewards cards are left out
 // while the overlay features are off; the Multistream card comes last while the relay is set up.
-const ORDER = ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify'];
+const ORDER = ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'coaching', 'polls', 'rewards', 'spotify'];
 const OVERLAY_CARDS = new Set(['overlay', 'tracking', 'rewards']);
 
 const label = (key, params = {}) => ({ key, params });
@@ -392,6 +392,49 @@ function giveawaysCard({ giveaway }) {
   };
 }
 
+// The Coaching card (docs/superpowers/specs/2026-10-29-coaching-design.md, "The Coaching card"), from
+// coachingBookings.cardData() and the booking page's link (null without a linked Twitch login). Not set up: its one
+// step (link Twitch, add Atleta to a Discord server, set the hours), with no link or rows. Set up: the requests waiting
+// for an answer (up to five; the badge counts them all), the next accepted session, the link and Bookings open. The
+// status line: a dead invite first (viewers cannot join), then the requests waiting, then open or paused. The times are
+// instants: the card's script writes them in the streamer's browser zone. It needs neither the chatbot nor the overlay.
+const COACHING_SETUP_STATUS = Object.freeze({
+  twitch: 'cards.coaching.status.setupTwitch',
+  server: 'cards.coaching.status.setupServer',
+  hours: 'cards.coaching.status.setupHours',
+});
+const coachingRow = (b) => ({
+  id: b.id, startsAt: b.startsAt, minutes: b.minutes, viewerName: b.viewerName, viewerUsername: b.viewerUsername,
+  note: b.note || '', messageError: b.messageError || null,
+});
+function coachingCard({ coaching, coachingUrl }) {
+  const c = coaching || {};
+  if (c.setup) {
+    return {
+      status: status(COACHING_SETUP_STATUS[c.setup], 'warn'), setup: c.setup, open: false, waiting: [], next: null,
+      bookingUrl: null, inviteBroken: false, counts: { waiting: plain('') },
+    };
+  }
+  const count = Number(c.waitingCount) || 0;
+  const open = !!c.open;
+  const inviteBroken = !!c.inviteBroken;
+  let st;
+  if (inviteBroken) st = status('cards.coaching.status.inviteBroken', 'warn');
+  else if (count > 0) st = status('cards.coaching.status.waiting', 'warn', { count });
+  else if (open) st = status('cards.coaching.status.open');
+  else st = status('cards.coaching.status.paused', 'off');
+  return {
+    status: st,
+    setup: null,
+    open,
+    waiting: (c.waiting || []).map(coachingRow),
+    next: c.next ? coachingRow(c.next) : null,
+    bookingUrl: coachingUrl || null,
+    inviteBroken,
+    counts: { waiting: count > 0 ? label('cards.coaching.badge', { count }) : plain('') },
+  };
+}
+
 // A poll or prediction that keeps its kind busy on Twitch: running, or locked and waiting for its winner.
 const busy = (view) => !!view && view.state !== 'ended';
 
@@ -514,7 +557,7 @@ function multistreamCard({ streamer }) {
 const BUILDERS = {
   chatbot: chatbotCard, discord: discordCard, overlay: overlayCard, tracking: trackingCard, commands: commandsCard, sponsors: sponsorsCard,
   donations: donationsCard, protection: protectionCard, giveaways: giveawaysCard, rewards: rewardsCard, spotify: spotifyCard,
-  shoutouts: shoutoutsCard, polls: pollsCard,
+  shoutouts: shoutoutsCard, polls: pollsCard, coaching: coachingCard,
   multistream: multistreamCard,
 };
 

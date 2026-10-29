@@ -259,6 +259,25 @@
   .wc-left { margin-right: auto; }
   .wc-danger { color: var(--danger); }
 
+  /* The Coaching card (the approved mockup docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html, step 2): the
+     "N waiting" badge, a request on two lines (name and length; its time and note) with ✓ and ✕, the next session */
+  .wc-head .wc-badge { margin-left: auto; }
+  .wc-badge { background: var(--warning); color: #1a1000; font: 700 11px var(--font-body); border-radius: 999px; padding: 2px 8px; flex: none; white-space: nowrap; }
+  .wc-badge:empty { display: none; }
+  .wc-coach-list:not(:has(.wc-row)) { display: none; }
+  .wc-coach { min-height: 48px; padding-top: 6px; padding-bottom: 6px; gap: 6px; }
+  .wc-coach .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .wc-coach .who .nm { max-width: none; min-width: 0; }
+  .wc-coach .who .txt { font-size: 12px; flex: none; }
+  .wc-coach .who small.warn { font-size: 11.5px; color: var(--warning); overflow-wrap: anywhere; }
+  .wc-coach .wc-ib { width: 28px; height: 28px; border-radius: 7px; font: 700 14px var(--font-body); }
+  .wc-coach .wc-ib.ok { color: var(--success); background: var(--success-bg); }
+  .wc-coach .wc-ib.no { color: var(--danger); background: var(--danger-bg); }
+  .wc-coach .wc-ib.ok:hover { color: var(--success); background: rgba(62,207,142,0.2); }
+  .wc-coach .wc-ib.no:hover { color: var(--danger); background: rgba(240,68,56,0.2); }
+  .wc-coach .wc-ib:disabled { opacity: .45; cursor: wait; }
+  .wc-coach-tag { font: 700 10px var(--font-display); letter-spacing: .5px; text-transform: uppercase; color: var(--success); background: var(--success-bg); padding: 1px 6px; border-radius: 999px; }
+
   /* Polls & predictions (the approved mockup docs/superpowers/specs/assets/2026-10-15-polls-shoutouts-mockup.html):
      the kind tags, ▶, the live panel (drawn by public/js/dashboard-polls.js), the template pop-up's type and choices */
   .lp-kind { font: 700 10px var(--font-display); letter-spacing: .6px; text-transform: uppercase; color: #38bdf8; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 2px 7px; border-radius: 999px; flex: none; }

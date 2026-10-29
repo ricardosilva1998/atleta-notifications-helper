@@ -36,6 +36,14 @@ function trackingInput(over = {}) {
   };
 }
 
+// What coachingBookings.cardData() hands the Coaching card (set up and open, nothing waiting), and one booking as it
+// views it.
+const booking = (over = {}) => ({
+  id: 1, startsAt: Date.parse('2026-10-15T18:00:00Z'), minutes: 60, state: 'waiting', viewerName: 'Synthetic Viewer',
+  viewerUsername: 'synthetic_viewer', viewerAvatar: null, note: '', messageError: null, ...over,
+});
+const coachingInput = (over = {}) => ({ setup: null, open: true, bookable: true, inviteBroken: false, waiting: [], waitingCount: 0, next: null, ...over });
+
 function input(over = {}) {
   const streamer = {
     id: 1, twitch_user_id: '1001', twitch_username: 'synthetic_channel', chatbot_enabled: 1,
@@ -74,6 +82,8 @@ function input(over = {}) {
     pollTemplates: [],
     polls: { hasScope: true, live: { poll: null, prediction: null, serverNow: Date.parse('2026-10-14T12:00:00Z') }, barUrl: 'https://atleta.example/overlay/poll/synthetic-token?lang=en' },
     tracking: trackingInput(),
+    coaching: coachingInput(),
+    coachingUrl: 'https://atleta.example/coaching/synthetic_channel',
     ...over,
     streamer,
   };
@@ -82,15 +92,15 @@ const build = (over) => buildCards(input(over));
 const keyOf = (status) => status && status.key;
 
 describe('the cards and their order', () => {
-  test('thirteen cards in reading order while the overlay features are on', () => {
-    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'rewards', 'spotify']);
+  test('fourteen cards in reading order while the overlay features are on', () => {
+    assert.deepEqual(ORDER, ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'coaching', 'polls', 'rewards', 'spotify']);
     assert.deepEqual(build().order, ORDER);
     assert.equal(build().chatbotOn, true);
   });
 
   test('without the overlay features the OBS overlay, Tracking and rewards cards are left out; Multistream comes last while the relay is set up', () => {
     const off = build({ features: { overlays: false } });
-    assert.deepEqual(off.order, ['chatbot', 'discord', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'polls', 'spotify']);
+    assert.deepEqual(off.order, ['chatbot', 'discord', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'giveaways', 'coaching', 'polls', 'spotify']);
     assert.equal(off.overlay, undefined);
     assert.equal(off.tracking, undefined);
     assert.equal(off.rewards, undefined);
@@ -391,6 +401,66 @@ describe('Giveaways', () => {
   });
 });
 
+describe('Coaching', () => {
+  const URL = 'https://atleta.example/coaching/synthetic_channel';
+  const coach = (over = {}, coachingUrl = URL) => build({ coaching: coachingInput(over), coachingUrl }).coaching;
+  const row = (b) => ({ id: b.id, startsAt: b.startsAt, minutes: b.minutes, viewerName: b.viewerName, viewerUsername: b.viewerUsername, note: b.note, messageError: b.messageError });
+
+  test('coaching comes after giveaways in ORDER, with the overlay features off too; it does not need the chatbot', () => {
+    assert.equal(ORDER.indexOf('coaching'), ORDER.indexOf('giveaways') + 1);
+    assert.ok(build({ features: { overlays: false } }).order.includes('coaching'), 'not an overlay card');
+    assert.equal(build({ streamer: { chatbot_enabled: 0 } }).coaching.needsChatbot, undefined);
+  });
+
+  test('the coaching card follows its setup steps, counts waiting requests, and says paused or invite broken', () => {
+    // Its one setup step: Twitch, a Discord server, the hours. No link, rows or switch until the page takes bookings.
+    for (const [setup, key, url] of [['twitch', 'cards.coaching.status.setupTwitch', null], ['server', 'cards.coaching.status.setupServer', URL], ['hours', 'cards.coaching.status.setupHours', URL]]) {
+      const card = coach({ setup, open: false, waiting: [booking()], waitingCount: 1 }, url);
+      assert.deepEqual(card.status, { key, params: {}, tone: 'warn' }, setup);
+      assert.equal(card.setup, setup);
+      assert.equal(card.bookingUrl, null, `${setup}: no booking link yet`);
+      assert.deepEqual([card.waiting, card.next], [[], null], setup);
+      assert.deepEqual(card.counts, { waiting: { text: '' } }, `${setup}: no badge`);
+    }
+
+    // Set up and open, nothing waiting: green, the link, no badge.
+    const open = coach();
+    assert.deepEqual(open.status, { key: 'cards.coaching.status.open', params: {}, tone: 'ok' });
+    assert.deepEqual([open.setup, open.open, open.inviteBroken, open.bookingUrl], [null, true, false, URL]);
+    assert.deepEqual(open.counts, { waiting: { text: '' } });
+
+    // Requests waiting: the status and the badge count them all (the card lists up to five), the next session.
+    const waiting = [booking({ id: 4 }), booking({ id: 5, minutes: 30, note: '<b>braking</b> into T1' })];
+    const next = booking({ id: 3, state: 'confirmed', messageError: 'closed_dms' });
+    const busy = coach({ waiting, waitingCount: 7, next });
+    assert.deepEqual(busy.status, { key: 'cards.coaching.status.waiting', params: { count: 7 }, tone: 'warn' });
+    assert.deepEqual(busy.counts, { waiting: { key: 'cards.coaching.badge', params: { count: 7 } } });
+    assert.deepEqual(busy.waiting, waiting.map(row));
+    assert.deepEqual(busy.next, row(next));
+
+    // Paused: grey while nothing waits; a request that waits still asks for an answer.
+    const paused = coach({ open: false });
+    assert.deepEqual(paused.status, { key: 'cards.coaching.status.paused', params: {}, tone: 'off' });
+    assert.equal(paused.open, false);
+    assert.equal(paused.bookingUrl, URL, 'the link stays while paused');
+    assert.equal(coach({ open: false, waiting, waitingCount: 2 }).status.key, 'cards.coaching.status.waiting');
+
+    // A dead invite comes first: viewers cannot join. The badge still counts.
+    const broken = coach({ inviteBroken: true, waiting, waitingCount: 2 });
+    assert.deepEqual(broken.status, { key: 'cards.coaching.status.inviteBroken', params: {}, tone: 'warn' });
+    assert.equal(broken.inviteBroken, true);
+    assert.deepEqual(broken.counts, { waiting: { key: 'cards.coaching.badge', params: { count: 2 } } });
+    assert.equal(coach({ inviteBroken: true, open: false }).status.key, 'cards.coaching.status.inviteBroken');
+  });
+
+  test('cardTexts translates its status and badge', () => {
+    const t = (key, params) => `${key}${params && Object.keys(params).length ? JSON.stringify(params) : ''}`;
+    const texts = cardTexts(build({ coaching: coachingInput({ waiting: [booking()], waitingCount: 1 }) }), t);
+    assert.deepEqual(texts.coaching, { status: { text: 'cards.coaching.status.waiting{"count":1}', tone: 'warn' }, counts: { waiting: 'cards.coaching.badge{"count":1}' } });
+    assert.deepEqual(cardTexts(build(), t).coaching.counts, { waiting: '' });
+  });
+});
+
 describe('Channel point rewards', () => {
   const rewards = [{ id: 1, title: 'Hydrate', cost: 500, enabled: 1 }, { id: 2, title: 'Horn', cost: 100, enabled: 0 }];
 
@@ -535,7 +605,7 @@ describe('cardTexts', () => {
   test('translates each status and count, gives plain counts as they are, and leaves the giveaway card to the page', () => {
     const t = (key, params) => `${key}${params && Object.keys(params).length ? JSON.stringify(params) : ''}`;
     const texts = cardTexts(build({ commands: [{ id: 1, command: 'discord', response: 'x', cooldown: 5 }] }), t);
-    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'polls', 'rewards', 'spotify']);
+    assert.deepEqual(Object.keys(texts), ['chatbot', 'discord', 'overlay', 'tracking', 'commands', 'shoutouts', 'sponsors', 'donations', 'protection', 'coaching', 'polls', 'rewards', 'spotify']);
     assert.deepEqual(texts.chatbot, { status: { text: 'cards.chatbot.status.online{"channel":"synthetic_channel"}', tone: 'ok' }, counts: { thankYous: 'cards.common.nOfM{"on":5,"total":6}' } });
     assert.deepEqual(texts.commands.counts, { commands: '1', builtins: 'cards.common.nOfM{"on":1,"total":13}' });
     assert.deepEqual(texts.spotify, { status: { text: 'dashboard.status.connected', tone: 'ok' }, counts: {} });

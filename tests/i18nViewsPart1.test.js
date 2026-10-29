@@ -192,6 +192,7 @@ const SAMPLES = {
     }],
     ['connected, bot ready but off', {
       streamer: streamerRow({ chatbot_enabled: 0, cp_rewards_enabled: 1 }), guilds: [], unclaimedGuilds: [], botInviteUrl: 'https://example.test/invite', msg: undefined, botConnected: true, botUsername: '',
+      coachingSetup: 'hours', // the Coaching card's last step (a sample of its own would need a claimed server)
       overlayUrl: 'https://example.test/overlay/zztoken', overlayStats: null, vtuberUrl: 'https://example.test/vtuber/zztoken', hasScope: true, needsReauth: false, activeGiveaway: null, multistreamAvailable: true, isAdmin: false, features: { youtube: true },
       discordNotifications: { twitchLinked: true, servers: [], announcing: 0, needsAuth: false, authAction: 'enable' },
     }],
@@ -250,6 +251,22 @@ const SAMPLES = {
 };
 
 const { buildCards } = require('../src/services/dashboardCards');
+// What coachingBookings.cardData() gives the Coaching card: the step a sample names (coachingSetup), no Twitch, no
+// server, or (with the bot connected and a server) set up, with two requests waiting, a dead invite and a next session
+// Atleta could not message about.
+function sampleCoaching(data, full) {
+  const empty = { open: false, bookable: false, inviteBroken: false, waiting: [], waitingCount: 0, next: null };
+  if (data.coachingSetup) return { ...empty, setup: data.coachingSetup };
+  if (!data.streamer.twitch_user_id) return { ...empty, setup: 'twitch' };
+  if (!data.guilds || !data.guilds.length) return { ...empty, setup: 'server' };
+  if (!full) return { ...empty, setup: 'hours' };
+  const view = (id, over) => ({ id, startsAt: Date.parse('2026-10-15T18:00:00Z') + id * 3600e3, minutes: 60, state: 'waiting', viewerName: `zzviewer${id}`, viewerUsername: `zzlogin${id}`, viewerAvatar: null, note: '', messageError: null, ...over });
+  return {
+    setup: null, open: true, bookable: false, inviteBroken: true, waitingCount: 2,
+    waiting: [view(1, { note: 'zznote' }), view(2, { minutes: 30 })],
+    next: view(3, { state: 'confirmed', messageError: 'closed_dms' }),
+  };
+}
 // What GET /dashboard gathers for the working cards (gatherCards() in routes/dashboard.js), from a sample's locals:
 // a sample with the bot connected also has commands, sponsor messages, tips, a goal, a reward and a giveaway.
 function sampleCards(data, features) {
@@ -280,6 +297,8 @@ function sampleCards(data, features) {
     ] : [],
     polls: { hasScope: full, live: { poll: null, prediction: null, serverNow: 0 }, barUrl: data.overlayUrl ? 'https://example.test/overlay/poll/zztoken?lang=en' : null },
     giveaway: data.activeGiveaway ? { id: 3, keyword: 'zzword', prize: 'zzprize', ends_at: '2026-10-14T12:05:00.000Z', winners_count: 2, subs_only: 1, entryCount: 4 } : null,
+    coaching: sampleCoaching(data, full),
+    coachingUrl: data.streamer.twitch_username ? 'https://example.test/coaching/zzchannel' : null,
     spotifyConnected: !!data.streamer.spotify_access_token,
     multistreamAvailable: !!data.multistreamAvailable && !!features.youtube,
   });
