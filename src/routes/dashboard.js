@@ -1150,6 +1150,8 @@ router.delete('/api/commands/:id', (req, res) => {
 
 // The Polls & predictions card's JSON routes (routes/polls.js), behind this router's login.
 router.use(require('./polls'));
+// The coaching page (/dashboard/coaching) and its JSON routes (routes/coachingDashboard.js), behind this router's login.
+router.use(require('./coachingDashboard'));
 
 // The Tracking card's tip goal: start (title, target, bar colour, currency and what was already raised), edit (title,
 // target and colour; a colour not sent is kept), end, and a test of the goal reached on the OBS bar.
