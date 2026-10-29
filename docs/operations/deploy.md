@@ -615,3 +615,150 @@ cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db
 That throws away the record, the goals and the trackers' values and settings. If the release comes back later, its
 first boot creates the tables again, empty; the tracker seed has run already (its name stays in `data_migrations`), so
 the trackers fill from the next events and tips, not from the past ones.
+
+## Coaching (booking sessions with a streamer)
+
+What changes when it deploys (`docs/features/coaching.md`):
+- **At boot**, on the existing database: three new tables (`coaching_settings`, `coaching_bookings`,
+  `viewer_sessions`) and two indexes, created quietly. There is no `[DB]` line for them and **no** `[DB migration]` line,
+  on the first boot and on every boot after. Nothing is added to `streamers` and nothing is seeded: no streamer has
+  coaching until they save their hours.
+- **No new variable**, and no change to the Railway settings.
+- **The Discord application needs no change.** The viewers' sign-in goes to Discord with the same redirect as the
+  streamer login, `<APP_URL>/auth/login/callback` (`https://atletanotifications.com/auth/login/callback`), and with the
+  `identify` scope only. The callback tells the two apart by a short-lived cookie (`oauth_purpose`). A viewer who signs
+  in gets a viewer session (`viewer_sessions`, 7 days) and never a `streamers` row.
+- **No new bot intent or permission.**
+  - The bot now sends direct messages (`sendDirectMessage`), which needs no intent.
+  - It looks members up by id, which uses the `GuildMembers` intent it already has.
+  - It reads invites through Discord's public `GET /api/v10/invites/<code>`, which needs no bot at all.
+- **Public routes:** `/coaching/<twitch login>` (with `/state`, `/book` and `/bookings/:id/cancel`),
+  `/auth/coaching-signin` and `POST /auth/coaching-signout`. A streamer who never saved coaching hours has no booking
+  page: theirs answers 404 "Coaching page unavailable.".
+- **Housekeeping:** the daily job also deletes bookings 90 days past their start, and the hourly session sweep also
+  deletes expired viewer sessions.
+
+What streamers see:
+- **Everyone:** a dashboard tab open across the deploy needs one reload. The Twitch tab has a new **Coaching** card
+  after Giveaways, showing its one setup step: "Link your Twitch account first", "Add Atleta to a Discord server first"
+  or "Set your coaching hours". It shows with `features.overlays` off too. Nothing else changes for a streamer who never
+  sets it up.
+- **The coaching page** (new, `/dashboard/coaching`):
+  - the schedule, with Accept, Decline and Cancel;
+  - the weekly hours, the time zone and the days off;
+  - the coaching server, the invite and "Where the session happens";
+  - "Message me about new requests" (on by default) and the booking link.
+
+  The first save opens bookings. After that, the card's **Bookings open** switch pauses them.
+- **Discord messages.** Atleta messages the streamer about each request and each viewer's cancel, and messages the
+  viewer when a booking is accepted, declined or cancelled.
+  - A viewer Atleta cannot reach is named on the schedule ("Atleta could not message <name>: message them yourself").
+  - A streamer Atleta cannot reach is only logged (below).
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and the boot log has no `[DB migration]` line.
+2. `/js/coaching-core.js`, `/js/coaching-page.js`, `/js/coaching-dashboard.js` and `/js/dashboard-coaching.js` answer
+   200. `/coaching/<a login that never saved coaching hours>` answers 404 with "Coaching page unavailable.".
+3. Signed in as a streamer with a claimed server, check the setup:
+   - The Coaching card says "Set your coaching hours".
+   - On `/dashboard/coaching`, save hours with an invite to that server: it says "Saved. Your booking page is open."
+   - A dead invite is refused with "That is not a working Discord invite…".
+4. Open the booking link in a private window and sign in with another Discord account:
+   - It comes back to the booking page signed in ("Booking as …"). That account has no dashboard: `/dashboard` sends it
+     to the streamer login.
+   - Read only, in the container (`railway ssh`, from `/app`), the account has no `streamers` row. This prints `[]`:
+
+     ```bash
+     cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT id FROM streamers WHERE discord_user_id = '<that account's Discord id>'"
+     ```
+5. Request a time and check both sides:
+   - The streamer gets a Discord message, and the card shows "1 waiting".
+   - Accept it on the card: the viewer gets a message with the server, the "where" line and the invite.
+   - Cancel it on the schedule if it was only for the check (the viewer is told).
+
+Log lines:
+- `[Auth] Coaching sign-in: <username> (<discord id>) for <login>`: a viewer signed in.
+- `[Coaching] could not message streamer <id> (request|withdrawn): <reason>`: the streamer's own Discord messages did
+  not go out. `unreachable` means their messages are closed or they share no server with the bot; `not_ready` that
+  the bot was not connected; `failed` anything else.
+- `[Coaching] invite check for streamer <id> failed: …`: the hourly invite check threw. The page still answered, and
+  the check runs again on the next visit.
+
+Watch after release:
+- The booking page asks Discord about the viewer's membership every time it reads its state, for a signed-in viewer
+  while bookings are open: on load, after each action, on "I've joined", and when the tab comes back after a minute.
+  Nothing remembers the answer yet.
+  - A lookup that does not answer in 5 s counts as "cannot say", and the viewer can still book.
+  - If the bot's Discord quota becomes a problem, add the short memo noted in the coaching branch's review.
+- The six non-English translations of the new texts are machine-made and want a native read-through.
+
+### andre_vilela_'s step
+
+With his OK, and only after he has saved his coaching hours, server and invite (his card no longer shows a setup step,
+and `https://atletanotifications.com/coaching/andre_vilela_` shows his times), point his `!coaching` command
+(`chat_commands` id 7) and his "Coaching" sponsor message (`sponsor_messages` id 8) at his booking page. Both held his
+Discord invite `https://discord.gg/9By7WNXNcJ` when this was written (2026-10-29).
+
+**The easy way: his dashboard.** Signed in as him:
+- edit `!coaching` on the Commands card (or the chatbot page);
+- edit the "Coaching" message on the sponsor messages page (`/dashboard/timed-notifications`).
+
+The editors check the lengths (a command's response is at most 500 characters).
+
+**Or SQL, in the container** (`railway ssh`, from `/app`; with Node and `better-sqlite3`, as for Vilela's C1 above).
+
+1. Read only. Check that his coaching is set up (one row, `open` 1, `invite_ok` 1) and what the two rows hold now:
+
+   ```bash
+   cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT c.open, c.guild_id, c.invite_code, c.invite_ok FROM coaching_settings c JOIN streamers s ON s.id = c.streamer_id WHERE s.twitch_user_id = '632557806'"
+   cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT c.id, c.command, c.response, length(c.response) AS len FROM chat_commands c JOIN streamers s ON s.id = c.streamer_id WHERE c.id = 7 AND s.twitch_user_id = '632557806'"
+   cd /app && node -e "const D=require('better-sqlite3');console.log(JSON.stringify(new D('data/bot.db',{readonly:true}).prepare(process.argv[1]).all()))" "SELECT m.id, m.message_text, m.url FROM sponsor_messages m JOIN streamers s ON s.id = m.streamer_id WHERE m.id = 8 AND s.twitch_user_id = '632557806'"
+   ```
+
+   The new link is 25 characters longer than the invite, so the command's `len` must be at most 475. SQL does not
+   check the 500 characters.
+
+2. The change. Each statement replaces only the invite inside the text and keeps everything around it. It changes a
+   row only while the row is his and still holds the old invite:
+
+   ```bash
+   cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE chat_commands SET response = REPLACE(response, 'https://discord.gg/9By7WNXNcJ', 'https://atletanotifications.com/coaching/andre_vilela_') WHERE id = 7 AND streamer_id = (SELECT id FROM streamers WHERE twitch_user_id = '632557806') AND instr(response, 'https://discord.gg/9By7WNXNcJ') > 0"
+   cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');console.log(d.prepare(process.argv[1]).run())" "UPDATE sponsor_messages SET message_text = REPLACE(message_text, 'https://discord.gg/9By7WNXNcJ', 'https://atletanotifications.com/coaching/andre_vilela_'), url = REPLACE(url, 'https://discord.gg/9By7WNXNcJ', 'https://atletanotifications.com/coaching/andre_vilela_') WHERE id = 8 AND streamer_id = (SELECT id FROM streamers WHERE twitch_user_id = '632557806') AND (instr(message_text, 'https://discord.gg/9By7WNXNcJ') > 0 OR instr(COALESCE(url, ''), 'https://discord.gg/9By7WNXNcJ') > 0)"
+   ```
+
+   Each must print `changes: 1`. `changes: 0` means the row no longer holds the old invite (he changed it himself) or is
+   not his: read it again with step 1 and leave it.
+
+No restart is needed. The bot reads a command from the database each time it is used, and the sponsor rotation reads
+the messages at each tick.
+
+### Rolling back
+
+Rolling back is safe.
+- **The three tables stay**, and older code reads and writes none of them.
+- **The routes go.** `/coaching/*` and the sign-in routes stop existing, and the card and the coaching page go.
+  `viewer_session` cookies in browsers are ignored.
+- **Pending bookings stay** in the table and come back with the release.
+
+Two things to know:
+
+- **His links.** If andre_vilela_'s command and sponsor message already point at his booking page, they lead to a 404
+  until the release comes back. Point them back at his invite from his dashboard, or with the two `UPDATE`s above with
+  the two links swapped.
+- **Removing an account works on today's `main`.** `coaching_settings` and `coaching_bookings` point at `streamers`
+  with plain foreign keys, and nothing points at them.
+  - The previous release (any build since 2026-10-13, d9dd7b3) clears such rows itself when an admin removes an
+    account (its stray-row sweep). It logs
+    `[DB] Removing streamers <id>: also deleted N row(s) from coaching_bookings (streamer_id), a table the removal does not list`
+    (and the same for `coaching_settings`), and the removal goes through. `viewer_sessions` points at nothing.
+  - Only a build from before 2026-10-13 would refuse to remove a streamer with coaching rows
+    (`FOREIGN KEY constraint failed`). Such a build is also older than Tracking, so the Tracking note above applies
+    first.
+  - To roll back that far: after a backup (`backup-restore.md`), drop the coaching tables too:
+
+    ```sh
+    cd /app && node -e "const D=require('better-sqlite3');const d=new D('data/bot.db');d.pragma('busy_timeout = 10000');for (const t of ['coaching_bookings','coaching_settings','viewer_sessions']) d.exec('DROP TABLE IF EXISTS ' + t);console.log('dropped')"
+    ```
+
+    That throws away every streamer's hours and bookings. If the release comes back, its first boot creates the tables
+    again, empty.
