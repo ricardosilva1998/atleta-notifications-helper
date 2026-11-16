@@ -341,6 +341,10 @@ describe('closeDue', () => {
     assert.deepEqual([...new Set(recipients)].sort(), [viewer.discordUserId, s.discord_user_id].sort());
     const transcripts = discord.sent.filter((d) => d.payload.files && d.payload.files[0].name === 'transcript.txt');
     assert.equal(transcripts.length, 2);
+    const toViewer = transcripts.find((d) => d.userId === viewer.discordUserId).payload.content;
+    const toCoach = transcripts.find((d) => d.userId === s.discord_user_id).payload.content;
+    assert.match(toViewer, new RegExp(`/my-bookings\\?booking=${booking.id}\\b`));
+    assert.ok(!toCoach.includes('/my-bookings'), 'the coach gets no My bookings link');
     const text = transcripts[0].payload.files[0].attachment.toString('utf8');
     assert.match(text, /Coaching session transcript/);
     assert.match(text, /2026-11-03 18:01 Viewer: hello <@123>/);

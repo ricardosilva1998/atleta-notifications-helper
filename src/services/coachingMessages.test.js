@@ -108,7 +108,7 @@ describe('coachingMessages: payment kinds', () => {
     assert.equal(e.title, 'Coach accepted your coaching session: pay to confirm it');
     assert.match(e.description, /Price: €45\.00/);
     assert.match(e.description, new RegExp(`Pay by: <t:${Math.floor(payBy / 1000)}:F>`));
-    assert.match(e.description, /Pay on the booking page: https:\/\/atleta\.test\/coaching\/coach/);
+    assert.match(e.description, /Pay in My bookings: https:\/\/atleta\.test\/coaching\/coach/);
     assert.ok(!/Voice room|Invite/.test(e.description), 'the place comes once it is paid');
     missing(e.title + e.description);
   });
@@ -184,7 +184,7 @@ describe('reschedule messages', () => {
   });
 
   test('way 2, a lapse and the other viewer kinds each carry the link or their line', () => {
-    assert.match(m.viewerMessage('rescheduleAsk', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0].description, /Pick a new time here: https:\/\/x\/coaching\/coach\?booking=1/);
+    assert.match(m.viewerMessage('rescheduleAsk', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0].description, /Pick a new time in My bookings: https:\/\/x\/coaching\/coach\?booking=1/);
     const lapsed = m.viewerMessage('proposalLapsed', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0];
     assert.match(lapsed.description, /dropped/);
     assert.match(lapsed.description, /\?booking=1/);
@@ -216,6 +216,55 @@ describe('reschedule messages', () => {
       const e = m.streamerMessage(kind, { booking: b, scheduleUrl: 'https://x/dashboard/coaching', t }).embeds[0];
       assert.ok(e.title.includes('\\[Vi\\]'), kind);
       if (kind !== 'agreedCoach') assert.match(e.description, /dashboard\/coaching/, kind);
+    }
+  });
+});
+
+describe('every viewer message links to My bookings', () => {
+  const base = {
+    booking: booking({ id: 42, original_starts_at: 1793000000000, proposal_starts_at: 1793100000000 }),
+    streamerName: 'Coach', guildName: 'Coach HQ', bookingUrl: 'https://x/coaching/coach',
+    bookingLink: 'https://x/coaching/coach?booking=42', myBookingsUrl: 'https://x/my-bookings?booking=42', t,
+  };
+  const kinds = ['accepted', 'acceptedPay', 'confirmed', 'declined', 'cancelled', 'refunded', 'expired',
+    'rescheduleProposed', 'rescheduleAsk', 'proposal', 'proposalLapsed', 'rescheduleAgreed', 'notRescheduled'];
+
+  for (const kind of kinds) {
+    test(`${kind} carries the link`, () => {
+      const d = m.viewerMessage(kind, base).embeds[0].description;
+      assert.ok(d.includes('https://x/my-bookings?booking=42'), kind);
+    });
+  }
+
+  test('declined and cancelled keep the link to the coach page to book again', () => {
+    for (const kind of ['declined', 'cancelled']) {
+      const d = m.viewerMessage(kind, base).embeds[0].description;
+      assert.ok(d.includes('https://x/coaching/coach'), kind);
+    }
+  });
+});
+
+describe('action lines point to My bookings', () => {
+  const my = 'https://x/my-bookings?booking=42';
+  const base = {
+    booking: booking({ id: 42, original_starts_at: 1793000000000, proposal_starts_at: 1793100000000, pay_by: 1793000000000 }),
+    streamerName: 'Coach', guildName: 'Coach HQ', bookingUrl: 'https://x/coaching/coach',
+    bookingLink: 'https://x/coaching/coach?booking=42', myBookingsUrl: my, lang: 'en', t,
+  };
+
+  for (const kind of ['acceptedPay', 'rescheduleAsk', 'rescheduleProposed', 'proposal', 'proposalLapsed']) {
+    test(`${kind}: the action line is the My bookings link, once, and no coach page link`, () => {
+      const d = m.viewerMessage(kind, base).embeds[0].description;
+      assert.equal(d.split(my).length - 1, 1, 'one link to My bookings');
+      assert.ok(!d.includes('/coaching/coach'), 'no coach page link');
+      assert.ok(d.split('\n').some((l) => l.endsWith(my) && /My bookings:/.test(l) && !/all your bookings/.test(l)), 'the action line carries it');
+    });
+  }
+
+  test('declined and cancelled keep the coach page for booking again', () => {
+    for (const kind of ['declined', 'cancelled', 'expired']) {
+      const d = m.viewerMessage(kind, base).embeds[0].description;
+      assert.ok(d.includes('https://x/coaching/coach'), kind);
     }
   });
 });

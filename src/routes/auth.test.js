@@ -668,6 +668,25 @@ describe('the coaching sign-in', () => {
     assert.deepEqual(calls.map((c) => timeoutOf.get(c.init.signal)), [10_000, 10_000], 'both Discord calls have a 10 s limit');
   });
 
+  test('a sign-in without a coach makes a viewer session and goes to My bookings', async () => {
+    const start = await request('/auth/coaching-signin');
+    assert.equal(start.status, 302, start.text);
+    const target = new URL(start.headers.location);
+    assert.equal(`${target.origin}${target.pathname}`, DISCORD_AUTHORIZE);
+    assert.equal(cookieValue(start, 'oauth_purpose'), 'coaching:', 'an empty login');
+
+    answers[DISCORD_TOKEN] = { status: 200, body: { access_token: 'synthetic-discord-access' } };
+    answers[DISCORD_ME] = { status: 200, body: { ...VIEWER, id: '400000000000000789' } };
+    const before = streamerCount();
+    const res = await request(`/auth/login/callback?code=synthetic-code&state=${target.searchParams.get('state')}`, { cookie: cookieHeader(start) });
+    assert.equal(res.status, 302, res.text);
+    assert.equal(res.headers.location, '/my-bookings');
+    assert.equal(streamerCount(), before, 'no streamers row');
+    assert.ok(!setCookies(res).some((c) => c.startsWith('session=')), 'no streamer session');
+    const session = db.getViewerSession(cookieValue(res, 'viewer_session'));
+    assert.equal(session.discord_user_id, '400000000000000789');
+  });
+
   test('the sign-in is only for a booking page that is up', async () => {
     const disabled = coachingStreamer('coach_off');
     db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(disabled);
@@ -677,6 +696,14 @@ describe('the coaching sign-in', () => {
       assert.equal(res.status, 404, login);
       assert.equal(res.text, t('en', 'coaching.error.pageUnavailable'));
       assert.deepEqual(setCookies(res), [], `${login}: no cookie`);
+    }
+  });
+
+  test('a sign-in whose `for` is repeated is refused, never read as the coach-less one', async () => {
+    for (const q of ['for=a&for=b', 'for=&for=']) {
+      const res = await request(`/auth/coaching-signin?${q}`);
+      assert.equal(res.status, 404, q);
+      assert.deepEqual(setCookies(res), [], `${q}: no cookie`);
     }
   });
 
@@ -700,7 +727,7 @@ describe('the coaching sign-in', () => {
   test('a purpose naming a login with a slash is refused', async () => {
     const before = streamerCount();
     const viewers = db.db.prepare('SELECT COUNT(*) AS n FROM viewer_sessions').get().n;
-    for (const purpose of ['coaching:a/b', 'coaching:../dashboard', 'coaching:', 'coaching:x'.padEnd(40, 'y')]) {
+    for (const purpose of ['coaching:a/b', 'coaching:../dashboard', 'coaching:x'.padEnd(40, 'y')]) {
       const res = await request('/auth/login/callback?code=synthetic-code&state=one', {
         cookie: `oauth_state=one; oauth_purpose=${encodeURIComponent(purpose)}`, headers: { 'x-show-keys': '1' },
       });
@@ -722,6 +749,8 @@ describe('the coaching sign-in', () => {
     assert.equal(db.getViewerSession(sid), null);
 
     const odd = await postForm('/auth/coaching-signout', { for: 'https://evil.example/x' });
-    assert.equal(odd.headers.location, '/', 'a "for" that is not a login goes home');
+    assert.equal(odd.headers.location, '/my-bookings', 'a "for" that is not a login goes to My bookings');
+    const none = await postForm('/auth/coaching-signout', {});
+    assert.equal(none.headers.location, '/my-bookings');
   });
 });

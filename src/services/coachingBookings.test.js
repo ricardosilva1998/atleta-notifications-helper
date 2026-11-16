@@ -215,6 +215,15 @@ describe('answering', () => {
     assert.match(discord.sent[0].payload.embeds[0].title, new RegExp(s.twitch_display_name));
   });
 
+  test('accept and decline messages carry the My bookings link with the booking id', async () => {
+    const one = await waiting();
+    await svc.accept(one.s, one.id, { now: NOW });
+    assert.ok(discord.sent[0].payload.embeds[0].description.includes(`https://atleta.test/my-bookings?booking=${one.id}`));
+    const two = await waiting(addStreamer(), viewer(2));
+    await svc.decline(two.s, two.id, { now: NOW });
+    assert.ok(discord.sent[0].payload.embeds[0].description.includes(`/my-bookings?booking=${two.id}`));
+  });
+
   test('a refused message is kept as messageError and the booking stays confirmed', async () => {
     const { s, id } = await waiting();
     discord.sendResult = { ok: false, reason: 'unreachable' };
@@ -769,7 +778,7 @@ describe('reschedule (the coach starts it; a proposal is held like a booking)', 
     const r = await svc.startReschedule(s, id, { way: 'ask', now: NOW + MIN });
     assert.equal(r.ok, true);
     assert.match(to(v.discordUserId)[0].payload.embeds[0].title, /pick a new time/);
-    assert.match(to(v.discordUserId)[0].payload.embeds[0].description, new RegExp(`/coach\\d+\\?booking=${id}`));
+    assert.match(to(v.discordUserId)[0].payload.embeds[0].description, new RegExp(`/my-bookings\\?booking=${id}`));
     const { starts } = svc.viewerStarts(s, v, id, { now: NOW + MIN });
     assert.ok(starts.length > 0);
     assert.ok(!starts.includes(FREE), 'never the original time');

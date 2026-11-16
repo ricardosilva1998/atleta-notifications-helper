@@ -199,7 +199,23 @@
     return (starts || []).filter(function (s) { return lead ? s >= now + lead : s > now; });
   }
 
-  var CORE = { localDate: localDate, groupByLocalDay: groupByLocalDay, daysToShow: daysToShow, timeLabel: timeLabel,
+  // The step the booking page opens at: 1 connect Discord (no viewer), 2 join the server (the bot does not see them in it),
+  // 3 length (a member, or Discord could not say: member null lets them go on, with a warning). Step 4 (day, time and
+  // message) is only ever reached with Next.
+  function stepFor(state) {
+    if (!state || !state.viewer) return 1;
+    return state.member === false ? 2 : 3;
+  }
+
+  // Where Back goes from a step: 4 -> 3; 3 -> 2 unless they are a member (joining is done); 2 and 1 have no Back (the
+  // viewer is connected already).
+  function backStep(step, state) {
+    if (step === 4) return 3;
+    if (step === 3) return state && state.member === true ? null : 2;
+    return null;
+  }
+
+  var CORE = { stepFor: stepFor, backStep: backStep, localDate: localDate, groupByLocalDay: groupByLocalDay, daysToShow: daysToShow, timeLabel: timeLabel,
     dayLabel: dayLabel, dateLabel: dateLabel, holds: holds, canCancel: canCancel, canPay: canPay, upcomingCount: upcomingCount,
     bookableStarts: bookableStarts, formatPrice: formatPrice, lengthLabel: lengthLabel, payByLabel: payByLabel,
     lengthsToShow: lengthsToShow, rescheduleMode: rescheduleMode, refundLine: refundLine, bookingFromSearch: bookingFromSearch, returnNotice: returnNotice, isPayPalUrl: isPayPalUrl, isRoomUrl: isRoomUrl };

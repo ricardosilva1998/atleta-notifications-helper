@@ -56,38 +56,19 @@ function refuse(res, code) {
 }
 
 // The texts public/js/coaching-page.js reads, as window.COACHING_TEXTS (name -> key; their {{fields}} are kept for the
-// script, which fills them in one pass), and the states' names under `states`.
+// script, which fills them in one pass).
 const PAGE_TEXT_KEYS = {
   zone: 'coaching.page.zone', lengthMin: 'coaching.page.lengthMin', lengthHour: 'coaching.page.lengthHour', free: 'coaching.page.free',
-  payBy: 'coaching.page.payBy', pay: 'coaching.page.pay', paying: 'coaching.page.paying', room: 'coaching.page.room',
-  where: 'coaching.page.where', paidOk: 'coaching.page.paidOk', checkAgain: 'coaching.page.checkAgain', paidAmount: 'coaching.page.paidAmount',
-  noTimes: 'coaching.page.noTimes', noTimesDay: 'coaching.page.noTimesDay', pickTime: 'coaching.page.pickTime',
-  request: 'coaching.page.request', requesting: 'coaching.page.requesting', requested: 'coaching.page.requested',
+  noTimes: 'coaching.page.noTimes', noTimesDay: 'coaching.page.noTimesDay',
+  request: 'coaching.page.request', requesting: 'coaching.page.requesting',
   unverified: 'coaching.page.unverified', joinFirst: 'coaching.page.joinFirst', serverFallback: 'coaching.page.serverFallback',
-  notJoined: 'coaching.page.notJoined', limit: 'coaching.page.limit', cancel: 'coaching.page.cancel',
-  cancelConfirm: 'coaching.page.cancelConfirm', withdrawn: 'coaching.page.withdrawn', signIn: 'coaching.page.signIn',
+  notJoined: 'coaching.page.notJoined', limit: 'coaching.page.limit', signIn: 'coaching.page.signIn',
   failed: 'coaching.page.failed', offline: 'coaching.page.offline',
-  payNote: 'coaching.page.payNote', cancelReason: 'coaching.page.cancelReason', refundPending: 'coaching.page.refundPending',
-  refunded: 'coaching.page.refunded', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
-  reschedMine: 'coaching.page.reschedMine', reschedUntil: 'coaching.page.reschedUntil', reschedOriginal: 'coaching.page.reschedOriginal',
-  reschedAccept: 'coaching.page.reschedAccept', reschedOther: 'coaching.page.reschedOther', reschedPick: 'coaching.page.reschedPick',
-  reschedSend: 'coaching.page.reschedSend', reschedNote: 'coaching.page.reschedNote', reschedLoading: 'coaching.page.reschedLoading',
-  reschedNoTimes: 'coaching.page.reschedNoTimes', reschedSent: 'coaching.page.reschedSent', reschedAgreed: 'coaching.page.reschedAgreed',
-  reschedClose: 'coaching.page.reschedClose', reschedPicked: 'coaching.page.reschedPicked',
-};
-const STATE_KEYS = {
-  waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
-  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
-  rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {
   const texts = {};
   for (const [name, key] of Object.entries(PAGE_TEXT_KEYS)) texts[name] = t(key, KEEP_FIELDS);
-  texts.states = {};
-  for (const [state, key] of Object.entries(STATE_KEYS)) texts.states[state] = t(key);
-  texts.returnErrors = {};
-  for (const [code, key] of Object.entries(RETURN_ERROR_KEYS)) texts.returnErrors[code] = t(key);
   return texts;
 }
 
@@ -269,13 +250,17 @@ router.post('/:username/bookings/:id/pay', async (req, res) => {
 router.get('/:username/paid', async (req, res) => {
   const page = coachingPage(req);
   if (!page) return unavailablePage(res);
-  const base = `/coaching/${encodeURIComponent(page.streamer.twitch_username)}`;
   const orderId = typeof req.query.token === 'string' ? req.query.token : '';
   const result = await coachingPayments.handleReturn({ streamer: page.streamer, orderId });
-  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}?paid=1` : `${base}?error=late`);
+  // The viewer lands on My bookings, on the booking this order paid (only one of this streamer's).
+  const payment = /^[A-Z0-9-]{1,64}$/i.test(orderId) ? db.getCoachingPayment(orderId) : null;
+  const paidBooking = payment ? db.getCoachingBookingById(payment.booking_id) : null;
+  const bookingPart = paidBooking && paidBooking.streamer_id === page.streamer.id ? `booking=${paidBooking.id}&` : '';
+  const base = `/my-bookings?${bookingPart}`;
+  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}paid=1` : `${base}error=late`);
   console.error(`[Coaching] return of order ${/^[A-Z0-9-]{1,64}$/i.test(orderId) ? orderId : '(invalid)'} for streamer ${page.streamer.id} not counted: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`);
   const code = coachingPayments.returnErrorCode(result.reason);
-  res.redirect(`${base}?error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);
+  res.redirect(`${base}error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);
 });
 
 module.exports = router;

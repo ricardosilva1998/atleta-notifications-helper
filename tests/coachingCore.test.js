@@ -202,4 +202,20 @@ describe('reschedule and refund helpers', () => {
     assert.equal(core.bookingFromSearch('?booking=1<script>'), null);
     assert.equal(core.bookingFromSearch(''), null);
   });
+
+  test('stepFor: signed out opens at 1, not in the server at 2, a member or unknown at 3', () => {
+    assert.equal(core.stepFor({ viewer: null }), 1);
+    assert.equal(core.stepFor(null), 1);
+    assert.equal(core.stepFor({ viewer: { displayName: 'a' }, member: false }), 2);
+    assert.equal(core.stepFor({ viewer: { displayName: 'a' }, member: true }), 3);
+    assert.equal(core.stepFor({ viewer: { displayName: 'a' }, member: null }), 3);
+  });
+
+  test('backStep: 4 to 3, 3 to 2 unless a member, none from 2', () => {
+    assert.equal(core.backStep(4, { member: true }), 3);
+    assert.equal(core.backStep(3, { member: true }), null);
+    assert.equal(core.backStep(3, { member: null }), 2);
+    assert.equal(core.backStep(3, { member: false }), 2);
+    assert.equal(core.backStep(2, { member: false }), null);
+  });
 });

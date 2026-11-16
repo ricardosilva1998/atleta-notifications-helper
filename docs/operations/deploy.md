@@ -898,3 +898,16 @@ Rolling back is safe for the data.
   schedule to say so.
 - **A cancelled paid session** keeps its Refund pending state in the database; the previous release will not show it.
 - **Rooms** already removed stay removed; a rescheduling session's room stays until it is settled.
+
+## Coaching booking in four steps and My bookings (2026-11-16)
+
+No schema change: no new tables or columns, so no `[DB migration]` line on the boot (the second CI boot stays quiet).
+What changed for viewers: the booking page is four steps, the viewer's bookings moved to `/my-bookings`, PayPal
+returns there, and every viewer Discord message links to `/my-bookings?booking=<id>`. The new texts in the six
+non-English languages are machine-made (pt is European Portuguese) and want a native read-through.
+
+After the deploy:
+1. `/health` answers 200, and the boot log has no `LOGIN REFUSED` and no `[DB migration]` line.
+2. `https://atletanotifications.com/coaching/ricardobsilva98` opens on its first step (Connect Discord, "Step 1 of 4").
+3. `https://atletanotifications.com/my-bookings` answers 200 signed out, with **Connect Discord**.
+4. Rolling back is safe: nothing in the data changed. An older release shows the viewer's bookings on the booking page again.
