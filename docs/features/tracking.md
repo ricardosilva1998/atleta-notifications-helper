@@ -268,7 +268,7 @@ refusal codes), `src/services/trackingGoals.test.js`, `src/services/trackers.tes
 tests (the feeds), `src/routes/overlay.tracking.test.js` (the sources), `tests/trackingClient.test.js`
 (the source's script in a `vm`), `src/routes/dashboard.tracking.test.js` (the page and its routes),
 `src/pollers/manager.test.js` and `src/services/accountLifecycle.test.js`. Run the unit suite as usual
-(`node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"`).
+(`node --test "src/**/*.test.js" "tests/**/*.test.js"`).
 
 The browser check (headless Chromium on a throwaway copy of the site and its database; Twitch stubbed, events fired
 through the same service calls EventSub and the tip routes make): `/dashboard/tracking` at 1600 and 375 px, a monthly

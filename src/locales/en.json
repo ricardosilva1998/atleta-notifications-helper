@@ -1261,7 +1261,7 @@
   "guild.channelCapReached": "A server can watch up to {{max}} Twitch channels. Remove one to add another.",
   "overlay.regenerate.button": "Regenerate overlay URL",
   "overlay.regenerate.hint": "Use this if your overlay URL was shared or leaked. The old URL stops working at once.",
-  "overlay.regenerate.confirm": "Generate a new overlay URL? The current URL stops working immediately: every OBS browser source that uses it (alerts, sponsors, tip goal, iRacing overlays, VTuber) shows nothing until you paste the new URL into OBS.",
+  "overlay.regenerate.confirm": "Generate a new overlay URL? The current URL stops working immediately: every OBS browser source that uses it (alerts, sponsors, tip goal, VTuber) shows nothing until you paste the new URL into OBS.",
 
   "modLog.back": "Back to Moderation",
   "modLog.title": "Moderation Log",

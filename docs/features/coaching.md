@@ -821,7 +821,7 @@ are read back once and dropped by the tick.
 | `src/discord.coaching.test.js`, `src/services/discordLogin.test.js` | the category permission check, the attachment hosts and size cap, the Message Content fallback |
 | `tests/streamerViewsI18n.test.js`, `tests/i18nViewsPart1.test.js`, `tests/i18n.test.js` | both pages and the card in all seven languages |
 
-Run the unit suite as usual: `node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"`.
+Run the unit suite as usual: `node --test "src/**/*.test.js" "tests/**/*.test.js"`.
 
 **The browser check.** Headless Chromium ran on a throwaway copy of the site with its own empty `data/` and
 `DISCORD_DISABLED=1`. A preload stubbed Discord's OAuth, the invite lookup, the membership check and the direct

@@ -33,7 +33,7 @@ A backup holds every account's data, including OAuth tokens, PayPal emails and w
 session hashes. Treat a downloaded copy as a secret: keep it encrypted, never commit it, and delete
 it when you no longer need it.
 
-Once `TOKEN_ENCRYPTION_KEY` is set (`deploy.md`), the OAuth tokens and the StreamElements token in a
+Once `TOKEN_ENCRYPTION_KEY` is set (`deploy.md`), the OAuth tokens in a
 copy are encrypted with it, and web sessions are stored as hashes. **Restoring a copy only gets the
 connections back if the service has the same key**; keep the key somewhere other than the backups.
 Copies made before the key was set hold plaintext tokens until they age out (7 days on the volume).
