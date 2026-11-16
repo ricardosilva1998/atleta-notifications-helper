@@ -102,6 +102,15 @@ app.use(generalLimiter);
 // some routes) is read, and it counts each request once: no /api route may be
 // given apiLimiter again.
 app.use('/api', apiLimiter);
+// The Racing product is retired (2026-11-16): the Atleta Racing app's API
+// answers 410 Gone before anything behind it runs. These routes trusted a bare
+// bridge id that /api/bridge-ids listed to anyone. The code behind them is
+// removed in a later change.
+const RETIRED_RACING_API = /^\/api\/(bridge(\/|-logs|-ids|-users|-bug-reports|$)|track-maps?(\/|$)|track-stats(\/|$)|live-session(\/|$)|sessions?(\/|$)|voice(\/|$))/;
+app.use((req, res, next) => {
+  if (RETIRED_RACING_API.test(req.path)) return res.status(410).json({ error: 'gone' });
+  next();
+});
 function secureCookie(res, name, value, opts = {}) {
   res.cookie(name, value, { httpOnly: true, secure: isProduction, sameSite: 'lax', ...opts });
 }

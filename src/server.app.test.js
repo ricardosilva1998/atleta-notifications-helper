@@ -174,7 +174,8 @@ describe('the rate limits count each visitor, not the Cloudflare edge in front o
     assert.equal(remaining(await file('198.51.100.23')), 199);
   });
 
-  test('the Discord voice limit (60 a minute) too', async () => {
+  // Racing retired 2026-11-16: /api/voice answers 410 Gone before its limiter.
+  test.skip('the Discord voice limit (60 a minute) too', async () => {
     const voice = (cf) => send('GET', '/api/voice/123456789012345678', { peer: CF_LISBON, cf });
     const first = await voice('198.51.100.30');
     assert.equal(first.headers['ratelimit-limit'], '60');
@@ -213,6 +214,28 @@ describe('the Racing sign-in log records the visitor\'s address', () => {
   });
 });
 
+describe('the retired Racing API answers 410 Gone', () => {
+  test('every route the Atleta Racing app called, before anything behind it runs', async () => {
+    const retired = [
+      ['GET', '/api/bridge-ids'], ['GET', '/api/bridge-users'], ['GET', '/api/bridge-logs/abc'],
+      ['GET', '/api/bridge/account?bridge_id=3f1c2a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f'], ['POST', '/api/bridge/whisper'],
+      ['GET', '/api/sessions/Spa'], ['GET', '/api/session/1/telemetry/1'], ['POST', '/api/session'],
+      ['DELETE', '/api/track-stats/Spa/GT3/Sprint'], ['GET', '/api/track-maps'], ['POST', '/api/live-session'],
+      ['GET', '/api/voice/123456789012345678'],
+    ];
+    for (const [method, urlPath] of retired) {
+      const res = await send(method, urlPath, { json: method === 'GET' ? undefined : {} });
+      assert.equal(res.status, 410, `${method} ${urlPath}`);
+      assert.deepEqual(res.json, { error: 'gone' });
+    }
+  });
+
+  test('the streamer routes under /api are not touched', async () => {
+    assert.notEqual((await send('GET', '/api/guild/1/channels')).status, 410);
+    assert.notEqual((await send('POST', '/api/multistream/auth', { json: {} })).status, 410);
+  });
+});
+
 // ── What the Atleta Racing app uploads ───────────────────────────────────
 // Payloads shaped exactly as bridge/sessionRecorder.js, bridge/telemetry.js and
 // bridge/main.js send them, and values of the wrong kind or length in every
@@ -234,7 +257,8 @@ const outline = (points = 500) => Array.from({ length: points }, (_, i) => ({ x:
 const weekend = { trackLength: '5.79 km', trackTurns: 21, trackCountry: 'Germany', trackCity: 'Nürburg' };
 const trackMeta = (name) => row('SELECT track_length, track_turns, track_country, track_city FROM track_maps WHERE track_name = ?', name);
 
-describe('POST /api/track-map (telemetry.js uploadTrackToServer)', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('POST /api/track-map (telemetry.js uploadTrackToServer)', () => {
   test('the app\'s upload is stored as it was sent', async () => {
     const res = await send('POST', '/api/track-map', { json: { trackName: 'Nurburgring Combined', trackData: outline(), ...weekend } });
     assert.deepEqual(res.json, { status: 'ok', points: 500 });
@@ -322,7 +346,8 @@ const storedSession = (id) => row(`SELECT ${SESSION_COLUMNS} FROM racing_session
 const storedLaps = (id) => rows(`SELECT ${LAP_COLUMNS} FROM session_laps WHERE session_id = ? ORDER BY id`, id);
 const storedTelemetry = (id) => rows('SELECT t.data FROM lap_telemetry t JOIN session_laps l ON l.id = t.lap_id WHERE l.session_id = ? ORDER BY l.id', id).map((r) => r.data);
 
-describe('POST /api/session (sessionRecorder.js createSessionOnServer)', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('POST /api/session (sessionRecorder.js createSessionOnServer)', () => {
   test('the app\'s first upload is stored as it was sent', async () => {
     const res = await send('POST', '/api/session', { json: bridgeSession('Track S1') });
     assert.equal(res.status, 200);
@@ -411,7 +436,8 @@ describe('POST /api/session (sessionRecorder.js createSessionOnServer)', () => {
   });
 });
 
-describe('POST /api/session/:id/lap and PATCH /api/session/:id/finish (sessionRecorder.js)', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('POST /api/session/:id/lap and PATCH /api/session/:id/finish (sessionRecorder.js)', () => {
   async function newSession(trackName) {
     return (await send('POST', '/api/session', { json: bridgeSession(trackName) })).json.id;
   }
@@ -464,7 +490,8 @@ describe('POST /api/session/:id/lap and PATCH /api/session/:id/finish (sessionRe
   });
 });
 
-describe('POST /api/live-session (telemetry.js heartbeat)', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('POST /api/live-session (telemetry.js heartbeat)', () => {
   const heartbeat = { trackName: 'Daytona International Speedway', eventType: 'Race', classes: ['GTP', 'LMP2', 'GT3 Class'], driversCount: 48, totalMinutes: 165, timeRemain: 5412, raceType: 'IMSA Endurance' };
 
   test('the app\'s heartbeat is shown as it was sent', async () => {
@@ -493,7 +520,8 @@ describe('POST /api/live-session (telemetry.js heartbeat)', () => {
   });
 });
 
-describe('POST /api/track-stats (telemetry.js collectAndUploadTrackStats)', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('POST /api/track-stats (telemetry.js collectAndUploadTrackStats)', () => {
   const stored = (track) => rows('SELECT car_class, race_type, avg_lap_time, avg_pit_time, avg_qualify_time, avg_sof, est_laps, avg_drivers, race_count, top_car, category FROM track_stats WHERE track_name = ? ORDER BY car_class', track);
 
   test('the app\'s statistics are stored as they were sent', async () => {
@@ -528,7 +556,8 @@ describe('POST /api/track-stats (telemetry.js collectAndUploadTrackStats)', () =
   });
 });
 
-describe('POST /api/bridge-logs and /api/bridge-bug-reports: the bridge id', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('POST /api/bridge-logs and /api/bridge-bug-reports: the bridge id', () => {
   test('the app\'s log upload is stored with its iRacing name', async () => {
     const res = await send('POST', '/api/bridge-logs', { json: { bridgeId: BRIDGE_ID, lines: '[Telemetry] Connected\n', iracingName: 'Synthetic Driver' } });
     assert.deepEqual(res.json, { ok: true });
@@ -566,7 +595,8 @@ describe('POST /api/bridge-logs and /api/bridge-bug-reports: the bridge id', () 
 // /api/bridge/spotify/control find the streamer through the racer's link (by
 // session or by ?bridge_id=): a disabled one must answer as no linked streamer.
 
-describe('a disabled streamer, through the Atleta Racing app\'s account and Spotify calls', () => {
+// Racing retired 2026-11-16: these routes answer 410 Gone; this block goes with the Racing code.
+describe.skip('a disabled streamer, through the Atleta Racing app\'s account and Spotify calls', () => {
   const { csrfToken } = require('./csrf');
   const BRIDGE_ENABLED = 'e0000000-0000-4000-8000-000000000001';
   const BRIDGE_DISABLED = 'd0000000-0000-4000-8000-000000000002';
@@ -684,9 +714,9 @@ describe('pages are in English unless the visitor picked a language', () => {
   });
 
   test('no JSON answer or file says Vary: Accept-Language either', async () => {
-    for (const urlPath of ['/api/track-maps', '/api/bridge/config', '/js/csrf.js']) {
+    for (const [urlPath, status] of [['/health', 200], ['/api/track-maps', 410], ['/js/csrf.js', 200]]) {
       const res = await send('GET', urlPath, { headers: { 'Accept-Language': 'pt' } });
-      assert.equal(res.status, 200, urlPath);
+      assert.equal(res.status, status, urlPath);
       assert.ok(!varies(res), `${urlPath}: Vary: ${res.headers.vary}`);
     }
   });
