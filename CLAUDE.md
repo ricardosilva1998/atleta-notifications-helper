@@ -436,3 +436,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - The overlay settings Preview Alert buttons keep their chat line; the working cards' Test buttons send `chat: false`; the preview iframe (`?preview=1`) is not counted as an open OBS source.
 - deploy.md has a PR B release note (migrations, checks, rollback); the socket.io-client item in security-todo is closed.
 **Open:** none
+
+### 2026-11-16 21:00 — team-qa
+**Task:** T19, final QA of the remove-Racing and review-fixes branch
+**Tests added/changed:** none
+**Suite result:** scratch copy (Node 26): 3970 tests, 3970 pass, 0 fail. Two boots on empty then reused data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM both times.
+**Manual checks:** 13 smoke checks pass (headless Chromium, seeded streamer): dashboard, card Test sends `chat:false`, overlay settings has no StreamElements and its preview iframe has `preview=1`, opening /dashboard/tracking leaves the six trackers off, /pricing and /payment redirect, /racing goes to `/`, /api/session 410, donation history shows a streamelements row, /my-bookings loads. Coaching tab flash checked for real with scripts delayed 1.5 s at 1280 and 375 px, five remembered-tab states each: only the remembered panel ever shown.
+**Bugs found:** none. QA: pass.
+**Open:** none
