@@ -154,9 +154,9 @@
     coachLink.appendChild(make('span', null, b.coach.name));
     what.appendChild(coachLink);
     var when = make('div');
-    when.appendChild(make('span', 't', whenOf(b.startsAt)));
+    when.appendChild(make('div', 't', whenOf(b.startsAt)));
     var cost = b.paid ? fill(T.paidAmount, { price: price(b.paidAmountCents, b.paidCurrency) }) : (b.priceCents == null ? '' : price(b.priceCents, b.currency));
-    when.appendChild(make('span', 'cz-sub', ' · ' + lengthText(b.minutes) + (cost ? ' · ' + cost : '')));
+    when.appendChild(make('div', 'cz-sub', lengthText(b.minutes) + (cost ? ' · ' + cost : '')));
     what.appendChild(when);
     var active = !!b.coach.available;
     if (b.state === 'awaiting_payment' && b.payBy) what.appendChild(make('div', 'cz-sub', fill(T.payBy, { when: C.payByLabel(b.payBy, zone, lang) })));

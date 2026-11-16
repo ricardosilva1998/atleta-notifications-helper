@@ -157,7 +157,7 @@
     drawLengths(list);
     var none = $('cz-empty-length');
     none.textContent = list.length ? '' : T.noTimes;
-    show(none, !list.length);
+    show(none, !list.length && !atLimit); // at the limit the limit text says why, not "no free times"
     var limit = $('cz-limit');
     limit.textContent = fill(T.limit, fields());
     show(limit, atLimit);

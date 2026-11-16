@@ -126,7 +126,13 @@
     .mb-off { color: var(--text-muted); }
     .cz-pill.declined, .cz-pill.expired, .cz-pill.withdrawn, .cz-pill.unanswered { background: var(--bg-elevated); color: var(--text-muted); }
     .cz-btn.signout { background: none; padding: 0; color: var(--text-muted); font-weight: 400; font-size: 11px; text-decoration: underline; min-height: 0; }
-    @media (max-width: 600px) { .cz-notyou, .cz-btn.signout { min-height: 44px; padding: 0 8px; } .cz-lead { font-size: 14px; } }
+    @media (max-width: 600px) {
+      .cz-notyou, .cz-btn.signout { min-height: 44px; padding: 0 8px; }
+      .cz-lead { font-size: 14px; }
+      .cz-btn { min-height: 44px; }
+      .mb-coach { min-height: 44px; margin: -12px 0 -8px; }
+      .cz-foot a { display: inline-block; min-width: 44px; padding: 15px 8px; margin: -15px -4px; }
+    }
   </style>
 </head>
 <body>

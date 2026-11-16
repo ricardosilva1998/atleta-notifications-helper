@@ -480,3 +480,13 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Files:** src/routes/auth.test.js, CLAUDE.md
 **Fixes applied:** none needed; one regression test added (repeated `for` is 404 with no cookie). Scratch suite: 4125 tests, 4124 pass, 0 fail, 1 pre-existing skip.
 **Open:** none
+
+### 2026-11-16 — team-ux (T6, coaching booking in steps and My bookings)
+**Mode:** audit
+**Task:** UX check of the four-step booking page, My bookings and the home entry at 360, 768 and 1280 px (scratch copy, Discord and PayPal stubbed, a viewer seeded with 10 bookings across two coaches)
+**Files:** src/views/coaching.ejs, src/views/my-bookings.ejs, public/js/coaching-page.js, public/js/my-bookings.js
+**Decisions:**
+- No horizontal scroll on any step or My bookings state at the three widths; text areas are 16 px at 360; focus moves to the step heading on a step change; Back keeps the chosen length.
+- Fixed: at the booking limit step 3 said "No free times" next to the limit text (now only the limit text); touch targets under 44 px at 360 (Back, Connect Discord on My bookings, coach links, My bookings link, footer link); a booking row's date, length and price no longer wrap mid-line (date on its own line, "length · price" below).
+- Left alone: the home page's new Coaching bookings button is 43 px high like its sibling buttons (home layout is not in this task).
+**Open:** none. Screenshots (scratch): /private/tmp/claude-501/-Users-ricardsilva-Library-Mobile-Documents-com-apple-CloudDocs-Projects-vilela-notifications/3cd9b144-ad1b-4e74-8f69-978c52aab7ed/scratchpad/shots/
