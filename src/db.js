@@ -1892,6 +1892,7 @@ const _saveRaidProtection = db.prepare(`
   ON CONFLICT(streamer_id) DO UPDATE SET ends_at = excluded.ends_at
 `);
 const _deleteRaidProtection = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ?');
+const _deleteRaidProtectionIf = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ? AND ends_at = ?');
 const _listRaidProtections = db.prepare('SELECT * FROM raid_protection');
 
 function getRaidProtection(streamerId) { return _getRaidProtection.get(streamerId); }
@@ -1900,6 +1901,7 @@ function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration) {
   _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0);
 }
 function deleteRaidProtection(streamerId) { _deleteRaidProtection.run(streamerId); }
+function deleteRaidProtectionIf(streamerId, endsAt) { return _deleteRaidProtectionIf.run(streamerId, endsAt).changes > 0; }
 function listRaidProtections() { return _listRaidProtections.all(); }
 
 // --- Digest Channel ---
@@ -5947,6 +5949,7 @@ module.exports = {
   getRaidProtection,
   saveRaidProtection,
   deleteRaidProtection,
+  deleteRaidProtectionIf,
   listRaidProtections,
   updateWeeklyDigestDate,
   getGuildsWithWeeklyHighlights,

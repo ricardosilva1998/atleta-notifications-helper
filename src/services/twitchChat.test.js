@@ -24,6 +24,12 @@ const dbStub = {
   getRaidProtection: (id) => raidRows.get(id),
   saveRaidProtection: (id, endsAt, mode, duration) => { if (!raidRows.has(id)) raidRows.set(id, { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0 }); },
   deleteRaidProtection: (id) => { raidRows.delete(id); },
+  deleteRaidProtectionIf: (id, endsAt) => {
+    const row = raidRows.get(id);
+    if (!row || row.ends_at !== endsAt) return false;
+    raidRows.delete(id);
+    return true;
+  },
   listRaidProtections: () => [...raidRows.values()],
 };
 const raidRows = new Map();

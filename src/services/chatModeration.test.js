@@ -19,6 +19,12 @@ const dbStub = {
     state.raidRows.set(id, old ? { ...old, ends_at: endsAt } : { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0 });
   },
   deleteRaidProtection: (id) => { state.raidRows.delete(id); },
+  deleteRaidProtectionIf: (id, endsAt) => {
+    const row = state.raidRows.get(id);
+    if (!row || row.ends_at !== endsAt) return false;
+    state.raidRows.delete(id);
+    return true;
+  },
   listRaidProtections: () => [...state.raidRows.values()],
   getStreamerById: (id) => state.streamers.get(id),
 };
@@ -394,6 +400,39 @@ describe('raid protection', () => {
     t.mock.timers.tick(60_000);
     await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
     assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_180_000, prev_follower_mode: 1, prev_follower_mode_duration: 30 });
+  });
+
+  test('a raid during the restore keeps its own protection and timer', async (t) => {
+    mod.stopRaidProtectionTicks();
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 5_000_000 });
+    stubTwitch(200);
+    state.streamers.set(1, streamerRow());
+    const client = fakeClient();
+    await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
+    const baseFetch = global.fetch;
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    let held = false;
+    global.fetch = async (url, opts = {}) => {
+      if (!held && opts.method === 'PATCH' && opts.body && JSON.parse(opts.body).follower_mode === false) {
+        held = true;
+        await gate;
+      }
+      return baseFetch(url, opts);
+    };
+    t.mock.timers.tick(120_000);
+    await flush();
+    assert.equal(held, true, 'the restore is pending');
+    await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
+    assert.equal(state.raidRows.get(1).ends_at, 5_240_000);
+    release();
+    await flush();
+    assert.equal(state.raidRows.get(1)?.ends_at, 5_240_000, 'the second raid\'s row survives');
+    assert.ok(!client.said.some((s) => s.text.startsWith('Raid protection ended')));
+    t.mock.timers.tick(120_000);
+    await flush();
+    assert.equal(state.raidRows.size, 0);
+    assert.equal(client.said.filter((s) => s.text.startsWith('Raid protection ended')).length, 1);
   });
 
   test('after a restart an overdue protection is ended and a running one is re-armed', async (t) => {

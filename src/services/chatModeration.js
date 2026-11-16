@@ -629,13 +629,18 @@ async function finishRaidProtection(streamerId, say) {
     return true;
   }
   if (await updateChatSettings(streamer.twitch_username, streamer, restoreBody(row))) {
-    db.deleteRaidProtection(streamerId);
+    // A raid that arrived during the restore moved ends_at: its row and timer stay.
+    if (!db.deleteRaidProtectionIf(streamerId, row.ends_at)) {
+      const current = db.getRaidProtection(streamerId);
+      if (current && !raidProtectionTimers.has(streamerId)) armRaidTimer(streamerId, current.ends_at - Date.now(), say);
+      return true;
+    }
     try { say?.(streamer, 'Raid protection ended. Followers-only mode disabled.'); } catch { /* chat is best effort */ }
     return true;
   }
   if (Date.now() - row.ends_at > RAID_RETRY_LIMIT_MS) {
     console.error(`[Mod] Giving up restoring followers-only mode for streamer ${streamerId} after an hour`);
-    db.deleteRaidProtection(streamerId);
+    db.deleteRaidProtectionIf(streamerId, row.ends_at);
     return true;
   }
   return false;
