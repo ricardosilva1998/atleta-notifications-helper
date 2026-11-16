@@ -3356,6 +3356,23 @@ try {
     console.log('[DB] Added profile_picture column to streamers');
   }
 } catch {}
+
+// Migration: add three streamers columns that were only in the CREATE TABLE (so brand-new databases had them and
+// every test passed) but never had an ALTER for databases from before they were added — like the production one.
+// `twitch_profile_image` is the coach's avatar (My bookings reads it in SQL, so a database without the column made
+// /my-bookings answer 500; the tip and coaching pages read it as a property that was simply absent); the other two
+// were never read in SQL and only as absent properties, so nothing had crashed on them yet.
+try {
+  const cols = db.pragma('table_info(streamers)').map(c => c.name);
+  if (!cols.includes('twitch_profile_image')) {
+    db.exec(`
+      ALTER TABLE streamers ADD COLUMN twitch_profile_image TEXT;
+      ALTER TABLE streamers ADD COLUMN discord_guild_id TEXT;
+      ALTER TABLE streamers ADD COLUMN sponsor_rotation_interval INTEGER DEFAULT 60;
+    `);
+    console.log('[DB] Added twitch_profile_image, discord_guild_id and sponsor_rotation_interval to streamers');
+  }
+} catch {}
 _updateProfilePicture = db.prepare('UPDATE streamers SET profile_picture = ? WHERE id = ?');
 _clearProfilePicture = db.prepare('UPDATE streamers SET profile_picture = NULL WHERE id = ?');
 
