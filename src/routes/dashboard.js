@@ -2377,7 +2377,7 @@ router.post('/report/:id/screenshot', async (req, res) => {
   const issueDir = path.join(__dirname, '..', '..', 'data', 'issues', String(issueId));
   try { await fs.promises.mkdir(issueDir, { recursive: true }); } catch (e) {}
 
-  const filename = `shot_${Date.now()}.${ext}`;
+  const filename = `shot_${require('crypto').randomBytes(16).toString('hex')}.${ext}`;
   try { await fs.promises.writeFile(path.join(issueDir, filename), buf); }
   catch (e) { return res.status(500).json({ ok: false, error: 'write_failed' }); }
 

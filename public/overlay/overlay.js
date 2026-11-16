@@ -782,8 +782,8 @@ function buildBannerContent(event) {
     case 'subscription': {
       const d = event.data;
       const detail = d.months && d.months > 1
-        ? `Subscribed for <b>${d.months} months</b> — Tier ${d.tier || '1'} 🥇`
-        : d.message ? esc(d.message) : `Tier ${d.tier || '1'} subscriber! 🥇`;
+        ? `Subscribed for <b>${esc(d.months)} months</b> — Tier ${esc(d.tier || '1')} 🥇`
+        : d.message ? esc(d.message) : `Tier ${esc(d.tier || '1')} subscriber! 🥇`;
       const body = `<div class="event-label">Podium Finish</div>
           <div class="username">${esc(d.username)}</div>
           <div class="detail">${detail}</div>`;
@@ -798,7 +798,7 @@ function buildBannerContent(event) {
     case 'bits': {
       const body = `<div class="event-label">Nitro Boost</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">fueled up <b>${event.data.amount} bits</b> of nitro! 🔥</div>`;
+          <div class="detail">fueled up <b>${esc(event.data.amount)} bits</b> of nitro! 🔥</div>`;
       return `<div class="top-accent"></div>
         <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
@@ -808,13 +808,13 @@ function buildBannerContent(event) {
     }
 
     case 'donation': {
-      const currency = event.data.currency || '$';
+      const currency = esc(event.data.currency || '$');
       const msgHtml = event.data.message
         ? `<div class="detail" style="margin-top:6px;font-style:italic;opacity:0.85;">"${esc(event.data.message)}"</div>`
         : '';
       const body = `<div class="event-label">Sponsor Alert</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">donated <b>${currency} ${event.data.amount}</b> 💸</div>${msgHtml}`;
+          <div class="detail">donated <b>${currency} ${esc(event.data.amount)}</b> 💸</div>${msgHtml}`;
       return `<div class="top-accent"></div>
         <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
@@ -827,7 +827,7 @@ function buildBannerContent(event) {
     }
 
     case 'raid': {
-      const viewers = event.data.viewers || '??';
+      const viewers = esc(event.data.viewers || '??');
       const body = `<div class="event-label">Incoming Raid</div>
           <div class="username">${esc(event.data.username)}</div>
           <div class="detail">raiding with <b>${viewers} viewers</b>! 🏁</div>`;

@@ -17,6 +17,7 @@ const { isRelayRequest } = require('./services/multistreamAuth');
 const { healthHandler } = require('./health');
 const httpDrain = require('./httpDrain');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
+const { issueFileHandler, issueFileHeaders } = require('./services/issueFiles');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -140,8 +141,6 @@ app.use('/sponsors', dataFiles('sponsors'));
 app.use('/redemptions', dataFiles('redemptions', (res) => res.set('Cache-Control', 'public, max-age=86400')));
 // Profile pictures
 app.use('/avatars', dataFiles('avatars'));
-// Issue screenshots
-app.use('/issues-files', dataFiles('issues'));
 // Custom VTuber models
 app.use('/vtuber-models', dataFiles('vtuber-models'));
 // Serve custom overlay uploads from persistent data volume — DISABLED for now
@@ -291,6 +290,8 @@ app.get('/streamer', (req, res) => {
 app.use('/api', apiRoutes); // apiLimiter is applied above, ahead of every /api route
 app.use('/admin', adminRoutes);
 app.use('/vtuber', vtuberRoutes);
+// Issue screenshots: the reporter or an admin only (after the session middleware)
+app.get('/issues-files/:issueId/:file', issueFileHeaders, issueFileHandler);
 app.use('/sync', syncRoutes);
 app.use('/overlay', overlayRoutes);
 
