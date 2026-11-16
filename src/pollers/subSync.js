@@ -1,6 +1,6 @@
 const config = require('../config');
 const db = require('../db');
-const { getSubscribers, getUserId, refreshBroadcasterToken } = require('../services/twitch');
+const { getSubscribers, getUserId, refreshBroadcasterTokenShared } = require('../services/twitch');
 const { client } = require('../discord');
 const { subRoleEligibility, roleFacts, botTopRolePosition } = require('../services/discordGuards');
 
@@ -64,7 +64,7 @@ async function checkStreamer(streamer) {
   let accessToken = streamer.broadcaster_access_token;
   if (Date.now() >= streamer.broadcaster_token_expires_at) {
     try {
-      accessToken = await refreshBroadcasterToken(streamer);
+      accessToken = await refreshBroadcasterTokenShared(streamer);
     } catch (error) {
       // A dead refresh token can never recover on its own. Clear the scopes so
       // the dashboard prompts for re-authorization, and stop retrying every

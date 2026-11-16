@@ -58,7 +58,7 @@ const stubs = {
   '../config': { twitch: { clientId: 'synthetic-client-id' } },
   '../db': dbStub,
   './overlayBus': { emit: (channel, event) => effects.overlay.push({ channel, event }) },
-  './twitch': { refreshBroadcasterToken: async () => 'synthetic-fresh-token', hasRedemptionScope: () => true, hasPollsScope: () => pollsScope },
+  './twitch': { refreshBroadcasterTokenShared: async () => 'synthetic-fresh-token', hasRedemptionScope: () => true, hasPollsScope: () => pollsScope },
   './livePolls': { livePolls: { onEvent: (streamerId, type, event) => effects.polls.push({ streamerId, type, event }) } },
   './shoutouts': { shoutouts: { afterRaid: async (streamerId, raid) => { effects.shoutouts.push([streamerId, raid]); return 'sent'; } } },
   './twitchChat': {
@@ -877,5 +877,82 @@ describe('the follow/sub record and the trackers (Tracking)', () => {
     }));
     assert.deepEqual(effects.records, []);
     assert.deepEqual(effects.trackers, []);
+  });
+});
+
+describe('event types Twitch could not take at the start of a session', () => {
+  // Helix answers `failFor` types with `status` on their first `times` requests, everything else at once.
+  function failTypes(types, status, times) {
+    const seen = {};
+    global.fetch = async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      subscribeCalls.push({ url, body, signal: opts.signal, auth: opts.headers && opts.headers.Authorization });
+      seen[body.type] = (seen[body.type] || 0) + 1;
+      if (types.includes(body.type) && seen[body.type] <= times) return { ok: false, status, json: async () => ({ message: 'synthetic' }) };
+      return { ok: true, status: 202, json: async () => ({}) };
+    };
+  }
+  let live;
+  // Moves the clock in 5 s steps, each with a keepalive, so the session stays alive.
+  const wait = async (ms) => {
+    for (let left = ms; left > 0; left -= 5000) {
+      mock.timers.tick(Math.min(5000, left));
+      live.receive(keepalive());
+      await flush();
+    }
+  };
+  const start = async () => { live = await connected(); return live; };
+  const callsFor = (type) => subscribeCalls.filter((c) => c.body.type === type).length;
+
+  test('a 503 is asked again on the same session after 30 s', async () => {
+    failTypes(['channel.cheer'], 503, 1);
+    await start();
+    assert.equal(callsFor('channel.cheer'), 1);
+    await wait(29_999);
+    assert.equal(callsFor('channel.cheer'), 1);
+    await wait(1);
+    assert.equal(callsFor('channel.cheer'), 2);
+    assert.equal(subscribeCalls[subscribeCalls.length - 1].body.transport.session_id, 'session-1');
+    await wait(10 * 60_000);
+    assert.equal(callsFor('channel.cheer'), 2, 'taken: no more retries');
+    assert.equal(callsFor('channel.follow'), 1, 'the types that worked are not asked again');
+  });
+
+  test('backs off 30 s, 2 min, 10 min and then gives up', async () => {
+    failTypes(['channel.cheer'], 429, 99);
+    await start();
+    await wait(30_000);
+    assert.equal(callsFor('channel.cheer'), 2);
+    await wait(119_999);
+    assert.equal(callsFor('channel.cheer'), 2);
+    await wait(1);
+    assert.equal(callsFor('channel.cheer'), 3);
+    await wait(10 * 60_000);
+    assert.equal(callsFor('channel.cheer'), 4);
+    await wait(60 * 60_000);
+    assert.equal(callsFor('channel.cheer'), 4);
+  });
+
+  test('a 400 is not retried', async () => {
+    failTypes(['channel.cheer'], 400, 99);
+    await start();
+    await wait(60 * 60_000);
+    assert.equal(callsFor('channel.cheer'), 1);
+  });
+
+  test('retries stop when the client is stopped', async () => {
+    failTypes(['channel.cheer'], 503, 99);
+    await start();
+    eventSubManager.stopAll();
+    await wait(60 * 60_000);
+    assert.equal(callsFor('channel.cheer'), 1);
+  });
+
+  test('retries stop when the session is lost', async () => {
+    failTypes(['channel.cheer'], 503, 99);
+    const socket = await start();
+    socket.closeFromTwitch(1006);
+    await wait(30_000);
+    assert.equal(callsFor('channel.cheer'), 1);
   });
 });

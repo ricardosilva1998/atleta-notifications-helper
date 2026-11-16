@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const db = require('../db');
-const { refreshBroadcasterToken } = require('./twitch');
+const { refreshBroadcasterTokenShared } = require('./twitch');
 
 const HELIX_BASE = 'https://api.twitch.tv/helix';
 // A slow Helix answer must not hold a dashboard request or a sync indefinitely.
@@ -40,7 +40,7 @@ async function helixBroadcaster(streamer, method, urlPath, body) {
   let res = await makeReq(streamer.broadcaster_access_token);
 
   if (res.status === 401) {
-    const freshToken = await refreshBroadcasterToken(streamer);
+    const freshToken = await refreshBroadcasterTokenShared(streamer);
     streamer = db.getStreamerById(streamer.id);
     res = await makeReq(freshToken);
   }

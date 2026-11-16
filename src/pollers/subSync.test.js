@@ -27,7 +27,7 @@ const dbStub = {
 const twitchStub = {
   getSubscribers: async () => subscribers,
   getUserId: async () => '632557806',
-  refreshBroadcasterToken: async () => 'fresh-token',
+  refreshBroadcasterTokenShared: async () => 'fresh-token',
 };
 
 const origLoad = Module._load.bind(Module);

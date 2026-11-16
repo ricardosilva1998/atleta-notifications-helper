@@ -12,13 +12,14 @@ const path = require('path');
 let streamer;
 let bannedWords = [];
 let bannedWordReads = 0;
+let enabledStreamers = []; // what db.getChatbotEnabledStreamers answers
 let chatCommands = {}; // command name -> row, as db.getChatCommand returns it
 
 const dbStub = {
   getStreamerById: (id) => (streamer && streamer.id === id ? { ...streamer } : null),
   getBannedWords: () => { bannedWordReads++; return bannedWords; },
   addModLogEntry: () => {},
-  getChatbotEnabledStreamers: () => [],
+  getChatbotEnabledStreamers: () => enabledStreamers,
   getChatCommand: (_streamerId, name) => chatCommands[name] || null,
   getRaidProtection: (id) => raidRows.get(id),
   saveRaidProtection: (id, endsAt, mode, duration) => { if (!raidRows.has(id)) raidRows.set(id, { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0 }); },
@@ -44,6 +45,8 @@ class FakeTmiClient {
     this.modIn = new Set(); // channels where the bot is a moderator
     this.joins = [];
     this.parts = [];
+    this.channels = []; // tmi.js's own lists, rejoined after a reconnect
+    this.opts = { channels: [] };
     tmiClient = this;
   }
   on(event, handler) { this.handlers[event] = handler; }
@@ -59,6 +62,7 @@ class FakeTmiClient {
     return Promise.resolve([`#${channel}`]);
   }
   say(channel, text) { this.said.push({ channel, text }); return Promise.resolve(); }
+  getChannels() { return this.channels; }
   readyState() { return this.state; }
   disconnect() { return Promise.resolve(); }
 }
@@ -182,6 +186,7 @@ beforeEach(() => {
   bannedWords = [];
   bannedWordReads = 0;
   raidRows.clear();
+  enabledStreamers = [];
   chatCommands = {};
   shoutoutCalls.length = 0;
   stubTwitch(200);
@@ -720,5 +725,64 @@ describe('!so in chat', () => {
     streamer = streamerRow({ shoutout_command_enabled: 0 });
     await chat('!so @OtherStreamer', tags({ username: 'somemod', mod: true }));
     assert.deepEqual(shoutoutCalls, []);
+  });
+});
+
+describe('joining and leaving around a (re)connect', () => {
+  const { mock } = require('node:test');
+  const row = (id, name) => ({ id, twitch_username: name });
+  beforeEach(() => { mock.timers.enable({ apis: ['setTimeout'] }); });
+  afterEach(() => { mock.timers.reset(); });
+
+  test('joins enabled channels one every 500 ms (Twitch allows 20 JOINs per 10 s)', () => {
+    tmiClient.joins.length = 0;
+    enabledStreamers = [row(1, 'Alpha'), row(2, 'Beta'), row(3, 'Gamma')];
+    tmiClient.handlers.connected();
+    assert.deepEqual(tmiClient.joins, ['alpha']);
+    mock.timers.tick(499);
+    assert.deepEqual(tmiClient.joins, ['alpha']);
+    mock.timers.tick(1);
+    assert.deepEqual(tmiClient.joins, ['alpha', 'beta']);
+    mock.timers.tick(500);
+    assert.deepEqual(tmiClient.joins, ['alpha', 'beta', 'gamma']);
+  });
+
+  test('a channel tmi.js is already rejoining is not joined again', () => {
+    tmiClient.joins.length = 0;
+    tmiClient.channels.push('#alpha');
+    enabledStreamers = [row(1, 'Alpha'), row(2, 'Beta')];
+    tmiClient.handlers.connected();
+    mock.timers.tick(5_000);
+    assert.deepEqual(tmiClient.joins, ['beta']);
+  });
+
+  test('a channel tmi.js would rejoin that is no longer enabled is taken out of its lists and of the bot', () => {
+    tmiClient.joins.length = 0;
+    tmiClient.channels.push('#alpha', '#gone');
+    tmiClient.opts.channels.push('#gone');
+    enabledStreamers = [row(1, 'Alpha')];
+    chatManager.joinChannel(9, 'gone');
+    tmiClient.handlers.connected();
+    assert.deepEqual(tmiClient.channels, ['#alpha']);
+    assert.deepEqual(tmiClient.opts.channels, []);
+    assert.deepEqual(chatManager.getJoinedChannels(), ['alpha']);
+  });
+
+  test('a queued join for a channel parted meanwhile is skipped', () => {
+    tmiClient.joins.length = 0;
+    enabledStreamers = [row(1, 'Alpha'), row(2, 'Beta')];
+    tmiClient.handlers.connected();
+    chatManager.partChannel('beta');
+    mock.timers.tick(5_000);
+    assert.deepEqual(tmiClient.joins, ['alpha']);
+  });
+
+  test('partChannel while disconnected removes the channel from tmi.js lists so it is not rejoined', () => {
+    tmiClient.channels.push('#somestreamer');
+    tmiClient.opts.channels.push('#somestreamer');
+    tmiClient.part = () => Promise.reject(new Error('Not connected to server.'));
+    chatManager.partChannel('somestreamer');
+    assert.deepEqual(tmiClient.channels, []);
+    assert.deepEqual(tmiClient.opts.channels, []);
   });
 });

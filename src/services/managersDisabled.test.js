@@ -29,7 +29,7 @@ const stubs = {
     ws: FakeWebSocket,
     '../config': { twitch: { clientId: 'synthetic-client-id' } },
     '../db': dbStub,
-    './twitch': { refreshBroadcasterToken: async () => 'token', hasRedemptionScope: () => false, hasPollsScope: () => false },
+    './twitch': { refreshBroadcasterTokenShared: async () => 'token', hasRedemptionScope: () => false, hasPollsScope: () => false },
     './twitchChat': { chatManager: {} },
   },
 };

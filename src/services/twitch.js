@@ -572,7 +572,7 @@ async function getStreamKey(streamer) {
 
   let token = streamer.broadcaster_access_token;
   if (streamer.broadcaster_token_expires_at && Date.now() >= streamer.broadcaster_token_expires_at) {
-    token = await refreshBroadcasterToken(streamer);
+    token = await refreshBroadcasterTokenShared(streamer);
   }
 
   const doFetch = async (bearer) => fetch(
@@ -582,7 +582,7 @@ async function getStreamKey(streamer) {
 
   let res = await doFetch(token);
   if (res.status === 401) {
-    token = await refreshBroadcasterToken(streamer);
+    token = await refreshBroadcasterTokenShared(streamer);
     res = await doFetch(token);
   }
   if (!res.ok) {

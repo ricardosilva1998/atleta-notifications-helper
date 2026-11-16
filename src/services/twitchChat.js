@@ -15,6 +15,9 @@ let client = null;
 // Made by connect().
 let dispatcher = null;
 const channelMap = new Map(); // channelName -> streamerId
+const JOIN_SPACING_MS = 500; // 20 JOINs per 10 s is Twitch's limit
+const joinQueue = []; // [streamerId, channel] waiting for their turn
+let joinTimer = null;
 const cooldowns = new Map(); // "streamerId:command" -> timestamp
 
 const chatTypeMap = { subscription: 'sub', follow: 'follow', giftsub: 'giftsub', bits: 'bits', donation: 'donation', raid: 'raid' };
@@ -214,17 +217,7 @@ const chatManager = {
     client.on('connected', () => {
       console.log(`[Chat] Bot connected as ${twitchUsername}`);
 
-      const streamers = db.getChatbotEnabledStreamers();
-      let joinDelay = 0;
-      for (const s of streamers) {
-        if (s.twitch_username) {
-          setTimeout(() => {
-            this.joinChannel(s.id, s.twitch_username);
-          }, joinDelay);
-          joinDelay += 500;
-        }
-      }
-      console.log(`[Chat] Queued ${streamers.length} channel joins`);
+      this.syncChannels();
     });
 
     client.on('disconnected', (reason) => {
@@ -259,8 +252,63 @@ const chatManager = {
       dispatcher.clear();
       dispatcher = null;
     }
+    clearTimeout(joinTimer);
+    joinTimer = null;
+    joinQueue.length = 0;
     channelMap.clear();
     cooldowns.clear();
+  },
+
+  // One rejoin mechanism. tmi.js rejoins the channels in its own lists after a reconnect (it copies the lists right
+  // after emitting 'connected', so what is removed here is not rejoined). So: leave out of those lists every channel
+  // that is no longer wanted, join only the wanted channels tmi.js is not already rejoining, and space the joins
+  // 500 ms apart (Twitch allows 20 JOINs per 10 s).
+  syncChannels() {
+    if (!client) return;
+    clearTimeout(joinTimer);
+    joinTimer = null;
+    joinQueue.length = 0;
+
+    const wanted = new Map();
+    for (const s of db.getChatbotEnabledStreamers()) {
+      if (s.twitch_username) wanted.set(s.twitch_username.toLowerCase(), s.id);
+    }
+
+    const tmiLists = [typeof client.getChannels === 'function' ? client.getChannels() : null, client.opts && client.opts.channels]
+      .filter(Array.isArray);
+    const inTmi = new Set();
+    for (const list of tmiLists) {
+      for (const name of list.slice()) {
+        const clean = name.replace(/^#/, '').toLowerCase();
+        if (wanted.has(clean)) { inTmi.add(clean); continue; }
+        list.splice(list.indexOf(name), 1);
+      }
+    }
+    for (const clean of Array.from(channelMap.keys())) {
+      if (!wanted.has(clean)) {
+        channelMap.delete(clean);
+        if (dispatcher) dispatcher.dropChannel(clean);
+      }
+    }
+
+    let queued = 0;
+    for (const [clean, id] of wanted) {
+      channelMap.set(clean, id);
+      if (!inTmi.has(clean)) { joinQueue.push([id, clean]); queued++; }
+    }
+    console.log(`[Chat] Queued ${queued} channel joins (${inTmi.size} left to tmi.js to rejoin)`);
+    this.drainJoins();
+  },
+
+  drainJoins() {
+    if (joinTimer || joinQueue.length === 0) return;
+    const [id, clean] = joinQueue.shift();
+    if (client && channelMap.get(clean) === id) this.joinChannel(id, clean);
+    joinTimer = setTimeout(() => {
+      joinTimer = null;
+      this.drainJoins();
+    }, JOIN_SPACING_MS);
+    if (joinTimer.unref) joinTimer.unref();
   },
 
   joinChannel(streamerId, channel) {
@@ -276,6 +324,16 @@ const chatManager = {
     if (!client) return;
     const clean = channel.toLowerCase();
     channelMap.delete(clean);
+    // While the socket is down client.part() cannot go out, and tmi.js would rejoin the channel on reconnect:
+    // take it out of its lists.
+    if (typeof client.getChannels === 'function') {
+      for (const list of [client.getChannels(), client.opts && client.opts.channels]) {
+        if (!Array.isArray(list)) continue;
+        for (const name of list.slice()) {
+          if (name.replace(/^#/, '').toLowerCase() === clean) list.splice(list.indexOf(name), 1);
+        }
+      }
+    }
     // Whatever still waits for this chat (the chatbot was switched off, or the
     // account was disabled) is not sent.
     if (dispatcher) dispatcher.dropChannel(clean);
