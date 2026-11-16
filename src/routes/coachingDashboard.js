@@ -17,6 +17,7 @@ const coachingBookings = require('../services/coachingBookings');
 const coachingRooms = require('../services/coachingRooms');
 const { canonicalTimeZone } = require('../services/goalPeriods');
 const { parseSwitch } = require('../services/inputLimits');
+const { paypalEmailFrom } = require('../services/donationSettings');
 
 const router = Router();
 
@@ -35,6 +36,7 @@ const REFUSALS = {
   bad_invite: [400, 'coaching.dashboard.error.bad_invite'],
   invite_other_server: [400, 'coaching.dashboard.error.invite_other_server'],
   bad_where: [400, 'coaching.dashboard.error.bad_where'],
+  bad_paypal: [400, 'coaching.dashboard.error.bad_paypal'],
   bad_lengths: [400, 'coaching.dashboard.error.bad_lengths'],
   no_length: [400, 'coaching.dashboard.error.no_length'],
   bad_switch: [400, 'coaching.dashboard.error.bad_switch'],
@@ -101,6 +103,9 @@ const TEXT_KEYS = {
   refundPending: 'coaching.dashboard.refundPending', refunded: 'coaching.dashboard.refunded', refundedButton: 'coaching.dashboard.refundedButton',
   refundTitle: 'coaching.dashboard.refundTitle', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
   refundCapture: 'coaching.dashboard.refundCapture', refundConfirm: 'coaching.dashboard.refundConfirm', refundedDone: 'coaching.dashboard.refundedDone',
+  connDiscordOk: 'coaching.dashboard.connDiscordOk', connDiscordWarn: 'coaching.dashboard.connDiscordWarn',
+  connPaypalOn: 'coaching.dashboard.connPaypalOn', connPaypalOff: 'coaching.dashboard.connPaypalOff',
+  connTwitchOk: 'coaching.dashboard.connTwitchOk', connTwitchNone: 'coaching.dashboard.connTwitchNone',
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
@@ -157,6 +162,35 @@ function moneyView(streamer, settings) {
     currency,
     hasPaypal: !!streamer.paypal_email,
     checkPrices: currency !== 'EUR' && !(settings && settings.prices_saved_at),
+  };
+}
+
+// What the Connections tab's Discord line says, from what the page already knows: whether the bot can see the
+// coaching server now (a Discord outage or not-ready reads as it cannot), whether the saved category is one the bot
+// named (a category kept by its id while Discord cannot see the server reads as not OK), and the invite's last check.
+// null is "nothing to say": no coaching settings, no category chosen, invite not checked yet. The raw settings row's
+// names (guild_id, category_id, invite_ok), as settingsView normalizes them for the form.
+function discordStatus(settings, servers, categories) {
+  if (!settings || !settings.guild_id) return { botSeen: null, categoryOk: null, inviteOk: null };
+  return {
+    botSeen: servers.some((s) => s.id === settings.guild_id) && botsName(settings.guild_id) !== null,
+    categoryOk: settings.category_id ? categories.some((c) => c.id === settings.category_id && c.name !== c.id) : null,
+    inviteOk: settings.invite_ok == null ? null : !!settings.invite_ok,
+  };
+}
+
+// The Connections tab's three blocks: the PayPal email (the tip page's, with the currency coaching is paid in), the
+// linked Twitch account the booking page is named after, and the Discord status above.
+function connectionsView(streamer, money, settings, servers, categories, link) {
+  return {
+    paypal: { email: streamer.paypal_email || '', hasPaypal: money.hasPaypal, currency: money.currency },
+    twitch: {
+      username: streamer.twitch_username || null,
+      displayName: streamer.twitch_display_name || streamer.twitch_username || null,
+      avatar: streamer.twitch_profile_image || null,
+      bookingUrl: link,
+    },
+    discord: discordStatus(settings, servers, categories),
   };
 }
 
@@ -249,6 +283,8 @@ router.get('/coaching', async (req, res) => {
   const view = settingsView(settings, now, servers);
   const link = bookingUrl(req, streamer);
   const categories = await categoryOptions(settings);
+  const money = moneyView(streamer, settings);
+  const connections = connectionsView(streamer, money, settings, servers, categories, link);
   // Discord is asked about the saved invite once the page is sent, at most once an hour (checkInvite keeps the hour);
   // what it learns shows on the next visit. The dashboard (the Coaching card) does the same.
   if (settings) res.once('finish', () => coachingBookings.checkInviteLater(streamer.id));
@@ -256,14 +292,16 @@ router.get('/coaching', async (req, res) => {
     streamer,
     setUp: !!settings,
     settings: view,
-    money: moneyView(streamer, settings),
+    money,
+    connections,
     servers,
     bookingUrl: link,
     coachingData: {
       lang: res.locals.lang || 'en',
       setUp: !!settings,
       settings: view,
-      money: moneyView(streamer, settings),
+      money,
+      connections,
       servers,
       categories,
       bookingUrl: link,
@@ -344,7 +382,15 @@ router.post('/api/coaching/settings', async (req, res) => {
     .filter((b) => b.startsAt > now && coaching.outsideHours({ starts_at: b.startsAt, minutes: b.minutes }, rules))
     .map((b) => b.id);
   const servers = serverOptions(claims, settings);
-  res.json({ ok: true, settings: settingsView(settings, now, servers), money: moneyView(streamer, settings), outsideHours, categories: await categoryOptions(settings) });
+  const categories = await categoryOptions(settings);
+  res.json({
+    ok: true,
+    settings: settingsView(settings, now, servers),
+    money: moneyView(streamer, settings),
+    outsideHours,
+    categories,
+    connections: { paypal: { email: streamer.paypal_email || '' }, discord: discordStatus(settings, servers, categories) },
+  });
 });
 
 // JSON { open }: Bookings open, paused without losing the hours. A value that is not a switch value is refused.
@@ -353,6 +399,25 @@ router.post('/api/coaching/open', (req, res) => {
   if (open === null) return refuse(res, 'bad_switch');
   if (!db.setCoachingOpen(req.streamer.id, open)) return refuse(res, 'not_set_up');
   res.json({ ok: true, open: !!open });
+});
+
+// The Connections tab's PayPal block: the streamer's PayPal email — the same field the tip page is paid to, with the
+// same check as the Donations page (services/donationSettings.js); only that column is written. The answer carries
+// the page's money view and the tab's status lines again, so the page can redraw them.
+router.post('/api/coaching/paypal', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const email = paypalEmailFrom(body.paypalEmail);
+  if (email.error) return refuse(res, 'bad_paypal');
+  db.updateDonationSettings(req.streamer.id, { paypal_email: email.email });
+  const streamer = db.getStreamerById(req.streamer.id);
+  const settings = db.getCoachingSettings(req.streamer.id);
+  const servers = serverOptions(db.getGuildsForStreamer(req.streamer.id), settings);
+  res.json({
+    ok: true,
+    email: streamer.paypal_email || '',
+    money: moneyView(streamer, settings),
+    connections: { paypal: { email: streamer.paypal_email || '' }, discord: discordStatus(settings, servers, await categoryOptions(settings)) },
+  });
 });
 
 // Accept or Decline a waiting request, Cancel a booking (waiting, awaiting payment, confirmed or rescheduling, paid

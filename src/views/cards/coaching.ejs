@@ -29,7 +29,7 @@
     <a href="/dashboard/coaching" class="btn btn-primary wc-btn block"><%= t('cards.coaching.setHours') %></a>
   <% } else { %>
     <% if (card.noPaypal) { %>
-    <div class="wc-note"><span><%= t('cards.coaching.noPaypal') %></span><a href="/dashboard/donations"><%= t('cards.coaching.noPaypalAction') %></a></div>
+    <div class="wc-note"><span><%= t('cards.coaching.noPaypal') %></span><a href="/dashboard/coaching?tab=settings"><%= t('cards.coaching.noPaypalAction') %></a></div>
     <% } %>
     <% if (card.checkPrices) { %>
     <div class="wc-note"><span><%= t('cards.coaching.checkPrices', { currency: card.currency }) %></span><a href="/dashboard/coaching"><%= t('cards.coaching.checkPricesAction') %></a></div>

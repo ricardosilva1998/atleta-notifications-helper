@@ -364,7 +364,7 @@ describe('When I coach', () => {
   test('every route needs a signed-in streamer whose account is not disabled', async () => {
     const s = addStreamer();
     db.db.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(s.id);
-    for (const [method, url] of [['GET', '/dashboard/coaching'], ['POST', '/dashboard/api/coaching/settings'], ['POST', '/dashboard/api/coaching/open'], ['POST', '/dashboard/api/coaching/bookings/1/accept']]) {
+    for (const [method, url] of [['GET', '/dashboard/coaching'], ['POST', '/dashboard/api/coaching/settings'], ['POST', '/dashboard/api/coaching/open'], ['POST', '/dashboard/api/coaching/paypal'], ['POST', '/dashboard/api/coaching/bookings/1/accept']]) {
       const anonymous = await send(method, url, { json: method === 'POST' ? {} : undefined });
       assert.equal(anonymous.status, 302, `${method} ${url} without a streamer goes to sign in`);
       const disabled = await send(method, url, { streamer: s, json: method === 'POST' ? { open: false } : undefined });
@@ -777,6 +777,62 @@ describe('the page', () => {
       await tick();
     } finally {
       delete discord.fetchInvite;
+    }
+  });
+});
+
+describe('Connections', () => {
+  test('the page carries the three connections: the PayPal email, the Twitch account and the Discord status', async () => {
+    const s = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach.paypal@example.com', s.id);
+    const page = pageData((await get('/dashboard/coaching', { streamer: s })).text);
+    assert.deepEqual(page.connections.paypal, { email: 'coach.paypal@example.com', hasPaypal: true, currency: 'EUR' });
+    assert.deepEqual(page.connections.twitch, {
+      username: s.login, displayName: `Coach_${s.login.slice('coach_'.length)}`, avatar: null,
+      bookingUrl: `https://atleta.test/coaching/${s.login}`,
+    });
+    // The bot is in the saved server; the invite has not been checked on this page load yet, and no category is saved.
+    assert.deepEqual(page.connections.discord, { botSeen: true, categoryOk: null, inviteOk: null });
+  });
+
+  test('the Discord status says nothing before coaching is set up, and cannot see a server Discord does not name', async () => {
+    const none = addStreamer({ settings: null });
+    const empty = pageData((await get('/dashboard/coaching', { streamer: none })).text);
+    assert.deepEqual(empty.connections.discord, { botSeen: null, categoryOk: null, inviteOk: null });
+
+    const s = addStreamer();
+    discord.guilds = {}; // Discord down or not ready: the saved server is kept, but read as not fine.
+    const down = pageData((await get('/dashboard/coaching', { streamer: s })).text);
+    assert.equal(down.connections.discord.botSeen, false);
+  });
+
+  test('the PayPal route saves the email the tip page is paid to, and clearing it turns payments off', async () => {
+    const s = addStreamer();
+    const saved = await post('/dashboard/api/coaching/paypal', { streamer: s, json: { paypalEmail: '  coach.paypal@example.com ' } });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.json.ok, true);
+    assert.equal(saved.json.email, 'coach.paypal@example.com', 'trimmed');
+    assert.equal(saved.json.money.hasPaypal, true);
+    assert.equal(saved.json.connections.paypal.email, 'coach.paypal@example.com');
+    assert.equal(db.getStreamerById(s.id).paypal_email, 'coach.paypal@example.com');
+
+    const cleared = await post('/dashboard/api/coaching/paypal', { streamer: s, json: { paypalEmail: '   ' } });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.json.email, '');
+    assert.equal(cleared.json.money.hasPaypal, false);
+    assert.equal(db.getStreamerById(s.id).paypal_email, null, 'cleared, as the Donations page clears it');
+  });
+
+  test('the PayPal route refuses a bad email with bad_paypal and leaves the saved one alone', async () => {
+    const s = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('keep@example.com', s.id);
+    for (const email of ['not-an-email', 'a@b', 'x@y.z', `${'a'.repeat(250)}@example.com`]) {
+      const bad = await post('/dashboard/api/coaching/paypal', { streamer: s, json: { paypalEmail: email } });
+      assert.equal(bad.status, 400, email);
+      assert.equal(bad.json.ok, false);
+      assert.equal(bad.json.code, 'bad_paypal');
+      assert.equal(bad.json.error, errorOf('bad_paypal'));
+      assert.equal(db.getStreamerById(s.id).paypal_email, 'keep@example.com', 'unchanged');
     }
   });
 });

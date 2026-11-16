@@ -284,9 +284,15 @@ const coachingDashboardPage = ({ setUp = true, settings = {}, servers = [{ id: '
   };
   const booking = { id: 1, startsAt: 1792429200000, minutes: 60, state: 'waiting', viewerName: 'Tester', viewerUsername: 'tester', viewerAvatar: null, note: 'TitleText', messageError: null, outside: false };
   const schedule = setUp ? { days: [{ date: '2026-10-21', bookings: [booking] }], past: [{ ...booking, id: 2, state: 'confirmed' }] } : { days: [], past: [] };
+  // The Connections tab's three blocks, as routes/coachingDashboard.js connectionsView() sends them.
+  const connections = {
+    paypal: { email: money.hasPaypal ? 'coach@example.com' : '', hasPaypal: money.hasPaypal, currency: money.currency },
+    twitch: { username: bookingUrl ? 'tester_tv' : null, displayName: bookingUrl ? 'Tester_tv' : null, avatar: null, bookingUrl },
+    discord: setUp ? { botSeen: servers.length > 0, categoryOk: null, inviteOk: view.inviteOk } : { botSeen: null, categoryOk: null, inviteOk: null },
+  };
   return {
-    streamer, setUp, settings: view, servers, bookingUrl, money,
-    coachingData: { lang: 'en', setUp, settings: view, money, categories: [], servers, bookingUrl, schedule, daysOffMax: 60, limits: { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 172800000 } }, coachingTexts: { zone: 'x' },
+    streamer, setUp, settings: view, servers, bookingUrl, money, connections,
+    coachingData: { lang: 'en', setUp, settings: view, money, categories: [], connections, servers, bookingUrl, schedule, daysOffMax: 60, limits: { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 172800000 } }, coachingTexts: { zone: 'x' },
   };
 };
 PAGE_LOCALS['coaching-dashboard'] = [
