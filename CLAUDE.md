@@ -440,3 +440,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** 13 smoke checks pass (headless Chromium, seeded streamer): dashboard, card Test sends `chat:false`, overlay settings has no StreamElements and its preview iframe has `preview=1`, opening /dashboard/tracking leaves the six trackers off, /pricing and /payment redirect, /racing goes to `/`, /api/session 410, donation history shows a streamelements row, /my-bookings loads. Coaching tab flash checked for real with scripts delayed 1.5 s at 1280 and 375 px, five remembered-tab states each: only the remembered panel ever shown.
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-16 23:00 — team-qa
+**Task:** C1.1.8, full suite after the code review fixes, on both branches
+**Tests added/changed:** none
+**Suite result:** scratch exports (Node 26, better-sqlite3 rebuilt): `fix/review-findings` 3979 tests, 3979 pass, 0 fail; `chore/remove-racing` 3958 tests, 3958 pass, 0 fail. Two boots per branch on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** none
+**Bugs found:** none. QA: pass.
+**Open:** none
