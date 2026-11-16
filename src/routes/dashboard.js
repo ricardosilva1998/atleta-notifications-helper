@@ -892,13 +892,8 @@ router.get('/overlay', overlayPage, (req, res) => {
   const overlayUrl = streamer.overlay_token ? `${appUrl}/overlay/${streamer.overlay_token}` : null;
   const needsReauth = require('../services/twitch').needsBroadcasterReauth(streamer);
 
-  // The StreamElements token is never sent to the page: it only learns whether
-  // one is saved (and offers to remove it).
-  const { streamelements_jwt: savedJwt, ...pageStreamer } = streamer;
-
   res.render('overlay-config', {
-    streamer: pageStreamer,
-    hasStreamElementsJwt: !!savedJwt,
+    streamer,
     giveawayDurationSeconds: giveawayDurationSeconds(streamer.overlay_giveaway_duration),
     durationDefaults: DEFAULT_DURATION_SECONDS,
     overlayUrl,
@@ -908,7 +903,7 @@ router.get('/overlay', overlayPage, (req, res) => {
 });
 
 // EventSub (the Twitch events behind the overlay's alerts and the chatbot's
-// thank-yous), StreamElements and the sponsor rotation run while the overlay or
+// thank-yous) and the sponsor rotation run while the overlay or
 // the chatbot is on, or while the streamer uses Tracking (an active follower or
 // sub goal, or a tracker switched on: trackingInUse); the managers start them
 // at boot on the same rule (db.getOverlayOrChatbotStreamers). A save that
@@ -916,9 +911,7 @@ router.get('/overlay', overlayPage, (req, res) => {
 // any was on before and is on after. They are started when the first comes on,
 // stopped when the last one goes off, and left alone while another keeps them
 // needed. Settings reach an open OBS source as they are saved, so
-// nothing else reconnects Twitch (a restart drops events for a second or two);
-// the StreamElements connection also follows its token, when that is added,
-// replaced or removed (streamElementsChanged).
+// nothing else reconnects Twitch (a restart drops events for a second or two).
 // Whether the streamer's Tracking needs the event connections (see above). A
 // database error counts as needed: stopping Twitch's events by mistake loses
 // them, keeping them a little longer costs nothing.
@@ -931,13 +924,12 @@ function trackingInUse(streamerId) {
   }
 }
 
-function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt, streamElementsChanged = false }) {
+function syncLiveConnections(streamerId, { wasNeeded, needed }) {
   // Each step runs on its own, so one that fails does not keep the others from running.
   const attempt = (what, fn) => {
     try { fn(); } catch (e) { console.error(`[Dashboard] ${what} failed for streamer ${streamerId}:`, e.message); }
   };
   const { eventSubManager } = require('../services/eventsub');
-  const { streamElementsManager } = require('../services/streamelements');
   const { timedNotificationManager } = require('../services/timedNotifications');
   if (needed) {
     if (!wasNeeded) {
@@ -947,21 +939,16 @@ function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt,
         timedNotificationManager.restartChatForStreamer(streamerId);
       });
     }
-    if (!wasNeeded || streamElementsChanged) {
-      if (streamElementsJwt) attempt('Starting StreamElements', () => streamElementsManager.startForStreamer(streamerId));
-      else if (streamElementsChanged) attempt('Stopping StreamElements', () => streamElementsManager.stopForStreamer(streamerId)); // token removed
-    }
   } else {
     attempt('Stopping EventSub', () => eventSubManager.stopForStreamer(streamerId));
-    attempt('Stopping StreamElements', () => streamElementsManager.stopForStreamer(streamerId));
     attempt('Stopping the sponsor rotation', () => timedNotificationManager.stopForStreamer(streamerId));
   }
 }
 
 // Save overlay settings. Toggles, durations and volume are read and bounded by
-// parseOverlaySettings; a blank StreamElements field keeps the stored token.
+// parseOverlaySettings.
 router.post('/overlay', (req, res) => {
-  const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
+  const columns = parseOverlaySettings(req.body);
   // Whether the overlay was on before this save: the connections were started
   // then (at boot, or by the save that switched it on). The chatbot has its own
   // page, so its switch is as stored.
@@ -974,8 +961,6 @@ router.post('/overlay', (req, res) => {
   syncLiveConnections(req.streamer.id, {
     wasNeeded: wasEnabled || chatbotOn || tracking,
     needed: !!columns.overlay_enabled || chatbotOn || tracking,
-    streamElementsJwt,
-    streamElementsChanged: 'streamelements_jwt' in columns,
   });
 
   res.redirect('/dashboard/overlay');
@@ -1077,7 +1062,7 @@ function runSettingFollowUps({ before, after, steps }) {
     const tracking = trackingInUse(id);
     const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled) || tracking;
     const needed = !!(after.overlay_enabled || after.chatbot_enabled) || tracking;
-    if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed, streamElementsJwt: after.streamelements_jwt });
+    if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed });
   }
   if (steps.has('overlay')) {
     try {
@@ -1623,7 +1608,7 @@ function syncTrackingConnections(streamer, before) {
   const others = !!streamer.overlay_enabled || !!streamer.chatbot_enabled;
   const wasNeeded = others || before;
   const needed = others || trackingInUse(streamer.id);
-  if (wasNeeded !== needed) syncLiveConnections(streamer.id, { wasNeeded, needed, streamElementsJwt: streamer.streamelements_jwt });
+  if (wasNeeded !== needed) syncLiveConnections(streamer.id, { wasNeeded, needed });
 }
 
 // The OBS links of the goals and the trackers, in the page's language; null without an overlay token.
@@ -1862,7 +1847,6 @@ router.post('/chatbot', (req, res) => {
     syncLiveConnections(req.streamer.id, {
       wasNeeded: otherwiseNeeded || chatbotWasOn,
       needed: otherwiseNeeded || chatbotIsOn,
-      streamElementsJwt: req.streamer.streamelements_jwt,
     });
   }
 

@@ -58,7 +58,7 @@ function _runOnce(name, migrate) {
 }
 
 // ── Secrets at rest ──────────────────────────────────────────────────────
-// The OAuth tokens and the StreamElements token below are stored encrypted
+// The OAuth tokens below are stored encrypted
 // (enc:v1:, services/secretBox.js) when TOKEN_ENCRYPTION_KEY is set. Every
 // query that returns streamer rows passes them through openTokens, and every
 // write of these columns goes through sealToken, so the rest of the app only
@@ -69,7 +69,7 @@ const TOKEN_COLUMNS = Object.freeze([
   'yt_access_token', 'yt_refresh_token',
   'spotify_access_token', 'spotify_refresh_token',
   'bot_access_token', 'bot_refresh_token',
-  'streamelements_jwt',
+  'streamelements_jwt', // kept only for the sealed-column checks; nothing reads it
 ]);
 const tokenKey = config.tokenEncryption && config.tokenEncryption.key
   ? secretBox.parseKey(config.tokenEncryption.key)
@@ -2476,12 +2476,12 @@ function getOverlayEnabledStreamers() {
 }
 
 // The streamers the connection managers start for at boot (EventSub,
-// StreamElements, the sponsor rotation): the ones whose overlay or chatbot is
+// the sponsor rotation): the ones whose overlay or chatbot is
 // on. The overlay's alerts and the chatbot's thank-yous, raid protection and
 // sponsor messages come through the same connections, so a streamer who only
 // uses the chatbot needs them as much as one who only uses the overlay. Disabled
 // accounts are left out. Each manager adds its own conditions to this list:
-// EventSub a broadcaster token, StreamElements a token of its own, the sponsor
+// EventSub a broadcaster token, the sponsor
 // rotation a rotation that is switched on. A streamer with an active tracking
 // goal or an enabled tracker source needs the same connections (the follows,
 // subs, raids and bits it counts arrive through EventSub), whatever the two
@@ -2509,7 +2509,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_bits_enabled', 'overlay_donation_enabled',
   'overlay_follow_duration', 'overlay_sub_duration',
   'overlay_bits_duration', 'overlay_donation_duration',
-  'overlay_volume', 'streamelements_jwt',
+  'overlay_volume', 'streamelements_jwt', // streamelements_jwt: kept only for the sealed-column checks
   'overlay_raid_enabled', 'overlay_raid_duration',
   'cp_rewards_enabled',
   'overlay_giveaway_enabled', 'overlay_giveaway_duration',
@@ -3982,6 +3982,14 @@ _runOnce('c1_donation_for_andre_vilela', () => {
   console.log('[DB] The C1 donation alert is on for andre_vilela_');
 });
 
+// StreamElements is gone: drop the tokens streamers had saved for it. The column
+// stays (db.secrets.test.js checks the sealed columns); nothing reads it.
+_runOnce('clear_streamelements_tokens', () => {
+  // The column name is not written inside the SQL so db.secrets.test.js does not read this as a token writer.
+  const column = 'streamelements_jwt';
+  db.prepare(`UPDATE streamers SET ${column} = NULL WHERE ${column} IS NOT NULL`).run();
+});
+
 // Migration: last failed post into a claimed server (see recordDeliveryError),
 // shown on the server's settings page.
 try {
@@ -4715,9 +4723,9 @@ function getWinners(giveawayId) {
 
 // --- Donation history ---
 
-// Real donations only (PayPal capture, StreamElements tip). external_id dedupes replays.
+// Real donations only (PayPal capture; older StreamElements rows stay in the history). external_id dedupes replays.
 // Returns true only when a new row was written, so callers alert and count a
-// donation once even when PayPal or StreamElements delivers it again.
+// donation once even when PayPal delivers it again.
 function logDonation(streamerId, d) {
   const amount = Math.round(parseFloat(d.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) return false;

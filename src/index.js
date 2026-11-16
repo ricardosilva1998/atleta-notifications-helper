@@ -19,7 +19,7 @@ process.on('uncaughtException', (err) => {
 
 // Stored OAuth tokens are encrypted only when TOKEN_ENCRYPTION_KEY is set (db.js).
 if (!db.tokenEncryptionEnabled) {
-  console.warn('[DB] TOKEN_ENCRYPTION_KEY is not set: OAuth tokens and the StreamElements token are stored unencrypted. Set it to 64 hex characters (openssl rand -hex 32).');
+  console.warn('[DB] TOKEN_ENCRYPTION_KEY is not set: OAuth tokens are stored unencrypted. Set it to 64 hex characters (openssl rand -hex 32).');
 }
 
 // Alert sounds used to be one set shared by every streamer. Move those files
@@ -53,11 +53,9 @@ function startWithoutDiscord() {
   server.start();
 
   const { eventSubManager } = require('./services/eventsub');
-  const { streamElementsManager } = require('./services/streamelements');
 
   // Start the event connections of every streamer whose overlay or chatbot is on
   eventSubManager.startAll();
-  streamElementsManager.startAll();
 
   const { chatManager } = require('./services/twitchChat');
   chatManager.startAll();
@@ -212,7 +210,6 @@ async function shutdown(signal) {
   stop('Pollers', () => pollers.stopAll());
   stop('Twitch chat', () => require('./services/twitchChat').chatManager.stopAll());
   stop('EventSub', () => require('./services/eventsub').eventSubManager.stopAll());
-  stop('StreamElements', () => require('./services/streamelements').streamElementsManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
   stop('Tracking goals', () => require('./services/trackingGoals').stopTicks());

@@ -124,7 +124,6 @@ const youtubeChatStub = {
 };
 const record = (name) => (...args) => managerCalls.push([name, ...args]);
 const eventSubStub = { eventSubManager: { startForStreamer: record('eventsub.start'), stopForStreamer: record('eventsub.stop') } };
-const streamElementsStub = { streamElementsManager: { startForStreamer: record('se.start'), stopForStreamer: record('se.stop') } };
 // The sponsor rotations a save starts or stops are recorded apart from the connections (the real manager starts timers).
 const sponsorCalls = [];
 const timedNotificationsStub = {
@@ -279,7 +278,6 @@ before(async () => {
       if (request === '../services/youtubeLiveChat') return youtubeChatStub;
       if (request === '../services/agentTriage') return agentTriageStub;
       if (request === '../services/eventsub') return eventSubStub;
-      if (request === '../services/streamelements') return streamElementsStub;
       if (request === '../services/timedNotifications') return timedNotificationsStub;
       if (request === '../services/tipVoice') return wrapTipVoice(saved.load(request, parent, isMain));
     }
@@ -922,28 +920,11 @@ describe('routes that were removed', () => {
 // ── Overlay settings (M5, N18) ───────────────────────────────────────────
 
 describe('the overlay settings page', () => {
-  const JWT = 'se.token.value';
   let id;
   beforeEach(() => {
-    id = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok', streamelements_jwt: JWT, overlay_giveaway_duration: 8, overlay_raid_duration: 9 });
+    id = addStreamer({ overlay_enabled: 1, broadcaster_access_token: 'tok', overlay_giveaway_duration: 8, overlay_raid_duration: 9 });
   });
   const save = (form) => request('POST', '/dashboard/overlay', { streamer: id, form });
-
-  test('never puts the saved StreamElements token in the page, and offers to remove it', async () => {
-    const res = await request('GET', '/dashboard/overlay', { streamer: id });
-    assert.equal(res.status, 200);
-    assert.ok(!res.text.includes(JWT), 'the token is not in the HTML');
-    assert.match(res.text, /A StreamElements token is saved/);
-    assert.match(res.text, /name="streamelements_jwt_remove"/);
-    assert.doesNotMatch(res.text, /name="streamelements_jwt"[^>]*value=/);
-  });
-
-  test('without a saved token there is nothing to remove', async () => {
-    const other = addStreamer();
-    const res = await request('GET', '/dashboard/overlay', { streamer: other });
-    assert.doesNotMatch(res.text, /streamelements_jwt_remove/);
-    assert.doesNotMatch(res.text, /A StreamElements token is saved/);
-  });
 
   test('shows the giveaway duration in seconds, so the form can be saved', async () => {
     const res = await request('GET', '/dashboard/overlay', { streamer: id });
@@ -981,7 +962,7 @@ describe('the overlay settings page', () => {
     return { open, closedMoreThanOpened: depthLow };
   }
 
-  test('every <div> the page opens is closed, so the Kick tab and the StreamElements card are where they belong', async () => {
+  test('every <div> the page opens is closed, so the Kick tab is where it belongs', async () => {
     const page = (await request('GET', '/dashboard/overlay', { streamer: id })).text;
     const whole = openDivsAt(page);
     assert.equal(whole.closedMoreThanOpened, 0, 'no </div> without a <div>');
@@ -991,11 +972,6 @@ describe('the overlay settings page', () => {
     const kick = openDivsAt(page, 'id="alert-tab-kick"').open.slice(0, -1); // minus the tab's own <div>
     assert.ok(kick.some((attributes) => attributes.includes('animate-in-delay-2')), 'the Kick tab is inside the alerts section');
     assert.ok(!kick.some((attributes) => attributes.includes('alert-tab-content')), 'but not inside another tab');
-
-    // The StreamElements card follows the alerts section; it is not inside it.
-    const streamElements = openDivsAt(page, 'id="streamelements_jwt"').open;
-    assert.ok(!streamElements.some((attributes) => attributes.includes('animate-in-delay-2') || attributes.includes('alert-tab-content')),
-      'the StreamElements card is outside the alerts section');
   });
 
   test('saves the raid and giveaway toggles and durations (they never were)', async () => {
@@ -1065,59 +1041,28 @@ describe('the overlay settings page', () => {
 
   // Settings reach an open OBS source as they are saved, so a save does not reconnect
   // Twitch (a restart drops events for a second or two): the connections are started
-  // when the overlay is switched on, and StreamElements' when its token changes.
+  // when the overlay is switched on.
   test('a save while the overlay is on leaves the connections running', async () => {
-    await save({ overlay_enabled: '1', overlay_follow_duration: '9', streamelements_jwt: '' });
+    await save({ overlay_enabled: '1', overlay_follow_duration: '9' });
     assert.equal(db.getStreamerById(id).overlay_follow_duration, 9, 'the settings are saved');
     assert.deepEqual(managerCalls, []);
   });
 
-  test('a blank token field keeps the saved token', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: '' });
-    assert.equal(db.getStreamerById(id).streamelements_jwt, JWT);
-    assert.deepEqual(managerCalls, []);
-  });
-
-  test('a typed token replaces the saved one and reconnects StreamElements only', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: ' other.token.value ' });
-    assert.equal(db.getStreamerById(id).streamelements_jwt, 'other.token.value');
-    assert.deepEqual(managerCalls, [['se.start', id]]);
-  });
-
-  test('typing the token that is already saved changes nothing', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: JWT });
-    assert.deepEqual(managerCalls, []);
-  });
-
-  test('the remove box clears the token and stops the StreamElements connection only', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: '', streamelements_jwt_remove: '1' });
-    assert.equal(db.getStreamerById(id).streamelements_jwt, null);
-    assert.deepEqual(managerCalls, [['se.stop', id]]);
-  });
-
-  test('switching the overlay on connects EventSub, and StreamElements when a token is saved', async () => {
+  test('switching the overlay on connects EventSub', async () => {
     db.db.prepare('UPDATE streamers SET overlay_enabled = 0 WHERE id = ?').run(id);
-    await save({ overlay_enabled: '1', streamelements_jwt: '' });
+    await save({ overlay_enabled: '1' });
     assert.equal(db.getStreamerById(id).overlay_enabled, 1);
-    assert.deepEqual(managerCalls, [['eventsub.start', id], ['se.start', id]]);
+    assert.deepEqual(managerCalls, [['eventsub.start', id]]);
   });
 
-  test('switching the overlay on without a StreamElements token connects EventSub only', async () => {
-    const noToken = addStreamer({ overlay_enabled: 0, broadcaster_access_token: 'tok' });
-    await request('POST', '/dashboard/overlay', { streamer: noToken, form: { overlay_enabled: '1' } });
-    assert.ok(managerCalls.some(([name, who]) => name === 'eventsub.start' && who === noToken));
-    assert.ok(!managerCalls.some(([name]) => name === 'se.start'), 'there is no token to connect with');
-  });
-
-  test('on, saved again, token changed, off, on again: the connections follow the switch', async () => {
+  test('on, saved again, off, on again: the connections follow the switch', async () => {
     db.db.prepare('UPDATE streamers SET overlay_enabled = 0 WHERE id = ?').run(id);
     const steps = [
-      [{ overlay_enabled: '1' }, [['eventsub.start', id], ['se.start', id]]],
+      [{ overlay_enabled: '1' }, [['eventsub.start', id]]],
       [{ overlay_enabled: '1', overlay_sub_duration: '10' }, []],
-      [{ overlay_enabled: '1', streamelements_jwt: 'new.token.value' }, [['se.start', id]]],
       [{ overlay_enabled: '1', overlay_bits_duration: '12' }, []],
-      [{}, [['eventsub.stop', id], ['se.stop', id]]],
-      [{ overlay_enabled: '1' }, [['eventsub.start', id], ['se.start', id]]],
+      [{}, [['eventsub.stop', id]]],
+      [{ overlay_enabled: '1' }, [['eventsub.start', id]]],
     ];
     for (const [form, expected] of steps) {
       managerCalls.length = 0;
@@ -1126,32 +1071,24 @@ describe('the overlay settings page', () => {
     }
   });
 
-  test('turning the overlay off stops both connections and keeps the token', async () => {
-    await save({ streamelements_jwt: '' });
+  test('turning the overlay off stops the connections', async () => {
+    await save({});
     assert.equal(db.getStreamerById(id).overlay_enabled, 0);
-    assert.equal(db.getStreamerById(id).streamelements_jwt, JWT);
-    assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+    assert.deepEqual(managerCalls, [['eventsub.stop', id]]);
   });
 
-  test('the saved token never comes back in the page after a save either', async () => {
-    await save({ overlay_enabled: '1', streamelements_jwt: ' other.token.value ' });
-    const res = await request('GET', '/dashboard/overlay', { streamer: id });
-    assert.ok(!res.text.includes('other.token.value'));
-    assert.ok(!res.text.includes(JWT));
-  });
 });
 
 // ── The event connections follow the overlay and the chatbot switches ────
 //
-// EventSub (the Twitch events behind the overlay's alerts and the chatbot's thank-yous), StreamElements and the
+// EventSub (the Twitch events behind the overlay's alerts and the chatbot's thank-yous) and the
 // sponsor rotation run while the overlay or the chatbot is on; the app starts them at boot on the same rule.
 // A save that flips one of the two switches starts them when the first comes on and stops them when the last
 // goes off, and leaves them alone while the other keeps them needed. With the overlay hidden, the chatbot
 // page is the only place left that can switch them on.
 
 describe('the event connections follow the overlay and the chatbot switches', () => {
-  const JWT = 'synthetic.stream.elements.token';
-  const STARTED = [['eventsub.start'], ['se.start']];
+  const STARTED = [['eventsub.start']];
   const SPONSORS_STARTED = [['sponsors.restart'], ['sponsors.restartChat']];
   const forId = (id, calls) => calls.map(([name]) => [name, id]);
   // Two forms post to /dashboard/chatbot and name their part: the Connection tab's switch (form=connection; an
@@ -1159,22 +1096,15 @@ describe('the event connections follow the overlay and the chatbot switches', ()
   const saveChatbot = (id, form) => request('POST', '/dashboard/chatbot', { streamer: id, form: { form: 'connection', ...form } });
   const saveMessages = (id, form) => request('POST', '/dashboard/chatbot', { streamer: id, form: { form: 'events', chat_follow_template: '', ...form } });
   const saveOverlay = (id, form) => request('POST', '/dashboard/overlay', { streamer: id, form: { overlay_volume: '0.8', ...form } });
-  const make = (over = {}) => addStreamer({ overlay_enabled: 0, chatbot_enabled: 0, twitch_username: `synthetic_conn_${counter + 1}`, broadcaster_access_token: 'tok', streamelements_jwt: JWT, ...over });
+  const make = (over = {}) => addStreamer({ overlay_enabled: 0, chatbot_enabled: 0, twitch_username: `synthetic_conn_${counter + 1}`, broadcaster_access_token: 'tok', ...over });
 
   describe('the chatbot save', () => {
-    test('switching the chatbot on with the overlay off joins chat, starts EventSub and StreamElements (a token is saved) and the sponsor rotation', async () => {
+    test('switching the chatbot on with the overlay off joins chat, starts EventSub and the sponsor rotation', async () => {
       const id = make();
       const res = await saveChatbot(id, { chatbot_enabled: '1' });
       assert.equal(res.status, 302);
       assert.equal(db.getStreamerById(id).chatbot_enabled, 1);
       assert.deepEqual(managerCalls, [['chat.start', id], ...forId(id, STARTED)]);
-      assert.deepEqual(sponsorCalls, forId(id, SPONSORS_STARTED));
-    });
-
-    test('without a StreamElements token it starts EventSub and the sponsor rotation only', async () => {
-      const id = make({ streamelements_jwt: null });
-      await saveChatbot(id, { chatbot_enabled: '1' });
-      assert.deepEqual(managerCalls, [['chat.start', id], ['eventsub.start', id]]);
       assert.deepEqual(sponsorCalls, forId(id, SPONSORS_STARTED));
     });
 
@@ -1186,7 +1116,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       try {
         const res = await saveChatbot(id, { chatbot_enabled: '1' });
         assert.equal(res.status, 302);
-        assert.deepEqual(managerCalls, [['chat.start', id], ['se.start', id]], 'StreamElements still starts');
+        assert.deepEqual(managerCalls, [['chat.start', id]], 'chat still starts');
         assert.deepEqual(sponsorCalls, forId(id, SPONSORS_STARTED), 'the sponsor rotation still starts');
         assert.ok(logs.some(([level, line]) => level === 'error' && line.includes('EventSub') && line.includes('synthetic failure')), 'the failure is logged');
       } finally {
@@ -1248,11 +1178,11 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       assert.deepEqual(managerCalls, []);
     });
 
-    test('switching it off with the overlay off leaves chat and stops EventSub, StreamElements and the sponsor rotation', async () => {
+    test('switching it off with the overlay off leaves chat and stops EventSub and the sponsor rotation', async () => {
       const id = make({ chatbot_enabled: 1 });
       await saveChatbot(id, {});
       assert.equal(db.getStreamerById(id).chatbot_enabled, 0);
-      assert.deepEqual(managerCalls, [['chat.stop', id], ['eventsub.stop', id], ['se.stop', id]]);
+      assert.deepEqual(managerCalls, [['chat.stop', id], ['eventsub.stop', id]]);
       assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
     });
 
@@ -1289,7 +1219,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
   describe('the overlay save', () => {
     test('switching the overlay off while the chatbot is on stops nothing: the chatbot still needs the connections', async () => {
       const id = make({ overlay_enabled: 1, chatbot_enabled: 1 });
-      const res = await saveOverlay(id, { streamelements_jwt: '' }); // the overlay switch is not sent: off
+      const res = await saveOverlay(id, {}); // the overlay switch is not sent: off
       assert.equal(res.status, 302);
       assert.equal(db.getStreamerById(id).overlay_enabled, 0);
       assert.deepEqual(managerCalls, []);
@@ -1304,17 +1234,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       assert.deepEqual(sponsorCalls, []);
     });
 
-    test('a StreamElements token changed with the overlay off and the chatbot on reconnects StreamElements only', async () => {
-      const id = make({ overlay_enabled: 0, chatbot_enabled: 1 });
-      await saveOverlay(id, { streamelements_jwt: 'other.token.value' });
-      assert.deepEqual(managerCalls, [['se.start', id]]);
-      managerCalls.length = 0;
-      await saveOverlay(id, { streamelements_jwt: '', streamelements_jwt_remove: '1' });
-      assert.deepEqual(managerCalls, [['se.stop', id]]);
-      assert.deepEqual(sponsorCalls, []);
-    });
-
-    test('with the chatbot off it is as it was: on starts EventSub, StreamElements and the sponsor rotation, off stops all three', async () => {
+    test('with the chatbot off it is as it was: on starts EventSub and the sponsor rotation, off stops both', async () => {
       const id = make();
       await saveOverlay(id, { overlay_enabled: '1' });
       assert.deepEqual(managerCalls, forId(id, STARTED));
@@ -1322,7 +1242,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       managerCalls.length = 0;
       sponsorCalls.length = 0;
       await saveOverlay(id, {});
-      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+      assert.deepEqual(managerCalls, [['eventsub.stop', id]]);
       assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
     });
 
@@ -1332,7 +1252,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       assert.deepEqual(managerCalls, [['chat.stop', id]]);
       managerCalls.length = 0;
       await saveOverlay(id, {}); // now neither is on
-      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+      assert.deepEqual(managerCalls, [['eventsub.stop', id]]);
       assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
     });
   });
@@ -1370,7 +1290,7 @@ describe('the event connections follow the overlay and the chatbot switches', ()
       db.endTrackingGoal(goal.id, id);
       db.setTrackerSetting(id, 'latest_tip', { enabled: false });
       await saveOverlay(id, {});
-      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+      assert.deepEqual(managerCalls, [['eventsub.stop', id]]);
     });
   });
 });
@@ -4687,7 +4607,7 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
   test('switching the chatbot off and on leaves and joins chat and stops and starts the connections', async () => {
     const id = addStreamer({ chatbot_enabled: 1, overlay_enabled: 0, twitch_username: 'synthetic_card_bot', broadcaster_access_token: 'tok' });
     await save(id, { key: 'chatbot_enabled', value: 0 });
-    assert.deepEqual(managerCalls, [['chat.stop', id], ['eventsub.stop', id], ['se.stop', id]]);
+    assert.deepEqual(managerCalls, [['chat.stop', id], ['eventsub.stop', id]]);
     assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
     managerCalls.length = 0;
     sponsorCalls.length = 0;
@@ -4818,7 +4738,7 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
       managerCalls.length = 0;
       sponsorCalls.length = 0;
       await save(id, { key: 'overlay_enabled', value: 0 });
-      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]]);
+      assert.deepEqual(managerCalls, [['eventsub.stop', id]]);
       assert.deepEqual(sponsorCalls, [['sponsors.stop', id]]);
       // With the chatbot on, the overlay switch leaves the connections (and the chat) alone.
       db.updateChatbotConfig(id, { chatbot_enabled: 1 });
@@ -4858,7 +4778,7 @@ describe('a working card\'s switch (POST /dashboard/settings)', () => {
     try {
       const off = await save(id, { key: 'chatbot_enabled', value: 0 });
       assert.equal(off.status, 200);
-      assert.deepEqual(managerCalls, [['eventsub.stop', id], ['se.stop', id]], 'the connections were still stopped');
+      assert.deepEqual(managerCalls, [['eventsub.stop', id]], 'the connections were still stopped');
       const sponsor = await save(id, { key: 'sponsor_send_chat', value: 1 });
       assert.equal(sponsor.status, 200);
       assert.equal(db.getStreamerById(id).sponsor_send_chat, 1);

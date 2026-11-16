@@ -83,8 +83,8 @@ router.get('/dashboard', requireAdmin, (req, res) => {
 
 // --- User management ---
 
-// Disabling closes the account's web sessions and stops its EventSub,
-// StreamElements and chat connections; enabling starts them again
+// Disabling closes the account's web sessions and stops its EventSub
+// and chat connections; enabling starts them again
 // (services/accountLifecycle.js).
 router.post('/streamers/:id/toggle', requireAdmin, (req, res) => {
   const s = db.getStreamerById(parseInt(req.params.id));

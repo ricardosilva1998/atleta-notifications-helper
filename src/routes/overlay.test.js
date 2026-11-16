@@ -125,7 +125,7 @@ function disable(id) {
   const noop = { startForStreamer() {}, stopForStreamer() {} };
   lifecycle.disableAccount(id, null, {
     db, bus,
-    eventSubManager: noop, streamElementsManager: noop, chatManager: noop,
+    eventSubManager: noop, chatManager: noop,
     timedNotificationManager: { stopForStreamer() {}, restartForStreamer() {}, restartChatForStreamer() {} },
   });
 }

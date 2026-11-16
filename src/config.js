@@ -19,7 +19,7 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// TOKEN_ENCRYPTION_KEY encrypts the OAuth tokens and the StreamElements token
+// TOKEN_ENCRYPTION_KEY encrypts the OAuth tokens
 // kept in the database (src/db.js, services/secretBox.js): 64 hex characters,
 // made with `openssl rand -hex 32`. Unset, they are stored unencrypted and the
 // boot log says so. Set but malformed, the boot stops: running anyway would

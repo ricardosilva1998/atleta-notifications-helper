@@ -47,7 +47,7 @@ function broadcast(streamerId, extra) {
   bus.emit(channel(streamerId), { type: 'tip_goal', goal: toPayload(goal), ...(extra || {}) });
 }
 
-// Called from every real donation source (PayPal tip page, StreamElements).
+// Called from every real donation source (the PayPal tip page).
 // Test alerts deliberately do not call this.
 function recordDonation(streamerId, amount, currency) {
   try {

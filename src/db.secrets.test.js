@@ -1,6 +1,6 @@
 'use strict';
 
-// Secrets at rest in src/db.js: the OAuth tokens and the StreamElements token
+// Secrets at rest in src/db.js: the OAuth tokens
 // (encrypted with TOKEN_ENCRYPTION_KEY when it is set) and the web session ids
 // (stored hashed). The real db.js is booted several times against temporary
 // database files, with and without a key, as successive deploys would boot it.

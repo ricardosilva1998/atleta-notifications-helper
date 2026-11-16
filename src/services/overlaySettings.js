@@ -53,10 +53,6 @@ const PREVIOUS_DEFAULT_SECONDS = Object.freeze({
 
 const DEFAULT_VOLUME = 0.8;
 
-// A StreamElements JWT is a few hundred characters; anything far beyond that
-// is not one.
-const STREAMELEMENTS_JWT_MAX = 2000;
-
 function wholeSeconds(value, fallback, longest) {
   const seconds = Number.parseInt(String(value), 10);
   if (!Number.isFinite(seconds)) return fallback;
@@ -77,23 +73,8 @@ function giveawayDurationSeconds(stored) {
   return wholeSeconds(stored, fallback, longest);
 }
 
-// A save never reveals or erases the stored StreamElements token by accident:
-//   - a typed token replaces it,
-//   - the "remove" box clears it (and wins over a typed token),
-//   - anything else, a blank field included, keeps what is stored.
-// Returns the token held afterwards and whether that differs from `stored`.
-function decideStreamElementsJwt({ typed, remove, stored }) {
-  const current = stored || null;
-  if (remove) return { value: null, changed: current !== null };
-  const candidate = typeof typed === 'string' ? typed.trim() : '';
-  if (!candidate || candidate.length > STREAMELEMENTS_JWT_MAX) return { value: current, changed: false };
-  return { value: candidate, changed: candidate !== current };
-}
-
-// body: the submitted form; stored: the streamer's row (only the token is read).
-// Returns { columns, streamElementsJwt }: the columns to write (the token's only
-// when it changes) and the token held after the save.
-function parseOverlaySettings(body, stored) {
+// body: the submitted form. Returns the columns to write.
+function parseOverlaySettings(body) {
   const form = body && typeof body === 'object' ? body : {};
   const columns = {};
   for (const name of TOGGLES) columns[name] = form[name] ? 1 : 0;
@@ -106,13 +87,7 @@ function parseOverlaySettings(body, stored) {
   }
   columns.overlay_volume = volumeOf(form.overlay_volume);
 
-  const jwt = decideStreamElementsJwt({
-    typed: form.streamelements_jwt,
-    remove: !!form.streamelements_jwt_remove,
-    stored: stored && stored.streamelements_jwt,
-  });
-  if (jwt.changed) columns.streamelements_jwt = jwt.value;
-  return { columns, streamElementsJwt: jwt.value };
+  return columns;
 }
 
 module.exports = {
@@ -122,9 +97,7 @@ module.exports = {
   YOUTUBE_DURATIONS,
   DEFAULT_DURATION_SECONDS,
   PREVIOUS_DEFAULT_SECONDS,
-  STREAMELEMENTS_JWT_MAX,
   parseOverlaySettings,
-  decideStreamElementsJwt,
   giveawayDurationSeconds,
   // Shared with services/overlayConfig.js, which sends the saved values to the
   // OBS overlay with the same bounds a save applies.

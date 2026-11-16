@@ -49,7 +49,6 @@ const STUBS = {
   '../services/youtubeLiveChat': { youtubeChatManager: { isPolling: () => false, getLiveChatId: () => null, startPolling: () => {}, stopPolling: () => {} } },
   '../services/agentTriage': { analyzeIssue: async () => {} },
   '../services/eventsub': { eventSubManager: { startForStreamer: record('eventsub.start'), stopForStreamer: record('eventsub.stop') } },
-  '../services/streamelements': { streamElementsManager: { startForStreamer: record('se.start'), stopForStreamer: record('se.stop') } },
   '../services/timedNotifications': { timedNotificationManager: { restartForStreamer: () => {}, restartChatForStreamer: () => {}, stopForStreamer: () => {} } },
 };
 

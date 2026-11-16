@@ -29,7 +29,6 @@ const record = (name) => (...args) => calls.push([name, ...args]);
 const youtubeChats = {}; // streamerId -> the live chat id the stub YouTube chat manager is polling
 const managers = {
   './eventsub': { eventSubManager: { startForStreamer: record('eventsub.start'), stopForStreamer: record('eventsub.stop') } },
-  './streamelements': { streamElementsManager: { startForStreamer: record('se.start'), stopForStreamer: record('se.stop') } },
   './twitchChat': { chatManager: { startForStreamer: record('chat.start'), stopForStreamer: record('chat.stop') } },
   './youtubeLiveChat': {
     youtubeChatManager: {
@@ -191,7 +190,7 @@ function get(urlPath, streamer) {
   });
 }
 
-const FULLY_ON = { overlay_enabled: 1, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 1, twitch_username: 'some_streamer' };
+const FULLY_ON = { overlay_enabled: 1, broadcaster_access_token: 'tok', chatbot_enabled: 1, twitch_username: 'some_streamer' };
 
 describe('Disable', () => {
   test('switches the account off, ends its web sessions and stops its live connections', async () => {
@@ -210,7 +209,7 @@ describe('Disable', () => {
     assert.equal(db.getStreamerById(target).admin_note, 'Disabled by admin');
     assert.equal(db.getSession('target-session'), undefined);
     assert.ok(db.getSession('bystander-session'));
-    assert.deepEqual(calls.map((c) => c[0]).sort(), ['chat.stop', 'eventsub.stop', 'se.stop', 'sponsors.stop', 'yt.stop']);
+    assert.deepEqual(calls.map((c) => c[0]).sort(), ['chat.stop', 'eventsub.stop', 'sponsors.stop', 'yt.stop']);
     assert.ok(calls.every((c) => c[1] === target), 'only that streamer\'s connections were touched');
     assert.deepEqual(closed, [target], 'its open overlay streams were told to end');
   });
@@ -260,7 +259,7 @@ describe('Enable', () => {
     assert.equal(row.enabled, 1);
     assert.equal(row.admin_note, null);
     assert.deepEqual(calls.map((c) => c[0]).sort(),
-      ['chat.start', 'eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
+      ['chat.start', 'eventsub.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
 
   test('picks up the YouTube chat the bot was polling for the account when it was disabled', async () => {
@@ -318,7 +317,7 @@ describe('Remove', () => {
     assert.ok(db.getSession(`session-${other}`));
     assert.equal(count('giveaway_entries'), 1, 'only the other streamer\'s entry is left');
     assert.deepEqual(db.db.pragma('foreign_key_check'), []);
-    assert.deepEqual(calls.map((c) => c[0]).sort(), ['chat.stop', 'eventsub.stop', 'se.stop', 'sponsors.stop', 'yt.stop'], 'its connections were stopped first');
+    assert.deepEqual(calls.map((c) => c[0]).sort(), ['chat.stop', 'eventsub.stop', 'sponsors.stop', 'yt.stop'], 'its connections were stopped first');
   });
 
   test('you cannot remove your own account', async () => {

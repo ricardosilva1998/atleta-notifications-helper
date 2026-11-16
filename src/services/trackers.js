@@ -121,7 +121,7 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
     }
   }
 
-  // A tip that db.logDonation() just recorded (PayPal or StreamElements), in any currency: the latest tip, then the
+  // A tip that db.logDonation() just recorded (PayPal), in any currency: the latest tip, then the
   // top tipper as it stands now. Never throws.
   function onTip(streamerId, tip) {
     try {

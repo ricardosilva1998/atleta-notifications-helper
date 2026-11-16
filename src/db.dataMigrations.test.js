@@ -19,6 +19,7 @@ const SESSION_HASH_MIGRATION = 'hash_web_session_ids';
 const DURATIONS_MIGRATION = 'longer_alert_durations';
 const C1_MIGRATION = 'c1_donation_for_andre_vilela';
 const TRACKERS_SEED = 'tracking_seed_trackers';
+const SE_TOKENS = 'clear_streamelements_tokens';
 
 let tmpDir;
 before(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-data-migrations-')); });
@@ -60,7 +61,7 @@ function boot(file, inspect, stubs = {}) {
   return errors;
 }
 
-const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|drop_racing_tables|longer_alert_durations|c1_donation_for_andre_vilela|tracking_seed_trackers/i.test(line));
+const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|drop_racing_tables|longer_alert_durations|c1_donation_for_andre_vilela|tracking_seed_trackers|clear_streamelements_tokens/i.test(line));
 
 test('a fresh database boots twice: each data migration is recorded once, without errors', () => {
   const file = path.join(tmpDir, 'fresh.db');
@@ -69,7 +70,7 @@ test('a fresh database boots twice: each data migration is recorded once, withou
 
   const raw = new RealDatabase(file);
   try {
-    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED, 'drop_racing_tables'].sort());
+    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED, SE_TOKENS, 'drop_racing_tables'].sort());
   } finally {
     raw.close();
   }
@@ -265,4 +266,30 @@ test('a database from before the Tracking release gets the last stream\'s start,
   boot(file, (db) => {
     assert.deepEqual(db.getTrackerValues(streamerId), {});
   });
+});
+
+test('a StreamElements token saved before the integration was removed is cleared once, and the column stays', () => {
+  const file = path.join(tmpDir, 'streamelements.db');
+  boot(file);
+
+  let streamerId;
+  const raw = new RealDatabase(file);
+  try {
+    streamerId = Number(raw.prepare("INSERT INTO streamers (discord_user_id, discord_username, streamelements_jwt) VALUES ('600000000000000095', 'se_streamer', 'synthetic.se.token')").run().lastInsertRowid);
+    raw.prepare('DELETE FROM data_migrations WHERE name = ?').run(SE_TOKENS);
+  } finally {
+    raw.close();
+  }
+
+  const errors = boot(file, (db) => {
+    assert.equal(db.db.prepare('SELECT streamelements_jwt AS jwt FROM streamers WHERE id = ?').get(streamerId).jwt, null);
+  });
+  assert.deepEqual(ownErrors(errors), []);
+
+  const again = new RealDatabase(file);
+  try {
+    assert.ok(again.prepare('SELECT 1 FROM data_migrations WHERE name = ?').get(SE_TOKENS), 'recorded');
+  } finally {
+    again.close();
+  }
 });

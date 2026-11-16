@@ -36,7 +36,6 @@ function fakeServices(streamer, { failing = [], youtubeChat, tracking = false } 
       },
       bus: { emit: rec('bus.emit') },
       eventSubManager: { startForStreamer: rec('eventsub.start'), stopForStreamer: rec('eventsub.stop') },
-      streamElementsManager: { startForStreamer: rec('se.start'), stopForStreamer: rec('se.stop') },
       chatManager: { startForStreamer: rec('chat.start'), stopForStreamer: rec('chat.stop'), partChannel: rec('chat.part') },
       livePolls: { forget: rec('polls.forget') },
       trackingGoals: { KINDS: ['follow', 'sub'], endGoal: rec('goal.end') },
@@ -53,7 +52,7 @@ function fakeServices(streamer, { failing = [], youtubeChat, tracking = false } 
 const names = (calls) => calls.map((c) => c[0]);
 
 const FULLY_ON = {
-  id: 5, overlay_enabled: 1, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt',
+  id: 5, overlay_enabled: 1, broadcaster_access_token: 'tok',
   chatbot_enabled: 1, twitch_username: 'some_streamer',
 };
 
@@ -62,7 +61,7 @@ describe('disableAccount', () => {
     const { calls, services } = fakeServices(FULLY_ON);
     disableAccount(5, 'Disabled by admin', services);
     assert.deepEqual(calls[0], ['db.disable', 5, 'Disabled by admin']);
-    assert.deepEqual(names(calls).slice(1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'se.stop', 'sponsors.stop', 'yt.stop']);
+    assert.deepEqual(names(calls).slice(1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'sponsors.stop', 'yt.stop']);
     assert.deepEqual(calls.find((c) => c[0] === 'eventsub.stop'), ['eventsub.stop', 5]);
     assert.deepEqual(calls.find((c) => c[0] === 'yt.stop'), ['yt.stop', 5]);
     assert.deepEqual(calls.find((c) => c[0] === 'bus.emit'), ['bus.emit', 'overlay-disabled:5']);
@@ -78,7 +77,7 @@ describe('disableAccount', () => {
     } finally {
       console.error = original;
     }
-    assert.deepEqual(names(calls).slice(1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'se.stop', 'sponsors.stop', 'yt.stop']);
+    assert.deepEqual(names(calls).slice(1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'sponsors.stop', 'yt.stop']);
     assert.equal(logged.length, 3);
     assert.match(logged[0], /EventSub stop failed for streamer 5: eventsub\.stop exploded/);
     assert.ok(logged.some((line) => /YouTube chat stop failed for streamer 5: yt\.stop exploded/.test(line)));
@@ -91,12 +90,12 @@ describe('enableAccount', () => {
     enableAccount(5, services);
     assert.deepEqual(calls[0], ['db.enable', 5]);
     assert.deepEqual(names(calls).slice(1).sort(),
-      ['chat.start', 'eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
+      ['chat.start', 'eventsub.start', 'sponsors.restart', 'sponsors.restartChat']);
     assert.equal(names(calls).some((n) => n.endsWith('.stop')), false);
   });
 
-  test('starts nothing the streamer had off (no overlay, no StreamElements token, no chatbot)', () => {
-    const quiet = { id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 0, twitch_username: 'x' };
+  test('starts nothing the streamer had off (no overlay, no chatbot)', () => {
+    const quiet = { id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', chatbot_enabled: 0, twitch_username: 'x' };
     const { calls, services } = fakeServices(quiet);
     enableAccount(5, services);
     assert.deepEqual(names(calls), ['db.enable']);
@@ -105,14 +104,8 @@ describe('enableAccount', () => {
   // The follows, subs, raids and bits Tracking counts come through EventSub, as at boot (db.getOverlayOrChatbotStreamers)
   // and on the dashboard (syncLiveConnections).
   test('Tracking alone (an active goal or a tracker on), overlay and chatbot off, brings back the event connections', () => {
-    const trackingOnly = { id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 0, twitch_username: 'x' };
+    const trackingOnly = { id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', chatbot_enabled: 0, twitch_username: 'x' };
     const { calls, services } = fakeServices(trackingOnly, { tracking: true });
-    enableAccount(5, services);
-    assert.deepEqual(names(calls).slice(1).sort(), ['eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
-  });
-
-  test('without a StreamElements token it connects EventSub only', () => {
-    const { calls, services } = fakeServices({ ...FULLY_ON, streamelements_jwt: null, chatbot_enabled: 0 });
     enableAccount(5, services);
     assert.deepEqual(names(calls).slice(1).sort(), ['eventsub.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
@@ -121,23 +114,23 @@ describe('enableAccount', () => {
   // being on brings them back, as it does when the app boots (db.getOverlayOrChatbotStreamers).
   test('the chatbot alone needs no overlay, matching how the app boots: it brings back the event connections too', () => {
     const { calls, services } = fakeServices({
-      id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 1, twitch_username: 'some_streamer',
+      id: 5, overlay_enabled: 0, broadcaster_access_token: 'tok', chatbot_enabled: 1, twitch_username: 'some_streamer',
     });
     enableAccount(5, services);
     assert.deepEqual(calls[0], ['db.enable', 5]);
-    assert.deepEqual(names(calls).slice(1).sort(), ['chat.start', 'eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
+    assert.deepEqual(names(calls).slice(1).sort(), ['chat.start', 'eventsub.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
 
   test('the overlay alone brings them back too, without the chat bot', () => {
-    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: 'tok', streamelements_jwt: 'jwt', chatbot_enabled: 0 });
+    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: 'tok', chatbot_enabled: 0 });
     enableAccount(5, services);
-    assert.deepEqual(names(calls).slice(1).sort(), ['eventsub.start', 'se.start', 'sponsors.restart', 'sponsors.restartChat']);
+    assert.deepEqual(names(calls).slice(1).sort(), ['eventsub.start', 'sponsors.restart', 'sponsors.restartChat']);
   });
 
-  test('EventSub needs a broadcaster token to connect; StreamElements and the sponsor rotation do not', () => {
-    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: '', streamelements_jwt: 'jwt', chatbot_enabled: 0 });
+  test('EventSub needs a broadcaster token to connect; the sponsor rotation does not', () => {
+    const { calls, services } = fakeServices({ id: 5, overlay_enabled: 1, broadcaster_access_token: '', chatbot_enabled: 0 });
     enableAccount(5, services);
-    assert.deepEqual(names(calls).slice(1).sort(), ['se.start', 'sponsors.restart', 'sponsors.restartChat']);
+    assert.deepEqual(names(calls).slice(1).sort(), ['sponsors.restart', 'sponsors.restartChat']);
     const chatbotOnly = fakeServices({ id: 5, overlay_enabled: 0, chatbot_enabled: 1, twitch_username: 'some_streamer' });
     enableAccount(5, chatbotOnly.services);
     assert.deepEqual(names(chatbotOnly.calls).slice(1).sort(), ['chat.start', 'sponsors.restart', 'sponsors.restartChat']);
@@ -156,7 +149,7 @@ describe('removeAccount', () => {
     removeAccount(5, services);
     assert.equal(names(calls).at(-1), 'db.delete');
     assert.deepEqual(calls.at(-1), ['db.delete', 5]);
-    assert.deepEqual(names(calls).slice(0, -1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'se.stop', 'sponsors.stop', 'yt.stop']);
+    assert.deepEqual(names(calls).slice(0, -1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'sponsors.stop', 'yt.stop']);
   });
 
   test('the coaching rooms on Discord are removed before the rows are deleted, and a failure there changes nothing', () => {

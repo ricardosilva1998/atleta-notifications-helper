@@ -192,7 +192,7 @@ describe('what the managers start at boot, and what the overlay links and stream
     assert.equal(db.getStreamerByMultistreamToken('tok-multistream-a').id, a);
   });
 
-  // The event connections (EventSub, StreamElements, the sponsor rotation) serve the overlay and the chatbot:
+  // The event connections (EventSub, the sponsor rotation) serve the overlay and the chatbot:
   // the managers start them at boot for every streamer whose overlay or chatbot is on.
   describe('the streamers the connection managers start at boot (overlay or chatbot on)', () => {
     let overlayOnly;

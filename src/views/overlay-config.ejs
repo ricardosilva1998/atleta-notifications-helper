@@ -599,35 +599,6 @@
 
   </div>
 
-  <!-- StreamElements JWT -->
-  <div class="card animate-in animate-in-delay-3">
-    <h3>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <%= t('overlay.seTitle') %>
-    </h3>
-    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-      <%- rich('overlay.seHelp', { b: '<strong>', bEnd: '</strong>' }) %>
-    </p>
-    <div class="form-group" style="margin-bottom: 0;">
-      <label for="streamelements_jwt"><%= t('overlay.seToken') %></label>
-      <input type="password" name="streamelements_jwt" id="streamelements_jwt"
-        placeholder="eyJhbGciOi..."
-        autocomplete="new-password">
-    </div>
-    <% if (hasStreamElementsJwt) { %>
-      <p style="color: var(--success); font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 6px;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        <%= t('overlay.se.saved') %>
-      </p>
-      <p style="color: var(--text-muted); font-size: 12px; margin: 4px 0 0;"><%= t('overlay.se.replace') %></p>
-      <div class="toggle" style="margin-top: 10px;">
-        <input type="checkbox" id="streamelements_jwt_remove" name="streamelements_jwt_remove" value="1">
-        <label for="streamelements_jwt_remove"><%= t('overlay.se.remove') %></label>
-      </div>
-    <% } %>
-  </div>
-
-
 </form>
 
 <!-- Preview Alert Modal -->
