@@ -29,6 +29,7 @@ function liveServices() {
     chatManager: require('./twitchChat').chatManager,
     youtubeChatManager: require('./youtubeLiveChat').youtubeChatManager,
     timedNotificationManager: require('./timedNotifications').timedNotificationManager,
+    coachingRooms: require('./coachingRooms'),
   };
 }
 
@@ -133,6 +134,11 @@ function enableAccount(streamerId, services = liveServices()) {
 function removeAccount(streamerId, services = liveServices()) {
   stopLiveServices(streamerId, services);
   pausedYoutubeChats.delete(streamerId);
+  // The coaching rooms and roles on Discord go too (planning decision 13): the rooms are read before the rows are
+  // deleted, and Discord is asked in the background (best effort, never throws).
+  if (services.coachingRooms) {
+    attempt('Coaching rooms removal', streamerId, () => { Promise.resolve(services.coachingRooms.removeAllFor(streamerId)).catch(() => {}); });
+  }
   services.db.deleteStreamer(streamerId);
 }
 

@@ -18,13 +18,24 @@ const DAY_MS = 86400e3;
 const MEMBER_KEEP_MS = 30e3; // how long Discord's answer about a viewer's membership is kept (Ruling 8)
 const RECHECK_MS = 10e3; // "I've joined" asks Discord again at most this often per viewer
 const SWEEP_MS = 60e3;
+const ROOM_WAIT_MS = 8e3; // a confirmation waits this long for its room's link
 
 const nameOf = (streamer) => streamer.twitch_display_name || streamer.twitch_username || '';
 const bookingUrl = (streamer) => `${config.app.url}/coaching/${encodeURIComponent(streamer.twitch_username)}`;
 const scheduleUrl = () => `${config.app.url}/dashboard/coaching`;
 const claimedGuildIds = (streamer) => db.getGuildsForStreamer(streamer.id).map((g) => g.guild_id);
 
-function bookingView(row, now) {
+// The room's link while it is open; its error code while it failed; what became of the transcript afterwards.
+function roomFields(room, { forViewer = false } = {}) {
+  const open = room && (room.state === 'open' || room.state === 'closing') && room.channel_id;
+  return {
+    roomUrl: open ? rooms.roomUrlOf(room) : null,
+    roomError: !forViewer && room && room.state === 'failed' ? room.error || 'failed' : null,
+    transcriptStatus: !forViewer && room && room.transcript_status ? room.transcript_status : null,
+  };
+}
+
+function bookingView(row, now, room = null, opts = {}) {
   return {
     id: row.id,
     startsAt: row.starts_at,
@@ -43,8 +54,14 @@ function bookingView(row, now) {
     paidAmountCents: row.paid_amount_cents == null ? null : row.paid_amount_cents,
     paidCurrency: row.paid_currency || null,
     paymentIssue: row.payment_issue || null,
-    roomUrl: null, // the session's Discord room, once rooms exist (services/coachingRooms.js)
+    ...roomFields(room, opts),
   };
+}
+
+// Several bookings as views, their rooms read in one query.
+function bookingViews(rows, now, opts = {}) {
+  const byBooking = new Map(db.listCoachingRoomsForBookings(rows.map((r) => r.id)).map((r) => [r.booking_id, r]));
+  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, opts));
 }
 
 // The currency of a streamer's coaching prices: their tip page's.
@@ -191,10 +208,17 @@ async function decide(streamer, id, { from, to, kind, noCode, unpaidOnly = false
 // coachingRooms.makeFor; nothing yet) and the viewer is messaged with the room's link, or the where text. Resolves to
 // the viewer message's failure reason (null when it went out); never throws.
 async function afterConfirmed(streamer, booking, kind) {
+  // The room is made in the background if Discord is slow: the message then goes without its link.
   let room = null;
-  try { room = await rooms.makeFor(booking.id); } catch (e) {
+  let timer;
+  try {
+    room = await Promise.race([
+      rooms.makeFor(booking.id),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), ROOM_WAIT_MS); timer.unref(); }),
+    ]);
+  } catch (e) {
     console.error(`[Coaching] room for booking ${booking.id} failed:`, e && e.message);
-  }
+  } finally { clearTimeout(timer); }
   const settings = db.getCoachingSettings(streamer.id);
   return messageViewer(streamer, settings, booking, kind, { roomUrl: room && room.url ? room.url : null });
 }
@@ -318,13 +342,16 @@ function cardData(streamer, { now = Date.now(), claimedGuildIds: claimed = [] } 
     open: !!(settings && settings.open),
     bookable: coaching.bookable(settings, claimed),
     inviteBroken: !!(settings && settings.invite_code && settings.invite_ok === 0),
-    waiting: waiting.slice(0, 5).map((r) => bookingView(r, now)),
+    waiting: bookingViews(waiting.slice(0, 5), now),
     waitingCount: settings ? db.countWaitingCoaching(streamer.id, now) : 0,
-    next: confirmed ? bookingView(confirmed, now) : null,
+    next: confirmed ? bookingViews([confirmed], now)[0] : null,
+    roomErrors: upcoming.filter((r) => r.status === 'confirmed').length
+      ? db.listCoachingRoomsForBookings(upcoming.filter((r) => r.status === 'confirmed').map((r) => r.id)).filter((r) => r.state === 'failed').length
+      : 0,
   };
 }
 
 module.exports = {
-  bookingView, offeredLengths, currencyOf, isMember, forgetMembers, request, accept, decline, cancel, withdraw,
+  bookingView, bookingViews, offeredLengths, currencyOf, isMember, forgetMembers, request, accept, decline, cancel, withdraw,
   afterPayment, afterExpired, checkInvite, checkInviteLater, cardData,
 };

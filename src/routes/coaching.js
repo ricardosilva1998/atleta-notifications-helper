@@ -121,7 +121,7 @@ function pageState(streamer, settings, viewer, now) {
     inviteUrl: settings.invite_code ? `https://discord.gg/${encodeURIComponent(settings.invite_code)}` : null,
     guildName: serverName(settings, claims),
     bookings: viewer
-      ? db.getViewerCoachingBookings(streamer.id, viewer.discordUserId, now - PAST_DAYS * DAY_MS).map((row) => coachingBookings.bookingView(row, now))
+      ? coachingBookings.bookingViews(db.getViewerCoachingBookings(streamer.id, viewer.discordUserId, now - PAST_DAYS * DAY_MS), now, { forViewer: true })
       : [],
     maxUpcoming: coaching.MAX_UPCOMING,
     horizonDays: coaching.HORIZON_DAYS,
@@ -176,7 +176,7 @@ router.post('/:username/book', async (req, res) => {
     startsAt: body.startsAt, minutes: body.minutes, note: body.note, lang: res.locals.lang,
   }, { now });
   if (!result.ok) return refuse(res, result.code);
-  res.json({ ok: true, booking: coachingBookings.bookingView(result.booking, now), unverified: !!result.unverified });
+  res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0], unverified: !!result.unverified });
 });
 
 // The viewer's own booking only (another's answers not_found), until it starts; it becomes Withdrawn.
@@ -189,7 +189,7 @@ router.post('/:username/bookings/:id/cancel', async (req, res) => {
   const now = Date.now();
   const result = await coachingBookings.withdraw(page.streamer, req.viewer, id, { now });
   if (!result.ok) return refuse(res, result.code);
-  res.json({ ok: true, booking: coachingBookings.bookingView(result.booking, now) });
+  res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0] });
 });
 
 // Pay for a booking the streamer accepted: the viewer's own, awaiting payment, before its deadline. Answers

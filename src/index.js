@@ -71,6 +71,10 @@ function startWithoutDiscord() {
   // OBS source is open re-read Twitch (services/trackingGoals.js).
   require('./services/trackingGoals').startTicks();
 
+  // Coaching: every minute, unpaid bookings expire, stale PayPal orders are read back, half-made rooms are finished and
+  // finished sessions' rooms are closed with their transcripts (services/coachingTick.js). Works without Discord.
+  require('./services/coachingTick').startTicks();
+
   // Multistream runs only once the relay is configured: then, finish any
   // go-live a previous restart interrupted, and from then on check the relay
   // every minute (services/multistreamSessions.js).
@@ -179,7 +183,7 @@ if (config.discord.disabled) {
   // Only the bot needs Discord: a failed login is tried again (30 s, doubling up
   // to every 10 minutes) while the site and everything else keep running; a
   // token Discord refuses is logged loudly and not retried.
-  discordLogin = startDiscordLogin({ client, token: config.discord.token });
+  discordLogin = startDiscordLogin({ client, token: config.discord.token, onIntentRefused: () => require('./discord').dropMessageContent() });
 }
 
 // Handle bot joining a new guild
@@ -222,6 +226,7 @@ async function shutdown(signal) {
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
   stop('Tracking goals', () => require('./services/trackingGoals').stopTicks());
+  stop('Coaching tick', () => require('./services/coachingTick').stopTicks());
   if (config.multistream.enabled) stop('Multistream checks', () => require('./services/multistreamSessions').sessions().stopAll());
   stop('Discord login retry', () => { if (discordLogin) discordLogin.stop(); });
   try {

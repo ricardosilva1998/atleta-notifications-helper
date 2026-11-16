@@ -460,3 +460,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Accept: a paid length goes to `awaiting_payment` (refused `no_paypal`, `too_close`), a free one (price 0 or a booking from before prices) to `confirmed` with the room hook. Cancel/Withdraw of a paid booking answer `paid` (409); the update itself skips a paid row. A request checks the length is on, and a paid one needs the PayPal email (`no_paypal`); `/state` lists only those lengths.
 - `expireDue` and `reconcileStale` are ready for T3's minute tick (one run at a time each); the return route redirects with `?paid=1`, `?error=late`, or `?error=pay_invalid|pay_unconfirmed(&order=<id>)|not_paid|paid|pay_closed` (texts in `RETURN_ERROR_KEYS`).
 **Open:** T3 starts the tick and fills `coachingRooms.makeFor` (accept of a free length awaits it); T4 shows the return codes, `&order=` "check again", and `coaching.error.bad_length` still says "Pick 30 minutes or 1 hour".
+
+### 2026-11-16 15:30 — claude (backend-dev, T3 of coaching payment and rooms)
+**Task:** Discord rooms, transcripts and the minute tick for paid coaching sessions
+**Files:** `src/discord.js`, `src/services/{discordLogin,coachingRooms,coachingTick,coachingBookings,accountLifecycle}.js`, `src/routes/{coachingDashboard,coaching}.js`, `src/index.js`, `src/locales/*.json`, tests (`coachingRooms`, `discord`, `discord.coaching`, `discordLogin`, `accountLifecycle`, `coachingDashboard`, `coachingBookings`, `tests/i18n`)
+**Decisions:**
+- The client asks for the Message Content intent (REST reads only, no GuildMessages); a refused login drops it and logs in again (`discord.dropMessageContent()`, `hasMessageContent()`), then a transcript is not sent (`transcript_status = no_intent`).
+- `coachingRooms.js` makes the role then the voice channel (ids written as made; `makeFor`, `retry`, `finishOrCleanMaking`, `closeDue`, `removeAllFor`); `coachingTick.js` runs every minute (expireDue, reconcileStale, making, close), started in `index.js`.
+- Settings save takes `categoryId` (checked: `category_not_found`, `category_permissions` naming what is missing); `POST /dashboard/api/coaching/bookings/:id/room` retries; `bookingView` now carries `roomUrl`, `roomError`, `transcriptStatus` (viewer views carry only `roomUrl`); admin Remove calls `removeAllFor` first.
+**Open:** T5 draws the category picker (`coachingData.categories`, `settings.categoryId`) and the room error and transcript texts (`coaching.dashboard.roomError.*`, `coaching.dashboard.transcript.*` exist in 7 locales).

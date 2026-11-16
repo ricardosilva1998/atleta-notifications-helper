@@ -130,6 +130,27 @@ describe('startDiscordLogin', () => {
     assert.equal(client.calls, 2);
   });
 
+  test('refused intents: the intent is dropped and the login is tried again at once, loudly, once', async () => {
+    const client = fakeClient([refused('DisallowedIntents'), 'ok']);
+    let dropped = 0;
+    const login = startDiscordLogin({ client, token: 't', log, onIntentRefused: () => { dropped += 1; return true; } });
+    await settle();
+    await settle();
+    assert.equal(client.calls, 2);
+    assert.equal(dropped, 1);
+    assert.equal(login.retryPending, false);
+    assert.equal(logs.filter(([kind]) => kind === 'error').length, 1);
+    assert.match(logs[0][1], /Message Content/);
+  });
+
+  test('refused intents with nothing left to drop stays a final refusal', async () => {
+    const client = fakeClient([refused('DisallowedIntents')]);
+    startDiscordLogin({ client, token: 't', log, onIntentRefused: () => false });
+    await settle();
+    assert.equal(client.calls, 1);
+    assert.match(logs[0][1], /LOGIN REFUSED/);
+  });
+
   test('stop() (the graceful shutdown) cancels a retry that is waiting', async () => {
     const client = fakeClient([networkError()]);
     const login = startDiscordLogin({ client, token: 't', log });

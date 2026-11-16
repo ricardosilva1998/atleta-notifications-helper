@@ -415,7 +415,7 @@ describe('cardData', () => {
     assert.equal(card.next.state, 'confirmed');
     assert.deepEqual(Object.keys(card.next).sort(), [
       'currency', 'id', 'messageError', 'minutes', 'note', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy', 'paymentIssue',
-      'priceCents', 'roomUrl', 'startsAt', 'state', 'viewerAvatar', 'viewerName', 'viewerUsername',
+      'priceCents', 'roomError', 'roomUrl', 'startsAt', 'state', 'transcriptStatus', 'viewerAvatar', 'viewerName', 'viewerUsername',
     ]);
     db.setCoachingOpen(s.id, 1);
     db.recordInviteCheck(s.id, 'abc', 0, NOW);

@@ -14,6 +14,7 @@ const discord = require('../discord');
 const config = require('../config');
 const coaching = require('../services/coaching');
 const coachingBookings = require('../services/coachingBookings');
+const coachingRooms = require('../services/coachingRooms');
 const { canonicalTimeZone } = require('../services/goalPeriods');
 const { parseSwitch } = require('../services/inputLimits');
 
@@ -43,10 +44,18 @@ const REFUSALS = {
   no_paypal: [409, 'coaching.dashboard.error.no_paypal'],
   too_close: [409, 'coaching.dashboard.error.too_close'],
   paid: [409, 'coaching.dashboard.error.paid'],
+  bad_category: [400, 'coaching.dashboard.error.bad_category'],
+  category_not_found: [400, 'coaching.dashboard.error.category_not_found'],
+  category_permissions: [400, 'coaching.dashboard.error.category_permissions'],
+  no_category: [409, 'coaching.dashboard.error.no_category'],
+  room_not_failed: [409, 'coaching.dashboard.error.room_not_failed'],
+  room_busy: [409, 'coaching.dashboard.error.room_busy'],
+  discord_down: [503, 'coaching.dashboard.error.discord_down'],
+  failed: [500, 'coaching.page.failed'],
 };
-function refuse(res, code) {
+function refuse(res, code, extra = {}, params = {}) {
   const [status, key] = REFUSALS[code] || [400, 'coaching.page.failed'];
-  res.status(status).json({ ok: false, code, error: res.locals.t(key) });
+  res.status(status).json({ ok: false, code, error: res.locals.t(key, params), ...extra });
 }
 
 // The texts public/js/coaching-dashboard.js reads, as window.COACHING_DASHBOARD_TEXTS (name -> key; their {{fields}}
@@ -86,7 +95,7 @@ function settingsView(settings, now, servers) {
   if (!settings) {
     return {
       open: false, timeZone: null, hours: coaching.DEFAULT_HOURS, daysOff: [],
-      guildId: servers.length ? servers[0].id : null, invite: '', inviteOk: null, where: '', notifyRequests: true,
+      guildId: servers.length ? servers[0].id : null, categoryId: null, invite: '', inviteOk: null, where: '', notifyRequests: true,
     };
   }
   const today = coaching.localDateOf(now, settings.time_zone);
@@ -96,6 +105,7 @@ function settingsView(settings, now, servers) {
     hours: settings.hours,
     daysOff: settings.days_off.filter((d) => d >= today),
     guildId: settings.guild_id,
+    categoryId: settings.category_id || null,
     invite: inviteLink(settings.invite_code),
     inviteOk: settings.invite_ok == null ? null : !!settings.invite_ok,
     where: settings.where_text || '',
@@ -111,8 +121,9 @@ function isOutside(row, rules, now) {
 }
 
 // A booking as the schedule shows it: the booking page's view plus whether it fell outside the hours.
-function viewOf(row, settings, now) {
-  return { ...coachingBookings.bookingView(row, now), outside: settings ? isOutside(row, rulesOf(settings), now) : false };
+function viewOf(row, settings, now, room) {
+  const rm = room === undefined ? db.getCoachingRoom(row.id) : room;
+  return { ...coachingBookings.bookingView(row, now, rm), outside: settings ? isOutside(row, rulesOf(settings), now) : false };
 }
 
 // The bookings not over yet, by day in the streamer's zone (in time order), and those of the last 30 days, newest first.
@@ -120,8 +131,10 @@ function scheduleOf(streamerId, settings, now) {
   const days = [];
   const past = [];
   if (!settings) return { days, past };
-  for (const row of db.getCoachingSchedule(streamerId, now - PAST_DAYS * DAY_MS, now + AHEAD_DAYS * DAY_MS)) {
-    const view = viewOf(row, settings, now);
+  const rows = db.getCoachingSchedule(streamerId, now - PAST_DAYS * DAY_MS, now + AHEAD_DAYS * DAY_MS);
+  const roomOf = new Map(db.listCoachingRoomsForBookings(rows.map((r) => r.id)).map((r) => [r.booking_id, r]));
+  for (const row of rows) {
+    const view = viewOf(row, settings, now, roomOf.get(row.id) || null);
     if (row.starts_at + row.minutes * MINUTE_MS <= now) {
       past.unshift(view);
       continue;
@@ -158,13 +171,24 @@ function bookingUrl(req, streamer) {
   return `${base}/coaching/${encodeURIComponent(streamer.twitch_username)}`;
 }
 
-router.get('/coaching', (req, res) => {
+// The coaching server's categories for the picker; the saved one is kept in the list while Discord cannot name it.
+async function categoryOptions(settings) {
+  if (!settings || !settings.guild_id) return [];
+  let list = null;
+  try { list = await discord.listCategories(settings.guild_id); } catch (e) { list = null; }
+  list = list || [];
+  if (settings.category_id && !list.some((c) => c.id === settings.category_id)) list.push({ id: settings.category_id, name: settings.category_id });
+  return list;
+}
+
+router.get('/coaching', async (req, res) => {
   const streamer = req.streamer;
   const now = Date.now();
   const settings = db.getCoachingSettings(streamer.id);
   const servers = serverOptions(db.getGuildsForStreamer(streamer.id), settings);
   const view = settingsView(settings, now, servers);
   const link = bookingUrl(req, streamer);
+  const categories = await categoryOptions(settings);
   // Discord is asked about the saved invite once the page is sent, at most once an hour (checkInvite keeps the hour);
   // what it learns shows on the next visit. The dashboard (the Coaching card) does the same.
   if (settings) res.once('finish', () => coachingBookings.checkInviteLater(streamer.id));
@@ -179,6 +203,7 @@ router.get('/coaching', (req, res) => {
       setUp: !!settings,
       settings: view,
       servers,
+      categories,
       bookingUrl: link,
       schedule: scheduleOf(streamer.id, settings, now),
       daysOffMax: coaching.DAYS_OFF_MAX,
@@ -212,6 +237,27 @@ router.post('/api/coaching/settings', async (req, res) => {
   const notify = parseSwitch(body.notifyRequests);
   if (notify === null) return refuse(res, 'bad_switch');
 
+  // The Coaching category: absent keeps the saved one (cleared when the server changes), '' or null clears it, an id is
+  // checked against the server (it must be one of its categories and hold the bot's permissions).
+  const before = db.getCoachingSettings(streamer.id);
+  let categoryId;
+  if (body.categoryId === undefined) {
+    if (before && before.guild_id !== guildId) categoryId = null;
+  } else if (body.categoryId === null || body.categoryId === '') {
+    categoryId = null;
+  } else if (typeof body.categoryId === 'string' && /^\d{17,20}$/.test(body.categoryId)) {
+    categoryId = body.categoryId;
+    const unchanged = before && before.guild_id === guildId && before.category_id === categoryId;
+    const check = await discord.checkCategory(guildId, categoryId);
+    if (!check.ok && check.reason === 'not_found') return refuse(res, 'category_not_found');
+    if (!check.ok && check.reason === 'permissions' && !unchanged) {
+      const missing = check.missing.map((id) => res.locals.t(`coaching.dashboard.permission.${id}`)).join(', ');
+      return refuse(res, 'category_permissions', { missing: check.missing }, { missing });
+    }
+  } else {
+    return refuse(res, 'bad_category');
+  }
+
   let invite;
   try { invite = await discord.fetchInvite(inviteCode); } catch (e) { invite = { ok: false, reason: 'unavailable' }; }
   if (invite && invite.ok && invite.guildId !== guildId) return refuse(res, 'invite_other_server');
@@ -219,7 +265,7 @@ router.post('/api/coaching/settings', async (req, res) => {
 
   const saved = db.saveCoachingSettings(streamer.id, {
     timeZone, hours: hours.hours, daysOff: daysOff.daysOff, guildId, inviteCode, whereText: where.where,
-    notifyRequests: notify, lang: res.locals.lang || 'en',
+    notifyRequests: notify, lang: res.locals.lang || 'en', categoryId,
   });
   if (invite && invite.ok) db.recordInviteCheck(streamer.id, inviteCode, 1, now);
   const settings = db.getCoachingSettings(streamer.id) || saved;
@@ -228,7 +274,7 @@ router.post('/api/coaching/settings', async (req, res) => {
     .filter((b) => b.startsAt > now && coaching.outsideHours({ starts_at: b.startsAt, minutes: b.minutes }, rules))
     .map((b) => b.id);
   const servers = serverOptions(claims, settings);
-  res.json({ ok: true, settings: settingsView(settings, now, servers), outsideHours });
+  res.json({ ok: true, settings: settingsView(settings, now, servers), outsideHours, categories: await categoryOptions(settings) });
 });
 
 // JSON { open }: Bookings open, paused without losing the hours. A value that is not a switch value is refused.
@@ -252,5 +298,16 @@ for (const action of ['accept', 'decline', 'cancel']) {
     res.json({ ok: true, booking: viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) });
   });
 }
+
+// Retry room: a confirmed session's failed room is made again (the half-made role and channel are deleted first).
+router.post('/api/coaching/bookings/:id/room', async (req, res) => {
+  const id = BOOKING_ID.test(req.params.id) ? Number(req.params.id) : 0;
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  const result = await coachingRooms.retry(req.streamer, id, { now });
+  if (!result.ok) return refuse(res, result.code);
+  const row = db.getCoachingBooking(id, req.streamer.id);
+  res.json({ ok: true, booking: viewOf(row, db.getCoachingSettings(req.streamer.id), now) });
+});
 
 module.exports = router;
