@@ -1,6 +1,6 @@
 # Atleta Notifications Helper
 
-A self-service Discord notification bot for streamers. Any streamer can sign up, add the bot to their Discord, and configure notifications — no code changes needed. The same site also hosts a Twitch chat bot, OBS alert overlays; `CLAUDE.md` describes the whole platform and its conventions.
+A self-service Discord notification bot for streamers. Any streamer can sign up, add the bot to their Discord, and configure notifications — no code changes needed. The same site also hosts a Twitch chat bot and OBS alert overlays; `CLAUDE.md` describes the whole platform and its conventions.
 
 ## Features
 
