@@ -29,10 +29,10 @@ Native Twitch Channel Points → audio/video clips on the OBS overlay. Streamers
 1. Looks up reward by `twitch_reward_id`. A reward this app does not manage (made on Twitch itself or by another app) is left alone: no history row, no refund, no sync.
 2. Records the redemption before anything else (`db.claimRedemption()`, outcome `pending`; the unique `twitch_redemption_id` index makes a repeat delivery a no-op), so a redemption Twitch delivers twice plays, refunds and fulfils once.
 3. A reward that is switched off here, deleted here while Twitch still has it (`delete_failed`, see Edits and Deletes), or any reward while **Enable Channel Point Rewards** (`streamers.cp_rewards_enabled`) is off, does not play: the redemption is CANCELED on Twitch so the viewer gets their points back (`refundUnavailableReward()`; only a redemption still `unfulfilled` can be canceled). The outcome says which of the three it was (`refunded_disabled`, `refunded_deleted`, `refunded_switch_off`, see History); a reward that is itself off or waiting to be deleted wins over the switch.
-4. Verifies file on disk. If missing → auto-CANCELED + chat warning.
+4. Verifies file on disk. If missing → the redemption is cancelled with Twitch first (only an unfulfilled one), then recorded `refunded_no_file`; a failed cancel records `error`; the chat warning follows a successful refund.
 5. Emits `redemption` event to `overlayBus`.
 6. Optionally posts chat message (template formatted via `redemptionTemplates.formatChatTemplate`, sent with `chatManager.sendMessage()` so it goes through the shared chat dispatcher like every other line the bot posts).
-7. Schedules auto-fulfill via Helix PATCH at `maxPlaySeconds + 1s`.
+7. Schedules auto-fulfill via Helix PATCH at `maxPlaySeconds + 1s`. The due time is also stored (`channel_point_redemptions.auto_fulfill_due_at`) and cleared on success; `redemptionDispatcher.settleDueAutoFulfills()` (at boot and every minute, `startTicks()`/`stopTicks()`) settles the ones still due after a restart, retries a failure and gives up after 1 h.
 8. Sets the outcome on the history row (`db.setRedemptionOutcome()`).
 
 **Overlay plays.** `playRedemption()` in `public/overlay/overlay.js` queues the event and plays the clip in dedicated `<audio id="redemption-audio">` / `<video id="redemption-video">` elements (separate from the alert-card path). `finalVolume = overlayMaster × rewardVolume`.

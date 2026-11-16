@@ -63,11 +63,9 @@ security-relevant behaviour (admin, CSRF, secrets at rest, rate limits, uploads)
 - **Fix:** Use POST with body instead of GET with query params. Add `Referrer-Policy: no-referrer`.
 - **Complexity:** Low
 
-### 11. Socket.io-client CVEs (Transitive)
+### 11. Socket.io-client CVEs (Transitive) — CLOSED 2026-11-16
 - **Package:** `socket.io-client` → `parseuri` (ReDoS)
-- **Issue:** 3 moderate CVEs in transitive dependency. No fix available without major version upgrade.
-- **Fix:** Wait for upstream fix or replace StreamElements socket.io with direct API/WebSocket.
-- **Complexity:** High (StreamElements integration rewrite)
+- **Resolution:** StreamElements was removed entirely, and `socket.io-client` left `package.json` with it.
 
 ## Completed (for reference)
 
@@ -88,7 +86,7 @@ security-relevant behaviour (admin, CSRF, secrets at rest, rate limits, uploads)
 - ✅ Dependencies: 5 CVEs fixed via npm audit fix
 - ✅ Global `_esc()` HTML escape function in overlay-utils.js
 - ✅ Admin access is decided by Discord user id (`ADMIN_DISCORD_IDS`), never by a name
-- ✅ OAuth tokens and the StreamElements token are encrypted at rest (`TOKEN_ENCRYPTION_KEY`); web session ids are stored as hashes
+- ✅ OAuth tokens are encrypted at rest (`TOKEN_ENCRYPTION_KEY`); web session ids are stored as hashes
 - ✅ Each OAuth connection uses a random state in a short-lived cookie; `/link` URLs are signed and expire after 15 minutes
 - ✅ Request bodies are limited (100 kb by default), dashboard uploads count against a per-streamer quota (report screenshots and sounds are also checked by their first bytes), and uploaded files are served with sandbox headers
 - ✅ PayPal tips are accepted only for a capture PayPal confirms for the streamer's own account, from a donor record kept on the server

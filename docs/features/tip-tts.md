@@ -23,7 +23,7 @@ Design: `docs/superpowers/specs/2026-10-16-tip-tts-design.md`; plan: `docs/super
   "{name} tipped {amount}!").
 - **Test the voice**: reads a sample tip (the locale's sample name and message, the threshold as its amount) built and
   cleaned like a real one, with the settings the form shows (saved or not). It plays in the page and, when an alert
-  overlay is open in OBS, there too as a donation alert. It uses real characters: it counts toward the month and has its
+  overlay is open in OBS, there too as a donation alert (the overlay settings page's own preview iframe is not counted as an open overlay: it opens the stream with `?preview=1`, not `?source=alerts`, so `overlayPresence.isOpen` stays false for it). It uses real characters: it counts toward the month and has its
   own 10-second cooldown.
 - **This month**: characters used of the streamer's limit, and the reset date (the 1st, UTC). The last problem, if any,
   is shown in words under it (never as its stored code).

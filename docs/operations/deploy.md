@@ -84,7 +84,7 @@ or go.
 
 A malformed key stops the boot (exit 1) on purpose. With a different key, or none, encrypted tokens
 read as "not connected" (they are not deleted, so the right key brings them back) and streamers
-would have to connect Twitch, YouTube, Spotify and StreamElements again.
+would have to connect Twitch, YouTube and Spotify again.
 
 **Do not roll back to a release from before this one once the key is set.** Older code would send
 the `enc:v1:` text to Twitch as if it were a token, the refresh would fail and the streamers' scopes
@@ -946,3 +946,36 @@ OBS sources, and the other `/overlay/iracing/*` types answer 404.
 **Rolling back:** code from before this release runs again, but the dropped tables and their data cannot come back
 except by restoring the pre-release copy (`backup-restore.md`), which also loses everything written since. Do not
 roll back after Racing users could have been needed again: the Racing data is only in that copy.
+
+## Review fixes and pricing hidden (2026-11-16, PR B)
+
+Stacked on "Racing removed": hardening from the code review, the paid-plans pages hidden, StreamElements removed.
+No setting or variable to change. Take no extra backup beyond the one for the Racing release.
+
+**Migrations** (all quiet on a second boot; each first boot prints at most its own `[DB migration]` line):
+- `_runOnce('clear_streamelements_tokens')` empties the stored StreamElements tokens. The `streamers` column, its
+  `TOKEN_COLUMNS` entry and `DONATION_SOURCES` stay, so old `source = 'streamelements'` donations still show in the history.
+- New table `raid_protection` (one row per streamer while raid protection runs: the follower-only setting to restore
+  and the end time); it is in `STREAMER_OWNED_ROWS`.
+- New table `weekly_digest_posts`, keyed by server and streamer; a silent `_runOnce` copies the old per-server rows to
+  the server's lowest streamer id so the week already posted is not posted again.
+- `channel_point_redemptions.auto_fulfill_due_at` (additive column) and `pending_tips.payee_email` (silent `ALTER`; older
+  pending tips fall back to the streamer's current PayPal email).
+
+**Behaviour to know:** `/pricing` and `/payment` redirect to `/dashboard` (`features.pricing` false; `true` brings them
+back); the overlay settings page has no StreamElements card; raid protection survives a restart (the boot finishes or
+re-arms it; a failed restore is retried by a one-minute tick for an hour; the log says what it did); the weekly digest
+posts once per streamer per server; trackers start off; issue screenshots are served by `/issues-files/<file>` to the
+reporter or an admin only; `/sync/backup` makes its own `data/.sync-<random>/` folder and removes it.
+
+**After the deploy:**
+1. `/health` answers 200; `railway logs` has no `[DB migration]` error lines and no `Raid protection` restore errors.
+2. `/pricing` and `/payment` redirect to `/dashboard`; the overlay settings page has no StreamElements card and its
+   preview iframe URL has `preview=1` (the dashboard still says whether OBS has the overlay open, and the preview does
+   not count).
+3. `/dashboard/coaching` opens on the remembered tab with no other panel flashing; `/my-bookings` loads.
+4. A screenshot attached to an issue opens for the reporter and for an admin, and answers 404 to anyone else.
+
+**Rolling back:** the new tables and columns are additive and older code ignores them. The cleared StreamElements tokens
+are not restored (the integration is gone in both directions).
+
