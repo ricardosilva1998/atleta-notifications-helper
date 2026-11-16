@@ -1,7 +1,7 @@
 'use strict';
 
 // The coaching minute tick (planning decision 12): unpaid bookings expire (a PayPal order is read back first), stale
-// PayPal orders are read back, `making` rooms a restart left are finished or cleaned up, and rooms past their close time
+// PayPal orders are read back, reschedule proposals that lapsed are dropped and reschedules past 7 days close, `making` rooms a restart left are finished or cleaned up, and rooms past their close time
 // get their transcripts and are deleted. One run at a time; a step that throws never stops the others, and nothing
 // here needs Discord to be up (the room steps wait for it). The first run comes 20 s after boot.
 
@@ -19,6 +19,7 @@ async function runOnce({ now = Date.now(), deps = null } = {}) {
   const d = deps || {
     payments: require('./coachingPayments'),
     rooms: require('./coachingRooms'),
+    bookings: require('./coachingBookings'),
   };
   const result = {};
   const step = async (name, fn) => {
@@ -27,6 +28,7 @@ async function runOnce({ now = Date.now(), deps = null } = {}) {
   try {
     await step('expire', () => d.payments.expireDue({ now }));
     await step('stale', () => d.payments.reconcileStale({ now }));
+    await step('reschedules', () => d.bookings.runDueReschedules({ now }));
     await step('making', () => d.rooms.finishOrCleanMaking({ now }));
     await step('close', () => d.rooms.closeDue({ now }));
   } finally {

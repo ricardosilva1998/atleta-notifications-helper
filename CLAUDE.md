@@ -469,3 +469,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Views: both sides carry `cancelReason`, `refundState` (`pending|refunded|null`), `refundPending`; only the coach's carry `refunds: [{orderId, amountCents, currency, payerName, payerEmail, captureId, status, reason}]` (every captured payment, status null when nothing is owed). `roomUrl` only for `confirmed`/`rescheduling`. `cardData.refundsPending` counts pending refunds.
 - `decideCoachingCapture` returns `payer {name, email, payerId}` from the verified order; every record path stores it; never logged.
 **Open:** the dashboard page script (`public/js/coaching-dashboard.js`) still posts Cancel without a reason (400 `bad_reason`) until T4; `coaching.dashboard.error.paid` and the old cancel-confirm texts are now unused.
+
+### 2026-11-16 — backend-dev (T3 of coaching cancel, reschedule and refunds)
+**Task:** Reschedule: services, minute tick, room rename, coach and viewer routes
+**Files:** `src/services/{coachingBookings,coachingRooms,coachingTick,coachingMessages}.js`, `src/discord.js`, `src/routes/{coachingDashboard,coaching}.js`, `src/server.js`, `src/locales/*.json` (23 keys), tests (new `coachingTick.test.js`)
+**Decisions:**
+- Only the coach starts a reschedule (`startReschedule`, way `propose` or `ask`); both sides then answer with `coachPropose`/`viewerPropose` or accept the other's (`coachAccept`/`viewerAccept`, `not_yours_to_answer` for one's own). The booking's own row is left out of the held times, so the coach may propose the original time and the viewer never gets it.
+- The minute tick runs `coachingBookings.runDueReschedules` (48 h lapse and under-1-hour drop of a proposal, the 7-day close with room removal and refund pending); agreement renames the role and channel (`discord.renameRole/renameChannel`, a failure is only logged) and moves `close_at` (`coachingRooms.reschedule`). A viewer's Withdraw of an unpaid confirmed or rescheduling session now also removes its room.
+- Viewer routes `GET /coaching/:u/bookings/:id/starts`, `POST .../propose`, `POST .../accept-proposal` share `coachingRescheduleLimiter` (30 per 10 min); coach routes `reschedule`, `propose`, `accept-proposal`, `GET proposal-starts`. Views carry `proposal`, `rescheduleStartedAt`, `rescheduleEndsAt`, `originalStartsAt`.
+**Open:** T5 adds the booking page's `STATE_KEYS` texts for `rescheduling`/`not_rescheduled` and the panel; T4 draws the coach's pop-ups (a `taken` or `bad_time` answer means the time is no longer on offer).

@@ -184,3 +184,29 @@ describe('the coaching room helpers', () => {
     await assert.rejects(discord.downloadAttachment('https://cdn.discordapp.com/a.png', { maxBytes: 10 }), /status_404/);
   });
 });
+
+describe('renameRole and renameChannel', () => {
+  const ROLE = '323456789012345678';
+  const CHANNEL = '423456789012345678';
+  test('edit only the name, through the guild, and ignore an id that is not a snowflake', async () => {
+    const edits = [];
+    fake.guilds.set(GUILD, {
+      id: GUILD,
+      roles: { edit: (id, opts) => { edits.push(['role', id, opts]); return Promise.resolve({}); } },
+      channels: { edit: (id, opts) => { edits.push(['channel', id, opts]); return Promise.resolve({}); } },
+    });
+    await discord.renameRole(GUILD, ROLE, 'coaching-x-2026-11-07');
+    await discord.renameChannel(GUILD, CHANNEL, 'coaching-x-2026-11-07');
+    await discord.renameRole(GUILD, 'nope', 'x');
+    await discord.renameChannel(GUILD, 'nope', 'x');
+    assert.deepEqual(edits.map((e) => [e[0], e[1], e[2].name]), [['role', ROLE, 'coaching-x-2026-11-07'], ['channel', CHANNEL, 'coaching-x-2026-11-07']]);
+  });
+
+  test('a refusal from Discord, or a server the bot is not in, is thrown to the caller', async () => {
+    fake.guilds.set(GUILD, { id: GUILD, roles: { edit: () => Promise.reject(codeError(50013)) }, channels: { edit: () => Promise.reject(codeError(10003)) } });
+    await assert.rejects(discord.renameRole(GUILD, ROLE, 'x'), { code: 50013 });
+    await assert.rejects(discord.renameChannel(GUILD, CHANNEL, 'x'), { code: 10003 });
+    fake.guilds.clear();
+    await assert.rejects(discord.renameChannel(GUILD, CHANNEL, 'x'));
+  });
+});

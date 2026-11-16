@@ -167,7 +167,19 @@ test('every rate limit counts the visitor\'s address (clientIp.js), and trust pr
   at("const { clientIp } = require('./clientIp');");
   at('const byVisitor = (req) => ipKeyGenerator(clientIp(req));');
   const limiters = [...code.matchAll(/const (\w+) = rateLimit\(\{[\s\S]*?\}\);/g)];
-  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'authLimiter', 'apiLimiter', 'voiceLimiter', 'coachingPayLimiter']);
+  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'authLimiter', 'apiLimiter', 'voiceLimiter', 'coachingPayLimiter', 'coachingRescheduleLimiter']);
   for (const [declaration, name] of limiters) assert.match(declaration, /\bkeyGenerator: byVisitor\b/, `${name} counts by visitor`);
   assert.equal(code.match(/\brateLimit\(/g).length, limiters.length, 'no other limiter');
+});
+
+test('the viewer\'s reschedule routes sit behind coachingRescheduleLimiter, ahead of the coaching router', () => {
+  const router = code.indexOf("app.use('/coaching', require('./routes/coaching'));");
+  assert.ok(router > 0);
+  for (const route of ["app.get('/coaching/:username/bookings/:id/starts', coachingRescheduleLimiter);",
+    "app.post('/coaching/:username/bookings/:id/propose', coachingRescheduleLimiter);",
+    "app.post('/coaching/:username/bookings/:id/accept-proposal', coachingRescheduleLimiter);"]) {
+    const at = code.indexOf(route);
+    assert.ok(at > 0 && at < router, route);
+  }
+  assert.match(code, /const coachingRescheduleLimiter = rateLimit\(\{ windowMs: 10 \* 60 \* 1000, max: 30,/);
 });

@@ -618,3 +618,80 @@ describe('the bad_length text', () => {
     }
   });
 });
+
+describe('reschedule, the viewer\'s side', () => {
+  function rescheduling(s, v, { way = 'ask' } = {}) {
+    const made = db.createCoachingBooking({ streamerId: s.id, viewer: v, startsAt: freeNow(s, 60)[0], minutes: 60, note: '', lang: 'en', now: Date.now() });
+    assert.ok(made.ok, made.code);
+    assert.ok(db.acceptCoachingBooking(made.booking.id, s.id, Date.now(), null));
+    const started = db.startCoachingReschedule(made.booking.id, s.id, way, null, Date.now());
+    assert.ok(started.ok, started.code);
+    return db.getCoachingBooking(made.booking.id, s.id);
+  }
+  const url = (s, b, tail) => `/coaching/${s.login}/bookings/${b.id}/${tail}`;
+
+  test('starts: the viewer\'s own booking only, never the original time or a held time; a signed-out visitor gets 401', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    const b = rescheduling(s, v);
+    const held = hold(s, addViewer(), freeNow(s, 60)[3]);
+    const res = await get(url(s, b, 'starts'), { cookie: v.cookie });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.minutes, 60);
+    assert.ok(res.json.starts.length > 0);
+    assert.ok(!res.json.starts.includes(b.starts_at), 'never the original time');
+    assert.ok(!res.json.starts.includes(held.starts_at), 'never a held time');
+    assert.equal((await get(url(s, b, 'starts'))).status, 401);
+    assert.equal((await get(url(s, b, 'starts'), { cookie: addViewer().cookie })).status, 404, 'another viewer');
+    assert.equal((await get(`/coaching/${s.login}/bookings/abc/starts`, { cookie: v.cookie })).status, 404);
+  });
+
+  test('propose: a time from the list is held and the coach hears; the original time, a held time and a string are refused', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    const b = rescheduling(s, v);
+    const starts = (await get(url(s, b, 'starts'), { cookie: v.cookie })).json.starts;
+    for (const bad of [b.starts_at, 'x', null, 1.5]) {
+      const refused = await post(url(s, b, 'propose'), { cookie: v.cookie, json: { startsAt: bad } });
+      assert.equal(refused.status, 409, String(bad));
+      assert.equal(refused.json.code, 'bad_time');
+    }
+    const long = await post(url(s, b, 'propose'), { cookie: v.cookie, json: { startsAt: starts[0], note: 'x'.repeat(301) } });
+    assert.equal(long.json.code, 'bad_note');
+    const ok = await post(url(s, b, 'propose'), { cookie: v.cookie, json: { startsAt: starts[0], note: 'Works for me' } });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.booking.proposal.startsAt, starts[0]);
+    assert.equal(ok.json.booking.proposal.by, 'viewer');
+    assert.equal(ok.json.booking.refunds, undefined, 'no payer details in a viewer view');
+    assert.equal((await post(url(s, b, 'propose'), { json: { startsAt: starts[1] } })).status, 401);
+    assert.equal((await post(url(s, b, 'propose'), { cookie: addViewer().cookie, json: { startsAt: starts[1] } })).status, 404);
+  });
+
+  test('accept-proposal: only the coach\'s proposal, only by the booking\'s viewer', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    const b = rescheduling(s, v);
+    assert.equal((await post(url(s, b, 'accept-proposal'), { cookie: v.cookie })).json.code, 'no_proposal');
+    const start = freeNow(s, 60).find((x) => x !== b.starts_at);
+    assert.ok(db.proposeCoachingTime(b.id, 'viewer', start, null, Date.now()).ok);
+    const own = await post(url(s, b, 'accept-proposal'), { cookie: v.cookie });
+    assert.equal(own.status, 409);
+    assert.equal(own.json.code, 'not_yours_to_answer');
+    assert.ok(db.proposeCoachingTime(b.id, 'coach', start, null, Date.now()).ok);
+    assert.equal((await post(url(s, b, 'accept-proposal'), { cookie: addViewer().cookie })).status, 404);
+    assert.equal((await post(url(s, b, 'accept-proposal'))).status, 401);
+    const done = await post(url(s, b, 'accept-proposal'), { cookie: v.cookie });
+    assert.equal(done.status, 200);
+    assert.equal(done.json.booking.state, 'confirmed');
+    assert.equal(done.json.booking.startsAt, start);
+    assert.equal((await post(url(s, b, 'accept-proposal'), { cookie: v.cookie })).json.code, 'not_rescheduling');
+  });
+
+  test('the viewer\'s refusal texts exist in the page language', async () => {
+    const s = addStreamer();
+    const v = addViewer();
+    const b = rescheduling(s, v);
+    const res = await post(url(s, b, 'accept-proposal'), { cookie: v.cookie, headers: { 'x-lang': 'pt' } });
+    assert.equal(res.json.error, t('pt', 'coaching.error.no_proposal'));
+  });
+});

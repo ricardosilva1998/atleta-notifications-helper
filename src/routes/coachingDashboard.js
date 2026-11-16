@@ -48,6 +48,15 @@ const REFUSALS = {
   paid: [409, 'coaching.dashboard.error.paid'],
   bad_reason: [400, 'coaching.dashboard.error.bad_reason'],
   not_pending: [409, 'coaching.dashboard.error.not_pending'],
+  not_confirmed: [409, 'coaching.dashboard.error.not_active'],
+  bad_time: [409, 'coaching.error.taken'],
+  taken: [409, 'coaching.error.taken'],
+  bad_note: [400, 'coaching.error.bad_note'],
+  bad_way: [400, 'coaching.page.failed'],
+  not_rescheduling: [409, 'coaching.error.not_rescheduling'],
+  not_yours_to_answer: [409, 'coaching.error.not_yours_to_answer'],
+  no_proposal: [409, 'coaching.error.no_proposal'],
+  proposal_too_close: [409, 'coaching.error.proposal_too_close'],
   bad_category: [400, 'coaching.dashboard.error.bad_category'],
   category_not_found: [400, 'coaching.dashboard.error.category_not_found'],
   category_permissions: [400, 'coaching.dashboard.error.category_permissions'],
@@ -341,6 +350,48 @@ for (const action of ['accept', 'decline', 'cancel']) {
     res.json({ ok: true, booking: viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) });
   });
 }
+
+// Reschedule (the coach starts it on a confirmed session before its start): JSON { way: 'propose' | 'ask', startsAt?, note? };
+// propose answers the viewer's proposal with a different time; accept-proposal takes the viewer's; proposal-starts lists
+// the half hours the coach may offer (milliseconds). One of this streamer's bookings only.
+const startOf = (body) => (body && Number.isInteger(body.startsAt) ? body.startsAt : null);
+const bodyOf = (req) => (req.body && typeof req.body === 'object' ? req.body : {});
+const bookingIdOf = (req) => (BOOKING_ID.test(req.params.id) ? Number(req.params.id) : 0);
+const answer = (req, res, result, now) => {
+  if (!result.ok) return refuse(res, result.code);
+  return res.json({ ok: true, booking: viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) });
+};
+
+router.post('/api/coaching/bookings/:id/reschedule', async (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  const body = bodyOf(req);
+  answer(req, res, await coachingBookings.startReschedule(req.streamer, id, { way: body.way, startsAt: startOf(body), note: body.note, now }), now);
+});
+
+router.post('/api/coaching/bookings/:id/propose', async (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  const body = bodyOf(req);
+  answer(req, res, await coachingBookings.coachPropose(req.streamer, id, { startsAt: startOf(body), note: body.note, now }), now);
+});
+
+router.post('/api/coaching/bookings/:id/accept-proposal', async (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  answer(req, res, await coachingBookings.coachAccept(req.streamer, id, { now }), now);
+});
+
+router.get('/api/coaching/bookings/:id/proposal-starts', (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const result = coachingBookings.coachStarts(req.streamer, id, { now: Date.now() });
+  if (!result.ok) return refuse(res, result.code);
+  res.json({ ok: true, minutes: result.minutes, starts: result.starts });
+});
 
 // "Refunded": the coach says they refunded one payment in PayPal. Only this streamer's payment, only from pending.
 router.post('/api/coaching/payments/:orderId/refunded', async (req, res) => {

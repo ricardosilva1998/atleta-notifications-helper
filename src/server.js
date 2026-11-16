@@ -319,6 +319,11 @@ app.use('/tip', tipRoutes);
 const coachingPayLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
 app.post('/coaching/:username/bookings/:id/pay', coachingPayLimiter);
 app.get('/coaching/:username/paid', coachingPayLimiter);
+// The viewer's reschedule routes (their times, a proposal, accepting the coach's): 30 in 10 minutes per visitor.
+const coachingRescheduleLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
+app.get('/coaching/:username/bookings/:id/starts', coachingRescheduleLimiter);
+app.post('/coaching/:username/bookings/:id/propose', coachingRescheduleLimiter);
+app.post('/coaching/:username/bookings/:id/accept-proposal', coachingRescheduleLimiter);
 app.use('/coaching', require('./routes/coaching'));
 
 const racingAuthRoutes = require('./routes/racing-auth');

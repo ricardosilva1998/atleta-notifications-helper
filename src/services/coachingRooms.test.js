@@ -39,6 +39,8 @@ const discord = {
   async deleteRole(guild, id) { return this.act('deleteRole', { guild, id }, () => undefined); },
   async addRoleToMember(guild, user, role) { return this.act('addRoleToMember', { guild, user, role }, () => undefined); },
   async createVoiceChannel(guild, opts) { return this.act('createVoiceChannel', { guild, ...opts }, () => 'chan1'); },
+  async renameRole(guild, id, name) { return this.act('renameRole', { guild, id, name }, () => undefined); },
+  async renameChannel(guild, id, name) { return this.act('renameChannel', { guild, id, name }, () => undefined); },
   async deleteChannel(guild, id) { return this.act('deleteChannel', { guild, id }, () => undefined); },
   async fetchAllMessages() { return this.act('fetchAllMessages', {}, () => this.messages); },
   async downloadAttachment(url) { this.downloaded.push(url); return Buffer.from('file'); },
@@ -461,6 +463,82 @@ describe('removeFor (a cancelled session)', () => {
   });
 });
 
+describe('reschedule (a session moved to a new time)', () => {
+  const NEW_START = Date.UTC(2026, 10, 7, 10, 0); // Saturday 10:00 Lisbon
+  const NEW_CLOSE = NEW_START + 3600e3 + 30 * 60e3;
+  const move = (booking, to = NEW_START) => db.db.prepare("UPDATE coaching_bookings SET status = 'confirmed', starts_at = ? WHERE id = ?").run(to, booking.id);
+
+  test('the role and the channel are renamed to the new date and the close moves to 30 minutes after the new end', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    calls.length = 0;
+    move(booking);
+    assert.deepEqual(await rooms.reschedule(booking.id, { now: NOW }), { url: `https://discord.com/channels/${GUILD}/chan1` });
+    assert.deepEqual(calls, [
+      { fn: 'renameRole', guild: GUILD, id: 'role1', name: 'coaching-some.viewer-2026-11-07' },
+      { fn: 'renameChannel', guild: GUILD, id: 'chan1', name: 'coaching-some.viewer-2026-11-07' },
+    ]);
+    assert.equal(db.getCoachingRoom(booking.id).close_at, NEW_CLOSE);
+  });
+
+  test('a rename Discord refuses leaves the room open, the close moved and nothing thrown', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    move(booking);
+    fail.renameRole = Object.assign(new Error('no'), { code: 50013 });
+    fail.renameChannel = new Error('down');
+    const made = await rooms.reschedule(booking.id, { now: NOW });
+    assert.deepEqual(made, { url: `https://discord.com/channels/${GUILD}/chan1` });
+    const room = db.getCoachingRoom(booking.id);
+    assert.equal(room.state, 'open');
+    assert.equal(room.close_at, NEW_CLOSE);
+  });
+
+  test('Discord not ready: the close still moves, nothing is renamed; a confirmed session with no room gets one', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    calls.length = 0;
+    move(booking);
+    discord.ready = false;
+    await rooms.reschedule(booking.id, { now: NOW });
+    assert.deepEqual(calls, []);
+    assert.equal(db.getCoachingRoom(booking.id).close_at, NEW_CLOSE);
+    discord.ready = true;
+    const s2 = addStreamer();
+    const two = confirmed(s2);
+    assert.equal(db.getCoachingRoom(two.booking.id), null);
+    assert.ok(await rooms.reschedule(two.booking.id, { now: NOW }));
+    assert.ok(db.getCoachingRoom(two.booking.id));
+  });
+
+  test('a booking that is not confirmed, or a closed room, is left alone', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    calls.length = 0;
+    db.db.prepare("UPDATE coaching_bookings SET status = 'rescheduling' WHERE id = ?").run(booking.id);
+    assert.equal(await rooms.reschedule(booking.id, { now: NOW }), null);
+    assert.equal(await rooms.reschedule(987654, { now: NOW }), null);
+    assert.deepEqual(calls, []);
+  });
+
+  test('closeDue does not close the room of a rescheduling session, and closes it again once it is confirmed', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    calls.length = 0;
+    db.db.prepare("UPDATE coaching_bookings SET status = 'rescheduling' WHERE id = ?").run(booking.id);
+    assert.deepEqual(await rooms.closeDue({ now: CLOSE_AT + 1 }), { closed: 0 });
+    assert.deepEqual(calls, []);
+    assert.equal(db.getCoachingRoom(booking.id).state, 'open');
+    db.db.prepare("UPDATE coaching_bookings SET status = 'confirmed' WHERE id = ?").run(booking.id);
+    assert.deepEqual(await rooms.closeDue({ now: CLOSE_AT + 1 }), { closed: 1 });
+  });
+});
+
 describe('removeAllFor', () => {
   test('deletes the channel and role of every open room of the streamer, other streamers\' rooms are left', async () => {
     const a = addStreamer();
@@ -529,17 +607,19 @@ describe('the minute tick', () => {
     const order = [];
     const deps = {
       payments: { expireDue: async () => { order.push('expire'); throw new Error('x'); }, reconcileStale: async () => { order.push('stale'); return 1; } },
+      bookings: { runDueReschedules: async () => { order.push('reschedules'); return 4; } },
       rooms: { finishOrCleanMaking: async () => { order.push('making'); return 2; }, closeDue: async () => { order.push('close'); return 3; } },
     };
     const result = await tick.runOnce({ now: NOW, deps });
-    assert.deepEqual(order, ['expire', 'stale', 'making', 'close']);
-    assert.deepEqual(result, { stale: 1, making: 2, close: 3 });
+    assert.deepEqual(order, ['expire', 'stale', 'reschedules', 'making', 'close']);
+    assert.deepEqual(result, { stale: 1, reschedules: 4, making: 2, close: 3 });
   });
 
   test('with Discord not ready the real steps resolve without throwing', async () => {
     discord.ready = false;
     const result = await tick.runOnce({ now: NOW, deps: {
       payments: { expireDue: async () => ({}), reconcileStale: async () => ({}) },
+      bookings: { runDueReschedules: async () => ({}) },
       rooms,
     } });
     assert.deepEqual(result.close, { closed: 0 });

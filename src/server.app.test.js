@@ -761,6 +761,23 @@ describe('coaching: the viewer\'s own Discord sign-in, on the real session step 
   const tokenOf = (sid) => csrfToken(db.hashSessionId(sid), config.csrf.secret);
   const bookings = () => db.db.prepare('SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ?').get(streamerId).n;
 
+  test('the reschedule routes need the CSRF token and are limited to 30 in 10 minutes per visitor', async () => {
+    const sid = viewerSession(3);
+    const cookie = `viewer_session=${sid}`;
+    const peer = '203.0.113.88';
+    const call = (method, tail, headers) => send(method, `/coaching/${login}/bookings/999999/${tail}`, { peer, headers, ...(method === 'POST' ? { json: { startsAt: 1 } } : {}) });
+    for (const tail of ['propose', 'accept-proposal']) {
+      assert.equal((await call('POST', tail, { Cookie: cookie, ...SITE })).status, 403, `${tail}: no token`);
+      assert.equal((await call('POST', tail, { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(viewerSession(4)) })).status, 403, `${tail}: another session's token`);
+    }
+    const own = { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(sid) };
+    assert.equal((await call('POST', 'propose', own)).status, 404, 'a booking that is not theirs');
+    assert.equal((await call('GET', 'starts', { Cookie: cookie })).status, 404);
+    for (let i = 0; i < 30; i++) await call('GET', 'starts', { Cookie: cookie });
+    assert.equal((await call('GET', 'starts', { Cookie: cookie })).status, 429);
+    assert.equal((await call('POST', 'accept-proposal', own)).status, 429, 'one limit for the three routes');
+  });
+
   test('booking needs the CSRF token of the viewer session', async () => {
     const sid = viewerSession(1);
     const cookie = `viewer_session=${sid}`;

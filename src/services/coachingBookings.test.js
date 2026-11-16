@@ -23,7 +23,8 @@ let db;
 let svc;
 // The room hook (services/coachingRooms.js): records which bookings asked for a room.
 const rooms = {
-  made: [], removed: [], url: null,
+  made: [], removed: [], rescheduled: [], url: null,
+  async reschedule(id) { this.rescheduled.push(id); return this.url ? { url: this.url } : null; },
   async makeFor(id) { this.made.push(id); return this.url ? { url: this.url } : null; },
   async removeFor(id) { this.removed.push(id); return true; },
   roomUrlOf(room) { return `https://discord.com/channels/${room.guild_id}/${room.channel_id}`; },
@@ -80,7 +81,7 @@ beforeEach(() => {
   discord.inviteCalls = 0; discord.inviteGate = null;
   discord.invite = { ok: true, guildId: '123', guildName: 'HQ' };
   svc.forgetMembers(); // each test starts with no membership answer kept
-  rooms.made = []; rooms.removed = []; rooms.url = null;
+  rooms.made = []; rooms.removed = []; rooms.rescheduled = []; rooms.url = null;
 });
 
 const coachingRules = require('./coaching');
@@ -419,8 +420,8 @@ describe('cardData', () => {
     assert.equal(card.next.id, ids[1]);
     assert.equal(card.next.state, 'confirmed');
     assert.deepEqual(Object.keys(card.next).sort(), [
-      'cancelReason', 'currency', 'id', 'messageError', 'minutes', 'note', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy',
-      'paymentIssue', 'priceCents', 'refundPending', 'refundState', 'refunds', 'roomError', 'roomUrl', 'startsAt', 'state',
+      'cancelReason', 'currency', 'id', 'messageError', 'minutes', 'note', 'originalStartsAt', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy',
+      'paymentIssue', 'priceCents', 'proposal', 'refundPending', 'refundState', 'refunds', 'rescheduleEndsAt', 'rescheduleStartedAt', 'roomError', 'roomUrl', 'startsAt', 'state',
       'transcriptStatus', 'viewerAvatar', 'viewerName', 'viewerUsername',
     ]);
     db.setCoachingOpen(s.id, 1);
@@ -701,5 +702,249 @@ describe('cancel with a reason, the refund step and the payer details', () => {
     assert.equal(done.ok, true);
     assert.equal(done.booking.messageError, 'not_ready');
     assert.equal(db.getCoachingPayment(orderId).refund_status, 'refunded');
+  });
+});
+
+describe('reschedule (the coach starts it; a proposal is held like a booking)', () => {
+  const MIN = 60e3;
+  const SAT_10 = NOW + 111 * HOUR; // Saturday 10:00: outside the weekly hours
+  const PAYER = { name: 'Pat Payer', email: 'pat@example.com', payerId: 'PAYERID001' };
+  let seq = 0;
+  async function confirmed({ s = addStreamer(), v = viewer(1), startsAt = FREE, minutes = 60 } = {}) {
+    const r = await ask(s, v, { startsAt, minutes });
+    const done = await svc.accept(s, r.booking.id, { now: NOW });
+    assert.equal(done.booking.status, 'confirmed');
+    discord.sent = [];
+    return { s, v, id: r.booking.id };
+  }
+  async function paidConfirmed() {
+    const s = addStreamer();
+    const v = viewer(1);
+    const r = await ask(s, v, { minutes: 120 });
+    await svc.accept(s, r.booking.id, { now: NOW });
+    const orderId = `ORDERRESCH${String(++seq).padStart(3, '0')}`;
+    assert.equal(db.recordCoachingPayment({ bookingId: r.booking.id, orderId, captureId: `CAP${orderId}`, amountCents: 4500, currency: 'EUR', now: NOW + MIN, payer: PAYER }).result, 'recorded');
+    discord.sent = [];
+    return { s, v, id: r.booking.id, orderId };
+  }
+  const row = (s, id) => db.getCoachingBooking(id, s.id);
+  const to = (userId) => discord.sent.filter((m) => m.userId === userId);
+  // The tick works on every rescheduling booking in the shared database: each test starts with none from another.
+  beforeEach(() => { db.db.prepare("UPDATE coaching_bookings SET status = 'cancelled' WHERE status = 'rescheduling'").run(); });
+
+  test('way 1: the coach proposes a time (outside the hours too); the original time is free at once; the viewer is told', async () => {
+    const { s, v, id } = await confirmed();
+    const r = await svc.startReschedule(s, id, { way: 'propose', startsAt: SAT_10, note: 'Sorry, a clash', now: NOW + MIN });
+    assert.equal(r.ok, true);
+    assert.equal(r.booking.status, 'rescheduling');
+    const view = svc.bookingView(row(s, id), NOW + MIN, null, { forViewer: true });
+    assert.deepEqual(view.proposal, { startsAt: SAT_10, by: 'coach', note: 'Sorry, a clash', at: NOW + MIN });
+    assert.equal(view.rescheduleEndsAt, NOW + MIN + coaching.RESCHEDULE_WINDOW_MS);
+    const msg = to(v.discordUserId)[0].payload.embeds[0];
+    assert.match(msg.title, /proposed a new time/);
+    assert.match(msg.description, /Sorry, a clash/);
+    assert.match(msg.description, new RegExp(`booking=${id}`));
+    const other = await ask(s, viewer(2)); // the original time is released: someone else can book it
+    assert.equal(other.ok, true);
+  });
+
+  test('way 2: the viewer is sent a link and picks; the picker never offers the original or a held time; the coach always hears', async () => {
+    const s = addStreamer({ settings: { notifyRequests: 0 } });
+    const { v, id } = await confirmed({ s });
+    const held = await ask(s, viewer(2), { startsAt: FREE + 24 * HOUR });
+    await svc.accept(s, held.booking.id, { now: NOW });
+    discord.sent = [];
+    const r = await svc.startReschedule(s, id, { way: 'ask', now: NOW + MIN });
+    assert.equal(r.ok, true);
+    assert.match(to(v.discordUserId)[0].payload.embeds[0].title, /pick a new time/);
+    assert.match(to(v.discordUserId)[0].payload.embeds[0].description, new RegExp(`/coach\\d+\\?booking=${id}`));
+    const { starts } = svc.viewerStarts(s, v, id, { now: NOW + MIN });
+    assert.ok(starts.length > 0);
+    assert.ok(!starts.includes(FREE), 'never the original time');
+    assert.ok(!starts.includes(FREE + 24 * HOUR), 'never a held time');
+    assert.ok(!starts.includes(FREE + 24 * HOUR - 30 * MIN), 'nothing overlapping a held time');
+    assert.equal((await svc.viewerPropose(s, v, id, { startsAt: FREE, now: NOW + MIN })).code, 'bad_time');
+    assert.equal((await svc.viewerPropose(s, v, id, { startsAt: FREE + 24 * HOUR, now: NOW + MIN })).code, 'bad_time');
+    assert.equal((await svc.viewerPropose(s, v, id, { startsAt: SAT_10, now: NOW + MIN })).code, 'bad_time', 'outside the hours');
+    const pick = starts[0];
+    assert.equal((await svc.viewerPropose(s, v, id, { startsAt: pick, note: 'x'.repeat(301), now: NOW + MIN })).code, 'bad_note');
+    const ok = await svc.viewerPropose(s, v, id, { startsAt: pick, note: 'This works', now: NOW + MIN });
+    assert.equal(ok.ok, true);
+    await tick();
+    const told = to(s.discord_user_id)[0].payload.embeds[0];
+    assert.match(told.title, /proposed a new time/, 'the coach is told with "Message me about new requests" off');
+    assert.match(told.description, /This works/);
+  });
+
+  test('a back and forth over several rounds; only the side that did not propose accepts; the room follows the agreement', async () => {
+    const { s, v, id } = await confirmed();
+    const a = NOW + 40 * HOUR;
+    const b = NOW + 48 * HOUR;
+    const c = NOW + 42 * HOUR;
+    assert.equal((await svc.startReschedule(s, id, { way: 'propose', startsAt: a, now: NOW + MIN })).ok, true);
+    assert.deepEqual(await svc.coachAccept(s, id, { now: NOW + MIN }), { ok: false, code: 'not_yours_to_answer' });
+    assert.equal((await svc.viewerPropose(s, v, id, { startsAt: b, now: NOW + 2 * MIN })).ok, true);
+    assert.deepEqual(await svc.viewerAccept(s, v, id, { now: NOW + 2 * MIN }), { ok: false, code: 'not_yours_to_answer' });
+    assert.equal((await svc.coachPropose(s, id, { startsAt: c, note: 'How about this', now: NOW + 3 * MIN })).ok, true);
+    assert.match(to(v.discordUserId).pop().payload.embeds[0].title, /another time/);
+    assert.equal(row(s, id).proposal_starts_at, c, 'only the latest proposal counts');
+    assert.equal(row(s, id).starts_at, FREE, 'the session keeps its time until agreed');
+    discord.sent = [];
+    rooms.url = 'https://discord.com/channels/1/2';
+    const done = await svc.viewerAccept(s, v, id, { now: NOW + 4 * MIN });
+    assert.equal(done.ok, true);
+    assert.equal(done.booking.status, 'confirmed');
+    assert.equal(done.booking.starts_at, c);
+    assert.deepEqual(rooms.rescheduled, [id]);
+    assert.match(to(v.discordUserId)[0].payload.embeds[0].description, /discord\.com\/channels\/1\/2/);
+    assert.match(to(v.discordUserId)[0].payload.embeds[0].title, /new time/);
+    assert.match(to(s.discord_user_id)[0].payload.embeds[0].title, /New time agreed/);
+    assert.deepEqual(await svc.viewerAccept(s, v, id, { now: NOW + 5 * MIN }), { ok: false, code: 'not_rescheduling' });
+  });
+
+  test('the coach may propose the original time and times outside the hours; never under an hour, past 14 days or a held time', async () => {
+    const s = addStreamer();
+    const { id } = await confirmed({ s });
+    const held = await ask(s, viewer(2), { startsAt: FREE + 24 * HOUR });
+    await svc.accept(s, held.booking.id, { now: NOW });
+    const { starts } = svc.coachStarts(s, id, { now: NOW });
+    assert.ok(starts.includes(FREE), 'the original time');
+    assert.ok(starts.includes(SAT_10), 'outside the hours');
+    assert.ok(!starts.includes(FREE + 24 * HOUR));
+    assert.ok(starts.every((t) => t >= NOW + HOUR && t <= NOW + 14 * 24 * HOUR));
+    assert.equal((await svc.startReschedule(s, id, { way: 'propose', startsAt: NOW + 30 * MIN, now: NOW })).code, 'bad_time');
+    assert.equal((await svc.startReschedule(s, id, { way: 'propose', startsAt: FREE + 24 * HOUR, now: NOW })).code, 'bad_time');
+    assert.equal((await svc.startReschedule(s, id, { way: 'propose', startsAt: NOW + 15 * 24 * HOUR, now: NOW })).code, 'bad_time');
+    assert.equal((await svc.startReschedule(s, id, { way: 'nope', now: NOW })).code, 'bad_way');
+    assert.equal(row(s, id).status, 'confirmed', 'nothing changed');
+    assert.equal((await svc.startReschedule(s, id, { way: 'propose', startsAt: FREE, now: NOW })).ok, true, 'the original time is allowed for the coach');
+  });
+
+  test('only a confirmed session before its start can be rescheduled; another coach and another viewer get not_found', async () => {
+    const s = addStreamer();
+    const { v, id } = await confirmed({ s });
+    const waiting = await ask(s, viewer(2), { startsAt: FREE + 24 * HOUR });
+    assert.equal((await svc.startReschedule(s, waiting.booking.id, { way: 'ask', now: NOW })).code, 'not_confirmed');
+    assert.equal((await svc.startReschedule(s, id, { way: 'ask', now: FREE })).code, 'not_confirmed');
+    const other = addStreamer();
+    assert.equal((await svc.startReschedule(other, id, { way: 'ask', now: NOW })).code, 'not_found');
+    assert.equal((await svc.startReschedule(s, id, { way: 'ask', now: NOW })).ok, true);
+    assert.equal((await svc.viewerPropose(s, viewer(9), id, { startsAt: NOW + 40 * HOUR, now: NOW })).code, 'not_found');
+    assert.equal((await svc.viewerAccept(s, viewer(9), id, { now: NOW })).code, 'not_found');
+    assert.equal(svc.viewerStarts(s, viewer(9), id, { now: NOW }).code, 'not_found');
+    assert.equal(svc.coachStarts(other, id, { now: NOW }).code, 'not_found');
+    assert.equal((await svc.coachAccept(other, id, { now: NOW })).code, 'not_found');
+    assert.equal(svc.viewerStarts(s, v, waiting.booking.id, { now: NOW }).code, 'not_found', 'not their booking');
+  });
+
+  test('two proposals for overlapping times: one wins; a proposal is held against new requests', async () => {
+    const s = addStreamer();
+    const a = await confirmed({ s });
+    const b = await confirmed({ s, v: viewer(2), startsAt: FREE + 24 * HOUR });
+    const t = NOW + 40 * HOUR;
+    assert.equal((await svc.startReschedule(s, a.id, { way: 'propose', startsAt: t, now: NOW })).ok, true);
+    assert.equal((await svc.startReschedule(s, b.id, { way: 'propose', startsAt: t + 30 * MIN, now: NOW })).code, 'bad_time', 'a held time is not on offer');
+    const real = db.startCoachingReschedule;
+    db.startCoachingReschedule = () => ({ ok: false, code: 'taken' }); // another proposal won the race
+    try { assert.equal((await svc.startReschedule(s, b.id, { way: 'propose', startsAt: NOW + 60 * HOUR, now: NOW })).code, 'taken'); } finally { db.startCoachingReschedule = real; }
+    assert.equal((await ask(s, viewer(3), { startsAt: t })).code, 'bad_time', 'held: not offered to a new request');
+  });
+
+  test('a viewer can withdraw an unpaid rescheduling session, never a paid one', async () => {
+    const { s, v, id } = await confirmed();
+    await svc.startReschedule(s, id, { way: 'ask', now: NOW });
+    const w = await svc.withdraw(s, v, id, { now: NOW + MIN });
+    assert.equal(w.ok, true);
+    assert.equal(w.booking.status, 'withdrawn');
+    assert.deepEqual(rooms.removed, [id]);
+    const p = await paidConfirmed();
+    await svc.startReschedule(p.s, p.id, { way: 'ask', now: NOW + 2 * MIN });
+    assert.equal((await svc.withdraw(p.s, p.v, p.id, { now: NOW + 3 * MIN })).code, 'paid');
+  });
+
+  test('the viewer cannot make a refund: no viewer action touches the payments', async () => {
+    const { s, v, id, orderId } = await paidConfirmed();
+    await svc.startReschedule(s, id, { way: 'ask', now: NOW + MIN });
+    await svc.viewerPropose(s, v, id, { startsAt: NOW + 40 * HOUR, now: NOW + 2 * MIN });
+    await svc.withdraw(s, v, id, { now: NOW + 3 * MIN });
+    assert.equal(db.getCoachingPayment(orderId).refund_status, null);
+  });
+
+  describe('the minute tick', () => {
+    async function proposed(by, { paid = false } = {}) {
+      const made = paid ? await paidConfirmed() : await confirmed();
+      const { s, v, id } = made;
+      if (by === 'coach') await svc.startReschedule(s, id, { way: 'propose', startsAt: NOW + 96 * HOUR, now: NOW });
+      else {
+        await svc.startReschedule(s, id, { way: 'ask', now: NOW });
+        await svc.viewerPropose(s, v, id, { startsAt: NOW + 96 * HOUR, now: NOW });
+      }
+      discord.sent = [];
+      return made;
+    }
+
+    test('a coach proposal unanswered for 48 h is dropped, its time freed, and the viewer is asked to pick', async () => {
+      const { s, v, id } = await proposed('coach');
+      assert.deepEqual(await svc.runDueReschedules({ now: NOW + 47 * HOUR }), { dropped: 0, closed: 0 });
+      assert.deepEqual(await svc.runDueReschedules({ now: NOW + 48 * HOUR }), { dropped: 1, closed: 0 });
+      assert.equal(row(s, id).proposal_starts_at, null);
+      assert.equal(row(s, id).status, 'rescheduling');
+      const msg = to(v.discordUserId)[0].payload.embeds[0];
+      assert.match(msg.title, /Pick a new time/);
+      assert.match(msg.description, new RegExp(`booking=${id}`));
+      assert.equal(to(s.discord_user_id).length, 0);
+      assert.equal((await ask(s, viewer(2), { startsAt: NOW + 96 * HOUR })).ok, true, 'the freed time can be booked');
+    });
+
+    test('a viewer proposal unanswered for 48 h is dropped and the coach is reminded, whatever the notify switch says', async () => {
+      const s = addStreamer({ settings: { notifyRequests: 0 } });
+      const { v, id } = await confirmed({ s });
+      await svc.startReschedule(s, id, { way: 'ask', now: NOW });
+      await svc.viewerPropose(s, v, id, { startsAt: NOW + 96 * HOUR, now: NOW });
+      discord.sent = [];
+      assert.equal((await svc.runDueReschedules({ now: NOW + 49 * HOUR })).dropped, 1);
+      assert.match(to(s.discord_user_id)[0].payload.embeds[0].title, /lapsed/);
+      assert.equal(to(v.discordUserId).length, 0);
+    });
+
+    test('a proposal that comes within the hour is dropped, whoever made it', async () => {
+      const a = await proposed('coach');
+      assert.equal((await svc.runDueReschedules({ now: NOW + 96 * HOUR - 30 * MIN })).dropped, 1);
+      assert.equal(to(a.v.discordUserId).length, 1);
+      const b = await proposed('viewer');
+      assert.equal((await svc.runDueReschedules({ now: NOW + 96 * HOUR - 30 * MIN })).dropped, 1);
+      assert.equal(to(b.s.discord_user_id).length, 1);
+    });
+
+    test('7 days with no agreement: not rescheduled, the room is removed, both are told; a free session owes nothing', async () => {
+      const { s, v, id } = await confirmed();
+      await svc.startReschedule(s, id, { way: 'ask', now: NOW });
+      discord.sent = [];
+      assert.deepEqual(await svc.runDueReschedules({ now: NOW + 7 * 24 * HOUR }), { dropped: 0, closed: 1 });
+      assert.equal(row(s, id).status, 'not_rescheduled');
+      assert.deepEqual(rooms.removed, [id]);
+      assert.match(to(v.discordUserId)[0].payload.embeds[0].title, /not rescheduled/);
+      assert.doesNotMatch(to(v.discordUserId)[0].payload.embeds[0].description, /refund/);
+      assert.match(to(s.discord_user_id)[0].payload.embeds[0].title, /not rescheduled/);
+    });
+
+    test('7 days on a paid session: the payment is pending, the viewer is told the coach will refund, the coach is told to', async () => {
+      const { s, v, id, orderId } = await paidConfirmed();
+      await svc.startReschedule(s, id, { way: 'ask', now: NOW + MIN });
+      discord.sent = [];
+      await svc.runDueReschedules({ now: NOW + MIN + 7 * 24 * HOUR });
+      assert.equal(db.getCoachingPayment(orderId).refund_status, 'pending');
+      assert.equal(db.getCoachingPayment(orderId).refund_reason, 'not_rescheduled');
+      assert.match(to(v.discordUserId)[0].payload.embeds[0].description, /refund you/);
+      assert.match(to(s.discord_user_id)[0].payload.embeds[0].description, /Refunded/);
+    });
+
+    test('Discord down never stops the tick or undoes a step; a second run finds nothing left to do', async () => {
+      const { s, id } = await proposed('coach');
+      discord.sendResult = { ok: false, reason: 'unreachable' };
+      assert.equal((await svc.runDueReschedules({ now: NOW + 48 * HOUR })).dropped, 1);
+      assert.equal(row(s, id).proposal_starts_at, null);
+      assert.deepEqual(await svc.runDueReschedules({ now: NOW + 48 * HOUR }), { dropped: 0, closed: 0 });
+    });
   });
 });

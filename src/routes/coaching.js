@@ -25,6 +25,7 @@ const PAST_DAYS = 30; // the viewer's bookings of the last 30 days are listed un
 const REFUSAL_STATUS = {
   signin: 401, unavailable: 404, not_found: 404, bad_length: 400, bad_note: 400,
   not_open: 409, join_first: 409, bad_time: 409, taken: 409, limit: 409, too_late: 409, not_active: 409, too_many: 429,
+  not_rescheduling: 409, not_yours_to_answer: 409, no_proposal: 409, proposal_too_close: 409,
   no_paypal: 409, paid: 409, not_awaiting: 409, pay_closed: 409, too_many_payments: 429, payment_failed: 502,
 };
 // bad_time and taken read the same: a time someone holds is refused as bad_time (it is no longer a free start) before
@@ -36,6 +37,8 @@ const ERROR_KEYS = {
   limit: 'coaching.error.limit', too_late: 'coaching.error.too_late', not_active: 'coaching.error.not_active',
   too_many: 'coaching.error.too_many', no_paypal: 'coaching.error.no_paypal', paid: 'coaching.error.paid',
   not_awaiting: 'coaching.error.not_awaiting', pay_closed: 'coaching.error.pay_closed',
+  not_rescheduling: 'coaching.error.not_rescheduling', not_yours_to_answer: 'coaching.error.not_yours_to_answer',
+  no_proposal: 'coaching.error.no_proposal', proposal_too_close: 'coaching.error.proposal_too_close',
   too_many_payments: 'coaching.error.too_many_payments', payment_failed: 'coaching.error.payment_failed',
 };
 // The codes /paid sends back to the page as ?error= (coachingPayments.returnErrorCode), with their texts; the page's
@@ -193,6 +196,48 @@ router.post('/:username/bookings/:id/cancel', async (req, res) => {
   if (!id) return refuse(res, 'not_found');
   const now = Date.now();
   const result = await coachingBookings.withdraw(page.streamer, req.viewer, id, { now });
+  if (!result.ok) return refuse(res, result.code);
+  res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0] });
+});
+
+// Reschedule, the viewer's side: the booking is the viewer's own (another's answers not_found). starts lists the times
+// they may propose (never the session's original time); propose answers the coach's proposal with another time;
+// accept-proposal takes the coach's. The viewer never starts or closes one. These routes have their own limiter
+// (server.js).
+const viewerBooking = (req, res) => {
+  const page = coachingPage(req);
+  if (!page) { refuse(res, 'unavailable'); return null; }
+  if (!req.viewer) { refuse(res, 'signin'); return null; }
+  const id = /^\d{1,15}$/.test(req.params.id) ? Number(req.params.id) : 0;
+  if (!id) { refuse(res, 'not_found'); return null; }
+  return { page, id };
+};
+
+router.get('/:username/bookings/:id/starts', (req, res) => {
+  const ctx = viewerBooking(req, res);
+  if (!ctx) return;
+  const result = coachingBookings.viewerStarts(ctx.page.streamer, req.viewer, ctx.id, { now: Date.now() });
+  if (!result.ok) return refuse(res, result.code);
+  res.json({ ok: true, minutes: result.minutes, starts: result.starts });
+});
+
+router.post('/:username/bookings/:id/propose', async (req, res) => {
+  const ctx = viewerBooking(req, res);
+  if (!ctx) return;
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const now = Date.now();
+  const result = await coachingBookings.viewerPropose(ctx.page.streamer, req.viewer, ctx.id, {
+    startsAt: Number.isInteger(body.startsAt) ? body.startsAt : null, note: body.note, now,
+  });
+  if (!result.ok) return refuse(res, result.code);
+  res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0] });
+});
+
+router.post('/:username/bookings/:id/accept-proposal', async (req, res) => {
+  const ctx = viewerBooking(req, res);
+  if (!ctx) return;
+  const now = Date.now();
+  const result = await coachingBookings.viewerAccept(ctx.page.streamer, req.viewer, ctx.id, { now });
   if (!result.ok) return refuse(res, result.code);
   res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0] });
 });

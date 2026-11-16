@@ -734,3 +734,88 @@ describe('the page', () => {
     }
   });
 });
+
+describe('reschedule routes (the coach)', () => {
+  function confirmedBooking(s, startsAt = freeNow(s)[0]) {
+    const b = hold(s, viewer(), startsAt);
+    assert.ok(db.acceptCoachingBooking(b.id, s.id, Date.now(), null));
+    return db.getCoachingBooking(b.id, s.id);
+  }
+  const base = (b) => `/dashboard/api/coaching/bookings/${b.id}`;
+
+  test('proposal-starts lists what the coach may offer, the original time and out-of-hours times included', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    const res = await get(`${base(b)}/proposal-starts`, { streamer: s });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.minutes, 60);
+    assert.ok(res.json.starts.includes(b.starts_at));
+    assert.ok(res.json.starts.some((x) => !freeNow(s).includes(x)), 'times outside the weekly hours are offered');
+    const other = addStreamer();
+    assert.equal((await get(`${base(b)}/proposal-starts`, { streamer: other })).status, 404);
+    assert.equal((await get('/dashboard/api/coaching/bookings/abc/proposal-starts', { streamer: s })).status, 404);
+  });
+
+  test('way 1: reschedule with a time; the view carries the proposal; a second start is refused', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    const start = (await get(`${base(b)}/proposal-starts`, { streamer: s })).json.starts[10];
+    const res = await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'propose', startsAt: start, note: 'Sorry' } });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.booking.state, 'rescheduling');
+    assert.equal(res.json.booking.proposal.startsAt, start);
+    assert.equal(res.json.booking.proposal.by, 'coach');
+    assert.equal(discord.sent.length, 1);
+    const again = await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask' } });
+    assert.equal(again.status, 409);
+    assert.equal(again.json.code, 'not_confirmed');
+  });
+
+  test('refusals: a time that is not on offer, a way that does not exist, a note over 300, another streamer, a string for a time', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    const bad = await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'propose', startsAt: Date.now() + 60e3 } });
+    assert.equal(bad.status, 409);
+    assert.equal(bad.json.code, 'bad_time');
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'propose', startsAt: String(b.starts_at) } })).json.code, 'bad_time');
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'nope' } })).status, 400);
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask', note: 'x'.repeat(301) } })).json.code, 'bad_note');
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: addStreamer(), json: { way: 'ask' } })).status, 404);
+    assert.equal(db.getCoachingBooking(b.id, s.id).status, 'confirmed');
+  });
+
+  test('a back and forth: the coach accepts the viewer\'s proposal, proposes another, never accepts their own', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask' } });
+    const own = await post(`${base(b)}/accept-proposal`, { streamer: s });
+    assert.equal(own.status, 409);
+    assert.equal(own.json.code, 'no_proposal');
+    const viewerStart = freeNow(s).find((x) => x !== b.starts_at);
+    assert.ok(db.proposeCoachingTime(b.id, 'viewer', viewerStart, 'This one', Date.now()).ok);
+    const counter = (await get(`${base(b)}/proposal-starts`, { streamer: s })).json.starts[40];
+    const prop = await post(`${base(b)}/propose`, { streamer: s, json: { startsAt: counter, note: 'Or this' } });
+    assert.equal(prop.status, 200);
+    assert.equal(prop.json.booking.proposal.by, 'coach');
+    const mine = await post(`${base(b)}/accept-proposal`, { streamer: s });
+    assert.equal(mine.json.code, 'not_yours_to_answer');
+    assert.ok(db.proposeCoachingTime(b.id, 'viewer', viewerStart, null, Date.now()).ok);
+    const done = await post(`${base(b)}/accept-proposal`, { streamer: s });
+    assert.equal(done.status, 200);
+    assert.equal(done.json.booking.state, 'confirmed');
+    assert.equal(done.json.booking.startsAt, viewerStart);
+    assert.equal(done.json.booking.proposal, null);
+    assert.equal((await post(`${base(b)}/accept-proposal`, { streamer: s })).json.code, 'not_rescheduling');
+  });
+
+  test('another streamer\'s booking answers 404 on every reschedule route', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask' } });
+    const other = addStreamer();
+    for (const route of ['propose', 'accept-proposal', 'reschedule']) {
+      assert.equal((await post(`${base(b)}/${route}`, { streamer: other, json: { way: 'ask', startsAt: Date.now() } })).status, 404, route);
+    }
+    assert.equal((await post(`${base(b)}/reschedule`, { json: { way: 'ask' } })).status, 302, 'signed out: the dashboard login');
+  });
+});

@@ -169,3 +169,53 @@ describe('coachingMessages: payment kinds', () => {
     assert.equal(e.color, 0x3ecf8e);
   });
 });
+
+describe('reschedule messages', () => {
+  const moving = (over = {}) => booking({ original_starts_at: 1793000000000, proposal_starts_at: 1793100000000, proposal_note: '[x](http://e.example)', ...over });
+  const args = { streamerName: 'Coach', guildName: 'Coach HQ', bookingUrl: 'https://x/coaching/coach', bookingLink: 'https://x/coaching/coach?booking=1', roomUrl: null, t };
+
+  test('a coach proposal names the original and the proposed time, the note without a live link, and the booking link', () => {
+    const e = m.viewerMessage('rescheduleProposed', { ...args, booking: moving() }).embeds[0];
+    assert.match(e.title, /Coach proposed a new time/);
+    assert.match(e.description, /Original time: <t:1793000000:F>/);
+    assert.match(e.description, /Proposed time: <t:1793100000:F>/);
+    assert.ok(!e.description.includes('[x]('), 'the note cannot make a link');
+    assert.match(e.description, /\?booking=1/);
+  });
+
+  test('way 2, a lapse and the other viewer kinds each carry the link or their line', () => {
+    assert.match(m.viewerMessage('rescheduleAsk', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0].description, /Pick a new time here: https:\/\/x\/coaching\/coach\?booking=1/);
+    const lapsed = m.viewerMessage('proposalLapsed', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0];
+    assert.match(lapsed.description, /dropped/);
+    assert.match(lapsed.description, /\?booking=1/);
+    assert.match(m.viewerMessage('proposal', { ...args, booking: moving() }).embeds[0].title, /another time/);
+  });
+
+  test('agreed shows the new time and the room, never the proposal lines', () => {
+    const agreed = m.viewerMessage('rescheduleAgreed', { ...args, roomUrl: 'https://discord.com/channels/1/2', booking: booking({ starts_at: 1793100000000 }) }).embeds[0];
+    assert.match(agreed.title, /new time/);
+    assert.match(agreed.description, /New time: <t:1793100000:F>/);
+    assert.match(agreed.description, /discord\.com\/channels\/1\/2/);
+    assert.doesNotMatch(agreed.description, /Proposed time/);
+    assert.equal(agreed.color, 0x3ecf8e);
+  });
+
+  test('not rescheduled: the refund line only for a paid session, to the viewer and to the coach in their own words', () => {
+    const free = m.viewerMessage('notRescheduled', { ...args, booking: moving({ proposal_starts_at: null }), refund: false }).embeds[0];
+    assert.doesNotMatch(free.description, /refund/);
+    const paid = m.viewerMessage('notRescheduled', { ...args, booking: moving({ proposal_starts_at: null }), refund: true }).embeds[0];
+    assert.match(paid.description, /refund you/);
+    const coach = m.streamerMessage('notRescheduledCoach', { booking: moving({ proposal_starts_at: null }), scheduleUrl: 'https://x/dashboard/coaching', refund: true, t }).embeds[0];
+    assert.match(coach.description, /Refunded/);
+    assert.match(coach.description, /dashboard\/coaching/);
+  });
+
+  test('the coach\'s kinds name the viewer through escapeLinkText and carry the schedule link', () => {
+    const b = moving({ viewer_display_name: '[Vi](http://e.example)' });
+    for (const kind of ['viewerProposed', 'agreedCoach', 'viewerLapsed', 'notRescheduledCoach']) {
+      const e = m.streamerMessage(kind, { booking: b, scheduleUrl: 'https://x/dashboard/coaching', t }).embeds[0];
+      assert.ok(e.title.includes('\\[Vi\\]'), kind);
+      if (kind !== 'agreedCoach') assert.match(e.description, /dashboard\/coaching/, kind);
+    }
+  });
+});
