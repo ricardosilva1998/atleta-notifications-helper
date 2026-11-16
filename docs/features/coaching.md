@@ -12,7 +12,8 @@ Design: `docs/superpowers/specs/2026-10-29-coaching-design.md` (its mockup:
 `docs/superpowers/plans/2026-11-16-coaching-payment-rooms.md`. Cancel with a reason, reschedule, refunds and the four
 tabs (2026-11-16): spec `docs/superpowers/specs/2026-11-16-coaching-cancel-reschedule-refund-design.md`, plan
 `docs/superpowers/plans/2026-11-16-coaching-cancel-reschedule-refund.md`; the coaches' guide is
-`docs/guides/coaching-for-coaches.pdf`.
+`docs/guides/coaching-for-coaches.pdf`. The booking page in four steps and the My bookings page (2026-11-16): plan
+`docs/superpowers/plans/2026-11-16-coaching-booking-in-steps-and-my-bookings.md`.
 
 ## How a booking goes
 
@@ -333,44 +334,33 @@ The booking page is `/coaching/<twitch login>` (`src/routes/coaching.js`, `src/v
 - The page stands alone like `tip.ejs`, with `csrf.ejs` in its `<head>` and no `header.ejs`. The site header's "Login
   with Discord" would sign a visitor in as a streamer.
 
-**The order of the page.** Connect Discord, then join the server, then choose, then (after the streamer accepts) pay.
+**The four steps.** The page is a wizard with a "Step N of 4" bar, a heading that takes focus on every change, and
+**Back** (it keeps the chosen length, time and note). `stepFor(state)` in `public/js/coaching-core.js` picks the
+first step: no viewer is 1, a viewer the bot does not see in the server (`member === false`) is 2, otherwise 3
+(Discord unable to say, `member` null, counts as 3). `backStep` goes back one.
+1. **Connect Discord.** Printed by the server for a visitor: the coach's name and picture, a short "how it works" and
+   **Connect Discord**. No times are in the page until a viewer is signed in.
+2. **Join the server** (below): the invite and "I've joined".
+3. **Length and time.** The streamer's lengths that are on (`state.lengths`, each with its price or "Free", only
+   those with a free start), the strip of days with the empty ones dimmed, the free times of the chosen day (in the
+   viewer's browser zone, grouped by the viewer's own days: a viewer in Tokyo sees Lisbon's 18:00 to 22:00 as 02:00 to
+   06:00 the next day) and, with a time picked, a summary. At the limit of 2 upcoming bookings, or with no length,
+   the step shows only the limit text.
+4. **Note and request.** "What do you want to work on? (optional)" and **Request this time**. A sent request goes to
+   `/my-bookings?booking=<id>&new=1`, where "Request sent, waiting for <coach>" is shown.
 
-**Signed out.** The page shows only the coach's name and picture, a short "how it works" and **Connect Discord**. It
-shows no times: the picker is not in the page until a viewer is signed in.
+The page also has a "booking as <Discord name>" bar ("not you?" signs a viewer out; for a streamer booking as their
+own account it leads to the viewer sign-in) and, when the viewer has bookings with this coach, "You have N bookings
+with <coach> - My bookings". **The list of bookings, Pay, Withdraw and the reschedule panel are no longer on this
+page: they live on My bookings (below).** A page that is not bookable shows "<streamer> is not taking new bookings
+right now." instead of the steps.
 
-**Times.** They are shown in the viewer's browser zone and grouped by the viewer's own days. A viewer far east of the
-streamer can see a 15th day: Lisbon's 18:00 to 22:00 falls between 02:00 and 06:00 the next day in Tokyo.
-
-**Signed in.**
-- "Booking as <Discord name>" with "not you?". For a viewer it signs them out. For a streamer booking as their own
-  account, it leads to the viewer sign-in instead.
-- The picker comes only after `/state` answered and the viewer is a member (or Discord could not say): the streamer's
-  lengths that are on (`state.lengths`, each with its price or "Free", only those with a free start), the strip of
-  days with the empty ones dimmed, the free times of the chosen day, the note "What do you want to work on?
-  (optional)" and **Request this time**.
-- After a request: "Your time is held. Atleta will message you on Discord once <streamer> accepts it."
-- At the limit, the request box gives way to "You have 2 upcoming bookings with <streamer>…".
-- **Your bookings**: the viewer's own bookings with this streamer, from the last 30 days and to come, with state
-  pills (including Awaiting payment and Expired), length, price and time. Per state:
-  - awaiting payment: **Pay <price>** and "Pay by <time>" (in the viewer's zone), shown only before the deadline;
-  - confirmed: the room link (`https://discord.com/channels/<guild>/<channel>`, drawn only when it has that shape),
-    or the streamer's "where" text when there is no open room;
-  - waiting and unpaid confirmed ones have **Withdraw** until they start; a paid one has none;
-  - cancelled by the coach: the coach's reason, then "Your coach will refund you" (Refund pending) or "Refunded". The
-    page never shows payer details;
-  - rescheduling: see below.
-- **Pay** (`POST /coaching/<login>/bookings/<id>/pay`) answers the PayPal approve address; the page goes there only if
-  it is on paypal.com (the server checks too). PayPal returns to `/coaching/<login>/paid`, which captures, and the
-  page opens with `?paid=1` or `?error=<code>`. `pay_unconfirmed` also carries `&order=<id>` and the page offers
-  **Check again** (the same return route).
-
-**Rescheduling on the page.** A rescheduling booking shows, by case: the coach's proposal with **Accept** and
-"Propose another time"; a request to **Pick a new time** (way `ask`, or after a lapse); or the viewer's own waiting
-proposal. The picker reads `GET /coaching/<login>/bookings/<id>/starts` (the coach's free starts, never the original
-time, nothing held) and posts `POST .../propose { startsAt, note }`; Accept posts `POST .../accept-proposal`. The
-Discord message's link, `?booking=<id>`, scrolls to the booking and opens the picker when it is a "pick" case. These
-three routes share `coachingRescheduleLimiter`. **Pay** now carries a note: "<coach> will see your PayPal name and
-email, in case they need to refund you."
+**Who can see it.**
+- The streamer is found by their linked Twitch login, as the tip page does (`db.getStreamerByUsername`).
+- An unknown name, a disabled account, or a streamer who never saved coaching hours answers 404 with "Coaching page
+  unavailable.", in the same form `/tip/<unknown>` answers.
+- The page stands alone like `tip.ejs`, with `csrf.ejs` in its `<head>` and no `header.ejs`. The site header's "Login
+  with Discord" would sign a visitor in as a streamer.
 
 **Join first.** Once a viewer is signed in, the page asks the bot whether they are a member of the coaching server.
 - If not, it shows "Join <server> first", the streamer's invite as a button, and "I've joined" to ask again. **Request
@@ -384,34 +374,62 @@ email, in case they need to refund you."
   most once every 10 s per viewer; within those 10 s it reads the kept answer.
 
 **Paused.** When the page is not bookable (see Bookable above), it says "<streamer> is not taking new bookings right
-now." and shows no times. A signed-in viewer still sees their bookings and can pay or cancel (before payment), and
-accept, decline and cancel keep working for the streamer.
+now." and shows no times. A viewer's bookings stay on My bookings (pay, withdraw), and accept, decline and
+cancel keep working for the streamer.
 
 **Refreshing.** The page reads `GET /coaching/<login>/state`:
-- once on load, for the membership;
+- once on load, for the membership (and so the first step);
 - after every action, and on "I've joined" (with `?recheck=1`);
 - when its tab is shown again after a minute away.
 
 Between two reads, the page drops a start that has come inside the hour of notice (`leadMs` in the state,
 `bookableStarts` in `public/js/coaching-core.js`), as the server would refuse it.
 
+## My bookings
+
+`/my-bookings` (`src/routes/myBookings.js`, `src/views/my-bookings.ejs`, `public/js/my-bookings.js`) is the viewer's
+own page across **every coach**. It stands alone like the booking page (no `header.ejs`, `csrf.ejs` in `<head>`).
+- **Signed out:** the title, a short intro and **Connect Discord** (`/auth/coaching-signin`, no coach).
+- **Signed in:** "Signed in as <name>" with a sign-out form (a streamer signed in to the site sees their own bookings
+  as a viewer, with a "not you?" link instead), then **To come** and **Past** lists (the last 30 days and to come).
+  Each row has the coach's picture and name (linking to `/coaching/<login>`), the date in the viewer's zone, the
+  length, the price and the state pill, and per state what the booking page used to show: Pay with its deadline,
+  Withdraw (unpaid only), the room link or the "where" text, the coach's cancel reason and the Refund pending or
+  Refunded line, and the reschedule panel (Accept, Propose another time, Pick a new time; the picker reads the
+  coach's free starts). No payer details appear.
+- **The actions call the per-booking coach routes** (`/coaching/<coach login>/bookings/<id>/pay`, `/cancel`,
+  `/starts`, `/propose`, `/accept-proposal`), so their rules, limiters (`coachingPayLimiter`,
+  `coachingRescheduleLimiter`) and CSRF are unchanged. A coach who stopped coaching (disabled, or hours never saved)
+  shows `available: false`: the row has its state and a note, and no actions.
+- **The query string:** `?booking=<id>` scrolls to and highlights the booking (and opens the picker for a "pick"
+  case); `&new=1` shows "Request sent, waiting for <coach>"; `&paid=1` or `&error=<code>` (with `&order=<id>` for
+  `pay_unconfirmed`, which offers **Check again**) show the payment's result. Every viewer Discord message links to
+  `?booking=<id>`.
+- **`GET /my-bookings/state`** answers `{ viewer, bookings }` for the signed-in viewer (401 without one,
+  `Cache-Control: private, no-store`). It reads by the session's own Discord id (`db.getViewerBookingsAllCoaches`),
+  builds each booking with the viewer view (`forViewer`, never payer details), and carries `coach { login, name,
+  avatar, available }` per booking.
+- The home page's hero has a "Coaching bookings" button to `/my-bookings`.
+
 ## The viewer's sign-in
 
 The viewer signs in with Discord with the `identify` scope only, and the sign-in **never creates a streamer**. The
 streamer login, `/auth/login`, creates a `streamers` row for anyone who signs in, so it could not be used as it is.
 
-**Starting the sign-in.** `GET /auth/coaching-signin?for=<login>` sends the viewer to Discord with the same
+**Starting the sign-in.** `GET /auth/coaching-signin?for=<login>` (from a booking page) or `GET /auth/coaching-signin`
+(without `for`, from My bookings) sends the viewer to Discord with the same
 `redirect_uri` as the streamer login, `<APP_URL>/auth/login/callback`.
 - Discord only accepts redirects registered on the application, and reusing that one means the Discord application
   needs no change.
 - The route sets `oauth_state` and `oauth_purpose = 'coaching:<login>'`, both short-lived cookies (10 minutes).
-- It answers 404 with the page's own text for a login that has no booking page up.
+- Without `for` the purpose is the bare `coaching:`; the callback then lands on `/my-bookings`.
+- It answers 404 with the page's own text for a login that has no booking page up (an empty or repeated `for` is 404 too).
 
 **The callback.** `/auth/login/callback` reads and clears `oauth_purpose` only after the state matched, so a stray
 callback cannot leave a coaching sign-in without its purpose.
 - A purpose that names something other than a Twitch login answers 400 before Discord is asked anything.
 - Otherwise it makes Discord's token and `@me` calls (10 s each), stores a viewer session and redirects to the
-  coaching page.
+  coaching page, or to `/my-bookings` when the purpose names no coach.
 - It returns before `upsertStreamerDiscord`: no `streamers` row, no dashboard and no streamer session.
 - `/auth/login` clears a leftover `oauth_purpose`, so a coaching sign-in abandoned half-way cannot turn the next
   streamer login into a viewer's.
@@ -421,7 +439,8 @@ callback cannot leave a coaching sign-in without its purpose.
   in production.
 - The row in `viewer_sessions` holds only the id's hash (`db.hashSessionId`, as the streamers' sessions do), with the
   Discord id, username, display name and avatar.
-- `POST /auth/coaching-signout` (the "not you?" form) deletes it.
+- `POST /auth/coaching-signout` (the "not you?" form) deletes it, and goes back to the coaching page, or to
+  `/my-bookings` when sent without a valid `for`.
 - Expired rows are swept every hour (`cleanExpiredViewerSessions`, next to `cleanExpiredSessions` in `server.js`).
 
 **Who books.** `server.js`'s session step sets `req.viewer`:
@@ -441,6 +460,9 @@ The Atleta bot sends them as direct messages through `src/discord.js`, the one p
 (`sendDirectMessage`).
 - Each is one embed, sent with `allowedMentions: { parse: [] }`, so it mentions nobody.
 - Times are Discord timestamps (`<t:…:F>`), which Discord shows in each reader's own zone.
+- **Every message to a viewer ends with "See all your bookings"**, linking to `<APP_URL>/my-bookings?booking=<id>`
+  (`myBookingsUrl`, `coaching.message.myBookings`); the pick-another, pay and booking links stay. The streamer's
+  messages are unchanged.
 - The texts are built in `src/services/coachingMessages.js` from the `coaching.message.*` keys.
 
 | To | When | Says |
@@ -552,6 +574,9 @@ alert, tip goal, tracker, voice or chat thank-you (tested).
 6. **Stale orders.** `reconcileStale` reads each order still `created` after 24 hours once, then records, refuses or
    drops it (kept up to 72 h when PayPal cannot be reached).
 
+The return **lands on My bookings**: `/my-bookings?booking=<id>&paid=1` or `…&error=<code>` (with `&order=<id>` for
+`pay_unconfirmed`); the booking id is added only when the order's booking belongs to this streamer.
+
 `/paid` needs no viewer sign-in: the order id cannot be guessed and only a verified order confirms a booking. The pay
 route needs the viewer session and its CSRF token. Both routes have their own limiter (15 per 10 minutes per visitor,
 `coachingPayLimiter` in `server.js`), because each talks to PayPal. The live site needs `PAYPAL_MODE=live`.
@@ -631,20 +656,23 @@ general limit applies, except pay and return (`coachingPayLimiter`, 15 per 10 mi
 | `POST /coaching/:username/bookings/:id/propose` | JSON `{ startsAt, note }` → `{ ok: true, booking }` |
 | `POST /coaching/:username/bookings/:id/accept-proposal` | accepts the coach's proposal → `{ ok: true, booking }` |
 | `POST /coaching/:username/bookings/:id/pay` | the viewer's own awaiting-payment booking → `{ ok: true, approveUrl }` (the PayPal page) |
-| `GET /coaching/:username/paid?token=<order>` | PayPal's return: captures and verifies, redirects to the page with `?paid=1` or `?error=` (`late`, `pay_invalid`, `pay_unconfirmed` (with `&order=`), `not_paid`, `paid`, `pay_closed`) |
+| `GET /coaching/:username/paid?token=<order>` | PayPal's return: captures and verifies, redirects to `/my-bookings?booking=<id>&paid=1` or `&error=` (`late`, `pay_invalid`, `pay_unconfirmed` (with `&order=`), `not_paid`, `paid`, `pay_closed`) |
 
 `GET /coaching/:username/state` answers
 `{ open, bookable, lengths: [{ minutes, priceCents }], currency, slots: { <minutes>: [...] }, viewer, member, inviteUrl, guildName, bookings, maxUpcoming, horizonDays, leadMs }`:
 - `slots` holds the free starts as UTC milliseconds for each offered length, and none while the page is not bookable;
 - `lengths` are the offered lengths only (on, and payable: a paid one needs the PayPal email);
-- a viewer's bookings carry `priceCents`, `payBy`, `paid`, `roomUrl` (only for confirmed or rescheduling ones), `whereText` for confirmed ones, `cancelReason`, `refundState` and `refundPending` (never payer details), and for rescheduling ones `proposal`, `rescheduleStartedAt`, `rescheduleEndsAt` and `originalStartsAt`;
+- a viewer's bookings (the booking page reads only the count, for its "My bookings" line) carry `priceCents`, `payBy`, `paid`, `roomUrl` (only for confirmed or rescheduling ones), `whereText` for confirmed ones, `cancelReason`, `refundState` and `refundPending` (never payer details), and for rescheduling ones `proposal`, `rescheduleStartedAt`, `rescheduleEndsAt` and `originalStartsAt`;
 - `member` comes only with a viewer, and Discord is asked only while the page is bookable (its answer kept 30 s;
   `?recheck=1` asks again, see Join first);
 - `leadMs` is the hour of notice (`LEAD_MS`), for the page to drop starts that come inside it while it stays open;
 - `guildName` is the bot's name for the server, else the one stored with the claim.
 
-The sign-in routes are in `src/routes/auth.js`: `GET /auth/coaching-signin?for=<login>`, the coaching branch of
-`GET /auth/login/callback`, and `POST /auth/coaching-signout`.
+The sign-in routes are in `src/routes/auth.js`: `GET /auth/coaching-signin[?for=<login>]`, the coaching branch of
+`GET /auth/login/callback`, and `POST /auth/coaching-signout[?for=<login>]`.
+
+The viewer's own page, in `src/routes/myBookings.js`, is not under `/api` (only the general limit applies): `GET
+/my-bookings` (the page, 200 signed out) and `GET /my-bookings/state` (JSON, see My bookings).
 
 A refusal is `{ ok: false, code, error }`, the error being the code's text in the page's language:
 
@@ -780,13 +808,14 @@ are read back once and dropped by the tick.
 | `src/db.accounts.test.js` | account removal, for every table with a `streamer_id` |
 | `src/discord.coaching.test.js` | direct messages and their failure reasons, the deadlines, the member and invite checks |
 | `src/services/coachingMessages.test.js`, `src/services/coachingBookings.test.js` | the messages (typed text escaped with the real `escapeLinkText`); request, accept, decline, cancel and withdraw with their refusals (book and withdraw again and again ends at `too_many`); a later message clearing the warning; the membership memo and its recheck; the hourly invite check, one at a time; the card's data |
-| `src/routes/auth.test.js` | the coaching sign-in creates a viewer session and no `streamers` row; a sign-in without the purpose still creates a streamer; a bad purpose is refused before Discord is asked |
+| `src/routes/auth.test.js` | the coaching sign-in creates a viewer session and no `streamers` row; a sign-in without the purpose still creates a streamer; a bad purpose is refused before Discord is asked; the coach-less sign-in lands on `/my-bookings`, a repeated or empty `for` is 404 |
+| `src/routes/myBookings.test.js` | the page signed out and in, `/my-bookings/state` (401, own bookings only, no payer details, unavailable coach), the script reads only the texts it is handed, the sign-out form, `<` escaped |
 | `src/routes/coaching.test.js` | the page, `state` (with `?recheck=1`), booking and cancelling (`not_active`, `too_many`); names and notes holding `<script>` print as text |
 | `src/server.app.test.js`, `src/server.wiring.test.js` | a booking and a pay need the viewer session's CSRF token, on the real `server.js`; the pay limiter is wired; a disabled streamer's web session gives no viewer |
 | `src/routes/coachingDashboard.test.js` | the settings save, open, accept, decline and cancel (with its reason), reschedule, proposal and refund routes, another streamer's booking, the four tabs, the schedule, the invite check after the page |
 | `src/services/coachingTick.test.js` | the minute tick's steps, one failing step not stopping the others, the reschedule step |
 | `src/services/dashboardCards.test.js`, `src/routes/dashboard.test.js`, `tests/dashboardCardsCore.test.js` | the card, and the invite check after `/dashboard` is sent (never on the cards' refresh) |
-| `tests/coachingCore.test.js` | the page's day grouping across zones; the starts a page left open still offers |
+| `tests/coachingCore.test.js` | the page's day grouping across zones; the starts a page left open still offers; `stepFor` and `backStep` |
 | `src/services/coachingPayments.test.js` | wrong payee, amount, currency, booking or streamer refused; a replay and two concurrent returns record once; a lost capture read back; expiry reads back first; a late capture; no `donations`, overlay or tip module touched |
 | `src/services/coachingRooms.test.js` (the tick included) | the overwrites, nothing outside the category, a failed step and Retry, a restart finishing or cleaning a `making` row, one transcript to each side then delete, `no_intent`, big files named, Discord down, `removeAllFor`, the tick |
 | `src/discord.coaching.test.js`, `src/services/discordLogin.test.js` | the category permission check, the attachment hosts and size cap, the Message Content fallback |
