@@ -60,6 +60,12 @@ function startWithoutDiscord() {
   const { chatManager } = require('./services/twitchChat');
   chatManager.startAll();
 
+  // Followers-only mode a raid switched on is put back even across a restart
+  // (services/chatModeration.js, table raid_protection).
+  require('./services/chatModeration').resumeRaidProtection(
+    (streamer, text) => chatManager.sendMessage(streamer.id, text, { priority: 'high' }),
+  ).catch((e) => console.error(`[Mod] Raid protection resume failed: ${e.message}`));
+
   const { timedNotificationManager } = require('./services/timedNotifications');
   timedNotificationManager.startAll();
 
@@ -209,6 +215,7 @@ async function shutdown(signal) {
   };
   stop('Pollers', () => pollers.stopAll());
   stop('Twitch chat', () => require('./services/twitchChat').chatManager.stopAll());
+  stop('Raid protection', () => require('./services/chatModeration').stopRaidProtectionTicks());
   stop('EventSub', () => require('./services/eventsub').eventSubManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());

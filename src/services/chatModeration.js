@@ -558,10 +558,120 @@ async function handleModCommand(client, channel, tags, message, streamer) {
 // the configured time. Nothing is announced unless Twitch accepted the change.
 const RAID_FOLLOWER_MINUTES = 10;
 
+// What the channel's followers-only mode is now, so the end of the protection
+// can put it back. Returns null when Twitch does not answer.
+async function readFollowerSettings(channel, streamer) {
+  const broadcasterId = await resolveBroadcasterId(channel, streamer);
+  const moderatorId = await getBotUserId();
+  if (!broadcasterId || !moderatorId) return null;
+  const params = new URLSearchParams({ broadcaster_id: broadcasterId, moderator_id: moderatorId });
+  try {
+    const res = await fetch(`https://api.twitch.tv/helix/chat/settings?${params}`, {
+      headers: {
+        'Client-ID': botClientId || config.twitch.clientId,
+        'Authorization': `Bearer ${config.bot.twitchToken.replace(/^oauth:/, '')}`,
+      },
+      signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const row = (await res.json())?.data?.[0];
+    if (!row) return null;
+    return { mode: !!row.follower_mode, duration: Number(row.follower_mode_duration) || 0 };
+  } catch (e) {
+    console.error(`[Mod] Reading chat settings failed in ${channel}:`, e.message);
+    return null;
+  }
+}
+
+function restoreBody(row) {
+  return row.prev_follower_mode
+    ? { follower_mode: true, follower_mode_duration: row.prev_follower_mode_duration }
+    : { follower_mode: false };
+}
+
+const RAID_RETRY_LIMIT_MS = 60 * 60 * 1000;
+const RAID_TICK_MS = 60 * 1000;
+let raidTick = null;
+
+// Puts the channel's followers-only setting back and forgets the row. A failed
+// restore keeps the row for the next minute tick. Returns true when it is done.
+const endingRaids = new Set();
+async function endRaidProtection(streamerId, say) {
+  if (endingRaids.has(streamerId)) return false;
+  endingRaids.add(streamerId);
+  try {
+    return await finishRaidProtection(streamerId, say);
+  } finally {
+    endingRaids.delete(streamerId);
+  }
+}
+
+async function finishRaidProtection(streamerId, say) {
+  const row = db.getRaidProtection(streamerId);
+  if (!row) return true;
+  const streamer = db.getStreamerById(streamerId);
+  if (!streamer || !streamer.twitch_username) {
+    db.deleteRaidProtection(streamerId);
+    return true;
+  }
+  if (await updateChatSettings(streamer.twitch_username, streamer, restoreBody(row))) {
+    db.deleteRaidProtection(streamerId);
+    try { say?.(streamer, 'Raid protection ended. Followers-only mode disabled.'); } catch { /* chat is best effort */ }
+    return true;
+  }
+  if (Date.now() - row.ends_at > RAID_RETRY_LIMIT_MS) {
+    console.error(`[Mod] Giving up restoring followers-only mode for streamer ${streamerId} after an hour`);
+    db.deleteRaidProtection(streamerId);
+    return true;
+  }
+  return false;
+}
+
+function armRaidTimer(streamerId, delayMs, say) {
+  clearTimeout(raidProtectionTimers.get(streamerId));
+  const timer = setTimeout(() => {
+    raidProtectionTimers.delete(streamerId);
+    endRaidProtection(streamerId, say).catch((e) => console.error(`[Mod] Raid protection end failed for streamer ${streamerId}:`, e.message));
+  }, Math.max(0, delayMs));
+  timer.unref?.();
+  raidProtectionTimers.set(streamerId, timer);
+}
+
+// Boot: finish the protections that ended while the server was down and set a
+// timer for the ones still running, then check for overdue ones every minute.
+// A shutdown leaves the rows, so the next boot finishes them.
+async function resumeRaidProtection(say) {
+  const now = Date.now();
+  for (const row of db.listRaidProtections()) {
+    if (row.ends_at > now) armRaidTimer(row.streamer_id, row.ends_at - now, say);
+    else await endRaidProtection(row.streamer_id, say).catch((e) => console.error(`[Mod] Raid protection end failed for streamer ${row.streamer_id}:`, e.message));
+  }
+  if (raidTick) return;
+  raidTick = setInterval(() => {
+    const t = Date.now();
+    for (const row of db.listRaidProtections()) {
+      if (row.ends_at <= t && !raidProtectionTimers.has(row.streamer_id)) {
+        endRaidProtection(row.streamer_id, say).catch((e) => console.error(`[Mod] Raid protection end failed for streamer ${row.streamer_id}:`, e.message));
+      }
+    }
+  }, RAID_TICK_MS);
+  raidTick.unref?.();
+}
+
+function stopRaidProtectionTicks() {
+  if (raidTick) clearInterval(raidTick);
+  raidTick = null;
+  for (const timer of raidProtectionTimers.values()) clearTimeout(timer);
+  raidProtectionTimers.clear();
+}
+
 async function activateRaidProtection(client, channel, streamer) {
   if (!streamer.mod_raid_protection_enabled) return;
   const seconds = clampInt(streamer.mod_raid_protection_duration, 30, 600, 120);
-  const key = channel.replace(/^#/, '').toLowerCase();
+  // A second raid keeps the first one's stored settings: what Twitch reports
+  // now is the protection itself, not what the streamer had.
+  const existing = db.getRaidProtection(streamer.id);
+  const previous = existing ? null : await readFollowerSettings(channel, streamer);
 
   const enabled = await updateChatSettings(channel, streamer, {
     follower_mode: true,
@@ -569,18 +679,11 @@ async function activateRaidProtection(client, channel, streamer) {
   });
   if (!enabled) return;
 
-  // Only replace the switch-off timer once followers-only mode is on, so a
-  // failed request can never cancel the end of an earlier raid's protection.
-  clearTimeout(raidProtectionTimers.get(key));
+  // Only replace the stored end once followers-only mode is on, so a failed
+  // request can never cancel the end of an earlier raid's protection.
+  db.saveRaidProtection(streamer.id, Date.now() + seconds * 1000, existing ? existing.prev_follower_mode : previous?.mode, existing ? existing.prev_follower_mode_duration : previous?.duration);
   client.say(channel, `Raid protection activated for ${seconds} seconds. Followers-only mode enabled.`).catch(() => {});
-  const timer = setTimeout(async () => {
-    raidProtectionTimers.delete(key);
-    if (await updateChatSettings(channel, streamer, { follower_mode: false })) {
-      client.say(channel, 'Raid protection ended. Followers-only mode disabled.').catch(() => {});
-    }
-  }, seconds * 1000);
-  timer.unref?.();
-  raidProtectionTimers.set(key, timer);
+  armRaidTimer(streamer.id, seconds * 1000, (_s, text) => client.say(channel, text).catch(() => {}));
 }
 
 module.exports = {
@@ -592,4 +695,6 @@ module.exports = {
   grantPermit,
   handleModCommand,
   activateRaidProtection,
+  resumeRaidProtection,
+  stopRaidProtectionTicks,
 };

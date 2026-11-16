@@ -317,7 +317,6 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
   };
   if (!twitchLinked) return card;
 
-  const digestOwners = new Map(db.getGuildsWithWeeklyHighlights().map((row) => [row.guild_id, row.streamer_id]));
   for (const server of servers) {
     const own = server.watchers.find((w) => w.twitch_username === login && w.enabled);
     const channelName = (id) => {
@@ -337,7 +336,7 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
       clips: { state: onOff(clips), where: clips ? channelName(own.clips_channel_id) : null },
       recaps: onOff(server.recap_enabled && liveChannel),
       milestones: server.milestones_enabled && liveChannel ? (authorized ? 'on' : 'wait') : 'off',
-      highlights: onOff(server.weekly_highlights_enabled && own && digestOwners.get(server.guild_id) === streamer.id
+      highlights: onOff(server.weekly_highlights_enabled && own
         && db.getDigestChannelForGuild(server.guild_id)),
       subRoles: server.sub_sync_enabled && server.sub_role_id ? (authorized ? 'on' : 'wait') : 'off',
       // The working card's switches (services/dashboardCards.js): what each one stores, where the posts go (the

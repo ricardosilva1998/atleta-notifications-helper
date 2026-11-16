@@ -20,7 +20,12 @@ const dbStub = {
   addModLogEntry: () => {},
   getChatbotEnabledStreamers: () => [],
   getChatCommand: (_streamerId, name) => chatCommands[name] || null,
+  getRaidProtection: (id) => raidRows.get(id),
+  saveRaidProtection: (id, endsAt, mode, duration) => { if (!raidRows.has(id)) raidRows.set(id, { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0 }); },
+  deleteRaidProtection: (id) => { raidRows.delete(id); },
+  listRaidProtections: () => [...raidRows.values()],
 };
+const raidRows = new Map();
 
 // Synthetic credentials; src/config.js would exit without real env vars.
 const configStub = {
@@ -131,6 +136,9 @@ function stubTwitch(status = 200) {
     if (String(url) === 'https://id.twitch.tv/oauth2/validate') {
       return { ok: true, status: 200, json: async () => ({ user_id: '999', client_id: 'synthetic-bot-client-id', login: 'atletabot', scopes: [] }) };
     }
+    if (!opts.method || opts.method === 'GET') {
+      return { ok: true, status: 200, json: async () => ({ data: [{ follower_mode: false, follower_mode_duration: 0 }] }), text: async () => '' };
+    }
     helixCalls.push({ url: String(url), method: opts.method, body: opts.body ? JSON.parse(opts.body) : undefined });
     return { ok: status >= 200 && status < 300, status, json: async () => ({}), text: async () => '' };
   };
@@ -173,6 +181,7 @@ beforeEach(() => {
   streamer = streamerRow();
   bannedWords = [];
   bannedWordReads = 0;
+  raidRows.clear();
   chatCommands = {};
   shoutoutCalls.length = 0;
   stubTwitch(200);

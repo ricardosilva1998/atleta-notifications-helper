@@ -8,9 +8,19 @@ const path = require('path');
 
 const state = { bannedWords: [], modLog: [] };
 
+state.raidRows = new Map();
+state.streamers = new Map();
 const dbStub = {
   getBannedWords: () => state.bannedWords,
   addModLogEntry: (...args) => state.modLog.push(args),
+  getRaidProtection: (id) => state.raidRows.get(id),
+  saveRaidProtection: (id, endsAt, mode, duration) => {
+    const old = state.raidRows.get(id);
+    state.raidRows.set(id, old ? { ...old, ends_at: endsAt } : { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0 });
+  },
+  deleteRaidProtection: (id) => { state.raidRows.delete(id); },
+  listRaidProtections: () => [...state.raidRows.values()],
+  getStreamerById: (id) => state.streamers.get(id),
 };
 
 // src/config.js exits the process without real env vars, so it is stubbed.
@@ -70,6 +80,9 @@ let logs;
 beforeEach(() => {
   state.bannedWords = [];
   state.modLog = [];
+  state.raidRows.clear();
+  state.streamers.clear();
+  chatSettingsNow = { follower_mode: false, follower_mode_duration: 0 };
   logs = [];
   for (const level of ['log', 'warn', 'error']) {
     console[level] = (...args) => logs.push({ level, text: args.join(' ') });
@@ -156,6 +169,7 @@ function fakeClient() {
 
 // Twitch stub: the bot token validates as user 999; Helix answers `status`.
 let helixCalls;
+let chatSettingsNow = { follower_mode: false, follower_mode_duration: 0 };
 function stubTwitch(status = 200) {
   helixCalls = [];
   global.fetch = async (url, opts = {}) => {
@@ -164,6 +178,9 @@ function stubTwitch(status = 200) {
         ok: true, status: 200,
         json: async () => ({ user_id: '999', client_id: 'synthetic-bot-client-id', login: 'atletabot', scopes: [] }),
       };
+    }
+    if (!opts.method || opts.method === 'GET') {
+      return { ok: true, status: 200, json: async () => ({ data: [chatSettingsNow] }), text: async () => '' };
     }
     helixCalls.push({
       url: String(url), method: opts.method || 'GET', headers: opts.headers || {},
@@ -336,6 +353,7 @@ describe('raid protection', () => {
   test('turns on followers-only mode, then off again after the configured time', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     stubTwitch(200);
+    state.streamers.set(1, streamerRow());
     const client = fakeClient();
     await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
     assert.equal(helixCalls.length, 1);
@@ -351,6 +369,67 @@ describe('raid protection', () => {
     assert.equal(helixCalls.length, 2);
     assertSettingsRequest(helixCalls[1], { follower_mode: false });
     assert.equal(client.said[1].text, 'Raid protection ended. Followers-only mode disabled.');
+  });
+
+  test('puts back the followers-only mode the channel had before the raid', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 5_000_000 });
+    stubTwitch(200);
+    chatSettingsNow = { follower_mode: true, follower_mode_duration: 30 };
+    state.streamers.set(1, streamerRow());
+    const client = fakeClient();
+    await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
+    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_120_000, prev_follower_mode: 1, prev_follower_mode_duration: 30 });
+    t.mock.timers.tick(120_000);
+    await flush();
+    assertSettingsRequest(helixCalls[1], { follower_mode: true, follower_mode_duration: 30 });
+    assert.equal(state.raidRows.size, 0);
+  });
+
+  test('a second raid moves the end but keeps the first raid\'s stored settings', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 5_000_000 });
+    stubTwitch(200);
+    chatSettingsNow = { follower_mode: true, follower_mode_duration: 30 };
+    await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
+    chatSettingsNow = { follower_mode: true, follower_mode_duration: 10 }; // the protection itself
+    t.mock.timers.tick(60_000);
+    await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
+    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_180_000, prev_follower_mode: 1, prev_follower_mode_duration: 30 });
+  });
+
+  test('after a restart an overdue protection is ended and a running one is re-armed', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 9_000_000 });
+    stubTwitch(200);
+    state.streamers.set(1, streamerRow());
+    state.streamers.set(2, streamerRow({ id: 2, twitch_user_id: '111', twitch_username: 'other' }));
+    state.raidRows.set(1, { streamer_id: 1, ends_at: 8_000_000, prev_follower_mode: 0, prev_follower_mode_duration: 0 });
+    state.raidRows.set(2, { streamer_id: 2, ends_at: 9_060_000, prev_follower_mode: 1, prev_follower_mode_duration: 15 });
+    const said = [];
+    await mod.resumeRaidProtection((streamer, text) => said.push([streamer.id, text]));
+    assert.equal(state.raidRows.has(1), false);
+    assertSettingsRequest(helixCalls[0], { follower_mode: false });
+    assert.equal(state.raidRows.has(2), true);
+    t.mock.timers.tick(60_000);
+    await flush();
+    assertSettingsRequest(helixCalls[1], { follower_mode: true, follower_mode_duration: 15 });
+    assert.equal(state.raidRows.size, 0);
+    assert.equal(said.length, 2);
+    mod.stopRaidProtectionTicks();
+  });
+
+  test('a failed restore keeps the row, retries on the minute tick and gives up after an hour', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 9_000_000 });
+    stubTwitch(500);
+    state.streamers.set(1, streamerRow());
+    state.raidRows.set(1, { streamer_id: 1, ends_at: 8_900_000, prev_follower_mode: 0, prev_follower_mode_duration: 0 });
+    await mod.resumeRaidProtection(() => {});
+    assert.equal(state.raidRows.has(1), true, 'kept after a refusal');
+    t.mock.timers.tick(60_000);
+    await flush();
+    assert.equal(helixCalls.length, 2, 'tried again on the tick');
+    t.mock.timers.tick(61 * 60_000);
+    await flush();
+    assert.equal(state.raidRows.has(1), false, 'dropped after an hour');
+    mod.stopRaidProtectionTicks();
   });
 
   test('announces nothing and schedules nothing when Twitch refuses', async (t) => {

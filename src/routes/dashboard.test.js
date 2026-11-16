@@ -4206,7 +4206,7 @@ describe('the Discord notifications card on the Twitch tab', () => {
     assert.equal(switchOf(card, g, 'milestones_enabled').hint, esc(t('en', 'dashboard.cards.discord.wait')));
   });
 
-  test('weekly highlights: posted for the streamer the digest is made for (the first to switch it on in a shared server)', async () => {
+  test('weekly highlights: every streamer who switched it on in a shared server gets their own digest', async () => {
     const first = linked();
     const second = linked();
     const g = nextGuild();
@@ -4217,7 +4217,7 @@ describe('the Discord notifications card on the Twitch tab', () => {
       db.addWatchedChannel(g, id, loginOf(id), CH_LIVE, null, true, false, null);
     }
     assert.deepEqual([switchOf(await cardOf(first), g, 'weekly_highlights_enabled').warn], [false]);
-    assert.equal(switchOf(await cardOf(second), g, 'weekly_highlights_enabled').hint, esc(t('en', 'cards.discord.notPosted')), 'the digest of this server is made of the first streamer\'s channels');
+    assert.deepEqual([switchOf(await cardOf(second), g, 'weekly_highlights_enabled').warn], [false]);
   });
 
   test('several servers: how many announce the streamer\'s channel, a Channels link on each, an offline one named as stored', async () => {

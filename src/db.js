@@ -566,6 +566,20 @@ db.exec(`
     last_digest_date TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS weekly_digest_posts (
+    guild_id TEXT NOT NULL,
+    streamer_id INTEGER NOT NULL,
+    last_digest_date TEXT,
+    PRIMARY KEY (guild_id, streamer_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS raid_protection (
+    streamer_id INTEGER PRIMARY KEY,
+    ends_at INTEGER NOT NULL,
+    prev_follower_mode INTEGER NOT NULL DEFAULT 0,
+    prev_follower_mode_duration INTEGER NOT NULL DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS channel_milestones (
     twitch_username TEXT PRIMARY KEY,
     last_follower_count INTEGER DEFAULT 0,
@@ -1579,6 +1593,8 @@ const STREAMER_OWNED_ROWS = [
   ['overlay_events', 'streamer_id = ?'],
   ['pending_tips', 'streamer_id = ?'],
   ['poller_state', 'streamer_id = ?'],
+  ['raid_protection', 'streamer_id = ?'],
+  ['weekly_digest_posts', 'streamer_id = ?'],
   ['user_links', 'streamer_id = ?'],
   ...WATCHER_TABLES.map((table) => [table, 'streamer_id = ?']),
   ['transactions', 'streamer_id = ?'],
@@ -1827,33 +1843,64 @@ function updateChannelMilestones(twitchUsername, updates) {
 
 // --- Weekly Digest State ---
 
-const _getWeeklyDigestState = db.prepare('SELECT * FROM weekly_digest_state WHERE guild_id = ?');
+// One digest per streamer per server: the state is keyed by guild and streamer.
+// The old per-guild rows move to the guild's MIN(streamer_id), the one the
+// poller used to pick, so nothing is posted twice in the week of the upgrade.
+_runOnce('weekly_digest_state_per_streamer', () => {
+  db.prepare(`
+    INSERT OR IGNORE INTO weekly_digest_posts (guild_id, streamer_id, last_digest_date)
+    SELECT w.guild_id, MIN(g.streamer_id), w.last_digest_date
+    FROM weekly_digest_state w JOIN guilds g ON g.guild_id = w.guild_id
+    GROUP BY w.guild_id
+  `).run();
+});
+
+const _getWeeklyDigestState = db.prepare('SELECT * FROM weekly_digest_posts WHERE guild_id = ? AND streamer_id = ?');
 const _upsertWeeklyDigestDate = db.prepare(`
-  INSERT INTO weekly_digest_state (guild_id, last_digest_date) VALUES (?, ?)
-  ON CONFLICT(guild_id) DO UPDATE SET last_digest_date = excluded.last_digest_date
+  INSERT INTO weekly_digest_posts (guild_id, streamer_id, last_digest_date) VALUES (?, ?, ?)
+  ON CONFLICT(guild_id, streamer_id) DO UPDATE SET last_digest_date = excluded.last_digest_date
 `);
 
-function getWeeklyDigestState(guildId) {
-  return _getWeeklyDigestState.get(guildId);
+function getWeeklyDigestState(guildId, streamerId) {
+  return _getWeeklyDigestState.get(guildId, streamerId);
 }
 
-function updateWeeklyDigestDate(guildId, dateStr) {
-  _upsertWeeklyDigestDate.run(guildId, dateStr);
+function updateWeeklyDigestDate(guildId, streamerId, dateStr) {
+  _upsertWeeklyDigestDate.run(guildId, streamerId, dateStr);
 }
 
 // --- Weekly Highlights Guilds ---
 
 const _getGuildsWithWeeklyHighlights = db.prepare(`
-  SELECT g.guild_id, MIN(g.streamer_id) AS streamer_id
+  SELECT g.guild_id, g.streamer_id
   FROM guilds g
   JOIN streamers s ON g.streamer_id = s.id
   WHERE g.weekly_highlights_enabled = 1 AND s.enabled = 1
-  GROUP BY g.guild_id
+  ORDER BY g.guild_id, g.streamer_id
 `);
 
 function getGuildsWithWeeklyHighlights() {
   return _getGuildsWithWeeklyHighlights.all();
 }
+
+// --- Raid protection (survives a restart) ---
+
+const _getRaidProtection = db.prepare('SELECT * FROM raid_protection WHERE streamer_id = ?');
+const _saveRaidProtection = db.prepare(`
+  INSERT INTO raid_protection (streamer_id, ends_at, prev_follower_mode, prev_follower_mode_duration)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(streamer_id) DO UPDATE SET ends_at = excluded.ends_at
+`);
+const _deleteRaidProtection = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ?');
+const _listRaidProtections = db.prepare('SELECT * FROM raid_protection');
+
+function getRaidProtection(streamerId) { return _getRaidProtection.get(streamerId); }
+// A second raid only moves the end: the settings to restore stay the first ones.
+function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration) {
+  _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0);
+}
+function deleteRaidProtection(streamerId) { _deleteRaidProtection.run(streamerId); }
+function listRaidProtections() { return _listRaidProtections.all(); }
 
 // --- Digest Channel ---
 
@@ -5859,6 +5906,10 @@ module.exports = {
   getChannelMilestones,
   updateChannelMilestones,
   getWeeklyDigestState,
+  getRaidProtection,
+  saveRaidProtection,
+  deleteRaidProtection,
+  listRaidProtections,
   updateWeeklyDigestDate,
   getGuildsWithWeeklyHighlights,
   getDigestChannelForGuild,

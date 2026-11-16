@@ -18,14 +18,14 @@ const world = {}; // everything the stubs know; rebuilt before each test
 const dbStub = {
   getGuildsWithWeeklyHighlights: () => world.guilds,
   getStreamerTier: () => world.tier,
-  getWeeklyDigestState: (guildId) => (world.postedOn[guildId] ? { last_digest_date: world.postedOn[guildId] } : undefined),
+  getWeeklyDigestState: (guildId, streamerId) => (world.postedOn[`${guildId}:${streamerId}`] ? { last_digest_date: world.postedOn[`${guildId}:${streamerId}`] } : undefined),
   getDigestChannelForGuild: (guildId) => world.channelOf[guildId] || null,
   getWatchedChannelsForGuild: (guildId) => (world.watched[guildId] || []).map((twitch_username) => ({ twitch_username })),
   getChannelState: () => ({ twitch_broadcaster_id: '777' }),
   updateChannelState: () => {},
-  updateWeeklyDigestDate: (guildId, date) => {
+  updateWeeklyDigestDate: (guildId, streamerId, date) => {
     if (world.recordFails) throw new Error('database is locked');
-    world.postedOn[guildId] = date;
+    world.postedOn[`${guildId}:${streamerId}`] = date;
     world.recorded.push([guildId, date]);
   },
 };
@@ -162,6 +162,27 @@ describe('what gets posted', () => {
     await tick('09:05');
     assert.equal(world.sends.length, 2);
     assert.equal(world.twitchCalls.filter((c) => c[0] === 'videos').length, 1);
+  });
+});
+
+describe('one digest per streamer per server', () => {
+  test('two streamers on one server each get a digest, and each is recorded on its own', async () => {
+    world.guilds = [{ guild_id: G1, streamer_id: 1 }, { guild_id: G1, streamer_id: 2 }];
+    await tick('09:05');
+    assert.equal(world.sends.length, 2);
+    assert.deepEqual(world.sends.map((s) => s.meta.streamerId), [1, 2]);
+    assert.deepEqual(Object.keys(world.postedOn).sort(), [`${G1}:1`, `${G1}:2`]);
+    await tick('09:25');
+    assert.equal(world.sends.length, 2, 'neither is posted twice');
+  });
+
+  test('one streamer failing does not hold back the other\'s retries or post', async () => {
+    world.guilds = [{ guild_id: G1, streamer_id: 1 }, { guild_id: G1, streamer_id: 2 }];
+    world.sendOutcome = (guildId, n) => n === 1 ? false : true;
+    await tick('09:05');
+    assert.deepEqual(Object.keys(world.postedOn), [`${G1}:2`]);
+    await tick('09:25');
+    assert.deepEqual(Object.keys(world.postedOn).sort(), [`${G1}:1`, `${G1}:2`]);
   });
 });
 
