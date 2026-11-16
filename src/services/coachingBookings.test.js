@@ -918,6 +918,33 @@ describe('reschedule (the coach starts it; a proposal is held like a booking)', 
       assert.equal((await ask(s, viewer(2), { startsAt: NOW + 96 * HOUR })).ok, true, 'the freed time can be booked');
     });
 
+    test('a proposal replaced while the tick is busy with an earlier row is kept, and no lapse message is sent', async () => {
+      const s = addStreamer();
+      const a = await confirmed({ s, v: viewer(1), startsAt: FREE });
+      const b = await confirmed({ s, v: viewer(2), startsAt: FREE + 24 * HOUR });
+      await svc.startReschedule(s, a.id, { way: 'propose', startsAt: NOW + 96 * HOUR, now: NOW });
+      await svc.startReschedule(s, b.id, { way: 'propose', startsAt: NOW + 100 * HOUR, now: NOW + MIN });
+      discord.sent = [];
+      const later = NOW + 49 * HOUR;
+      const fresh = NOW + 120 * HOUR;
+      const realSend = discord.sendDirectMessage;
+      let replaced = false;
+      discord.sendDirectMessage = async function (userId, payload) {
+        if (!replaced) {
+          replaced = true;
+          assert.equal(db.proposeCoachingTime(b.id, 'coach', fresh, 'new', later).ok, true);
+        }
+        return realSend.call(this, userId, payload);
+      };
+      try {
+        const r = await svc.runDueReschedules({ now: later });
+        assert.equal(r.dropped, 1);
+      } finally { discord.sendDirectMessage = realSend; }
+      assert.equal(row(s, b.id).proposal_starts_at, fresh);
+      assert.equal(row(s, b.id).proposal_at, later);
+      assert.equal(to(b.v.discordUserId).length, 0, 'no lapse message for the replaced proposal');
+    });
+
     test('a viewer proposal unanswered for 48 h is dropped and the coach is reminded, whatever the notify switch says', async () => {
       const s = addStreamer({ settings: { notifyRequests: 0 } });
       const { v, id } = await confirmed({ s });

@@ -445,12 +445,13 @@ describe('coaching reschedule and refunds', () => {
     const id = addStreamer();
     const b = confirmed(id, 'D1', START);
     db.startCoachingReschedule(b.id, id, 'propose', { startsAt: START + 6 * 3600e3 }, NOW);
-    const r = db.dropCoachingProposal(b.id, NOW + 1);
+    assert.equal(db.dropCoachingProposal(b.id, NOW + 1).code, 'not_due');
+    const r = db.dropCoachingProposal(b.id, NOW + 49 * 3600e3);
     assert.equal(r.ok, true);
     assert.equal(r.dropped.by, 'coach');
     assert.equal(r.booking.reschedule_way, 'ask');
     assert.equal(held(id).length, 0);
-    assert.equal(db.dropCoachingProposal(b.id, NOW).code, 'no_proposal');
+    assert.equal(db.dropCoachingProposal(b.id, NOW + 49 * 3600e3).code, 'no_proposal');
   });
 
   test('coach cancel of a paid booking stores the reason and marks its captured payment pending, with the payer saved', () => {

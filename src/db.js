@@ -6271,6 +6271,8 @@ function acceptCoachingProposal(id, by, now) { return _acceptCoachingProposal.im
 const _dropCoachingProposal = db.transaction((id, now) => {
   const b = getCoachingBookingById(id);
   if (!b || b.status !== 'rescheduling' || b.proposal_starts_at == null) return { ok: false, code: 'no_proposal' };
+  const due = coaching.rescheduleDue(b, now);
+  if (due !== 'too_close' && due !== 'lapse_viewer' && due !== 'lapse_coach') return { ok: false, code: 'not_due' };
   db.prepare(`UPDATE coaching_bookings SET ${_PROPOSAL_CLEAR}, reschedule_way = 'ask' WHERE id = ?`).run(id);
   return { ok: true, booking: getCoachingBookingById(id), dropped: { by: b.proposal_by, startsAt: b.proposal_starts_at, note: b.proposal_note, at: b.proposal_at } };
 });
@@ -6280,6 +6282,7 @@ function dropCoachingProposal(id, now) { return _dropCoachingProposal.immediate(
 const _closeCoachingReschedule = db.transaction((id, now) => {
   const b = getCoachingBookingById(id);
   if (!b || b.status !== 'rescheduling') return { ok: false, code: 'not_rescheduling' };
+  if (coaching.rescheduleDue(b, now) !== 'close') return { ok: false, code: 'not_due' };
   db.prepare(`UPDATE coaching_bookings SET status = 'not_rescheduled', decided_at = ?, ${_PROPOSAL_CLEAR} WHERE id = ?`).run(now, id);
   const pending = _markPaymentsPending(id, 'not_rescheduled', now).changes;
   return { ok: true, booking: getCoachingBookingById(id), refundPending: pending > 0 };
