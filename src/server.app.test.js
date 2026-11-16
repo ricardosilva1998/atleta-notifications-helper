@@ -211,6 +211,16 @@ describe('the retired Racing API answers 410 Gone, and the old Racing pages redi
 // English, unless the visitor picked a language with the switcher (the lang
 // cookie). The browser's own language is not used, so no answer varies by it.
 
+describe('the legacy paid flow is hidden while features.pricing is off', () => {
+  test('/pricing and every /payment route redirect to the dashboard', async () => {
+    for (const [method, urlPath] of [['GET', '/pricing'], ['GET', '/payment'], ['GET', '/payment/subscription'], ['GET', '/payment/success'], ['GET', '/payment/cancel'], ['POST', '/payment/create'], ['POST', '/payment/subscription/cancel']]) {
+      const res = await send(method, urlPath, { json: method === 'POST' ? {} : undefined, headers: { Origin: 'http://localhost:3000' } });
+      assert.equal(res.status, 302, `${method} ${urlPath}`);
+      assert.equal(res.headers.location, '/dashboard', `${method} ${urlPath}`);
+    }
+  });
+});
+
 describe('pages are in English unless the visitor picked a language', () => {
   const varies = (res) => (res.headers.vary || '').split(',').map((v) => v.trim().toLowerCase()).includes('accept-language');
 

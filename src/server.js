@@ -243,6 +243,12 @@ app.get('/donate', (req, res) => {
   res.render('donate', { streamer: req.streamer || null });
 });
 
+// The legacy paid flow stays off until features.pricing is switched on.
+app.use(['/pricing', '/payment'], (req, res, next) => {
+  if (config.features.pricing) return next();
+  res.redirect('/dashboard');
+});
+
 app.get('/pricing', (req, res) => {
   res.render('pricing', {
     streamer: req.streamer || null,
