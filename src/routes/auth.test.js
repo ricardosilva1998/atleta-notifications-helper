@@ -699,6 +699,14 @@ describe('the coaching sign-in', () => {
     }
   });
 
+  test('a sign-in whose `for` is repeated is refused, never read as the coach-less one', async () => {
+    for (const q of ['for=a&for=b', 'for=&for=']) {
+      const res = await request(`/auth/coaching-signin?${q}`);
+      assert.equal(res.status, 404, q);
+      assert.deepEqual(setCookies(res), [], `${q}: no cookie`);
+    }
+  });
+
   test('a sign-in without the purpose cookie still creates a streamer as before', async () => {
     // A coaching sign-in left half-way: the streamer's own login forgets its purpose.
     const start = await request('/auth/login', { cookie: 'oauth_purpose=coaching%3Acoach_one' });

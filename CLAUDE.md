@@ -468,3 +468,15 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** F1.1 reproduction (status `rescheduling`, paid_at NULL, starts_at = original_starts_at = now - 1 h, reschedule_started_at = now - 2 h, way `ask`) through `coachingBookings.withdraw` answers `{ ok: true }`, booking `withdrawn`.
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-16 — team-security (T5, coaching booking in steps and My bookings)
+**Task:** Security pass over `git diff main...HEAD`: coach-less sign-in, `/my-bookings/state`, CSRF, the `/paid` redirect, DM links, script rendering, the home link
+**Findings:**
+- OK: the sign-in redirect is a fixed `/my-bookings` or `/coaching/<encoded login>` (login pattern-checked); the empty-login purpose is read only after the state matched, any other non-matching purpose is 400; a repeated `for` is refused.
+- OK: `/my-bookings/state` reads by the session's own Discord id, uses `forViewer` views (no payer details), marks a disabled or never-set-up coach unavailable, answers 401 without a viewer, `Cache-Control: private, no-store`.
+- OK: the new page's POSTs go to the existing `/coaching/<login>/...` routes behind the global CSRF; the page includes `csrf.ejs`.
+- OK: `/paid` adds `booking=<numeric id>` only for a booking of that streamer, errors are fixed codes, the order is pattern-checked and URL-encoded.
+- OK: the DM link carries only the booking id; scripts build the DOM with `textContent`, no `innerHTML`; JSON embeds escape `<`; avatar `src` needs https, PayPal redirect is checked with `isPayPalUrl`.
+**Files:** src/routes/auth.test.js, CLAUDE.md
+**Fixes applied:** none needed; one regression test added (repeated `for` is 404 with no cookie). Scratch suite: 4125 tests, 4124 pass, 0 fail, 1 pre-existing skip.
+**Open:** none
