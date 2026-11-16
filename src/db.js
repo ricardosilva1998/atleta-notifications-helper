@@ -4258,6 +4258,8 @@ try {
   db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_booking ON coaching_payments(booking_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_status ON coaching_payments(status, created_at)');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_coaching_payments_capture ON coaching_payments(capture_id) WHERE capture_id IS NOT NULL');
+  // The PayPal account id PayPal named for the payee when the order was made: the strongest proof the money reached it.
+  addColumns('coaching_payments', [['payee_merchant_id', 'TEXT']]);
   db.exec(`
     CREATE TABLE IF NOT EXISTS coaching_rooms (
       booking_id INTEGER PRIMARY KEY,
@@ -6027,11 +6029,12 @@ function getViewerCoachingBookings(streamerId, discordUserId, sinceMs) {
 }
 
 // Conditional move: only from one of the listed states; returns the updated row, or null.
-function setCoachingBookingStatus(id, streamerId, fromStatuses, toStatus, now) {
+// `unpaidOnly`: a booking with a recorded payment is left as it is (no cancel after payment).
+function setCoachingBookingStatus(id, streamerId, fromStatuses, toStatus, now, { unpaidOnly = false } = {}) {
   if (!fromStatuses || !fromStatuses.length) return null;
   const marks = fromStatuses.map(() => '?').join(', ');
   const info = db.prepare(
-    `UPDATE coaching_bookings SET status = ?, decided_at = ? WHERE id = ? AND streamer_id = ? AND status IN (${marks})`
+    `UPDATE coaching_bookings SET status = ?, decided_at = ? WHERE id = ? AND streamer_id = ? AND status IN (${marks})${unpaidOnly ? ' AND paid_at IS NULL' : ''}`
   ).run(toStatus, now, id, streamerId, ...fromStatuses);
   return info.changes ? getCoachingBooking(id, streamerId) : null;
 }
@@ -6063,11 +6066,11 @@ function getCoachingBookingById(id) {
 }
 
 // A PayPal order made for a booking, kept until it is captured (or dropped after a day).
-function createCoachingPayment({ orderId, bookingId, streamerId, amountCents, currency, payeeEmail, now }) {
+function createCoachingPayment({ orderId, bookingId, streamerId, amountCents, currency, payeeEmail, payeeMerchantId, now }) {
   db.prepare(`
-    INSERT OR IGNORE INTO coaching_payments (order_id, booking_id, streamer_id, amount_cents, currency, payee_email, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'created', ?)
-  `).run(orderId, bookingId, streamerId, amountCents, currency, payeeEmail, now);
+    INSERT OR IGNORE INTO coaching_payments (order_id, booking_id, streamer_id, amount_cents, currency, payee_email, payee_merchant_id, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?)
+  `).run(orderId, bookingId, streamerId, amountCents, currency, payeeEmail, payeeMerchantId || null, now);
   return getCoachingPayment(orderId);
 }
 

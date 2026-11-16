@@ -410,6 +410,36 @@ describe('Accept, Decline and Cancel', () => {
     assert.equal(db.getCoachingBooking(past.id, s.id).status, 'waiting');
   });
 
+  test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and no Cancel once paid', async () => {
+    const s = addStreamer();
+    const paidHold = (startsAt, now = Date.now()) => {
+      const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
+      assert.ok(made.ok, made.code);
+      return made.booking;
+    };
+    const booking = paidHold(freeNow(s)[0]);
+    const noPaypal = await post(`/dashboard/api/coaching/bookings/${booking.id}/accept`, { streamer: s });
+    assert.equal(noPaypal.status, 409);
+    assert.deepEqual(noPaypal.json, { ok: false, code: 'no_paypal', error: errorOf('no_paypal') });
+
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
+    const soon = paidHold(Date.now() + 24 * 60e3, Date.now() - 86400e3);
+    const close = await post(`/dashboard/api/coaching/bookings/${soon.id}/accept`, { streamer: s });
+    assert.equal(close.status, 409);
+    assert.deepEqual(close.json, { ok: false, code: 'too_close', error: errorOf('too_close') });
+    assert.equal(db.getCoachingBooking(soon.id, s.id).status, 'waiting');
+
+    const ok = await post(`/dashboard/api/coaching/bookings/${booking.id}/accept`, { streamer: s });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.booking.state, 'awaiting_payment');
+    assert.equal(ok.json.booking.priceCents, 2500);
+    db.recordCoachingPayment({ bookingId: booking.id, orderId: 'DASHORDER0001', captureId: 'DASHCAP0001', amountCents: 2500, currency: 'EUR', now: Date.now() });
+    const cancel = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    assert.equal(cancel.status, 409);
+    assert.deepEqual(cancel.json, { ok: false, code: 'paid', error: errorOf('paid') });
+    assert.equal(db.getCoachingBooking(booking.id, s.id).status, 'confirmed');
+  });
+
   test("another streamer's booking answers not_found", async () => {
     const mine = addStreamer();
     const theirs = addStreamer();

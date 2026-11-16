@@ -40,6 +40,9 @@ const REFUSALS = {
   too_late: [409, 'coaching.dashboard.error.too_late'],
   not_waiting: [409, 'coaching.dashboard.error.not_waiting'],
   not_active: [409, 'coaching.dashboard.error.not_active'],
+  no_paypal: [409, 'coaching.dashboard.error.no_paypal'],
+  too_close: [409, 'coaching.dashboard.error.too_close'],
+  paid: [409, 'coaching.dashboard.error.paid'],
 };
 function refuse(res, code) {
   const [status, key] = REFUSALS[code] || [400, 'coaching.page.failed'];

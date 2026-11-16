@@ -4,7 +4,8 @@
 // "The viewer's side"). Anyone can look at it; booking needs a viewer, req.viewer, which server.js's session step
 // sets from the viewer's own Discord sign-in (/auth/coaching-signin, viewer_sessions) or from a streamer signed in to
 // the site. The page (views/coaching.ejs) is drawn by public/js/coaching-page.js from GET /state, and posts to /book
-// and /bookings/:id/cancel with the CSRF token of the visitor's session. Every refusal is { ok: false, code, error },
+// and /bookings/:id/cancel with the CSRF token of the visitor's session; /bookings/:id/pay starts the PayPal payment of a
+// booking the streamer accepted, and PayPal sends the viewer back to /paid (services/coachingPayments.js). Every refusal is { ok: false, code, error },
 // the error being the code's text in the page's language. Times travel as UTC milliseconds; the page shows them in
 // the viewer's own time zone.
 
@@ -13,6 +14,7 @@ const db = require('../db');
 const discord = require('../discord');
 const coaching = require('../services/coaching');
 const coachingBookings = require('../services/coachingBookings');
+const coachingPayments = require('../services/coachingPayments');
 const { isStreamerDisabled } = require('../services/streamerAccess');
 
 const router = Router();
@@ -23,6 +25,7 @@ const PAST_DAYS = 30; // the viewer's bookings of the last 30 days are listed un
 const REFUSAL_STATUS = {
   signin: 401, unavailable: 404, not_found: 404, bad_length: 400, bad_note: 400,
   not_open: 409, join_first: 409, bad_time: 409, taken: 409, limit: 409, too_late: 409, not_active: 409, too_many: 429,
+  no_paypal: 409, paid: 409, not_awaiting: 409, pay_closed: 409, too_many_payments: 429, payment_failed: 502,
 };
 // bad_time and taken read the same: a time someone holds is refused as bad_time (it is no longer a free start) before
 // the insert's own check (taken) ever sees it, and for the viewer both mean "someone was quicker".
@@ -31,7 +34,16 @@ const ERROR_KEYS = {
   bad_length: 'coaching.error.bad_length', bad_note: 'coaching.error.bad_note', not_open: 'coaching.error.not_open',
   join_first: 'coaching.error.join_first', bad_time: 'coaching.error.taken', taken: 'coaching.error.taken',
   limit: 'coaching.error.limit', too_late: 'coaching.error.too_late', not_active: 'coaching.error.not_active',
-  too_many: 'coaching.error.too_many',
+  too_many: 'coaching.error.too_many', no_paypal: 'coaching.error.no_paypal', paid: 'coaching.error.paid',
+  not_awaiting: 'coaching.error.not_awaiting', pay_closed: 'coaching.error.pay_closed',
+  too_many_payments: 'coaching.error.too_many_payments', payment_failed: 'coaching.error.payment_failed',
+};
+// The codes /paid sends back to the page as ?error= (coachingPayments.returnErrorCode), with their texts; the page's
+// script shows them (paid and pay_closed are above).
+const RETURN_ERROR_KEYS = {
+  pay_invalid: 'coaching.error.pay_invalid', pay_unconfirmed: 'coaching.error.pay_unconfirmed',
+  not_paid: 'coaching.error.not_paid', late: 'coaching.error.late',
+  paid: 'coaching.error.paid', pay_closed: 'coaching.error.pay_closed',
 };
 
 function refuse(res, code) {
@@ -86,12 +98,15 @@ function serverName(settings, claims) {
 
 // What the page draws: the free starts of both lengths (none while nothing can be booked), the viewer and their own
 // bookings of the last 30 days and to come, and where to join. Never waits on Discord (see withMembership).
+// `lengths` are the ones the viewer can pick (switched on; a paid one only while the streamer has a PayPal email), each
+// with its price in cents of `currency` (0 = free), and `slots` holds the free starts of each of them.
 function pageState(streamer, settings, viewer, now) {
   const claims = db.getGuildsForStreamer(streamer.id);
   const bookable = coaching.bookable(settings, claims.map((g) => g.guild_id));
   const held = bookable ? db.getHeldCoachingBookings(streamer.id, now) : [];
+  const lengths = coachingBookings.offeredLengths(streamer, settings);
   const slots = {};
-  for (const minutes of coaching.LENGTHS) {
+  for (const { minutes } of lengths) {
     slots[minutes] = bookable ? coaching.freeStarts({
       hours: settings.hours, timeZone: settings.time_zone, daysOff: settings.days_off, held, now, minutes,
     }) : [];
@@ -99,6 +114,8 @@ function pageState(streamer, settings, viewer, now) {
   return {
     open: !!settings.open,
     bookable,
+    lengths,
+    currency: coachingBookings.currencyOf(streamer),
     slots,
     viewer: viewer ? { displayName: viewer.displayName, username: viewer.username, avatar: viewer.avatar || null, fromStreamer: !!viewer.fromStreamer } : null,
     inviteUrl: settings.invite_code ? `https://discord.gg/${encodeURIComponent(settings.invite_code)}` : null,
@@ -175,4 +192,33 @@ router.post('/:username/bookings/:id/cancel', async (req, res) => {
   res.json({ ok: true, booking: coachingBookings.bookingView(result.booking, now) });
 });
 
+// Pay for a booking the streamer accepted: the viewer's own, awaiting payment, before its deadline. Answers
+// { ok: true, approveUrl }, the PayPal page the script sends the viewer to.
+router.post('/:username/bookings/:id/pay', async (req, res) => {
+  const page = coachingPage(req);
+  if (!page) return refuse(res, 'unavailable');
+  if (!req.viewer) return refuse(res, 'signin');
+  const id = /^\d{1,15}$/.test(req.params.id) ? Number(req.params.id) : 0;
+  if (!id) return refuse(res, 'not_found');
+  const result = await coachingPayments.startPayment(page.streamer, req.viewer, id, { lang: res.locals.lang });
+  if (!result.ok) return refuse(res, result.code);
+  res.json({ ok: true, approveUrl: result.approveUrl });
+});
+
+// PayPal's return (the order id as `token`): the payment is captured and checked here, never taken from the browser's
+// word, then the viewer goes back to the page with ?paid=1 or ?error=<code>. A payment PayPal has not confirmed yet
+// (pay_unconfirmed) also carries &order=<id>, so the page can offer to check again (this route, again).
+router.get('/:username/paid', async (req, res) => {
+  const page = coachingPage(req);
+  if (!page) return unavailablePage(res);
+  const base = `/coaching/${encodeURIComponent(page.streamer.twitch_username)}`;
+  const orderId = typeof req.query.token === 'string' ? req.query.token : '';
+  const result = await coachingPayments.handleReturn({ streamer: page.streamer, orderId });
+  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}?paid=1` : `${base}?error=late`);
+  console.error(`[Coaching] return of order ${/^[A-Z0-9-]{1,64}$/i.test(orderId) ? orderId : '(invalid)'} for streamer ${page.streamer.id} not counted: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`);
+  const code = coachingPayments.returnErrorCode(result.reason);
+  res.redirect(`${base}?error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);
+});
+
 module.exports = router;
+module.exports.RETURN_ERROR_KEYS = RETURN_ERROR_KEYS;

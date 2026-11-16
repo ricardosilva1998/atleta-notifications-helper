@@ -5,52 +5,15 @@ const {
   tipInput, orderPayeeMerchantId, handleTipReturn, tipErrorResponse, reconcilePendingTips,
 } = require('../services/tipCapture');
 const { isStreamerDisabled } = require('../services/streamerAccess');
+const { paypalClient } = require('../services/paypal');
 
 const router = Router();
 
-// --- PayPal API helpers ---
+// --- PayPal API helpers (services/paypal.js) ---
 
-// A PayPal call gives up after this long instead of holding the viewer's request open.
-const PAYPAL_TIMEOUT_MS = 15000;
-
-async function getPayPalToken() {
-  const auth = Buffer.from(`${config.paypal.clientId}:${config.paypal.clientSecret}`).toString('base64');
-  const res = await fetch(`${config.paypal.baseUrl}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'grant_type=client_credentials',
-    signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
-  });
-  const data = await res.json();
-  if (!data.access_token) throw new Error(`PayPal token request failed (HTTP ${res.status})`);
-  return data.access_token;
-}
-
-// `Prefer: return=representation` returns the whole order. The default minimal
-// capture response has no purchase_units[0].payee, which the payee check needs.
-// A PayPal server error leaves the outcome unknown, so it throws like a timeout
-// and the order is read instead (services/tipCapture.js).
-async function capturePayPalOrder(orderId) {
-  const token = await getPayPalToken();
-  const res = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders/${orderId}/capture`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
-  });
-  if (res.status >= 500) throw new Error(`PayPal capture failed (HTTP ${res.status})`);
-  return res.json();
-}
-
-// The order as PayPal has it now (the full order, payee and captures included).
-async function getPayPalOrder(orderId) {
-  const token = await getPayPalToken();
-  const res = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders/${orderId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`PayPal order lookup failed (HTTP ${res.status})`);
-  return res.json();
-}
+const paypal = paypalClient(config.paypal);
+const capturePayPalOrder = (orderId) => paypal.capture(orderId);
+const getPayPalOrder = (orderId) => paypal.getOrder(orderId);
 
 // --- Tip page rendering ---
 
@@ -154,29 +117,21 @@ router.post('/:username/create', async (req, res) => {
   }
 
   try {
-    const token = await getPayPalToken();
-    const orderRes = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders`, {
-      method: 'POST',
-      // return=representation: the reply names the payee (purchase_units[0].payee), kept below
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({
-        intent: 'CAPTURE',
-        purchase_units: [{
-          amount: { currency_code: currency, value: amount.toFixed(2) },
-          // Shown to the donor at PayPal, so in the language they are reading this page in
-          description: t('tip.paypalDescription', { name: streamer.twitch_display_name || streamer.twitch_username }),
-          payee: { email_address: streamer.paypal_email },
-        }],
-        application_context: {
-          return_url: `${config.app.url}/tip/${streamer.twitch_username}/success`,
-          cancel_url: `${config.app.url}/tip/${streamer.twitch_username}`,
-          brand_name: 'Atleta',
-          user_action: 'PAY_NOW',
-        },
-      }),
-      signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
+    const order = await paypal.createOrder({
+      intent: 'CAPTURE',
+      purchase_units: [{
+        amount: { currency_code: currency, value: amount.toFixed(2) },
+        // Shown to the donor at PayPal, so in the language they are reading this page in
+        description: t('tip.paypalDescription', { name: streamer.twitch_display_name || streamer.twitch_username }),
+        payee: { email_address: streamer.paypal_email },
+      }],
+      application_context: {
+        return_url: `${config.app.url}/tip/${streamer.twitch_username}/success`,
+        cancel_url: `${config.app.url}/tip/${streamer.twitch_username}`,
+        brand_name: 'Atleta',
+        user_action: 'PAY_NOW',
+      },
     });
-    const order = await orderRes.json();
 
     const approveUrl = order.id && order.links?.find(l => l.rel === 'approve')?.href;
     if (approveUrl) {

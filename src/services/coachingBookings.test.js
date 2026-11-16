@@ -21,6 +21,8 @@ const realFs = require('fs');
 
 let db;
 let svc;
+// The room hook (services/coachingRooms.js): records which bookings asked for a room.
+const rooms = { made: [], url: null, async makeFor(id) { this.made.push(id); return this.url ? { url: this.url } : null; } };
 let counter = 0;
 const discord = {
   sent: [], sendResult: { ok: true }, member: true, memberCalls: 0, memberGate: null,
@@ -48,6 +50,7 @@ before(() => {
     if (parent && (parent.filename === SERVICE || parent.filename === MSG)) {
       if (request === '../discord') return discord;
       if (request === '../config') return { app: { url: 'https://atleta.test' } };
+      if (request === './coachingRooms') return rooms;
     }
     return origLoad(request, parent, isMain);
   };
@@ -72,27 +75,31 @@ beforeEach(() => {
   discord.inviteCalls = 0; discord.inviteGate = null;
   discord.invite = { ok: true, guildId: '123', guildName: 'HQ' };
   svc.forgetMembers(); // each test starts with no membership answer kept
+  rooms.made = []; rooms.url = null;
 });
 
+const coachingRules = require('./coaching');
 const HOURS = Array.from({ length: 7 }, (_, i) => ({ on: i < 5, start: 1080, end: 1320 }));
 const NOW = Date.UTC(2026, 10, 2, 19, 0); // Monday 19:00 Lisbon (UTC+0)
 const HOUR = 3600e3;
 const FREE = NOW + 25 * HOUR; // Tuesday 20:00
 const NEXT_FREE = FREE + 30 * 60e3;
 
-function addStreamer({ settings = {}, guild = true, twitch = true } = {}) {
+// 30 min and 1 h free (accepted straight to confirmed), the longer lengths at the default prices.
+const LENGTHS = { ...coachingRules.DEFAULT_LENGTHS, 30: { on: true, price: 0 }, 60: { on: true, price: 0 } };
+function addStreamer({ settings = {}, guild = true, twitch = true, paypal = 'coach@example.com' } = {}) {
   const n = ++counter;
   const discordId = `3000000000000${String(n).padStart(5, '0')}`;
-  const id = Number(db.db.prepare('INSERT INTO streamers (discord_user_id, discord_username, twitch_username, twitch_display_name) VALUES (?, ?, ?, ?)')
-    .run(discordId, `s${n}`, twitch ? `coach${n}` : null, twitch ? `Coach${n}` : null).lastInsertRowid);
+  const id = Number(db.db.prepare('INSERT INTO streamers (discord_user_id, discord_username, twitch_username, twitch_display_name, paypal_email) VALUES (?, ?, ?, ?, ?)')
+    .run(discordId, `s${n}`, twitch ? `coach${n}` : null, twitch ? `Coach${n}` : null, paypal).lastInsertRowid);
   if (guild) db.db.prepare('INSERT INTO guilds (guild_id, streamer_id, guild_name) VALUES (?, ?, ?)').run('123', id, 'HQ');
   if (settings) {
     db.saveCoachingSettings(id, {
       timeZone: 'Europe/Lisbon', hours: HOURS, daysOff: [], guildId: '123', inviteCode: 'abc', whereText: 'Voice room',
-      notifyRequests: 1, lang: 'en', ...settings,
+      notifyRequests: 1, lang: 'en', lengths: LENGTHS, ...settings,
     });
   }
-  return { id, discord_user_id: discordId, twitch_username: twitch ? `coach${n}` : null, twitch_display_name: twitch ? `Coach${n}` : null };
+  return { id, discord_user_id: discordId, twitch_username: twitch ? `coach${n}` : null, twitch_display_name: twitch ? `Coach${n}` : null, paypal_email: paypal, donation_currency: 'EUR' };
 }
 const viewer = (id) => ({ discordUserId: `4000000000000000${id}`, username: `u${id}`, displayName: `U ${id}`, avatar: null });
 const ask = (s, v, over = {}, opts = {}) => svc.request(s, v, { startsAt: FREE, minutes: 60, note: 'hi', lang: 'en', ...over }, { now: NOW, ...opts });
@@ -406,7 +413,10 @@ describe('cardData', () => {
     assert.equal(card.waiting[0].state, 'waiting');
     assert.equal(card.next.id, ids[1]);
     assert.equal(card.next.state, 'confirmed');
-    assert.deepEqual(Object.keys(card.next).sort(), ['id', 'messageError', 'minutes', 'note', 'startsAt', 'state', 'viewerAvatar', 'viewerName', 'viewerUsername']);
+    assert.deepEqual(Object.keys(card.next).sort(), [
+      'currency', 'id', 'messageError', 'minutes', 'note', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy', 'paymentIssue',
+      'priceCents', 'roomUrl', 'startsAt', 'state', 'viewerAvatar', 'viewerName', 'viewerUsername',
+    ]);
     db.setCoachingOpen(s.id, 1);
     db.recordInviteCheck(s.id, 'abc', 0, NOW);
     const broken = svc.cardData(s, { now: NOW, claimedGuildIds: ['123'] });
@@ -418,5 +428,132 @@ describe('cardData', () => {
     const v = svc.bookingView({ id: 1, starts_at: NOW - 1, minutes: 30, status: 'waiting', viewer_username: 'a', viewer_display_name: null, viewer_avatar: null, note: null, message_error: null }, NOW);
     assert.equal(v.state, 'unanswered');
     assert.equal(v.viewerName, 'a');
+  });
+});
+
+describe('lengths, prices and the accept change (planning decisions 3, 5, 6, 9)', () => {
+  const MIN = 60e3;
+  // 2 h at the default price, EUR 45.00.
+  const askPaid = (s, v, over = {}, opts = {}) => ask(s, v, { minutes: 120, ...over }, opts);
+
+  test('a request stores the length\'s price and the tip page\'s currency; a length switched off or paid without PayPal is refused', async () => {
+    const s = addStreamer();
+    const r = await askPaid(s, viewer(1));
+    assert.equal(r.ok, true);
+    assert.equal(r.booking.price_cents, 4500);
+    assert.equal(r.booking.currency, 'EUR');
+    assert.equal(r.booking.status, 'waiting');
+    const off = addStreamer({ settings: { lengths: { ...coachingRules.DEFAULT_LENGTHS } } }); // 30 min off by default
+    assert.equal((await ask(off, viewer(2), { minutes: 30 })).code, 'bad_length');
+    const noPaypal = addStreamer({ paypal: null });
+    assert.equal((await askPaid(noPaypal, viewer(3))).code, 'no_paypal');
+    assert.equal((await ask(noPaypal, viewer(3))).ok, true, 'a free length needs no PayPal');
+  });
+
+  test('accepting a paid request waits for payment until min(accept + 2 h, start - 15 min), and messages the viewer to pay', async () => {
+    const s = addStreamer();
+    const r = await askPaid(s, viewer(1));
+    discord.sent = [];
+    const a = await svc.accept(s, r.booking.id, { now: NOW });
+    assert.equal(a.ok, true);
+    assert.equal(a.booking.status, 'awaiting_payment');
+    assert.equal(a.booking.accepted_at, NOW);
+    assert.equal(a.booking.pay_by, NOW + 2 * HOUR, 'two hours: the start is a day away');
+    assert.equal(rooms.made.length, 0, 'no room before the payment');
+    const msg = discord.sent.find((m) => m.userId === viewer(1).discordUserId);
+    assert.match(msg.payload.embeds[0].title, /pay to confirm/);
+    assert.match(msg.payload.embeds[0].description, /€45\.00/);
+    assert.ok(coachingRules.HOLDING.includes('awaiting_payment'));
+    // Close to the start, the deadline is 15 minutes before it.
+    const s2 = addStreamer();
+    const r2 = await askPaid(s2, viewer(2));
+    const late = FREE - 60 * MIN;
+    const a2 = await svc.accept(s2, r2.booking.id, { now: late });
+    assert.equal(a2.booking.pay_by, FREE - 15 * MIN);
+  });
+
+  test('a paid request is refused at 24 minutes before its start (too_close) and accepted at 26; without PayPal it is no_paypal', async () => {
+    const s = addStreamer();
+    const r = await askPaid(s, viewer(1));
+    const at24 = await svc.accept(s, r.booking.id, { now: FREE - 24 * MIN });
+    assert.deepEqual(at24, { ok: false, code: 'too_close' });
+    assert.equal(db.getCoachingBooking(r.booking.id, s.id).status, 'waiting', 'still waiting: the streamer can decline it');
+    const at26 = await svc.accept(s, r.booking.id, { now: FREE - 26 * MIN });
+    assert.equal(at26.ok, true);
+    assert.equal(at26.booking.pay_by, FREE - 15 * MIN);
+
+    const s2 = addStreamer();
+    const r2 = await askPaid(s2, viewer(2));
+    const noPaypal = { ...s2, paypal_email: null }; // the email removed after the request
+    assert.deepEqual(await svc.accept(noPaypal, r2.booking.id, { now: NOW }), { ok: false, code: 'no_paypal' });
+    assert.equal((await svc.decline(noPaypal, r2.booking.id, { now: NOW })).ok, true, 'decline still works');
+  });
+
+  test('a free length is confirmed on accept, up to its start, and asks for its room', async () => {
+    const s = addStreamer();
+    const r = await ask(s, viewer(1)); // 1 h, free in these tests
+    rooms.url = 'https://discord.com/channels/123/456';
+    discord.sent = [];
+    const a = await svc.accept(s, r.booking.id, { now: FREE - 5 * MIN });
+    assert.equal(a.ok, true);
+    assert.equal(a.booking.status, 'confirmed');
+    assert.equal(a.booking.pay_by, null);
+    assert.deepEqual(rooms.made, [r.booking.id]);
+    assert.match(discord.sent[0].payload.embeds[0].description, /Your room: https:\/\/discord\.com\/channels\/123\/456/);
+  });
+
+  test('a booking made before prices (no price) is accepted as free', async () => {
+    const s = addStreamer();
+    const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(1), startsAt: FREE, minutes: 120, note: '', lang: 'en', now: NOW });
+    assert.equal(made.booking.price_cents, null);
+    const a = await svc.accept(s, made.booking.id, { now: NOW });
+    assert.equal(a.booking.status, 'confirmed');
+  });
+
+  test('Cancel and Withdraw of a paid booking answer paid and change nothing; before payment both work', async () => {
+    const s = addStreamer();
+    const v = viewer(1);
+    const r = await askPaid(s, v);
+    await svc.accept(s, r.booking.id, { now: NOW });
+    const rec = db.recordCoachingPayment({ bookingId: r.booking.id, orderId: 'ORDERPAID0001', captureId: 'CAPPAID0001', amountCents: 4500, currency: 'EUR', now: NOW + MIN });
+    assert.equal(rec.result, 'recorded');
+    assert.deepEqual(await svc.cancel(s, r.booking.id, { now: NOW + 2 * MIN }), { ok: false, code: 'paid' });
+    assert.deepEqual(await svc.withdraw(s, v, r.booking.id, { now: NOW + 2 * MIN }), { ok: false, code: 'paid' });
+    const row = db.getCoachingBooking(r.booking.id, s.id);
+    assert.equal(row.status, 'confirmed');
+    assert.ok(row.paid_at);
+
+    const r2 = await askPaid(s, viewer(2), { startsAt: FREE + 24 * HOUR });
+    await svc.accept(s, r2.booking.id, { now: NOW });
+    assert.equal((await svc.withdraw(s, viewer(2), r2.booking.id, { now: NOW })).booking.status, 'withdrawn', 'awaiting payment: Withdraw works');
+    const r3 = await askPaid(s, viewer(3), { startsAt: FREE + 48 * HOUR });
+    await svc.accept(s, r3.booking.id, { now: NOW });
+    assert.equal((await svc.cancel(s, r3.booking.id, { now: NOW })).booking.status, 'cancelled', 'awaiting payment: Cancel works');
+  });
+
+  test('a payment recorded between the check and the update wins: Cancel answers paid', async () => {
+    const s = addStreamer();
+    const r = await askPaid(s, viewer(1));
+    await svc.accept(s, r.booking.id, { now: NOW });
+    const real = db.getCoachingBooking;
+    let calls = 0;
+    db.getCoachingBooking = (...args) => {
+      const row = real(...args);
+      if (++calls === 1) {
+        db.recordCoachingPayment({ bookingId: r.booking.id, orderId: 'ORDERRACE0001', captureId: 'CAPRACE0001', amountCents: 4500, currency: 'EUR', now: NOW });
+      }
+      return row; // the row as it was read before the payment
+    };
+    try {
+      assert.deepEqual(await svc.cancel(s, r.booking.id, { now: NOW }), { ok: false, code: 'paid' });
+    } finally { db.getCoachingBooking = real; }
+    assert.equal(db.getCoachingBooking(r.booking.id, s.id).status, 'confirmed');
+  });
+
+  test('offeredLengths lists the lengths that are on, a paid one only with a PayPal email', () => {
+    const settings = { lengths: { ...coachingRules.DEFAULT_LENGTHS, 30: { on: true, price: 0 } } };
+    assert.deepEqual(svc.offeredLengths({ paypal_email: 'a@b.c' }, settings).map((l) => [l.minutes, l.priceCents]),
+      [[30, 0], [60, 2500], [120, 4500], [180, 6000], [240, 7000], [300, 8000]]);
+    assert.deepEqual(svc.offeredLengths({ paypal_email: null }, settings).map((l) => l.minutes), [30]);
   });
 });

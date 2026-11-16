@@ -749,7 +749,7 @@ describe('coaching: the viewer\'s own Discord sign-in, on the real session step 
 
   before(() => {
     login = 'coach_on_server';
-    streamerId = Number(db.db.prepare("INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, twitch_username) VALUES ('300000000000009001', 'coachstreamer', 'Coach Streamer', ?)").run(login).lastInsertRowid);
+    streamerId = Number(db.db.prepare("INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, twitch_username, paypal_email) VALUES ('300000000000009001', 'coachstreamer', 'Coach Streamer', ?, 'coach@example.com')").run(login).lastInsertRowid);
     db.db.prepare("INSERT INTO guilds (guild_id, streamer_id, guild_name) VALUES ('123', ?, 'Coach HQ')").run(streamerId);
     db.saveCoachingSettings(streamerId, { timeZone: 'Europe/Lisbon', hours: HOURS, daysOff: [], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en' });
   });

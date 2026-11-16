@@ -12,6 +12,7 @@ const config = require('../config');
 const { t } = require('../i18n');
 const coaching = require('./coaching');
 const messages = require('./coachingMessages');
+const rooms = require('./coachingRooms');
 
 const DAY_MS = 86400e3;
 const MEMBER_KEEP_MS = 30e3; // how long Discord's answer about a viewer's membership is kept (Ruling 8)
@@ -34,7 +35,28 @@ function bookingView(row, now) {
     viewerAvatar: row.viewer_avatar || null,
     note: row.note || '',
     messageError: row.message_error || null,
+    // A booking made before prices existed has none (null) and is treated as free.
+    priceCents: row.price_cents == null ? null : row.price_cents,
+    currency: row.currency || null,
+    payBy: row.pay_by || null,
+    paid: row.paid_at != null,
+    paidAmountCents: row.paid_amount_cents == null ? null : row.paid_amount_cents,
+    paidCurrency: row.paid_currency || null,
+    paymentIssue: row.payment_issue || null,
+    roomUrl: null, // the session's Discord room, once rooms exist (services/coachingRooms.js)
   };
+}
+
+// The currency of a streamer's coaching prices: their tip page's.
+const currencyOf = (streamer) => streamer.donation_currency || 'EUR';
+
+// The lengths a viewer can pick: switched on, and a paid one only while the streamer has a PayPal email to be paid at
+// (planning decision 5). [{ minutes, priceCents }] in LENGTHS order.
+function offeredLengths(streamer, settings) {
+  const lengths = settings && settings.lengths ? settings.lengths : coaching.lengthsFor(settings);
+  return coaching.LENGTHS
+    .filter((m) => lengths[m] && lengths[m].on && (lengths[m].price === 0 || !!streamer.paypal_email))
+    .map((m) => ({ minutes: m, priceCents: lengths[m].price }));
 }
 
 // Whether a viewer is in the coaching server, as discord.isGuildMember answers it: true, false, or null when Discord
@@ -72,7 +94,7 @@ function forgetMembers() {
 
 // The viewer's message, awaited: a failure's reason is stored and returned; a message that goes out clears the
 // reason a previous one left.
-async function messageViewer(streamer, settings, row, kind) {
+async function messageViewer(streamer, settings, row, kind, { roomUrl = null } = {}) {
   const lang = row.lang || 'en';
   let reason = null;
   try {
@@ -84,6 +106,8 @@ async function messageViewer(streamer, settings, row, kind) {
       inviteUrl: settings && settings.invite_code ? `https://discord.gg/${settings.invite_code}` : null,
       whereText: settings && settings.where_text ? settings.where_text : '',
       bookingUrl: bookingUrl(streamer),
+      roomUrl,
+      lang,
       t: (key, params) => t(lang, key, params),
     });
     const sent = await discord.sendDirectMessage(row.viewer_discord_id, payload);
@@ -95,15 +119,17 @@ async function messageViewer(streamer, settings, row, kind) {
   return reason;
 }
 
-// The streamer's message: started, never awaited by the caller, failures logged.
-function messageStreamer(streamer, settings, row, kind) {
-  if (!settings || !settings.notify_requests) return;
-  (async () => {
+// The streamer's message: started, never awaited by the caller (the promise is returned for the tests), failures
+// logged. `always`: sent even with "Message me about new requests" off (a payment to refund cannot wait for a visit).
+function messageStreamer(streamer, settings, row, kind, { always = false } = {}) {
+  if (!settings || (!settings.notify_requests && !always)) return Promise.resolve();
+  return (async () => {
     try {
       const lang = settings.lang || 'en';
       const payload = messages.streamerMessage(kind, {
         booking: row,
         scheduleUrl: scheduleUrl(),
+        lang,
         t: (key, params) => t(lang, key, params),
       });
       const sent = await discord.sendDirectMessage(streamer.discord_user_id, payload);
@@ -118,6 +144,9 @@ async function request(streamer, viewer, { startsAt, minutes, note, lang } = {},
   const settings = db.getCoachingSettings(streamer.id);
   if (!coaching.bookable(settings, claimedGuildIds(streamer))) return { ok: false, code: 'not_open' };
   if (!coaching.LENGTHS.includes(minutes)) return { ok: false, code: 'bad_length' };
+  const length = settings.lengths[minutes];
+  if (!length || !length.on) return { ok: false, code: 'bad_length' };
+  if (length.price > 0 && !streamer.paypal_email) return { ok: false, code: 'no_paypal' };
   const parsed = coaching.parseNote(note == null ? '' : note);
   if (!parsed.ok) return { ok: false, code: parsed.code };
   // The free times first: Discord is asked only about a request that could be booked.
@@ -130,41 +159,112 @@ async function request(streamer, viewer, { startsAt, minutes, note, lang } = {},
   if (member === false) return { ok: false, code: 'join_first' };
   // The transaction counts the viewer's requests of the last 24 h (too_many), their upcoming ones (limit), then
   // looks for an overlap (taken).
-  const made = db.createCoachingBooking({ streamerId: streamer.id, viewer, startsAt, minutes, note: parsed.note, lang, now });
+  // The price and currency are the booking's own from here on: a later change of either never changes it.
+  const made = db.createCoachingBooking({
+    streamerId: streamer.id, viewer, startsAt, minutes, note: parsed.note, lang, now,
+    priceCents: length.price, currency: currencyOf(streamer),
+  });
   if (!made.ok) return { ok: false, code: made.code };
   messageStreamer(streamer, settings, made.booking, 'request');
   return { ok: true, booking: made.booking, unverified: member === null };
 }
 
-// accept/decline: a waiting booking that has not started. cancel: waiting or confirmed, not started.
-async function decide(streamer, id, { from, to, kind, noCode }, now) {
+// decline/cancel: a booking that has not started. cancel: waiting, awaiting payment or confirmed, never once paid (no
+// cancel after payment, planning decision 9: the update itself skips a paid booking, so a payment recorded in between
+// wins).
+async function decide(streamer, id, { from, to, kind, noCode, unpaidOnly = false }, now) {
   const row = db.getCoachingBooking(id, streamer.id);
   if (!row) return { ok: false, code: 'not_found' };
+  if (unpaidOnly && row.paid_at != null) return { ok: false, code: 'paid' };
   if (!from.includes(row.status)) return { ok: false, code: noCode };
   if (row.starts_at <= now) return { ok: false, code: 'too_late' };
-  const updated = db.setCoachingBookingStatus(id, streamer.id, from, to, now);
-  if (!updated) return { ok: false, code: noCode };
+  const updated = db.setCoachingBookingStatus(id, streamer.id, from, to, now, { unpaidOnly });
+  if (!updated) {
+    const again = db.getCoachingBooking(id, streamer.id);
+    return { ok: false, code: unpaidOnly && again && again.paid_at != null ? 'paid' : noCode };
+  }
   const reason = await messageViewer(streamer, db.getCoachingSettings(streamer.id), updated, kind);
   return { ok: true, booking: { ...updated, message_error: reason, messageError: reason } };
 }
 
-const accept = (streamer, id, { now = Date.now() } = {}) =>
-  decide(streamer, id, { from: ['waiting'], to: 'confirmed', kind: 'accepted', noCode: 'not_waiting' }, now);
+// Once a booking is confirmed (a free length accepted, or a payment recorded): its room is made (the hook
+// coachingRooms.makeFor; nothing yet) and the viewer is messaged with the room's link, or the where text. Resolves to
+// the viewer message's failure reason (null when it went out); never throws.
+async function afterConfirmed(streamer, booking, kind) {
+  let room = null;
+  try { room = await rooms.makeFor(booking.id); } catch (e) {
+    console.error(`[Coaching] room for booking ${booking.id} failed:`, e && e.message);
+  }
+  const settings = db.getCoachingSettings(streamer.id);
+  return messageViewer(streamer, settings, booking, kind, { roomUrl: room && room.url ? room.url : null });
+}
+
+// Accept a waiting request that has not started. A paid length waits for the viewer's payment until
+// coaching.payBy(now, start) (planning decision 6): refused without the streamer's PayPal email (no_paypal) or when
+// the viewer would have under 10 minutes to pay (too_close). A free length (price 0, or a booking from before prices)
+// is confirmed at once.
+async function accept(streamer, id, { now = Date.now() } = {}) {
+  const row = db.getCoachingBooking(id, streamer.id);
+  if (!row) return { ok: false, code: 'not_found' };
+  if (row.status !== 'waiting') return { ok: false, code: 'not_waiting' };
+  if (row.starts_at <= now) return { ok: false, code: 'too_late' };
+  const paid = row.price_cents > 0;
+  if (paid && !streamer.paypal_email) return { ok: false, code: 'no_paypal' };
+  if (paid && !coaching.canAcceptPaid(now, row.starts_at)) return { ok: false, code: 'too_close' };
+  const updated = db.acceptCoachingBooking(id, streamer.id, now, paid ? coaching.payBy(now, row.starts_at) : null);
+  if (!updated) return { ok: false, code: 'not_waiting' };
+  const reason = paid
+    ? await messageViewer(streamer, db.getCoachingSettings(streamer.id), updated, 'acceptedPay')
+    : await afterConfirmed(streamer, updated, 'accepted');
+  return { ok: true, booking: { ...updated, message_error: reason, messageError: reason } };
+}
+
 const decline = (streamer, id, { now = Date.now() } = {}) =>
   decide(streamer, id, { from: ['waiting'], to: 'declined', kind: 'declined', noCode: 'not_waiting' }, now);
 const cancel = (streamer, id, { now = Date.now() } = {}) =>
-  decide(streamer, id, { from: ['waiting', 'confirmed'], to: 'cancelled', kind: 'cancelled', noCode: 'not_active' }, now);
+  decide(streamer, id, { from: coaching.HOLDING, to: 'cancelled', kind: 'cancelled', noCode: 'not_active', unpaidOnly: true }, now);
 
-// The viewer's own booking, waiting or confirmed (else not_active: answered or withdrawn already), until it starts.
+// The viewer's own booking, waiting, awaiting payment or confirmed (else not_active: answered or withdrawn already), until
+// it starts; never once paid (paid).
 async function withdraw(streamer, viewer, id, { now = Date.now() } = {}) {
   const row = db.getCoachingBooking(id, streamer.id);
   if (!row || row.viewer_discord_id !== viewer.discordUserId) return { ok: false, code: 'not_found' };
+  if (row.paid_at != null) return { ok: false, code: 'paid' };
   if (!coaching.HOLDING.includes(row.status)) return { ok: false, code: 'not_active' };
   if (row.starts_at <= now) return { ok: false, code: 'too_late' };
-  const updated = db.setCoachingBookingStatus(id, streamer.id, coaching.HOLDING, 'withdrawn', now);
-  if (!updated) return { ok: false, code: 'not_active' }; // the streamer answered in between
+  const updated = db.setCoachingBookingStatus(id, streamer.id, coaching.HOLDING, 'withdrawn', now, { unpaidOnly: true });
+  if (!updated) {
+    const again = db.getCoachingBooking(id, streamer.id);
+    return { ok: false, code: again && again.paid_at != null ? 'paid' : 'not_active' }; // paid or answered in between
+  }
   messageStreamer(streamer, db.getCoachingSettings(streamer.id), updated, 'withdrawn');
   return { ok: true, booking: updated };
+}
+
+// After a payment was recorded (services/coachingPayments.js), by recordCoachingPayment's result: a booking it
+// confirmed gets its room and both sides are told; a payment the booking could not take ('late_issue', 'double') is
+// told to the streamer, always, to refund in PayPal. Resolves when the messages are sent; never throws.
+async function afterPayment(streamer, booking, result) {
+  const settings = db.getCoachingSettings(streamer.id);
+  try {
+    if (result === 'recorded' || result === 'late_confirmed') {
+      await Promise.all([afterConfirmed(streamer, booking, 'confirmed'), messageStreamer(streamer, settings, booking, 'paid')]);
+    } else if (result === 'late_issue' || result === 'double') {
+      await messageStreamer(streamer, settings, booking, 'paymentLate', { always: true });
+    }
+  } catch (e) {
+    console.error(`[Coaching] after the payment of booking ${booking.id}:`, e && e.message);
+  }
+}
+
+// A booking that was not paid in time (coachingPayments.expireDue): both sides are told; never throws.
+async function afterExpired(streamer, booking) {
+  const settings = db.getCoachingSettings(streamer.id);
+  try {
+    await Promise.all([messageViewer(streamer, settings, booking, 'expired'), messageStreamer(streamer, settings, booking, 'unpaid')]);
+  } catch (e) {
+    console.error(`[Coaching] after the expiry of booking ${booking.id}:`, e && e.message);
+  }
 }
 
 // Asks Discord about the saved invite at most once an hour (or when forced) and records the answer: an unknown invite,
@@ -225,5 +325,6 @@ function cardData(streamer, { now = Date.now(), claimedGuildIds: claimed = [] } 
 }
 
 module.exports = {
-  bookingView, isMember, forgetMembers, request, accept, decline, cancel, withdraw, checkInvite, checkInviteLater, cardData,
+  bookingView, offeredLengths, currencyOf, isMember, forgetMembers, request, accept, decline, cancel, withdraw,
+  afterPayment, afterExpired, checkInvite, checkInviteLater, cardData,
 };
