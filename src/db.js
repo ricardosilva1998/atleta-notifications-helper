@@ -4853,6 +4853,10 @@ function getDonationMonthly(streamerId, currency, source) {
   `).all(...f.params, currency);
 }
 
+function getDonationById(id, streamerId) {
+  return db.prepare('SELECT id, amount, currency, created_at FROM donations WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
 function deleteDonation(id, streamerId) {
   return db.prepare('DELETE FROM donations WHERE id = ? AND streamer_id = ?').run(id, streamerId);
 }
@@ -5756,12 +5760,11 @@ function getTrackerSettings(streamerId) {
   return out;
 }
 
-// Writes a row (on, no colour) for each of `trackers` the streamer has none
-// for, leaving the rows there are; returns how many it wrote. The Tracking page
-// does this on its first visit, so the trackers that are on by default count as
-// in use (TRACKING_IN_USE reads the rows).
+// Writes a row (off, no colour) for each of `trackers` the streamer has none
+// for, leaving the rows there are; returns how many it wrote. Opening the
+// Tracking page does this, so it never switches a tracker on by itself.
 function ensureTrackerSettings(streamerId, trackers) {
-  const insert = db.prepare('INSERT OR IGNORE INTO tracker_settings (streamer_id, tracker, enabled, color) VALUES (?, ?, 1, NULL)');
+  const insert = db.prepare('INSERT OR IGNORE INTO tracker_settings (streamer_id, tracker, enabled, color) VALUES (?, ?, 0, NULL)');
   return db.transaction(() => trackers.reduce((written, tracker) => written + insert.run(streamerId, tracker).changes, 0))();
 }
 
@@ -6137,6 +6140,7 @@ module.exports = {
   countDonations,
   getDonationTotals,
   getDonationMonthly,
+  getDonationById,
   deleteDonation,
   cleanupOldDonations,
   getCoachingSettings, saveCoachingSettings, setCoachingOpen, recordInviteCheck,

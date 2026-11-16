@@ -28,6 +28,7 @@ const {
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction, parseSwitch } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
+const REWARD_COOLDOWN_MAX = 604800; // Twitch's longest global cooldown, 7 days
 const { EVENT_DEFAULTS, OVERLAY_FONTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
 const { ALERTS: STYLED_ALERTS, DEFAULT_STYLES, canUseStyle, familyStyles, galleryFor, familyKeys, soundGroups, secondVersionOf, fontsOf } = require('../services/alertStyles');
@@ -1435,7 +1436,18 @@ router.get('/donations/history.csv', (req, res) => {
 });
 
 router.post('/donations/history/:id/delete', (req, res) => {
-  db.deleteDonation(parseInt(req.params.id), req.streamer.id);
+  const id = parseInt(req.params.id, 10);
+  const donation = Number.isInteger(id) ? db.getDonationById(id, req.streamer.id) : null;
+  const removed = donation ? db.deleteDonation(id, req.streamer.id).changes > 0 : false;
+  if (removed) {
+    // A refunded tip stops counting toward the goal it was added to: the active one, in its currency, started before the tip.
+    const goal = db.getActiveTipGoal(req.streamer.id);
+    const tipGoals = require('../services/tipGoals');
+    if (goal && tipGoals.currencyMatches(goal.currency, donation.currency) && donation.created_at >= goal.created_at) {
+      db.addToTipGoal(goal.id, -Math.round(donation.amount * 100) / 100);
+      tipGoals.broadcast(req.streamer.id);
+    }
+  }
   const back = new URLSearchParams();
   ['range', 'source', 'page'].forEach(k => { if (req.body[k]) back.set(k, String(req.body[k])); });
   res.redirect('/dashboard/donations/history' + (back.toString() ? '?' + back : ''));
@@ -1452,8 +1464,8 @@ router.post('/donations/goal', (req, res) => {
   const fields = parseTipGoalFields(req.body);
   if (fields.error) return goalRedirect(res, fields.error);
   const currency = TIP_GOAL_CURRENCIES.includes(req.body.currency) ? req.body.currency : (req.streamer.donation_currency || 'EUR');
-  const start = parseFloat(req.body.current_amount);
-  db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: Number.isFinite(start) ? start : 0 });
+  const start = Math.round(parseFloat(req.body.current_amount) * 100) / 100;
+  db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: Number.isFinite(start) && start > 0 ? Math.min(start, 10000000) : 0 });
   require('../services/tipGoals').broadcast(req.streamer.id);
   goalRedirect(res);
 });
@@ -1464,6 +1476,12 @@ router.post('/donations/goal/test', (req, res) => {
   if (req.body && req.body.reset) {
     tipGoals.endTest(req.streamer.id);
     return res.json({ ok: true });
+  }
+  const waitMs = testCooldown.take(req.streamer.id);
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000);
+    res.set('Retry-After', String(seconds));
+    return res.status(429).json({ ok: false, error: res.locals.t('dashboard.test.tooFast', { seconds }) });
   }
   if (!tipGoals.sendTest(req.streamer.id, req.body)) return res.status(400).json({ error: 'Invalid test goal' });
   res.json({ ok: true, revertMs: tipGoals.TEST_REVERT_MS });
@@ -1482,7 +1500,7 @@ router.post('/donations/goal/:id/adjust', (req, res) => {
   const goal = db.getActiveTipGoal(req.streamer.id);
   const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
   if (!goal || goal.id !== parseInt(req.params.id)) return goalRedirect(res, 'not_found');
-  if (!Number.isFinite(amount) || amount === 0) return goalRedirect(res, 'amount_invalid');
+  if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 10000000) return goalRedirect(res, 'amount_invalid');
   const result = db.addToTipGoal(goal.id, amount);
   const justCompleted = !!result && !result.before.completed_at && !!result.after.completed_at;
   require('../services/tipGoals').broadcast(req.streamer.id, amount > 0 ? { added: amount, justCompleted } : {});
@@ -2462,9 +2480,10 @@ router.post('/sponsors/:id/delete', async (req, res) => {
 
 // Update sponsor image
 router.post('/sponsors/:id/update', (req, res) => {
+  const textOf = (v) => (v == null ? v : String(v).slice(0, dashboardSettings.TEMPLATE_MAX));
   db.updateSponsorImage(
     parseInt(req.params.id), req.streamer.id,
-    req.body.display_name, req.body.chat_message,
+    textOf(req.body.display_name), textOf(req.body.chat_message),
     req.body.enabled, sponsorDurationSeconds(req.body.display_duration),
     sponsorImageScale(req.body.image_scale)
   );
@@ -2683,7 +2702,7 @@ router.post('/redemptions/upload', async (req, res) => {
   if (!validateRewardFields({ title, cost, prompt, position_preset: positionPreset }, res)) return;
   if (refuseUpload(req, res, buf.length)) return;
 
-  const cooldownSeconds = Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0);
+  const cooldownSeconds = Math.min(REWARD_COOLDOWN_MAX, Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0));
   const maxPlaySeconds = clamp(req.query.max_play_seconds, 1, 60);
   const volume = clamp(req.query.volume !== undefined ? req.query.volume : 1, 0, 1);
   const customX = req.query.custom_x != null ? clamp(req.query.custom_x, 0, 1) : null;
@@ -2800,11 +2819,15 @@ router.patch('/redemptions/:id', async (req, res) => {
     if (body.prompt && String(body.prompt).length > 200) return res.status(400).json({ error: res.locals.t('redemptions.error.promptLength') });
     updates.prompt = body.prompt ? String(body.prompt).trim() : null;
   }
-  if (body.cooldown_seconds !== undefined) updates.cooldown_seconds = Math.max(0, parseInt(body.cooldown_seconds, 10) || 0);
+  if (body.cooldown_seconds !== undefined) updates.cooldown_seconds = Math.min(REWARD_COOLDOWN_MAX, Math.max(0, parseInt(body.cooldown_seconds, 10) || 0));
   if (body.enabled !== undefined) updates.enabled = body.enabled ? 1 : 0;
   if (body.volume !== undefined) updates.volume = clamp(body.volume, 0, 1);
   if (body.max_play_seconds !== undefined) updates.max_play_seconds = clamp(body.max_play_seconds, 1, 60);
-  if (body.chat_message_template !== undefined) updates.chat_message_template = body.chat_message_template || null;
+  if (body.chat_message_template !== undefined) {
+    const template = body.chat_message_template ? String(body.chat_message_template) : '';
+    if (template.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ error: res.locals.t('dashboard.settings.error.tooLong') });
+    updates.chat_message_template = template || null;
+  }
   if (body.auto_fulfill !== undefined) updates.auto_fulfill = body.auto_fulfill ? 1 : 0;
   if (body.position_preset !== undefined) {
     if (!VALID_POSITION_PRESETS.has(body.position_preset)) return res.status(400).json({ error: res.locals.t('redemptions.error.position') });
@@ -3020,7 +3043,11 @@ router.post('/giveaways/:id/close', (req, res) => {
   const giveaway = db.getGiveawayById(id, streamerId);
   if (!giveaway) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   const giveawayMgr = require('../services/giveawayManager');
-  const result = giveawayMgr.closeGiveaway(streamerId, { silent: false });
+  if (giveaway.status === 'open') {
+    const active = giveawayMgr.getActive(streamerId);
+    if (!active || active.giveawayId !== id) return res.status(409).json({ error: res.locals.t('giveaways.error.notFound') });
+  }
+  const result = giveaway.status === 'open' ? giveawayMgr.closeGiveaway(streamerId, { silent: false }) : null;
   if (!result) {
     // Already closed — return current state
     return res.json({ ok: true, giveaway: db.getGiveawayById(id, streamerId), entryCount: db.getEntryCount(id) });

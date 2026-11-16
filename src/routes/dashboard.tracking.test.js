@@ -207,18 +207,19 @@ describe('the Tracking page', () => {
     }
   });
 
-  test('the first visit writes the six trackers\' rows (on), which starts the event connections; a later visit writes and starts nothing', async () => {
+  test('the first visit writes the six trackers\' rows off and starts nothing; a later visit changes nothing', async () => {
     const s = addStreamer();
     assert.equal(db.usesTracking(s), false);
     await request('GET', '/dashboard/tracking', { streamer: s });
     const rows = db.getTrackerSettings(s);
     assert.deepEqual(Object.keys(rows).sort(), [...TRACKERS].sort());
-    assert.ok(Object.values(rows).every((row) => row.enabled === 1 && row.color === null));
-    assert.deepEqual(eventSubCalls(), [['eventsub.start', s]]);
+    assert.ok(Object.values(rows).every((row) => row.enabled === 0 && row.color === null));
+    assert.deepEqual(eventSubCalls(), []);
+    assert.equal(db.usesTracking(s), false);
+    db.setTrackerSetting(s, 'latest_tip', { enabled: true });
     managerCalls.length = 0;
-    db.setTrackerSetting(s, 'latest_tip', { enabled: false });
     await request('GET', '/dashboard/tracking', { streamer: s });
-    assert.equal(db.getTrackerSettings(s).latest_tip.enabled, 0, 'a switched-off tracker stays off');
+    assert.equal(db.getTrackerSettings(s).latest_tip.enabled, 1, 'a switched-on tracker stays on');
     assert.deepEqual(managerCalls, []);
   });
 
@@ -419,6 +420,7 @@ describe('the trackers', () => {
   test('the last tracker switched off stops the connections, the first back on starts them', async () => {
     const s = addStreamer();
     await request('GET', '/dashboard/tracking', { streamer: s });
+    await request('POST', '/dashboard/api/tracking/tracker/latest_raid', { streamer: s, body: { enabled: true } });
     managerCalls.length = 0;
     for (const tracker of TRACKERS) await request('POST', `/dashboard/api/tracking/tracker/${tracker}`, { streamer: s, body: { enabled: false } });
     assert.deepEqual(eventSubCalls(), [['eventsub.stop', s]]);
@@ -487,7 +489,7 @@ describe('another streamer', () => {
     assert.deepEqual(told, [], 'a\'s sources heard nothing');
 
     assert.deepEqual(db.getActiveTrackingGoal(a, 'follow'), before, 'a\'s goal is as it was');
-    assert.deepEqual(db.getTrackerSettings(a).latest_tip, { enabled: 1, color: null }, 'a\'s tracker is as it was');
+    assert.deepEqual(db.getTrackerSettings(a).latest_tip, { enabled: 0, color: null }, 'a\'s tracker is as it was');
   });
 });
 

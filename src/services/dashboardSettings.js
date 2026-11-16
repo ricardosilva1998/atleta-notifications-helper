@@ -160,9 +160,17 @@ function save(streamer, body, { db, followUps, ttsAvailable = false }) {
     plan.push({ key: change.key, setting, value: read.value, target: found.target });
   }
 
-  db.runInTransaction(() => {
-    for (const p of plan) write(db, streamer.id, p.key, p.setting, p.value, p.target);
-  });
+  const notFound = new Error('not_found');
+  try {
+    db.runInTransaction(() => {
+      for (const p of plan) {
+        if (write(db, streamer.id, p.key, p.setting, p.value, p.target) === false && p.setting.writer === 'watcher') throw notFound;
+      }
+    });
+  } catch (e) {
+    if (e === notFound) return fail('not_found');
+    throw e;
+  }
   const steps = new Set(plan.flatMap((p) => p.setting.after || []));
   followUps.run({ before: streamer, after: db.getStreamerById(streamer.id), steps });
   return { ok: true, values: Object.fromEntries(plan.map((p) => [p.key, p.value])) };

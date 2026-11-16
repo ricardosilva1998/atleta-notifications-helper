@@ -1560,6 +1560,65 @@ describe('the dashboard after a broadcaster authorization from another Twitch ac
   });
 });
 
+describe('server-side gaps in the dashboard routes (T13)', () => {
+  test('the tip goal form clamps a starting amount and an adjustment like the JSON route', async () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    await request('POST', '/dashboard/donations/goal', { streamer: id, form: { title: 'Big', target_amount: '30', currency: 'EUR', current_amount: '99999999999' } });
+    const goal = db.getActiveTipGoal(id);
+    assert.equal(goal.current_amount, 10000000);
+    const res = await request('POST', `/dashboard/donations/goal/${goal.id}/adjust`, { streamer: id, form: { amount: '99999999999' } });
+    assert.equal(res.headers.location, '/dashboard/tracking?goal_error=amount_invalid#tip-goal');
+    assert.equal(db.getActiveTipGoal(id).current_amount, 10000000);
+  });
+
+  test('the tip goal test button of the form shares the test cooldown', async () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const body = { current: 5, target: 10, title: 'x' };
+    const first = await request('POST', '/dashboard/donations/goal/test', { streamer: id, body });
+    const second = await request('POST', '/dashboard/donations/goal/test', { streamer: id, body });
+    assert.notEqual(first.status, 429);
+    assert.equal(second.status, 429);
+  });
+
+  test('deleting a donation takes it off the active goal when it counted, never below 0', async () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const goal = db.createTipGoal(id, { title: 'G', target_amount: 100, currency: 'EUR', bar_color: '#22c55e', current_amount: 0 });
+    db.logDonation(id, { source: 'paypal', donor_name: 'a', amount: 10, currency: 'EUR', external_id: 'x-eur' });
+    db.logDonation(id, { source: 'paypal', donor_name: 'b', amount: 7, currency: 'USD', external_id: 'x-usd' });
+    db.logDonation(id, { source: 'paypal', donor_name: 'c', amount: 50, currency: 'EUR', external_id: 'x-big' });
+    const idOf = (ext) => db.getDonations(id, {}).find((d) => d.external_id === ext).id;
+    db.addToTipGoal(goal.id, 10);
+    await request('POST', `/dashboard/donations/history/${idOf('x-usd')}/delete`, { streamer: id, form: {} });
+    assert.equal(db.getActiveTipGoal(id).current_amount, 10, 'another currency never counted');
+    await request('POST', `/dashboard/donations/history/${idOf('x-eur')}/delete`, { streamer: id, form: {} });
+    assert.equal(db.getActiveTipGoal(id).current_amount, 0);
+    await request('POST', `/dashboard/donations/history/${idOf('x-big')}/delete`, { streamer: id, form: {} });
+    assert.equal(db.getActiveTipGoal(id).current_amount, 0, 'never below 0');
+  });
+
+  test('the sponsor update caps the texts', async () => {
+    const id = addStreamer();
+    db.addSponsorImage(id, 'a.png', 'A', null, 30);
+    const imageId = db.getSponsorImages(id)[0].id;
+    await request('POST', `/dashboard/sponsors/${imageId}/update`, { streamer: id, body: { display_name: 'n'.repeat(900), chat_message: 'm'.repeat(900), enabled: '1', display_duration: 30, image_scale: 1 } });
+    const row = db.getSponsorImages(id)[0];
+    assert.equal(row.display_name.length, 500);
+    assert.equal(row.chat_message.length, 500);
+  });
+
+  test('closing a giveaway closes only the one with that id, and a closed one is left alone', async () => {
+    const id = addStreamer();
+    const closed = db.insertGiveaway({ streamer_id: id, keyword: 'old', status: 'closed' });
+    const res = await request('POST', `/dashboard/giveaways/${closed.id}/close`, { streamer: id, body: {} });
+    assert.equal(res.status, 200);
+    const open = db.insertGiveaway({ streamer_id: id, keyword: 'open', status: 'open' });
+    const stale = await request('POST', `/dashboard/giveaways/${open.id}/close`, { streamer: id, body: {} });
+    assert.equal(stale.status, 409, 'an open giveaway the manager does not hold is not closed by a guess');
+    assert.equal(db.getGiveawayById(open.id, id).status, 'open');
+    assert.equal((await request('POST', '/dashboard/giveaways/999999/close', { streamer: id, body: {} })).status, 404);
+  });
+});
+
 // ── Sponsor timing is clamped when it is saved (H11) ─────────────────────
 
 describe('sponsor timing on save', () => {
