@@ -10,7 +10,7 @@ One product: **Streamer** (Twitch/YouTube/Discord tools). A Racing product (iRac
 - **Backend:** Express v5, EJS templates (server-rendered)
 - **Database:** SQLite via better-sqlite3 (WAL mode, foreign keys)
 - **Bot:** discord.js v14 (intents: Guilds, GuildMembers, GuildVoiceStates and the privileged MessageContent, which coaching transcripts need and the owner switches on in the Discord Developer Portal; a login Discord refuses for it is retried without it and no transcript is sent; nothing the bot posts can ping @everyone, roles or users unless that send opts in)
-- **External APIs:** Twitch Helix, Twitch EventSub (WebSocket), StreamElements (socket.io), YouTube Data API v3 + Live Chat API + RSS feeds, Spotify Web API, PayPal, OpenAI Whisper, Anthropic (AI analysis of reported issues), ElevenLabs (tips read aloud)
+- **External APIs:** Twitch Helix, Twitch EventSub (WebSocket), StreamElements (socket.io), YouTube Data API v3 + Live Chat API + RSS feeds, Spotify Web API, PayPal, Anthropic (AI analysis of reported issues), ElevenLabs (tips read aloud)
 - **Chatbot:** tmi.js (Twitch IRC) — single shared connection for all channels; YouTube Live Chat API polling
 - **i18n:** Custom JSON-based translation system (7 languages); every streamer page and the public tip page are translated (`docs/features/i18n.md`)
 - **Deployment:** Docker on Railway with persistent volume at `/app/data`. `railway.json` records the build (the `Dockerfile`, whose `CMD` is the start command), the deploy healthcheck (`/health`, 120 s) and restart-on-failure (10 retries), but Railway is retiring Config as Code files, so the same values are set in the Railway dashboard too. A push to `main` deploys. Service settings, variables, the secrets rollout and rollback cautions: `docs/operations/deploy.md`; backups and restore: `docs/operations/backup-restore.md`.
@@ -419,4 +419,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Decisions:**
 - CLAUDE.md now describes a Streamer-only project with one "Racing removed" bullet: the 410 rule, the `/racing*` and `/tracks*` redirect, `/pitwall/overlays` 404, the chat overlay kept at `/overlay/iracing/chat/<token>`, the `drop_racing_tables` migration. Racing env vars and Racing sections are gone; the Racing alert-look family stays.
 - deploy.md has a "Racing removed (2026-11-16)" release note: manual backup before merging, what the migration drops, how to check the tables, rollback needs the pre-release copy.
+**Open:** none
+
+### 2026-11-16 22:00 — team-qa
+**Task:** T6, QA checkpoint for Part 1 (remove Racing)
+**Tests added/changed:** none
+**Suite result:** scratch copy (Node 26, better-sqlite3 rebuilt): 3958 tests, 3958 pass, 0 fail. Two boots on empty data/: `/health` 200, 0 `[DB migration]` lines.
+**Manual checks:** `/racing*` and `/tracks` redirect to `/`; retired `/api` paths 410; `/pitwall/overlays/x` 404; chat overlay 200 with no WebSocket code, standings 404; `/auth/coaching-signin` redirects to Discord; `/my-bookings` loads.
+**Bugs found:** none. Trivial fix: removed OpenAI Whisper from the External APIs line.
 **Open:** none
