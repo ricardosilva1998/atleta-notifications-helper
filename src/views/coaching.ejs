@@ -112,6 +112,10 @@
     .cz-paynote { flex: 1 0 100%; }
     .cz-resched { background: var(--bg-base); border-radius: 10px; padding: 10px; margin: 2px 0 8px; }
     .cz-resched .cz-note { margin: 8px 0; }
+    .cz-refund { font-weight: 600; }
+    .cz-refund.pending { color: var(--warning); }
+    .cz-refund.done { color: var(--success); }
+    @media (max-width: 600px) { .cz-btn.sm, .cz-resched .cz-btn { min-height: 44px; padding-left: 14px; padding-right: 14px; } .cz-slot { min-height: 44px; } .cz-day { width: 44px; min-height: 48px; } .cz-resched textarea { font-size: 16px; } }
     .cz-foot { margin-top: 18px; text-align: center; font-size: 11px; color: var(--text-muted); }
     .cz-foot a { color: var(--accent); text-decoration: none; }
   </style>

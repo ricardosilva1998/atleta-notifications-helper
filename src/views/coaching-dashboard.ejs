@@ -266,7 +266,8 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-refund b { color: var(--warning); }
   .cd-refund p { margin: 2px 0; color: var(--text-secondary); }
   .cd-refund .cd-btnrow { margin-top: 6px; }
-  .cd-dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card, var(--bg-elevated)); color: var(--text-primary); padding: 0; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
+  .cd-dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card, var(--bg-elevated)); color: var(--text-primary); padding: 0; margin: auto; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
+  .cd-dialog [hidden] { display: none !important; }
   .cd-dialog::backdrop { background: rgba(0,0,0,.6); }
   .cd-dform { padding: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
   .cd-dtitle { font: 600 15px var(--font-display); margin: 0 !important; overflow-wrap: anywhere; }
@@ -281,6 +282,7 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-pickrow .cd-field { margin-bottom: 4px !important; }
   .cd-pickrow select { width: 100%; }
   @media (max-width: 420px) { .cd-pickrow { grid-template-columns: 1fr; } .cd-line { flex-wrap: wrap; } .cd-acts { width: 100%; justify-content: flex-start; } }
+  @media (max-width: 600px) { .cd-tab { min-height: 44px; } .cd-sbtn, .cd-dactions .cd-btn { min-height: 44px; padding-left: 14px; padding-right: 14px; } .cd-dform textarea, .cd-pickrow select { font-size: 16px; } .cd-way { min-height: 44px; } }
   .cd-icon.ok { background: var(--success-bg); color: var(--success); }
   .cd-icon.no { background: var(--danger-bg); color: var(--danger); }
   .cd-sbtn { border: 0; border-radius: 8px; padding: 4px 9px; font: 600 12px var(--font-body); cursor: pointer; background: var(--danger-bg); color: var(--danger); }

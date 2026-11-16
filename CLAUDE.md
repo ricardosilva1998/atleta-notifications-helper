@@ -510,3 +510,13 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Files:** src/services/coachingBookings.js, src/services/coachingBookings.test.js, CLAUDE.md
 **Fixes applied:** the card finding above. Scratch copy: full `src/**` + `tests/**` suites 4022 tests, 4021 pass, 0 fail, 1 pre-existing skip.
 **Open:** Accepted: a viewer paying the same booking twice marks the second capture refund pending (a real double payment, as for the earlier late/double rule). Accepted: viewer proposals DM the coach each time, bounded by the 30/10 min limiter. Not browser-seeded: the viewer page's Refund pending/Refunded lines (unit-tested only).
+
+### 2026-11-16 — team-ux (T7, coaching cancel, reschedule, refund and tabs)
+**Task:** UX check of the coach's four tabs, the cancel and reschedule pop-ups and the booking page's reschedule panel at 360, 768 and 1280 px
+**Files:** `src/views/coaching-dashboard.ejs`, `src/views/coaching.ejs`, `public/js/coaching-page.js`
+**Decisions:**
+- Fixed: the coach's `<dialog>`s sat in the top-left corner (the global `* { margin: 0 }` removes the dialog's auto margin); `margin: auto` as in `dialog.wc-dialog`. Now centred at all three widths, Esc and a backdrop click close, focus returns to the button.
+- Touch targets at 600 px and below: tab buttons, Cancel/Reschedule/Refunded buttons and the dialogs' buttons, the viewer page's small buttons, day and time chips are at least 44 px; text areas 16 px (no iOS zoom).
+- Viewer page: the Refund pending and Refunded lines (seeded in the scratch run, they show correctly) now stand out (warning and success colours). Tabs are a scrollable row, arrow keys move between them, no horizontal scroll in any tab or on the viewer page at 360, 768, 1280.
+- Screenshots (scratch): `/private/tmp/claude-501/-Users-ricardsilva-Library-Mobile-Documents-com-apple-CloudDocs-Projects-vilela-notifications/3e58c335-8b89-4c8d-9270-49b0e85893f6/scratchpad/ux/{before,after}-{dash-bookings,dash-schedule,dash-price,dash-settings,dash-cancel,dash-resched,viewer,viewer-resched}-{360,768,1280}.png`
+**Open:** none

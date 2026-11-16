@@ -254,8 +254,8 @@
       if (b.note) what.appendChild(make('div', 'cz-sub', b.note));
       if (b.state === 'cancelled' && b.cancelReason) what.appendChild(make('div', 'cz-sub', fill(T.cancelReason, { reason: b.cancelReason })));
       var refund = C.refundLine(b);
-      if (refund === 'pending') what.appendChild(make('div', 'cz-sub', T.refundPending));
-      if (refund === 'refunded') what.appendChild(make('div', 'cz-sub', T.refunded));
+      if (refund === 'pending') what.appendChild(make('div', 'cz-sub cz-refund pending', T.refundPending));
+      if (refund === 'refunded') what.appendChild(make('div', 'cz-sub cz-refund done', T.refunded));
       var mode = C.rescheduleMode(b, now);
       if (mode) drawRescheduleInfo(what, b, mode);
       line.appendChild(what);
