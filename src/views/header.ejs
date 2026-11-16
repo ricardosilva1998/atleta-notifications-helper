@@ -171,37 +171,6 @@
       transition: background var(--transition); text-decoration: none; color: var(--text-primary);
     }
     .nav-user-link:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .nav-notif-btn {
-      position: relative; display: flex; align-items: center; justify-content: center;
-      width: 34px; height: 34px; border-radius: var(--radius-sm); background: none;
-      border: none; cursor: pointer; color: var(--text-muted); transition: all var(--transition);
-    }
-    .nav-notif-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .nav-notif-badge {
-      position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px;
-      background: #f04438; color: #fff; font-size: 10px; font-weight: 700;
-      border-radius: 8px; display: flex; align-items: center; justify-content: center;
-      padding: 0 4px; line-height: 1;
-    }
-    .nav-notif-dropdown {
-      display: none; position: absolute; top: 100%; right: 0; margin-top: 8px;
-      width: 320px; background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); z-index: 200;
-      overflow: hidden;
-    }
-    .nav-notif-dropdown.open { display: block; }
-    .nav-notif-header {
-      padding: 12px 16px; font-size: 13px; font-weight: 700;
-      border-bottom: 1px solid var(--border); color: var(--text-primary);
-    }
-    .nav-notif-item {
-      padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);
-      transition: background 0.15s;
-    }
-    .nav-notif-item:hover { background: rgba(255,255,255,0.03); }
-    .nav-notif-empty {
-      padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 13px;
-    }
 
     /* Sidebar */
     .sidebar-overlay {
@@ -550,7 +519,6 @@
     .tab-instagram.active { background: #E1306C; }
     .tab-tiktok.active { background: #010101; color: white; }
     .tab-twitter.active { background: #1DA1F2; }
-    .tab-iracing.active { background: #1a1a2e; }
     .tab-settings.active { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); }
     .admin-tab-stats.active { background: #3498db; }
     .admin-tab-users.active { background: #9146ff; }
@@ -626,33 +594,6 @@
         <i data-lucide="tv"></i>
         <%= t('nav.streamer') %>
       </a>
-      <%# hideRacingNav: a page that names no Racing (the home page) leaves out the Racing link and its sub-links. %>
-      <% if (!(typeof hideRacingNav !== 'undefined' && hideRacingNav)) { %>
-      <a href="/racing" class="sidebar-link">
-        <i data-lucide="car"></i>
-        <%= t('nav.racing') %>
-      </a>
-      <% if (typeof racingUser !== 'undefined' && racingUser) { %>
-        <a href="/tracks" class="sidebar-link" style="padding-left:34px;font-size:12px;">
-          <i data-lucide="globe" style="width:15px;height:15px;"></i>
-          <%= t('nav.trackDatabase') %>
-        </a>
-        <a href="/racing/teams" class="sidebar-link" style="padding-left:34px;font-size:12px;">
-          <i data-lucide="users" style="width:15px;height:15px;"></i>
-          <%= t('nav.teams') %>
-        </a>
-        <a href="/racing/account" class="sidebar-link" style="padding-left:34px;font-size:12px;">
-          <i data-lucide="user" style="width:15px;height:15px;"></i>
-          <%= t('nav.account') %>
-        </a>
-        <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
-        <a href="/racing/admin" class="sidebar-link" style="padding-left:34px;font-size:12px;">
-          <i data-lucide="shield" style="width:15px;height:15px;"></i>
-          <%= t('nav.racingAdmin') %>
-        </a>
-        <% } %>
-      <% } %>
-      <% } %>
 
       <a href="/tutorial" class="sidebar-link">
         <i data-lucide="book-open"></i>
@@ -672,7 +613,7 @@
         </a>
       <% } %>
 
-      <% if ((typeof streamer !== 'undefined' && streamer) || (typeof racingUser !== 'undefined' && racingUser)) { %>
+      <% if (typeof streamer !== 'undefined' && streamer) { %>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section"><%= t('nav.account') %></div>
         <form method="POST" action="/auth/logout" class="sidebar-logout">
@@ -696,88 +637,7 @@
       <a href="/" class="nav-brand"><img src="/app-icon/honest_graphic-running-athlete-9715727.png" alt="">Atleta</a>
     </div>
     <div class="nav-right">
-      <% const _notifs = typeof notifications !== 'undefined' ? notifications : []; %>
-      <% const _unreadCount = typeof unreadNotifCount !== 'undefined' ? unreadNotifCount : 0; %>
-      <% if (typeof racingUser !== 'undefined' && racingUser) { %>
-        <div style="position:relative;">
-          <button class="nav-notif-btn" onclick="toggleNotifDropdown(event)" aria-label="<%= t('nav.notifications') %>">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            <% if (_unreadCount > 0) { %><span class="nav-notif-badge"><%= _unreadCount %></span><% } %>
-          </button>
-          <div class="nav-notif-dropdown" id="notif-dropdown">
-            <div class="nav-notif-header" style="display:flex;align-items:center;justify-content:space-between;">
-              <span><%= t('nav.notifications') %></span>
-              <% if (_notifs.length > 0) { %>
-                <form method="POST" action="/racing/notifications/dismiss-all" style="margin:0;">
-                  <button type="submit" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0;"><%= t('nav.dismissAll') %></button>
-                </form>
-              <% } %>
-            </div>
-            <% if (_notifs.length === 0) { %>
-              <div class="nav-notif-empty"><%= t('nav.noNotifications') %></div>
-            <% } else { %>
-              <div style="max-height:360px;overflow-y:auto;">
-              <% _notifs.forEach(function(n) { %>
-                <div class="nav-notif-item" style="position:relative;<%= !n.is_read ? 'background:rgba(59,130,246,0.04);' : '' %>">
-                  <div style="display:flex;gap:8px;align-items:flex-start;">
-                    <% if (!n.is_read) { %><div style="width:6px;height:6px;border-radius:50%;background:#3b82f6;margin-top:5px;flex-shrink:0;"></div><% } else { %><div style="width:6px;flex-shrink:0;"></div><% } %>
-                    <% if (n.type === 'team_invite' || n.type === 'team_join' || n.type === 'team_leave') { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    <% } else if (n.type === 'race_result') { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f7c948" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-                    <% } else if (n.type === 'irating_milestone') { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f7c948" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
-                    <% } else if (n.type === 'bridge_update') { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    <% } else if (n.type === 'announcement') { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
-                    <% } else if (n.type === 'session_shared') { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    <% } else { %>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <% } %>
-                    <div style="flex:1;min-width:0;">
-                      <% if (n.link) { %><a href="<%= n.link %>" style="text-decoration:none;color:inherit;" onclick="fetch('/racing/notifications/<%= n.id %>/read',{method:'POST'})"><% } %>
-                        <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:2px;"><%= n.title %></div>
-                        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;"><%= n.message %></div>
-                        <div style="font-size:10px;color:var(--text-muted);">
-                          <% var _ago = Math.floor((Date.now() - new Date(n.created_at + 'Z').getTime()) / 1000); %>
-                          <% if (_ago < 60) { %><%= t('nav.timeNow') %><% } else if (_ago < 3600) { %><%= t('nav.timeMinutes', { n: Math.floor(_ago/60) }) %><% } else if (_ago < 86400) { %><%= t('nav.timeHours', { n: Math.floor(_ago/3600) }) %><% } else { %><%= t('nav.timeDays', { n: Math.floor(_ago/86400) }) %><% } %>
-                        </div>
-                      <% if (n.link) { %></a><% } %>
-                      <% if (n.action_type === 'team_invite') { %>
-                        <div style="display:flex;gap:6px;margin-top:6px;">
-                          <form method="POST" action="/racing/teams/invite/<%= n.action_id %>/accept" style="margin:0;">
-                            <button type="submit" style="background:#3ecf8e;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;"><%= t('nav.accept') %></button>
-                          </form>
-                          <form method="POST" action="/racing/teams/invite/<%= n.action_id %>/decline" style="margin:0;">
-                            <button type="submit" style="background:rgba(240,68,56,0.15);color:#f04438;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;"><%= t('nav.decline') %></button>
-                          </form>
-                        </div>
-                      <% } %>
-                    </div>
-                    <form method="POST" action="/racing/notifications/<%= n.id %>/dismiss" style="margin:0;flex-shrink:0;">
-                      <button type="submit" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;opacity:0.5;" title="<%= t('nav.dismiss') %>" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">&times;</button>
-                    </form>
-                  </div>
-                </div>
-              <% }); %>
-              </div>
-            <% } %>
-          </div>
-        </div>
-      <% } %>
-      <% const _isRacingPage = typeof currentPath !== 'undefined' && currentPath && (currentPath.startsWith('/racing') || currentPath.startsWith('/tracks')); %>
-      <% if (_isRacingPage && typeof racingUser !== 'undefined' && racingUser) { %>
-        <a href="/racing/account" class="nav-user-link">
-          <% if (racingUser.avatar) { %>
-            <img src="<%= racingUser.avatar %>" alt="" class="nav-avatar" style="object-fit:cover;">
-          <% } else { %>
-            <div class="nav-avatar" style="background:#3ecf8e;display:flex;align-items:center;justify-content:center;color:white;font-family:var(--font-display);font-weight:700;font-size:13px;"><%= (racingUser.display_name || racingUser.username || '?').charAt(0).toUpperCase() %></div>
-          <% } %>
-          <span class="nav-username"><%= racingUser.display_name || racingUser.username %></span>
-        </a>
-      <% } else if (typeof streamer !== 'undefined' && streamer) { %>
+      <% if (typeof streamer !== 'undefined' && streamer) { %>
         <a href="/dashboard/account" class="nav-user-link">
           <% const navAvatarUrl = streamer.profile_picture ? '/avatars/' + streamer.id + '/' + streamer.profile_picture : streamer.discord_avatar; %>
           <% if (navAvatarUrl) { %>
@@ -786,15 +646,6 @@
             <div class="nav-avatar" style="background: var(--accent); display: flex; align-items: center; justify-content: center; color: white; font-family: var(--font-display); font-weight: 700; font-size: 13px;"><%= (streamer.discord_display_name || streamer.discord_username || '?').charAt(0).toUpperCase() %></div>
           <% } %>
           <span class="nav-username"><%= streamer.discord_display_name || streamer.discord_username %></span>
-        </a>
-      <% } else if (typeof racingUser !== 'undefined' && racingUser) { %>
-        <a href="/racing/account" class="nav-user-link">
-          <% if (racingUser.avatar) { %>
-            <img src="<%= racingUser.avatar %>" alt="" class="nav-avatar" style="object-fit:cover;">
-          <% } else { %>
-            <div class="nav-avatar" style="background:#3ecf8e;display:flex;align-items:center;justify-content:center;color:white;font-family:var(--font-display);font-weight:700;font-size:13px;"><%= (racingUser.display_name || racingUser.username || '?').charAt(0).toUpperCase() %></div>
-          <% } %>
-          <span class="nav-username"><%= racingUser.display_name || racingUser.username %></span>
         </a>
       <% } %>
     </div>
@@ -822,17 +673,8 @@
       document.getElementById('sidebar').classList.remove('active');
       document.getElementById('sidebar-overlay').classList.remove('active');
     }
-    function toggleNotifDropdown(e) {
-      e.stopPropagation();
-      var dd = document.getElementById('notif-dropdown');
-      if (dd) dd.classList.toggle('open');
-    }
-    document.addEventListener('click', function(e) {
-      var dd = document.getElementById('notif-dropdown');
-      if (dd && !dd.parentElement.contains(e.target)) dd.classList.remove('open');
-    });
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { closeLightbox(); closeSidebar(); var dd = document.getElementById('notif-dropdown'); if (dd) dd.classList.remove('open'); }
+      if (e.key === 'Escape') { closeLightbox(); closeSidebar(); }
     });
     function toggleUserMenu() {
       const dropdown = document.getElementById('user-dropdown');

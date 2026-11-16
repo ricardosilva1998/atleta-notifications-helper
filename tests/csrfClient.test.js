@@ -203,7 +203,7 @@ describe('forms', () => {
   test('a POST form to this site is sent with a hidden _csrf field', () => {
     const page = loadPage();
     new page.HTMLFormElement({ method: 'POST', action: '/dashboard/overlay' }).pressSubmit();
-    new page.HTMLFormElement({ method: 'post', action: 'https://atleta.example/racing/auth/login' }).pressSubmit();
+    new page.HTMLFormElement({ method: 'post', action: 'https://atleta.example/dashboard/settings' }).pressSubmit();
     new page.HTMLFormElement({ method: 'post' }).pressSubmit(); // no action: posts to the page itself
     for (const sent of page.sentForms) assert.deepEqual(fieldsOf(sent), [['_csrf', TOKEN]]);
   });
@@ -224,8 +224,8 @@ describe('forms', () => {
 
   test('a GET form, or a form to another site, is sent without it', () => {
     const page = loadPage();
-    new page.HTMLFormElement({ action: '/tracks' }).pressSubmit();
-    new page.HTMLFormElement({ method: 'get', action: '/tracks' }).submit();
+    new page.HTMLFormElement({ action: '/account' }).pressSubmit();
+    new page.HTMLFormElement({ method: 'get', action: '/account' }).submit();
     new page.HTMLFormElement({ method: 'POST', action: 'https://www.paypal.example/checkout' }).pressSubmit();
     for (const sent of page.sentForms) assert.deepEqual(fieldsOf(sent), []);
   });
@@ -251,7 +251,7 @@ describe('a page without a token (nobody is logged in)', () => {
   test('changes nothing: fetch, forms and XMLHttpRequest are left as they are', () => {
     const page = loadPage({ token: '' });
     assert.equal(page.window.fetch, page.nativeFetch);
-    new page.HTMLFormElement({ method: 'POST', action: '/racing/auth/login' }).submit();
+    new page.HTMLFormElement({ method: 'POST', action: '/dashboard/settings' }).submit();
     assert.deepEqual(page.sentForms[0].fields, []);
   });
 });

@@ -26,7 +26,7 @@ const PAGES = ['tip', 'dashboard', 'donation-settings', 'donation-history', 'giv
 
 // Words that stay as they are in every language: product names, units and codes.
 const KEEP = new Set([
-  'atleta', 'twitch', 'youtube', 'obs', 'paypal', 'streamelements', 'discord', 'spotify', 'vrm', 'utc', 'kick', 'tiktok', 'instagram', 'iracing',
+  'atleta', 'twitch', 'youtube', 'obs', 'paypal', 'streamelements', 'discord', 'spotify', 'vrm', 'utc', 'kick', 'tiktok', 'instagram',
   'eur', 'usd', 'gbp', 'brl', 'cad', 'aud',
 ]);
 // "Atleta Personal Helper" is the product's name.
@@ -320,7 +320,7 @@ for (const page of OVERLAY_SWITCH_PAGES) {
 // What header.ejs and the layout need besides a page's own data.
 const layout = (lang, translate) => ({
   t: translate || ((key, params) => t(lang, key, params)), lang, SUPPORTED_LANGS, currentPath: '/', isAdmin: false, notifications: [], unreadNotifCount: 0,
-  racingUser: null, features: { youtube: true }, csrfToken: 'zztoken', streamerTier: 'free',
+  features: { youtube: true }, csrfToken: 'zztoken', streamerTier: 'free',
 });
 
 const inlineScripts = (html) => [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);

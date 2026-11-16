@@ -349,7 +349,7 @@ describe('every page that sends a form or a request loads the token', () => {
       assert.ok(includesHeader(text) || PARTIAL.test(text), `${name} sends a form or a request but loads no CSRF token`);
     }
     // The pages that do not include the header (overlay builder, tip page) are among them.
-    for (const name of ['overlay-builder.ejs', 'tip.ejs', 'dashboard.ejs', 'tracks.ejs']) assert.ok(checked.includes(name), name);
+    for (const name of ['overlay-builder.ejs', 'tip.ejs', 'dashboard.ejs', 'account.ejs']) assert.ok(checked.includes(name), name);
   });
 
   test('a page that includes the partial itself has it in <head>, ahead of its scripts', () => {

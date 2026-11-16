@@ -13,7 +13,6 @@
 <% if (msg && msg.startsWith('test_sent_')) { %><div class="alert alert-success">Test notification sent to <%= msg.split('_')[2] %> channel(s).</div><% } %>
 <% if (msg === 'test_error') { %><div class="alert alert-danger">Test failed. Check logs or verify the username exists.</div><% } %>
 <% if (msg === 'test_no_data') { %><div class="alert alert-warning">No data found for this channel (no clips, videos, etc.).</div><% } %>
-<% if (msg === 'iracing_not_configured') { %><div class="alert alert-danger">iRacing API not configured. Add IRACING_EMAIL and IRACING_PASSWORD environment variables on Railway.</div><% } %>
 
 <!-- Tab Bar -->
 <div class="tab-bar animate-in animate-in-delay-1">
@@ -442,7 +441,6 @@
       </form>
     </div>
 
-    <!-- iRacing Race Result — disabled, OAuth credentials paused by iRacing -->
 
   </div>
 </div>

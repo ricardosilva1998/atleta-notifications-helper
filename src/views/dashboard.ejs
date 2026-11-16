@@ -192,13 +192,13 @@
         <!-- Individual charts per notification type -->
         <%
           // The YouTube posts are left out of the charts while YouTube is hidden (they are still in the totals).
-          const typeKeys = ['twitch_live', 'twitch_clip', 'twitch_recap', 'twitch_milestone', 'youtube_video', 'youtube_short', 'youtube_live', 'weekly_digest', 'instagram_post', 'tiktok_video', 'twitter_tweet', 'iracing_result']
+          const typeKeys = ['twitch_live', 'twitch_clip', 'twitch_recap', 'twitch_milestone', 'youtube_video', 'youtube_short', 'youtube_live', 'weekly_digest', 'instagram_post', 'tiktok_video', 'twitter_tweet']
             .filter(function(tk) { return features.youtube || tk.indexOf('youtube_') !== 0; });
-          const typeColors = { twitch_live: '#9146ff', twitch_clip: '#bf94ff', twitch_recap: '#6d28d9', twitch_milestone: '#f1c40f', youtube_video: '#f04438', youtube_short: '#ff6b6b', youtube_live: '#ff4444', weekly_digest: '#3498db', instagram_post: '#E1306C', tiktok_video: '#010101', twitter_tweet: '#1DA1F2', iracing_result: '#1a1a2e' };
+          const typeColors = { twitch_live: '#9146ff', twitch_clip: '#bf94ff', twitch_recap: '#6d28d9', twitch_milestone: '#f1c40f', youtube_video: '#f04438', youtube_short: '#ff6b6b', youtube_live: '#ff4444', weekly_digest: '#3498db', instagram_post: '#E1306C', tiktok_video: '#010101', twitter_tweet: '#1DA1F2' };
           const typeNames = {
             twitch_live: t('dashboard.type.twitch_live'), twitch_clip: t('dashboard.type.twitch_clip'), twitch_recap: t('dashboard.type.twitch_recap'),
             twitch_milestone: t('dashboard.type.twitch_milestone'), weekly_digest: t('dashboard.type.weekly_digest'), instagram_post: t('dashboard.type.instagram_post'),
-            tiktok_video: t('dashboard.type.tiktok_video'), twitter_tweet: t('dashboard.type.twitter_tweet'), iracing_result: t('dashboard.type.iracing_result'),
+            tiktok_video: t('dashboard.type.tiktok_video'), twitter_tweet: t('dashboard.type.twitter_tweet'),
           };
           if (features.youtube) {
             Object.assign(typeNames, { youtube_video: t('dashboard.type.youtube_video'), youtube_short: t('dashboard.type.youtube_short'), youtube_live: t('dashboard.type.youtube_live') });

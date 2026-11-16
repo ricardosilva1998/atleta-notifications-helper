@@ -3,7 +3,7 @@
 // The shared layout (views/header.ejs and views/footer.ejs) and the pages built on it:
 //   - a page that opens the layout closes it with the footer (the footer closes the container,
 //     starts the icons and ends the document);
-//   - the team-invite buttons in the notification menu post to routes that exist;
+//   - the layout renders without any Racing locals;
 //   - the icon library is loaded from one exact version, checked by its hash.
 
 const { test, describe } = require('node:test');
@@ -26,35 +26,24 @@ describe('every page that opens the layout closes it', () => {
   }
 });
 
-describe('the team invite buttons in the notification menu', () => {
+describe('the layout without Racing', () => {
   const english = (key, params) => t('en', key, params);
-  const render = (notifications) => ejs.render(read(VIEWS, 'header.ejs'), {
-    racingUser: { id: 4, username: 'driver', display_name: 'Driver', avatar: null }, streamer: null, isAdmin: false, features: { youtube: true }, lang: 'en',
-    csrfToken: 'token', currentPath: '/racing/teams', notifications, unreadNotifCount: notifications.length, streamerTier: 'free', SUPPORTED_LANGS: ['en'],
-    t: english, esc, rich: richFor(english), title: 'Teams',
+  const render = (locals) => ejs.render(read(VIEWS, 'header.ejs'), {
+    streamer: null, isAdmin: false, features: { youtube: true }, lang: 'en',
+    csrfToken: 'token', currentPath: '/', streamerTier: 'free', SUPPORTED_LANGS: ['en'],
+    t: english, esc, rich: richFor(english), title: 'Home', ...locals,
   }, { filename: path.join(VIEWS, 'header.ejs'), views: [VIEWS] });
 
-  const invite = { id: 9, type: 'team_invite', action_type: 'team_invite', action_id: 42, title: 'Team invite', message: 'someone invited you', link: '/racing/teams', is_read: 0, created_at: '2026-10-14 10:00:00' };
-
-  test('accept and decline post to the invite of that notification', () => {
-    const actions = [...render([invite]).matchAll(/<form method="POST" action="([^"]*\/invite\/[^"]*)"/g)].map((m) => m[1]);
-    assert.deepEqual(actions, ['/racing/teams/invite/42/accept', '/racing/teams/invite/42/decline']);
+  test('renders for a visitor without any Racing, notification or nav locals', () => {
+    const html = render({});
+    assert.ok(!/racing|\/tracks|notif-dropdown/i.test(html.replace(/<style[\s\S]*?<\/style>/g, '')));
+    assert.ok(!html.includes('action="/auth/logout"'));
   });
 
-  test('and those are routes the server has: the team router is mounted at /racing/teams', () => {
-    const mount = read(SRC, 'server.js').match(/app\.use\('(\/racing\/teams)'/);
-    assert.ok(mount, 'server.js mounts the team routes');
-    const team = read(SRC, 'routes', 'racing-team.js');
-    for (const action of ['accept', 'decline']) {
-      assert.ok(team.includes(`router.post('/invite/:id/${action}'`), `racing-team.js has POST /invite/:id/${action}`);
-    }
-    const posted = [...render([invite]).matchAll(/<form method="POST" action="([^"]*\/invite\/[^"]*)"/g)].map((m) => m[1]);
-    assert.deepEqual(posted, ['accept', 'decline'].map((action) => `${mount[1]}/invite/42/${action}`));
-  });
-
-  test('a notification that is not an invite has no such buttons', () => {
-    const html = render([{ ...invite, type: 'team_join', action_type: null, action_id: null }]);
-    assert.ok(!html.includes('/invite/'));
+  test('a streamer gets the logout form and the account link', () => {
+    const html = render({ streamer: { id: 1, discord_username: 'viewer', discord_display_name: 'Viewer', discord_avatar: null, profile_picture: null } });
+    assert.ok(html.includes('action="/auth/logout"'));
+    assert.ok(html.includes('href="/dashboard/account"'));
   });
 });
 
@@ -64,15 +53,13 @@ describe('the icon library', () => {
   const TAG = /<script src="(https:\/\/unpkg\.com\/lucide@(\d+\.\d+\.\d+)\/dist\/umd\/lucide\.min\.js)" integrity="(sha384-[A-Za-z0-9+/]{64})" crossorigin="anonymous"><\/script>/;
   const loaders = views.filter((view) => read(VIEWS, view).includes('lucide.min.js'));
 
-  test('the layout and the pit wall page are the pages that load it', () => {
-    assert.deepEqual(loaders, ['header.ejs', 'racing-pitwall.ejs']);
+  test('the layout is the only page that loads it', () => {
+    assert.deepEqual(loaders, ['header.ejs']);
   });
 
-  test('both load one exact version, with its hash, as an anonymous cross-origin script', () => {
+  test('it loads one exact version, with its hash, as an anonymous cross-origin script', () => {
     const tags = loaders.map((view) => read(VIEWS, view).match(TAG));
     tags.forEach((tag, i) => assert.ok(tag, `${loaders[i]} loads lucide from an exact version with an integrity hash`));
-    assert.equal(tags[0][1], tags[1][1], 'the same URL');
-    assert.equal(tags[0][3], tags[1][3], 'the same hash');
   });
 
   test('no page asks for the latest version of anything from unpkg', () => {
