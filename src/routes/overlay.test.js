@@ -125,7 +125,7 @@ function disable(id) {
   const noop = { startForStreamer() {}, stopForStreamer() {} };
   lifecycle.disableAccount(id, null, {
     db, bus,
-    eventSubManager: noop, streamElementsManager: noop, chatManager: noop,
+    eventSubManager: noop, chatManager: noop,
     timedNotificationManager: { stopForStreamer() {}, restartForStreamer() {}, restartChatForStreamer() {} },
   });
 }
@@ -252,6 +252,24 @@ describe('a stream that is already open when the account is disabled', () => {
 
     bus.emit(`overlay:${bystander.id}`, { type: 'probe', n: 3 });
     await until(() => stream.chunks.join('').includes('"probe"'), 'the other stream still receives events');
+  });
+
+  test('the sponsor stream forwards config updates that carry designs, and no other config', async () => {
+    const { id, token } = addStreamer();
+    const stream = await openStream(`/overlay/sponsors/events/${token}`);
+    bus.emit(`overlay:${id}`, { type: 'config-update', config: { volume: 1 } });
+    bus.emit(`overlay:${id}`, { type: 'config-update', designs: { sponsor: { card_width: 321 } } });
+    await until(() => stream.chunks.join('').includes('"card_width":321'), 'the designs update reaches the sponsor stream');
+    assert.ok(!stream.chunks.join('').includes('"volume":1'));
+  });
+
+  test('ending a stream detaches its bus listeners first, so a later event writes nothing', async () => {
+    const { id, token } = addStreamer();
+    const stream = await openStream(`/overlay/events/${token}`);
+    disable(id);
+    await until(() => stream.ended, 'the stream was not ended');
+    assert.equal(bus.listenerCount(`overlay:${id}`), 0);
+    assert.doesNotThrow(() => bus.emit(`overlay:${id}`, { type: 'probe', n: 9 }));
   });
 
   test('a stream that closed on its own leaves no listener behind', async () => {

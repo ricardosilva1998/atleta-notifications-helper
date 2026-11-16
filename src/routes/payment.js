@@ -12,6 +12,7 @@ async function getPayPalToken() {
     method: 'POST',
     headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'grant_type=client_credentials',
+    signal: AbortSignal.timeout(15000),
   });
   const data = await res.json();
   return data.access_token;
@@ -35,6 +36,7 @@ async function createPayPalOrder(amount, description) {
         user_action: 'PAY_NOW',
       },
     }),
+    signal: AbortSignal.timeout(15000),
   });
   return res.json();
 }
@@ -44,6 +46,7 @@ async function capturePayPalOrder(orderId) {
   const res = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders/${orderId}/capture`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(15000),
   });
   return res.json();
 }
@@ -89,7 +92,7 @@ router.post('/create', (req, res) => {
     const sub = db.createSubscription(req.streamer.id, tier, null, expiresAt);
     db.createTransaction(req.streamer.id, null, 0, 'FREE_CODE', discountCodeUsed, discountPercent);
     console.log(`[Payment] Free subscription (${tier}) activated for ${req.streamer.discord_username} with code ${discountCodeUsed}`);
-    return res.redirect('/dashboard/subscription?msg=activated');
+    return res.redirect('/payment/subscription?msg=activated');
   }
 
   // Store payment intent in session cookie
@@ -180,7 +183,7 @@ router.get('/success', async (req, res) => {
 
     res.clearCookie('paypal_order_id');
     res.clearCookie('payment_intent');
-    res.redirect('/dashboard/subscription?msg=activated');
+    res.redirect('/payment/subscription?msg=activated');
   } catch (err) {
     console.error(`[Payment] Success handler error: ${err.message}`);
     res.redirect('/pricing?msg=payment_error');
@@ -217,7 +220,7 @@ router.post('/subscription/cancel', (req, res) => {
 
   db.cancelSubscription(req.streamer.id);
   console.log(`[Payment] Subscription cancelled for ${req.streamer.discord_username}`);
-  res.redirect('/dashboard/subscription?msg=cancelled');
+  res.redirect('/payment/subscription?msg=cancelled');
 });
 
 module.exports = router;

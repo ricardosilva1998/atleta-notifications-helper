@@ -57,7 +57,6 @@ const PAGE_WORDS = {
     'up', 'down', 'left', 'right', // the values of the hidden direction control
   ],
   'chatbot-config': ['socials'], // the example in the command-name placeholder
-  'overlay-config': ['eyJhbGciOi'], // the example in the StreamElements token placeholder
   tracking: ['USD', 'GBP', 'BRL', 'CAD', 'AUD'], // the tip goal's currency menu lists the codes it counts in
 };
 
@@ -192,8 +191,8 @@ const PAGE_LOCALS = {
     { ...guildPage, discordListsUnavailable: true, channels: [], roles: [] },
   ],
   'overlay-config': [
-    { streamer, hasStreamElementsJwt: true, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true, kick: true } },
-    { streamer, hasStreamElementsJwt: false, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: null, needsReauth: false, appUrl: 'https://app.test', features: { youtube: false } },
+    { streamer, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: 'https://app.test/overlay/tok123', needsReauth: true, appUrl: 'https://app.test', features: { youtube: true, kick: true } },
+    { streamer, giveawayDurationSeconds: 8, durationDefaults: DEFAULT_DURATION_SECONDS, overlayUrl: null, needsReauth: false, appUrl: 'https://app.test', features: { youtube: false } },
   ],
   'overlay-builder': [
     { streamer, designs: '[]', sponsors: JSON.stringify([{ id: 1, filename: 'a.png', display_name: 'SponsorName', display_duration: 30, enabled: 1, image_scale: 1 }]),

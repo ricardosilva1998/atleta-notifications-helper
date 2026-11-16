@@ -19,7 +19,7 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// TOKEN_ENCRYPTION_KEY encrypts the OAuth tokens and the StreamElements token
+// TOKEN_ENCRYPTION_KEY encrypts the OAuth tokens
 // kept in the database (src/db.js, services/secretBox.js): 64 hex characters,
 // made with `openssl rand -hex 32`. Unset, they are stored unencrypted and the
 // boot log says so. Set but malformed, the boot stops: running anyway would
@@ -143,6 +143,9 @@ module.exports = {
     // The VTuber face tracker: the dashboard's Experimental tab and its preview page, shown only
     // while the overlays are too. Off until its bundled models are back.
     vtuber: false,
+    // The legacy paid-plan flow (/pricing and /payment/*): every plan is free now, so the pages redirect to
+    // /dashboard while this is off. The code stays; set it to true when pricing comes back.
+    pricing: false,
   },
   // Most Twitch channels one Discord server may watch. Adding past it is
   // refused; a server already over it keeps what it has.

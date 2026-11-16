@@ -28,6 +28,7 @@ const {
 const { sponsorDurationSeconds, sponsorChatIntervalMinutes, sponsorImageScale, moderationNumber, moderationAction, parseSwitch } = require('../services/inputLimits');
 const { COMMAND_RESPONSE_MAX, COMMANDS_PER_STREAMER_MAX, COMMAND_ERRORS, parseCommand, singleLine, isUniqueViolation } = require('../services/chatCommands');
 const { testCooldown } = require('../services/testCooldown');
+const REWARD_COOLDOWN_MAX = 604800; // Twitch's longest global cooldown, 7 days
 const { EVENT_DEFAULTS, OVERLAY_FONTS, isBuilderEventType, validateOverlayDesign } = require('../services/overlayDesign');
 const { bundle: alertStyleBundle } = require('../services/alertStyleBundle');
 const { ALERTS: STYLED_ALERTS, DEFAULT_STYLES, canUseStyle, familyStyles, galleryFor, familyKeys, soundGroups, secondVersionOf, fontsOf } = require('../services/alertStyles');
@@ -317,7 +318,6 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
   };
   if (!twitchLinked) return card;
 
-  const digestOwners = new Map(db.getGuildsWithWeeklyHighlights().map((row) => [row.guild_id, row.streamer_id]));
   for (const server of servers) {
     const own = server.watchers.find((w) => w.twitch_username === login && w.enabled);
     const channelName = (id) => {
@@ -337,7 +337,7 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
       clips: { state: onOff(clips), where: clips ? channelName(own.clips_channel_id) : null },
       recaps: onOff(server.recap_enabled && liveChannel),
       milestones: server.milestones_enabled && liveChannel ? (authorized ? 'on' : 'wait') : 'off',
-      highlights: onOff(server.weekly_highlights_enabled && own && digestOwners.get(server.guild_id) === streamer.id
+      highlights: onOff(server.weekly_highlights_enabled && own
         && db.getDigestChannelForGuild(server.guild_id)),
       subRoles: server.sub_sync_enabled && server.sub_role_id ? (authorized ? 'on' : 'wait') : 'off',
       // The working card's switches (services/dashboardCards.js): what each one stores, where the posts go (the
@@ -892,13 +892,8 @@ router.get('/overlay', overlayPage, (req, res) => {
   const overlayUrl = streamer.overlay_token ? `${appUrl}/overlay/${streamer.overlay_token}` : null;
   const needsReauth = require('../services/twitch').needsBroadcasterReauth(streamer);
 
-  // The StreamElements token is never sent to the page: it only learns whether
-  // one is saved (and offers to remove it).
-  const { streamelements_jwt: savedJwt, ...pageStreamer } = streamer;
-
   res.render('overlay-config', {
-    streamer: pageStreamer,
-    hasStreamElementsJwt: !!savedJwt,
+    streamer,
     giveawayDurationSeconds: giveawayDurationSeconds(streamer.overlay_giveaway_duration),
     durationDefaults: DEFAULT_DURATION_SECONDS,
     overlayUrl,
@@ -908,7 +903,7 @@ router.get('/overlay', overlayPage, (req, res) => {
 });
 
 // EventSub (the Twitch events behind the overlay's alerts and the chatbot's
-// thank-yous), StreamElements and the sponsor rotation run while the overlay or
+// thank-yous) and the sponsor rotation run while the overlay or
 // the chatbot is on, or while the streamer uses Tracking (an active follower or
 // sub goal, or a tracker switched on: trackingInUse); the managers start them
 // at boot on the same rule (db.getOverlayOrChatbotStreamers). A save that
@@ -916,9 +911,7 @@ router.get('/overlay', overlayPage, (req, res) => {
 // any was on before and is on after. They are started when the first comes on,
 // stopped when the last one goes off, and left alone while another keeps them
 // needed. Settings reach an open OBS source as they are saved, so
-// nothing else reconnects Twitch (a restart drops events for a second or two);
-// the StreamElements connection also follows its token, when that is added,
-// replaced or removed (streamElementsChanged).
+// nothing else reconnects Twitch (a restart drops events for a second or two).
 // Whether the streamer's Tracking needs the event connections (see above). A
 // database error counts as needed: stopping Twitch's events by mistake loses
 // them, keeping them a little longer costs nothing.
@@ -931,13 +924,12 @@ function trackingInUse(streamerId) {
   }
 }
 
-function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt, streamElementsChanged = false }) {
+function syncLiveConnections(streamerId, { wasNeeded, needed }) {
   // Each step runs on its own, so one that fails does not keep the others from running.
   const attempt = (what, fn) => {
     try { fn(); } catch (e) { console.error(`[Dashboard] ${what} failed for streamer ${streamerId}:`, e.message); }
   };
   const { eventSubManager } = require('../services/eventsub');
-  const { streamElementsManager } = require('../services/streamelements');
   const { timedNotificationManager } = require('../services/timedNotifications');
   if (needed) {
     if (!wasNeeded) {
@@ -947,21 +939,16 @@ function syncLiveConnections(streamerId, { wasNeeded, needed, streamElementsJwt,
         timedNotificationManager.restartChatForStreamer(streamerId);
       });
     }
-    if (!wasNeeded || streamElementsChanged) {
-      if (streamElementsJwt) attempt('Starting StreamElements', () => streamElementsManager.startForStreamer(streamerId));
-      else if (streamElementsChanged) attempt('Stopping StreamElements', () => streamElementsManager.stopForStreamer(streamerId)); // token removed
-    }
   } else {
     attempt('Stopping EventSub', () => eventSubManager.stopForStreamer(streamerId));
-    attempt('Stopping StreamElements', () => streamElementsManager.stopForStreamer(streamerId));
     attempt('Stopping the sponsor rotation', () => timedNotificationManager.stopForStreamer(streamerId));
   }
 }
 
 // Save overlay settings. Toggles, durations and volume are read and bounded by
-// parseOverlaySettings; a blank StreamElements field keeps the stored token.
+// parseOverlaySettings.
 router.post('/overlay', (req, res) => {
-  const { columns, streamElementsJwt } = parseOverlaySettings(req.body, req.streamer);
+  const columns = parseOverlaySettings(req.body);
   // Whether the overlay was on before this save: the connections were started
   // then (at boot, or by the save that switched it on). The chatbot has its own
   // page, so its switch is as stored.
@@ -974,8 +961,6 @@ router.post('/overlay', (req, res) => {
   syncLiveConnections(req.streamer.id, {
     wasNeeded: wasEnabled || chatbotOn || tracking,
     needed: !!columns.overlay_enabled || chatbotOn || tracking,
-    streamElementsJwt,
-    streamElementsChanged: 'streamelements_jwt' in columns,
   });
 
   res.redirect('/dashboard/overlay');
@@ -1077,7 +1062,7 @@ function runSettingFollowUps({ before, after, steps }) {
     const tracking = trackingInUse(id);
     const wasNeeded = !!(before.overlay_enabled || before.chatbot_enabled) || tracking;
     const needed = !!(after.overlay_enabled || after.chatbot_enabled) || tracking;
-    if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed, streamElementsJwt: after.streamelements_jwt });
+    if (wasNeeded !== needed) syncLiveConnections(id, { wasNeeded, needed });
   }
   if (steps.has('overlay')) {
     try {
@@ -1451,7 +1436,18 @@ router.get('/donations/history.csv', (req, res) => {
 });
 
 router.post('/donations/history/:id/delete', (req, res) => {
-  db.deleteDonation(parseInt(req.params.id), req.streamer.id);
+  const id = parseInt(req.params.id, 10);
+  const donation = Number.isInteger(id) ? db.getDonationById(id, req.streamer.id) : null;
+  const removed = donation ? db.deleteDonation(id, req.streamer.id).changes > 0 : false;
+  if (removed) {
+    // A refunded tip stops counting toward the goal it was added to: the active one, in its currency, started before the tip.
+    const goal = db.getActiveTipGoal(req.streamer.id);
+    const tipGoals = require('../services/tipGoals');
+    if (goal && tipGoals.currencyMatches(goal.currency, donation.currency) && donation.created_at >= goal.created_at) {
+      db.addToTipGoal(goal.id, -Math.round(donation.amount * 100) / 100);
+      tipGoals.broadcast(req.streamer.id);
+    }
+  }
   const back = new URLSearchParams();
   ['range', 'source', 'page'].forEach(k => { if (req.body[k]) back.set(k, String(req.body[k])); });
   res.redirect('/dashboard/donations/history' + (back.toString() ? '?' + back : ''));
@@ -1468,8 +1464,8 @@ router.post('/donations/goal', (req, res) => {
   const fields = parseTipGoalFields(req.body);
   if (fields.error) return goalRedirect(res, fields.error);
   const currency = TIP_GOAL_CURRENCIES.includes(req.body.currency) ? req.body.currency : (req.streamer.donation_currency || 'EUR');
-  const start = parseFloat(req.body.current_amount);
-  db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: Number.isFinite(start) ? start : 0 });
+  const start = Math.round(parseFloat(req.body.current_amount) * 100) / 100;
+  db.createTipGoal(req.streamer.id, { ...fields, currency, current_amount: Number.isFinite(start) && start > 0 ? Math.min(start, 10000000) : 0 });
   require('../services/tipGoals').broadcast(req.streamer.id);
   goalRedirect(res);
 });
@@ -1480,6 +1476,12 @@ router.post('/donations/goal/test', (req, res) => {
   if (req.body && req.body.reset) {
     tipGoals.endTest(req.streamer.id);
     return res.json({ ok: true });
+  }
+  const waitMs = testCooldown.take(req.streamer.id);
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000);
+    res.set('Retry-After', String(seconds));
+    return res.status(429).json({ ok: false, error: res.locals.t('dashboard.test.tooFast', { seconds }) });
   }
   if (!tipGoals.sendTest(req.streamer.id, req.body)) return res.status(400).json({ error: 'Invalid test goal' });
   res.json({ ok: true, revertMs: tipGoals.TEST_REVERT_MS });
@@ -1498,7 +1500,7 @@ router.post('/donations/goal/:id/adjust', (req, res) => {
   const goal = db.getActiveTipGoal(req.streamer.id);
   const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
   if (!goal || goal.id !== parseInt(req.params.id)) return goalRedirect(res, 'not_found');
-  if (!Number.isFinite(amount) || amount === 0) return goalRedirect(res, 'amount_invalid');
+  if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 10000000) return goalRedirect(res, 'amount_invalid');
   const result = db.addToTipGoal(goal.id, amount);
   const justCompleted = !!result && !result.before.completed_at && !!result.after.completed_at;
   require('../services/tipGoals').broadcast(req.streamer.id, amount > 0 ? { added: amount, justCompleted } : {});
@@ -1623,7 +1625,7 @@ function syncTrackingConnections(streamer, before) {
   const others = !!streamer.overlay_enabled || !!streamer.chatbot_enabled;
   const wasNeeded = others || before;
   const needed = others || trackingInUse(streamer.id);
-  if (wasNeeded !== needed) syncLiveConnections(streamer.id, { wasNeeded, needed, streamElementsJwt: streamer.streamelements_jwt });
+  if (wasNeeded !== needed) syncLiveConnections(streamer.id, { wasNeeded, needed });
 }
 
 // The OBS links of the goals and the trackers, in the page's language; null without an overlay token.
@@ -1642,8 +1644,8 @@ function trackingLinks(req, streamer, lang) {
 const trackingKind = (req, res, next) => (trackingGoals.KINDS.includes(req.params.kind) ? next() : trackingRefusal(res, 'not_found'));
 const trackingAnswer = (req, res) => res.json({ ok: true, state: trackingState(db.getStreamerById(req.streamer.id) || req.streamer) });
 
-// The page. Its first visit writes the six trackers' rows (on, no colour), so the trackers that are on by default
-// count as in use and keep the event connections running for a source opened before anything else is set.
+// The page. Its first visit writes the six trackers' rows (off, no colour), so reading them before and after
+// the first visit gives the same answer.
 router.get('/tracking', overlayPage, (req, res) => {
   const streamer = req.streamer;
   const before = trackingInUse(streamer.id);
@@ -1862,7 +1864,6 @@ router.post('/chatbot', (req, res) => {
     syncLiveConnections(req.streamer.id, {
       wasNeeded: otherwiseNeeded || chatbotWasOn,
       needed: otherwiseNeeded || chatbotIsOn,
-      streamElementsJwt: req.streamer.streamelements_jwt,
     });
   }
 
@@ -2376,7 +2377,7 @@ router.post('/report/:id/screenshot', async (req, res) => {
   const issueDir = path.join(__dirname, '..', '..', 'data', 'issues', String(issueId));
   try { await fs.promises.mkdir(issueDir, { recursive: true }); } catch (e) {}
 
-  const filename = `shot_${Date.now()}.${ext}`;
+  const filename = `shot_${require('crypto').randomBytes(16).toString('hex')}.${ext}`;
   try { await fs.promises.writeFile(path.join(issueDir, filename), buf); }
   catch (e) { return res.status(500).json({ ok: false, error: 'write_failed' }); }
 
@@ -2457,7 +2458,7 @@ router.post('/sponsors/upload', async (req, res) => {
   try { await fs.promises.writeFile(path.join(sponsorDir, filename), buf); }
   catch (e) { return res.status(500).json({ error: res.locals.t('upload.error.writeFailed') }); }
 
-  const displayName = req.query.name || res.locals.t('overlayBuilder.sponsors.defaultName');
+  const displayName = String(req.query.name || '').slice(0, dashboardSettings.TEMPLATE_MAX) || res.locals.t('overlayBuilder.sponsors.defaultName');
   const displayDuration = sponsorDurationSeconds(req.query.dur);
   db.addSponsorImage(streamerId, filename, displayName, null, displayDuration);
   const newImage = db.getSponsorImages(streamerId).find(i => i.filename === filename);
@@ -2479,9 +2480,10 @@ router.post('/sponsors/:id/delete', async (req, res) => {
 
 // Update sponsor image
 router.post('/sponsors/:id/update', (req, res) => {
+  const textOf = (v) => (v == null ? v : String(v).slice(0, dashboardSettings.TEMPLATE_MAX));
   db.updateSponsorImage(
     parseInt(req.params.id), req.streamer.id,
-    req.body.display_name, req.body.chat_message,
+    textOf(req.body.display_name), textOf(req.body.chat_message),
     req.body.enabled, sponsorDurationSeconds(req.body.display_duration),
     sponsorImageScale(req.body.image_scale)
   );
@@ -2700,7 +2702,7 @@ router.post('/redemptions/upload', async (req, res) => {
   if (!validateRewardFields({ title, cost, prompt, position_preset: positionPreset }, res)) return;
   if (refuseUpload(req, res, buf.length)) return;
 
-  const cooldownSeconds = Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0);
+  const cooldownSeconds = Math.min(REWARD_COOLDOWN_MAX, Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0));
   const maxPlaySeconds = clamp(req.query.max_play_seconds, 1, 60);
   const volume = clamp(req.query.volume !== undefined ? req.query.volume : 1, 0, 1);
   const customX = req.query.custom_x != null ? clamp(req.query.custom_x, 0, 1) : null;
@@ -2708,6 +2710,7 @@ router.post('/redemptions/upload', async (req, res) => {
   const customW = req.query.custom_w != null ? clamp(req.query.custom_w, 0, 1) : null;
   const customH = req.query.custom_h != null ? clamp(req.query.custom_h, 0, 1) : null;
   const chatMessageTemplate = String(req.query.chat_message_template || '').trim() || null;
+  if (chatMessageTemplate && chatMessageTemplate.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ error: res.locals.t('dashboard.settings.error.tooLong') });
   const autoFulfill = req.query.auto_fulfill === '0' ? 0 : 1;
 
   const streamerId = req.streamer.id;
@@ -2817,11 +2820,15 @@ router.patch('/redemptions/:id', async (req, res) => {
     if (body.prompt && String(body.prompt).length > 200) return res.status(400).json({ error: res.locals.t('redemptions.error.promptLength') });
     updates.prompt = body.prompt ? String(body.prompt).trim() : null;
   }
-  if (body.cooldown_seconds !== undefined) updates.cooldown_seconds = Math.max(0, parseInt(body.cooldown_seconds, 10) || 0);
+  if (body.cooldown_seconds !== undefined) updates.cooldown_seconds = Math.min(REWARD_COOLDOWN_MAX, Math.max(0, parseInt(body.cooldown_seconds, 10) || 0));
   if (body.enabled !== undefined) updates.enabled = body.enabled ? 1 : 0;
   if (body.volume !== undefined) updates.volume = clamp(body.volume, 0, 1);
   if (body.max_play_seconds !== undefined) updates.max_play_seconds = clamp(body.max_play_seconds, 1, 60);
-  if (body.chat_message_template !== undefined) updates.chat_message_template = body.chat_message_template || null;
+  if (body.chat_message_template !== undefined) {
+    const template = body.chat_message_template ? String(body.chat_message_template) : '';
+    if (template.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ error: res.locals.t('dashboard.settings.error.tooLong') });
+    updates.chat_message_template = template || null;
+  }
   if (body.auto_fulfill !== undefined) updates.auto_fulfill = body.auto_fulfill ? 1 : 0;
   if (body.position_preset !== undefined) {
     if (!VALID_POSITION_PRESETS.has(body.position_preset)) return res.status(400).json({ error: res.locals.t('redemptions.error.position') });
@@ -3037,7 +3044,11 @@ router.post('/giveaways/:id/close', (req, res) => {
   const giveaway = db.getGiveawayById(id, streamerId);
   if (!giveaway) return res.status(404).json({ error: res.locals.t('giveaways.error.notFound') });
   const giveawayMgr = require('../services/giveawayManager');
-  const result = giveawayMgr.closeGiveaway(streamerId, { silent: false });
+  if (giveaway.status === 'open') {
+    const active = giveawayMgr.getActive(streamerId);
+    if (!active || active.giveawayId !== id) return res.status(409).json({ error: res.locals.t('giveaways.error.notFound') });
+  }
+  const result = giveaway.status === 'open' ? giveawayMgr.closeGiveaway(streamerId, { silent: false }) : null;
   if (!result) {
     // Already closed — return current state
     return res.json({ ok: true, giveaway: db.getGiveawayById(id, streamerId), entryCount: db.getEntryCount(id) });

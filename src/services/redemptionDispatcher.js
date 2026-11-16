@@ -4,7 +4,7 @@ const db = require('../db');
 const bus = require('./overlayBus');
 const { chatManager } = require('./twitchChat');
 const { formatChatTemplate } = require('./redemptionTemplates');
-const { unavailableReason, refundRedemption } = require('./twitchRewards');
+const { unavailableReason, refundRedemption, fulfillRedemption } = require('./twitchRewards');
 
 // A redemption of a reward that must not play (switched off here, deleted here
 // while Twitch still has it, or Channel Point Rewards switched off): the viewer's
@@ -83,21 +83,31 @@ async function handleRedemption(streamerId, eventData) {
     return;
   }
 
-  // Step 4: verify file exists
+  // Step 4: verify file exists. Only a redemption still waiting in the queue can be
+  // canceled: the refund is asked for first and recorded only when Twitch took it.
   const mediaPath = path.join(__dirname, '..', '..', 'data', 'redemptions', String(streamerId), reward.media_filename);
   if (!fs.existsSync(mediaPath)) {
-    db.setRedemptionOutcome(logId, 'refunded_no_file', 'media file missing');
+    if (String(status).toLowerCase() !== 'unfulfilled') {
+      db.setRedemptionOutcome(logId, 'disabled', 'media file missing');
+      return;
+    }
     try {
-      const { fulfillRedemption } = require('./twitchRewards');
       await fulfillRedemption(streamer, twitchRewardId, twitchRedemptionId, 'CANCELED');
-      if (streamer && streamer.twitch_username && streamer.chatbot_enabled) {
+    } catch (e) {
+      console.error('[Redemption] refund failed:', e.message);
+      db.setRedemptionOutcome(logId, 'error', `refund failed: ${e.message}`);
+      return;
+    }
+    db.setRedemptionOutcome(logId, 'refunded_no_file', 'media file missing');
+    if (streamer && streamer.twitch_username && streamer.chatbot_enabled) {
+      try {
         chatManager.sendMessage(
           streamerId,
           `[Atleta] Reward "${reward.title}" had a missing media file — redemption refunded.`
         );
+      } catch (e) {
+        console.error('[Redemption] chat failed:', e.message);
       }
-    } catch (e) {
-      console.error('[Redemption] refund/chat failed:', e.message);
     }
     return;
   }
@@ -138,19 +148,13 @@ async function handleRedemption(streamerId, eventData) {
     }
   }
 
-  // Step 7: auto-fulfill after playback window
+  // Step 7: auto-fulfill after the playback window. The due time is stored, so a
+  // restart settles it at boot; the timer only makes it prompt.
   if (reward.auto_fulfill) {
     const delay = (reward.max_play_seconds * 1000) + 1000;
-    const timer = setTimeout(async () => {
-      try {
-        const latest = db.getStreamerById(streamerId); // its token may have been refreshed since
-        if (!latest) return;
-        const { fulfillRedemption } = require('./twitchRewards');
-        await fulfillRedemption(latest, twitchRewardId, twitchRedemptionId, 'FULFILLED');
-      } catch (e) {
-        console.error('[Redemption] auto-fulfill error:', e.message);
-      }
-    }, delay);
+    const dueMs = Date.now() + delay;
+    db.setRedemptionAutoFulfillDue(logId, new Date(dueMs).toISOString());
+    const timer = setTimeout(() => { settleDueAutoFulfills(dueMs).catch(() => {}); }, delay);
     timer.unref();
   }
 
@@ -158,4 +162,45 @@ async function handleRedemption(streamerId, eventData) {
   db.setRedemptionOutcome(logId, 'played', null);
 }
 
-module.exports = { handleRedemption, formatChatTemplate };
+// Redemptions that played and are due to be marked fulfilled on Twitch: at boot and on a minute tick.
+// One that Twitch still refuses an hour after it was due is given up on (it was probably handled by hand).
+const GIVE_UP_MS = 60 * 60 * 1000;
+const settling = new Set();
+let tickTimer = null;
+
+async function settleDueAutoFulfills(nowMs) {
+  const now = nowMs || Date.now();
+  const due = db.getDueRedemptionAutoFulfills(new Date(now).toISOString(), 100);
+  for (const row of due) {
+    if (settling.has(row.id)) continue;
+    settling.add(row.id);
+    try {
+      const latest = db.getStreamerById(row.streamer_id); // its token may have been refreshed since
+      if (latest) {
+        await fulfillRedemption(latest, row.twitch_reward_id, row.twitch_redemption_id, 'FULFILLED');
+      }
+      db.clearRedemptionAutoFulfillDue(row.id);
+    } catch (e) {
+      console.error('[Redemption] auto-fulfill error:', e.message);
+      if (now - Date.parse(row.auto_fulfill_due_at) > GIVE_UP_MS) db.clearRedemptionAutoFulfillDue(row.id);
+    } finally {
+      settling.delete(row.id);
+    }
+  }
+}
+
+function startTicks() {
+  if (tickTimer) return;
+  settleDueAutoFulfills().catch((e) => console.error('[Redemption] boot settle failed:', e.message));
+  tickTimer = setInterval(() => {
+    settleDueAutoFulfills().catch((e) => console.error('[Redemption] tick failed:', e.message));
+  }, 60 * 1000);
+  tickTimer.unref();
+}
+
+function stopTicks() {
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = null;
+}
+
+module.exports = { handleRedemption, formatChatTemplate, settleDueAutoFulfills, startTicks, stopTicks };

@@ -74,10 +74,13 @@ test('the body parsers are mounted once, from bodyParsers.js, before any route',
 });
 
 test('every route that serves uploaded files from data/ sends the user-content headers', () => {
-  for (const [route, folder] of [['/sponsors', 'sponsors'], ['/redemptions', 'redemptions'], ['/avatars', 'avatars'], ['/issues-files', 'issues'], ['/vtuber-models', 'vtuber-models']]) {
+  for (const [route, folder] of [['/sponsors', 'sponsors'], ['/redemptions', 'redemptions'], ['/avatars', 'avatars'], ['/vtuber-models', 'vtuber-models']]) {
     assert.ok(source.includes(`app.use('${route}', dataFiles('${folder}'`), `${route} is served by dataFiles('${folder}')`);
   }
   at('setUserContentHeaders(res, filePath);');
+  // Issue screenshots are private: a route behind the session, not a static folder.
+  assert.ok(at("app.get('/issues-files/:issueId/:file', issueFileHeaders, issueFileHandler);") > at('res.locals.currentPath = req.path;'), 'after the session middleware');
+  assert.ok(!source.includes("dataFiles('issues'"), 'issues is not served by dataFiles');
   // data/ itself (the database and its backups) is never served.
   const staticFolders = [...code.matchAll(/express\.static\(path\.join\(__dirname, '\.\.', ([^)]*)\)/g)].map((m) => m[1]);
   assert.deepEqual(staticFolders, ["'public'", "'data', folder"]);
@@ -125,7 +128,7 @@ test('the CSRF check runs once, after the session and the body parsers, before e
   // Between the parsers and the check, only files are served (GET and HEAD).
   const between = source.slice(at('mountBodyParsers(app);'), csrf).replace(/^\s*\/\/.*$/gm, '');
   const mounted = [...between.matchAll(/app\.(use|get|post|put|patch|delete|all)\('([^']*)'/g)].map((m) => m[2]);
-  assert.deepEqual(mounted, ['/sponsors', '/redemptions', '/avatars', '/issues-files', '/vtuber-models']);
+  assert.deepEqual(mounted, ['/sponsors', '/redemptions', '/avatars', '/vtuber-models']);
   for (const route of ["app.get('/', (req, res)", "app.use('/auth', authRoutes);", "app.use('/dashboard', dashboardRoutes);",
     "app.use('/tip', tipRoutes);", "app.use('/overlay', overlayRoutes);",
     "app.use('/api', apiRoutes);", "app.post('/set-language'", 'app.use(errorHandler);']) {

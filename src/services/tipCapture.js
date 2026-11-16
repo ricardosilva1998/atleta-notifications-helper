@@ -64,7 +64,9 @@ function sameEmail(a, b) {
 function payeeMatches(payee, streamer, pending) {
   if (!payee || typeof payee !== 'object') return false;
   if (pending.payee_merchant_id && payee.merchant_id) return payee.merchant_id === pending.payee_merchant_id;
-  return sameEmail(payee.email_address, streamer.paypal_email);
+  // The email the order was created with; older rows have none, so the
+  // streamer's current email stands in.
+  return sameEmail(payee.email_address, pending.payee_email || streamer.paypal_email);
 }
 
 // Before PayPal is called: can this return be tied to this streamer's tip page?
@@ -223,7 +225,7 @@ async function handleTipReturn({ streamer, orderId }, deps) {
 //   getOrder(orderId)          -> the order as PayPal has it now (may throw)
 //   logDonation(streamer, d)   -> true / false / null, as for handleTipReturn
 //   markCaptured(orderId)
-//   recordGoal(streamer, d)    -> tip goal progress
+//   recordGoal(streamer, d, { recovered, at }) -> tip goal progress and trackers; `at` is when the tip was started (SQLite UTC text)
 //   log(line), logError(line)
 // Returns how many tips it recovered.
 async function reconcilePendingTips(deps) {
@@ -242,7 +244,7 @@ async function reconcilePendingTips(deps) {
       }
       deps.markCaptured(pending.order_id);
       if (!isNew) continue;
-      deps.recordGoal(streamer, verdict.donation);
+      deps.recordGoal(streamer, verdict.donation, { recovered: true, at: pending.created_at });
       recovered++;
       const d = verdict.donation;
       deps.log(`[Tip] Recovered order ${pending.order_id} for ${streamer.twitch_username}: ${d.currency} ${d.amount} from ${d.donorName}, recorded without an alert`);

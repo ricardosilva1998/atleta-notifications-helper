@@ -661,7 +661,7 @@
 
   onClick('[data-alert-test]', async (button) => {
     const card = button.closest('.wc-card');
-    const answer = await call('POST', '/dashboard/overlay/test/' + encodeURIComponent(button.dataset.alertTest));
+    const answer = await call('POST', '/dashboard/overlay/test/' + encodeURIComponent(button.dataset.alertTest), { chat: false });
     if (!answer.ok) {
       showMessage(card, answer);
       return;

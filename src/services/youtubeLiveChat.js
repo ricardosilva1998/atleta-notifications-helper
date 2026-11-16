@@ -220,12 +220,15 @@ async function pollChat(streamerId) {
 
   try {
     const token = await ensureBotToken();
+    if (activePollers.get(streamerId) !== poller) return;
     if (!token) {
       console.error(`[YT Chat] No bot token available for streamer ${streamerId}`);
       poller.timer = setTimeout(() => pollChat(streamerId), 30000);
       return;
     }
+    if (activePollers.get(streamerId) !== poller) return;
     const data = await fetchLiveChatMessages(poller.liveChatId, poller.pageToken, token);
+    if (activePollers.get(streamerId) !== poller) return;
 
     if (!data) {
       console.log(`[YT Chat] Failed to fetch messages for streamer ${streamerId}, retrying...`);
@@ -253,6 +256,7 @@ async function pollChat(streamerId) {
     poller.timer = setTimeout(() => pollChat(streamerId), interval);
   } catch (err) {
     console.error(`[YT Chat] Poll error for streamer ${streamerId}:`, err.message);
+    if (activePollers.get(streamerId) !== poller) return;
     poller.timer = setTimeout(() => pollChat(streamerId), 10000);
   }
 }

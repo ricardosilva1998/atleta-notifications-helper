@@ -4,12 +4,11 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = rateLimit;
 const path = require('path');
-const crypto = require('crypto');
 const config = require('./config');
 const db = require('./db');
 const { t, SUPPORTED_LANGS, esc, richFor } = require('./i18n');
 const { clientIp } = require('./clientIp');
-const { applyAccountStatus, isStreamerDisabled } = require('./services/streamerAccess');
+const { applyAccountStatus } = require('./services/streamerAccess');
 const { errorHandler } = require('./errorHandler');
 const { mountBodyParsers } = require('./bodyParsers');
 const { csrfProtection } = require('./csrf');
@@ -17,6 +16,7 @@ const { isRelayRequest } = require('./services/multistreamAuth');
 const { healthHandler } = require('./health');
 const httpDrain = require('./httpDrain');
 const { setUserContentHeaders } = require('./services/userContentHeaders');
+const { issueFileHandler, issueFileHeaders } = require('./services/issueFiles');
 
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
@@ -89,7 +89,7 @@ const apiLimiter = rateLimit({
 });
 app.use(generalLimiter);
 // Every /api route (the multistream webhooks, the api router) is behind this one limiter. It is mounted ahead of the body
-// parsers, so a refused request is answered before its body (up to 10 MB on
+// parsers, so a refused request is answered before its body (up to 1 MB on
 // some routes) is read, and it counts each request once: no /api route may be
 // given apiLimiter again.
 app.use('/api', apiLimiter);
@@ -140,8 +140,6 @@ app.use('/sponsors', dataFiles('sponsors'));
 app.use('/redemptions', dataFiles('redemptions', (res) => res.set('Cache-Control', 'public, max-age=86400')));
 // Profile pictures
 app.use('/avatars', dataFiles('avatars'));
-// Issue screenshots
-app.use('/issues-files', dataFiles('issues'));
 // Custom VTuber models
 app.use('/vtuber-models', dataFiles('vtuber-models'));
 // Serve custom overlay uploads from persistent data volume — DISABLED for now
@@ -243,6 +241,12 @@ app.get('/donate', (req, res) => {
   res.render('donate', { streamer: req.streamer || null });
 });
 
+// The legacy paid flow stays off until features.pricing is switched on.
+app.use(['/pricing', '/payment'], (req, res, next) => {
+  if (config.features.pricing) return next();
+  res.redirect('/dashboard');
+});
+
 app.get('/pricing', (req, res) => {
   res.render('pricing', {
     streamer: req.streamer || null,
@@ -285,6 +289,8 @@ app.get('/streamer', (req, res) => {
 app.use('/api', apiRoutes); // apiLimiter is applied above, ahead of every /api route
 app.use('/admin', adminRoutes);
 app.use('/vtuber', vtuberRoutes);
+// Issue screenshots: the reporter or an admin only (after the session middleware)
+app.get('/issues-files/:issueId/:file', issueFileHeaders, issueFileHandler);
 app.use('/sync', syncRoutes);
 app.use('/overlay', overlayRoutes);
 

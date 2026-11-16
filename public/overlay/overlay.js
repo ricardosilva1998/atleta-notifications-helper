@@ -351,7 +351,7 @@ const soundEffects = {
   // Follow: tire screech + short engine rev
   follow: () => {
     tireScreech(0.3);
-    setTimeout(() => engineRev(80, 200, 0.4, 0.2), 200);
+    alertTimer(() => engineRev(80, 200, 0.4, 0.2), 200);
   },
   // Subscription: turbo spool + blow-off valve + engine rev
   subscription: () => {
@@ -361,25 +361,25 @@ const soundEffects = {
   // Bits: rapid engine revs (nitro boost)
   bits: () => {
     engineRev(100, 400, 0.15, 0.2);
-    setTimeout(() => engineRev(200, 600, 0.15, 0.25), 120);
-    setTimeout(() => engineRev(300, 800, 0.2, 0.3), 240);
+    alertTimer(() => engineRev(200, 600, 0.15, 0.25), 120);
+    alertTimer(() => engineRev(300, 800, 0.2, 0.3), 240);
   },
   // Donation: engine start + rev up
   donation: () => {
     engineRev(40, 60, 0.3, 0.15);
-    setTimeout(() => engineRev(60, 300, 0.5, 0.25), 250);
+    alertTimer(() => engineRev(60, 300, 0.5, 0.25), 250);
   },
   // Raid: multiple engines approaching
   raid: () => {
     engineRev(50, 150, 0.6, 0.12);
-    setTimeout(() => engineRev(60, 180, 0.5, 0.15), 100);
-    setTimeout(() => engineRev(70, 200, 0.5, 0.18), 200);
-    setTimeout(() => tireScreech(0.2), 500);
+    alertTimer(() => engineRev(60, 180, 0.5, 0.15), 100);
+    alertTimer(() => engineRev(70, 200, 0.5, 0.18), 200);
+    alertTimer(() => tireScreech(0.2), 500);
   },
   // YouTube Super Chat: engine rev + turbo
   yt_superchat: () => {
     engineRev(80, 250, 0.5, 0.2);
-    setTimeout(() => turboBlowoff(0.2), 300);
+    alertTimer(() => turboBlowoff(0.2), 300);
   },
   // YouTube Member: smooth engine purr + rev
   yt_member: () => {
@@ -388,7 +388,7 @@ const soundEffects = {
   // YouTube Gift: double rev burst
   yt_giftmember: () => {
     engineRev(80, 300, 0.3, 0.2);
-    setTimeout(() => engineRev(100, 400, 0.3, 0.25), 250);
+    alertTimer(() => engineRev(100, 400, 0.3, 0.25), 250);
   },
 };
 
@@ -396,13 +396,25 @@ const soundEffects = {
 let evtSource = null;
 let reconnectTimer = null;
 
+// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
+// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
+function retryDelay(url) {
+  if (typeof fetch !== 'function') return Promise.resolve(5000);
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
+    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
+    .catch(() => 5000);
+}
+
 function connectSSE() {
   if (evtSource) {
     evtSource.close();
     evtSource = null;
   }
 
-  const sseUrl = `/overlay/events/${window.OVERLAY_TOKEN}?source=alerts`;
+  // The builder's Preview iframe (?preview=1) is not an OBS source: it must not count as the overlay being open
+  const isPreview = /[?&]preview=1(&|$)/.test(String((typeof location !== 'undefined' && location.search) || ''));
+  const sseUrl = `/overlay/events/${window.OVERLAY_TOKEN}` + (isPreview ? '' : '?source=alerts');
   console.log('[Overlay] Connecting SSE to:', sseUrl);
   evtSource = new EventSource(sseUrl);
 
@@ -497,10 +509,12 @@ function connectSSE() {
     evtSource = null;
     // Retry after 5s — handles deploy downtime
     if (!reconnectTimer) {
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        connectSSE();
-      }, 5000);
+      retryDelay(sseUrl).then((ms) => {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connectSSE();
+        }, ms);
+      });
     }
   };
 }
@@ -516,6 +530,7 @@ function clearOverlay() {
   alertTimers.forEach((id) => clearTimeout(id));
   alertTimers.clear();
   stopCurrentSound();
+  if (window.ATLETA_KIT && typeof window.ATLETA_KIT.stopSounds === 'function') window.ATLETA_KIT.stopSounds();
   // Remove all alert cards and screen effects
   document.querySelectorAll('.alert-card, .alert-pos, .screen-effect').forEach(e => e.remove());
   console.log('[Overlay] Queue cleared, all cards removed');
@@ -782,8 +797,8 @@ function buildBannerContent(event) {
     case 'subscription': {
       const d = event.data;
       const detail = d.months && d.months > 1
-        ? `Subscribed for <b>${d.months} months</b> — Tier ${d.tier || '1'} 🥇`
-        : d.message ? esc(d.message) : `Tier ${d.tier || '1'} subscriber! 🥇`;
+        ? `Subscribed for <b>${esc(d.months)} months</b> — Tier ${esc(d.tier || '1')} 🥇`
+        : d.message ? esc(d.message) : `Tier ${esc(d.tier || '1')} subscriber! 🥇`;
       const body = `<div class="event-label">Podium Finish</div>
           <div class="username">${esc(d.username)}</div>
           <div class="detail">${detail}</div>`;
@@ -798,7 +813,7 @@ function buildBannerContent(event) {
     case 'bits': {
       const body = `<div class="event-label">Nitro Boost</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">fueled up <b>${event.data.amount} bits</b> of nitro! 🔥</div>`;
+          <div class="detail">fueled up <b>${esc(event.data.amount)} bits</b> of nitro! 🔥</div>`;
       return `<div class="top-accent"></div>
         <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
@@ -808,13 +823,13 @@ function buildBannerContent(event) {
     }
 
     case 'donation': {
-      const currency = event.data.currency || '$';
+      const currency = esc(event.data.currency || '$');
       const msgHtml = event.data.message
         ? `<div class="detail" style="margin-top:6px;font-style:italic;opacity:0.85;">"${esc(event.data.message)}"</div>`
         : '';
       const body = `<div class="event-label">Sponsor Alert</div>
           <div class="username">${esc(event.data.username)}</div>
-          <div class="detail">donated <b>${currency} ${event.data.amount}</b> 💸</div>${msgHtml}`;
+          <div class="detail">donated <b>${currency} ${esc(event.data.amount)}</b> 💸</div>${msgHtml}`;
       return `<div class="top-accent"></div>
         <div class="card-body">${wrapWithSideIcons(icon, body)}</div>
         <div class="car-track">
@@ -827,7 +842,7 @@ function buildBannerContent(event) {
     }
 
     case 'raid': {
-      const viewers = event.data.viewers || '??';
+      const viewers = esc(event.data.viewers || '??');
       const body = `<div class="event-label">Incoming Raid</div>
           <div class="username">${esc(event.data.username)}</div>
           <div class="detail">raiding with <b>${viewers} viewers</b>! 🏁</div>`;
@@ -1396,7 +1411,13 @@ function applyRectToElement(el, rect) {
   el.style.height = rect.height || '';
 }
 
+// One id per playback: onerror, onended, the cap timer and a rejected play() can
+// all report the same clip ending, and only the first may advance the queue.
+let _redemptionActive = 0;
+let _redemptionSeq = 0;
+
 function stopRedemption(andPlayNext) {
+  _redemptionActive = 0;
   if (_redemptionCapTimer) { clearTimeout(_redemptionCapTimer); _redemptionCapTimer = null; }
 
   const vid = document.getElementById('redemption-video');
@@ -1408,12 +1429,14 @@ function stopRedemption(andPlayNext) {
     try { vid.load(); } catch (e) {}
     vid.style.display = 'none';
     vid.onended = null;
+    vid.onerror = null;
   }
   if (aud) {
     try { aud.pause(); } catch (e) {}
     aud.removeAttribute('src');
     try { aud.load(); } catch (e) {}
     aud.onended = null;
+    aud.onerror = null;
   }
 
   if (andPlayNext !== false) {
@@ -1432,6 +1455,9 @@ function playRedemption(event) {
 
   console.log('[Redemption] play', { mediaType, mediaUrl, finalVolume, masterVolume, rewardVolume });
   stopRedemption(false);
+  const playId = ++_redemptionSeq;
+  _redemptionActive = playId;
+  const finish = () => { if (_redemptionActive === playId) stopRedemption(true); };
 
   if (mediaType === 'video') {
     const vid = document.getElementById('redemption-video');
@@ -1442,22 +1468,22 @@ function playRedemption(event) {
     vid.src = mediaUrl;
     vid.volume = finalVolume;
     vid.style.display = 'block';
-    vid.onerror = () => console.error('[Redemption] video error', vid.error, 'src=', vid.currentSrc);
+    vid.onerror = () => { console.error('[Redemption] video error', vid.error, 'src=', vid.currentSrc); finish(); };
 
-    _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
-    vid.onended = () => stopRedemption(true);
-    vid.play().catch(err => console.error('[Redemption] video.play() rejected:', err.message, 'src=', vid.currentSrc));
+    _redemptionCapTimer = setTimeout(() => finish(), maxPlaySec * 1000);
+    vid.onended = () => finish();
+    vid.play().catch(err => { console.error('[Redemption] video.play() rejected:', err.message, 'src=', vid.currentSrc); finish(); });
   } else {
     const aud = document.getElementById('redemption-audio');
     if (!aud) { console.error('[Redemption] #redemption-audio element missing'); alertTimer(playNext, 200); return; }
 
     aud.src = mediaUrl;
     aud.volume = finalVolume;
-    aud.onerror = () => console.error('[Redemption] audio error', aud.error, 'src=', aud.currentSrc);
+    aud.onerror = () => { console.error('[Redemption] audio error', aud.error, 'src=', aud.currentSrc); finish(); };
 
-    _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
-    aud.onended = () => stopRedemption(true);
-    aud.play().catch(err => console.error('[Redemption] audio.play() rejected:', err.message, 'src=', aud.currentSrc));
+    _redemptionCapTimer = setTimeout(() => finish(), maxPlaySec * 1000);
+    aud.onended = () => finish();
+    aud.play().catch(err => { console.error('[Redemption] audio.play() rejected:', err.message, 'src=', aud.currentSrc); finish(); });
   }
 }
 

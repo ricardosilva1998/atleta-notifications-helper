@@ -329,22 +329,30 @@
   }
   // Starts loading the recordings of these sounds ('today', 'none' and unknown keys are passed over),
   // so the first alert's sound is ready when it comes.
+  var playing = [], cleared = 0;
   function preloadSounds(keys) { (keys || []).forEach(function (key) { loadRecording(key); }); }
   function recorded(key, synth) {
     return function () {
       var c = audio.ctx, asked = Date.now(), pending = loadRecording(key);
       if (!pending) { synth(); return; }
       pending.then(function (buffer) {
-        if (Date.now() - asked > LATE_MS) return;
+        if (Date.now() - asked > LATE_MS || asked < cleared) return;
         if (!buffer) { try { synth(); } catch (e) { /* nothing to play */ } return; }
         var src = c.createBufferSource(), g = c.createGain();
         src.buffer = buffer;
         g.gain.value = audio.volume();
         src.connect(g);
         g.connect(c.destination);
+        playing.push(src);
+        src.onended = function () { var i = playing.indexOf(src); if (i >= 0) playing.splice(i, 1); };
         src.start();
       });
     };
+  }
+  // Clear All: ends every recording still playing; one that has not loaded yet is dropped by `cleared`.
+  function stopSounds() {
+    cleared = Date.now();
+    playing.splice(0).forEach(function (src) { try { src.stop(); } catch (e) { /* already ended */ } });
   }
   function level(v) { return Math.max(0.0001, (v || 0.1) * audio.volume()); }
   function envelope(g, t0, v, a, d) { g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(level(v), t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d); }
@@ -390,7 +398,7 @@
     sizeOf: sizeOf, lookData: lookData, slotVars: slotVars, DEFAULT_LOOKS: DEFAULT_LOOKS, ownSettings: ownSettings, effectFor: effectFor, soundFor: soundFor,
     registerFamily: registerFamily, fontNames: fontNames, register: register, looksOf: looksOf,
     setAudio: setAudio, registerSound: registerSound, playSound: playSound, tone: tone, noise: noise, engine: engine,
-    soundFiles: FILES, registerSoundFiles: registerSoundFiles, preloadSounds: preloadSounds, setSoundBase: setSoundBase,
+    soundFiles: FILES, registerSoundFiles: registerSoundFiles, preloadSounds: preloadSounds, stopSounds: stopSounds, setSoundBase: setSoundBase,
     isSecondVersion: isSecondVersion, secondVersionOf: secondVersionOf,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = KIT;

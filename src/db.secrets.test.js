@@ -1,6 +1,6 @@
 'use strict';
 
-// Secrets at rest in src/db.js: the OAuth tokens and the StreamElements token
+// Secrets at rest in src/db.js: the OAuth tokens
 // (encrypted with TOKEN_ENCRYPTION_KEY when it is set) and the web session ids
 // (stored hashed). The real db.js is booted several times against temporary
 // database files, with and without a key, as successive deploys would boot it.
@@ -95,7 +95,9 @@ function writeAllTokens(db, id, tag) {
   db.updateStreamerYoutubeTokens(id, t.yt_access_token, t.yt_refresh_token, Date.now() + 3_600_000, 'Synthetic Channel');
   db.updateSpotifyTokens(id, t.spotify_access_token, t.spotify_refresh_token, Date.now() + 3_600_000);
   db.updateBotTokens(id, t.bot_access_token, t.bot_refresh_token, Date.now() + 3_600_000, 'synthetic_bot');
-  db.updateOverlayConfig(id, { streamelements_jwt: t.streamelements_jwt, overlay_enabled: 1 });
+  // No writer is left for the retired column: write it as an old row would hold it.
+  const stored = db.tokenEncryptionEnabled ? secretBox.seal(t.streamelements_jwt, KEY) : t.streamelements_jwt;
+  db.db.prepare('UPDATE streamers SET streamelements_jwt = ?, overlay_enabled = 1 WHERE id = ?').run(stored, id);
   return t;
 }
 
@@ -230,7 +232,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
     assert.ok('x = db.prepare("SELECT yt_access_token FROM streamers WHERE id = ?")'.match(/"[^"\n]*"/)[0].includes('yt_access_token'));
   });
 
-  test('no column whitelist of a dynamic UPDATE names a token column, except OVERLAY_COLUMNS (whose writer seals it)', () => {
+  test('no column whitelist of a dynamic UPDATE names a token column', () => {
     // A dynamic UPDATE takes its column names from a Set or an object of
     // allowed names; a token column there would be written without sealToken.
     const source = fs.readFileSync(DB_FILE, 'utf8');
@@ -242,7 +244,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
       assert.ok(lists.some(({ name }) => name === known), `the scan finds ${known}`);
     }
     const naming = lists.filter(({ body }) => TOKEN_COLUMNS.some((c) => new RegExp(`['"\`]${c}['"\`]`).test(body)));
-    assert.deepEqual(naming.map(({ name }) => name), ['OVERLAY_COLUMNS']);
+    assert.deepEqual(naming.map(({ name }) => name), []);
   });
 
   test('a renewed YouTube token is stored encrypted, and the channel name is left as it was', () => {
@@ -273,7 +275,6 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
       inspect: (db) => {
         id = insertStreamer(db.db);
         db.updateSpotifyTokens(id, null, '', null);
-        db.updateOverlayConfig(id, { streamelements_jwt: null });
         const streamer = db.getStreamerById(id);
         assert.equal(streamer.spotify_access_token, null);
         assert.equal(streamer.spotify_refresh_token, '');
@@ -394,13 +395,6 @@ describe('session ids', () => {
         assert.equal(db.getSession(DISCORD_SID).streamer_id, streamer);
         assert.equal(db.getSession(HEX_SID).streamer_id, streamer);
         assert.equal(db.getSession(sha256(DISCORD_SID)), undefined, 'what the table holds does not log anyone in');
-
-        // "Log out other devices" keeps the current one.
-        db.deleteOtherSessions(HEX_SID, { streamerId: streamer });
-        assert.ok(db.getSession(HEX_SID));
-        assert.equal(db.getSession('c3'.repeat(32)), undefined);
-        assert.equal(db.getSession('second-device'), undefined);
-        db.createSession('second-device', streamer, soon);
 
         // Logout ends that session only.
         db.deleteSession(DISCORD_SID);

@@ -158,6 +158,22 @@ describe('the trackers', () => {
     assert.deepEqual(w.tr.values(id).latest_tip, { name: 'Yankee', amount: 50, currency: 'USD' });
     assert.ok(!('top_tipper' in db.getTrackerValues(id)), 'the top tipper is worked out, not stored');
   });
+
+  test('a recovered tip becomes the latest tip only when newer than the stored one', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const w = setup();
+    w.tr.onTip(id, { name: 'Live', amount: 5, currency: 'EUR' });
+    const stored = db.db.prepare("SELECT updated_at FROM tracker_values WHERE streamer_id = ? AND tracker = 'latest_tip'").get(id).updated_at;
+    w.tr.onTip(id, { name: 'Late', amount: 9, currency: 'EUR' }, { recovered: true, at: '2000-01-01 00:00:00' });
+    assert.equal(w.tr.values(id).latest_tip.name, 'Live', 'an older recovered tip leaves the latest tip alone');
+    assert.ok(!w.emitted.some((e) => e.payload.tracker === 'latest_tip' && e.payload.value.name === 'Late'));
+    w.tr.onTip(id, { name: 'Newer', amount: 9, currency: 'EUR' }, { recovered: true, at: '2999-01-01 00:00:00' });
+    assert.equal(w.tr.values(id).latest_tip.name, 'Newer');
+    assert.ok(stored);
+    const other = addStreamer({ donation_currency: 'EUR' });
+    w.tr.onTip(other, { name: 'First', amount: 1, currency: 'EUR' }, { recovered: true, at: '2000-01-01 00:00:00' });
+    assert.equal(w.tr.values(other).latest_tip.name, 'First', 'with nothing stored a recovered tip is the latest');
+  });
 });
 
 describe('the top tipper', () => {
@@ -272,7 +288,7 @@ describe('clearing the trackers', () => {
 });
 
 describe('the trackers\' settings', () => {
-  test('settings() gives all six as their sources draw them: no row is on in the Atleta purple, a stored colour is kept', () => {
+  test('settings() gives all six as their sources draw them: no row is off in the Atleta purple, a stored colour is kept', () => {
     const s = addStreamer();
     const world = setup();
     db.setTrackerSetting(s, 'latest_tip', { enabled: false, color: '#ff00aa' });
@@ -280,9 +296,17 @@ describe('the trackers\' settings', () => {
     const settings = world.tr.settings(s);
     assert.deepEqual(Object.keys(settings), trackers.TRACKERS);
     assert.equal(trackers.DEFAULT_COLOR, '#9146FF');
-    assert.deepEqual(settings.latest_follower, { enabled: true, color: '#9146FF', ownColor: false });
+    assert.deepEqual(settings.latest_follower, { enabled: false, color: '#9146FF', ownColor: false });
     assert.deepEqual(settings.latest_tip, { enabled: false, color: '#ff00aa', ownColor: true });
-    assert.deepEqual(settings.latest_raid, { enabled: true, color: '#9146FF', ownColor: false }, 'a colour that is not #rrggbb is the default');
+    assert.deepEqual(settings.latest_raid, { enabled: false, color: '#9146FF', ownColor: false }, 'a colour that is not #rrggbb is the default');
+  });
+});
+
+describe('trackers with no rows', () => {
+  test('settings() with no rows gives enabled:false for all six', () => {
+    const tr = trackers.createTrackers({ db: { getTrackerSettings: () => ({}) } });
+    const settings = tr.settings(1);
+    for (const tracker of trackers.TRACKERS) assert.equal(settings[tracker].enabled, false);
   });
 });
 

@@ -404,7 +404,7 @@ describe('trackers', () => {
     const s = addStreamer();
     assert.deepEqual(db.getTrackerSettings(s), {});
     db.setTrackerSetting(s, 'latest_tip', { color: '#ff00aa' });
-    assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 1, color: '#ff00aa' } });
+    assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 0, color: '#ff00aa' } });
     db.setTrackerSetting(s, 'latest_tip', { enabled: false });
     assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 0, color: '#ff00aa' } });
     db.setTrackerSetting(s, 'latest_tip', { enabled: true, color: null });
@@ -413,14 +413,14 @@ describe('trackers', () => {
     assert.equal(Object.keys(db.getTrackerSettings(s)).length, 2);
   });
 
-  test('ensureTrackerSettings writes a row, on and with no colour, for each tracker that has none, and leaves the others', () => {
+  test('ensureTrackerSettings writes a row, off and with no colour, for each tracker that has none, and leaves the others', () => {
     const s = addStreamer();
     db.setTrackerSetting(s, 'latest_tip', { enabled: false, color: '#ff00aa' });
     assert.equal(db.ensureTrackerSettings(s, ['latest_follower', 'latest_tip', 'top_tipper']), 2);
     assert.deepEqual(db.getTrackerSettings(s), {
-      latest_follower: { enabled: 1, color: null },
+      latest_follower: { enabled: 0, color: null },
       latest_tip: { enabled: 0, color: '#ff00aa' },
-      top_tipper: { enabled: 1, color: null },
+      top_tipper: { enabled: 0, color: null },
     });
     assert.equal(db.ensureTrackerSettings(s, ['latest_follower', 'latest_tip', 'top_tipper']), 0, 'a second time writes nothing');
   });

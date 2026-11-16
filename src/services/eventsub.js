@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { refreshBroadcasterToken, hasRedemptionScope, hasPollsScope } = require('./twitch');
+const { refreshBroadcasterTokenShared, hasRedemptionScope, hasPollsScope } = require('./twitch');
 const { chatManager } = require('./twitchChat');
 const { isStreamerDisabled } = require('./streamerAccess');
 const { createMessageDedupe } = require('./messageDedupe');
@@ -30,6 +30,10 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
 // deliver notifications written before the move. It is kept for them until
 // Twitch closes it, and at most this long.
 const DRAIN_MS = 30_000;
+
+// An event type Twitch could not take (no answer, 429, 5xx, a refresh that failed) is asked for again on the same
+// session after these pauses, then given up on until the next session.
+const SUBSCRIBE_RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
 
 // Twitch can deliver a notification more than once (same message_id), for
 // example around a reconnect. Each one is acted on once.
@@ -87,6 +91,8 @@ class EventSubClient {
     this.drainTimer = null;
     this.sessionId = null; // the live session's id; the session survives a move to a reconnect socket
     this.sessionRun = 0; // counts the sessions started, so a subscribe loop knows if its session is still the live one
+    this.subscribeRetryTimer = null;
+    this.lastSubscribeRetryable = false; // set by createSubscription when it returns false
     this.keepaliveTimer = null;
     this.keepaliveSeconds = DEFAULT_KEEPALIVE_SECONDS;
     this.reconnectTimer = null;
@@ -298,7 +304,9 @@ class EventSubClient {
     const run = ++this.sessionRun;
     console.log(`[EventSub] Session ${sessionId} for streamer ${this.streamerId} (keepalive: ${this.keepaliveSeconds}s)`);
 
+    this.clearSubscribeRetry();
     let subscribed = 0;
+    const failed = [];
     for (const subType of SUBSCRIPTION_TYPES) {
       // Stop once this session is over (stopped, lost, replaced by a newer one,
       // or the token died). A session Twitch moved to a reconnect socket is the
@@ -306,6 +314,11 @@ class EventSubClient {
       // id it has now.
       if (this.needsReauth || this.stopped || this.sessionRun !== run || !this.sessionId) break;
       if (await this.createSubscription(this.sessionId, subType)) subscribed++;
+      else if (this.lastSubscribeRetryable) failed.push(subType);
+    }
+
+    if (failed.length > 0 && !this.needsReauth && !this.stopped && this.sessionRun === run) {
+      this.scheduleSubscribeRetry(run, failed, 0);
     }
 
     // Only a session that actually subscribed to something earns a backoff
@@ -317,6 +330,33 @@ class EventSubClient {
     } else if (!this.needsReauth && !this.stopped) {
       console.warn(`[EventSub] No subscriptions created for streamer ${this.streamerId} — next retry in ${this.reconnectDelay / 1000}s`);
     }
+  }
+
+  clearSubscribeRetry() {
+    if (this.subscribeRetryTimer) {
+      clearTimeout(this.subscribeRetryTimer);
+      this.subscribeRetryTimer = null;
+    }
+  }
+
+  scheduleSubscribeRetry(run, types, attempt) {
+    if (attempt >= SUBSCRIBE_RETRY_DELAYS_MS.length) {
+      console.warn(`[EventSub] Giving up on ${types.map((t) => t.type).join(', ')} for streamer ${this.streamerId} until the next session`);
+      return;
+    }
+    this.subscribeRetryTimer = setTimeout(async () => {
+      this.subscribeRetryTimer = null;
+      const still = [];
+      for (const subType of types) {
+        if (this.needsReauth || this.stopped || this.sessionRun !== run || !this.sessionId) return;
+        if (await this.createSubscription(this.sessionId, subType)) continue;
+        if (this.lastSubscribeRetryable) still.push(subType);
+      }
+      if (still.length > 0 && !this.needsReauth && !this.stopped && this.sessionRun === run) {
+        this.scheduleSubscribeRetry(run, still, attempt + 1);
+      }
+    }, SUBSCRIBE_RETRY_DELAYS_MS[attempt]);
+    this.subscribeRetryTimer.unref?.();
   }
 
   handleNotification(msg) {
@@ -432,6 +472,7 @@ class EventSubClient {
 
   // Returns true only when Twitch accepted the subscription.
   async createSubscription(sessionId, subType) {
+    this.lastSubscribeRetryable = false;
     if (this.needsReauth) return false;
 
     let streamer = db.getStreamerById(this.streamerId);
@@ -477,6 +518,7 @@ class EventSubClient {
       // No answer in time, or the network failed: this event type is not
       // subscribed, and the others still get their turn.
       console.error(`[EventSub] Subscribe request for ${subType.type} failed for streamer ${this.streamerId}:`, err.message);
+      this.lastSubscribeRetryable = true;
       return false;
     }
 
@@ -484,11 +526,12 @@ class EventSubClient {
     if (res.status === 401) {
       try {
         streamer = db.getStreamerById(this.streamerId);
-        token = await refreshBroadcasterToken(streamer);
+        token = await refreshBroadcasterTokenShared(streamer);
         res = await post(token);
       } catch (err) {
         console.error(`[EventSub] Token refresh failed for streamer ${this.streamerId}:`, err.message);
         if (err.code === 'INVALID_REFRESH_TOKEN') this.markNeedsReauth();
+        else this.lastSubscribeRetryable = true;
         return false;
       }
     }
@@ -496,6 +539,7 @@ class EventSubClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error(`[EventSub] Failed to subscribe ${subType.type} for streamer ${this.streamerId}:`, err.message || res.status);
+      this.lastSubscribeRetryable = res.status === 429 || res.status >= 500;
       return false;
     }
 
@@ -634,6 +678,7 @@ class EventSubClient {
 
   disconnect() {
     this.stopped = true;
+    this.clearSubscribeRetry();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

@@ -66,7 +66,6 @@ const stubs = {
   '../services/youtubeLiveChat': { youtubeChatManager: { isPolling: () => false, startPolling: record(), stopPolling: record() } },
   '../services/agentTriage': { analyzeIssue: async () => {} },
   '../services/eventsub': { eventSubManager: { startForStreamer: record(), stopForStreamer: record() } },
-  '../services/streamelements': { streamElementsManager: { startForStreamer: record(), stopForStreamer: record() } },
 };
 
 let db;

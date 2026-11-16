@@ -1317,3 +1317,36 @@ describe('the fonts of the looks (alert styles)', () => {
     assert.equal(overlay.slots().length, 1, 'a card');
   });
 });
+
+describe('a redemption clip ends exactly once', () => {
+  async function flush() { for (let i = 0; i < 5; i++) await Promise.resolve(); }
+  const clip = { type: 'redemption', data: { mediaType: 'audio', mediaUrl: '/redemptions/x/missing.mp3', maxPlaySeconds: 15 } };
+
+  test('a clip that fails to load (onerror and a rejected play) takes one queue item, not two', async () => {
+    const overlay = loadOverlay();
+    const aud = overlay.sandbox.document.getElementById('redemption-audio');
+    aud.play = () => Promise.reject(new Error('NotSupportedError'));
+    overlay.run("queue.length = 0; isPlaying = false;");
+    overlay.run(`queue.push(${JSON.stringify(clip)}, { type: 'follow', data: { username: 'A' } }, { type: 'follow', data: { username: 'B' } }, { type: 'follow', data: { username: 'C' } }); playNext();`);
+    aud.onerror();
+    await flush();
+    overlay.clock.advance(300);
+    assert.equal(overlay.slots().length, 1, 'only A is on screen');
+    assert.equal(overlay.run('queue.length'), 2, 'B and C still wait');
+  });
+
+  test('the cap timer and the play() rejection it causes advance the queue once', async () => {
+    const overlay = loadOverlay();
+    const aud = overlay.sandbox.document.getElementById('redemption-audio');
+    let rejectPlay;
+    aud.play = () => new Promise((_, reject) => { rejectPlay = reject; });
+    aud.load = () => { if (rejectPlay) rejectPlay(new Error('aborted')); };
+    overlay.run("queue.length = 0; isPlaying = false;");
+    overlay.run(`queue.push(${JSON.stringify(clip)}, { type: 'follow', data: { username: 'A' } }, { type: 'follow', data: { username: 'B' } }); playNext();`);
+    overlay.clock.advance(15000 + 300);
+    await flush();
+    overlay.clock.advance(300);
+    assert.equal(overlay.slots().length, 1);
+    assert.equal(overlay.run('queue.length'), 1);
+  });
+});

@@ -12,25 +12,27 @@ const { getVideos, getClips, getUserId, getGameNames } = require('../services/tw
 const MAX_ATTEMPTS = 4;
 const RETRY_GAP_MS = 10 * 60 * 1000;
 
-// guild_id -> { date, count, lastAt }: this week's tries for a server that has
-// not been posted yet. One entry per server at most; each poll first drops the
-// entries of an earlier week.
+// "guild:streamer" -> { date, count, lastAt }: this week's tries for a streamer's
+// digest in a server that has not been posted yet. One entry per pair at most;
+// each poll first drops the entries of an earlier week.
 const attempts = new Map();
 
+const attemptKey = (guildId, streamerId) => `${guildId}:${streamerId}`;
+
 function forgetOldAttempts(date) {
-  for (const [guildId, tried] of attempts) {
-    if (tried.date !== date) attempts.delete(guildId);
+  for (const [key, tried] of attempts) {
+    if (tried.date !== date) attempts.delete(key);
   }
 }
 
-function mayAttempt(guildId, nowMs) {
-  const tried = attempts.get(guildId);
+function mayAttempt(key, nowMs) {
+  const tried = attempts.get(key);
   return !tried || (tried.count < MAX_ATTEMPTS && nowMs - tried.lastAt >= RETRY_GAP_MS);
 }
 
-function noteAttempt(guildId, date, nowMs) {
-  const count = (attempts.get(guildId)?.count || 0) + 1;
-  attempts.set(guildId, { date, count, lastAt: nowMs });
+function noteAttempt(key, date, nowMs) {
+  const count = (attempts.get(key)?.count || 0) + 1;
+  attempts.set(key, { date, count, lastAt: nowMs });
   return count;
 }
 
@@ -108,15 +110,16 @@ async function pollWeeklyDigest(now = new Date()) {
       if (!tierConfig.weeklyHighlights) continue;
 
       // Check if already posted this week
-      const digestState = db.getWeeklyDigestState(guild_id);
+      const digestState = db.getWeeklyDigestState(guild_id, streamer_id);
       if (digestState?.last_digest_date === todayStr) continue;
 
       // Get posting channel
       const channelId = db.getDigestChannelForGuild(guild_id);
       if (!channelId) continue;
 
-      if (!mayAttempt(guild_id, nowMs)) continue;
-      const attempt = noteAttempt(guild_id, todayStr, nowMs);
+      const key = attemptKey(guild_id, streamer_id);
+      if (!mayAttempt(key, nowMs)) continue;
+      const attempt = noteAttempt(key, todayStr, nowMs);
 
       let outcome; // why this attempt did not post, when it did not
       try {
@@ -141,10 +144,10 @@ async function pollWeeklyDigest(now = new Date()) {
         if (posted) {
           console.log(`[WeeklyDigest] Posted digest for guild ${guild_id}${attempt > 1 ? ` (attempt ${attempt} of ${MAX_ATTEMPTS})` : ''}`);
           // It is out: no more tries this week, even if recording it fails below.
-          attempts.set(guild_id, { date: todayStr, count: MAX_ATTEMPTS, lastAt: nowMs });
+          attempts.set(key, { date: todayStr, count: MAX_ATTEMPTS, lastAt: nowMs });
           try {
             // Only recorded after a post that went out: a refused channel returns normally.
-            db.updateWeeklyDigestDate(guild_id, todayStr);
+            db.updateWeeklyDigestDate(guild_id, streamer_id, todayStr);
           } catch (e) {
             console.error(`[WeeklyDigest] Posted for guild ${guild_id} but could not record it: ${e.message}`);
           }

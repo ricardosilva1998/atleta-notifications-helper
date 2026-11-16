@@ -290,6 +290,16 @@
   let source = null;
   let retryTimer = null;
 
+// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
+// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
+function retryDelay(url) {
+  if (typeof fetch !== 'function') return Promise.resolve(5000);
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
+    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
+    .catch(() => 5000);
+}
+
   function connect() {
     if (source) { source.close(); source = null; }
     source = new EventSource(page.events);
@@ -301,11 +311,14 @@
     source.onerror = () => {
       if (source) source.close();
       source = null;
-      if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; connect(); }, 5000);
+      if (!retryTimer) {
+        retryTimer = true;
+        retryDelay(page.events).then((ms) => { retryTimer = setTimeout(() => { retryTimer = null; connect(); }, ms); });
+      }
     };
   }
 
-  const api = { renderGoal, renderTracker, applyTrackerSettings, handle };
+  const api = { renderGoal, renderTracker, applyTrackerSettings, handle, retryDelay };
   window.TrackingSource = api;
   if (typeof module === 'object' && module.exports) module.exports = api;
 

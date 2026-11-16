@@ -123,6 +123,9 @@ share the dashboard's per-streamer test cooldown of 5 seconds (`too_fast` answer
 
 ## Trackers
 
+A streamer's six trackers start **off** (`db.ensureTrackerSettings` inserts them disabled, 2026-11-16): opening the Tracking page
+or card no longer switches any on; the streamer turns on the ones they want.
+
 Six trackers, each with an on/off switch and an optional colour (`tracker_settings`; no colour of its own is the Atleta
 purple). A tracker keeps its last value (`tracker_values`, one row per streamer and tracker), so a restart or an OBS
 reload shows the same thing; its source hides itself while it is switched off or has nothing yet (the page's preview
@@ -132,7 +135,7 @@ shows a sample until the first value comes).
 |---|---|---|
 | Latest follower | name | `channel.follow` |
 | Latest sub | name, with "x months" or "gifted" | subscribe, resub message and gift events |
-| Latest tip | name and amount, any currency | PayPal and StreamElements tips, once `db.logDonation()` wrote a new row (a replayed tip never reaches it) |
+| Latest tip | name and amount, any currency | PayPal tips (and StreamElements tips from before it was removed), once `db.logDonation()` wrote a new row (a replayed tip never reaches it) |
 | Latest raid | name and viewers | `channel.raid` |
 | Latest bits | name and amount | `channel.cheer` |
 | Top tipper | name and total this stream | worked out from the donation history, never stored |
@@ -161,7 +164,7 @@ goals heal on their next Twitch read-back, sub goals do not.
 
 `eventsub.js` keeps the follower's `user_id` (de-duplication), marks the sub type, and after logging the event calls
 `trackingGoals.recordEvent()` and `trackers.onEvent()`, each in its own `try`, so the chat thank-you after them goes
-out whatever they do; tips call `trackers.onTip()` from `src/routes/tip.js` and `src/services/streamelements.js`.
+out whatever they do; tips call `trackers.onTip()` from `src/routes/tip.js` (StreamElements, which also fed it, was removed 2026-11-16).
 Enabling a disabled account starts the connection again for Tracking too (`accountLifecycle.enableAccount` reads
 `db.usesTracking`), as the boot and the dashboard do.
 
@@ -243,6 +246,14 @@ sources keep serving a streamer who already has them, like every other `/overlay
 - One active follower goal and one active sub goal per streamer; the page lists the last 10 past goals.
 - Test: 5 s cooldown, reverts after 10 s.
 
+## Recovered tips and refunds
+
+A tip recovered from `pending_tips` by the reconcile job passes `{ recovered, at }` (the pending row's creation time):
+it is recorded and counted but replays no alert, and `trackers.onTip` keeps the stored latest tip when it is newer
+(`db.getTrackerUpdatedAt`). Deleting a donation in the history subtracts it from the active tip goal (same currency,
+made at or after the goal's start, never below 0) and the broadcast carries no `added`. The goal form and manual adjust
+clamp to 10,000,000, and the goal's Test button shares the 5 s test cooldown.
+
 ## Release seeding
 
 At the first boot of the release `_runOnce('tracking_seed_trackers')` fills `tracker_values` from what Atleta already
@@ -253,11 +264,11 @@ Anything older stays empty until the next event.
 
 `src/services/goalPeriods.test.js` (windows at time-zone and DST boundaries), `src/db.tracking.test.js` (the record,
 goals, periods, trackers, cleanup, seeding, account removal), `src/services/twitch.tracking.test.js` (reads, refresh,
-refusal codes), `src/services/trackingGoals.test.js`, `src/services/trackers.test.js`, the EventSub, tip and
-StreamElements tests (the feeds), `src/routes/overlay.tracking.test.js` (the sources), `tests/trackingClient.test.js`
+refusal codes), `src/services/trackingGoals.test.js`, `src/services/trackers.test.js`, the EventSub and tip
+tests (the feeds), `src/routes/overlay.tracking.test.js` (the sources), `tests/trackingClient.test.js`
 (the source's script in a `vm`), `src/routes/dashboard.tracking.test.js` (the page and its routes),
 `src/pollers/manager.test.js` and `src/services/accountLifecycle.test.js`. Run the unit suite as usual
-(`node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"`).
+(`node --test "src/**/*.test.js" "tests/**/*.test.js"`).
 
 The browser check (headless Chromium on a throwaway copy of the site and its database; Twitch stubbed, events fired
 through the same service calls EventSub and the tip routes make): `/dashboard/tracking` at 1600 and 375 px, a monthly

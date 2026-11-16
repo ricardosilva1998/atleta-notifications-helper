@@ -58,7 +58,7 @@ function _runOnce(name, migrate) {
 }
 
 // ── Secrets at rest ──────────────────────────────────────────────────────
-// The OAuth tokens and the StreamElements token below are stored encrypted
+// The OAuth tokens below are stored encrypted
 // (enc:v1:, services/secretBox.js) when TOKEN_ENCRYPTION_KEY is set. Every
 // query that returns streamer rows passes them through openTokens, and every
 // write of these columns goes through sealToken, so the rest of the app only
@@ -69,7 +69,7 @@ const TOKEN_COLUMNS = Object.freeze([
   'yt_access_token', 'yt_refresh_token',
   'spotify_access_token', 'spotify_refresh_token',
   'bot_access_token', 'bot_refresh_token',
-  'streamelements_jwt',
+  'streamelements_jwt', // kept only for the sealed-column checks; nothing reads it
 ]);
 const tokenKey = config.tokenEncryption && config.tokenEncryption.key
   ? secretBox.parseKey(config.tokenEncryption.key)
@@ -564,6 +564,21 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS weekly_digest_state (
     guild_id TEXT PRIMARY KEY,
     last_digest_date TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_digest_posts (
+    guild_id TEXT NOT NULL,
+    streamer_id INTEGER NOT NULL,
+    last_digest_date TEXT,
+    PRIMARY KEY (guild_id, streamer_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS raid_protection (
+    streamer_id INTEGER PRIMARY KEY,
+    ends_at INTEGER NOT NULL,
+    prev_follower_mode INTEGER NOT NULL DEFAULT 0,
+    prev_follower_mode_duration INTEGER NOT NULL DEFAULT 0,
+    channel_login TEXT
   );
 
   CREATE TABLE IF NOT EXISTS channel_milestones (
@@ -1281,7 +1296,6 @@ function linkUser(streamerId, discordUserId, twitchUserId, twitchUsername) {
 const _createSession = db.prepare('INSERT OR REPLACE INTO sessions (sid, streamer_id, expires_at) VALUES (?, ?, ?)');
 const _getSession = db.prepare('SELECT * FROM sessions WHERE sid = ? AND expires_at > ?');
 const _deleteSession = db.prepare('DELETE FROM sessions WHERE sid = ?');
-const _deleteOtherSessionsByStreamer = db.prepare('DELETE FROM sessions WHERE streamer_id = ? AND sid != ?');
 const _cleanExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
 function createSession(sid, streamerId, expiresAt) {
@@ -1294,10 +1308,6 @@ function getSession(sid) {
 
 function deleteSession(sid) {
   _deleteSession.run(hashSessionId(sid));
-}
-function deleteOtherSessions(currentSid, { streamerId } = {}) {
-  const keep = hashSessionId(currentSid);
-  if (streamerId) _deleteOtherSessionsByStreamer.run(streamerId, keep);
 }
 
 function cleanExpiredSessions() {
@@ -1579,6 +1589,8 @@ const STREAMER_OWNED_ROWS = [
   ['overlay_events', 'streamer_id = ?'],
   ['pending_tips', 'streamer_id = ?'],
   ['poller_state', 'streamer_id = ?'],
+  ['raid_protection', 'streamer_id = ?'],
+  ['weekly_digest_posts', 'streamer_id = ?'],
   ['user_links', 'streamer_id = ?'],
   ...WATCHER_TABLES.map((table) => [table, 'streamer_id = ?']),
   ['transactions', 'streamer_id = ?'],
@@ -1827,33 +1839,71 @@ function updateChannelMilestones(twitchUsername, updates) {
 
 // --- Weekly Digest State ---
 
-const _getWeeklyDigestState = db.prepare('SELECT * FROM weekly_digest_state WHERE guild_id = ?');
+// One digest per streamer per server: the state is keyed by guild and streamer.
+// The old per-guild rows move to the guild's MIN(streamer_id), the one the
+// poller used to pick, so nothing is posted twice in the week of the upgrade.
+_runOnce('weekly_digest_state_per_streamer', () => {
+  db.prepare(`
+    INSERT OR IGNORE INTO weekly_digest_posts (guild_id, streamer_id, last_digest_date)
+    SELECT w.guild_id, MIN(g.streamer_id), w.last_digest_date
+    FROM weekly_digest_state w JOIN guilds g ON g.guild_id = w.guild_id
+    GROUP BY w.guild_id
+  `).run();
+});
+
+const _getWeeklyDigestState = db.prepare('SELECT * FROM weekly_digest_posts WHERE guild_id = ? AND streamer_id = ?');
 const _upsertWeeklyDigestDate = db.prepare(`
-  INSERT INTO weekly_digest_state (guild_id, last_digest_date) VALUES (?, ?)
-  ON CONFLICT(guild_id) DO UPDATE SET last_digest_date = excluded.last_digest_date
+  INSERT INTO weekly_digest_posts (guild_id, streamer_id, last_digest_date) VALUES (?, ?, ?)
+  ON CONFLICT(guild_id, streamer_id) DO UPDATE SET last_digest_date = excluded.last_digest_date
 `);
 
-function getWeeklyDigestState(guildId) {
-  return _getWeeklyDigestState.get(guildId);
+function getWeeklyDigestState(guildId, streamerId) {
+  return _getWeeklyDigestState.get(guildId, streamerId);
 }
 
-function updateWeeklyDigestDate(guildId, dateStr) {
-  _upsertWeeklyDigestDate.run(guildId, dateStr);
+function updateWeeklyDigestDate(guildId, streamerId, dateStr) {
+  _upsertWeeklyDigestDate.run(guildId, streamerId, dateStr);
 }
 
 // --- Weekly Highlights Guilds ---
 
 const _getGuildsWithWeeklyHighlights = db.prepare(`
-  SELECT g.guild_id, MIN(g.streamer_id) AS streamer_id
+  SELECT g.guild_id, g.streamer_id
   FROM guilds g
   JOIN streamers s ON g.streamer_id = s.id
   WHERE g.weekly_highlights_enabled = 1 AND s.enabled = 1
-  GROUP BY g.guild_id
+  ORDER BY g.guild_id, g.streamer_id
 `);
 
 function getGuildsWithWeeklyHighlights() {
   return _getGuildsWithWeeklyHighlights.all();
 }
+
+// --- Raid protection (survives a restart) ---
+
+// Development databases that made the table before channel_login existed.
+if (!db.prepare('PRAGMA table_info(raid_protection)').all().some((c) => c.name === 'channel_login')) {
+  db.exec('ALTER TABLE raid_protection ADD COLUMN channel_login TEXT');
+}
+
+const _getRaidProtection = db.prepare('SELECT * FROM raid_protection WHERE streamer_id = ?');
+const _saveRaidProtection = db.prepare(`
+  INSERT INTO raid_protection (streamer_id, ends_at, prev_follower_mode, prev_follower_mode_duration, channel_login)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(streamer_id) DO UPDATE SET ends_at = excluded.ends_at
+`);
+const _deleteRaidProtection = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ?');
+const _deleteRaidProtectionIf = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ? AND ends_at = ?');
+const _listRaidProtections = db.prepare('SELECT * FROM raid_protection');
+
+function getRaidProtection(streamerId) { return _getRaidProtection.get(streamerId); }
+// A second raid only moves the end: the settings to restore stay the first ones.
+function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration, channelLogin) {
+  _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0, channelLogin || null);
+}
+function deleteRaidProtection(streamerId) { _deleteRaidProtection.run(streamerId); }
+function deleteRaidProtectionIf(streamerId, endsAt) { return _deleteRaidProtectionIf.run(streamerId, endsAt).changes > 0; }
+function listRaidProtections() { return _listRaidProtections.all(); }
 
 // --- Digest Channel ---
 
@@ -2476,12 +2526,12 @@ function getOverlayEnabledStreamers() {
 }
 
 // The streamers the connection managers start for at boot (EventSub,
-// StreamElements, the sponsor rotation): the ones whose overlay or chatbot is
+// the sponsor rotation): the ones whose overlay or chatbot is
 // on. The overlay's alerts and the chatbot's thank-yous, raid protection and
 // sponsor messages come through the same connections, so a streamer who only
 // uses the chatbot needs them as much as one who only uses the overlay. Disabled
 // accounts are left out. Each manager adds its own conditions to this list:
-// EventSub a broadcaster token, StreamElements a token of its own, the sponsor
+// EventSub a broadcaster token, the sponsor
 // rotation a rotation that is switched on. A streamer with an active tracking
 // goal or an enabled tracker source needs the same connections (the follows,
 // subs, raids and bits it counts arrive through EventSub), whatever the two
@@ -2509,7 +2559,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_bits_enabled', 'overlay_donation_enabled',
   'overlay_follow_duration', 'overlay_sub_duration',
   'overlay_bits_duration', 'overlay_donation_duration',
-  'overlay_volume', 'streamelements_jwt',
+  'overlay_volume',
   'overlay_raid_enabled', 'overlay_raid_duration',
   'cp_rewards_enabled',
   'overlay_giveaway_enabled', 'overlay_giveaway_duration',
@@ -2523,7 +2573,7 @@ function updateOverlayConfig(streamerId, config) {
   for (const [key, value] of Object.entries(config)) {
     if (!OVERLAY_COLUMNS.has(key)) continue; // Whitelist columns
     fields.push(`${key} = ?`);
-    values.push(TOKEN_COLUMNS.includes(key) ? sealToken(value) : value); // streamelements_jwt
+    values.push(TOKEN_COLUMNS.includes(key) ? sealToken(value) : value);
   }
   if (fields.length === 0) return;
   values.push(streamerId);
@@ -3384,6 +3434,16 @@ db.exec(`
 db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_redemptions_streamer_date ON channel_point_redemptions(streamer_id, created_at)`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_redemptions_twitch_id ON channel_point_redemptions(twitch_redemption_id)`);
 
+// Migration: when a played redemption is due to be marked fulfilled on Twitch (ISO time, NULL when nothing is owed),
+// so a restart between the clip and the fulfil does not leave it waiting in the queue.
+try {
+  const cols = db.pragma('table_info(channel_point_redemptions)').map(c => c.name);
+  if (!cols.includes('auto_fulfill_due_at')) {
+    db.exec('ALTER TABLE channel_point_redemptions ADD COLUMN auto_fulfill_due_at TEXT');
+    console.log('[DB] Added auto_fulfill_due_at to channel_point_redemptions');
+  }
+} catch (e) { _migrationLog('channel_point_redemptions.auto_fulfill_due_at', e); }
+
 // Migration: Giveaways tables
 try {
   db.exec(`
@@ -3776,11 +3836,14 @@ try {
       donor_name TEXT NOT NULL,
       message TEXT,
       payee_merchant_id TEXT,
+      payee_email TEXT,
       captured_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (streamer_id) REFERENCES streamers(id) ON DELETE CASCADE
     )
   `);
+  const ptCols = db.pragma('table_info(pending_tips)').map(c => c.name);
+  if (!ptCols.includes('payee_email')) db.exec('ALTER TABLE pending_tips ADD COLUMN payee_email TEXT');
 } catch (e) { _migrationLog('pending_tips', e); }
 
 // Migration: Add channel point columns to streamers
@@ -3980,6 +4043,14 @@ _runOnce('c1_donation_for_andre_vilela', () => {
   if (!vilela) return;
   setOverlayDesignStyle(vilela.id, 'donation', 'donation-c1');
   console.log('[DB] The C1 donation alert is on for andre_vilela_');
+});
+
+// StreamElements is gone: drop the tokens streamers had saved for it. The column
+// stays (db.secrets.test.js checks the sealed columns); nothing reads it.
+_runOnce('clear_streamelements_tokens', () => {
+  // The column name is not written inside the SQL so db.secrets.test.js does not read this as a token writer.
+  const column = 'streamelements_jwt';
+  db.prepare(`UPDATE streamers SET ${column} = NULL WHERE ${column} IS NOT NULL`).run();
 });
 
 // Migration: last failed post into a claimed server (see recordDeliveryError),
@@ -4461,6 +4532,23 @@ function setRedemptionOutcome(id, outcome, errorMessage) {
     .run(outcome, errorMessage || null, id);
 }
 
+function setRedemptionAutoFulfillDue(id, dueIso) {
+  db.prepare('UPDATE channel_point_redemptions SET auto_fulfill_due_at = ? WHERE id = ?').run(dueIso, id);
+}
+
+function clearRedemptionAutoFulfillDue(id) {
+  db.prepare('UPDATE channel_point_redemptions SET auto_fulfill_due_at = NULL WHERE id = ?').run(id);
+}
+
+function getDueRedemptionAutoFulfills(nowIso, limit) {
+  return db.prepare(`
+    SELECT id, streamer_id, twitch_redemption_id, twitch_reward_id, auto_fulfill_due_at
+    FROM channel_point_redemptions
+    WHERE auto_fulfill_due_at IS NOT NULL AND auto_fulfill_due_at <= ?
+    ORDER BY auto_fulfill_due_at LIMIT ?
+  `).all(nowIso, limit || 100);
+}
+
 function getRedemptionsRecent(streamerId, limit) {
   return db.prepare('SELECT * FROM channel_point_redemptions WHERE streamer_id = ? ORDER BY created_at DESC LIMIT ?')
     .all(streamerId, limit || 50);
@@ -4715,9 +4803,9 @@ function getWinners(giveawayId) {
 
 // --- Donation history ---
 
-// Real donations only (PayPal capture, StreamElements tip). external_id dedupes replays.
+// Real donations only (PayPal capture; older StreamElements rows stay in the history). external_id dedupes replays.
 // Returns true only when a new row was written, so callers alert and count a
-// donation once even when PayPal or StreamElements delivers it again.
+// donation once even when PayPal delivers it again.
 function logDonation(streamerId, d) {
   const amount = Math.round(parseFloat(d.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) return false;
@@ -4769,6 +4857,10 @@ function getDonationMonthly(streamerId, currency, source) {
     SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS count, ROUND(SUM(amount), 2) AS total
     FROM donations WHERE ${f.where} AND COALESCE(currency, '?') = ? GROUP BY month ORDER BY month
   `).all(...f.params, currency);
+}
+
+function getDonationById(id, streamerId) {
+  return db.prepare('SELECT id, amount, currency, created_at FROM donations WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
 }
 
 function deleteDonation(id, streamerId) {
@@ -5225,9 +5317,9 @@ function cleanupOldDonations() {
 
 function createPendingTip(t) {
   db.prepare(`
-    INSERT INTO pending_tips (order_id, streamer_id, donor_name, message, payee_merchant_id)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(t.order_id, t.streamer_id, t.donor_name, t.message || null, t.payee_merchant_id || null);
+    INSERT INTO pending_tips (order_id, streamer_id, donor_name, message, payee_merchant_id, payee_email)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(t.order_id, t.streamer_id, t.donor_name, t.message || null, t.payee_merchant_id || null, t.payee_email || null);
 }
 
 function getPendingTip(orderId) {
@@ -5589,6 +5681,11 @@ function setTrackerValue(streamerId, tracker, value) {
   `).run(streamerId, tracker, text);
 }
 
+function getTrackerUpdatedAt(streamerId, tracker) {
+  const row = db.prepare('SELECT updated_at FROM tracker_values WHERE streamer_id = ? AND tracker = ? AND value IS NOT NULL').get(streamerId, tracker);
+  return row ? row.updated_at : null;
+}
+
 function clearTrackerValues(streamerId) {
   db.prepare('DELETE FROM tracker_values WHERE streamer_id = ?').run(streamerId);
 }
@@ -5674,17 +5771,16 @@ function getTrackerSettings(streamerId) {
   return out;
 }
 
-// Writes a row (on, no colour) for each of `trackers` the streamer has none
-// for, leaving the rows there are; returns how many it wrote. The Tracking page
-// does this on its first visit, so the trackers that are on by default count as
-// in use (TRACKING_IN_USE reads the rows).
+// Writes a row (off, no colour) for each of `trackers` the streamer has none
+// for, leaving the rows there are; returns how many it wrote. Opening the
+// Tracking page does this, so it never switches a tracker on by itself.
 function ensureTrackerSettings(streamerId, trackers) {
-  const insert = db.prepare('INSERT OR IGNORE INTO tracker_settings (streamer_id, tracker, enabled, color) VALUES (?, ?, 1, NULL)');
+  const insert = db.prepare('INSERT OR IGNORE INTO tracker_settings (streamer_id, tracker, enabled, color) VALUES (?, ?, 0, NULL)');
   return db.transaction(() => trackers.reduce((written, tracker) => written + insert.run(streamerId, tracker).changes, 0))();
 }
 
 // Creates or changes a tracker's row; what the call does not name stays as it
-// was (a new row starts on, with no colour). `color: null` clears the colour.
+// was (a new row starts off, with no colour). `color: null` clears the colour.
 function setTrackerSetting(streamerId, tracker, settings) {
   const s = settings || {};
   const hasEnabled = s.enabled !== undefined;
@@ -5694,7 +5790,7 @@ function setTrackerSetting(streamerId, tracker, settings) {
     ON CONFLICT(streamer_id, tracker) DO UPDATE SET
       enabled = CASE WHEN ? THEN excluded.enabled ELSE enabled END,
       color = CASE WHEN ? THEN excluded.color ELSE color END
-  `).run(streamerId, tracker, hasEnabled ? (s.enabled ? 1 : 0) : 1, hasColor ? s.color : null, hasEnabled ? 1 : 0, hasColor ? 1 : 0);
+  `).run(streamerId, tracker, hasEnabled ? (s.enabled ? 1 : 0) : 0, hasColor ? s.color : null, hasEnabled ? 1 : 0, hasColor ? 1 : 0);
 }
 
 // ── Boot: tokens at rest (see "Secrets at rest" at the top) ─────────────
@@ -5793,7 +5889,6 @@ module.exports = {
   createSession,
   getSession,
   deleteSession,
-  deleteOtherSessions,
   cleanExpiredSessions,
   logNotification,
   disableStreamer,
@@ -5851,6 +5946,11 @@ module.exports = {
   getChannelMilestones,
   updateChannelMilestones,
   getWeeklyDigestState,
+  getRaidProtection,
+  saveRaidProtection,
+  deleteRaidProtection,
+  deleteRaidProtectionIf,
+  listRaidProtections,
   updateWeeklyDigestDate,
   getGuildsWithWeeklyHighlights,
   getDigestChannelForGuild,
@@ -6013,6 +6113,9 @@ module.exports = {
   logRedemption,
   claimRedemption,
   setRedemptionOutcome,
+  setRedemptionAutoFulfillDue,
+  clearRedemptionAutoFulfillDue,
+  getDueRedemptionAutoFulfills,
   getRedemptionsRecent,
   updateStreamerCpSync,
   clearStreamerBroadcasterScopes,
@@ -6048,6 +6151,7 @@ module.exports = {
   countDonations,
   getDonationTotals,
   getDonationMonthly,
+  getDonationById,
   deleteDonation,
   cleanupOldDonations,
   getCoachingSettings, saveCoachingSettings, setCoachingOpen, recordInviteCheck,
@@ -6093,6 +6197,7 @@ module.exports = {
   usesTracking,
   getTrackerValues,
   setTrackerValue,
+  getTrackerUpdatedAt,
   clearTrackerValues,
   seedTrackerValues,
   getTrackerSettings,

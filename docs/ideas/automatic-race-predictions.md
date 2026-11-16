@@ -1,3 +1,5 @@
+> **Obsolete (Racing removed 2026-11-16):** this idea depended on the Atleta Racing app and its session API, which no longer exist. Kept for history only.
+
 # Idea (parked): automatic Twitch predictions from iRacing races
 
 Status: parked by the owner on 2026-10-16 — "must be carefully studied"; a plan for the future, not scheduled.

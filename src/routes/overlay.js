@@ -22,9 +22,20 @@ const SERVER_INSTANCE_ID = crypto.randomBytes(8).toString('hex');
 // db.getStreamerByOverlayToken, which finds nobody for an account an admin has
 // disabled, so a disabled account's links answer like an unknown token. A stream
 // that was already open when the account was disabled is ended here.
-function endStreamWhenAccountDisabled(streamerId, req, res) {
+// A write to a stream that was already ended (the drain, a disabled account) would throw
+// ERR_STREAM_WRITE_AFTER_END, so every send goes through here.
+function sseWrite(res, text) {
+  if (res.writableEnded || res.destroyed) return false;
+  try { res.write(text); return true; } catch (e) { return false; }
+}
+
+// `detach` removes the stream's bus listeners and timers; it runs before the stream is ended.
+function endStreamWhenAccountDisabled(streamerId, req, res, detach) {
   const channel = accountDisabledChannel(streamerId);
-  const end = () => res.end();
+  const end = () => {
+    if (detach) { try { detach(); } catch (e) { /* ending the stream matters more */ } }
+    if (!res.writableEnded) res.end();
+  };
   bus.once(channel, end);
   req.on('close', () => bus.off(channel, end));
 }
@@ -63,32 +74,32 @@ router.get('/events/:token', (req, res) => {
   const designMap = {};
   designs.forEach(d => { designMap[d.event_type] = d; });
 
-  res.write(`data: ${JSON.stringify({ type: 'config', config, designs: designMap, serverVersion: SERVER_INSTANCE_ID })}\n\n`);
+  sseWrite(res, `data: ${JSON.stringify({ type: 'config', config, designs: designMap, serverVersion: SERVER_INSTANCE_ID })}\n\n`);
 
   // Replay current sponsor image so new clients see it immediately
   try {
     const { timedNotificationManager } = require('../services/timedNotifications');
     const currentSponsor = timedNotificationManager.getCurrentSponsor(streamer.id);
     if (currentSponsor) {
-      res.write(`data: ${JSON.stringify(currentSponsor)}\n\n`);
+      sseWrite(res, `data: ${JSON.stringify(currentSponsor)}\n\n`);
     }
   } catch (e) { /* timedNotifications not yet initialized */ }
 
   // Heartbeat every 30s to keep connection alive in OBS browser source
   const heartbeat = setInterval(() => {
-    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+    if (!sseWrite(res, `:heartbeat\n\n`)) clearInterval(heartbeat);
   }, 30000);
 
   // Listen for events on the bus. The listener runs inside the sender's emit, so nothing may throw out of it.
   const listener = (event) => {
     try {
       if (event && ALERT_TYPES.has(event.type) && !db.isOverlayEnabled(streamer.id)) return;
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      sseWrite(res, `data: ${JSON.stringify(event)}\n\n`);
     } catch (e) { /* the switch could not be read (the alert is not shown), or the connection closed */ }
   };
 
   bus.on(`overlay:${streamer.id}`, listener);
-  endStreamWhenAccountDisabled(streamer.id, req, res);
+  endStreamWhenAccountDisabled(streamer.id, req, res, () => { clearInterval(heartbeat); bus.off(`overlay:${streamer.id}`, listener); });
   holdStream(res);
 
   // The alert overlay names itself (?source=alerts): the dashboard says whether it is open in OBS.
@@ -158,29 +169,29 @@ router.get('/sponsors/events/:token', (req, res) => {
   const designs = db.getAllOverlayDesigns(streamer.id);
   const designMap = {};
   designs.forEach(d => { designMap[d.event_type] = d; });
-  res.write(`data: ${JSON.stringify({ type: 'config', designs: designMap, serverVersion: SERVER_INSTANCE_ID })}\n\n`);
+  sseWrite(res, `data: ${JSON.stringify({ type: 'config', designs: designMap, serverVersion: SERVER_INSTANCE_ID })}\n\n`);
 
   // Replay current sponsor
   try {
     const { timedNotificationManager } = require('../services/timedNotifications');
     const currentSponsor = timedNotificationManager.getCurrentSponsor(streamer.id);
     if (currentSponsor) {
-      res.write(`data: ${JSON.stringify(currentSponsor)}\n\n`);
+      sseWrite(res, `data: ${JSON.stringify(currentSponsor)}\n\n`);
     }
   } catch (e) {}
 
   const heartbeat = setInterval(() => {
-    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+    if (!sseWrite(res, `:heartbeat\n\n`)) clearInterval(heartbeat);
   }, 30000);
 
   const listener = (event) => {
-    // Only forward sponsor events
-    if (event.type !== 'sponsor') return;
-    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+    // Sponsor images, and the config updates that carry designs (placement changes)
+    if (!event || (event.type !== 'sponsor' && !(event.type === 'config-update' && event.designs))) return;
+    try { sseWrite(res, `data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
   };
 
   bus.on(`overlay:${streamer.id}`, listener);
-  endStreamWhenAccountDisabled(streamer.id, req, res);
+  endStreamWhenAccountDisabled(streamer.id, req, res, () => { clearInterval(heartbeat); bus.off(`overlay:${streamer.id}`, listener); });
   holdStream(res);
   req.on('close', () => {
     clearInterval(heartbeat);
@@ -222,19 +233,19 @@ router.get('/goal/events/:token', (req, res) => {
     Connection: 'keep-alive',
   });
 
-  res.write(`data: ${JSON.stringify({ type: 'config', serverVersion: SERVER_INSTANCE_ID })}\n\n`);
-  res.write(`data: ${JSON.stringify({ type: 'tip_goal', goal: tipGoals.toPayload(db.getActiveTipGoal(streamer.id)) })}\n\n`);
+  sseWrite(res, `data: ${JSON.stringify({ type: 'config', serverVersion: SERVER_INSTANCE_ID })}\n\n`);
+  sseWrite(res, `data: ${JSON.stringify({ type: 'tip_goal', goal: tipGoals.toPayload(db.getActiveTipGoal(streamer.id)) })}\n\n`);
 
   const heartbeat = setInterval(() => {
-    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+    if (!sseWrite(res, `:heartbeat\n\n`)) clearInterval(heartbeat);
   }, 30000);
 
   const listener = (event) => {
-    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+    try { sseWrite(res, `data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
   };
 
   bus.on(tipGoals.channel(streamer.id), listener);
-  endStreamWhenAccountDisabled(streamer.id, req, res);
+  endStreamWhenAccountDisabled(streamer.id, req, res, () => { clearInterval(heartbeat); bus.off(tipGoals.channel(streamer.id), listener); });
   holdStream(res);
   req.on('close', () => {
     clearInterval(heartbeat);
@@ -328,7 +339,7 @@ function sendTrackingPage(req, res, title, pageConfig) {
   res.send(trackingPageHtml(req, title, pageConfig));
 }
 
-// A tracker's settings as its source draws them (trackers.settings: no row is on, no colour is the Atleta purple).
+// A tracker's settings as its source draws them (trackers.settings: no row is off, no colour is the Atleta purple).
 function trackerSettingsOf(streamerId, tracker) {
   const { enabled, color } = trackers.settings(streamerId)[tracker];
   return { enabled, color };
@@ -344,18 +355,18 @@ function openTrackingStream(req, res, streamer, { first, channel, passes, onClos
     Connection: 'keep-alive',
   });
   const send = (event) => {
-    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+    try { sseWrite(res, `data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
   };
   for (const event of first) send(event);
 
   const heartbeat = setInterval(() => {
-    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+    if (!sseWrite(res, `:heartbeat\n\n`)) clearInterval(heartbeat);
   }, 30000);
   const listener = (event) => {
     try { if (passes(event)) send(event); } catch (e) {}
   };
   bus.on(channel, listener);
-  endStreamWhenAccountDisabled(streamer.id, req, res);
+  endStreamWhenAccountDisabled(streamer.id, req, res, () => { clearInterval(heartbeat); bus.off(channel, listener); });
   holdStream(res);
 
   let closed = false;
@@ -463,12 +474,12 @@ router.get('/poll/events/:token', (req, res) => {
     Connection: 'keep-alive',
   });
   const send = (event) => {
-    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
+    try { sseWrite(res, `data: ${JSON.stringify(event)}\n\n`); } catch (e) {}
   };
   send({ type: 'config', serverVersion: SERVER_INSTANCE_ID });
 
   const heartbeat = setInterval(() => {
-    try { res.write(`:heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+    if (!sseWrite(res, `:heartbeat\n\n`)) clearInterval(heartbeat);
   }, 30000);
   let askedAt = Date.now(); // the read when the bar opens, below
   const recheck = setInterval(() => {
@@ -482,7 +493,7 @@ router.get('/poll/events/:token', (req, res) => {
   }, BAR_RUNNING_CHECK_MS);
   const channel = `poll:${streamer.id}`;
   bus.on(channel, send);
-  endStreamWhenAccountDisabled(streamer.id, req, res);
+  endStreamWhenAccountDisabled(streamer.id, req, res, () => { clearInterval(heartbeat); clearInterval(recheck); bus.off(channel, send); });
   holdStream(res);
   req.on('close', () => {
     clearInterval(heartbeat);

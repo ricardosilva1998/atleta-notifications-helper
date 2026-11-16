@@ -25,7 +25,6 @@ function liveServices() {
     db: require('../db'),
     bus: require('./overlayBus'),
     eventSubManager: require('./eventsub').eventSubManager,
-    streamElementsManager: require('./streamelements').streamElementsManager,
     chatManager: require('./twitchChat').chatManager,
     youtubeChatManager: require('./youtubeLiveChat').youtubeChatManager,
     timedNotificationManager: require('./timedNotifications').timedNotificationManager,
@@ -62,7 +61,6 @@ function attempt(label, streamerId, fn) {
 // account again can pick it up (Disable), as opposed to Remove.
 function stopLiveServices(streamerId, services, { pauseYoutubeChat = false } = {}) {
   attempt('EventSub stop', streamerId, () => services.eventSubManager.stopForStreamer(streamerId));
-  attempt('StreamElements stop', streamerId, () => services.streamElementsManager.stopForStreamer(streamerId));
   attempt('Twitch chat stop', streamerId, () => services.chatManager.stopForStreamer(streamerId));
   attempt('YouTube chat stop', streamerId, () => {
     const liveChatId = services.youtubeChatManager.getLiveChatId(streamerId);
@@ -76,11 +74,11 @@ function stopLiveServices(streamerId, services, { pauseYoutubeChat = false } = {
 
 // Restarts what the streamer had switched on, under the same conditions the
 // managers use when the app boots. The event connections (EventSub,
-// StreamElements, the sponsor rotation) serve the overlay, the chatbot and
+// the sponsor rotation) serve the overlay, the chatbot and
 // Tracking, so any one of them in use starts them
 // (db.getOverlayOrChatbotStreamers, db.usesTracking); each
 // keeps its own condition: EventSub needs the broadcaster authorization,
-// StreamElements its token, and the sponsor manager starts only the rotations
+// and the sponsor manager starts only the rotations
 // the streamer switched on.
 function startLiveServices(streamerId, services) {
   const streamer = services.db.getStreamerById(streamerId);
@@ -88,9 +86,6 @@ function startLiveServices(streamerId, services) {
   if (streamer.overlay_enabled || streamer.chatbot_enabled || services.db.usesTracking(streamerId)) {
     if (streamer.broadcaster_access_token) {
       attempt('EventSub start', streamerId, () => services.eventSubManager.startForStreamer(streamerId));
-    }
-    if (streamer.streamelements_jwt) {
-      attempt('StreamElements start', streamerId, () => services.streamElementsManager.startForStreamer(streamerId));
     }
     attempt('Sponsor rotation start', streamerId, () => {
       services.timedNotificationManager.restartForStreamer(streamerId);

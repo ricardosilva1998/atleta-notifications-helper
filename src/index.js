@@ -19,7 +19,7 @@ process.on('uncaughtException', (err) => {
 
 // Stored OAuth tokens are encrypted only when TOKEN_ENCRYPTION_KEY is set (db.js).
 if (!db.tokenEncryptionEnabled) {
-  console.warn('[DB] TOKEN_ENCRYPTION_KEY is not set: OAuth tokens and the StreamElements token are stored unencrypted. Set it to 64 hex characters (openssl rand -hex 32).');
+  console.warn('[DB] TOKEN_ENCRYPTION_KEY is not set: OAuth tokens are stored unencrypted. Set it to 64 hex characters (openssl rand -hex 32).');
 }
 
 // Alert sounds used to be one set shared by every streamer. Move those files
@@ -53,14 +53,18 @@ function startWithoutDiscord() {
   server.start();
 
   const { eventSubManager } = require('./services/eventsub');
-  const { streamElementsManager } = require('./services/streamelements');
 
   // Start the event connections of every streamer whose overlay or chatbot is on
   eventSubManager.startAll();
-  streamElementsManager.startAll();
 
   const { chatManager } = require('./services/twitchChat');
   chatManager.startAll();
+
+  // Followers-only mode a raid switched on is put back even across a restart
+  // (services/chatModeration.js, table raid_protection).
+  require('./services/chatModeration').resumeRaidProtection(
+    (streamer, text) => chatManager.sendMessage(streamer.id, text, { priority: 'high' }),
+  ).catch((e) => console.error(`[Mod] Raid protection resume failed: ${e.message}`));
 
   const { timedNotificationManager } = require('./services/timedNotifications');
   timedNotificationManager.startAll();
@@ -70,6 +74,9 @@ function startWithoutDiscord() {
   // Follower and sub goals: every minute, hours goals end, calendar goals start their next period, and goals whose
   // OBS source is open re-read Twitch (services/trackingGoals.js).
   require('./services/trackingGoals').startTicks();
+
+  // Played channel point redemptions that are due to be marked fulfilled (also those a restart interrupted).
+  require('./services/redemptionDispatcher').startTicks();
 
   // Coaching: every minute, unpaid bookings expire, stale PayPal orders are read back, half-made rooms are finished and
   // finished sessions' rooms are closed with their transcripts (services/coachingTick.js). Works without Discord.
@@ -211,10 +218,11 @@ async function shutdown(signal) {
   };
   stop('Pollers', () => pollers.stopAll());
   stop('Twitch chat', () => require('./services/twitchChat').chatManager.stopAll());
+  stop('Raid protection', () => require('./services/chatModeration').stopRaidProtectionTicks());
   stop('EventSub', () => require('./services/eventsub').eventSubManager.stopAll());
-  stop('StreamElements', () => require('./services/streamelements').streamElementsManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
+  stop('Redemption fulfils', () => require('./services/redemptionDispatcher').stopTicks());
   stop('Tracking goals', () => require('./services/trackingGoals').stopTicks());
   stop('Coaching tick', () => require('./services/coachingTick').stopTicks());
   if (config.multistream.enabled) stop('Multistream checks', () => require('./services/multistreamSessions').sessions().stopAll());

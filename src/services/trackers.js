@@ -121,11 +121,18 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
     }
   }
 
-  // A tip that db.logDonation() just recorded (PayPal or StreamElements), in any currency: the latest tip, then the
+  // A tip that db.logDonation() just recorded (PayPal), in any currency: the latest tip, then the
   // top tipper as it stands now. Never throws.
-  function onTip(streamerId, tip) {
+  // `late` ({ recovered, at }) marks a tip the daily reconcile found hours after it was paid: it becomes the latest tip
+  // only when it is newer than the stored one (`at` and the stored time are SQLite UTC text, so they compare as text).
+  function onTip(streamerId, tip, late) {
     try {
-      store(streamerId, 'latest_tip', valueOfTip(tip));
+      let newest = true;
+      if (late && late.recovered) {
+        const stored = typeof db.getTrackerUpdatedAt === 'function' ? db.getTrackerUpdatedAt(streamerId, 'latest_tip') : null;
+        newest = !stored || (!!late.at && String(late.at) > String(stored));
+      }
+      if (newest) store(streamerId, 'latest_tip', valueOfTip(tip));
       broadcast(streamerId, 'top_tipper', topTipper(streamerId));
     } catch (err) {
       logger.error('[Trackers] onTip error:', err.message);
@@ -201,14 +208,14 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
   }
 
   // Every tracker's settings, in TRACKERS order, as its source draws them: { enabled, color, ownColor }. A tracker
-  // with no row is on; a colour that is not #rrggbb (or none) is DEFAULT_COLOR, and ownColor says one is stored.
+  // with no row is off; a colour that is not #rrggbb (or none) is DEFAULT_COLOR, and ownColor says one is stored.
   function settings(streamerId) {
     const rows = db.getTrackerSettings(streamerId);
     const out = {};
     for (const tracker of TRACKERS) {
       const row = rows[tracker];
       const own = !!row && typeof row.color === 'string' && /^#[0-9a-f]{6}$/i.test(row.color);
-      out[tracker] = { enabled: row ? !!row.enabled : true, color: own ? row.color : DEFAULT_COLOR, ownColor: own };
+      out[tracker] = { enabled: row ? !!row.enabled : false, color: own ? row.color : DEFAULT_COLOR, ownColor: own };
     }
     return out;
   }

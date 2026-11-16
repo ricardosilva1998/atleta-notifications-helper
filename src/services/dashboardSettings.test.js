@@ -10,7 +10,7 @@ const { SETTINGS, ERRORS, BATCH_MAX, save } = require('./dashboardSettings');
 const GUILD = '600000000000000001';
 const OTHER_GUILD = '600000000000000002';
 
-function fakeDb({ streamer = {}, guilds = {}, watchers = [], sponsorMessages = [] } = {}) {
+function fakeDb({ streamer = {}, guilds = {}, watchers = [], sponsorMessages = [], watcherChanges = true } = {}) {
   const row = { id: 1, chatbot_enabled: 1, overlay_enabled: 0, twitch_username: 'synthetic_streamer', paypal_email: null, ...streamer };
   const writes = [];
   const recordInto = (name) => (id, config) => { writes.push([name, id, config]); Object.assign(row, config); };
@@ -31,7 +31,7 @@ function fakeDb({ streamer = {}, guilds = {}, watchers = [], sponsorMessages = [
     updateTtsSettings: recordInto('updateTtsSettings'),
     setSponsorChatSetting: (id, column, value) => { writes.push(['setSponsorChatSetting', id, column, value]); row[column] = value; },
     setGuildSwitch: (guildId, id, column, value) => { writes.push(['setGuildSwitch', guildId, id, column, value]); return true; },
-    setWatcherNotify: (watcherId, id, column, value) => { writes.push(['setWatcherNotify', watcherId, id, column, value]); return true; },
+    setWatcherNotify: (watcherId, id, column, value) => { writes.push(['setWatcherNotify', watcherId, id, column, value]); return watcherChanges; },
     setSponsorMessageEnabled: (messageId, id, value) => { writes.push(['setSponsorMessageEnabled', messageId, id, value]); return true; },
   };
 }
@@ -163,8 +163,10 @@ describe('settings that need something first', () => {
     const noWatcher = { guilds: { [GUILD]: {} }, watchers: [] };
     assert.deepEqual(run({ key: 'notify_live', guildId: GUILD, value: 1 }, noWatcher).result.code, 'no_channel');
     const offWithout = run({ key: 'notify_live', guildId: GUILD, value: 0 }, noWatcher);
-    assert.deepEqual(offWithout.result.values, { notify_live: 0 });
-    assert.deepEqual(offWithout.writes, [], 'nothing to switch off');
+    assert.deepEqual(offWithout.result, { ok: false, code: 'not_found', status: 404 }, 'the watcher is gone: not reported as saved');
+    assert.deepEqual(offWithout.writes, [], 'nothing written');
+    const gone = run({ key: 'notify_live', guildId: GUILD, value: 0 }, { guilds, watchers, watcherChanges: false });
+    assert.deepEqual(gone.result, { ok: false, code: 'not_found', status: 404 }, 'no row changed');
   });
 
   test('a sponsor message switch needs the streamer\'s own message', () => {

@@ -61,7 +61,7 @@ function allElements(node) {
 }
 
 // heldFrames: animation frames wait in `frames` until the test runs them (otherwise each runs at once, at its end).
-function loadTracking({ page = {}, texts = TEXTS, lang = 'en', heldFrames = false } = {}) {
+function loadTracking({ page = {}, texts = TEXTS, lang = 'en', heldFrames = false, fetch: fakeFetch } = {}) {
   const frames = [];
   const root = makeElement('div');
   root.id = 'tracking-root';
@@ -93,6 +93,7 @@ function loadTracking({ page = {}, texts = TEXTS, lang = 'en', heldFrames = fals
     cancelAnimationFrame: () => {},
     performance: { now: () => 0 },
     Intl,
+    ...(fakeFetch ? { fetch: fakeFetch } : {}),
     module: { exports: {} },
   };
   vm.createContext(context);
@@ -358,5 +359,22 @@ describe('the page', () => {
     trackerDemo.post({ type: 'tracker', tracker: 'latest_bits', value: { name: 'cheerer', amount: 100 } });
     assert.equal(find(trackerDemo.root, 'trk-title').textContent, 'Latest bits');
     assert.equal(find(trackerDemo.root, 'trk-card').style.properties['--track-color'], '#abcdef');
+  });
+});
+
+describe('the retry delay after a stream error', () => {
+  const delayWith = (fakeFetch) => loadTracking({ fetch: fakeFetch }).api.retryDelay('/overlay/goal/followers/events/tok');
+
+  test('a 404 (the link is gone) waits 5 minutes', async () => {
+    assert.equal(await delayWith(async () => ({ status: 404 })), 300000);
+  });
+
+  test('any other status retries in 5 seconds', async () => {
+    assert.equal(await delayWith(async () => ({ status: 200 })), 5000);
+    assert.equal(await delayWith(async () => ({ status: 500 })), 5000);
+  });
+
+  test('a network error retries in 5 seconds', async () => {
+    assert.equal(await delayWith(async () => { throw new Error('offline'); }), 5000);
   });
 });

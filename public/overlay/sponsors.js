@@ -4,6 +4,16 @@ let serverVersion = null;
 let evtSource = null;
 let reconnectTimer = null;
 
+// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
+// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
+function retryDelay(url) {
+  if (typeof fetch !== 'function') return Promise.resolve(5000);
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
+    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
+    .catch(() => 5000);
+}
+
 function connectSSE() {
   if (evtSource) { evtSource.close(); evtSource = null; }
 
@@ -22,6 +32,11 @@ function connectSSE() {
       return;
     }
 
+    if (data.type === 'config-update') {
+      if (data.designs) overlayDesigns = data.designs;
+      return;
+    }
+
     if (data.type === 'sponsor') {
       showSponsorImage(data.data);
     }
@@ -31,7 +46,9 @@ function connectSSE() {
     evtSource.close();
     evtSource = null;
     if (!reconnectTimer) {
-      reconnectTimer = setTimeout(() => { reconnectTimer = null; connectSSE(); }, 5000);
+      retryDelay(`/overlay/sponsors/events/${window.OVERLAY_TOKEN}`).then((ms) => {
+        reconnectTimer = setTimeout(() => { reconnectTimer = null; connectSSE(); }, ms);
+      });
     }
   };
 }

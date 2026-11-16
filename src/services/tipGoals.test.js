@@ -66,6 +66,13 @@ test('recordDonation adds matching donations and broadcasts the new state', () =
   assert.equal(events[0].justCompleted, false);
 });
 
+test('a silent donation (a recovered tip) moves the goal but carries no added amount', () => {
+  tipGoals.recordDonation(7, '4', 'EUR', { silent: true });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].goal.current, 4);
+  assert.ok(!('added' in events[0]));
+});
+
 test('recordDonation ignores other currencies, invalid amounts and missing goals', () => {
   tipGoals.recordDonation(7, 10, 'USD');
   tipGoals.recordDonation(7, 'abc', 'EUR');
