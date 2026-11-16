@@ -396,13 +396,6 @@ describe('session ids', () => {
         assert.equal(db.getSession(HEX_SID).streamer_id, streamer);
         assert.equal(db.getSession(sha256(DISCORD_SID)), undefined, 'what the table holds does not log anyone in');
 
-        // "Log out other devices" keeps the current one.
-        db.deleteOtherSessions(HEX_SID, { streamerId: streamer });
-        assert.ok(db.getSession(HEX_SID));
-        assert.equal(db.getSession('c3'.repeat(32)), undefined);
-        assert.equal(db.getSession('second-device'), undefined);
-        db.createSession('second-device', streamer, soon);
-
         // Logout ends that session only.
         db.deleteSession(DISCORD_SID);
         assert.equal(db.getSession(DISCORD_SID), undefined);

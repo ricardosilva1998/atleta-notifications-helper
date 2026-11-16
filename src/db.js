@@ -1296,7 +1296,6 @@ function linkUser(streamerId, discordUserId, twitchUserId, twitchUsername) {
 const _createSession = db.prepare('INSERT OR REPLACE INTO sessions (sid, streamer_id, expires_at) VALUES (?, ?, ?)');
 const _getSession = db.prepare('SELECT * FROM sessions WHERE sid = ? AND expires_at > ?');
 const _deleteSession = db.prepare('DELETE FROM sessions WHERE sid = ?');
-const _deleteOtherSessionsByStreamer = db.prepare('DELETE FROM sessions WHERE streamer_id = ? AND sid != ?');
 const _cleanExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
 function createSession(sid, streamerId, expiresAt) {
@@ -1309,10 +1308,6 @@ function getSession(sid) {
 
 function deleteSession(sid) {
   _deleteSession.run(hashSessionId(sid));
-}
-function deleteOtherSessions(currentSid, { streamerId } = {}) {
-  const keep = hashSessionId(currentSid);
-  if (streamerId) _deleteOtherSessionsByStreamer.run(streamerId, keep);
 }
 
 function cleanExpiredSessions() {
@@ -5894,7 +5889,6 @@ module.exports = {
   createSession,
   getSession,
   deleteSession,
-  deleteOtherSessions,
   cleanExpiredSessions,
   logNotification,
   disableStreamer,
