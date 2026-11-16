@@ -14,9 +14,9 @@ const dbStub = {
   getBannedWords: () => state.bannedWords,
   addModLogEntry: (...args) => state.modLog.push(args),
   getRaidProtection: (id) => state.raidRows.get(id),
-  saveRaidProtection: (id, endsAt, mode, duration) => {
+  saveRaidProtection: (id, endsAt, mode, duration, login) => {
     const old = state.raidRows.get(id);
-    state.raidRows.set(id, old ? { ...old, ends_at: endsAt } : { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0 });
+    state.raidRows.set(id, old ? { ...old, ends_at: endsAt } : { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0, channel_login: login || null });
   },
   deleteRaidProtection: (id) => { state.raidRows.delete(id); },
   deleteRaidProtectionIf: (id, endsAt) => {
@@ -53,6 +53,7 @@ const budgetStub = {
 // in the module cache because chatModeration.js loads ./twitch only when a
 // check runs, and the real module would load the real config.
 const followStub = {
+  getUserId: async (login) => ({ a: '111', b: '222' })[login] || null,
   calls: [],
   answer: null,
   fail: null,
@@ -61,7 +62,6 @@ const followStub = {
     if (followStub.fail) throw followStub.fail;
     return followStub.answer;
   },
-  async getUserId() { return null; },
 };
 const twitchPath = require.resolve('./twitch');
 require.cache[twitchPath] = { id: twitchPath, filename: twitchPath, loaded: true, exports: followStub };
@@ -384,7 +384,7 @@ describe('raid protection', () => {
     state.streamers.set(1, streamerRow());
     const client = fakeClient();
     await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
-    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_120_000, prev_follower_mode: 1, prev_follower_mode_duration: 30 });
+    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_120_000, prev_follower_mode: 1, prev_follower_mode_duration: 30, channel_login: 'somestreamer' });
     t.mock.timers.tick(120_000);
     await flush();
     assertSettingsRequest(helixCalls[1], { follower_mode: true, follower_mode_duration: 30 });
@@ -399,7 +399,7 @@ describe('raid protection', () => {
     chatSettingsNow = { follower_mode: true, follower_mode_duration: 10 }; // the protection itself
     t.mock.timers.tick(60_000);
     await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
-    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_180_000, prev_follower_mode: 1, prev_follower_mode_duration: 30 });
+    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_180_000, prev_follower_mode: 1, prev_follower_mode_duration: 30, channel_login: 'somestreamer' });
   });
 
   test('a raid during the restore keeps its own protection and timer', async (t) => {
@@ -453,6 +453,21 @@ describe('raid protection', () => {
     assert.equal(state.raidRows.size, 0);
     assert.equal(said.length, 2);
     mod.stopRaidProtectionTicks();
+  });
+
+  test('the restore goes to the channel the protection ran on after the Twitch account changed', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    stubTwitch(200);
+    state.streamers.set(1, streamerRow({ twitch_username: 'a' }));
+    await mod.activateRaidProtection(fakeClient(), 'a', protectedRow({ twitch_username: 'a' }));
+    assert.equal(state.raidRows.get(1).channel_login, 'a');
+    state.streamers.set(1, streamerRow({ twitch_user_id: '222', twitch_username: 'b' }));
+    t.mock.timers.tick(120_000);
+    await flush();
+    assert.equal(helixCalls.length, 2);
+    assertSettingsRequest(helixCalls[1], { follower_mode: false });
+    assert.match(helixCalls[1].url, /broadcaster_id=111(&|$)/, 'restored on the old channel, not the new one');
+    assert.equal(state.raidRows.has(1), false);
   });
 
   test('a failed restore keeps the row, retries on the minute tick and gives up after an hour', async (t) => {

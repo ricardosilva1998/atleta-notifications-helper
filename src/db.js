@@ -577,7 +577,8 @@ db.exec(`
     streamer_id INTEGER PRIMARY KEY,
     ends_at INTEGER NOT NULL,
     prev_follower_mode INTEGER NOT NULL DEFAULT 0,
-    prev_follower_mode_duration INTEGER NOT NULL DEFAULT 0
+    prev_follower_mode_duration INTEGER NOT NULL DEFAULT 0,
+    channel_login TEXT
   );
 
   CREATE TABLE IF NOT EXISTS channel_milestones (
@@ -1885,10 +1886,15 @@ function getGuildsWithWeeklyHighlights() {
 
 // --- Raid protection (survives a restart) ---
 
+// Development databases that made the table before channel_login existed.
+if (!db.prepare('PRAGMA table_info(raid_protection)').all().some((c) => c.name === 'channel_login')) {
+  db.exec('ALTER TABLE raid_protection ADD COLUMN channel_login TEXT');
+}
+
 const _getRaidProtection = db.prepare('SELECT * FROM raid_protection WHERE streamer_id = ?');
 const _saveRaidProtection = db.prepare(`
-  INSERT INTO raid_protection (streamer_id, ends_at, prev_follower_mode, prev_follower_mode_duration)
-  VALUES (?, ?, ?, ?)
+  INSERT INTO raid_protection (streamer_id, ends_at, prev_follower_mode, prev_follower_mode_duration, channel_login)
+  VALUES (?, ?, ?, ?, ?)
   ON CONFLICT(streamer_id) DO UPDATE SET ends_at = excluded.ends_at
 `);
 const _deleteRaidProtection = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ?');
@@ -1897,8 +1903,8 @@ const _listRaidProtections = db.prepare('SELECT * FROM raid_protection');
 
 function getRaidProtection(streamerId) { return _getRaidProtection.get(streamerId); }
 // A second raid only moves the end: the settings to restore stay the first ones.
-function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration) {
-  _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0);
+function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration, channelLogin) {
+  _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0, channelLogin || null);
 }
 function deleteRaidProtection(streamerId) { _deleteRaidProtection.run(streamerId); }
 function deleteRaidProtectionIf(streamerId, endsAt) { return _deleteRaidProtectionIf.run(streamerId, endsAt).changes > 0; }
