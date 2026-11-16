@@ -2280,6 +2280,12 @@ describe('the sponsor image upload', () => {
     assert.equal(named.json().image.display_name, 'Acme');
   });
 
+  test('a name over 500 characters is cut at 500, as the update route does', async () => {
+    const res = await request('POST', `/dashboard/sponsors/upload?name=${'a'.repeat(5000)}&ext=png&dur=30`, { streamer: addStreamer(), rawBody: 'not-really-a-png', contentType: 'application/octet-stream' });
+    assert.equal(res.status, 200);
+    assert.equal(res.json().image.display_name, 'a'.repeat(500));
+  });
+
   test('a file type that is not an image is refused with the translated message', async () => {
     const res = await request('POST', '/dashboard/sponsors/upload?name=Acme&ext=exe', { streamer: addStreamer(), rawBody: 'x', contentType: 'application/octet-stream' });
     assert.equal(res.status, 400);
@@ -3624,6 +3630,15 @@ describe('channel point rewards', () => {
       assert.equal(res.json().rewardsSwitchedOn, true);
       assert.equal(switchOf(), 1);
       assert.equal(db.getRewards(id).length, 1);
+    });
+
+    test('a chat message template over 500 characters is refused, as the update route does', async () => {
+      const before = db.getRewards(id).length;
+      const res = await upload(id, { chat_message_template: 'a'.repeat(5000) });
+      assert.equal(res.status, 400);
+      assert.equal(res.json().error, t('en', 'dashboard.settings.error.tooLong'));
+      assert.equal(db.getRewards(id).length, before);
+      assert.equal((await upload(id, { chat_message_template: 'a'.repeat(500) })).status, 200);
     });
 
     test('the cooldown is held to 7 days', async () => {

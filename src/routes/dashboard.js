@@ -2458,7 +2458,7 @@ router.post('/sponsors/upload', async (req, res) => {
   try { await fs.promises.writeFile(path.join(sponsorDir, filename), buf); }
   catch (e) { return res.status(500).json({ error: res.locals.t('upload.error.writeFailed') }); }
 
-  const displayName = req.query.name || res.locals.t('overlayBuilder.sponsors.defaultName');
+  const displayName = String(req.query.name || '').slice(0, dashboardSettings.TEMPLATE_MAX) || res.locals.t('overlayBuilder.sponsors.defaultName');
   const displayDuration = sponsorDurationSeconds(req.query.dur);
   db.addSponsorImage(streamerId, filename, displayName, null, displayDuration);
   const newImage = db.getSponsorImages(streamerId).find(i => i.filename === filename);
@@ -2710,6 +2710,7 @@ router.post('/redemptions/upload', async (req, res) => {
   const customW = req.query.custom_w != null ? clamp(req.query.custom_w, 0, 1) : null;
   const customH = req.query.custom_h != null ? clamp(req.query.custom_h, 0, 1) : null;
   const chatMessageTemplate = String(req.query.chat_message_template || '').trim() || null;
+  if (chatMessageTemplate && chatMessageTemplate.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ error: res.locals.t('dashboard.settings.error.tooLong') });
   const autoFulfill = req.query.auto_fulfill === '0' ? 0 : 1;
 
   const streamerId = req.streamer.id;
