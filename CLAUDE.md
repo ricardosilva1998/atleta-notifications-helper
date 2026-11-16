@@ -451,3 +451,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - A second booking unpaid past its deadline expired on the tick (DMs to both). Accept 20 minutes before start refused (`too_close`). A free length confirmed on accept; a forced role failure left it confirmed with the room error and Retry room, which then made the room. Room past `close_at`: transcript DM to viewer and coach (one small file re-uploaded, the 31 MB one named too big), channel and role deleted, past list says the transcript was sent.
 **Bugs found:** none. Notes (not bugs): after Retry room succeeds no new DM carries the room link (the page and schedule do); the first save must happen before the category can be picked (the page says so).
 **Open:** QA: pass. The harness had no outside network for fonts and the lucide script (fallback fonts, some icons missing in the shots); timing steps (expiry, room close) moved the booking's deadline or start in the database to simulate the clock, since the tick cannot wait two hours.
+
+### 2026-11-16 18:00 — backend-dev (T1 of coaching cancel, reschedule and refunds)
+**Task:** Schema, queries and pure rules (branch `feat/coaching-reschedule-refund`)
+**Files:** `src/db.js`, `src/services/coaching.js`, `src/db.coaching.test.js`, `src/services/coaching.test.js`, `src/routes/coaching.test.js` (state-text assertion skips the two new states until the viewer panel task)
+**Decisions:**
+- Proposals live on `coaching_bookings` (`proposal_*`, `reschedule_*`, `cancel_reason`, `original_starts_at`); payer details and refund fields on `coaching_payments`. Held time is `_HELD_AT` (a rescheduling row holds its proposal, nothing without one); `rescheduling` counts toward MAX_UPCOMING even after the original start.
+- New db functions return `{ ok, booking }` or `{ ok:false, code }` (`not_confirmed`, `taken`, `not_rescheduling`, `no_proposal`, `own_proposal`, `too_close`, `not_cancellable`); accept refuses a proposal under 1 h away (`too_close`); drop sets `reschedule_way = 'ask'`; accept keeps `original_starts_at`.
+- Refund pending is set only by coach cancel, reschedule close, and own-payment late/double; `recordCoachingPayment` takes `payer { name, email, payerId }`.
+**Open:** T2 and T3 build the services and routes on these; `STATE_KEYS` in `routes/coaching.js` still lacks the two new states.

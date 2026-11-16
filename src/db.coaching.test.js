@@ -351,3 +351,220 @@ describe('viewer sessions', () => {
     assert.equal(db.getViewerSession('raw-sid-1'), null);
   });
 });
+
+describe('coaching reschedule and refunds', () => {
+  const NOW = T - 2 * 24 * 3600e3;
+  const START = T + 3 * 24 * 3600e3;
+  const confirmed = (id, v, startsAt, minutes = 60, paid = false) => {
+    const b = db.createCoachingBooking({ streamerId: id, viewer: viewer(v), startsAt, minutes, note: null, lang: 'en', now: NOW, priceCents: paid ? 4500 : 0, currency: 'EUR' }).booking;
+    if (!paid) return db.acceptCoachingBooking(b.id, id, NOW, null);
+    db.acceptCoachingBooking(b.id, id, NOW, NOW + 1e6);
+    db.createCoachingPayment({ orderId: `RO${b.id}`, bookingId: b.id, streamerId: id, amountCents: 4500, currency: 'EUR', payeeEmail: 'c@x.io', now: NOW });
+    db.recordCoachingPayment({ bookingId: b.id, orderId: `RO${b.id}`, captureId: `RC${b.id}`, amountCents: 4500, currency: 'EUR', now: NOW, payer: { name: 'Pat Payer', email: 'pat@x.io', payerId: 'PID1' } });
+    return db.getCoachingBooking(b.id, id);
+  };
+  const held = (id) => db.getHeldCoachingBookings(id, NOW);
+
+  test('the new columns exist on both tables', () => {
+    const b = sql.prepare('PRAGMA table_info(coaching_bookings)').all().map((c) => c.name);
+    for (const c of ['reschedule_started_at', 'reschedule_way', 'proposal_starts_at', 'proposal_by', 'proposal_at', 'proposal_note', 'cancel_reason', 'original_starts_at']) assert.ok(b.includes(c), c);
+    const p = sql.prepare('PRAGMA table_info(coaching_payments)').all().map((c) => c.name);
+    for (const c of ['payer_name', 'payer_email', 'payer_id', 'refund_status', 'refund_reason', 'refund_pending_at', 'refunded_at']) assert.ok(p.includes(c), c);
+  });
+
+  test('a rescheduling row holds its proposal and not its original time', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'R1', START);
+    const r = db.startCoachingReschedule(b.id, id, 'propose', { startsAt: START + 5 * 3600e3, note: 'n' }, NOW);
+    assert.equal(r.ok, true);
+    assert.equal(r.booking.status, 'rescheduling');
+    assert.equal(r.booking.original_starts_at, START);
+    assert.equal(r.booking.starts_at, START);
+    assert.deepEqual(held(id).map((h) => h.startsAt), [START + 5 * 3600e3]);
+    assert.equal(book(id, 'R2', START, 60, NOW).ok, true, 'the original time is free');
+    assert.deepEqual(book(id, 'R3', START + 5 * 3600e3, 60, NOW), { ok: false, code: 'taken' });
+  });
+
+  test('way ask holds nothing; a rescheduling row still counts as upcoming for the viewer', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'A1', START);
+    assert.equal(db.startCoachingReschedule(b.id, id, 'ask', null, NOW).ok, true);
+    assert.equal(held(id).length, 0);
+    assert.equal(book(id, 'A1', START + 3600e3 * 2, 60, NOW).ok, true);
+    assert.deepEqual(book(id, 'A1', START + 3600e3 * 4, 60, NOW), { ok: false, code: 'limit' });
+  });
+
+  test('startCoachingReschedule only from a confirmed session before its start, and a taken proposal is refused', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'S1', START);
+    assert.equal(db.startCoachingReschedule(b.id, id, 'ask', null, START + 1).code, 'not_confirmed');
+    const other = confirmed(id, 'S2', START + 10 * 3600e3);
+    assert.equal(db.startCoachingReschedule(b.id, id, 'propose', { startsAt: other.starts_at + 30 * MIN }, NOW).code, 'taken');
+    assert.equal(db.getCoachingBooking(b.id, id).status, 'confirmed');
+    assert.equal(db.startCoachingReschedule(b.id, id + 99, 'ask', null, NOW).code, 'not_confirmed');
+    assert.equal(db.startCoachingReschedule(b.id, id, 'ask', null, NOW).ok, true);
+    assert.equal(db.startCoachingReschedule(b.id, id, 'ask', null, NOW).code, 'not_confirmed');
+  });
+
+  test('two overlapping proposals or a proposal and a request: exactly one wins', () => {
+    const id = addStreamer();
+    const a = confirmed(id, 'P1', START);
+    const b = confirmed(id, 'P2', START + 8 * 3600e3);
+    db.startCoachingReschedule(a.id, id, 'ask', null, NOW);
+    db.startCoachingReschedule(b.id, id, 'ask', null, NOW);
+    const slot = START + 20 * 3600e3;
+    assert.equal(db.proposeCoachingTime(a.id, 'coach', slot, null, NOW).ok, true);
+    assert.equal(db.proposeCoachingTime(b.id, 'coach', slot + 30 * MIN, null, NOW).code, 'taken');
+    assert.deepEqual(book(id, 'P3', slot, 60, NOW), { ok: false, code: 'taken' });
+    assert.equal(db.proposeCoachingTime(a.id, 'viewer', slot + 30 * MIN, null, NOW).ok, true, 'a proposal may replace its own');
+    assert.equal(db.proposeCoachingTime(b.id, 'viewer', slot + 5 * MIN * 12 + 60 * MIN, null, NOW).ok, true);
+    assert.equal(db.proposeCoachingTime(999999, 'coach', slot, null, NOW).code, 'not_rescheduling');
+  });
+
+  test('only the side that did not propose can accept; the proposal becomes the time', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'AC1', START);
+    db.startCoachingReschedule(b.id, id, 'propose', { startsAt: START + 6 * 3600e3 }, NOW);
+    assert.equal(db.acceptCoachingProposal(b.id, 'coach', NOW).code, 'own_proposal');
+    const ok = db.acceptCoachingProposal(b.id, 'viewer', NOW);
+    assert.equal(ok.ok, true);
+    assert.equal(ok.booking.status, 'confirmed');
+    assert.equal(ok.booking.starts_at, START + 6 * 3600e3);
+    assert.equal(ok.booking.proposal_starts_at, null);
+    assert.equal(db.acceptCoachingProposal(b.id, 'viewer', NOW).code, 'not_rescheduling');
+    const c = confirmed(id, 'AC2', START + 30 * 3600e3);
+    db.startCoachingReschedule(c.id, id, 'ask', null, NOW);
+    assert.equal(db.acceptCoachingProposal(c.id, 'viewer', NOW).code, 'no_proposal');
+    db.proposeCoachingTime(c.id, 'viewer', START + 40 * 3600e3, null, NOW);
+    assert.equal(db.acceptCoachingProposal(c.id, 'viewer', NOW).code, 'own_proposal');
+    assert.equal(db.acceptCoachingProposal(c.id, 'coach', START + 40 * 3600e3 - 10 * MIN).code, 'too_close');
+    assert.equal(db.acceptCoachingProposal(c.id, 'coach', NOW).ok, true);
+  });
+
+  test('dropCoachingProposal frees the time and switches to asking', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'D1', START);
+    db.startCoachingReschedule(b.id, id, 'propose', { startsAt: START + 6 * 3600e3 }, NOW);
+    const r = db.dropCoachingProposal(b.id, NOW + 1);
+    assert.equal(r.ok, true);
+    assert.equal(r.dropped.by, 'coach');
+    assert.equal(r.booking.reschedule_way, 'ask');
+    assert.equal(held(id).length, 0);
+    assert.equal(db.dropCoachingProposal(b.id, NOW).code, 'no_proposal');
+  });
+
+  test('coach cancel of a paid booking stores the reason and marks its captured payment pending, with the payer saved', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'C1', START, 60, true);
+    assert.equal(db.getCoachingPayment(`RO${b.id}`).payer_email, 'pat@x.io');
+    assert.equal(db.getCoachingPayment(`RO${b.id}`).refund_status, null);
+    const r = db.cancelCoachingBookingByCoach(b.id, id, 'I am ill', NOW);
+    assert.equal(r.ok, true);
+    assert.equal(r.refundPending, true);
+    assert.equal(r.booking.status, 'cancelled');
+    assert.equal(r.booking.cancel_reason, 'I am ill');
+    const p = db.getCoachingPayment(`RO${b.id}`);
+    assert.equal(p.refund_status, 'pending');
+    assert.equal(p.refund_reason, 'cancelled');
+    assert.equal(p.refund_pending_at, NOW);
+    assert.equal(db.countPendingCoachingRefunds(id), 1);
+    assert.equal(db.listPendingCoachingRefunds(id)[0].payer_name, 'Pat Payer');
+    assert.equal(db.cancelCoachingBookingByCoach(b.id, id, 'again', NOW).code, 'not_cancellable');
+  });
+
+  test('coach cancel: a free one has no refund, another streamer cannot, a started one cannot, a rescheduling one can', () => {
+    const id = addStreamer();
+    const f = confirmed(id, 'C2', START);
+    assert.equal(db.cancelCoachingBookingByCoach(f.id, id + 50, 'x', NOW).code, 'not_cancellable');
+    assert.equal(db.cancelCoachingBookingByCoach(f.id, id, 'x', START + 1).code, 'not_cancellable');
+    const r = db.cancelCoachingBookingByCoach(f.id, id, 'x', NOW);
+    assert.equal(r.ok, true);
+    assert.equal(r.refundPending, false);
+    const g = confirmed(id, 'C3', START + 20 * 3600e3);
+    db.startCoachingReschedule(g.id, id, 'ask', null, NOW);
+    assert.equal(db.cancelCoachingBookingByCoach(g.id, id, 'x', START + 99 * 3600e3).ok, true);
+  });
+
+  test('closeCoachingReschedule: not_rescheduled, paid payment pending, the held proposal freed', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'X1', START, 60, true);
+    db.startCoachingReschedule(b.id, id, 'propose', { startsAt: START + 6 * 3600e3 }, NOW);
+    const r = db.closeCoachingReschedule(b.id, NOW + 7 * 86400e3);
+    assert.equal(r.ok, true);
+    assert.equal(r.booking.status, 'not_rescheduled');
+    assert.equal(r.refundPending, true);
+    assert.equal(db.getCoachingPayment(`RO${b.id}`).refund_reason, 'not_rescheduled');
+    assert.equal(held(id).length, 0);
+    assert.equal(db.closeCoachingReschedule(b.id, NOW).code, 'not_rescheduling');
+  });
+
+  test('late and double captures mark their own payment pending with the payer saved; recorded and late_confirmed do not', () => {
+    const id = addStreamer();
+    const a = db.createCoachingBooking({ streamerId: id, viewer: viewer('LD1'), startsAt: START, minutes: 60, note: null, lang: 'en', now: NOW, priceCents: 4500, currency: 'EUR' }).booking;
+    db.acceptCoachingBooking(a.id, id, NOW - 9e6, NOW - 8e6);
+    db.expireCoachingBooking(a.id, NOW - 7e6);
+    book(id, 'LD2', START + 30 * MIN, 30, NOW);
+    const payer = { name: 'Lee', email: 'lee@x.io', payerId: 'P2' };
+    const late = db.recordCoachingPayment({ bookingId: a.id, orderId: 'LDO1', captureId: 'LDC1', amountCents: 4500, currency: 'EUR', now: NOW, payer });
+    assert.equal(late.result, 'late_issue');
+    const lp = db.getCoachingPayment('LDO1');
+    assert.equal(lp.refund_status, 'pending');
+    assert.equal(lp.refund_reason, 'late');
+    assert.equal(lp.payer_email, 'lee@x.io');
+    const b = confirmed(id, 'LD3', START + 40 * 3600e3, 60, true);
+    const dbl = db.recordCoachingPayment({ bookingId: b.id, orderId: 'LDO2', captureId: 'LDC2', amountCents: 4500, currency: 'EUR', now: NOW });
+    assert.equal(dbl.result, 'double');
+    assert.equal(db.getCoachingPayment('LDO2').refund_reason, 'double');
+    assert.equal(db.getCoachingPayment('LDO2').payer_name, null);
+    assert.equal(db.getCoachingPayment(`RO${b.id}`).refund_status, null);
+    const c = confirmed(id, 'LD4', START + 60 * 3600e3, 60, true);
+    assert.equal(db.getCoachingPayment(`RO${c.id}`).refund_status, null);
+  });
+
+  test('markCoachingRefunded only from pending and only for the payment\'s streamer', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'MR1', START, 60, true);
+    assert.equal(db.markCoachingRefunded(`RO${b.id}`, id, NOW), null, 'not pending yet');
+    db.cancelCoachingBookingByCoach(b.id, id, 'x', NOW);
+    assert.equal(db.markCoachingRefunded(`RO${b.id}`, id + 77, NOW), null);
+    const p = db.markCoachingRefunded(`RO${b.id}`, id, NOW + 5);
+    assert.equal(p.refund_status, 'refunded');
+    assert.equal(p.refunded_at, NOW + 5);
+    assert.equal(db.markCoachingRefunded(`RO${b.id}`, id, NOW + 9), null);
+    assert.equal(db.countPendingCoachingRefunds(id), 0);
+  });
+
+  test('listDueReschedules finds the 7-day, 48 h and too-close cases, and listDueCoachingRooms skips a rescheduling booking', () => {
+    const id = addStreamer();
+    const a = confirmed(id, 'DU1', START);
+    const b = confirmed(id, 'DU2', START + 10 * 3600e3);
+    const c = confirmed(id, 'DU3', START + 20 * 3600e3);
+    db.startCoachingReschedule(a.id, id, 'ask', null, NOW);
+    db.startCoachingReschedule(b.id, id, 'propose', { startsAt: START + 50 * 3600e3 }, NOW);
+    db.startCoachingReschedule(c.id, id, 'propose', { startsAt: START + 60 * 3600e3 }, NOW);
+    const mine = new Set([a.id, b.id, c.id]);
+    const due = (now) => db.listDueReschedules(now).map((r) => r.id).filter((x) => mine.has(x)).sort();
+    assert.equal(due(NOW + 3600e3).length, 0);
+    assert.deepEqual(due(NOW + 49 * 3600e3), [b.id, c.id].sort());
+    assert.deepEqual(due(NOW + 7 * 86400e3), [a.id, b.id, c.id].sort());
+    assert.deepEqual(due(START + 50 * 3600e3 - 30 * MIN), [a.id, b.id, c.id].sort());
+    db.createCoachingRoom({ bookingId: a.id, streamerId: id, guildId: 'g', categoryId: null, closeAt: NOW + 5, now: NOW });
+    db.updateCoachingRoom(a.id, { state: 'open' }, NOW);
+    const mineRooms = () => db.listDueCoachingRooms(NOW + 10).filter((r) => r.streamer_id === id).map((r) => r.booking_id);
+    assert.equal(mineRooms().length, 0);
+    db.updateCoachingRoomClose(a.id, NOW + 99);
+    assert.equal(db.getCoachingRoom(a.id).close_at, NOW + 99);
+    db.dropCoachingProposal(b.id, NOW);
+    db.acceptCoachingProposal(c.id, 'viewer', NOW);
+    db.createCoachingRoom({ bookingId: c.id, streamerId: id, guildId: 'g', categoryId: null, closeAt: NOW + 5, now: NOW });
+    db.updateCoachingRoom(c.id, { state: 'open' }, NOW);
+    assert.deepEqual(mineRooms(), [c.id]);
+  });
+
+  test('the 90-day cleanup removes payments, with the payer details, with their booking', () => {
+    const id = addStreamer();
+    const b = confirmed(id, 'CL1', START, 60, true);
+    db.cleanupOldCoachingBookings(START + 91 * 86400e3 + 3600e3);
+    assert.equal(db.getCoachingPayment(`RO${b.id}`), null);
+  });
+});
