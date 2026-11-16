@@ -374,6 +374,80 @@ describe('the redemption flow', () => {
     });
   });
 
+  describe('a missing media file', () => {
+    test('Twitch refusing the refund is recorded as an error, not as refunded, and nothing is said in chat', async () => {
+      const id = addStreamer();
+      const reward = addReward(id); // its file is not on disk
+      const event = redemption(reward);
+      global.fetch = async () => ({ ok: false, status: 500, statusText: '500', json: async () => ({ message: 'Twitch is having a problem' }), text: async () => '' });
+
+      await dispatcher.handleRedemption(id, event);
+
+      assert.deepEqual(outcomes(event), ['error']);
+      assert.deepEqual(chatLines, []);
+    });
+
+    test('a redemption that is no longer waiting is not canceled and is not recorded as refunded', async () => {
+      const id = addStreamer();
+      const reward = addReward(id);
+      const event = redemption(reward, { status: 'fulfilled' });
+
+      await dispatcher.handleRedemption(id, event);
+
+      assert.deepEqual(helix.calls, []);
+      assert.deepEqual(outcomes(event), ['disabled']);
+    });
+  });
+
+  describe('auto-fulfill that a restart interrupted', () => {
+    test('the due time is stored and cleared once Twitch has fulfilled it', async () => {
+      const id = addStreamer();
+      const reward = addReward(id);
+      mediaOnDisk.add(reward.media_filename);
+      const event = redemption(reward);
+      const dueOf = () => db.db.prepare('SELECT auto_fulfill_due_at AS d FROM channel_point_redemptions WHERE twitch_redemption_id = ?').get(event.twitchRedemptionId).d;
+
+      await dispatcher.handleRedemption(id, event);
+      assert.ok(dueOf());
+      mock.timers.tick(6000);
+      await flush();
+      await flush();
+
+      assert.deepEqual(helix.statusesOf(event), ['FULFILLED']);
+      assert.equal(dueOf(), null);
+    });
+
+    test('a due one is settled by the tick or at boot without its timer, and only once', async () => {
+      const id = addStreamer();
+      const reward = addReward(id);
+      mediaOnDisk.add(reward.media_filename);
+      const event = redemption(reward);
+      await dispatcher.handleRedemption(id, event); // its timer is lost, as in a restart
+      mock.timers.reset();
+
+      await dispatcher.settleDueAutoFulfills(Date.now() + 10 * 60 * 1000);
+      await dispatcher.settleDueAutoFulfills(Date.now() + 10 * 60 * 1000);
+
+      assert.deepEqual(helix.statusesOf(event), ['FULFILLED']);
+    });
+
+    test('one that is not yet due is left alone, and one Twitch refuses stays owed', async () => {
+      const id = addStreamer();
+      const reward = addReward(id);
+      mediaOnDisk.add(reward.media_filename);
+      const event = redemption(reward);
+      await dispatcher.handleRedemption(id, event);
+
+      await dispatcher.settleDueAutoFulfills(Date.now());
+      assert.deepEqual(helix.statusesOf(event), []);
+
+      global.fetch = async () => ({ ok: false, status: 500, statusText: '500', json: async () => ({ message: 'down' }), text: async () => '' });
+      await dispatcher.settleDueAutoFulfills(Date.now() + 10 * 60 * 1000);
+      const row = db.db.prepare('SELECT auto_fulfill_due_at AS d FROM channel_point_redemptions WHERE twitch_redemption_id = ?').get(event.twitchRedemptionId);
+      assert.ok(row.d);
+    });
+  });
+
   describe('claimRedemption', () => {
     test('records a redemption id once, as pending; setRedemptionOutcome sets the outcome', () => {
       const id = addStreamer();

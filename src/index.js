@@ -75,6 +75,9 @@ function startWithoutDiscord() {
   // OBS source is open re-read Twitch (services/trackingGoals.js).
   require('./services/trackingGoals').startTicks();
 
+  // Played channel point redemptions that are due to be marked fulfilled (also those a restart interrupted).
+  require('./services/redemptionDispatcher').startTicks();
+
   // Coaching: every minute, unpaid bookings expire, stale PayPal orders are read back, half-made rooms are finished and
   // finished sessions' rooms are closed with their transcripts (services/coachingTick.js). Works without Discord.
   require('./services/coachingTick').startTicks();
@@ -219,6 +222,7 @@ async function shutdown(signal) {
   stop('EventSub', () => require('./services/eventsub').eventSubManager.stopAll());
   stop('YouTube chat', () => require('./services/youtubeLiveChat').youtubeChatManager.stopAll());
   stop('Sponsor rotations', () => require('./services/timedNotifications').timedNotificationManager.stopAll());
+  stop('Redemption fulfils', () => require('./services/redemptionDispatcher').stopTicks());
   stop('Tracking goals', () => require('./services/trackingGoals').stopTicks());
   stop('Coaching tick', () => require('./services/coachingTick').stopTicks());
   if (config.multistream.enabled) stop('Multistream checks', () => require('./services/multistreamSessions').sessions().stopAll());

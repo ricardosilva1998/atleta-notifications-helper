@@ -554,6 +554,7 @@ router.get('/link/callback', async (req, res) => {
         grant_type: 'authorization_code',
         redirect_uri: `${config.app.url}/auth/link/callback`,
       }),
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!tokenRes.ok) throw new Error('Token exchange failed');
@@ -564,6 +565,7 @@ router.get('/link/callback', async (req, res) => {
         Authorization: `Bearer ${tokenData.access_token}`,
         'Client-Id': config.twitch.clientId,
       },
+      signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     });
 
     if (!userRes.ok) throw new Error('Failed to get user info');

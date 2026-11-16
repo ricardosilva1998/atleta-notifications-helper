@@ -361,7 +361,7 @@ async function findActiveLiveStream(channelId, apiKey) {
     key: apiKey,
   });
 
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) return null;
 
   const data = await res.json();
@@ -434,6 +434,7 @@ async function deleteYoutubeChatMessage(messageId, accessToken) {
   const res = await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?id=${encodeURIComponent(messageId)}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
     const err = await res.text().catch(() => '');
@@ -455,6 +456,7 @@ async function banYoutubeChatUser(liveChatId, channelId, durationSeconds, access
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
     const err = await res.text().catch(() => '');

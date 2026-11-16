@@ -26,6 +26,7 @@ async function refreshSpotifyToken(streamer) {
         grant_type: 'refresh_token',
         refresh_token: streamer.spotify_refresh_token,
       }),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -59,6 +60,7 @@ async function getCurrentlyPlaying(streamer) {
 
   const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10000),
   });
 
   if (res.status === 204) return { status: 'nothing_playing' };
@@ -68,6 +70,7 @@ async function getCurrentlyPlaying(streamer) {
     if (!token) return { status: 'not_connected' };
     const retry = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10000),
     });
     if (retry.status === 204) return { status: 'nothing_playing' };
     if (!retry.ok) return { status: 'error' };

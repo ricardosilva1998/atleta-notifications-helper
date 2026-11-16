@@ -327,6 +327,7 @@ async function refreshBotToken(streamer) {
   const res = await fetch('https://id.twitch.tv/oauth2/token', {
     method: 'POST',
     body: params,
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!res.ok) throw new Error(`Bot token refresh failed: ${res.status}`);

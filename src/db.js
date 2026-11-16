@@ -3431,6 +3431,16 @@ db.exec(`
 db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_redemptions_streamer_date ON channel_point_redemptions(streamer_id, created_at)`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_redemptions_twitch_id ON channel_point_redemptions(twitch_redemption_id)`);
 
+// Migration: when a played redemption is due to be marked fulfilled on Twitch (ISO time, NULL when nothing is owed),
+// so a restart between the clip and the fulfil does not leave it waiting in the queue.
+try {
+  const cols = db.pragma('table_info(channel_point_redemptions)').map(c => c.name);
+  if (!cols.includes('auto_fulfill_due_at')) {
+    db.exec('ALTER TABLE channel_point_redemptions ADD COLUMN auto_fulfill_due_at TEXT');
+    console.log('[DB] Added auto_fulfill_due_at to channel_point_redemptions');
+  }
+} catch (e) { _migrationLog('channel_point_redemptions.auto_fulfill_due_at', e); }
+
 // Migration: Giveaways tables
 try {
   db.exec(`
@@ -4514,6 +4524,23 @@ function claimRedemption(fields) {
 function setRedemptionOutcome(id, outcome, errorMessage) {
   db.prepare('UPDATE channel_point_redemptions SET outcome = ?, error_message = ? WHERE id = ?')
     .run(outcome, errorMessage || null, id);
+}
+
+function setRedemptionAutoFulfillDue(id, dueIso) {
+  db.prepare('UPDATE channel_point_redemptions SET auto_fulfill_due_at = ? WHERE id = ?').run(dueIso, id);
+}
+
+function clearRedemptionAutoFulfillDue(id) {
+  db.prepare('UPDATE channel_point_redemptions SET auto_fulfill_due_at = NULL WHERE id = ?').run(id);
+}
+
+function getDueRedemptionAutoFulfills(nowIso, limit) {
+  return db.prepare(`
+    SELECT id, streamer_id, twitch_redemption_id, twitch_reward_id, auto_fulfill_due_at
+    FROM channel_point_redemptions
+    WHERE auto_fulfill_due_at IS NOT NULL AND auto_fulfill_due_at <= ?
+    ORDER BY auto_fulfill_due_at LIMIT ?
+  `).all(nowIso, limit || 100);
 }
 
 function getRedemptionsRecent(streamerId, limit) {
@@ -6072,6 +6099,9 @@ module.exports = {
   logRedemption,
   claimRedemption,
   setRedemptionOutcome,
+  setRedemptionAutoFulfillDue,
+  clearRedemptionAutoFulfillDue,
+  getDueRedemptionAutoFulfills,
   getRedemptionsRecent,
   updateStreamerCpSync,
   clearStreamerBroadcasterScopes,

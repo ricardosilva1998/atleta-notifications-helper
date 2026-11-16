@@ -12,6 +12,7 @@ async function getPayPalToken() {
     method: 'POST',
     headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'grant_type=client_credentials',
+    signal: AbortSignal.timeout(15000),
   });
   const data = await res.json();
   return data.access_token;
@@ -35,6 +36,7 @@ async function createPayPalOrder(amount, description) {
         user_action: 'PAY_NOW',
       },
     }),
+    signal: AbortSignal.timeout(15000),
   });
   return res.json();
 }
@@ -44,6 +46,7 @@ async function capturePayPalOrder(orderId) {
   const res = await fetch(`${config.paypal.baseUrl}/v2/checkout/orders/${orderId}/capture`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(15000),
   });
   return res.json();
 }
