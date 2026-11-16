@@ -448,3 +448,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** none
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-16 23:30 — team-qa
+**Task:** F1.3, check of fix round 1 (F1.1 01a3768 redemption clip ends once, F1.2 4c5e1ce docs): suite and boots on both branches, F1.1 in a browser
+**Tests added/changed:** none
+**Suite result:** scratch copies (Node 26, better-sqlite3 rebuilt): `fix/review-findings` 3981 tests, 3981 pass, 0 fail; `chore/remove-racing` 3958 tests, 3958 pass, 0 fail. Two boots per branch (empty data/, then reused): `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** F1.1 in headless Chromium on `/overlay/<token>`: a redemption with a missing audio file then three follows shows A, then B, then C, one at a time (2193, 2595, 2997 ms); the pre-fix overlay.js shows A and B at the same instant (2209, 2209). F1.2 `git grep` over docs: only legitimate mentions (release notes, 410/redirect notes, donation-history StreamElements rows, coaching.md:3, the obsolete idea doc, the Racing alert-look family).
+**Bugs found:** none. QA: pass.
+**Open:** none
