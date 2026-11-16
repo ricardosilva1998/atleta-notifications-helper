@@ -496,3 +496,17 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Withdraw still shows only for unpaid bookings (rescheduling counts as holding); cancelled bookings show the coach's reason, Refund pending reads "Your coach will refund you", Refunded reads as such; no payer details are on the page. The Pay step adds the PayPal name and email note.
 - `rescheduling` and `not_rescheduled` are in `STATE_KEYS`; the every-state-has-a-text assertion is whole again.
 **Open:** native read-through of the 20 machine translations.
+
+### 2026-11-16 — team-security (T6, coaching cancel, reschedule, refund and tabs)
+**Task:** Security pass over `git diff main...HEAD`: new routes' authz, CSRF, limiter, payer privacy, refund reachability, held-time races, text limits, rendering, DMs
+**Findings:**
+- Low, FIXED: `cardData()` (dashboard Coaching card, `/dashboard/api/cards`) built its views with the coach-only `refunds` list (payer name/email/PayPal ids); the card's `coachingRow` whitelist kept it off the page, but it was one edit from leaking. Card views now use `{ noPayer: true }`; test added (card and cancel DM carry no payer text).
+- OK: every viewer route (starts, propose, accept-proposal) finds the booking by id + streamer + viewer discord id (another's is `not_found`), needs the viewer session, carries `coachingRescheduleLimiter` (30/10 min) and the global CSRF (tested); the coach's routes look the booking and payment up by the signed-in streamer (another streamer: 404), behind dashboard login + CSRF.
+- OK: payer details only in the coach's `refunds` (never `forViewer`), not logged, not in any DM; payments rows go with the booking (90 days) and with Remove (`STREAMER_OWNED_ROWS`).
+- OK: only coach cancel, a reschedule closing (the coach's), a late/double capture mark a payment pending; no viewer route writes a payment; viewer withdraw of a paid booking is `paid` 409.
+- OK: start, propose, accept, drop, cancel, request and the late-capture clash all run as immediate transactions with one held-time expression (`_HELD_AT`); two proposals or a proposal against a request: one `taken`.
+- OK: reason 1-500 and note 0-300 characters, line breaks to spaces, control characters stripped (`cleanText`); times must be in the offered start list; ids and order ids are pattern-checked.
+- OK: client scripts use no innerHTML; DMs pass reason, note, names through `escapeLinkText` and send with `allowedMentions: { parse: [] }`.
+**Files:** src/services/coachingBookings.js, src/services/coachingBookings.test.js, CLAUDE.md
+**Fixes applied:** the card finding above. Scratch copy: full `src/**` + `tests/**` suites 4022 tests, 4021 pass, 0 fail, 1 pre-existing skip.
+**Open:** Accepted: a viewer paying the same booking twice marks the second capture refund pending (a real double payment, as for the earlier late/double rule). Accepted: viewer proposals DM the coach each time, bounded by the 30/10 min limiter. Not browser-seeded: the viewer page's Refund pending/Refunded lines (unit-tested only).

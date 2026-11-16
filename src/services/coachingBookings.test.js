@@ -421,7 +421,7 @@ describe('cardData', () => {
     assert.equal(card.next.state, 'confirmed');
     assert.deepEqual(Object.keys(card.next).sort(), [
       'cancelReason', 'currency', 'id', 'messageError', 'minutes', 'note', 'originalStartsAt', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy',
-      'paymentIssue', 'priceCents', 'proposal', 'refundPending', 'refundState', 'refunds', 'rescheduleEndsAt', 'rescheduleStartedAt', 'roomError', 'roomUrl', 'startsAt', 'state',
+      'paymentIssue', 'priceCents', 'proposal', 'refundPending', 'refundState', 'rescheduleEndsAt', 'rescheduleStartedAt', 'roomError', 'roomUrl', 'startsAt', 'state',
       'transcriptStatus', 'viewerAvatar', 'viewerName', 'viewerUsername',
     ]);
     db.setCoachingOpen(s.id, 1);
@@ -672,6 +672,18 @@ describe('cancel with a reason, the refund step and the payer details', () => {
     assert.equal(svc.cardData(s, { now: NOW, claimedGuildIds: ['123'] }).refundsPending, 0);
     await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
     assert.equal(svc.cardData(s, { now: NOW, claimedGuildIds: ['123'] }).refundsPending, 1);
+  });
+
+  test('the dashboard card never carries the payer\'s PayPal details, and no DM to the viewer does', async () => {
+    const { s, id } = await paidConfirmed();
+    discord.sent = [];
+    await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    const dm = JSON.stringify(discord.sent);
+    assert.doesNotMatch(dm, /pat@example|Pat Payer|PAYERID001|CAPORDER/);
+    const card = JSON.stringify(svc.cardData(s, { now: NOW, claimedGuildIds: ['123'] }));
+    assert.doesNotMatch(card, /pat@example|Pat Payer|PAYERID001|payerEmail|"refunds"/);
+    const open = await paidConfirmed();
+    assert.doesNotMatch(JSON.stringify(svc.cardData(open.s, { now: NOW, claimedGuildIds: ['123'] })), /pat@example|Pat Payer|payerEmail|"refunds"/);
   });
 
   test('Refunded: only that payment\'s streamer, only from pending, and the viewer is messaged', async () => {

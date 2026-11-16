@@ -62,7 +62,7 @@ function refundsOf(payments) {
 function bookingView(row, now, room = null, opts = {}) {
   const payments = opts.payments || db.listCoachingPaymentsForBookings([row.id]);
   const refundState = refundStateOf(payments);
-  const coachOnly = opts.forViewer ? {} : { refunds: refundsOf(payments) };
+  const coachOnly = opts.forViewer || opts.noPayer ? {} : { refunds: refundsOf(payments) };
   return {
     id: row.id,
     startsAt: row.starts_at,
@@ -608,9 +608,10 @@ function cardData(streamer, { now = Date.now(), claimedGuildIds: claimed = [] } 
     open: !!(settings && settings.open),
     bookable: coaching.bookable(settings, claimed),
     inviteBroken: !!(settings && settings.invite_code && settings.invite_ok === 0),
-    waiting: bookingViews(waiting.slice(0, 5), now),
+    waiting: bookingViews(waiting.slice(0, 5), now, { noPayer: true }),
     waitingCount: settings ? db.countWaitingCoaching(streamer.id, now) : 0,
-    next: confirmed ? bookingViews([confirmed], now)[0] : null,
+    // The dashboard card never carries the payer's PayPal details: they are for the coach's schedule page only.
+    next: confirmed ? bookingViews([confirmed], now, { noPayer: true })[0] : null,
     refundsPending: settings ? db.countPendingCoachingRefunds(streamer.id) : 0,
     roomErrors: upcoming.filter((r) => r.status === 'confirmed').length
       ? db.listCoachingRoomsForBookings(upcoming.filter((r) => r.status === 'confirmed').map((r) => r.id)).filter((r) => r.state === 'failed').length
