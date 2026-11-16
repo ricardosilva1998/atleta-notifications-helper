@@ -441,3 +441,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `checkInvite` runs one at a time per streamer and records a check with no answer (`recordInviteCheck(..., null, ...)` keeps `invite_ok`); `/dashboard` starts it on `finish` (`coachingBookings.checkInviteLater`, also used by `/dashboard/coaching`), never inside `gatherCards`.
 - A viewer message that goes out clears `message_error`; line breaks in notes and the where text become spaces; the where text and the server name are escaped; `/state` carries `leadMs` and the page drops starts inside the hour.
 **Open:** the controller's scoped re-review; a native read-through of the two new texts; finding 9 (Cf characters) left for later as the review allowed.
+
+### 2026-11-16 12:00 — backend-dev (T1 of coaching payment and rooms)
+**Task:** Coaching payment and rooms, T1: rules, schema and queries (branch `feat/coaching-payment-rooms`)
+**Files:** `src/services/coaching.js`, `src/db.js`, `src/services/coaching.test.js`, `src/db.coaching.test.js`, `src/routes/coaching.test.js` (two assertions widened to the new `LENGTHS`/`STATES`)
+**Decisions:**
+- `coaching_settings` gains `lengths`, `prices_saved_at`, `category_id`; `coaching_bookings` the price and payment columns; new `coaching_payments` and `coaching_rooms` (no foreign keys, both in `STREAMER_OWNED_ROWS` ahead of bookings, and swept with the 90-day booking cleanup). A settings row with no `lengths` reads as the defaults (`getCoachingSettings().lengths`).
+- `recordCoachingPayment` returns `recorded | duplicate | late_confirmed | late_issue | double`, or `{ ok:false, code:'mismatch'|'no_booking' }`; the caller (T2) must check payee, amount, currency and status first.
+- `acceptCoachingBooking(id, streamerId, now, payByMs|null)` does accept (null = free, confirmed at once); `expireCoachingBooking` only past `pay_by`.
+**Open:** the booking page script still has no texts for `awaiting_payment`/`expired` (T4); on this machine Node is 26 and the installed better-sqlite3 is built for 24, so tests were run on a scratch copy with the module rebuilt.

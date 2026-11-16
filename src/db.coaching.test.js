@@ -195,6 +195,145 @@ describe('coaching bookings', () => {
   });
 });
 
+describe('coaching payment', () => {
+  const paidBook = (id, v, startsAt, minutes, now = T - 24 * 3600e3) =>
+    db.createCoachingBooking({ streamerId: id, viewer: viewer(v), startsAt, minutes, note: null, lang: 'en', now, priceCents: 4500, currency: 'EUR' });
+  const cap = (bookingId, n, now) => db.recordCoachingPayment({ bookingId, orderId: `ORD${n}`, captureId: `CAP${n}`, amountCents: 4500, currency: 'EUR', now });
+
+  test('lengths default for a row with none, round-trip once saved, and prices_saved_at is set once', () => {
+    const id = addStreamer();
+    const s = db.saveCoachingSettings(id, baseSettings());
+    assert.equal(s.lengths[60].price, 2500);
+    assert.equal(s.lengths[30].on, false);
+    assert.equal(s.prices_saved_at, null);
+    assert.equal(s.category_id, null);
+    const lengths = { 30: { on: true, price: 0 }, 60: { on: false, price: 1 }, 120: { on: true, price: 99 }, 180: { on: false, price: 0 }, 240: { on: false, price: 0 }, 300: { on: false, price: 0 } };
+    const saved = db.saveCoachingSettings(id, baseSettings({ lengths, savedAt: 111, categoryId: 'cat1' }));
+    assert.deepEqual(saved.lengths, lengths);
+    assert.equal(saved.prices_saved_at, 111);
+    assert.equal(saved.category_id, 'cat1');
+    const again = db.saveCoachingSettings(id, baseSettings({ daysOff: [] }));
+    assert.deepEqual(again.lengths, lengths, 'a save without lengths keeps them');
+    assert.equal(again.category_id, 'cat1');
+  });
+
+  test('a booking stores its price and currency; one made without a price keeps NULL', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'P1', T, 60).booking;
+    assert.equal(a.price_cents, 4500);
+    assert.equal(a.currency, 'EUR');
+    const b = book(id, 'P2', T + 5 * 60 * MIN, 30).booking;
+    assert.equal(b.price_cents, null);
+    assert.equal(b.currency, null);
+  });
+
+  test('awaiting_payment holds its slot in the overlap; expired frees it', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'H1', T, 60).booking;
+    const acc = db.acceptCoachingBooking(a.id, id, T - 1000, T - 900000);
+    assert.equal(acc.status, 'awaiting_payment');
+    assert.equal(acc.accepted_at, T - 1000);
+    assert.equal(acc.pay_by, T - 900000);
+    assert.equal(db.acceptCoachingBooking(a.id, id, T, null), null, 'only from waiting');
+    assert.deepEqual(book(id, 'H2', T + 30 * MIN, 30), { ok: false, code: 'taken' });
+    assert.equal(db.expireCoachingBooking(a.id, T - 900001), null, 'not before pay_by');
+    assert.equal(db.listExpirableCoachingBookings(T - 900000).length >= 1, true);
+    assert.equal(db.expireCoachingBooking(a.id, T - 900000).status, 'expired');
+    assert.equal(book(id, 'H2', T + 30 * MIN, 30).ok, true);
+  });
+
+  test('accepting a free request confirms it at once', () => {
+    const id = addStreamer();
+    const a = book(id, 'F1', T, 30).booking;
+    const row = db.acceptCoachingBooking(a.id, id, T - 5, null);
+    assert.equal(row.status, 'confirmed');
+    assert.equal(row.pay_by, null);
+  });
+
+  test('a double recordCoachingPayment with the same capture id writes once', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'D1', T, 60).booking;
+    db.acceptCoachingBooking(a.id, id, T - 5000, T + 1e6);
+    db.createCoachingPayment({ orderId: 'ORD1', bookingId: a.id, streamerId: id, amountCents: 4500, currency: 'EUR', payeeEmail: 'c@x.io', now: T - 4000 });
+    const first = cap(a.id, 1, T - 3000);
+    assert.equal(first.result, 'recorded');
+    assert.equal(first.booking.status, 'confirmed');
+    assert.equal(first.booking.paid_at, T - 3000);
+    assert.equal(first.booking.paypal_capture_id, 'CAP1');
+    const second = cap(a.id, 1, T - 1000);
+    assert.equal(second.result, 'duplicate');
+    assert.equal(db.getCoachingBooking(a.id, id).paid_at, T - 3000);
+    assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM coaching_payments WHERE capture_id = ?').get('CAP1').n, 1);
+    assert.equal(db.getCoachingPayment('ORD1').status, 'captured');
+    assert.equal(db.listOpenCoachingPaymentsFor(a.id).length, 0);
+  });
+
+  test('an order of another booking is refused', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'M1', T, 60).booking;
+    const b = paidBook(id, 'M2', T + 5 * 60 * MIN, 60).booking;
+    db.createCoachingPayment({ orderId: 'ORDM', bookingId: a.id, streamerId: id, amountCents: 4500, currency: 'EUR', payeeEmail: 'c@x.io', now: T });
+    assert.deepEqual(db.recordCoachingPayment({ bookingId: b.id, orderId: 'ORDM', captureId: 'CAPM', amountCents: 4500, currency: 'EUR', now: T }), { ok: false, code: 'mismatch' });
+    assert.equal(db.getCoachingBooking(b.id, id).paid_at, null);
+  });
+
+  test('a late capture confirms the booking when its time is still free', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'L1', T, 60).booking;
+    db.acceptCoachingBooking(a.id, id, T - 9e6, T - 8e6);
+    db.expireCoachingBooking(a.id, T - 7e6);
+    const r = cap(a.id, 21, T - 6e6);
+    assert.equal(r.result, 'late_confirmed');
+    assert.equal(r.booking.status, 'confirmed');
+    assert.equal(r.booking.payment_issue, null);
+  });
+
+  test('a late capture on a taken slot keeps the booking expired and flags it', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'L2', T, 60).booking;
+    db.acceptCoachingBooking(a.id, id, T - 9e6, T - 8e6);
+    db.expireCoachingBooking(a.id, T - 7e6);
+    assert.equal(book(id, 'L3', T + 30 * MIN, 30).ok, true);
+    const r = cap(a.id, 22, T - 6e6);
+    assert.equal(r.result, 'late_issue');
+    assert.equal(r.booking.status, 'expired');
+    assert.equal(r.booking.payment_issue, 'late');
+    assert.equal(r.booking.paid_at, T - 6e6);
+    assert.equal(r.booking.paid_amount_cents, 4500);
+  });
+
+  test('stale orders list and drop; a captured one is never dropped', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'S1', T, 60).booking;
+    db.createCoachingPayment({ orderId: 'ORDS1', bookingId: a.id, streamerId: id, amountCents: 4500, currency: 'EUR', payeeEmail: 'c@x.io', now: 1000 });
+    assert.equal(db.listStaleCoachingPayments(2000).some((p) => p.order_id === 'ORDS1'), true);
+    assert.equal(db.listStaleCoachingPayments(1000).some((p) => p.order_id === 'ORDS1'), false);
+    assert.equal(db.deleteOpenCoachingPayment('ORDS1'), true);
+    assert.equal(db.getCoachingPayment('ORDS1'), null);
+  });
+});
+
+describe('coaching rooms', () => {
+  test('a room row is made once, updated by field, listed when making, due and to remove', () => {
+    const id = addStreamer();
+    const room = db.createCoachingRoom({ bookingId: 9001, streamerId: id, guildId: 'g1', categoryId: 'c1', closeAt: 5000, now: 100 });
+    assert.equal(room.state, 'making');
+    assert.equal(db.createCoachingRoom({ bookingId: 9001, streamerId: id, guildId: 'other', categoryId: 'c9', closeAt: 1, now: 200 }).guild_id, 'g1');
+    assert.equal(db.listMakingCoachingRooms(101).length >= 1, true);
+    assert.equal(db.listMakingCoachingRooms(100).some((r) => r.booking_id === 9001), false);
+    const upd = db.updateCoachingRoom(9001, { role_id: 'r1', channel_id: 'ch1', state: 'open', bogus: 'x' }, 300);
+    assert.equal(upd.state, 'open');
+    assert.equal(upd.role_id, 'r1');
+    assert.equal(upd.updated_at, 300);
+    assert.equal(db.listDueCoachingRooms(4999).some((r) => r.booking_id === 9001), false);
+    assert.equal(db.listDueCoachingRooms(5000).some((r) => r.booking_id === 9001), true);
+    assert.equal(db.listCoachingRoomsToRemove(id).length, 1);
+    db.updateCoachingRoom(9001, { state: 'closed' }, 400);
+    assert.equal(db.listCoachingRoomsToRemove(id).length, 0);
+    assert.equal(db.listCoachingRoomsForBookings([9001]).length, 1);
+  });
+});
+
 describe('viewer sessions', () => {
   test('a viewer session is found by its raw id, stored hashed, and not after it expires', () => {
     const v = { discordUserId: '111', username: 'vi', displayName: 'Vi', avatar: 'a.png' };
