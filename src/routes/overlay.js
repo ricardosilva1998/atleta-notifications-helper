@@ -339,7 +339,7 @@ function sendTrackingPage(req, res, title, pageConfig) {
   res.send(trackingPageHtml(req, title, pageConfig));
 }
 
-// A tracker's settings as its source draws them (trackers.settings: no row is on, no colour is the Atleta purple).
+// A tracker's settings as its source draws them (trackers.settings: no row is off, no colour is the Atleta purple).
 function trackerSettingsOf(streamerId, tracker) {
   const { enabled, color } = trackers.settings(streamerId)[tracker];
   return { enabled, color };

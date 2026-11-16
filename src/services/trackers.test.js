@@ -288,7 +288,7 @@ describe('clearing the trackers', () => {
 });
 
 describe('the trackers\' settings', () => {
-  test('settings() gives all six as their sources draw them: no row is on in the Atleta purple, a stored colour is kept', () => {
+  test('settings() gives all six as their sources draw them: no row is off in the Atleta purple, a stored colour is kept', () => {
     const s = addStreamer();
     const world = setup();
     db.setTrackerSetting(s, 'latest_tip', { enabled: false, color: '#ff00aa' });
@@ -296,9 +296,17 @@ describe('the trackers\' settings', () => {
     const settings = world.tr.settings(s);
     assert.deepEqual(Object.keys(settings), trackers.TRACKERS);
     assert.equal(trackers.DEFAULT_COLOR, '#9146FF');
-    assert.deepEqual(settings.latest_follower, { enabled: true, color: '#9146FF', ownColor: false });
+    assert.deepEqual(settings.latest_follower, { enabled: false, color: '#9146FF', ownColor: false });
     assert.deepEqual(settings.latest_tip, { enabled: false, color: '#ff00aa', ownColor: true });
-    assert.deepEqual(settings.latest_raid, { enabled: true, color: '#9146FF', ownColor: false }, 'a colour that is not #rrggbb is the default');
+    assert.deepEqual(settings.latest_raid, { enabled: false, color: '#9146FF', ownColor: false }, 'a colour that is not #rrggbb is the default');
+  });
+});
+
+describe('trackers with no rows', () => {
+  test('settings() with no rows gives enabled:false for all six', () => {
+    const tr = trackers.createTrackers({ db: { getTrackerSettings: () => ({}) } });
+    const settings = tr.settings(1);
+    for (const tracker of trackers.TRACKERS) assert.equal(settings[tracker].enabled, false);
   });
 });
 

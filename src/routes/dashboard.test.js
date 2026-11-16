@@ -5306,7 +5306,7 @@ describe('the working cards on the page', () => {
 
   test('the Tracking card: the goal bars for its script, each tracker with its switch, last value, test and link; the page for the rest', async () => {
     const id = linkedStreamer({ overlay_token: 'synthetic-token-wcp-track', donation_currency: 'EUR' });
-    db.setTrackerSetting(id, 'latest_bits', { enabled: false });
+    db.setTrackerSetting(id, 'latest_raid', { enabled: true });
     db.setTrackerValue(id, 'latest_raid', { name: '<b>Raider</b>', viewers: 42 });
     db.setTrackerValue(id, 'latest_tip', { name: 'Marta', amount: 10, currency: 'EUR' });
     const card = cardOf(await pane(id), 'tracking');

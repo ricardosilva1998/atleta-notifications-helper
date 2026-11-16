@@ -404,7 +404,7 @@ describe('trackers', () => {
     const s = addStreamer();
     assert.deepEqual(db.getTrackerSettings(s), {});
     db.setTrackerSetting(s, 'latest_tip', { color: '#ff00aa' });
-    assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 1, color: '#ff00aa' } });
+    assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 0, color: '#ff00aa' } });
     db.setTrackerSetting(s, 'latest_tip', { enabled: false });
     assert.deepEqual(db.getTrackerSettings(s), { latest_tip: { enabled: 0, color: '#ff00aa' } });
     db.setTrackerSetting(s, 'latest_tip', { enabled: true, color: null });

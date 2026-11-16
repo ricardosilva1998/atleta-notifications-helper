@@ -265,14 +265,14 @@ describe('a goal bar\'s stream', () => {
 });
 
 describe('a tracker\'s stream', () => {
-  test('the config with the tracker\'s settings (on, Atleta purple by default), then its stored value', async () => {
+  test('the config with the tracker\'s settings (off, Atleta purple by default), then its stored value', async () => {
     const { id, token } = addStreamer();
     db.setTrackerValue(id, 'latest_follower', { name: 'viewer_a' });
     const stream = await openStream(`/overlay/tracker/latest_follower/events/${token}`);
     await until(() => stream.messages().length >= 2, 'config and value');
     const [config, value] = stream.messages();
     assert.equal(config.type, 'config');
-    assert.deepEqual(config.settings, { enabled: true, color: '#9146FF' });
+    assert.deepEqual(config.settings, { enabled: false, color: '#9146FF' });
     assert.deepEqual(value, { type: 'tracker', tracker: 'latest_follower', value: { name: 'viewer_a' } });
   });
 

@@ -1644,8 +1644,8 @@ function trackingLinks(req, streamer, lang) {
 const trackingKind = (req, res, next) => (trackingGoals.KINDS.includes(req.params.kind) ? next() : trackingRefusal(res, 'not_found'));
 const trackingAnswer = (req, res) => res.json({ ok: true, state: trackingState(db.getStreamerById(req.streamer.id) || req.streamer) });
 
-// The page. Its first visit writes the six trackers' rows (on, no colour), so the trackers that are on by default
-// count as in use and keep the event connections running for a source opened before anything else is set.
+// The page. Its first visit writes the six trackers' rows (off, no colour), so reading them before and after
+// the first visit gives the same answer.
 router.get('/tracking', overlayPage, (req, res) => {
   const streamer = req.streamer;
   const before = trackingInUse(streamer.id);

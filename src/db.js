@@ -5790,7 +5790,7 @@ function setTrackerSetting(streamerId, tracker, settings) {
     ON CONFLICT(streamer_id, tracker) DO UPDATE SET
       enabled = CASE WHEN ? THEN excluded.enabled ELSE enabled END,
       color = CASE WHEN ? THEN excluded.color ELSE color END
-  `).run(streamerId, tracker, hasEnabled ? (s.enabled ? 1 : 0) : 1, hasColor ? s.color : null, hasEnabled ? 1 : 0, hasColor ? 1 : 0);
+  `).run(streamerId, tracker, hasEnabled ? (s.enabled ? 1 : 0) : 0, hasColor ? s.color : null, hasEnabled ? 1 : 0, hasColor ? 1 : 0);
 }
 
 // ── Boot: tokens at rest (see "Secrets at rest" at the top) ─────────────

@@ -208,14 +208,14 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
   }
 
   // Every tracker's settings, in TRACKERS order, as its source draws them: { enabled, color, ownColor }. A tracker
-  // with no row is on; a colour that is not #rrggbb (or none) is DEFAULT_COLOR, and ownColor says one is stored.
+  // with no row is off; a colour that is not #rrggbb (or none) is DEFAULT_COLOR, and ownColor says one is stored.
   function settings(streamerId) {
     const rows = db.getTrackerSettings(streamerId);
     const out = {};
     for (const tracker of TRACKERS) {
       const row = rows[tracker];
       const own = !!row && typeof row.color === 'string' && /^#[0-9a-f]{6}$/i.test(row.color);
-      out[tracker] = { enabled: row ? !!row.enabled : true, color: own ? row.color : DEFAULT_COLOR, ownColor: own };
+      out[tracker] = { enabled: row ? !!row.enabled : false, color: own ? row.color : DEFAULT_COLOR, ownColor: own };
     }
     return out;
   }
