@@ -437,8 +437,8 @@ describe('Accept, Decline and Cancel', () => {
 
   test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and Cancel works once paid and owes a refund', async () => {
     const s = addStreamer();
-    const paidHold = (startsAt, now = Date.now()) => {
-      const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
+    const paidHold = (startsAt, now = Date.now(), owner = s) => {
+      const made = db.createCoachingBooking({ streamerId: owner.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
       assert.ok(made.ok, made.code);
       return made.booking;
     };
@@ -448,11 +448,14 @@ describe('Accept, Decline and Cancel', () => {
     assert.deepEqual(noPaypal.json, { ok: false, code: 'no_paypal', error: errorOf('no_paypal') });
 
     db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
-    const soon = paidHold(Date.now() + 24 * 60e3, Date.now() - 86400e3);
-    const close = await post(`/dashboard/api/coaching/bookings/${soon.id}/accept`, { streamer: s });
+    // The 24-minute hold belongs to a second coach, so it can never overlap the free time held above, whatever the time of day.
+    const s2 = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s2.id);
+    const soon = paidHold(Date.now() + 24 * 60e3, Date.now() - 86400e3, s2);
+    const close = await post(`/dashboard/api/coaching/bookings/${soon.id}/accept`, { streamer: s2 });
     assert.equal(close.status, 409);
     assert.deepEqual(close.json, { ok: false, code: 'too_close', error: errorOf('too_close') });
-    assert.equal(db.getCoachingBooking(soon.id, s.id).status, 'waiting');
+    assert.equal(db.getCoachingBooking(soon.id, s2.id).status, 'waiting');
 
     const ok = await post(`/dashboard/api/coaching/bookings/${booking.id}/accept`, { streamer: s });
     assert.equal(ok.status, 200);
