@@ -29,8 +29,8 @@ download one, and how to put one back.
   backup covers them.
 - No route serves `data/backups/`, or `data/` itself.
 
-A backup holds every account's data, including OAuth tokens, PayPal emails and password
-hashes. Treat a downloaded copy as a secret: keep it encrypted, never commit it, and delete
+A backup holds every account's data, including OAuth tokens, PayPal emails and web
+session hashes. Treat a downloaded copy as a secret: keep it encrypted, never commit it, and delete
 it when you no longer need it.
 
 Once `TOKEN_ENCRYPTION_KEY` is set (`deploy.md`), the OAuth tokens and the StreamElements token in a

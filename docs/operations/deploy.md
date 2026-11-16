@@ -120,7 +120,7 @@ Trouble:
   **After any change to the Discord token, read the boot log for this line.**
 - `[DB] ... cannot be decrypted` or `TOKEN_ENCRYPTION_KEY is not set`: see above.
 - `[CSRF] Refused ...`: a request was turned away. After a deploy, open pages sending an old token are
-  expected; a Bridge call or other program that is refused needs an entry in `CSRF_EXEMPT` (`src/csrf.js`).
+  expected; a program (the multistream relay, a webhook) that is refused needs an entry in `CSRF_EXEMPT` (`src/csrf.js`).
 - `[Tip] Order ... not counted: <reason>`: a PayPal capture that did not pass the checks (nothing is
   announced; the money still reached the streamer).
 - `[TTS] Streamer <id>: <code>`: a tip's voice (or a test) failed, at most once per streamer an hour (the settings
@@ -140,7 +140,7 @@ Trouble:
 - `[SubSync]` logs one count line per streamer per cycle and one line per role given or taken, not one
   per linked viewer. To see who is linked, query `user_links`.
 - Every icon missing on every page: the browser refused the icon library because the `integrity` hash in its
-  `<script>` tag (`header.ejs`, `racing-pitwall.ejs`; unpkg, `lucide@1.57.0`) does not match the file. The
+  `<script>` tag (`header.ejs`; unpkg, `lucide@1.57.0`) does not match the file. The
   version is pinned together with its hash, so only a change to the tag can cause it; nothing to do at deploy.
 
 ## First deploy of the 2026-10 stream fixes
@@ -176,11 +176,6 @@ After, and over the first days:
   shared Cloudflare address again.
 - Once the release has settled, delete the hand-made copy `data/backups/pre-release.db`
   (`backup-restore.md`): it holds account tokens, and the nightly clean-up leaves it alone.
-- `build-bridge.yml` (the "Build Atleta Bridge" workflow) runs when a push touches `bridge/**`,
-  `bridge/CLAUDE.md` included, and this release changes that file. It publishes a new installer only
-  when the version in `bridge/package.json` is new, but its "Add release notes" step rewrites the notes
-  of the release for that version from the latest `bridge/` commits even when nothing is published. To
-  ship a Bridge change to drivers, raise the version in `bridge/package.json` in the same push.
 
 ### What streamers see, and what they need to do
 
@@ -911,3 +906,43 @@ After the deploy:
 2. `https://atletanotifications.com/coaching/ricardobsilva98` opens on its first step (Connect Discord, "Step 1 of 4").
 3. `https://atletanotifications.com/my-bookings` answers 200 signed out, with **Connect Discord**.
 4. Rolling back is safe: nothing in the data changed. An older release shows the viewer's bookings on the booking page again.
+
+## Racing removed (2026-11-16)
+
+The Racing product is gone: its pages, routes, services, the Atleta Racing desktop app (`bridge/`) and its two
+workflows, and the Racing tables. Streamers are not affected. **The migration drops Racing data for good, so take a
+manual backup before this deploys.**
+
+**Before merging (the push to `main` deploys):**
+1. Make a copy in the container as in `backup-restore.md`, "Make a copy in the container": `railway ssh`, then the
+   `backup(...)` one-liner. It must print `integrity: ok`; the file is `/app/data/backups/pre-release.db`.
+2. Take a Railway volume backup too (service, **Backups**). Keep both until the release has settled, then delete
+   `pre-release.db` (it holds account tokens).
+
+**What the migration does** (`_runOnce('drop_racing_tables')` in `src/db.js`, once, in a transaction, recorded in
+`data_migrations`): drops the 18 Racing tables (`racing_users`, `auth_log`, `password_reset_tokens`, `teams`,
+`team_members`, `team_invites`, `notifications`, `racing_sessions`, `session_laps`, `lap_telemetry`, `track_maps`,
+`track_stats`, `bridge_logs`, `bridge_bug_reports`, `iracing_race_cache`, `iracing_driver_state`,
+`watched_iracing_drivers`, `iracing_overlay_settings`), children first, and deletes `sessions` rows with
+no streamer (Racing-only web sessions). It is silent on a fresh database. The `guilds.iracing_enabled` and
+`sessions.racing_user_id` columns stay on old databases, unused. The first boot after the deploy prints one
+`[DB migration]` line for it; the second boot prints none.
+
+**What stays on the site:** the old app's `/api` paths (`/api/bridge*`, `/api/track-map*`, `/api/track-stats`,
+`/api/live-session`, `/api/session*`, `/api/voice*`) answer 410; `/racing*` and `/tracks*` redirect to `/`;
+`/pitwall/overlays/*` answers 404; `/overlay/iracing/chat/<token>` still serves the Twitch chat overlay for existing
+OBS sources, and the other `/overlay/iracing/*` types answer 404.
+
+**After the deploy:**
+1. `https://atletanotifications.com/health` answers 200; `railway logs` has no `[DB migration]` error lines.
+2. `/racing`, `/tracks` redirect to `/` and `/pitwall/overlays/x` answers 404; `/api/session` and `/api/bridge/config`
+   answer 410; `/my-bookings` still loads.
+3. In the container, check the tables are gone (the image has no `sqlite3` program; use Node as in the sections above):
+   `cd /app && node -e "const D=require('better-sqlite3');console.log(new D('data/bot.db',{readonly:true}).prepare(\"SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'racing%' OR name LIKE 'iracing%' OR name LIKE 'pitwall%' OR name LIKE 'bridge%')\").all())"`
+   must print `[]`. (`sqlite3 bot.db .tables` on a downloaded copy shows the same.)
+4. Unset the variables nothing reads any more on Railway: `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`, `OPENAI_API_KEY`,
+   `STRICT_SESSION_OWNERSHIP`, `IRACING_*`.
+
+**Rolling back:** code from before this release runs again, but the dropped tables and their data cannot come back
+except by restoring the pre-release copy (`backup-restore.md`), which also loses everything written since. Do not
+roll back after Racing users could have been needed again: the Racing data is only in that copy.
