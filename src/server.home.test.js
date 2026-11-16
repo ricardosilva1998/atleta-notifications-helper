@@ -195,6 +195,16 @@ describe('GET /: the call to action', () => {
     }
   });
 
+  test('a visitor and a streamer both get the viewer entry "Coaching bookings" (to /my-bookings)', async () => {
+    for (const session of [null, sessions.streamer]) {
+      const res = await get('/', { session });
+      assert.equal(res.status, 200);
+      const entry = links(pageBody(res.text)).filter((a) => a.href === '/my-bookings');
+      assert.equal(entry.length, 1, 'one link to My bookings');
+      assert.equal(entry[0].text, english('home.coaching.link'));
+    }
+  });
+
   test('a Racing account alone counts as a visitor here', async () => {
     const res = await get('/', { session: sessions['Racing account only'] });
     assert.ok(links(pageBody(res.text)).some((a) => a.href === '/auth/login'));

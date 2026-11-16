@@ -193,3 +193,33 @@ describe('My bookings', () => {
     assert.deepEqual(win.json.bookings, [], 'the viewer session wins');
   });
 });
+
+describe('the page', () => {
+  test('hands the page script its texts, and the script reads exactly those', async () => {
+    const me = addViewer();
+    const res = await get('/my-bookings', { cookie: me.cookie });
+    assert.equal(res.status, 200);
+    const texts = JSON.parse(res.text.match(/window\.MYBOOKINGS_TEXTS = (\{.*?\});<\/script>/)[1]);
+    const script = fs.readFileSync(path.join(SRC, '..', 'public', 'js', 'my-bookings.js'), 'utf8');
+    const read = [...new Set([...script.matchAll(/\bT\.(\w+)/g)].map((m) => m[1]))];
+    assert.ok(read.length > 10);
+    assert.deepEqual(read.filter((name) => !(name in texts)), [], 'the script reads texts the page does not hand over');
+    assert.deepEqual(Object.keys(texts).filter((name) => !read.includes(name)), [], 'texts handed over but never read');
+    for (const state of ['waiting', 'confirmed', 'declined', 'cancelled', 'awaiting_payment', 'expired', 'withdrawn', 'unanswered', 'rescheduling', 'not_rescheduled']) {
+      assert.equal(typeof texts.states[state], 'string', state);
+    }
+    for (const code of ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed']) assert.equal(typeof texts.returnErrors[code], 'string', code);
+    assert.ok(texts.requestSent.includes('{{name}}'), 'fields are kept for the script');
+  });
+
+  test('a signed-in page has the sign-out form and no sign-in link; the data cannot end the script', async () => {
+    const a = addStreamer();
+    const me = addViewer();
+    hold(a, me, 5, '</script><b>x');
+    const res = await get('/my-bookings', { cookie: me.cookie });
+    assert.ok(res.text.includes('action="/auth/coaching-signout"'));
+    assert.ok(!res.text.includes('href="/auth/coaching-signin"'));
+    assert.ok(!res.text.includes('</script><b>x'));
+    assert.ok(res.text.includes('\\u003c/script>'));
+  });
+});
