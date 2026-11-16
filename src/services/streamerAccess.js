@@ -12,7 +12,7 @@ function isStreamerDisabled(streamer) {
 
 // Session step: a disabled account moves from req.streamer to
 // req.disabledStreamer, so every route that asks for a logged-in streamer
-// sees nobody. This also covers a Racing login linked to a disabled streamer.
+// sees nobody.
 function applyAccountStatus(req) {
   if (req.streamer && isStreamerDisabled(req.streamer)) {
     req.disabledStreamer = req.streamer;

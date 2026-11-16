@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
-    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "cookie-parser": "^1.4.7",
     "discord.js": "^14.16.0",
@@ -22,7 +21,6 @@
     "express-rate-limit": "^8.3.2",
     "fast-xml-parser": "^5.5.8",
     "helmet": "^8.1.0",
-    "nodemailer": "^8.0.5",
     "socket.io-client": "^2.5.0",
     "tmi.js": "^1.8.5",
     "ws": "^8.20.0"

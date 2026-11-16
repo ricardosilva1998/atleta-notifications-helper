@@ -121,16 +121,6 @@ function startHousekeeping() {
   setInterval(cleanupTipVoices, 60 * 60 * 1000).unref();
   cleanupTipVoices();
 
-  // Clean up old bridge logs (every 6 hours)
-  setInterval(() => { try { db.cleanupOldBridgeLogs(); } catch (e) {} }, 6 * 60 * 60 * 1000);
-  db.cleanupOldBridgeLogs();
-  setInterval(() => { try { db.cleanupOldBridgeBugReports(); } catch (e) {} }, 6 * 60 * 60 * 1000);
-  db.cleanupOldBridgeBugReports();
-
-  // Clean up old notifications (every 24 hours)
-  setInterval(() => { try { db.cleanupOldNotifications(); } catch (e) {} }, 24 * 60 * 60 * 1000);
-  db.cleanupOldNotifications();
-
   // Nightly copy of the database, kept 7 days (services/backups.js), made without
   // pausing the app. Skipped when the copy would leave the data volume with less
   // than 200 MB free.

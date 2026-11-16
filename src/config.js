@@ -126,11 +126,6 @@ module.exports = {
     creditFloor: ttsCreditFloor(process.env.TTS_CREDIT_FLOOR),
     monthlyLimit: 15000,
   },
-  email: {
-    user: process.env.EMAIL_USER || '',
-    pass: process.env.EMAIL_PASS || '',
-    from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@atletanotifications.com',
-  },
   features: {
     // YouTube, for streamers: the dashboard's YouTube tab, the YouTube chatbot page, the YouTube parts of the
     // server, account, statistics and overlay pages, the Setup Guide's YouTube step and what the home page says
@@ -192,7 +187,6 @@ module.exports = {
     instagramFeed: parseInt(process.env.INSTAGRAM_FEED_INTERVAL) || 600_000,
     tiktokFeed: parseInt(process.env.TIKTOK_FEED_INTERVAL) || 600_000,
     twitterFeed: parseInt(process.env.TWITTER_FEED_INTERVAL) || 600_000,
-    iracingResults: parseInt(process.env.IRACING_POLL_INTERVAL) || 1_800_000,
   },
   tiers: {
     free: {
@@ -219,8 +213,6 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: -1,
-      iracing: true,
-      maxIracingDrivers: -1,
     },
     starter: {
       name: 'Starter',
@@ -246,8 +238,6 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: -1,
-      iracing: true,
-      maxIracingDrivers: -1,
     },
     pro: {
       name: 'Pro',
@@ -273,8 +263,6 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: -1,
-      iracing: true,
-      maxIracingDrivers: -1,
     },
     enterprise: {
       name: 'Enterprise',
@@ -300,8 +288,6 @@ module.exports = {
       tiktok: true,
       twitter: true,
       maxSocialAccounts: -1,
-      iracing: true,
-      maxIracingDrivers: -1,
     },
   },
 };

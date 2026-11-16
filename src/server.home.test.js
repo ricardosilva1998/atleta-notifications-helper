@@ -6,12 +6,11 @@
 // server.js mounts from routes/ are empty ones (/, /streamer and /tutorial are
 // server.js's own routes). Checks:
 //   - a visitor gets "Login with Discord", a logged-in streamer "Open dashboard";
-//   - the page names neither Racing (the sidebar's Racing menu and the Racing
-//     account's parts of the header are left out) nor the OBS-overlay features;
+//   - the page names neither Racing nor the OBS-overlay features;
 //   - it renders in the seven languages, with every text filled in;
 //   - what it says about YouTube follows the YouTube switch and the API key;
 //   - /streamer, the old Streamer landing page, sends people here or to the
-//     dashboard, and the other pages keep the sidebar's Racing link.
+//     dashboard, and the other pages have no Racing link either.
 
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -37,7 +36,6 @@ const config = {
   multistream: { enabled: false },
   tiers: {},
   csrf: { secret: 'synthetic-csrf-secret' },
-  email: {},
 };
 
 let app;
@@ -77,24 +75,10 @@ before(async () => {
     Module._load = origLoad;
   }
 
-  // A streamer; the same streamer with a linked Racing account (which has a
-  // team invite waiting, so the header would show the Racing notification
-  // menu); and a Racing account alone.
   const expires = Date.now() + 3600_000;
   const streamer = db.upsertStreamerDiscord('900000000000000001', 'homestreamer', 'Home Streamer', null);
   db.createSession('synthetic-home-streamer', streamer.id, expires);
-  const linkedRacer = Number(db.createRacingUser('home-linked-racer', 'x', 'Synthetic Driver', null).lastInsertRowid);
-  db.linkRacingUserToStreamer(linkedRacer, streamer.id);
-  db.createNotification(linkedRacer, 'team_invite', 'Team invite', 'someone invited you', '/racing/teams', 'team_invite', 42);
-  db.createLinkedSession('synthetic-home-linked', streamer.id, linkedRacer, expires);
-  const racerAlone = Number(db.createRacingUser('home-racer-alone', 'x', 'Other Driver', null).lastInsertRowid);
-  db.createRacingSession('synthetic-home-racer', racerAlone, expires);
-  Object.assign(sessions, {
-    visitor: null,
-    streamer: 'synthetic-home-streamer',
-    'streamer with a linked Racing account': 'synthetic-home-linked',
-    'Racing account only': 'synthetic-home-racer',
-  });
+  Object.assign(sessions, { visitor: null, streamer: 'synthetic-home-streamer' });
 
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   port = server.address().port;
@@ -183,7 +167,7 @@ describe('GET /: the call to action', () => {
   });
 
   test('a logged-in streamer gets "Open dashboard" (to /dashboard) instead', async () => {
-    for (const session of [sessions.streamer, sessions['streamer with a linked Racing account']]) {
+    for (const session of [sessions.streamer]) {
       const res = await get('/', { session });
       assert.equal(res.status, 200);
       const body = links(pageBody(res.text));
@@ -203,11 +187,6 @@ describe('GET /: the call to action', () => {
       assert.equal(entry.length, 1, 'one link to My bookings');
       assert.equal(entry[0].text, english('home.coaching.link'));
     }
-  });
-
-  test('a Racing account alone counts as a visitor here', async () => {
-    const res = await get('/', { session: sessions['Racing account only'] });
-    assert.ok(links(pageBody(res.text)).some((a) => a.href === '/auth/login'));
   });
 });
 
@@ -401,18 +380,12 @@ describe('GET /streamer, the old Streamer landing page', () => {
   });
 });
 
-describe('the other pages keep Racing in the sidebar', () => {
-  test('the Setup Guide has the sidebar\'s Racing link, and its Streamer link leads home', async () => {
+describe('the other pages', () => {
+  test('the Setup Guide has no Racing link, and its Streamer link leads home', async () => {
     const res = await get('/tutorial');
     assert.equal(res.status, 200);
-    assert.match(res.text, /<a href="\/racing" class="sidebar-link">/);
+    assert.ok(!res.text.includes('/racing'));
     assert.match(res.text, /<a href="\/" class="sidebar-link">\s*<i data-lucide="tv">/);
-  });
-
-  test('and so does a page of a logged-in Racing account, with its Racing menu', async () => {
-    const res = await get('/tutorial', { session: sessions['streamer with a linked Racing account'] });
-    assert.match(res.text, /<a href="\/racing" class="sidebar-link">/);
-    assert.match(res.text, /<a href="\/racing\/teams" class="sidebar-link"/);
   });
 
   test('nothing the pages did was logged as an error', () => {

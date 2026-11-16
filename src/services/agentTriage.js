@@ -4,55 +4,11 @@ const path = require('path');
 const config = require('../config');
 const db = require('../db');
 
-const BRIDGE_DIR = path.join(__dirname, '..', '..', 'bridge');
-
 // The request gives up after 2 minutes and is tried once more, so an analysis ends
 // well inside the 15 minutes after which an issue still marked "analyzing" counts as
 // abandoned (ANALYSIS_STALE_MS in issueAnalysis.js). The SDK's own limits, 10 minutes
 // and 2 retries, could keep it running past that.
 const REQUEST_OPTIONS = { timeout: 120_000, maxRetries: 1 };
-
-// Bridge source files to include in context
-const BRIDGE_FILES = [
-  'main.js', 'telemetry.js', 'websocket.js', 'settings.js',
-  'fuel-calculator.js', 'relative.js', 'keyboardSim.js',
-  'voiceInput.js', 'sessionRecorder.js', 'trackExtractor.js',
-];
-
-const OVERLAY_DIR = path.join(BRIDGE_DIR, 'overlays');
-
-function loadBridgeSources() {
-  const sources = [];
-
-  for (const file of BRIDGE_FILES) {
-    const filePath = path.join(BRIDGE_DIR, file);
-    if (fs.existsSync(filePath)) {
-      sources.push({ file: `bridge/${file}`, content: fs.readFileSync(filePath, 'utf8') });
-    }
-  }
-
-  const cpPath = path.join(BRIDGE_DIR, 'control-panel.html');
-  if (fs.existsSync(cpPath)) {
-    sources.push({ file: 'bridge/control-panel.html', content: fs.readFileSync(cpPath, 'utf8') });
-  }
-
-  if (fs.existsSync(OVERLAY_DIR)) {
-    const overlays = fs.readdirSync(OVERLAY_DIR).filter(f => f.endsWith('.html'));
-    for (const file of overlays) {
-      sources.push({
-        file: `bridge/overlays/${file}`,
-        content: fs.readFileSync(path.join(OVERLAY_DIR, file), 'utf8'),
-      });
-    }
-  }
-
-  const racingPath = path.join(__dirname, '..', 'routes', 'racing.js');
-  if (fs.existsSync(racingPath)) {
-    sources.push({ file: 'src/routes/racing.js', content: fs.readFileSync(racingPath, 'utf8') });
-  }
-
-  return sources;
-}
 
 function loadScreenshots(issueId, screenshotNames) {
   const images = [];
@@ -75,32 +31,24 @@ function loadScreenshots(issueId, screenshotNames) {
   return images;
 }
 
-const SYSTEM_PROMPT = `You are a senior developer triaging a bug report for Atleta Bridge, an Electron desktop app for iRacing sim racing. The app reads iRacing telemetry via shared memory (node-iracing-sdk) and displays transparent always-on-top overlays (standings, relative, fuel, wind, track map, driver card, session laps, weather, inputs, race duration, voice chat, etc.). It has a WebSocket server on port 9100, a control panel for settings, and session recording.
+const SYSTEM_PROMPT = `You are a senior developer triaging a problem reported by a streamer using Atleta, a web platform of Twitch, YouTube and Discord tools for streamers. It posts go-live messages, clips, recaps, milestones and weekly digests to Discord; runs a Twitch chatbot (thank-you messages, custom and built-in commands, chat moderation, giveaways, polls and predictions, shoutouts); shows animated alerts in an OBS browser source overlay (with an Overlay Builder, goal bars and trackers); takes PayPal tips; reads tips aloud; handles channel point rewards; and books paid coaching sessions through Discord. Streamers configure everything on a server-rendered dashboard.
 
 Your job:
-1. Analyze the bug description and any screenshots provided
-2. Search the source code to identify the likely root cause — cite specific file(s) and line(s)
-3. Assess whether you can produce a reliable fix
-4. If fixable, produce a JSON patch array with exact string replacements
+1. Analyze the report and any screenshots provided
+2. Say what the likely cause is: a setting the streamer has not made, a missing Twitch or Discord permission, a limit of Twitch, Discord or PayPal, or a bug in Atleta
+3. Say what the streamer or the owner should check or do next
+
+You have no source code. Do not invent file names, line numbers or code.
 
 Respond with ONLY valid JSON (no markdown fences):
 {
   "summary": "Brief 1-2 sentence diagnosis",
-  "root_cause": "Detailed explanation — which file, what code, why it fails",
-  "can_fix": true or false,
+  "root_cause": "The most likely cause and why",
+  "can_fix": false,
   "confidence": "high" or "medium" or "low",
-  "patch": [
-    {
-      "file": "bridge/main.js",
-      "old": "exact existing code to replace (copy-paste from source)",
-      "new": "replacement code"
-    }
-  ],
-  "notes": "Caveats, things to watch, or testing suggestions"
-}
-
-If you cannot fix it, set can_fix to false, patch to [], and explain why in notes.
-Keep patches minimal — fix only what's broken, don't refactor surrounding code.`;
+  "patch": [],
+  "notes": "What to check or do next, and anything that would confirm the cause"
+}`;
 
 async function analyzeIssue(issueId) {
   const issue = db.getIssueById(issueId);
@@ -111,9 +59,6 @@ async function analyzeIssue(issueId) {
 
   const client = new Anthropic({ apiKey: config.anthropic.apiKey });
 
-  const sources = loadBridgeSources();
-  const sourceContext = sources.map(s => `--- ${s.file} ---\n${s.content}`).join('\n\n');
-
   const content = [];
 
   const screenshots = loadScreenshots(issueId, issue.screenshots);
@@ -123,7 +68,7 @@ async function analyzeIssue(issueId) {
 
   content.push({
     type: 'text',
-    text: `## Bug Report\n\n**Subject:** ${issue.subject}\n\n**Description:** ${issue.description}\n\n**Reported by:** ${issue.discord_username}\n\n## Source Code\n\n${sourceContext}`,
+    text: `## Bug Report\n\n**Subject:** ${issue.subject}\n\n**Description:** ${issue.description}\n\n**Reported by:** ${issue.discord_username}`,
   });
 
   const response = await client.messages.create({

@@ -2,7 +2,7 @@
 
 // How many alert overlays (the OBS browser source at /overlay/:token) are open per streamer right now, so
 // the dashboard can say whether the overlay is open in OBS. routes/overlay.js counts only the streams that
-// say they are the alert overlay (?source=alerts): the iRacing chat overlay reads the same stream.
+// say they are the alert overlay (?source=alerts): the Twitch chat overlay reads the same stream.
 const open = new Map(); // streamer id -> open streams
 
 function opened(streamerId) {

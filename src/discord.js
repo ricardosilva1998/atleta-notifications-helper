@@ -245,52 +245,6 @@ function buildTwitterEmbed({ username, displayName, profileImageUrl, text, tweet
   });
 }
 
-function formatLapTime(seconds) {
-  if (!seconds || seconds <= 0) return 'N/A';
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(3);
-  return `${mins}:${secs.padStart(6, '0')}`;
-}
-
-function buildIracingResultEmbed(raceData) {
-  const posChange = raceData.starting_position - raceData.finish_position;
-  let posChangeStr = '';
-  if (posChange > 0) posChangeStr = ` (started P${raceData.starting_position} — gained ${posChange})`;
-  else if (posChange < 0) posChangeStr = ` (started P${raceData.starting_position} — lost ${Math.abs(posChange)})`;
-  else posChangeStr = ` (started P${raceData.starting_position})`;
-
-  let iratingStr = raceData.new_irating?.toLocaleString() || '0';
-  if (raceData.irating_change > 0) iratingStr += ` (+${raceData.irating_change} ▲)`;
-  else if (raceData.irating_change < 0) iratingStr += ` (${raceData.irating_change} ▼)`;
-  else iratingStr += ' (±0)';
-
-  const fields = [
-    { name: 'Position', value: `P${raceData.finish_position} / ${raceData.field_size}${posChangeStr}`, inline: true },
-    { name: 'iRating', value: iratingStr, inline: true },
-    { name: 'Incidents', value: `${raceData.incidents}x`, inline: true },
-    { name: 'Laps', value: `${raceData.laps_completed}`, inline: true },
-    { name: 'Car', value: raceData.car_name || 'Unknown', inline: true },
-    { name: 'SOF', value: raceData.strength_of_field?.toLocaleString() || '0', inline: true },
-  ];
-
-  if (raceData.fastest_lap_time) {
-    fields.push({ name: 'Fastest Lap', value: formatLapTime(raceData.fastest_lap_time) });
-  }
-  if (raceData.qualifying_time) {
-    fields.push({ name: 'Qualifying', value: `${formatLapTime(raceData.qualifying_time)} (P${raceData.starting_position})` });
-  }
-
-  return buildEmbed({
-    color: 0x1a1a2e,
-    author: { name: `${raceData.driver_name} finished a race` },
-    title: `${raceData.series_name} — ${raceData.track_name}`,
-    url: `https://members.iracing.com/membersite/member/EventResult.do?subsessionid=${raceData.subsession_id}`,
-    fields,
-    footer: { text: 'iRacing' },
-    timestamp: raceData.race_date ? new Date(raceData.race_date) : new Date(),
-  });
-}
-
 // ── Coaching: direct messages, membership, invites ─────────────────────────
 
 // Runs a promise against a deadline; the timer is cleared and never keeps the process alive.
@@ -525,4 +479,4 @@ function guildName(guildId) {
   return guild ? guild.name : null;
 }
 
-module.exports = { client, hasMessageContent, dropMessageContent, isReady, listCategories, checkCategory, createRole, deleteRole, renameRole, renameChannel, addRoleToMember, createVoiceChannel, deleteChannel, fetchAllMessages, downloadAttachment, CATEGORY_PERMISSIONS, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };
+module.exports = { client, hasMessageContent, dropMessageContent, isReady, listCategories, checkCategory, createRole, deleteRole, renameRole, renameChannel, addRoleToMember, createVoiceChannel, deleteChannel, fetchAllMessages, downloadAttachment, CATEGORY_PERMISSIONS, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed };

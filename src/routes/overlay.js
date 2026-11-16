@@ -31,7 +31,7 @@ function endStreamWhenAccountDisabled(streamerId, req, res) {
 
 // The event types the alert overlay draws as an alert. While the streamer's overlay switch is off none of
 // them reaches the stream; everything else on it still does (config updates, clears, sponsor images,
-// redemption clips, and the chat lines the iRacing chat overlay reads, which twitchChat.js already sends only
+// redemption clips, and the chat lines the Twitch chat overlay reads, which twitchChat.js already sends only
 // while the switch is on).
 const ALERT_TYPES = new Set(['follow', 'subscription', 'bits', 'donation', 'raid', 'giveaway_winner', 'yt_superchat', 'yt_member', 'yt_giftmember']);
 
@@ -539,43 +539,32 @@ router.get('/poll/:token', (req, res) => {
 // router.get('/custom-alerts/events/:token', (req, res) => customSSE(req, res, 'custom-alert'));
 // router.get('/custom-alerts/:token', (req, res) => customPage(req, res, 'custom-alert'));
 
-// iRacing overlay pages
+// The Twitch chat overlay: an OBS source that shows the chat lines the SSE stream carries. The address
+// keeps its old /iracing/ name so existing OBS sources keep working; every other type is gone.
 router.get('/iracing/:type/:token', (req, res) => {
-  const validTypes = ['standings', 'relative', 'fuel', 'chat', 'wind', 'proximity'];
-  const type = req.params.type;
-  if (!validTypes.includes(type)) return res.status(404).send('Invalid overlay type');
+  if (req.params.type !== 'chat') return res.status(404).send('Invalid overlay type');
   const streamer = db.getStreamerByOverlayToken(req.params.token);
   if (!streamer) return res.status(404).send('Invalid overlay token');
-
-  let settings = {};
-  try {
-    const setting = db.getIracingOverlaySetting(streamer.id, type);
-    if (setting) settings = JSON.parse(setting.settings || '{}');
-  } catch (e) {}
-  // Escape every "<" (as a JSON unicode escape) because the settings hold
-  // streamer-entered text and are embedded raw in the inline <script> below;
-  // same pattern as the builder and redemption pages.
-  const settingsJson = JSON.stringify(settings).replace(/</g, '\\u003c');
 
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>iRacing ${type.charAt(0).toUpperCase() + type.slice(1)} Overlay</title>
+  <title>Chat Overlay</title>
   <link rel="stylesheet" href="/overlay/iracing/shared.css">
-  <link rel="stylesheet" href="/overlay/iracing/${type}.css">
+  <link rel="stylesheet" href="/overlay/iracing/chat.css">
 </head>
 <body>
   <div id="overlay-root"></div>
   <script>
     window.OVERLAY_TOKEN = ${JSON.stringify(req.params.token)};
-    window.OVERLAY_TYPE = ${JSON.stringify(type)};
-    window.OVERLAY_SETTINGS = ${settingsJson};
+    window.OVERLAY_TYPE = "chat";
+    window.OVERLAY_SETTINGS = {};
     window.STREAMER_ID = ${streamer.id};
   </script>
   <script src="/overlay/iracing/shared.js"></script>
-  <script src="/overlay/iracing/${type}.js"></script>
+  <script src="/overlay/iracing/chat.js"></script>
 </body>
 </html>`);
 });
