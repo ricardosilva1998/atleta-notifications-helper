@@ -431,3 +431,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** 39 walk checks (Discord and PayPal stubbed, membership steered per viewer), 0 failed, no horizontal scroll, no console errors: signed out shows step 1 only; a non-member sees step 2 with Next disabled, Check again while still outside keeps it disabled, after joining Next enables and step 3 follows; unknown membership may go on; member starts at step 3, Back keeps the length, Send lands on `/my-bookings?booking=<id>&new=1` with the request on top as waiting; the coach's accept DM links `/my-bookings?booking=<id>`; My bookings across two coaches: Pay (PayPal return lands on My bookings with the paid notice, booking confirmed), Withdraw, accept a proposal, pick a new time, cancelled reason, refund line; home entry, Connect Discord with no coach, back on My bookings with the list.
 **Bugs found:** [P3, fixed] A viewer whose membership is unknown starts at step 3 and never saw the "could not check" warning (it sat only in step 2, reachable by Back). Added the same line to step 3 (`src/views/coaching.ejs` `#cz-unverified-3`, `public/js/coaching-page.js`); walk and 156 related tests pass.
 **Open:** none
+
+### 2026-11-16 20:00 — team-qa
+**Task:** F1.2, check of fix round 1 (F1.1, e8e534c: viewer DM action lines point to My bookings; transcript DM links it)
+**Tests added/changed:** none
+**Suite result:** `node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"` on a scratch copy (Node 26, better-sqlite3 rebuilt there): 4131 tests, 4130 pass, 0 fail, 1 pre-existing skip. Two boots on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** `viewerMessage` (booking 42, English) action lines: acceptedPay, rescheduleAsk, proposal, rescheduleProposed and proposalLapsed all end in `https://x/my-bookings?booking=42`; declined keeps `Pick another time` on the coach page plus the My bookings line.
+**Bugs found:** none. QA: pass.
+**Open:** none
