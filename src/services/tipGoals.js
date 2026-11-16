@@ -49,7 +49,7 @@ function broadcast(streamerId, extra) {
 
 // Called from every real donation source (the PayPal tip page).
 // Test alerts deliberately do not call this.
-function recordDonation(streamerId, amount, currency) {
+function recordDonation(streamerId, amount, currency, { silent = false } = {}) {
   try {
     const value = parseFloat(amount);
     if (!Number.isFinite(value) || value <= 0) return;
@@ -63,7 +63,7 @@ function recordDonation(streamerId, amount, currency) {
     if (!result) return;
     const justCompleted = !result.before.completed_at && !!result.after.completed_at;
     if (justCompleted) console.log(`[TipGoal] Goal "${goal.title}" reached for streamer ${streamerId}`);
-    broadcast(streamerId, { added: round2(value), justCompleted });
+    broadcast(streamerId, silent ? { justCompleted } : { added: round2(value), justCompleted });
   } catch (e) {
     console.error('[TipGoal] recordDonation error:', e.message);
   }

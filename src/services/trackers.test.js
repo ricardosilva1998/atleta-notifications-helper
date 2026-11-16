@@ -158,6 +158,22 @@ describe('the trackers', () => {
     assert.deepEqual(w.tr.values(id).latest_tip, { name: 'Yankee', amount: 50, currency: 'USD' });
     assert.ok(!('top_tipper' in db.getTrackerValues(id)), 'the top tipper is worked out, not stored');
   });
+
+  test('a recovered tip becomes the latest tip only when newer than the stored one', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const w = setup();
+    w.tr.onTip(id, { name: 'Live', amount: 5, currency: 'EUR' });
+    const stored = db.db.prepare("SELECT updated_at FROM tracker_values WHERE streamer_id = ? AND tracker = 'latest_tip'").get(id).updated_at;
+    w.tr.onTip(id, { name: 'Late', amount: 9, currency: 'EUR' }, { recovered: true, at: '2000-01-01 00:00:00' });
+    assert.equal(w.tr.values(id).latest_tip.name, 'Live', 'an older recovered tip leaves the latest tip alone');
+    assert.ok(!w.emitted.some((e) => e.payload.tracker === 'latest_tip' && e.payload.value.name === 'Late'));
+    w.tr.onTip(id, { name: 'Newer', amount: 9, currency: 'EUR' }, { recovered: true, at: '2999-01-01 00:00:00' });
+    assert.equal(w.tr.values(id).latest_tip.name, 'Newer');
+    assert.ok(stored);
+    const other = addStreamer({ donation_currency: 'EUR' });
+    w.tr.onTip(other, { name: 'First', amount: 1, currency: 'EUR' }, { recovered: true, at: '2000-01-01 00:00:00' });
+    assert.equal(w.tr.values(other).latest_tip.name, 'First', 'with nothing stored a recovered tip is the latest');
+  });
 });
 
 describe('the top tipper', () => {

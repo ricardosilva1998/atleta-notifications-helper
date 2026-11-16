@@ -63,9 +63,12 @@ function announceTip(streamer, d) {
 
 // A tip just recorded in the donation history counts toward the tip goal and
 // the trackers (Latest tip, Top tipper). Neither throws.
-function countTip(streamer, d) {
-  require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency);
-  require('../services/trackers').onTip(streamer.id, { name: d.donorName, amount: d.amount, currency: d.currency });
+// A recovered tip (the daily reconcile, hours late) moves the goal without an `added` animation and only becomes the
+// latest tip when it is newer than the stored one.
+function countTip(streamer, d, opts) {
+  const recovered = !!(opts && opts.recovered);
+  require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency, { silent: recovered });
+  require('../services/trackers').onTip(streamer.id, { name: d.donorName, amount: d.amount, currency: d.currency }, recovered ? { recovered: true, at: opts.at } : undefined);
 }
 
 // A PayPal tip into the donation history: true for a new row, false if it was

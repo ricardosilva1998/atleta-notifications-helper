@@ -5675,6 +5675,11 @@ function setTrackerValue(streamerId, tracker, value) {
   `).run(streamerId, tracker, text);
 }
 
+function getTrackerUpdatedAt(streamerId, tracker) {
+  const row = db.prepare('SELECT updated_at FROM tracker_values WHERE streamer_id = ? AND tracker = ? AND value IS NOT NULL').get(streamerId, tracker);
+  return row ? row.updated_at : null;
+}
+
 function clearTrackerValues(streamerId) {
   db.prepare('DELETE FROM tracker_values WHERE streamer_id = ?').run(streamerId);
 }
@@ -6186,6 +6191,7 @@ module.exports = {
   usesTracking,
   getTrackerValues,
   setTrackerValue,
+  getTrackerUpdatedAt,
   clearTrackerValues,
   seedTrackerValues,
   getTrackerSettings,

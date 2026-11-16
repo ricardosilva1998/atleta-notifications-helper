@@ -123,9 +123,16 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
 
   // A tip that db.logDonation() just recorded (PayPal), in any currency: the latest tip, then the
   // top tipper as it stands now. Never throws.
-  function onTip(streamerId, tip) {
+  // `late` ({ recovered, at }) marks a tip the daily reconcile found hours after it was paid: it becomes the latest tip
+  // only when it is newer than the stored one (`at` and the stored time are SQLite UTC text, so they compare as text).
+  function onTip(streamerId, tip, late) {
     try {
-      store(streamerId, 'latest_tip', valueOfTip(tip));
+      let newest = true;
+      if (late && late.recovered) {
+        const stored = typeof db.getTrackerUpdatedAt === 'function' ? db.getTrackerUpdatedAt(streamerId, 'latest_tip') : null;
+        newest = !stored || (!!late.at && String(late.at) > String(stored));
+      }
+      if (newest) store(streamerId, 'latest_tip', valueOfTip(tip));
       broadcast(streamerId, 'top_tipper', topTipper(streamerId));
     } catch (err) {
       logger.error('[Trackers] onTip error:', err.message);

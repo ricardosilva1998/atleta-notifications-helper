@@ -223,7 +223,7 @@ async function handleTipReturn({ streamer, orderId }, deps) {
 //   getOrder(orderId)          -> the order as PayPal has it now (may throw)
 //   logDonation(streamer, d)   -> true / false / null, as for handleTipReturn
 //   markCaptured(orderId)
-//   recordGoal(streamer, d)    -> tip goal progress
+//   recordGoal(streamer, d, { recovered, at }) -> tip goal progress and trackers; `at` is when the tip was started (SQLite UTC text)
 //   log(line), logError(line)
 // Returns how many tips it recovered.
 async function reconcilePendingTips(deps) {
@@ -242,7 +242,7 @@ async function reconcilePendingTips(deps) {
       }
       deps.markCaptured(pending.order_id);
       if (!isNew) continue;
-      deps.recordGoal(streamer, verdict.donation);
+      deps.recordGoal(streamer, verdict.donation, { recovered: true, at: pending.created_at });
       recovered++;
       const d = verdict.donation;
       deps.log(`[Tip] Recovered order ${pending.order_id} for ${streamer.twitch_username}: ${d.currency} ${d.amount} from ${d.donorName}, recorded without an alert`);

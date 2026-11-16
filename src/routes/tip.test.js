@@ -486,7 +486,8 @@ describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
     assert.equal(count('donations'), 1);
     assert.equal(db.db.prepare('SELECT external_id FROM donations').get().external_id, 'RECONCILE00000001');
     assert.equal(db.getActiveTipGoal(streamerA).current_amount, 7);
-    assert.equal(goalUpdates.length, 1, 'the goal counts it');
+    assert.equal(goalUpdates.length, 0, 'a recovered tip plays no late added animation');
+    assert.equal(db.getActiveTipGoal(streamerA).current_amount, 7, 'but the goal still counts it');
     assert.equal(alerts.length, 0, 'no stale overlay alert');
     assert.equal(chatSends.length, 0, 'no stale chat thank-you');
     assert.equal(count('overlay_events'), 0);
@@ -497,7 +498,7 @@ describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
 
     assert.equal(await tipRoutes.reconcilePendingTips(), 0);
     assert.equal(count('donations'), 1);
-    assert.equal(goalUpdates.length, 1);
+    assert.equal(goalUpdates.length, 0);
     assert.equal(orderReads().length, 1, 'a recorded tip is not read again');
   });
 
@@ -560,6 +561,7 @@ describe('the trackers (Latest tip, Top tipper)', () => {
   test('a tip the daily reconcile recovers reaches them once', async () => {
     db.createPendingTip({ order_id: 'RECONCILE00000010', streamer_id: streamerA, donor_name: 'Late Viewer', message: 'gg', payee_merchant_id: 'MERCHANT12345' });
     db.db.prepare("UPDATE pending_tips SET created_at = datetime('now', '-180 minutes') WHERE order_id = ?").run('RECONCILE00000010');
+    db.clearTrackerValues(streamerA);
     assert.equal(await tipRoutes.reconcilePendingTips(), 1);
     assert.deepEqual(trackerUpdates.map((e) => [e.tracker, e.value && e.value.name]), [['latest_tip', 'Late Viewer'], ['top_tipper', 'Late Viewer']]);
     assert.equal(await tipRoutes.reconcilePendingTips(), 0);
