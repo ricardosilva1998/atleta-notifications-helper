@@ -183,6 +183,9 @@ describe('reschedule and refund helpers', () => {
     assert.equal(core.upcomingCount([base, { ...base, state: 'cancelled' }], NOW), 1);
     assert.equal(core.canCancel(base, NOW), false);
     assert.equal(core.canCancel({ ...base, paid: false }, NOW), true);
+    const past = { ...base, paid: false, startsAt: NOW - 3600e3 };
+    assert.equal(core.canCancel(past, NOW), true, 'unpaid rescheduling: the original time has passed, Withdraw stays');
+    assert.equal(core.canCancel({ ...past, state: 'confirmed' }, NOW), false);
   });
 
   test('refundLine reads only the flags', () => {

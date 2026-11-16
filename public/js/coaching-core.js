@@ -89,6 +89,7 @@
   // A booking that holds its time: waiting, awaiting payment, confirmed or rescheduling, and not started.
   var HOLDING = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling'];
   function holds(booking, now) {
+    if (booking.state === 'rescheduling') return true; // startsAt is the original time, which limits nothing now
     return HOLDING.indexOf(booking.state) >= 0 && booking.startsAt > now;
   }
 

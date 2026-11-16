@@ -329,13 +329,13 @@ async function markRefunded(streamer, orderId, { now = Date.now() } = {}) {
 }
 
 // The viewer's own booking, waiting, awaiting payment or confirmed (else not_active: answered or withdrawn already), until
-// it starts; never once paid (paid).
+// it starts (a rescheduling one at any time: its original time no longer limits it); never once paid (paid).
 async function withdraw(streamer, viewer, id, { now = Date.now() } = {}) {
   const row = db.getCoachingBooking(id, streamer.id);
   if (!row || row.viewer_discord_id !== viewer.discordUserId) return { ok: false, code: 'not_found' };
   if (row.paid_at != null) return { ok: false, code: 'paid' };
   if (!coaching.HOLDING.includes(row.status)) return { ok: false, code: 'not_active' };
-  if (row.starts_at <= now) return { ok: false, code: 'too_late' };
+  if (row.status !== 'rescheduling' && row.starts_at <= now) return { ok: false, code: 'too_late' }; // a rescheduling row's starts_at is the original time, which limits nothing
   const updated = db.setCoachingBookingStatus(id, streamer.id, coaching.HOLDING, 'withdrawn', now, { unpaidOnly: true });
   if (!updated) {
     const again = db.getCoachingBooking(id, streamer.id);

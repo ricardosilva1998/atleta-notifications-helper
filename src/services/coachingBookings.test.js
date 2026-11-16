@@ -874,6 +874,16 @@ describe('reschedule (the coach starts it; a proposal is held like a booking)', 
     assert.equal((await svc.withdraw(p.s, p.v, p.id, { now: NOW + 3 * MIN })).code, 'paid');
   });
 
+  test('a viewer can withdraw an unpaid rescheduling session after its original time has passed', async () => {
+    const { s, v, id } = await confirmed();
+    await svc.startReschedule(s, id, { way: 'ask', now: NOW });
+    const after = FREE + HOUR;
+    const w = await svc.withdraw(s, v, id, { now: after });
+    assert.equal(w.ok, true);
+    assert.equal(w.booking.status, 'withdrawn');
+    assert.ok(rooms.removed.includes(id));
+  });
+
   test('the viewer cannot make a refund: no viewer action touches the payments', async () => {
     const { s, v, id, orderId } = await paidConfirmed();
     await svc.startReschedule(s, id, { way: 'ask', now: NOW + MIN });
