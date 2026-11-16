@@ -714,9 +714,9 @@ describe('pages are in English unless the visitor picked a language', () => {
   });
 
   test('no JSON answer or file says Vary: Accept-Language either', async () => {
-    for (const urlPath of ['/api/track-maps', '/api/bridge/config', '/js/csrf.js']) {
+    for (const [urlPath, status] of [['/health', 200], ['/api/track-maps', 410], ['/js/csrf.js', 200]]) {
       const res = await send('GET', urlPath, { headers: { 'Accept-Language': 'pt' } });
-      assert.equal(res.status, 200, urlPath);
+      assert.equal(res.status, status, urlPath);
       assert.ok(!varies(res), `${urlPath}: Vary: ${res.headers.vary}`);
     }
   });
