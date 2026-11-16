@@ -570,11 +570,11 @@ describe('payment', () => {
     const token = new URL(approveUrl).searchParams.get('token');
     const back = await get(`/coaching/${s.login}/paid?token=${token}`);
     assert.equal(back.status, 302);
-    assert.equal(back.headers.location, `/coaching/${s.login}?paid=1`);
+    assert.equal(back.headers.location, `/my-bookings?booking=${id}&paid=1`);
     const row = db.getCoachingBooking(id, s.id);
     assert.deepEqual([row.status, row.paid_amount_cents, row.paypal_order_id], ['confirmed', 2500, token]);
     const again = await get(`/coaching/${s.login}/paid?token=${token}`);
-    assert.equal(again.headers.location, `/coaching/${s.login}?paid=1`);
+    assert.equal(again.headers.location, `/my-bookings?booking=${id}&paid=1`);
     assert.equal(calls.filter((u) => u.endsWith('/capture')).length, 1);
     // Paid: no Withdraw any more.
     const withdraw = await post(`/coaching/${s.login}/bookings/${id}/cancel`, { cookie: v.cookie });
@@ -590,7 +590,7 @@ describe('payment', () => {
     for (const [login, query] of [[elsewhere.login, `token=${token}`], [s.login, 'token=NOSUCHORDER01'], [s.login, '']]) {
       const res = await get(`/coaching/${login}/paid?${query}`);
       assert.equal(res.status, 302);
-      assert.equal(res.headers.location, `/coaching/${login}?error=pay_invalid`);
+      assert.equal(res.headers.location, `/my-bookings?error=pay_invalid`);
     }
     assert.equal(calls.length, 0, 'nothing captured');
     assert.equal(db.getCoachingBooking(id, s.id).status, 'awaiting_payment');

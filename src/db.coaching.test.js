@@ -569,3 +569,30 @@ describe('coaching reschedule and refunds', () => {
     assert.equal(db.getCoachingPayment(`RO${b.id}`), null);
   });
 });
+
+describe('getViewerBookingsAllCoaches', () => {
+  test('lists one viewer\'s bookings with every coach from the since time, with the coach and availability', () => {
+    const c1 = addStreamer();
+    const c2 = addStreamer();
+    const noSettings = addStreamer();
+    db.saveCoachingSettings(c1, baseSettings());
+    db.saveCoachingSettings(c2, baseSettings());
+    const VIEW = '500000000000000001';
+    const day = 86400e3;
+    book(c1, VIEW, T + 2 * day, 60);
+    book(c2, VIEW, T + 3 * day, 60);
+    book(noSettings, VIEW, T + 4 * day, 60);
+    book(c1, VIEW, T - 100 * day, 60);
+    book(c1, '500000000000000002', T + 5 * day, 60);
+    sql.prepare('UPDATE streamers SET twitch_username = ?, twitch_display_name = ? WHERE id = ?').run('login_one', 'Coach One', c1);
+    sql.prepare('UPDATE streamers SET enabled = 0 WHERE id = ?').run(c2);
+    const rows = db.getViewerBookingsAllCoaches(VIEW, T - 90 * day);
+    assert.equal(rows.length, 3, 'the old one and the other viewer\'s are left out');
+    assert.deepEqual(rows.map((r) => r.streamer_id), [c1, c2, noSettings], 'in start order');
+    assert.equal(rows[0].coach_login, 'login_one');
+    assert.equal(rows[0].coach_name, 'Coach One');
+    assert.deepEqual(rows.map((r) => r.coach_available), [1, 0, 0]);
+    const plan = sql.prepare('EXPLAIN QUERY PLAN SELECT * FROM coaching_bookings WHERE viewer_discord_id = ? AND starts_at >= ?').all(VIEW, 0);
+    assert.ok(plan.some((p) => /idx_coaching_bookings_viewer/.test(p.detail)));
+  });
+});

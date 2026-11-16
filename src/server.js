@@ -325,6 +325,7 @@ app.get('/coaching/:username/bookings/:id/starts', coachingRescheduleLimiter);
 app.post('/coaching/:username/bookings/:id/propose', coachingRescheduleLimiter);
 app.post('/coaching/:username/bookings/:id/accept-proposal', coachingRescheduleLimiter);
 app.use('/coaching', require('./routes/coaching'));
+app.use('/my-bookings', require('./routes/myBookings'));
 
 const racingAuthRoutes = require('./routes/racing-auth');
 const racingRoutes = require('./routes/racing');

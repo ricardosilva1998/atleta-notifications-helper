@@ -46,16 +46,21 @@ router.get('/login', (req, res) => {
 });
 
 // GET /auth/coaching-signin?for=<twitch login>: only for a booking page that is up (a streamer who is not disabled
-// and has set coaching up); anything else answers like that page does.
+// and has set coaching up); anything else answers like that page does. Without `for` the sign-in is the viewer's own
+// (My bookings): the purpose is 'coaching:' with an empty login and the callback goes to /my-bookings.
 router.get('/coaching-signin', (req, res) => {
-  const login = typeof req.query.for === 'string' ? req.query.for : '';
-  const streamer = COACHING_LOGIN.test(login) ? db.getStreamerByUsername(login) : null;
-  if (!streamer || isStreamerDisabled(streamer) || !db.getCoachingSettings(streamer.id)) {
-    return sendText(res, 404, 'coaching.error.pageUnavailable');
+  let loginToStore = '';
+  if (req.query.for !== undefined) {
+    const login = typeof req.query.for === 'string' ? req.query.for : '';
+    const streamer = COACHING_LOGIN.test(login) ? db.getStreamerByUsername(login) : null;
+    if (!streamer || isStreamerDisabled(streamer) || !db.getCoachingSettings(streamer.id)) {
+      return sendText(res, 404, 'coaching.error.pageUnavailable');
+    }
+    loginToStore = streamer.twitch_username;
   }
   const state = crypto.randomUUID();
   req.app.locals.secureCookie(res, 'oauth_state', state, { maxAge: 600_000 });
-  req.app.locals.secureCookie(res, 'oauth_purpose', `${COACHING_PURPOSE}${streamer.twitch_username}`, { maxAge: 600_000 });
+  req.app.locals.secureCookie(res, 'oauth_purpose', `${COACHING_PURPOSE}${loginToStore}`, { maxAge: 600_000 });
   res.redirect(discordAuthorizeUrl(state));
 });
 
@@ -71,10 +76,10 @@ router.get('/login/callback', async (req, res) => {
   // purpose (a coaching sign-in must never come back as a streamer's).
   const purpose = typeof req.cookies?.oauth_purpose === 'string' ? req.cookies.oauth_purpose : '';
   res.clearCookie('oauth_purpose');
-  let coachingLogin = null;
+  let coachingLogin = null; // null: not a coaching sign-in; '': the viewer's own (My bookings)
   if (purpose.startsWith(COACHING_PURPOSE)) {
     coachingLogin = purpose.slice(COACHING_PURPOSE.length);
-    if (!COACHING_LOGIN.test(coachingLogin)) return sendText(res, 400, 'auth.error.invalidCallback');
+    if (coachingLogin !== '' && !COACHING_LOGIN.test(coachingLogin)) return sendText(res, 400, 'auth.error.invalidCallback');
   }
 
   try {
@@ -109,14 +114,14 @@ router.get('/login/callback', async (req, res) => {
       : null;
 
     // A viewer booking coaching: their own session, never a streamer (upsertStreamerDiscord is not reached).
-    if (coachingLogin) {
+    if (coachingLogin !== null) {
       const viewerSid = crypto.randomBytes(32).toString('hex');
       db.createViewerSession(viewerSid, {
         discordUserId: user.id, username: user.username, displayName: user.global_name || user.username, avatar,
       }, Date.now() + VIEWER_SESSION_MS);
       req.app.locals.secureCookie(res, 'viewer_session', viewerSid, { maxAge: VIEWER_SESSION_MS, path: '/' });
-      console.log(`[Auth] Coaching sign-in: ${user.username} (${user.id}) for ${coachingLogin}`);
-      return res.redirect(`/coaching/${encodeURIComponent(coachingLogin)}`);
+      console.log(`[Auth] Coaching sign-in: ${user.username} (${user.id}) for ${coachingLogin || 'my bookings'}`);
+      return res.redirect(coachingLogin ? `/coaching/${encodeURIComponent(coachingLogin)}` : '/my-bookings');
     }
 
     // Create/update streamer record
@@ -172,7 +177,7 @@ router.post('/coaching-signout', (req, res) => {
   if (sid) db.deleteViewerSession(sid);
   res.clearCookie('viewer_session', { path: '/' });
   const login = req.body && typeof req.body.for === 'string' && COACHING_LOGIN.test(req.body.for) ? req.body.for : null;
-  res.redirect(login ? `/coaching/${encodeURIComponent(login)}` : '/');
+  res.redirect(login ? `/coaching/${encodeURIComponent(login)}` : '/my-bookings');
 });
 
 // --- Twitch Account Linking ---

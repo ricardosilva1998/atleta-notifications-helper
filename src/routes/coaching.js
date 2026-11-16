@@ -269,13 +269,17 @@ router.post('/:username/bookings/:id/pay', async (req, res) => {
 router.get('/:username/paid', async (req, res) => {
   const page = coachingPage(req);
   if (!page) return unavailablePage(res);
-  const base = `/coaching/${encodeURIComponent(page.streamer.twitch_username)}`;
   const orderId = typeof req.query.token === 'string' ? req.query.token : '';
   const result = await coachingPayments.handleReturn({ streamer: page.streamer, orderId });
-  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}?paid=1` : `${base}?error=late`);
+  // The viewer lands on My bookings, on the booking this order paid (only one of this streamer's).
+  const payment = /^[A-Z0-9-]{1,64}$/i.test(orderId) ? db.getCoachingPayment(orderId) : null;
+  const paidBooking = payment ? db.getCoachingBookingById(payment.booking_id) : null;
+  const bookingPart = paidBooking && paidBooking.streamer_id === page.streamer.id ? `booking=${paidBooking.id}&` : '';
+  const base = `/my-bookings?${bookingPart}`;
+  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}paid=1` : `${base}error=late`);
   console.error(`[Coaching] return of order ${/^[A-Z0-9-]{1,64}$/i.test(orderId) ? orderId : '(invalid)'} for streamer ${page.streamer.id} not counted: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`);
   const code = coachingPayments.returnErrorCode(result.reason);
-  res.redirect(`${base}?error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);
+  res.redirect(`${base}error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);
 });
 
 module.exports = router;
