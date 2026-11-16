@@ -29,6 +29,8 @@ const ROUTE = path.join(__dirname, 'coaching.js');
 const TIP = path.join(__dirname, 'tip.js');
 const SERVICE = path.join(SRC, 'services', 'coachingBookings.js');
 const MSG = path.join(SRC, 'services', 'coachingMessages.js');
+const PAYMENTS = path.join(SRC, 'services', 'coachingPayments.js');
+const PAYPAL = 'https://paypal.test';
 const PAGE_SCRIPT = path.join(SRC, '..', 'public', 'js', 'coaching-page.js');
 
 const discord = {
@@ -55,9 +57,9 @@ before(async () => {
       if (request === 'fs') return { ...fs, existsSync: () => true, mkdirSync: () => {} };
       if (request === './config') return { adminDiscordIds: [] };
     }
-    if ([ROUTE, SERVICE, MSG].includes(from)) {
+    if ([ROUTE, SERVICE, MSG, PAYMENTS].includes(from)) {
       if (request === '../discord') return discord;
-      if (request === '../config') return { app: { url: 'https://atleta.test' } };
+      if (request === '../config') return { app: { url: 'https://atleta.test' }, paypal: { clientId: 'c', clientSecret: 's', baseUrl: PAYPAL } };
     }
     if (from === TIP && request === '../config') return { app: { url: 'https://atleta.test' }, paypal: {} };
     return restore.load.apply(this, arguments);
@@ -69,7 +71,7 @@ before(async () => {
   let router;
   let tipRouter;
   try {
-    for (const file of [DB_FILE, ROUTE, TIP, SERVICE, MSG]) delete require.cache[file];
+    for (const file of [DB_FILE, ROUTE, TIP, SERVICE, MSG, PAYMENTS]) delete require.cache[file];
     db = require(DB_FILE);
     router = require(ROUTE);
     bookings = require(SERVICE);
@@ -157,16 +159,18 @@ const HOURS = Array.from({ length: 7 }, () => ({ on: true, start: 1080, end: 132
 const HALF_HOUR = 30 * 60e3;
 let counter = 0;
 
-function addStreamer({ name, settings = {}, guild = true } = {}) {
+// Every length on: 30 min and 1 h free, the longer ones at the default prices (the payment tests switch 1 h to paid).
+const LENGTHS = { ...coaching.DEFAULT_LENGTHS, 30: { on: true, price: 0 }, 60: { on: true, price: 0 } };
+function addStreamer({ name, settings = {}, guild = true, paypal = 'coach@example.com' } = {}) {
   const n = ++counter;
   const login = `coach_${n}`;
   const discordName = `Streamer ${n}`;
-  const id = Number(db.db.prepare('INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, twitch_username, twitch_display_name) VALUES (?, ?, ?, ?, ?)')
-    .run(`30000000000000${String(n).padStart(4, '0')}`, `streamer${n}`, discordName, login, name || `Coach_${n}`).lastInsertRowid);
+  const id = Number(db.db.prepare('INSERT INTO streamers (discord_user_id, discord_username, discord_display_name, twitch_username, twitch_display_name, paypal_email, donation_currency) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(`30000000000000${String(n).padStart(4, '0')}`, `streamer${n}`, discordName, login, name || `Coach_${n}`, paypal, 'EUR').lastInsertRowid);
   if (guild) db.db.prepare('INSERT INTO guilds (guild_id, streamer_id, guild_name) VALUES (?, ?, ?)').run('123', id, 'Coach HQ');
   if (settings) {
     db.saveCoachingSettings(id, {
-      timeZone: 'Europe/Lisbon', hours: HOURS, daysOff: [], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en', ...settings,
+      timeZone: 'Europe/Lisbon', hours: HOURS, daysOff: [], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en', lengths: LENGTHS, ...settings,
     });
   }
   return { id, login, name: name || `Coach_${n}`, discordName };
@@ -271,7 +275,7 @@ describe('the booking page', () => {
     const state = await get(`/coaching/${s.login}/state`, { cookie: v.cookie });
     assert.equal(state.json.open, false);
     assert.equal(state.json.bookable, false);
-    assert.deepEqual(state.json.slots, { 30: [], 60: [] });
+    assert.deepEqual(state.json.slots, Object.fromEntries(coaching.LENGTHS.map((m) => [m, []])));
     assert.equal(state.json.bookings.length, 1, 'the viewer still sees their booking');
     assert.equal(discord.memberCalls, 0, 'Discord is not asked while nothing can be booked');
 
@@ -481,5 +485,124 @@ describe('booking', () => {
     assert.equal(res.status, 200, res.text);
     const row = db.getCoachingBooking(res.json.booking.id, s.id);
     assert.equal(row.viewer_discord_id, db.getStreamerById(other.id).discord_user_id);
+  });
+});
+
+// ── Pay and the return from PayPal ──────────────────────────────────────
+
+describe('payment', () => {
+  // A fake PayPal: an order is made as asked, and its capture completes as asked.
+  const orders = new Map();
+  let calls = [];
+  let nextOrder = 1;
+  let realFetch;
+  const reply = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+  const completed = (o) => ({
+    id: o.id, status: 'COMPLETED',
+    purchase_units: [{ custom_id: o.customId, payee: { email_address: o.payee, merchant_id: 'MERCHANTROUTE' },
+      payments: { captures: [{ id: `CAP-${o.id}`, status: 'COMPLETED', amount: { currency_code: o.currency, value: o.value } }] } }],
+  });
+  before(() => {
+    realFetch = global.fetch;
+    global.fetch = async (url, opts = {}) => {
+      url = String(url);
+      calls.push(url);
+      if (url === `${PAYPAL}/v1/oauth2/token`) return reply(200, { access_token: 't' });
+      if (url === `${PAYPAL}/v2/checkout/orders`) {
+        const unit = JSON.parse(opts.body).purchase_units[0];
+        const id = `ROUTEORDER${String(nextOrder++).padStart(6, '0')}`;
+        orders.set(id, { id, customId: unit.custom_id, payee: unit.payee.email_address, currency: unit.amount.currency_code, value: unit.amount.value });
+        return reply(201, { id, status: 'CREATED', purchase_units: [{ payee: { email_address: unit.payee.email_address, merchant_id: 'MERCHANTROUTE' } }],
+          links: [{ rel: 'approve', href: `https://www.paypal.com/checkoutnow?token=${id}` }] });
+      }
+      const m = url.match(/\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/);
+      const o = m && orders.get(m[1]);
+      if (!o) return reply(404, { name: 'RESOURCE_NOT_FOUND' });
+      return reply(m[2] ? 201 : 200, completed(o));
+    };
+  });
+  after(() => { global.fetch = realFetch; });
+  beforeEach(() => { calls = []; });
+
+  // A 1 h booking at EUR 25.00 the streamer accepted.
+  async function accepted(paypal = 'coach@example.com') {
+    const s = addStreamer({ paypal, settings: { lengths: { ...LENGTHS, 60: { on: true, price: 2500 } } } });
+    const v = addViewer();
+    const startsAt = freeNow(s, 60)[0];
+    const booked = await post(`/coaching/${s.login}/book`, { cookie: v.cookie, json: { startsAt, minutes: 60 } });
+    assert.equal(booked.status, 200, booked.text);
+    const streamer = db.getStreamerById(s.id);
+    const a = await bookings.accept(streamer, booked.json.booking.id);
+    assert.equal(a.ok, true, a.code);
+    return { s, v, id: booked.json.booking.id };
+  }
+
+  test('state names the lengths with their prices and the currency, and each booking its price, deadline and payment', async () => {
+    const { s, v, id } = await accepted();
+    const state = (await get(`/coaching/${s.login}/state`, { cookie: v.cookie })).json;
+    assert.equal(state.currency, 'EUR');
+    assert.deepEqual(state.lengths.map((l) => [l.minutes, l.priceCents]), [[30, 0], [60, 2500], [120, 4500], [180, 6000], [240, 7000], [300, 8000]]);
+    assert.deepEqual(Object.keys(state.slots).map(Number), [30, 60, 120, 180, 240, 300]);
+    const b = state.bookings.find((x) => x.id === id);
+    assert.deepEqual([b.state, b.priceCents, b.currency, b.paid, b.roomUrl], ['awaiting_payment', 2500, 'EUR', false, null]);
+    assert.equal(typeof b.payBy, 'number');
+
+    const noPaypal = addStreamer({ paypal: null });
+    const other = (await get(`/coaching/${noPaypal.login}/state`)).json;
+    assert.deepEqual(other.lengths.map((l) => l.minutes), [30, 60], 'without PayPal only the free lengths');
+  });
+
+  test('Pay answers the PayPal approve link for the booking\'s own viewer only', async () => {
+    const { s, v, id } = await accepted();
+    assert.equal((await post(`/coaching/${s.login}/bookings/${id}/pay`)).json.code, 'signin');
+    const stranger = await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: addViewer().cookie });
+    assert.deepEqual([stranger.status, stranger.json.code], [404, 'not_found']);
+    assert.equal(calls.length, 0, 'PayPal not asked for a stranger');
+    const mine = await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: v.cookie });
+    assert.equal(mine.status, 200, mine.text);
+    assert.equal(mine.json.ok, true);
+    assert.match(mine.json.approveUrl, /^https:\/\/www\.paypal\.com\/checkoutnow\?token=ROUTEORDER\d+$/);
+  });
+
+  test('the return confirms the booking and sends the viewer back with paid=1; a replay too, recorded once', async () => {
+    const { s, v, id } = await accepted();
+    const approveUrl = (await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: v.cookie })).json.approveUrl;
+    const token = new URL(approveUrl).searchParams.get('token');
+    const back = await get(`/coaching/${s.login}/paid?token=${token}`);
+    assert.equal(back.status, 302);
+    assert.equal(back.headers.location, `/coaching/${s.login}?paid=1`);
+    const row = db.getCoachingBooking(id, s.id);
+    assert.deepEqual([row.status, row.paid_amount_cents, row.paypal_order_id], ['confirmed', 2500, token]);
+    const again = await get(`/coaching/${s.login}/paid?token=${token}`);
+    assert.equal(again.headers.location, `/coaching/${s.login}?paid=1`);
+    assert.equal(calls.filter((u) => u.endsWith('/capture')).length, 1);
+    // Paid: no Withdraw any more.
+    const withdraw = await post(`/coaching/${s.login}/bookings/${id}/cancel`, { cookie: v.cookie });
+    assert.deepEqual([withdraw.status, withdraw.json.code, withdraw.json.error], [409, 'paid', errorOf('coaching.error.paid')]);
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
+  });
+
+  test("a return with another streamer's order, an unknown one or none goes back with error=pay_invalid", async () => {
+    const { s, v, id } = await accepted();
+    const token = new URL((await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: v.cookie })).json.approveUrl).searchParams.get('token');
+    const elsewhere = addStreamer();
+    calls = [];
+    for (const [login, query] of [[elsewhere.login, `token=${token}`], [s.login, 'token=NOSUCHORDER01'], [s.login, '']]) {
+      const res = await get(`/coaching/${login}/paid?${query}`);
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, `/coaching/${login}?error=pay_invalid`);
+    }
+    assert.equal(calls.length, 0, 'nothing captured');
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'awaiting_payment');
+    assert.equal((await get('/coaching/nobody_here/paid?token=ABCDEFGHIJ')).status, 404);
+  });
+
+  test('every code the return sends back has its text', () => {
+    const { RETURN_ERROR_KEYS } = require(ROUTE);
+    for (const code of ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed']) {
+      const key = RETURN_ERROR_KEYS[code];
+      assert.ok(key, code);
+      assert.notEqual(t('en', key), key, `${code} has an English text`);
+    }
   });
 });

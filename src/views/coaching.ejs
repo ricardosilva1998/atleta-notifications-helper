@@ -89,12 +89,47 @@
     .cz-pill { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--bg-elevated); color: var(--text-secondary); flex: none; }
     .cz-pill.waiting { background: var(--warning-bg); color: var(--warning); }
     .cz-pill.confirmed { background: var(--success-bg); color: var(--success); }
+    .cz-intro { max-width: 460px; margin: 0 auto; }
+    .cz-lead { color: var(--text-secondary); margin-bottom: 12px; }
+    .cz-how-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .cz-how { margin: 0 0 14px 18px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; }
+    .cz-lengths { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .cz-len { border: 0; background: var(--bg-base); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: center; color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+    .cz-len b { display: block; color: var(--text-primary); font: 600 13px var(--font-display); }
+    .cz-len[aria-pressed="true"] { background: var(--accent); color: #e9dcff; }
+    .cz-len[aria-pressed="true"] b { color: #fff; }
+    .cz-len:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+    .cz-msg { margin: 0 auto 10px; max-width: 760px; }
+    .cz-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+    .cz-line { flex-wrap: wrap; }
+    .cz-line .cz-what { flex: 1 1 140px; }
+    .cz-dot.awaiting_payment { background: var(--warning); }
+    .cz-pill.awaiting_payment { background: var(--warning-bg); color: var(--warning); }
     .cz-foot { margin-top: 18px; text-align: center; font-size: 11px; color: var(--text-muted); }
     .cz-foot a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
   <main class="cz">
+    <div class="cz-msg" id="cz-msg" role="status" aria-live="polite" hidden></div>
+    <% if (!viewer) { %>
+    <section class="cz-card cz-intro" aria-labelledby="cz-title">
+      <div class="cz-head">
+        <img class="cz-avatar" src="<%= avatarUrl || '/app-icon/honest_graphic-running-athlete-9715727.png' %>" alt="">
+        <div class="cz-who">
+          <h1 id="cz-title"><%= t('coaching.page.heading', { name: streamerName }) %></h1>
+        </div>
+      </div>
+      <p class="cz-lead"><%= t('coaching.page.howIntro') %></p>
+      <h2 class="cz-how-title"><%= t('coaching.page.howTitle') %></h2>
+      <ol class="cz-how">
+        <li><%= t('coaching.page.how1') %></li>
+        <li><%= t('coaching.page.how2') %></li>
+        <li><%= t('coaching.page.how3', { name: streamerName }) %></li>
+      </ol>
+      <a class="cz-btn discord full" href="/auth/coaching-signin?for=<%= encodeURIComponent(login) %>"><%= t('coaching.page.connect') %></a>
+    </section>
+    <% } else { %>
     <div class="cz-row">
       <section class="cz-card" aria-labelledby="cz-title">
         <div class="cz-head">
@@ -103,24 +138,17 @@
             <h1 id="cz-title"><%= t('coaching.page.heading', { name: streamerName }) %></h1>
             <div class="cz-sub" id="cz-zone"></div>
           </div>
-          <div class="cz-seg" id="cz-length" role="group" aria-label="<%= t('coaching.page.length') %>"<%= state.bookable ? '' : ' hidden' %>>
-            <button type="button" data-minutes="30" aria-pressed="false"><%= t('coaching.page.minutes30') %></button>
-            <button type="button" data-minutes="60" aria-pressed="true"><%= t('coaching.page.minutes60') %></button>
-          </div>
         </div>
         <p class="cz-paused" id="cz-paused"<%= state.bookable ? ' hidden' : '' %>><%= t('coaching.page.paused', { name: streamerName }) %></p>
-        <div id="cz-picker"<%= state.bookable ? '' : ' hidden' %>>
+        <div id="cz-picker" hidden>
+          <div class="cz-lengths" id="cz-length" role="group" aria-label="<%= t('coaching.page.length') %>"></div>
           <div class="cz-days" id="cz-days" role="group" aria-label="<%= t('coaching.page.days') %>"></div>
           <div class="cz-slots" id="cz-slots" role="group" aria-label="<%= t('coaching.page.times') %>"></div>
           <p class="cz-empty" id="cz-empty" hidden></p>
         </div>
-        <% if (!viewer) { %>
-          <a class="cz-btn discord full" href="/auth/coaching-signin?for=<%= encodeURIComponent(login) %>"><%= t('coaching.page.signIn') %></a>
-        <% } %>
       </section>
-      <% if (viewer) { %>
       <section class="cz-card" aria-labelledby="cz-pick">
-        <div class="cz-head" id="cz-pick-head"<%= state.bookable ? '' : ' hidden' %>>
+        <div class="cz-head" id="cz-pick-head" hidden>
           <h2 id="cz-pick" class="cz-who"><%= t('coaching.page.pickTime') %></h2>
           <span class="cz-sub" id="cz-pick-length"></span>
         </div>
@@ -150,14 +178,13 @@
           <button type="button" class="cz-btn full" id="cz-request" disabled><%= t('coaching.page.request') %></button>
         </div>
         <p class="cz-limit" id="cz-limit" hidden></p>
-        <div class="cz-msg" id="cz-msg" role="status" aria-live="polite" hidden></div>
         <div id="cz-mine" hidden>
           <div class="cz-group"><%= t('coaching.page.yourBookings') %></div>
           <div id="cz-list"></div>
         </div>
       </section>
-      <% } %>
     </div>
+    <% } %>
     <p class="cz-foot"><%= t('coaching.page.poweredBy') %> <a href="/">Atleta</a></p>
   </main>
   <script>window.COACHING_DATA = <%- JSON.stringify(coachingData).replace(/</g, '\\u003c') %>; window.COACHING_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g, '\\u003c') %>;</script>

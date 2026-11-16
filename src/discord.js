@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, IntentsBitField, ChannelType, PermissionFlagsBits } = require('discord.js');
 const config = require('./config');
 const { isChannelInGuild, isTextChannel, DELIVERY_CHANNEL_UNAVAILABLE } = require('./services/discordGuards');
 
@@ -10,11 +10,30 @@ const { isChannelInGuild, isTextChannel, DELIVERY_CHANNEL_UNAVAILABLE } = requir
 // and role sync), GuildVoiceStates (the Discord voice overlay). Nothing reads
 // the messages people write in a server, so GuildMessages is not asked for:
 // with it Discord sends the bot, and discord.js caches, every message in every
-// server it is in.
+// server it is in. MessageContent is the exception, added for the coaching
+// rooms' transcripts: it only makes the text of messages that REST reads
+// available (no GuildMessages, so nothing is streamed). It is a privileged
+// intent the owner switches on in the Developer Portal; when Discord refuses
+// the login because of it, discordLogin.js calls dropMessageContent() and logs
+// in again without it (hasMessageContent() then answers false).
+const BASE_INTENTS = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates];
+let messageContent = true;
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates],
+  intents: [...BASE_INTENTS, GatewayIntentBits.MessageContent],
   allowedMentions: { parse: [] },
 });
+
+function hasMessageContent() {
+  return messageContent;
+}
+
+// Logs in again without the Message Content intent (the next login uses the new options).
+function dropMessageContent() {
+  if (!messageContent) return false;
+  messageContent = false;
+  client.options.intents = new IntentsBitField(BASE_INTENTS).freeze();
+  return true;
+}
 
 // The only way to reach a channel before posting: it must be a channel of the
 // server the post is for, and one that holds messages (a saved category id
@@ -286,11 +305,11 @@ function withDeadline(promise, ms) {
 
 // Sends one direct message. Never throws. 50007 (DMs closed) and 10013 (unknown user) are
 // 'unreachable'; anything else, a timeout included, is 'failed'. No mention can ping anyone.
-async function sendDirectMessage(userId, payload) {
+async function sendDirectMessage(userId, payload, { deadlineMs = 10000 } = {}) {
   if (typeof userId !== 'string' || !/^\d{17,20}$/.test(userId)) return { ok: false, reason: 'unreachable' };
   if (!client.isReady()) return { ok: false, reason: 'not_ready' };
   try {
-    await withDeadline(client.users.send(userId, { ...payload, allowedMentions: { parse: [] } }), 10000);
+    await withDeadline(client.users.send(userId, { ...payload, allowedMentions: { parse: [] } }), deadlineMs);
     return { ok: true };
   } catch (e) {
     if (e && (e.code === 50007 || e.code === 10013)) return { ok: false, reason: 'unreachable' };
@@ -326,9 +345,171 @@ async function fetchInvite(code) {
   }
 }
 
+// ── Coaching rooms: every call the rooms make to Discord, each under a 10 s deadline. They throw what Discord
+// throws (error.code is Discord's), or Error('not_ready') while the bot is not logged in; the caller decides.
+
+const ROOM_DEADLINE_MS = 10000;
+const SNOWFLAKE = /^\d{17,20}$/;
+const isSnowflake = (id) => typeof id === 'string' && SNOWFLAKE.test(id);
+
+function readyGuild(guildId) {
+  if (!client.isReady()) throw new Error('not_ready');
+  const guild = client.guilds.cache.get(String(guildId));
+  if (!guild) throw new Error('not_ready');
+  return guild;
+}
+
+function isReady() {
+  return client.isReady();
+}
+
+// What the bot needs on the Coaching category (a channel's Manage Permissions is the ManageRoles flag), by the id the
+// page translates; and Manage Roles in the server, which creates the session roles.
+const CATEGORY_PERMISSIONS = [
+  ['manage_channels', PermissionFlagsBits.ManageChannels],
+  ['manage_permissions', PermissionFlagsBits.ManageRoles],
+  ['view_channel', PermissionFlagsBits.ViewChannel],
+  ['connect', PermissionFlagsBits.Connect],
+  ['speak', PermissionFlagsBits.Speak],
+  ['send_messages', PermissionFlagsBits.SendMessages],
+  ['attach_files', PermissionFlagsBits.AttachFiles],
+  ['read_message_history', PermissionFlagsBits.ReadMessageHistory],
+];
+
+// The categories of a server, [{ id, name }] by position; null while Discord cannot say.
+async function listCategories(guildId) {
+  try {
+    const guild = readyGuild(guildId);
+    const channels = await withDeadline(guild.channels.fetch(), ROOM_DEADLINE_MS);
+    return [...channels.values()]
+      .filter((c) => c && c.type === ChannelType.GuildCategory)
+      .sort((a, b) => a.position - b.position)
+      .map((c) => ({ id: c.id, name: c.name }));
+  } catch (e) {
+    return null;
+  }
+}
+
+// { ok: true }, { ok: false, reason: 'not_found' }, { ok: false, reason: 'permissions', missing: [ids] }, or
+// { ok: false, reason: 'unknown' } when Discord cannot say.
+async function checkCategory(guildId, categoryId) {
+  if (!isSnowflake(categoryId)) return { ok: false, reason: 'not_found' };
+  try {
+    const guild = readyGuild(guildId);
+    const me = guild.members.me || await withDeadline(guild.members.fetchMe(), ROOM_DEADLINE_MS);
+    const category = await withDeadline(guild.channels.fetch(categoryId), ROOM_DEADLINE_MS);
+    if (!category || category.type !== ChannelType.GuildCategory || category.guildId !== String(guildId)) return { ok: false, reason: 'not_found' };
+    const have = category.permissionsFor(me);
+    const missing = CATEGORY_PERMISSIONS.filter(([, flag]) => !have || !have.has(flag)).map(([id]) => id);
+    if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) missing.push('manage_roles');
+    return missing.length ? { ok: false, reason: 'permissions', missing } : { ok: true };
+  } catch (e) {
+    if (e && e.code === 10003) return { ok: false, reason: 'not_found' };
+    return { ok: false, reason: 'unknown' };
+  }
+}
+
+// A role with no permissions and no mention; Discord places it below the bot's top role.
+async function createRole(guildId, name) {
+  const guild = readyGuild(guildId);
+  const role = await withDeadline(guild.roles.create({ name, permissions: [], mentionable: false, hoist: false, reason: 'Atleta coaching session' }), ROOM_DEADLINE_MS);
+  return role.id;
+}
+
+async function deleteRole(guildId, roleId) {
+  if (!isSnowflake(roleId)) return;
+  const guild = readyGuild(guildId);
+  try {
+    await withDeadline(guild.roles.delete(roleId, 'Atleta coaching session ended'), ROOM_DEADLINE_MS);
+  } catch (e) {
+    if (!(e && e.code === 10011)) throw e;
+  }
+}
+
+async function addRoleToMember(guildId, userId, roleId) {
+  const guild = readyGuild(guildId);
+  const member = await withDeadline(guild.members.fetch(userId), ROOM_DEADLINE_MS);
+  await withDeadline(member.roles.add(roleId, 'Atleta coaching session'), ROOM_DEADLINE_MS);
+}
+
+// A voice channel (its built-in text chat carries the messages and files) inside `parentId`, with the given
+// permission overwrites: [{ id, type: 0 role | 1 member, allow: [flag names], deny: [flag names] }].
+async function createVoiceChannel(guildId, { name, parentId, overwrites }) {
+  const guild = readyGuild(guildId);
+  const channel = await withDeadline(guild.channels.create({
+    name, type: ChannelType.GuildVoice, parent: parentId, permissionOverwrites: overwrites, reason: 'Atleta coaching session',
+  }), ROOM_DEADLINE_MS);
+  return channel.id;
+}
+
+async function deleteChannel(guildId, channelId) {
+  if (!isSnowflake(channelId)) return;
+  const guild = readyGuild(guildId);
+  try {
+    await withDeadline(guild.channels.delete(channelId, 'Atleta coaching session ended'), ROOM_DEADLINE_MS);
+  } catch (e) {
+    if (!(e && e.code === 10003)) throw e;
+  }
+}
+
+// Every message of a channel, oldest first, as plain data: [{ id, at, author, bot, content, attachments: [{ name, url,
+// size }] }]. A channel that no longer exists answers null. Each page of 100 has its own deadline; at most 5000 messages.
+async function fetchAllMessages(guildId, channelId, { max = 5000 } = {}) {
+  const guild = readyGuild(guildId);
+  let channel;
+  try {
+    channel = await withDeadline(guild.channels.fetch(channelId), ROOM_DEADLINE_MS);
+  } catch (e) {
+    if (e && e.code === 10003) return null;
+    throw e;
+  }
+  if (!channel || typeof channel.messages?.fetch !== 'function') return null;
+  const out = [];
+  let before;
+  while (out.length < max) {
+    const page = await withDeadline(channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }), ROOM_DEADLINE_MS);
+    if (!page.size) break;
+    const batch = [...page.values()];
+    for (const m of batch) {
+      out.push({
+        id: m.id,
+        at: m.createdTimestamp,
+        author: (m.member && m.member.displayName) || (m.author && (m.author.globalName || m.author.username)) || '?',
+        bot: !!(m.author && m.author.bot),
+        content: m.content || '',
+        attachments: [...m.attachments.values()].map((a) => ({ name: a.name || 'file', url: a.url, size: a.size })),
+      });
+    }
+    before = batch.reduce((oldest, m) => (m.createdTimestamp < oldest.createdTimestamp ? m : oldest)).id;
+    if (page.size < 100) break;
+  }
+  return out.reverse();
+}
+
+// Only Discord's own file hosts are fetched (a message cannot point the bot at another server).
+const ATTACHMENT_HOSTS = new Set(['cdn.discordapp.com', 'media.discordapp.net']);
+
+// The bytes of an attachment, never more than maxBytes (the declared size is not trusted: the body is read in chunks
+// and stops past the limit). Throws on a foreign host, an answer that is not 200, or too many bytes.
+async function downloadAttachment(url, { maxBytes, deadlineMs = 20000 } = {}) {
+  let u;
+  try { u = new URL(url); } catch (e) { throw new Error('bad_url'); }
+  if (u.protocol !== 'https:' || !ATTACHMENT_HOSTS.has(u.hostname)) throw new Error('bad_host');
+  const res = await fetch(u, { signal: AbortSignal.timeout(deadlineMs), redirect: 'error' });
+  if (!res.ok || !res.body) throw new Error(`status_${res.status}`);
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of res.body) {
+    total += chunk.length;
+    if (total > maxBytes) throw new Error('too_big');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function guildName(guildId) {
   const guild = client.guilds.cache.get(String(guildId));
   return guild ? guild.name : null;
 }
 
-module.exports = { client, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };
+module.exports = { client, hasMessageContent, dropMessageContent, isReady, listCategories, checkCategory, createRole, deleteRole, addRoleToMember, createVoiceChannel, deleteChannel, fetchAllMessages, downloadAttachment, CATEGORY_PERMISSIONS, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };

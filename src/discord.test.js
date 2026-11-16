@@ -188,13 +188,25 @@ describe('sendNotification', () => {
 });
 
 describe('the intents the bot asks Discord for', () => {
-  test('servers, members and voice states are asked for; messages are not, because nothing reads them', () => {
+  test('servers, members and voice states are asked for; message events are not, because nothing listens to them', () => {
     const intents = client.options.intents;
     assert.equal(intents.has(GatewayIntentBits.Guilds), true);
     assert.equal(intents.has(GatewayIntentBits.GuildMembers), true, 'the welcome message and role sync');
     assert.equal(intents.has(GatewayIntentBits.GuildVoiceStates), true, 'the Discord voice overlay');
     assert.equal(intents.has(GatewayIntentBits.GuildMessages), false, 'it made Discord send the bot every message in every server');
-    assert.equal(intents.has(GatewayIntentBits.MessageContent), false);
+  });
+
+  test('Message Content (coaching transcripts, read over REST) is asked for, and can be dropped when Discord refuses it', () => {
+    const discordModule = discord;
+    assert.equal(client.options.intents.has(GatewayIntentBits.MessageContent), true);
+    assert.equal(discordModule.hasMessageContent(), true);
+    assert.equal(discordModule.dropMessageContent(), true);
+    assert.equal(discordModule.hasMessageContent(), false);
+    assert.equal(client.options.intents.has(GatewayIntentBits.MessageContent), false);
+    assert.equal(client.options.intents.has(GatewayIntentBits.Guilds), true);
+    assert.equal(client.options.intents.has(GatewayIntentBits.GuildMembers), true);
+    assert.equal(client.options.intents.has(GatewayIntentBits.GuildVoiceStates), true);
+    assert.equal(discordModule.dropMessageContent(), false, 'dropped once');
   });
 
   test('nothing the bot sends may ping anyone unless that send says so', () => {

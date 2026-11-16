@@ -26,7 +26,11 @@ function isUnrecoverable(error) {
 
 // Starts logging in at once. stop() cancels a retry that is waiting (the
 // graceful shutdown calls it).
-function startDiscordLogin({ client, token, log = console, firstMs = FIRST_RETRY_MS, maxMs = MAX_RETRY_MS }) {
+//
+// onIntentRefused (optional): called once when Discord refuses the intents; when it answers true (the bot dropped an
+// intent it can live without: Message Content) the login is tried again at once with what is left, after a loud
+// log line. If it answers false the refusal is final, as before.
+function startDiscordLogin({ client, token, log = console, firstMs = FIRST_RETRY_MS, maxMs = MAX_RETRY_MS, onIntentRefused = null }) {
   let timer = null;
   let stopped = false;
   let failures = 0;
@@ -41,6 +45,11 @@ function startDiscordLogin({ client, token, log = console, firstMs = FIRST_RETRY
       if (stopped) return;
       failures += 1;
       const reason = (error && error.message) || String(error);
+      if (error && error.code === 'DisallowedIntents' && typeof onIntentRefused === 'function' && onIntentRefused()) {
+        log.error(`[Discord] LOGIN REFUSED for an intent: ${reason} Logging in again without Message Content: coaching transcripts will not be sent until "Message Content Intent" is switched on for the bot in the Discord developer portal and the service restarted.`);
+        failures -= 1;
+        return attempt();
+      }
       if (isUnrecoverable(error)) {
         log.error(`[Discord] LOGIN REFUSED: ${reason} The bot will not try again: fix DISCORD_TOKEN (or the bot's intents in the Discord developer portal) and redeploy. The website, overlays and the Twitch chat bot keep running; Discord posts, slash commands and welcome messages are off until then.`);
         return;

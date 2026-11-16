@@ -1970,6 +1970,8 @@ const STREAMER_OWNED_ROWS = [
   ['tracking_events', 'streamer_id = ?'],
   ['tracker_values', 'streamer_id = ?'],
   ['tracker_settings', 'streamer_id = ?'],
+  ['coaching_rooms', 'streamer_id = ?'],
+  ['coaching_payments', 'streamer_id = ?'],
   ['coaching_bookings', 'streamer_id = ?'],
   ['coaching_settings', 'streamer_id = ?'],
   ['vtuber_models', 'streamer_id = ?'],
@@ -4227,6 +4229,57 @@ try {
   `);
 } catch (e) { _migrationLog('coaching tables', e); }
 
+// Coaching payment and rooms: lengths with prices, the category, the payment on a booking, the PayPal orders, one room per paid session.
+try {
+  const addColumns = (table, list) => {
+    const have = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    for (const [col, type] of list) if (!have.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  };
+  addColumns('coaching_settings', [['lengths', 'TEXT'], ['prices_saved_at', 'INTEGER'], ['category_id', 'TEXT']]);
+  addColumns('coaching_bookings', [
+    ['price_cents', 'INTEGER'], ['currency', 'TEXT'], ['accepted_at', 'INTEGER'], ['pay_by', 'INTEGER'], ['paid_at', 'INTEGER'],
+    ['paid_amount_cents', 'INTEGER'], ['paid_currency', 'TEXT'], ['paypal_order_id', 'TEXT'], ['paypal_capture_id', 'TEXT'],
+    ['payment_issue', 'TEXT'],
+  ]);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS coaching_payments (
+      order_id TEXT PRIMARY KEY,
+      booking_id INTEGER NOT NULL,
+      streamer_id INTEGER NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      payee_email TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'created',
+      capture_id TEXT,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_booking ON coaching_payments(booking_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_status ON coaching_payments(status, created_at)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_coaching_payments_capture ON coaching_payments(capture_id) WHERE capture_id IS NOT NULL');
+  // The PayPal account id PayPal named for the payee when the order was made: the strongest proof the money reached it.
+  addColumns('coaching_payments', [['payee_merchant_id', 'TEXT']]);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS coaching_rooms (
+      booking_id INTEGER PRIMARY KEY,
+      streamer_id INTEGER NOT NULL,
+      guild_id TEXT NOT NULL,
+      category_id TEXT,
+      role_id TEXT,
+      channel_id TEXT,
+      state TEXT NOT NULL DEFAULT 'making',
+      error TEXT,
+      close_at INTEGER,
+      transcript_status TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_rooms_state ON coaching_rooms(state, close_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_rooms_streamer ON coaching_rooms(streamer_id)');
+} catch (e) { _migrationLog('coaching payment and rooms', e); }
+
 // Migration: Donation history (365-day retention). On first creation, backfill
 // from the donation rows still in overlay_events (30-day retention) so history
 // doesn't start empty. Backfilled rows have source 'legacy' (origin unknown, no message).
@@ -5883,7 +5936,7 @@ const _coachingParse = (row) => {
   let hours = []; let daysOff = [];
   try { hours = JSON.parse(row.hours); } catch (e) {}
   try { daysOff = JSON.parse(row.days_off); } catch (e) {}
-  return { ...row, hours: Array.isArray(hours) ? hours : [], days_off: Array.isArray(daysOff) ? daysOff : [] };
+  return { ...row, hours: Array.isArray(hours) ? hours : [], days_off: Array.isArray(daysOff) ? daysOff : [], lengths: coaching.lengthsFor(row) };
 };
 
 function getCoachingSettings(streamerId) {
@@ -5905,6 +5958,13 @@ function saveCoachingSettings(streamerId, s) {
       updated_at = datetime('now')
   `).run(streamerId, s.timeZone, JSON.stringify(s.hours || []), JSON.stringify(s.daysOff || []), s.guildId || null,
     s.inviteCode || null, s.whereText || null, s.notifyRequests ? 1 : 0, s.lang || 'en');
+  if (s.lengths) {
+    db.prepare("UPDATE coaching_settings SET lengths = ?, prices_saved_at = COALESCE(prices_saved_at, ?) WHERE streamer_id = ?")
+      .run(JSON.stringify(s.lengths), s.savedAt || Date.now(), streamerId);
+  }
+  if (s.categoryId !== undefined) {
+    db.prepare('UPDATE coaching_settings SET category_id = ? WHERE streamer_id = ?').run(s.categoryId || null, streamerId);
+  }
   return getCoachingSettings(streamerId);
 }
 
@@ -5923,7 +5983,7 @@ function recordInviteCheck(streamerId, inviteCode, ok, checkedAt) {
 const _HOLD_SQL = coaching.HOLDING.map((st) => `'${st}'`).join(', ');
 
 // One viewer's requests of one streamer in the last 24 h (every status), then their upcoming ones, then the overlap.
-const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, minutes, note, lang, now }) => {
+const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, minutes, note, lang, now, priceCents, currency }) => {
   const recent = db.prepare(
     'SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND created_at > ?'
   ).get(streamerId, viewer.discordUserId, now - 86400e3).n;
@@ -5939,10 +5999,10 @@ const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, m
   if (clash) return { ok: false, code: 'taken' };
   const info = db.prepare(`
     INSERT INTO coaching_bookings (streamer_id, viewer_discord_id, viewer_username, viewer_display_name, viewer_avatar,
-      starts_at, minutes, note, lang, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)
+      starts_at, minutes, note, lang, status, created_at, price_cents, currency)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)
   `).run(streamerId, viewer.discordUserId, viewer.username, viewer.displayName || null, viewer.avatar || null,
-    startsAt, minutes, note || null, lang || 'en', now);
+    startsAt, minutes, note || null, lang || 'en', now, priceCents == null ? null : priceCents, priceCents == null ? null : (currency || null));
   return { ok: true, booking: db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(info.lastInsertRowid) };
 });
 function createCoachingBooking(args) { return _createCoachingBooking.immediate(args); }
@@ -5969,13 +6029,156 @@ function getViewerCoachingBookings(streamerId, discordUserId, sinceMs) {
 }
 
 // Conditional move: only from one of the listed states; returns the updated row, or null.
-function setCoachingBookingStatus(id, streamerId, fromStatuses, toStatus, now) {
+// `unpaidOnly`: a booking with a recorded payment is left as it is (no cancel after payment).
+function setCoachingBookingStatus(id, streamerId, fromStatuses, toStatus, now, { unpaidOnly = false } = {}) {
   if (!fromStatuses || !fromStatuses.length) return null;
   const marks = fromStatuses.map(() => '?').join(', ');
   const info = db.prepare(
-    `UPDATE coaching_bookings SET status = ?, decided_at = ? WHERE id = ? AND streamer_id = ? AND status IN (${marks})`
+    `UPDATE coaching_bookings SET status = ?, decided_at = ? WHERE id = ? AND streamer_id = ? AND status IN (${marks})${unpaidOnly ? ' AND paid_at IS NULL' : ''}`
   ).run(toStatus, now, id, streamerId, ...fromStatuses);
   return info.changes ? getCoachingBooking(id, streamerId) : null;
+}
+
+// Accept: only from 'waiting'. A paid request waits for payment (payBy given), a free one is confirmed at once.
+function acceptCoachingBooking(id, streamerId, now, payByMs) {
+  const paid = payByMs != null;
+  const info = db.prepare(
+    `UPDATE coaching_bookings SET status = ?, decided_at = ?, accepted_at = ?, pay_by = ?
+     WHERE id = ? AND streamer_id = ? AND status = 'waiting'`
+  ).run(paid ? 'awaiting_payment' : 'confirmed', now, now, paid ? payByMs : null, id, streamerId);
+  return info.changes ? getCoachingBooking(id, streamerId) : null;
+}
+
+// Unpaid and past its deadline: the time frees up. Returns the updated row or null.
+function expireCoachingBooking(id, now) {
+  const info = db.prepare(
+    "UPDATE coaching_bookings SET status = 'expired', decided_at = ? WHERE id = ? AND status = 'awaiting_payment' AND paid_at IS NULL AND pay_by <= ?"
+  ).run(now, id, now);
+  return info.changes ? db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(id) : null;
+}
+
+function listExpirableCoachingBookings(now) {
+  return db.prepare("SELECT * FROM coaching_bookings WHERE status = 'awaiting_payment' AND paid_at IS NULL AND pay_by <= ? ORDER BY pay_by LIMIT 200").all(now);
+}
+
+function getCoachingBookingById(id) {
+  return db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(id) || null;
+}
+
+// A PayPal order made for a booking, kept until it is captured (or dropped after a day).
+function createCoachingPayment({ orderId, bookingId, streamerId, amountCents, currency, payeeEmail, payeeMerchantId, now }) {
+  db.prepare(`
+    INSERT OR IGNORE INTO coaching_payments (order_id, booking_id, streamer_id, amount_cents, currency, payee_email, payee_merchant_id, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?)
+  `).run(orderId, bookingId, streamerId, amountCents, currency, payeeEmail, payeeMerchantId || null, now);
+  return getCoachingPayment(orderId);
+}
+
+function getCoachingPayment(orderId) {
+  return db.prepare('SELECT * FROM coaching_payments WHERE order_id = ?').get(orderId) || null;
+}
+
+function listOpenCoachingPaymentsFor(bookingId) {
+  return db.prepare("SELECT * FROM coaching_payments WHERE booking_id = ? AND status = 'created' ORDER BY created_at").all(bookingId);
+}
+
+function listStaleCoachingPayments(olderThanMs, limit = 200) {
+  return db.prepare("SELECT * FROM coaching_payments WHERE status = 'created' AND created_at < ? ORDER BY created_at LIMIT ?").all(olderThanMs, limit);
+}
+
+function deleteOpenCoachingPayment(orderId) {
+  return db.prepare("DELETE FROM coaching_payments WHERE order_id = ? AND status = 'created'").run(orderId).changes > 0;
+}
+
+function markCoachingPaymentRefused(orderId) {
+  return db.prepare("UPDATE coaching_payments SET status = 'refused' WHERE order_id = ? AND status = 'created'").run(orderId).changes > 0;
+}
+
+// A verified capture, recorded once. The caller has already checked payee, amount, currency and status.
+// 'recorded': an awaiting booking is now paid and confirmed. 'duplicate': this capture was recorded before; nothing changed.
+// 'late_confirmed' / 'late_issue': the booking had expired (or ended otherwise): the payment is kept, and the booking is
+// confirmed when its time is still free, else payment_issue = 'late'. 'double': the booking was already paid by another capture.
+const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, amountCents, currency, now }) => {
+  const booking = db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
+  if (!booking) return { ok: false, code: 'no_booking' };
+  if (db.prepare('SELECT 1 FROM coaching_payments WHERE capture_id = ?').get(captureId)) return { ok: true, result: 'duplicate', booking };
+  const order = db.prepare('SELECT * FROM coaching_payments WHERE order_id = ?').get(orderId);
+  if (order && (order.booking_id !== bookingId || order.streamer_id !== booking.streamer_id)) return { ok: false, code: 'mismatch' };
+  if (order) {
+    db.prepare("UPDATE coaching_payments SET status = 'captured', capture_id = ?, captured_at = ? WHERE order_id = ?").run(captureId, now, orderId);
+  } else {
+    db.prepare(`
+      INSERT INTO coaching_payments (order_id, booking_id, streamer_id, amount_cents, currency, payee_email, status, capture_id, created_at, captured_at)
+      VALUES (?, ?, ?, ?, ?, '', 'captured', ?, ?, ?)
+    `).run(orderId, bookingId, booking.streamer_id, amountCents, currency, captureId, now, now);
+  }
+  const setPaid = (status, issue) => db.prepare(
+    `UPDATE coaching_bookings SET status = ?, paid_at = ?, paid_amount_cents = ?, paid_currency = ?, paypal_order_id = ?, paypal_capture_id = ?, payment_issue = ?
+     WHERE id = ?`
+  ).run(status, now, amountCents, currency, orderId, captureId, issue, bookingId);
+  const reload = () => db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
+  if (booking.paid_at != null) {
+    db.prepare("UPDATE coaching_bookings SET payment_issue = 'double' WHERE id = ?").run(bookingId);
+    return { ok: true, result: 'double', booking: reload() };
+  }
+  if (booking.status === 'awaiting_payment') {
+    setPaid('confirmed', null);
+    return { ok: true, result: 'recorded', booking: reload() };
+  }
+  if (booking.status === 'expired' && booking.starts_at > now) {
+    const end = booking.starts_at + booking.minutes * 60000;
+    const clash = db.prepare(
+      `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND starts_at < ? AND starts_at + minutes * 60000 > ? LIMIT 1`
+    ).get(booking.streamer_id, bookingId, end, booking.starts_at);
+    if (!clash) {
+      setPaid('confirmed', null);
+      return { ok: true, result: 'late_confirmed', booking: reload() };
+    }
+  }
+  setPaid(booking.status, 'late');
+  return { ok: true, result: 'late_issue', booking: reload() };
+});
+function recordCoachingPayment(args) { return _recordCoachingPayment.immediate(args); }
+
+// Rooms: one row per paid (or free-accepted) session; each Discord id is written as it is made.
+function createCoachingRoom({ bookingId, streamerId, guildId, categoryId, closeAt, now }) {
+  db.prepare(`
+    INSERT INTO coaching_rooms (booking_id, streamer_id, guild_id, category_id, state, close_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'making', ?, ?, ?)
+    ON CONFLICT(booking_id) DO NOTHING
+  `).run(bookingId, streamerId, guildId, categoryId || null, closeAt == null ? null : closeAt, now, now);
+  return getCoachingRoom(bookingId);
+}
+
+const _ROOM_FIELDS = { role_id: 1, channel_id: 1, state: 1, error: 1, close_at: 1, transcript_status: 1, category_id: 1, guild_id: 1 };
+function updateCoachingRoom(bookingId, fields, now) {
+  const keys = Object.keys(fields).filter((k) => _ROOM_FIELDS[k]);
+  if (!keys.length) return getCoachingRoom(bookingId);
+  db.prepare(`UPDATE coaching_rooms SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE booking_id = ?`)
+    .run(...keys.map((k) => (fields[k] === undefined ? null : fields[k])), now, bookingId);
+  return getCoachingRoom(bookingId);
+}
+
+function getCoachingRoom(bookingId) {
+  return db.prepare('SELECT * FROM coaching_rooms WHERE booking_id = ?').get(bookingId) || null;
+}
+
+function listCoachingRoomsForBookings(bookingIds) {
+  if (!bookingIds.length) return [];
+  return db.prepare(`SELECT * FROM coaching_rooms WHERE booking_id IN (${bookingIds.map(() => '?').join(', ')})`).all(...bookingIds);
+}
+
+function listDueCoachingRooms(now) {
+  return db.prepare("SELECT * FROM coaching_rooms WHERE state IN ('open', 'closing') AND close_at IS NOT NULL AND close_at <= ? ORDER BY close_at LIMIT 100").all(now);
+}
+
+function listMakingCoachingRooms(olderThanMs) {
+  return db.prepare("SELECT * FROM coaching_rooms WHERE state = 'making' AND updated_at < ? ORDER BY updated_at LIMIT 100").all(olderThanMs);
+}
+
+// Every room of a streamer that still holds a Discord role or channel, for the clean-up before the rows go.
+function listCoachingRoomsToRemove(streamerId) {
+  return db.prepare("SELECT * FROM coaching_rooms WHERE streamer_id = ? AND (role_id IS NOT NULL OR channel_id IS NOT NULL) AND state != 'closed'").all(streamerId);
 }
 
 function recordCoachingMessageError(id, error) {
@@ -5988,7 +6191,10 @@ function countWaitingCoaching(streamerId, now) {
 }
 
 function cleanupOldCoachingBookings(now) {
-  db.prepare('DELETE FROM coaching_bookings WHERE starts_at < ?').run(now - 90 * 86400e3);
+  const cutoff = now - 90 * 86400e3;
+  db.prepare('DELETE FROM coaching_rooms WHERE booking_id IN (SELECT id FROM coaching_bookings WHERE starts_at < ?)').run(cutoff);
+  db.prepare('DELETE FROM coaching_payments WHERE booking_id IN (SELECT id FROM coaching_bookings WHERE starts_at < ?)').run(cutoff);
+  db.prepare('DELETE FROM coaching_bookings WHERE starts_at < ?').run(cutoff);
 }
 
 // The viewer's own sign-in; the row holds only the hash of the cookie's id.
@@ -6929,6 +7135,11 @@ module.exports = {
   getCoachingSettings, saveCoachingSettings, setCoachingOpen, recordInviteCheck,
   createCoachingBooking, getCoachingBooking, getHeldCoachingBookings, getCoachingSchedule,
   getViewerCoachingBookings, setCoachingBookingStatus, recordCoachingMessageError, countWaitingCoaching,
+  acceptCoachingBooking, expireCoachingBooking, listExpirableCoachingBookings, getCoachingBookingById,
+  createCoachingPayment, getCoachingPayment, listOpenCoachingPaymentsFor, listStaleCoachingPayments, deleteOpenCoachingPayment,
+  markCoachingPaymentRefused, recordCoachingPayment,
+  createCoachingRoom, updateCoachingRoom, getCoachingRoom, listCoachingRoomsForBookings, listDueCoachingRooms,
+  listMakingCoachingRooms, listCoachingRoomsToRemove,
   cleanupOldCoachingBookings, createViewerSession, getViewerSession, deleteViewerSession, cleanExpiredViewerSessions,
   createPendingTip,
   getPendingTip,

@@ -158,6 +158,16 @@ describe('removeAccount', () => {
     assert.deepEqual(calls.at(-1), ['db.delete', 5]);
     assert.deepEqual(names(calls).slice(0, -1).sort(), ['bus.emit', 'chat.stop', 'eventsub.stop', 'se.stop', 'sponsors.stop', 'yt.stop']);
   });
+
+  test('the coaching rooms on Discord are removed before the rows are deleted, and a failure there changes nothing', () => {
+    const { calls, services } = fakeServices(FULLY_ON);
+    services.coachingRooms = { removeAllFor: (id) => { calls.push(['rooms.remove', id]); return Promise.reject(new Error('Discord is down')); } };
+    removeAccount(5, services);
+    assert.ok(names(calls).indexOf('rooms.remove') < names(calls).indexOf('db.delete'));
+    assert.deepEqual(calls.at(-1), ['db.delete', 5]);
+    services.coachingRooms = { removeAllFor: () => { throw new Error('x'); } };
+    removeAccount(5, services);
+  });
 });
 
 // The YouTube live chat: a disabled account's chat bot stops polling (and so stops

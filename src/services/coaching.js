@@ -8,7 +8,7 @@
 
 const { offsetAt, localDate } = require('./goalPeriods');
 
-const LENGTHS = [30, 60];
+const LENGTHS = [30, 60, 120, 180, 240, 300];
 const STEP_MINUTES = 30;
 const HORIZON_DAYS = 14;
 const LEAD_MS = 3600000;
@@ -19,11 +19,63 @@ const NOTE_MAX = 300;
 const WHERE_MAX = 150;
 const DAYS_OFF_MAX = 60;
 const INVITE_CHECK_MS = 3600000;
-const HOLDING = ['waiting', 'confirmed'];
-const STATES = ['waiting', 'confirmed', 'declined', 'cancelled', 'withdrawn'];
+const HOLDING = ['waiting', 'awaiting_payment', 'confirmed'];
+const STATES = ['waiting', 'awaiting_payment', 'confirmed', 'declined', 'cancelled', 'withdrawn', 'expired'];
+const PRICE_MAX_CENTS = 100000;
+const PAY_WINDOW_MS = 2 * 3600e3;
+const PAY_CUTOFF_MS = 15 * 60e3;
+const PAY_MIN_LEFT_MS = 10 * 60e3;
 
 const DAY_MS = 86400e3;
 const MINUTE_MS = 60e3;
+
+// Prices in cents of the streamer's tip-page currency. 30 min is off by default.
+const DEFAULT_LENGTHS = Object.freeze({
+  30: Object.freeze({ on: false, price: 0 }),
+  60: Object.freeze({ on: true, price: 2500 }),
+  120: Object.freeze({ on: true, price: 4500 }),
+  180: Object.freeze({ on: true, price: 6000 }),
+  240: Object.freeze({ on: true, price: 7000 }),
+  300: Object.freeze({ on: true, price: 8000 }),
+});
+
+// The streamer's lengths from a form: every length present with { on, price }, whole cents 0-100000, at least one on.
+function parseLengths(value) {
+  const bad = { ok: false, code: 'bad_lengths' };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return bad;
+  const keys = Object.keys(value);
+  if (keys.length !== LENGTHS.length || !keys.every((k) => LENGTHS.includes(Number(k)) && String(Number(k)) === k)) return bad;
+  const lengths = {};
+  for (const m of LENGTHS) {
+    const l = value[m];
+    if (!l || typeof l.on !== 'boolean') return bad;
+    if (!Number.isInteger(l.price) || l.price < 0 || l.price > PRICE_MAX_CENTS) return bad;
+    lengths[m] = { on: l.on, price: l.price };
+  }
+  if (!LENGTHS.some((m) => lengths[m].on)) return { ok: false, code: 'no_length' };
+  return { ok: true, lengths };
+}
+
+// What a settings row offers: its saved lengths, or the defaults while none were saved (or the stored text is damaged).
+function lengthsFor(settings) {
+  let raw = settings ? settings.lengths : null;
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { raw = null; } }
+  const parsed = raw ? parseLengths(raw) : null;
+  const source = parsed && parsed.ok ? parsed.lengths : DEFAULT_LENGTHS;
+  const out = {};
+  for (const m of LENGTHS) out[m] = { on: source[m].on, price: source[m].price };
+  return out;
+}
+
+// The latest a viewer can pay: two hours after accepting, never later than 15 minutes before the start.
+function payBy(acceptedAt, startsAt) {
+  return Math.min(acceptedAt + PAY_WINDOW_MS, startsAt - PAY_CUTOFF_MS);
+}
+
+// A paid request can be accepted only while the viewer would still have 10 minutes to pay.
+function canAcceptPaid(now, startsAt) {
+  return payBy(now, startsAt) - now >= PAY_MIN_LEFT_MS;
+}
 
 // Monday to Friday 18:00-22:00; the weekend is off but keeps its window.
 const DEFAULT_HOURS = Object.freeze(Array.from({ length: 7 }, (_, i) =>
@@ -164,7 +216,8 @@ function bookable(settings, claimedGuildIds) {
 
 module.exports = {
   LENGTHS, STEP_MINUTES, HORIZON_DAYS, LEAD_MS, MAX_UPCOMING, MAX_REQUESTS_PER_DAY, NOTE_MAX, WHERE_MAX, DAYS_OFF_MAX,
-  INVITE_CHECK_MS, HOLDING, STATES, DEFAULT_HOURS,
+  INVITE_CHECK_MS, HOLDING, STATES, DEFAULT_HOURS, DEFAULT_LENGTHS, PRICE_MAX_CENTS, PAY_WINDOW_MS,
+  parseLengths, lengthsFor, payBy, canAcceptPaid,
   parseHours, parseDaysOff, parseInvite, parseWhere, parseNote,
   localDateOf, localInstant, freeStarts, bookingState, outsideHours, bookable,
 };

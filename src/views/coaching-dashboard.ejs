@@ -20,6 +20,8 @@
 <% if (!servers.length) { %>
   <div class="cd-note warn" role="status"><span><%= t('coaching.dashboard.noServer') %></span> <a href="/dashboard"><%= t('coaching.dashboard.noServerAction') %></a></div>
 <% } %>
+<div class="cd-note warn" id="cd-no-paypal" role="status"<%= money.hasPaypal ? ' hidden' : '' %>><span><%= t('coaching.dashboard.noPaypal') %></span> <a href="/dashboard/donations"><%= t('coaching.dashboard.noPaypalAction') %></a></div>
+<div class="cd-note warn" id="cd-check-prices" role="status"<%= money.checkPrices ? '' : ' hidden' %>><span><%= t('coaching.dashboard.checkPrices', { currency: money.currency }) %></span> <a href="#cd-lengths"><%= t('coaching.dashboard.checkPricesAction') %></a></div>
 <div class="cd-note warn" id="cd-invite-broken" role="status"<%= setUp && settings.inviteOk === false ? '' : ' hidden' %>><span><%= t('coaching.dashboard.inviteBroken') %></span> <a href="#cd-invite"><%= t('coaching.dashboard.inviteFix') %></a></div>
 
 <div class="cd-row">
@@ -62,6 +64,10 @@
         <button type="button" class="btn btn-secondary cd-btn" id="cd-dayoff-add"><%= t('coaching.dashboard.addDayOff') %></button>
       </div>
 
+      <div class="cd-sec" id="cd-lengths"><span class="cd-label"><%= t('coaching.dashboard.lengths') %></span></div>
+      <p class="cd-hint cd-hint-top"><%= t('coaching.dashboard.lengthsHint', { currency: money.currency }) %></p>
+      <div class="cd-lengths" id="cd-lengths-list" role="group" aria-label="<%= t('coaching.dashboard.lengths') %>"></div>
+
       <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.whereWeMeet') %></span></div>
       <% if (servers.length) { %>
       <div class="form-group cd-field">
@@ -71,14 +77,19 @@
       </div>
       <% } %>
       <div class="form-group cd-field">
+        <label for="cd-category"><%= t('coaching.dashboard.category') %></label>
+        <select id="cd-category"></select>
+        <span class="cd-hint" id="cd-category-hint"><%= t('coaching.dashboard.categoryHint') %></span>
+      </div>
+      <div class="form-group cd-field">
         <label for="cd-invite"><%= t('coaching.dashboard.invite') %></label>
         <input id="cd-invite" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="200" placeholder="<%= t('coaching.dashboard.invitePlaceholder') %>" value="<%= settings.invite %>">
         <span class="cd-hint"><%= t('coaching.dashboard.inviteHint') %></span>
       </div>
       <div class="form-group cd-field">
-        <label for="cd-where"><%= t('coaching.dashboard.where') %></label>
+        <label for="cd-where"><%= t('coaching.dashboard.whereFallback') %></label>
         <input id="cd-where" type="text" maxlength="150" autocomplete="off" placeholder="<%= t('coaching.dashboard.wherePlaceholder') %>" value="<%= settings.where %>">
-        <span class="cd-hint"><%= t('coaching.dashboard.whereHint') %></span>
+        <span class="cd-hint"><%= t('coaching.dashboard.whereFallbackHint') %></span>
       </div>
       <div class="cd-switchrow">
         <div class="cd-switchtext">
@@ -132,9 +143,9 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-past-title { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); }
   .cd-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
   .cd-group + .cd-line { border-top: 0; }
-  .cd-line.declined, .cd-line.cancelled, .cd-line.withdrawn, .cd-line.unanswered { opacity: .6; }
+  .cd-line.expired, .cd-line.declined, .cd-line.cancelled, .cd-line.withdrawn, .cd-line.unanswered { opacity: .6; }
   .cd-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px; background: var(--text-muted); }
-  .cd-dot.waiting { background: var(--warning); }
+  .cd-dot.waiting, .cd-dot.awaiting_payment { background: var(--warning); }
   .cd-dot.confirmed { background: var(--success); }
   .cd-what { flex: 1; min-width: 0; }
   .cd-top { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; }
@@ -142,10 +153,21 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-name { color: var(--text-primary); overflow-wrap: anywhere; }
   .cd-what .cd-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 1px; }
   .cd-pill { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--bg-elevated); color: var(--text-secondary); }
-  .cd-pill.waiting, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
-  .cd-pill.confirmed { background: var(--success-bg); color: var(--success); }
+  .cd-pill.waiting, .cd-pill.awaiting_payment, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
+  .cd-pill.confirmed, .cd-pill.paid { background: var(--success-bg); color: var(--success); }
   .cd-note-text { background: var(--bg-base); border-radius: 8px; padding: 5px 8px; margin-top: 5px; color: var(--text-secondary); overflow-wrap: anywhere; white-space: pre-wrap; }
   .cd-warn { color: var(--warning); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+  .cd-room { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; }
+  .cd-room a { color: var(--accent-hover); font-weight: 600; overflow-wrap: anywhere; }
+  .cd-hint-top { margin: 0 0 8px; }
+  .cd-lengths { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; }
+  .cd-lrow { display: contents; }
+  .cd-lrow.off .cd-ln, .cd-lrow.off .cd-lp { opacity: .45; }
+  .cd-ln { font-weight: 500; }
+  .cd-lp { display: flex; align-items: center; gap: 6px; }
+  .cd-lp input[type=number] { width: 90px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font: 13px var(--font-body); }
+  .cd-lp input[type=number]:disabled { cursor: not-allowed; }
+  .cd-cur { color: var(--text-muted); font-size: 12px; }
   .cd-acts { display: flex; gap: 4px; flex: none; }
   .cd-icon { width: 28px; height: 28px; border-radius: 7px; border: 0; display: inline-grid; place-items: center; font: 700 14px var(--font-body); cursor: pointer; }
   .cd-icon.ok { background: var(--success-bg); color: var(--success); }

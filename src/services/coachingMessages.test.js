@@ -87,3 +87,60 @@ describe('coachingMessages', () => {
     assert.doesNotMatch(w.description, /dashboard/);
   });
 });
+
+describe('coachingMessages: payment kinds', () => {
+  const missing = (text) => assert.ok(!/coaching\.message\./.test(text), `a text key was left in: ${text}`);
+
+  test('formatPrice writes the amount in the reader\'s language and falls back on an unknown currency', () => {
+    assert.equal(m.formatPrice(2500, 'EUR', 'en'), '€25.00');
+    assert.equal(m.formatPrice(4500, 'USD', 'en'), '$45.00');
+    assert.match(m.formatPrice(2500, 'EUR', 'pt'), /25,00/, 'a decimal comma in Portuguese');
+    assert.equal(m.formatPrice(2500, 'nope', 'en'), '€25.00', 'a currency that is not a code reads as EUR');
+  });
+
+  test('acceptedPay carries the price, the deadline and the booking page, and no where line', () => {
+    const payBy = 1793000000000 - 15 * 60e3;
+    const msg = m.viewerMessage('acceptedPay', {
+      booking: booking({ price_cents: 4500, currency: 'EUR', pay_by: payBy }), streamerName: 'Coach', guildName: 'HQ',
+      inviteUrl: 'https://discord.gg/abc', whereText: 'Voice room', bookingUrl: 'https://atleta.test/coaching/coach', lang: 'en', t,
+    });
+    const e = msg.embeds[0];
+    assert.equal(e.title, 'Coach accepted your coaching session: pay to confirm it');
+    assert.match(e.description, /Price: €45\.00/);
+    assert.match(e.description, new RegExp(`Pay by: <t:${Math.floor(payBy / 1000)}:F>`));
+    assert.match(e.description, /Pay on the booking page: https:\/\/atleta\.test\/coaching\/coach/);
+    assert.ok(!/Voice room|Invite/.test(e.description), 'the place comes once it is paid');
+    missing(e.title + e.description);
+  });
+
+  test('confirmed names the amount paid and the room link in place of the where text; without a room, the where text', () => {
+    const paid = booking({ paid_amount_cents: 2500, paid_currency: 'EUR' });
+    const base = { booking: paid, streamerName: 'Coach', guildName: 'HQ', inviteUrl: null, whereText: '[x](https://evil.example)', bookingUrl: 'u', lang: 'en', t };
+    const room = m.viewerMessage('confirmed', { ...base, roomUrl: 'https://discord.com/channels/1/2' }).embeds[0];
+    assert.equal(room.title, 'Your coaching session with Coach is confirmed');
+    assert.match(room.description, /Paid: €25\.00/);
+    assert.match(room.description, /Your room: https:\/\/discord\.com\/channels\/1\/2/);
+    assert.ok(!room.description.includes('Where:'));
+    const where = m.viewerMessage('confirmed', { ...base, roomUrl: null }).embeds[0];
+    assert.ok(where.description.includes(`Where: ${escapeLinkText('[x](https://evil.example)')}`), 'the where text is escaped');
+    missing(room.description + where.description);
+  });
+
+  test('expired (viewer) offers another time; unpaid, paid and paymentLate (streamer) carry what the streamer needs', () => {
+    const b = booking({ viewer_display_name: '[Vi](https://evil.example)', paid_amount_cents: 2500, paid_currency: 'EUR', price_cents: 2500, currency: 'EUR' });
+    const exp = m.viewerMessage('expired', { booking: b, streamerName: 'Coach', bookingUrl: 'https://atleta.test/coaching/coach', lang: 'en', t }).embeds[0];
+    assert.equal(exp.title, 'Your coaching session with Coach was not paid in time');
+    assert.match(exp.description, /Pick another time: https:\/\/atleta\.test\/coaching\/coach/);
+    const s = (kind) => m.streamerMessage(kind, { booking: b, scheduleUrl: 'https://atleta.test/dashboard/coaching', lang: 'en', t }).embeds[0];
+    const name = escapeLinkText('[Vi](https://evil.example)');
+    assert.equal(s('unpaid').title, `${name} did not pay in time: the time is free again`);
+    assert.equal(s('paid').title, `${name} paid for their coaching session`);
+    assert.match(s('paid').description, /Paid: €25\.00/);
+    const late = s('paymentLate');
+    assert.match(late.description, /Paid: €25\.00/);
+    assert.match(late.description, /refund it to the viewer in PayPal/);
+    assert.match(s('request').description, /Price: €25\.00/, 'a paid request names its price');
+    assert.ok(!/Price/.test(m.streamerMessage('request', { booking: booking({ price_cents: 0 }), scheduleUrl: 'u', lang: 'en', t }).embeds[0].description), 'a free one does not');
+    for (const k of ['unpaid', 'paid', 'paymentLate', 'request']) missing(s(k).title + s(k).description);
+  });
+});

@@ -97,3 +97,70 @@ describe('the labels', () => {
     assert.deepEqual(bookings.filter((b) => core.canCancel(b, now)).map((b) => b.id), [1, 2]);
   });
 });
+
+describe('payment helpers', () => {
+  const now = Date.UTC(2026, 10, 2, 12, 0);
+  const later = now + 24 * 3600e3;
+
+  test('formatPrice writes the amount in the currency and the language, and Free for none', () => {
+    assert.match(core.formatPrice(2500, 'EUR', 'en', 'Free'), /€\s?25\.00/);
+    assert.match(core.formatPrice(2500, 'EUR', 'pt', 'Grátis'), /25,00/);
+    assert.match(core.formatPrice(4550, 'USD', 'en', 'Free'), /\$45\.50/);
+    assert.equal(core.formatPrice(0, 'EUR', 'en', 'Free'), 'Free');
+    assert.equal(core.formatPrice(null, 'EUR', 'en', 'Free'), 'Free');
+    assert.equal(core.formatPrice(1000, 'nope', 'en', 'Free'), '10.00 nope', 'an unknown currency still prints the amount');
+  });
+
+  test('lengthLabel: minutes under an hour, whole hours as hours', () => {
+    const texts = { lengthMin: '{{n}} min', lengthHour: '{{n}} h' };
+    assert.deepEqual([30, 60, 120, 300].map((m) => core.lengthLabel(m, texts)), ['30 min', '1 h', '2 h', '5 h']);
+  });
+
+  test('payByLabel is the date and time in the viewer zone', () => {
+    const at = Date.UTC(2026, 10, 3, 17, 30);
+    assert.match(core.payByLabel(at, 'Europe/Lisbon', 'en'), /Tue.*17:30/);
+    assert.match(core.payByLabel(at, 'Asia/Tokyo', 'en'), /Wed.*02:30/);
+  });
+
+  test('lengthsToShow keeps only the lengths with a free start far enough away', () => {
+    const lengths = [{ minutes: 60, priceCents: 2500 }, { minutes: 120, priceCents: 4500 }, { minutes: 180, priceCents: 0 }];
+    const lead = 3600e3;
+    const slots = { 60: [later], 120: [now + 1800e3], 180: [] };
+    assert.deepEqual(core.lengthsToShow(lengths, slots, now, lead).map((l) => l.minutes), [60]);
+    assert.deepEqual(core.lengthsToShow(null, slots, now, lead), []);
+  });
+
+  test('a paid booking counts toward the limit but has no Cancel; Pay needs a price and time left', () => {
+    const awaiting = { id: 1, startsAt: later, state: 'awaiting_payment', priceCents: 2500, payBy: now + 3600e3, paid: false };
+    const paid = { id: 2, startsAt: later, state: 'confirmed', priceCents: 2500, paid: true };
+    const old = { id: 3, startsAt: later, state: 'confirmed', priceCents: null, paid: false };
+    const expired = { id: 4, startsAt: later, state: 'expired', priceCents: 2500, paid: false };
+    const all = [awaiting, paid, old, expired];
+    assert.equal(core.upcomingCount(all, now), 3);
+    assert.deepEqual(all.filter((b) => core.canCancel(b, now)).map((b) => b.id), [1, 3]);
+    assert.deepEqual(all.filter((b) => core.canPay(b, now)).map((b) => b.id), [1]);
+    assert.equal(core.canPay({ ...awaiting, payBy: now - 1 }, now), false, 'past its pay-by time');
+    assert.equal(core.canPay({ ...awaiting, priceCents: 0 }, now), false);
+  });
+
+  test('returnNotice reads what PayPal left in the address and nothing else', () => {
+    assert.deepEqual(core.returnNotice('?paid=1'), { kind: 'paid' });
+    assert.deepEqual(core.returnNotice('?error=late'), { kind: 'error', code: 'late', order: null });
+    assert.deepEqual(core.returnNotice('?error=pay_unconfirmed&order=5O190127TN364715T'), { kind: 'error', code: 'pay_unconfirmed', order: '5O190127TN364715T' });
+    assert.equal(core.returnNotice('?error=pay_unconfirmed&order=a%20b').order, null, 'an order id of another shape is dropped');
+    assert.equal(core.returnNotice('?error=late&order=ABC').order, null, 'only an unconfirmed payment keeps its order');
+    assert.equal(core.returnNotice('?error=<script>'), null);
+    assert.equal(core.returnNotice('?paid=2'), null);
+    assert.equal(core.returnNotice(''), null);
+    assert.equal(core.returnNotice('?error=%E0%A4%A'), null, 'a broken escape does not throw');
+  });
+
+  test('only a PayPal page is gone to and only a Discord channel is linked as a room', () => {
+    assert.equal(core.isPayPalUrl('https://www.sandbox.paypal.com/checkoutnow?token=X'), true);
+    assert.equal(core.isPayPalUrl('https://paypal.com.evil.test/x'), false);
+    assert.equal(core.isPayPalUrl('javascript:alert(1)'), false);
+    assert.equal(core.isRoomUrl('https://discord.com/channels/123/456'), true);
+    assert.equal(core.isRoomUrl('https://discord.com/channels/123/456/'), false);
+    assert.equal(core.isRoomUrl('https://evil.test/channels/1/2'), false);
+  });
+});

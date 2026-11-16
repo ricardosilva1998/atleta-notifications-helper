@@ -159,3 +159,64 @@ test('bookable is false while paused, without a claimed server, without an invit
   assert.equal(C.bookable({ ...s, invite_ok: 0 }, ['g1']), false);
   assert.equal(C.bookable(null, ['g1']), false);
 });
+
+test('the default lengths: 1 h to 5 h on at the owner\'s prices, 30 min off, and a row with none gets them', () => {
+  assert.deepEqual(C.LENGTHS, [30, 60, 120, 180, 240, 300]);
+  const d = C.lengthsFor(null);
+  assert.deepEqual(d[30], { on: false, price: 0 });
+  assert.deepEqual([60, 120, 180, 240, 300].map((m) => d[m].price), [2500, 4500, 6000, 7000, 8000]);
+  assert.ok([60, 120, 180, 240, 300].every((m) => d[m].on));
+  assert.deepEqual(C.lengthsFor({ lengths: null }), d);
+  assert.deepEqual(C.lengthsFor({ lengths: 'not json' }), d);
+  const saved = { ...d, 60: { on: false, price: 1 } };
+  assert.equal(C.lengthsFor({ lengths: JSON.stringify(saved) })[60].price, 1);
+  C.lengthsFor(null)[60].price = 1;
+  assert.equal(C.lengthsFor(null)[60].price, 2500, 'the defaults are never shared');
+  assert.deepEqual(C.HOLDING, ['waiting', 'awaiting_payment', 'confirmed']);
+  assert.ok(C.STATES.includes('awaiting_payment') && C.STATES.includes('expired'));
+});
+
+test('parseLengths refuses what is not six lengths with a switch and whole-cent prices, and all off', () => {
+  const ok = C.lengthsFor(null);
+  assert.deepEqual(C.parseLengths(ok), { ok: true, lengths: ok });
+  const bad = { ok: false, code: 'bad_lengths' };
+  assert.deepEqual(C.parseLengths(null), bad);
+  assert.deepEqual(C.parseLengths([]), bad);
+  const without = { ...ok }; delete without[300];
+  assert.deepEqual(C.parseLengths(without), bad);
+  assert.deepEqual(C.parseLengths({ ...ok, 45: { on: true, price: 1 } }), bad);
+  assert.deepEqual(C.parseLengths({ ...ok, 60: { on: 'yes', price: 1 } }), bad);
+  assert.deepEqual(C.parseLengths({ ...ok, 60: { on: true, price: 12.5 } }), bad);
+  assert.deepEqual(C.parseLengths({ ...ok, 60: { on: true, price: -1 } }), bad);
+  assert.deepEqual(C.parseLengths({ ...ok, 60: { on: true, price: 100001 } }), bad);
+  assert.equal(C.parseLengths({ ...ok, 60: { on: true, price: 100000 } }).ok, true);
+  assert.equal(C.parseLengths({ ...ok, 30: { on: true, price: 0 } }).ok, true, 'free is allowed');
+  const off = Object.fromEntries(C.LENGTHS.map((m) => [m, { on: false, price: 0 }]));
+  assert.deepEqual(C.parseLengths(off), { ok: false, code: 'no_length' });
+});
+
+test('payBy is two hours after accepting, never later than 15 minutes before the start', () => {
+  const H = 3600e3; const M = 60e3;
+  assert.equal(C.payBy(0, 10 * H), 2 * H);
+  assert.equal(C.payBy(0, 2 * H), 2 * H - 15 * M);
+  assert.equal(C.payBy(0, 2 * H + 15 * M), 2 * H);
+  assert.equal(C.payBy(0, 30 * M), 15 * M);
+});
+
+test('canAcceptPaid needs 10 minutes left to pay: allowed 26 minutes before the start, refused at 24', () => {
+  const M = 60e3; const start = 1e9;
+  assert.equal(C.canAcceptPaid(start - 26 * M, start), true);
+  assert.equal(C.canAcceptPaid(start - 25 * M, start), true);
+  assert.equal(C.canAcceptPaid(start - 24 * M, start), false);
+  assert.equal(C.canAcceptPaid(start - 3 * 3600e3, start), true);
+});
+
+test('freeStarts lists 5 h starts only where the session ends inside the window', () => {
+  const now = at('2026-11-02T00:00:00Z');
+  const hours = C.DEFAULT_HOURS.map((d) => ({ ...d, start: 600, end: 1320 }));
+  const starts = C.freeStarts({ hours, timeZone: 'UTC', daysOff: [], held: [], now, minutes: 300 });
+  assert.ok(starts.length > 0);
+  const first = new Date(starts[0]);
+  assert.equal(first.getUTCHours() * 60 + first.getUTCMinutes(), 600);
+  assert.ok(starts.every((s) => { const d = new Date(s); return d.getUTCHours() * 60 + d.getUTCMinutes() + 300 <= 1320; }));
+});

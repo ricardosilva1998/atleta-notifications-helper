@@ -28,6 +28,7 @@ const DB_FILE = path.join(SRC, 'db.js');
 const ROUTE = path.join(__dirname, 'coachingDashboard.js');
 const SERVICE = path.join(SRC, 'services', 'coachingBookings.js');
 const MSG = path.join(SRC, 'services', 'coachingMessages.js');
+const ROOMS = path.join(SRC, 'services', 'coachingRooms.js');
 const PAGE_SCRIPT = path.join(SRC, '..', 'public', 'js', 'coaching-dashboard.js');
 
 // What the bot sees (guild id -> name), Discord's answer about an invite, and the direct messages it was asked to send.
@@ -37,6 +38,17 @@ const discord = {
   async fetchInvite(code) { this.inviteCalls.push(code); return this.invite; },
   async sendDirectMessage(userId, payload) { this.sent.push({ userId, payload }); return this.dm; },
   async isGuildMember() { return true; },
+  // Coaching rooms: the categories the bot sees and what it is allowed in the one asked about.
+  categories: [{ id: '223456789012345678', name: 'Coaching' }], category: { ok: true }, categoryCalls: [],
+  async listCategories() { return this.categories; },
+  async checkCategory(guild, id) { this.categoryCalls.push([guild, id]); return this.category; },
+  ready: true, roomCalls: [],
+  isReady() { return this.ready; }, hasMessageContent() { return true; }, client: { user: { id: '999999999999999999' } },
+  async createRole(g, name) { this.roomCalls.push('createRole'); return 'role1'; },
+  async deleteRole() { this.roomCalls.push('deleteRole'); },
+  async addRoleToMember() { this.roomCalls.push('addRoleToMember'); },
+  async createVoiceChannel() { this.roomCalls.push('createVoiceChannel'); return 'chan1'; },
+  async deleteChannel() { this.roomCalls.push('deleteChannel'); },
   escapeLinkText,
 };
 
@@ -54,7 +66,7 @@ before(async () => {
       if (request === 'fs') return { ...fs, existsSync: () => true, mkdirSync: () => {} };
       if (request === './config') return { adminDiscordIds: [] };
     }
-    if ([ROUTE, SERVICE, MSG].includes(from)) {
+    if ([ROUTE, SERVICE, MSG, ROOMS].includes(from)) {
       if (request === '../discord') return discord;
       if (request === '../config') return { app: { url: 'https://atleta.test' } };
     }
@@ -67,7 +79,7 @@ before(async () => {
   let router;
   let access;
   try {
-    for (const file of [DB_FILE, ROUTE, SERVICE, MSG]) delete require.cache[file];
+    for (const file of [DB_FILE, ROUTE, SERVICE, MSG, ROOMS]) delete require.cache[file];
     db = require(DB_FILE);
     router = require(ROUTE);
     access = require('../services/streamerAccess');
@@ -110,7 +122,14 @@ beforeEach(() => {
   discord.inviteCalls = [];
   discord.dm = { ok: true };
   discord.sent = [];
+  discord.categories = [{ id: CATEGORY, name: 'Coaching' }];
+  discord.category = { ok: true };
+  discord.categoryCalls = [];
+  discord.roomCalls = [];
+  discord.ready = true;
 });
+
+const CATEGORY = '223456789012345678';
 
 // ── HTTP ─────────────────────────────────────────────────────────────────
 
@@ -408,6 +427,145 @@ describe('Accept, Decline and Cancel', () => {
     assert.equal(res.status, 409);
     assert.deepEqual(res.json, { ok: false, code: 'too_late', error: errorOf('too_late') });
     assert.equal(db.getCoachingBooking(past.id, s.id).status, 'waiting');
+  });
+
+  test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and no Cancel once paid', async () => {
+    const s = addStreamer();
+    const paidHold = (startsAt, now = Date.now()) => {
+      const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
+      assert.ok(made.ok, made.code);
+      return made.booking;
+    };
+    const booking = paidHold(freeNow(s)[0]);
+    const noPaypal = await post(`/dashboard/api/coaching/bookings/${booking.id}/accept`, { streamer: s });
+    assert.equal(noPaypal.status, 409);
+    assert.deepEqual(noPaypal.json, { ok: false, code: 'no_paypal', error: errorOf('no_paypal') });
+
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
+    const soon = paidHold(Date.now() + 24 * 60e3, Date.now() - 86400e3);
+    const close = await post(`/dashboard/api/coaching/bookings/${soon.id}/accept`, { streamer: s });
+    assert.equal(close.status, 409);
+    assert.deepEqual(close.json, { ok: false, code: 'too_close', error: errorOf('too_close') });
+    assert.equal(db.getCoachingBooking(soon.id, s.id).status, 'waiting');
+
+    const ok = await post(`/dashboard/api/coaching/bookings/${booking.id}/accept`, { streamer: s });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.booking.state, 'awaiting_payment');
+    assert.equal(ok.json.booking.priceCents, 2500);
+    db.recordCoachingPayment({ bookingId: booking.id, orderId: 'DASHORDER0001', captureId: 'DASHCAP0001', amountCents: 2500, currency: 'EUR', now: Date.now() });
+    const cancel = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    assert.equal(cancel.status, 409);
+    assert.deepEqual(cancel.json, { ok: false, code: 'paid', error: errorOf('paid') });
+    assert.equal(db.getCoachingBooking(booking.id, s.id).status, 'confirmed');
+  });
+
+  test('the Coaching category: checked against the server, named permissions refused, kept, cleared and offered', async () => {
+    const s = addStreamer({ settings: null });
+    const save = (over) => post('/dashboard/api/coaching/settings', { streamer: s, json: saveBody(over) });
+
+    discord.category = { ok: false, reason: 'not_found' };
+    const gone = await save({ categoryId: CATEGORY });
+    assert.equal(gone.status, 400);
+    assert.deepEqual(gone.json, { ok: false, code: 'category_not_found', error: errorOf('category_not_found') });
+
+    discord.category = { ok: false, reason: 'permissions', missing: ['manage_channels', 'attach_files', 'manage_roles'] };
+    const lacking = await save({ categoryId: CATEGORY });
+    assert.equal(lacking.status, 400);
+    assert.equal(lacking.json.code, 'category_permissions');
+    assert.deepEqual(lacking.json.missing, ['manage_channels', 'attach_files', 'manage_roles']);
+    for (const id of lacking.json.missing) assert.ok(lacking.json.error.includes(t('en', `coaching.dashboard.permission.${id}`)), id);
+    assert.equal(db.getCoachingSettings(s.id), null, 'nothing was saved');
+
+    assert.equal((await save({ categoryId: 'not an id' })).json.code, 'bad_category');
+    assert.equal((await save({ categoryId: 12 })).json.code, 'bad_category');
+
+    discord.category = { ok: true };
+    const ok = await save({ categoryId: CATEGORY });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.settings.categoryId, CATEGORY);
+    assert.deepEqual(ok.json.categories, [{ id: CATEGORY, name: 'Coaching' }]);
+    assert.equal(db.getCoachingSettings(s.id).category_id, CATEGORY);
+    assert.deepEqual(discord.categoryCalls.at(-1), ['123', CATEGORY]);
+
+    discord.categoryCalls = [];
+    assert.equal((await save({})).json.settings.categoryId, CATEGORY, 'a save with no category keeps it');
+    assert.deepEqual(discord.categoryCalls, []);
+    const page = await get('/dashboard/coaching', { streamer: s });
+    assert.deepEqual(pageData(page.text).categories, [{ id: CATEGORY, name: 'Coaching' }]);
+    assert.equal(pageData(page.text).settings.categoryId, CATEGORY);
+
+    discord.category = { ok: false, reason: 'unknown' };
+    const unchecked = await save({ categoryId: '323456789012345678' });
+    assert.equal(unchecked.status, 200, 'Discord cannot say: saved unchecked');
+
+    assert.equal((await save({ categoryId: '' })).json.settings.categoryId, null);
+    assert.equal(db.getCoachingSettings(s.id).category_id, null);
+  });
+
+  test('lengths and prices: the defaults on the page, a save keeps or replaces them, all-off and bad prices are refused, and the notes follow PayPal and the currency', async () => {
+    const s = addStreamer({ settings: null });
+    const save = (over) => post('/dashboard/api/coaching/settings', { streamer: s, json: saveBody(over) });
+    const first = pageData((await get('/dashboard/coaching', { streamer: s })).text);
+    assert.deepEqual(first.settings.lengths, coaching.lengthsFor(null), 'the defaults before any save');
+    assert.deepEqual(first.money, { currency: 'EUR', hasPaypal: false, checkPrices: false });
+
+    const custom = { 30: { on: true, price: 0 }, 60: { on: true, price: 3000 }, 120: { on: false, price: 4500 }, 180: { on: false, price: 6000 }, 240: { on: false, price: 7000 }, 300: { on: false, price: 8000 } };
+    const ok = await save({ lengths: custom });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.json.settings.lengths, custom);
+    assert.ok(db.getCoachingSettings(s.id).prices_saved_at, 'the first save of prices is recorded');
+    assert.deepEqual((await save({})).json.settings.lengths, custom, 'a save without lengths keeps them');
+
+    const none = Object.fromEntries(Object.entries(custom).map(([m, l]) => [m, { ...l, on: false }]));
+    const off = await save({ lengths: none });
+    assert.equal(off.status, 400);
+    assert.deepEqual(off.json, { ok: false, code: 'no_length', error: errorOf('no_length') });
+    for (const bad of [{ ...custom, 60: { on: true, price: null } }, { ...custom, 60: { on: true, price: 100001 } }, { ...custom, 60: { on: true, price: 12.5 } }, { 60: { on: true, price: 100 } }, 'x']) {
+      const r = await save({ lengths: bad });
+      assert.equal(r.json.code, 'bad_lengths');
+    }
+    assert.deepEqual(db.getCoachingSettings(s.id).lengths && coaching.lengthsFor(db.getCoachingSettings(s.id)), custom, 'refusals changed nothing');
+
+    db.db.prepare("UPDATE streamers SET paypal_email = 'pay@example.test', donation_currency = 'USD' WHERE id = ?").run(s.id);
+    const other = addStreamer({ settings: null });
+    db.db.prepare("UPDATE streamers SET paypal_email = 'pay@example.test', donation_currency = 'USD' WHERE id = ?").run(other.id);
+    assert.deepEqual(pageData((await get('/dashboard/coaching', { streamer: s })).text).money, { currency: 'USD', hasPaypal: true, checkPrices: false }, 'prices were saved');
+    assert.deepEqual(pageData((await get('/dashboard/coaching', { streamer: other })).text).money, { currency: 'USD', hasPaypal: true, checkPrices: true }, 'defaults in a currency other than EUR');
+  });
+
+  test('Retry room: refused without a category or for a room that is not failed, remakes a failed room', async () => {
+    const s = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
+    const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(), startsAt: freeNow(s)[0], minutes: 60, note: '', lang: 'en', now: Date.now(), priceCents: 0, currency: 'EUR' });
+    const id = made.booking.id;
+    db.acceptCoachingBooking(id, s.id, Date.now(), null);
+    const url = `/dashboard/api/coaching/bookings/${id}/room`;
+
+    const none = await post(url, { streamer: s });
+    assert.equal(none.status, 409);
+    assert.deepEqual(none.json, { ok: false, code: 'no_category', error: errorOf('no_category') });
+
+    db.saveCoachingSettings(s.id, { timeZone: ZONE, hours: HOURS, daysOff: [], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en', categoryId: CATEGORY });
+    db.createCoachingRoom({ bookingId: id, streamerId: s.id, guildId: '123', categoryId: CATEGORY, closeAt: Date.now() + 7200e3, now: Date.now() });
+    db.updateCoachingRoom(id, { state: 'failed', error: 'missing_permissions', role_id: 'oldrole' }, Date.now());
+    let list = await get('/dashboard/coaching', { streamer: s });
+    const listed = pageData(list.text).schedule.days.flatMap((d) => d.bookings).find((b) => b.id === id);
+    assert.equal(listed.roomError, 'missing_permissions');
+    assert.equal(listed.roomUrl, null);
+
+    const retried = await post(url, { streamer: s });
+    assert.equal(retried.status, 200);
+    assert.equal(retried.json.booking.roomUrl, 'https://discord.com/channels/123/chan1');
+    assert.equal(retried.json.booking.roomError, null);
+    assert.deepEqual(discord.roomCalls.slice(0, 2), ['deleteChannel', 'deleteRole'], 'the half-made role goes first');
+
+    const again = await post(url, { streamer: s });
+    assert.equal(again.status, 409);
+    assert.equal(again.json.code, 'room_not_failed');
+
+    const theirs = addStreamer();
+    assert.equal((await post(url, { streamer: theirs })).status, 404);
+    assert.equal((await post('/dashboard/api/coaching/bookings/abc/room', { streamer: s })).status, 404);
   });
 
   test("another streamer's booking answers not_found", async () => {

@@ -313,7 +313,12 @@ app.use('/dashboard', dashboardRoutes);
 // app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);
 app.use('/tip', tipRoutes);
-// The public coaching booking page (its viewers sign in with /auth/coaching-signin).
+// The public coaching booking page (its viewers sign in with /auth/coaching-signin). Pay starts a PayPal order and
+// /paid captures one: both talk to PayPal, so each visitor gets 15 of them in 10 minutes (the tick, not the browser,
+// does the rest of the reading).
+const coachingPayLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
+app.post('/coaching/:username/bookings/:id/pay', coachingPayLimiter);
+app.get('/coaching/:username/paid', coachingPayLimiter);
 app.use('/coaching', require('./routes/coaching'));
 
 const racingAuthRoutes = require('./routes/racing-auth');

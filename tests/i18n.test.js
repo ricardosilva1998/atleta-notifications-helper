@@ -125,6 +125,11 @@ const DYNAMIC_KEY_FAMILIES = {
   'overlayBuilder.looks.': alertStyles.lookIds().concat(Object.keys(alertStyles.PRIVATE_STYLES), Object.keys(alertStyles.STANDALONE_STYLES)).flatMap((id) => [`${id}.title`, `${id}.desc`]),
   // services/coachingMessages.js: the title of each Discord message, t(`coaching.message.${kind}.title`)
   'coaching.message.': ['accepted', 'declined', 'cancelled', 'request', 'withdrawn'].map((kind) => `${kind}.title`),
+  // routes/coachingDashboard.js: the bot's missing permissions on the Coaching category (discord.CATEGORY_PERMISSIONS + manage_roles)
+  'coaching.dashboard.permission.': ['manage_channels', 'manage_permissions', 'view_channel', 'connect', 'speak', 'send_messages', 'attach_files', 'read_message_history', 'manage_roles'],
+  // routes/coachingDashboard.js: the schedule's room errors and transcript statuses
+  'coaching.dashboard.roomError.': ['missing_permissions', 'viewer_not_member', 'discord_down', 'failed'],
+  'coaching.dashboard.transcript.': ['sent', 'partial', 'failed', 'no_intent', 'no_channel'],
   'overlayBuilder.sounds.': alertStyles.soundGroups().flatMap((group) => group.sounds),
 };
 

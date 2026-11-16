@@ -26,12 +26,19 @@ before(() => {
     constructor() {
       this.users = { send: (id, payload) => { fake.sent.push([id, payload]); return fake.sendImpl ? fake.sendImpl(id, payload) : Promise.resolve({}); } };
       this.guilds = { cache: fake.guilds };
+      this.options = {};
     }
     isReady() { return fake.ready; }
   }
   Module._load = function (request, parent, isMain) {
     if (request === 'discord.js' && parent && parent.filename === DISCORD_FILE) {
-      return { Client, GatewayIntentBits: { Guilds: 1, GuildMembers: 2, GuildVoiceStates: 4 }, EmbedBuilder: class {} };
+      const flags = ['ViewChannel', 'Connect', 'Speak', 'SendMessages', 'AttachFiles', 'ReadMessageHistory', 'ManageChannels', 'ManageRoles'];
+      return {
+        Client, GatewayIntentBits: { Guilds: 1, GuildMembers: 2, GuildVoiceStates: 4, MessageContent: 8 }, EmbedBuilder: class {},
+        IntentsBitField: class { constructor(list) { this.list = list; } freeze() { return this; } },
+        ChannelType: { GuildVoice: 2, GuildCategory: 4 },
+        PermissionFlagsBits: Object.fromEntries(flags.map((f, i) => [f, 1 << i])),
+      };
     }
     return origLoad(request, parent, isMain);
   };
@@ -117,5 +124,63 @@ describe('fetchInvite', () => {
     assert.deepEqual(await discord.fetchInvite('zzz'), { ok: false, reason: 'unavailable' });
     global.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
     assert.deepEqual(await discord.fetchInvite('zzz'), { ok: false, reason: 'unavailable' });
+  });
+});
+
+describe('the coaching room helpers', () => {
+  const CATEGORY = '323456789012345678';
+  const category = (have, over = {}) => ({ id: CATEGORY, type: 4, guildId: GUILD, permissionsFor: () => ({ has: (flag) => have.includes(flag) }), ...over });
+  const ALL = [1, 2, 4, 8, 16, 32, 64, 128]; // the fake's flags: all of them
+  function guildWith(cat, { manageRoles = true } = {}) {
+    return {
+      members: { me: { permissions: { has: () => manageRoles } } },
+      channels: { fetch: async (id) => { if (id === CATEGORY && cat) return cat; const e = new Error('Unknown Channel'); e.code = 10003; throw e; } },
+    };
+  }
+
+  test('checkCategory names each missing permission, including Manage Roles in the server', async () => {
+    fake.guilds.set(GUILD, guildWith(category(ALL)));
+    assert.deepEqual(await discord.checkCategory(GUILD, CATEGORY), { ok: true });
+
+    fake.guilds.set(GUILD, guildWith(category(ALL.filter((f) => f !== 64 && f !== 16)), { manageRoles: false }));
+    assert.deepEqual(await discord.checkCategory(GUILD, CATEGORY), { ok: false, reason: 'permissions', missing: ['manage_channels', 'attach_files', 'manage_roles'] });
+  });
+
+  test('checkCategory: not a category, another server\'s, a bad id, unknown channel, and Discord not ready', async () => {
+    fake.guilds.set(GUILD, guildWith(category(ALL, { type: 0 })));
+    assert.equal((await discord.checkCategory(GUILD, CATEGORY)).reason, 'not_found');
+    fake.guilds.set(GUILD, guildWith(category(ALL, { guildId: '999999999999999999' })));
+    assert.equal((await discord.checkCategory(GUILD, CATEGORY)).reason, 'not_found');
+    assert.equal((await discord.checkCategory(GUILD, 'nope')).reason, 'not_found');
+    fake.guilds.set(GUILD, guildWith(null));
+    assert.equal((await discord.checkCategory(GUILD, CATEGORY)).reason, 'not_found');
+    fake.ready = false;
+    assert.equal((await discord.checkCategory(GUILD, CATEGORY)).reason, 'unknown');
+  });
+
+  test('a room call with Discord not ready throws not_ready, and deleting something already gone is not an error', async () => {
+    fake.ready = false;
+    await assert.rejects(discord.createRole(GUILD, 'x'), /not_ready/);
+    fake.ready = true;
+    fake.guilds.set(GUILD, { roles: { delete: async () => { throw codeError(10011); } }, channels: { delete: async () => { throw codeError(10003); } } });
+    await discord.deleteRole(GUILD, '423456789012345678');
+    await discord.deleteChannel(GUILD, '423456789012345678');
+    fake.guilds.set(GUILD, { roles: { delete: async () => { throw codeError(50013); } } });
+    await assert.rejects(discord.deleteRole(GUILD, '423456789012345678'), (e) => e.code === 50013);
+  });
+
+  test('attachments are fetched only from Discord\'s own hosts, over https, and never past the size limit', async () => {
+    const bodyOf = (...chunks) => ({ ok: true, status: 200, body: (async function* () { for (const c of chunks) yield c; })() });
+    let asked = [];
+    global.fetch = async (url) => { asked.push(String(url)); return bodyOf(Buffer.alloc(6), Buffer.alloc(6)); };
+    for (const url of ['https://evil.example/a.png', 'http://cdn.discordapp.com/a.png', 'https://cdn.discordapp.com.evil.example/a.png', 'not a url']) {
+      await assert.rejects(discord.downloadAttachment(url, { maxBytes: 100 }), /bad_/);
+    }
+    assert.deepEqual(asked, []);
+    const ok = await discord.downloadAttachment('https://cdn.discordapp.com/attachments/1/2/a.png', { maxBytes: 100 });
+    assert.equal(ok.length, 12);
+    await assert.rejects(discord.downloadAttachment('https://media.discordapp.net/a.png', { maxBytes: 10 }), /too_big/);
+    global.fetch = async () => ({ ok: false, status: 404, body: null });
+    await assert.rejects(discord.downloadAttachment('https://cdn.discordapp.com/a.png', { maxBytes: 10 }), /status_404/);
   });
 });
