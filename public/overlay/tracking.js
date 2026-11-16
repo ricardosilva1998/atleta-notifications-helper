@@ -318,7 +318,7 @@ function retryDelay(url) {
     };
   }
 
-  const api = { renderGoal, renderTracker, applyTrackerSettings, handle };
+  const api = { renderGoal, renderTracker, applyTrackerSettings, handle, retryDelay };
   window.TrackingSource = api;
   if (typeof module === 'object' && module.exports) module.exports = api;
 

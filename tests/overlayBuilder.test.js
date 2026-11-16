@@ -290,3 +290,17 @@ describe('the looks (alert styles)', () => {
     assert.match(builder, /#preview-object-host\.look > \.obj \{ width: 420px; zoom: var\(--zw, 1\); \}/);
   });
 });
+
+describe('the overlay settings preview is not an OBS source', () => {
+  const config = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'overlay-config.ejs'), 'utf8');
+  const overlay = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
+
+  test('the preview iframe adds preview=1 to the overlay URL', () => {
+    assert.match(config, /iframe\.src = overlayUrlBase \+ .*'preview=1'/);
+  });
+
+  test('the overlay opens its stream with source=alerts only when it is not a preview', () => {
+    assert.match(overlay, /isPreview = \/\[\?&\]preview=1/);
+    assert.match(overlay, /\(isPreview \? '' : '\?source=alerts'\)/);
+  });
+});

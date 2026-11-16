@@ -3404,6 +3404,17 @@ describe('channel point rewards', () => {
     assert.deepEqual(helix.calls.find((c) => c.method === 'PATCH').body, { title: 'Big Horn', is_paused: true });
   });
 
+  test('an edit holds the cooldown to Twitch\'s 7 days and refuses a chat template over the limit', async () => {
+    const rewardId = addReward(id);
+    const res = await patch(rewardId, { cooldown_seconds: 99999999 });
+    assert.equal(res.status, 200);
+    assert.equal(rewardRow(rewardId).cooldown_seconds, 604800);
+    const long = await patch(rewardId, { chat_message_template: 'x'.repeat(501) });
+    assert.equal(long.status, 400);
+    assert.equal(long.json().error, t('en', 'dashboard.settings.error.tooLong'));
+    assert.equal(rewardRow(rewardId).chat_message_template, null);
+  });
+
   test('an edit Twitch refuses is saved here but reported as an error, and the reward is marked', async () => {
     const rewardId = addReward(id);
     helix.fail.PATCH = { status: 500, message: 'Twitch is having a problem' };
@@ -3613,6 +3624,12 @@ describe('channel point rewards', () => {
       assert.equal(res.json().rewardsSwitchedOn, true);
       assert.equal(switchOf(), 1);
       assert.equal(db.getRewards(id).length, 1);
+    });
+
+    test('the cooldown is held to 7 days', async () => {
+      const res = await upload(id, { cooldown_seconds: '99999999' });
+      assert.equal(res.status, 200);
+      assert.equal(db.getRewards(id)[0].cooldown_seconds, 604800);
     });
 
     test('a later reward leaves the switch as the streamer set it', async () => {
