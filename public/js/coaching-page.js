@@ -151,6 +151,9 @@
     var unverified = $('cz-unverified');
     unverified.textContent = fill(T.unverified, fields());
     show(unverified, state.member === null);
+    var unverified3 = $('cz-unverified-3'); // the same warning where a viewer whose membership is unknown starts
+    unverified3.textContent = unverified.textContent;
+    show(unverified3, state.member === null);
     $('cz-next-2').disabled = state.member === false;
 
     // Step 3: length

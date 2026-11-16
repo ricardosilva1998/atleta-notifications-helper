@@ -423,3 +423,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - The feature doc now describes the four steps, a new "My bookings" section, the coach-less sign-in and sign-out, the DM link to `/my-bookings?booking=<id>`, the PayPal return landing on My bookings, the routes and the tests.
 - The deploy note says no schema change and lists the three live checks; payer details still go only to the booking's coach.
 **Open:** none
+
+### 2026-11-16 19:00 — team-qa
+**Task:** T8, QA of the booking steps and My bookings: full suite, time-of-day runs, two clean boots, browser walk at 1600 and 375 px
+**Tests added/changed:** none in the repo (harness and screenshots in the gitignored `.superpowers/sdd/2026-11-16-coaching-booking-in-steps/`)
+**Suite result:** `node --test "src/**/*.test.js" "tests/**/*.test.js"` on a scratch copy (Node 26, better-sqlite3 rebuilt there; bridge tests not copied): 4055 tests, 4054 pass, 0 fail, 1 pre-existing skip. The 12 coaching, My bookings, auth and home test files (350 tests) run with Date shifted to 00:10, 00:00, 03:29, 06:30, 12:00, 16:40, 23:50 and 23:59 UTC: 350 pass each time. Two boots on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** 39 walk checks (Discord and PayPal stubbed, membership steered per viewer), 0 failed, no horizontal scroll, no console errors: signed out shows step 1 only; a non-member sees step 2 with Next disabled, Check again while still outside keeps it disabled, after joining Next enables and step 3 follows; unknown membership may go on; member starts at step 3, Back keeps the length, Send lands on `/my-bookings?booking=<id>&new=1` with the request on top as waiting; the coach's accept DM links `/my-bookings?booking=<id>`; My bookings across two coaches: Pay (PayPal return lands on My bookings with the paid notice, booking confirmed), Withdraw, accept a proposal, pick a new time, cancelled reason, refund line; home entry, Connect Discord with no coach, back on My bookings with the list.
+**Bugs found:** [P3, fixed] A viewer whose membership is unknown starts at step 3 and never saw the "could not check" warning (it sat only in step 2, reachable by Back). Added the same line to step 3 (`src/views/coaching.ejs` `#cz-unverified-3`, `public/js/coaching-page.js`); walk and 156 related tests pass.
+**Open:** none
