@@ -19,8 +19,13 @@ const NOTE_MAX = 300;
 const WHERE_MAX = 150;
 const DAYS_OFF_MAX = 60;
 const INVITE_CHECK_MS = 3600000;
-const HOLDING = ['waiting', 'awaiting_payment', 'confirmed'];
-const STATES = ['waiting', 'awaiting_payment', 'confirmed', 'declined', 'cancelled', 'withdrawn', 'expired'];
+const HOLDING = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling'];
+const STATES = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling', 'declined', 'cancelled', 'withdrawn', 'expired', 'not_rescheduled'];
+// A proposal nobody answers lapses after 48 h; a reschedule with no agreement closes after 7 days.
+const PROPOSAL_LAPSE_MS = 48 * 3600e3;
+const RESCHEDULE_WINDOW_MS = 7 * 86400e3;
+const CANCEL_REASON_MAX = 500;
+const PROPOSAL_NOTE_MAX = 300;
 const PRICE_MAX_CENTS = 100000;
 const PAY_WINDOW_MS = 2 * 3600e3;
 const PAY_CUTOFF_MS = 15 * 60e3;
@@ -139,6 +144,12 @@ function parseNote(text) {
   return note === null ? { ok: false, code: 'bad_note' } : { ok: true, note };
 }
 
+// The coach's reason for a cancel: required, 1 to CANCEL_REASON_MAX characters, line breaks to spaces.
+function parseCancelReason(text) {
+  const reason = cleanText(text, CANCEL_REASON_MAX);
+  return reason ? { ok: true, reason } : { ok: false, code: 'bad_reason' };
+}
+
 const pad = (n, width = 2) => String(n).padStart(width, '0');
 
 function localDateOf(ms, timeZone) {
@@ -190,6 +201,53 @@ function freeStarts({ hours, timeZone, daysOff, held, now, minutes }) {
   return starts;
 }
 
+// The viewer's free starts while rescheduling: the same as a booking's, never the session's original time.
+function viewerRescheduleStarts({ originalStartsAt, ...args }) {
+  return freeStarts(args).filter((s) => s !== originalStartsAt);
+}
+
+// The coach's starts: every half hour (in their zone) from an hour ahead to the 14-day horizon, whatever their hours or
+// days off say, not overlapping a held booking. The original time is allowed.
+function coachProposalStarts({ timeZone, held, now, minutes }) {
+  const step = STEP_MINUTES * MINUTE_MS;
+  const first = now + LEAD_MS;
+  const last = now + HORIZON_DAYS * DAY_MS;
+  const starts = [];
+  const off0 = offsetAt(first, timeZone);
+  let s = Math.ceil((first + off0) / step) * step - off0;
+  for (; s <= last; s += step) {
+    if (s < first || (s + offsetAt(s, timeZone)) % step !== 0) continue;
+    const end = s + minutes * MINUTE_MS;
+    if (held.some((h) => s < h.startsAt + h.minutes * MINUTE_MS && h.startsAt < end)) continue;
+    starts.push(s);
+  }
+  return starts;
+}
+
+// A session can be rescheduled while confirmed and before its start.
+function canReschedule(booking, now) {
+  return booking.status === 'confirmed' && booking.starts_at > now;
+}
+
+// The coach can cancel a request or a confirmed session before its start, and a rescheduling one at any time.
+function canCoachCancel(booking, now) {
+  if (booking.status === 'rescheduling') return true;
+  return ['waiting', 'awaiting_payment', 'confirmed'].includes(booking.status) && booking.starts_at > now;
+}
+
+// What the minute tick does with a rescheduling booking: close it (7 days), drop a proposal that came within the lead
+// time or went unanswered for 48 h (told apart by whose it was), or nothing.
+function rescheduleDue(booking, now) {
+  if (booking.status !== 'rescheduling') return null;
+  if (booking.reschedule_started_at != null && booking.reschedule_started_at + RESCHEDULE_WINDOW_MS <= now) return 'close';
+  if (booking.proposal_starts_at == null) return null;
+  if (booking.proposal_starts_at < now + LEAD_MS) return 'too_close';
+  if (booking.proposal_at != null && booking.proposal_at + PROPOSAL_LAPSE_MS <= now) {
+    return booking.proposal_by === 'viewer' ? 'lapse_viewer' : 'lapse_coach';
+  }
+  return null;
+}
+
 // A stored 'waiting' whose start has come is 'unanswered' (never stored).
 function bookingState(booking, now) {
   if (booking.status === 'waiting' && booking.starts_at <= now) return 'unanswered';
@@ -216,8 +274,8 @@ function bookable(settings, claimedGuildIds) {
 
 module.exports = {
   LENGTHS, STEP_MINUTES, HORIZON_DAYS, LEAD_MS, MAX_UPCOMING, MAX_REQUESTS_PER_DAY, NOTE_MAX, WHERE_MAX, DAYS_OFF_MAX,
-  INVITE_CHECK_MS, HOLDING, STATES, DEFAULT_HOURS, DEFAULT_LENGTHS, PRICE_MAX_CENTS, PAY_WINDOW_MS,
+  INVITE_CHECK_MS, HOLDING, STATES, PROPOSAL_LAPSE_MS, RESCHEDULE_WINDOW_MS, CANCEL_REASON_MAX, PROPOSAL_NOTE_MAX, DEFAULT_HOURS, DEFAULT_LENGTHS, PRICE_MAX_CENTS, PAY_WINDOW_MS,
   parseLengths, lengthsFor, payBy, canAcceptPaid,
-  parseHours, parseDaysOff, parseInvite, parseWhere, parseNote,
-  localDateOf, localInstant, freeStarts, bookingState, outsideHours, bookable,
+  parseHours, parseDaysOff, parseInvite, parseWhere, parseNote, parseCancelReason,
+  localDateOf, localInstant, freeStarts, viewerRescheduleStarts, coachProposalStarts, canReschedule, canCoachCancel, rescheduleDue, bookingState, outsideHours, bookable,
 };

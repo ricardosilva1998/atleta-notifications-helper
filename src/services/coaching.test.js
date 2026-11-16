@@ -172,7 +172,7 @@ test('the default lengths: 1 h to 5 h on at the owner\'s prices, 30 min off, and
   assert.equal(C.lengthsFor({ lengths: JSON.stringify(saved) })[60].price, 1);
   C.lengthsFor(null)[60].price = 1;
   assert.equal(C.lengthsFor(null)[60].price, 2500, 'the defaults are never shared');
-  assert.deepEqual(C.HOLDING, ['waiting', 'awaiting_payment', 'confirmed']);
+  assert.deepEqual(C.HOLDING, ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling']);
   assert.ok(C.STATES.includes('awaiting_payment') && C.STATES.includes('expired'));
 });
 
@@ -219,4 +219,71 @@ test('freeStarts lists 5 h starts only where the session ends inside the window'
   const first = new Date(starts[0]);
   assert.equal(first.getUTCHours() * 60 + first.getUTCMinutes(), 600);
   assert.ok(starts.every((s) => { const d = new Date(s); return d.getUTCHours() * 60 + d.getUTCMinutes() + 300 <= 1320; }));
+});
+
+test('states and holding include rescheduling; not_rescheduled is a state that holds nothing', () => {
+  assert.ok(C.HOLDING.includes('rescheduling'));
+  assert.ok(C.STATES.includes('rescheduling') && C.STATES.includes('not_rescheduled'));
+  assert.ok(!C.HOLDING.includes('not_rescheduled'));
+  assert.equal(C.PROPOSAL_LAPSE_MS, 48 * 3600e3);
+  assert.equal(C.RESCHEDULE_WINDOW_MS, 7 * 86400e3);
+  assert.equal(C.CANCEL_REASON_MAX, 500);
+  assert.equal(C.PROPOSAL_NOTE_MAX, 300);
+});
+
+test('viewerRescheduleStarts never offers the original time or a held one', () => {
+  const now = at('2026-11-02T00:00:00Z');
+  const hours = C.DEFAULT_HOURS.map((d) => ({ ...d, start: 600, end: 1320 }));
+  const args = { hours, timeZone: 'UTC', daysOff: [], held: [], now, minutes: 60 };
+  const all = C.freeStarts(args);
+  const original = all[5];
+  const starts = C.viewerRescheduleStarts({ ...args, originalStartsAt: original });
+  assert.equal(starts.includes(original), false);
+  assert.equal(starts.length, all.length - 1);
+  const heldOne = { startsAt: all[8], minutes: 60 };
+  assert.equal(C.viewerRescheduleStarts({ ...args, held: [heldOne], originalStartsAt: original }).includes(all[8]), false);
+});
+
+test('coachProposalStarts: any half hour from an hour ahead to 14 days, outside hours and on days off, never held', () => {
+  const now = at('2026-11-02T10:10:00Z');
+  const held = [{ startsAt: at('2026-11-03T12:00:00Z'), minutes: 60 }];
+  const starts = C.coachProposalStarts({ timeZone: 'UTC', held, now, minutes: 60 });
+  assert.equal(starts[0], at('2026-11-02T11:30:00Z'), 'the first half hour at least an hour away');
+  assert.ok(starts.every((s) => s >= now + 3600e3 && s <= now + 14 * 86400e3));
+  assert.ok(starts.every((s) => s % 1800e3 === 0));
+  assert.ok(starts.includes(at('2026-11-02T03:00:00Z') + 86400e3), 'outside weekly hours');
+  assert.ok(starts.includes(at('2026-11-07T14:00:00Z')), 'a Saturday, a day the default week has off');
+  assert.equal(starts.includes(at('2026-11-03T12:00:00Z')), false);
+  assert.equal(starts.includes(at('2026-11-03T11:30:00Z')), false, 'overlaps the held hour');
+  assert.equal(starts.includes(at('2026-11-03T13:00:00Z')), true);
+  const zoned = C.coachProposalStarts({ timeZone: 'Asia/Kathmandu', held: [], now, minutes: 30 });
+  assert.ok(zoned.every((s) => (s + 5.75 * 3600e3) % 1800e3 === 0));
+});
+
+test('canReschedule and canCoachCancel', () => {
+  const now = 1000;
+  assert.equal(C.canReschedule({ status: 'confirmed', starts_at: now + 1 }, now), true);
+  assert.equal(C.canReschedule({ status: 'confirmed', starts_at: now }, now), false);
+  assert.equal(C.canReschedule({ status: 'waiting', starts_at: now + 1 }, now), false);
+  assert.equal(C.canReschedule({ status: 'rescheduling', starts_at: now + 1 }, now), false);
+  for (const st of ['waiting', 'awaiting_payment', 'confirmed']) {
+    assert.equal(C.canCoachCancel({ status: st, starts_at: now + 1 }, now), true, st);
+    assert.equal(C.canCoachCancel({ status: st, starts_at: now - 1 }, now), false, st);
+  }
+  assert.equal(C.canCoachCancel({ status: 'rescheduling', starts_at: now - 5 }, now), true);
+  for (const st of ['declined', 'cancelled', 'withdrawn', 'expired', 'not_rescheduled']) assert.equal(C.canCoachCancel({ status: st, starts_at: now + 1 }, now), false, st);
+});
+
+test('rescheduleDue: close at 7 days, too close, 48 h lapse by side, otherwise nothing', () => {
+  const H = 3600e3; const now = 1e12;
+  const b = (over) => ({ status: 'rescheduling', reschedule_started_at: now - H, proposal_starts_at: now + 20 * H, proposal_by: 'coach', proposal_at: now - H, ...over });
+  assert.equal(C.rescheduleDue(b({}), now), null);
+  assert.equal(C.rescheduleDue({ status: 'confirmed' }, now), null);
+  assert.equal(C.rescheduleDue(b({ proposal_starts_at: null, proposal_by: null, proposal_at: null }), now), null);
+  assert.equal(C.rescheduleDue(b({ reschedule_started_at: now - 7 * 24 * H }), now), 'close');
+  assert.equal(C.rescheduleDue(b({ reschedule_started_at: now - 7 * 24 * H, proposal_starts_at: null }), now), 'close');
+  assert.equal(C.rescheduleDue(b({ proposal_starts_at: now + 30 * 60e3 }), now), 'too_close');
+  assert.equal(C.rescheduleDue(b({ proposal_at: now - 48 * H }), now), 'lapse_coach');
+  assert.equal(C.rescheduleDue(b({ proposal_at: now - 48 * H, proposal_by: 'viewer' }), now), 'lapse_viewer');
+  assert.equal(C.rescheduleDue(b({ proposal_at: now - 47 * H }), now), null);
 });

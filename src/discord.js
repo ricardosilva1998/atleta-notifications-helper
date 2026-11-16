@@ -426,6 +426,19 @@ async function deleteRole(guildId, roleId) {
   }
 }
 
+// A rename keeps everything else of the role or channel as it is. Discord's own refusal is thrown to the caller.
+async function renameRole(guildId, roleId, name) {
+  if (!isSnowflake(roleId)) return;
+  const guild = readyGuild(guildId);
+  await withDeadline(guild.roles.edit(roleId, { name, reason: 'Atleta coaching session moved' }), ROOM_DEADLINE_MS);
+}
+
+async function renameChannel(guildId, channelId, name) {
+  if (!isSnowflake(channelId)) return;
+  const guild = readyGuild(guildId);
+  await withDeadline(guild.channels.edit(channelId, { name, reason: 'Atleta coaching session moved' }), ROOM_DEADLINE_MS);
+}
+
 async function addRoleToMember(guildId, userId, roleId) {
   const guild = readyGuild(guildId);
   const member = await withDeadline(guild.members.fetch(userId), ROOM_DEADLINE_MS);
@@ -512,4 +525,4 @@ function guildName(guildId) {
   return guild ? guild.name : null;
 }
 
-module.exports = { client, hasMessageContent, dropMessageContent, isReady, listCategories, checkCategory, createRole, deleteRole, addRoleToMember, createVoiceChannel, deleteChannel, fetchAllMessages, downloadAttachment, CATEGORY_PERMISSIONS, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };
+module.exports = { client, hasMessageContent, dropMessageContent, isReady, listCategories, checkCategory, createRole, deleteRole, renameRole, renameChannel, addRoleToMember, createVoiceChannel, deleteChannel, fetchAllMessages, downloadAttachment, CATEGORY_PERMISSIONS, fetchGuildChannel, streamerGuildForChannel, sendToGuildChannel, sendDirectMessage, isGuildMember, fetchInvite, guildName, sendNotification, escapeLinkText, buildEmbed, buildRecapEmbed, buildWeeklyDigestEmbed, buildMilestoneEmbed, buildInstagramEmbed, buildTikTokEmbed, buildTwitterEmbed, buildIracingResultEmbed, formatLapTime };

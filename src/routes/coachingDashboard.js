@@ -3,9 +3,9 @@
 // The streamer's coaching page, /dashboard/coaching, and its JSON routes (docs/superpowers/specs/2026-10-29-coaching-
 // design.md, "The streamer's side" and "A dead invite"), mounted inside the dashboard router, so behind its login, the
 // disabled-account check and CSRF. The page (views/coaching-dashboard.ejs) is drawn by public/js/coaching-dashboard.js
-// from window.COACHING_DASHBOARD_DATA: the Schedule (the bookings to come, grouped by day in the streamer's zone, and
-// the last 30 days below) and When I coach (the weekly hours, the zone, the days off, where we meet, the booking
-// link). Every refusal is { ok: false, code, error }, the error being the code's text in the page's language. Times
+// from window.COACHING_DASHBOARD_DATA, in four tabs: Bookings (the bookings to come, grouped by day in the streamer's
+// zone, and the last 30 days below), Schedule (the weekly hours, the zone, the days off), Price (the lengths) and
+// Settings (where we meet, the booking link). Every refusal is { ok: false, code, error }, the error being the code's text in the page's language. Times
 // travel as UTC milliseconds.
 
 const { Router } = require('express');
@@ -46,6 +46,17 @@ const REFUSALS = {
   no_paypal: [409, 'coaching.dashboard.error.no_paypal'],
   too_close: [409, 'coaching.dashboard.error.too_close'],
   paid: [409, 'coaching.dashboard.error.paid'],
+  bad_reason: [400, 'coaching.dashboard.error.bad_reason'],
+  not_pending: [409, 'coaching.dashboard.error.not_pending'],
+  not_confirmed: [409, 'coaching.dashboard.error.not_active'],
+  bad_time: [409, 'coaching.error.taken'],
+  taken: [409, 'coaching.error.taken'],
+  bad_note: [400, 'coaching.error.bad_note'],
+  bad_way: [400, 'coaching.page.failed'],
+  not_rescheduling: [409, 'coaching.error.not_rescheduling'],
+  not_yours_to_answer: [409, 'coaching.error.not_yours_to_answer'],
+  no_proposal: [409, 'coaching.error.no_proposal'],
+  proposal_too_close: [409, 'coaching.error.proposal_too_close'],
   bad_category: [400, 'coaching.dashboard.error.bad_category'],
   category_not_found: [400, 'coaching.dashboard.error.category_not_found'],
   category_permissions: [400, 'coaching.dashboard.error.category_permissions'],
@@ -80,10 +91,21 @@ const TEXT_KEYS = {
   saved: 'coaching.dashboard.saved', savedOpened: 'coaching.dashboard.savedOpened', savedUnchecked: 'coaching.dashboard.savedUnchecked',
   outsideSaved: 'coaching.dashboard.outsideSaved', copied: 'coaching.dashboard.copied',
   sessionEnded: 'coaching.dashboard.sessionEnded', failed: 'coaching.page.failed', offline: 'coaching.page.offline',
+  cancelTitle: 'coaching.dashboard.cancelTitle', reasonRequired: 'coaching.dashboard.error.bad_reason', reasonGiven: 'coaching.dashboard.reasonGiven',
+  reschedule: 'coaching.dashboard.reschedule', rescheduleTitle: 'coaching.dashboard.rescheduleTitle', proposeAnotherTitle: 'coaching.dashboard.proposeAnotherTitle',
+  rescheduleWayAsk: 'coaching.dashboard.rescheduleWayAsk', rescheduleLoading: 'coaching.dashboard.rescheduleLoading', rescheduleNoTimes: 'coaching.dashboard.rescheduleNoTimes',
+  reschedCoachProposed: 'coaching.dashboard.reschedCoachProposed', reschedViewerProposed: 'coaching.dashboard.reschedViewerProposed',
+  reschedWaitingViewer: 'coaching.dashboard.reschedWaitingViewer', reschedEnds: 'coaching.dashboard.reschedEnds',
+  acceptProposal: 'coaching.dashboard.acceptProposal', proposeAnother: 'coaching.dashboard.proposeAnother',
+  proposalAccepted: 'coaching.dashboard.proposalAccepted', proposalSent: 'coaching.dashboard.proposalSent', askSent: 'coaching.dashboard.askSent',
+  refundPending: 'coaching.dashboard.refundPending', refunded: 'coaching.dashboard.refunded', refundedButton: 'coaching.dashboard.refundedButton',
+  refundTitle: 'coaching.dashboard.refundTitle', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
+  refundCapture: 'coaching.dashboard.refundCapture', refundConfirm: 'coaching.dashboard.refundConfirm', refundedDone: 'coaching.dashboard.refundedDone',
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
   cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
+  rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
 const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'failed'];
 const TRANSCRIPT_STATUSES = ['sent', 'partial', 'failed', 'no_intent', 'no_channel'];
@@ -141,14 +163,20 @@ function moneyView(streamer, settings) {
 const rulesOf = (settings) => ({ hours: settings.hours, timeZone: settings.time_zone, daysOff: settings.days_off });
 
 // Waiting or confirmed, not started, and no longer inside the hours (a day off or a shorter window added after it).
+// A rescheduling booking holds its proposal's time (nothing without one), so that is the time tested.
 function isOutside(row, rules, now) {
-  return coaching.HOLDING.includes(row.status) && row.starts_at > now && coaching.outsideHours(row, rules);
+  if (!coaching.HOLDING.includes(row.status)) return false;
+  const at = row.status === 'rescheduling' ? row.proposal_starts_at : row.starts_at;
+  return at != null && at > now && coaching.outsideHours({ starts_at: at, minutes: row.minutes }, rules);
 }
 
+// Where the schedule places a row: a rescheduling one by its proposal when there is one, else its original time.
+const placedAt = (row) => (row.status === 'rescheduling' && row.proposal_starts_at != null ? row.proposal_starts_at : row.starts_at);
+
 // A booking as the schedule shows it: the booking page's view plus whether it fell outside the hours.
-function viewOf(row, settings, now, room) {
+function viewOf(row, settings, now, room, payments) {
   const rm = room === undefined ? db.getCoachingRoom(row.id) : room;
-  return { ...coachingBookings.bookingView(row, now, rm), outside: settings ? isOutside(row, rulesOf(settings), now) : false };
+  return { ...coachingBookings.bookingView(row, now, rm, payments ? { payments } : {}), outside: settings ? isOutside(row, rulesOf(settings), now) : false };
 }
 
 // The bookings not over yet, by day in the streamer's zone (in time order), and those of the last 30 days, newest first.
@@ -158,13 +186,20 @@ function scheduleOf(streamerId, settings, now) {
   if (!settings) return { days, past };
   const rows = db.getCoachingSchedule(streamerId, now - PAST_DAYS * DAY_MS, now + AHEAD_DAYS * DAY_MS);
   const roomOf = new Map(db.listCoachingRoomsForBookings(rows.map((r) => r.id)).map((r) => [r.booking_id, r]));
-  for (const row of rows) {
-    const view = viewOf(row, settings, now, roomOf.get(row.id) || null);
-    if (row.starts_at + row.minutes * MINUTE_MS <= now) {
+  const paymentsOf = new Map();
+  for (const p of db.listCoachingPaymentsForBookings(rows.map((r) => r.id))) {
+    if (!paymentsOf.has(p.booking_id)) paymentsOf.set(p.booking_id, []);
+    paymentsOf.get(p.booking_id).push(p);
+  }
+  // A rescheduling booking stays among the days to come until it is agreed, dropped or closed, whatever its original time.
+  const placed = rows.slice().sort((a, b) => placedAt(a) - placedAt(b));
+  for (const row of placed) {
+    const view = viewOf(row, settings, now, roomOf.get(row.id) || null, paymentsOf.get(row.id) || []);
+    if (row.status !== 'rescheduling' && row.starts_at + row.minutes * MINUTE_MS <= now) {
       past.unshift(view);
       continue;
     }
-    const date = coaching.localDateOf(row.starts_at, settings.time_zone);
+    const date = coaching.localDateOf(placedAt(row), settings.time_zone);
     let day = days[days.length - 1];
     if (!day || day.date !== date) days.push(day = { date, bookings: [] });
     day.bookings.push(view);
@@ -234,6 +269,7 @@ router.get('/coaching', async (req, res) => {
       bookingUrl: link,
       schedule: scheduleOf(streamer.id, settings, now),
       daysOffMax: coaching.DAYS_OFF_MAX,
+      limits: { cancelReasonMax: coaching.CANCEL_REASON_MAX, noteMax: coaching.PROPOSAL_NOTE_MAX, proposalLapseMs: coaching.PROPOSAL_LAPSE_MS },
     },
     coachingTexts: pageTexts(res.locals.t),
   });
@@ -319,19 +355,75 @@ router.post('/api/coaching/open', (req, res) => {
   res.json({ ok: true, open: !!open });
 });
 
-// Accept or Decline a waiting request, Cancel a waiting or confirmed booking; one of this streamer's, not started. The
-// viewer's Discord message is awaited: a message that did not go out is in the answer's messageError.
+// Accept or Decline a waiting request, Cancel a booking (waiting, awaiting payment, confirmed or rescheduling, paid
+// ones too) with a required reason; one of this streamer's. The viewer's Discord message is awaited: a message that did
+// not go out is in the answer's messageError.
 const BOOKING_ID = /^\d{1,15}$/;
 for (const action of ['accept', 'decline', 'cancel']) {
   router.post(`/api/coaching/bookings/:id/${action}`, async (req, res) => {
     const id = BOOKING_ID.test(req.params.id) ? Number(req.params.id) : 0;
     if (!id) return refuse(res, 'not_found');
     const now = Date.now();
-    const result = await coachingBookings[action](req.streamer, id, { now });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const result = await coachingBookings[action](req.streamer, id, action === 'cancel' ? { now, reason: body.reason } : { now });
     if (!result.ok) return refuse(res, result.code);
     res.json({ ok: true, booking: viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) });
   });
 }
+
+// Reschedule (the coach starts it on a confirmed session before its start): JSON { way: 'propose' | 'ask', startsAt?, note? };
+// propose answers the viewer's proposal with a different time; accept-proposal takes the viewer's; proposal-starts lists
+// the half hours the coach may offer (milliseconds). One of this streamer's bookings only.
+const startOf = (body) => (body && Number.isInteger(body.startsAt) ? body.startsAt : null);
+const bodyOf = (req) => (req.body && typeof req.body === 'object' ? req.body : {});
+const bookingIdOf = (req) => (BOOKING_ID.test(req.params.id) ? Number(req.params.id) : 0);
+const answer = (req, res, result, now) => {
+  if (!result.ok) return refuse(res, result.code);
+  return res.json({ ok: true, booking: viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) });
+};
+
+router.post('/api/coaching/bookings/:id/reschedule', async (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  const body = bodyOf(req);
+  answer(req, res, await coachingBookings.startReschedule(req.streamer, id, { way: body.way, startsAt: startOf(body), note: body.note, now }), now);
+});
+
+router.post('/api/coaching/bookings/:id/propose', async (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  const body = bodyOf(req);
+  answer(req, res, await coachingBookings.coachPropose(req.streamer, id, { startsAt: startOf(body), note: body.note, now }), now);
+});
+
+router.post('/api/coaching/bookings/:id/accept-proposal', async (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const now = Date.now();
+  answer(req, res, await coachingBookings.coachAccept(req.streamer, id, { now }), now);
+});
+
+router.get('/api/coaching/bookings/:id/proposal-starts', (req, res) => {
+  const id = bookingIdOf(req);
+  if (!id) return refuse(res, 'not_found');
+  const result = coachingBookings.coachStarts(req.streamer, id, { now: Date.now() });
+  if (!result.ok) return refuse(res, result.code);
+  res.json({ ok: true, minutes: result.minutes, starts: result.starts });
+});
+
+// "Refunded": the coach says they refunded one payment in PayPal. Only this streamer's payment, only from pending.
+router.post('/api/coaching/payments/:orderId/refunded', async (req, res) => {
+  const result = await coachingBookings.markRefunded(req.streamer, req.params.orderId, { now: Date.now() });
+  if (!result.ok) return refuse(res, result.code);
+  const now = Date.now();
+  res.json({
+    ok: true,
+    orderId: req.params.orderId,
+    booking: result.booking ? viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) : null,
+  });
+});
 
 // Retry room: a confirmed session's failed room is made again (the half-made role and channel are deleted first).
 router.post('/api/coaching/bookings/:id/room', async (req, res) => {

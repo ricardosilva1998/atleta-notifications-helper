@@ -9,7 +9,10 @@ opt-in: a streamer has no booking page until they save their hours the first tim
 
 Design: `docs/superpowers/specs/2026-10-29-coaching-design.md` (its mockup:
 `docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html`); plan: `docs/superpowers/plans/2026-10-29-coaching.md`. Payment, rooms and sign-in first (2026-11-16): brief and plan in
-`docs/superpowers/plans/2026-11-16-coaching-payment-rooms.md`.
+`docs/superpowers/plans/2026-11-16-coaching-payment-rooms.md`. Cancel with a reason, reschedule, refunds and the four
+tabs (2026-11-16): spec `docs/superpowers/specs/2026-11-16-coaching-cancel-reschedule-refund-design.md`, plan
+`docs/superpowers/plans/2026-11-16-coaching-cancel-reschedule-refund.md`; the coaches' guide is
+`docs/guides/coaching-for-coaches.pdf`.
 
 ## How a booking goes
 
@@ -30,10 +33,22 @@ Design: `docs/superpowers/specs/2026-10-29-coaching-design.md` (its mockup:
 6. About 30 minutes after the session ends, the bot sends the room's chat to the viewer and the coach as a text file
    and deletes the room and its role.
 
-**Cancelling.** Before payment (waiting or awaiting payment) the streamer can decline or cancel and the viewer can
-withdraw, as before. **Once paid, nobody can cancel in the app**: the routes answer `paid` (409) and the two sort it
-out on Discord. Atleta cannot refund (the money is in the streamer's PayPal). Bookings confirmed before this release
-(no price, nothing paid) keep Cancel and Withdraw and get no room.
+**Cancelling.**
+- **The streamer** can cancel a waiting, awaiting-payment, confirmed (paid or free) or rescheduling session until it
+  starts, and **must give a reason** (1 to 500 characters, `bad_reason`; line breaks become spaces). The viewer's
+  message carries the reason. A cancelled confirmed session loses its room and role at once, with no transcript
+  (`transcript_status = cancelled`; with Discord down the room row stays `closing` and `closeDue` finishes it). A
+  cancelled **paid** session becomes **Refund pending** (below).
+- **The viewer** can withdraw only before payment (waiting, awaiting payment, or an unpaid confirmed or rescheduling
+  session, which also removes its room). **A viewer cannot cancel a paid session**: the route answers `paid` (409).
+- No ended session (cancelled, declined, withdrawn, expired, not rescheduled) shows a room link. This fixes a bug seen
+  on 2026-11-16: a cancelled free confirmed session still showed "Open the room".
+- Atleta never refunds (the money is in the streamer's PayPal): the streamer refunds in PayPal and presses
+  **Refunded**.
+- Bookings confirmed before PR #14 (no price, nothing paid) keep Cancel and Withdraw and get no room.
+
+**Rescheduling.** Only the streamer starts it, on a **confirmed** session (paid or free) before its start. See
+[Reschedule](#reschedule).
 
 A request nobody answered before its start time shows as **Not answered**. It is still stored as waiting; the state
 is worked out when it is read (`coaching.bookingState`). Nobody is messaged about it.
@@ -44,12 +59,17 @@ is worked out when it is read (`coaching.bookingState`). Nobody is messaged abou
 | Awaiting payment | `awaiting_payment` | accepted, held, waiting for the viewer's payment (`pay_by`) |
 | Confirmed | `confirmed` | paid (`paid_at` set), or a free length the streamer accepted |
 | Declined | `declined` | the streamer declined it |
-| Cancelled | `cancelled` | the streamer cancelled it (before payment) |
+| Cancelled | `cancelled` | the streamer cancelled it (with a reason; a paid one then owes a refund) |
 | Withdrawn | `withdrawn` | the viewer cancelled it (before payment) |
 | Expired | `expired` | not paid by `pay_by` |
+| Rescheduling | `rescheduling` | the streamer started a reschedule; a proposal may be waiting for an answer |
+| Not rescheduled | `not_rescheduled` | the reschedule ended without agreement (7 days) |
 | Not answered | never stored | still `waiting` when its start came |
 
-Waiting, awaiting-payment and confirmed bookings hold their time (`coaching.HOLDING`); the other states free it. A
+Waiting, awaiting-payment, confirmed and rescheduling bookings hold their time (`coaching.HOLDING`); the other states free it.
+A rescheduling booking holds its **proposal** (and nothing at all while it has none), not its original time
+(`_HELD_AT` in `db.js`, used by every overlap check and free-time list). It counts as one upcoming session of the
+viewer (`MAX_UPCOMING`) even after the original start, and its proposals are not new requests (no `too_many`). A
 booking that becomes Withdrawn also frees the viewer's place under the limit. A booking is **paid** when it has a
 recorded capture (`paid_at` not null).
 
@@ -125,14 +145,81 @@ Before that, the service refuses a time that is not among the free starts it has
 it ask whether the viewer is in the coaching server (`join_first`), so Discord is never asked about a time that could
 not be booked.
 
+## Reschedule
+
+Only the streamer starts it. Code: `coachingBookings.js` (`startReschedule`, `coachPropose`, `coachAccept`,
+`viewerPropose`, `viewerAccept`, `coachStarts`, `viewerStarts`, `runDueReschedules`), the rules in `coaching.js`.
+
+- **Start.** On a confirmed session (paid or free) before its start, the coach chooses **Propose a time** (way
+  `propose`) or **Ask the viewer to pick** (way `ask`), with an optional note (300 characters). The booking becomes
+  `rescheduling`, `reschedule_started_at` is set and `original_starts_at` keeps the old time. The room and role stay,
+  and the room's close is paused while the booking is rescheduling.
+- **Proposals.** There is one proposal on the booking (`proposal_starts_at`, `proposal_by` `coach` or `viewer`,
+  `proposal_at`, `proposal_note`); only the latest counts and a new one replaces it. It is **held** like a booking
+  (overlap checks and free-time lists treat it as taken), and the original time is released at once.
+  - The viewer picks from the coach's free starts (hours, days off, the one hour of notice, 14 days, other bookings
+    held) and **never the original time** (`GET /coaching/:username/bookings/:id/starts`).
+  - The coach picks any half-hour start in the next 14 days, at least 1 hour ahead, not held by another booking,
+    **even outside the weekly hours or on a day off** (an exception of their own), and may propose the original time,
+    which undoes a mistaken reschedule (`GET /dashboard/api/coaching/bookings/:id/proposal-starts`).
+  - Two proposals, or a proposal and a request, for overlapping times: exactly one wins (an immediate transaction like
+    `createCoachingBooking`; the loser gets `taken`, or `bad_time` for a time no longer on offer).
+- **Answers.** The side that did not propose can accept or propose another time, with a note, any number of rounds. A
+  side cannot answer its own proposal (`not_yours_to_answer`). A proposal less than 1 hour away cannot be accepted
+  (`proposal_too_close`). **Accept** makes the booking `confirmed` at the new time (`starts_at` changes only now), both
+  sides are told (with the room link), the role and channel are renamed to the new date
+  (`coaching-<discord username>-<YYYY-MM-DD>`, the naming is unchanged; a rename that fails is only logged) and
+  `close_at` moves to 30 minutes after the new end. No new payment: the length, price and payment stay.
+- **Lapses** (the minute tick, `runDueReschedules`, which survives a restart and never fails on Discord being down):
+  - a coach's proposal unanswered for **48 hours**, or whose time comes within 1 hour, is dropped and the viewer is
+    asked to pick a time instead (way `ask`, with the `?booking=<id>` link);
+  - a viewer's proposal that lapses the same way is dropped and the coach is reminded;
+  - **7 days** after the reschedule started with no agreement, the booking ends as `not_rescheduled`: the room and
+    role are deleted (no transcript), both are told, and a paid session becomes **Refund pending**.
+- **Cancel** still works during a reschedule. The viewer's Withdraw still works on an unpaid one, never on a paid one.
+- The coach's messages about a viewer's proposal, an agreement, a lapse and "not rescheduled" **always go out**, like
+  the late-payment warning, whatever "Message me about new requests" says.
+- A booking's views carry `proposal { startsAt, by, note, at }`, `rescheduleStartedAt`, `rescheduleEndsAt` and
+  `originalStartsAt` (no payer data). The 90-day cleanup uses the final `starts_at`.
+
+## Refunds
+
+Atleta **never refunds**: the viewer pays straight into the coach's PayPal, and only that account can refund it.
+Atleta records what the coach says they did and does not check PayPal. Refunds are tracked **per payment**
+(`coaching_payments`), because a booking can owe more than one (a double payment, then a cancel).
+
+- **Payer details.** When a capture is verified, the order's `payer` is stored on the payment row: `payer_name`,
+  `payer_email` (up to 254 characters) and `payer_id`. They are never logged. They go only to the booking's own coach,
+  in the `refunds` list of the schedule's booking views, and never in the viewer's views, the dashboard card's views,
+  a Discord message or a log. They are deleted with the booking (90 days after its start) and with the account
+  (Remove). There is **no backfill**: payments from before this release have no payer details and no refund step; a
+  late or double payment from before keeps its current warning.
+- **Refund pending** (`refund_status = 'pending'`, with `refund_reason`, `refund_pending_at`) is set only by:
+  a coach's cancel of a paid session; a reschedule that closes without agreement; and a late or double capture of a
+  payment (the cases that used to only message the coach). **A viewer can never start one.** The booking shows Refund
+  pending while any of its payments is pending.
+- **Refunded.** The coach refunds in PayPal, then presses **Refunded** on the schedule (after a confirmation):
+  `POST /dashboard/api/coaching/payments/:orderId/refunded` sets `refund_status = 'refunded'` and `refunded_at`, and
+  the viewer gets a message ("<coach> refunded your coaching session"). Another streamer's payment answers 404, one
+  not pending `not_pending` (409).
+- Every captured payment is in the coach's `refunds` list (status null when nothing is owed); `cardData.refundsPending`
+  counts the pending ones for the Coaching card.
+
 ## The streamer's side
 
 ### The coaching page
 
 `/dashboard/coaching` (`src/routes/coachingDashboard.js`, `src/views/coaching-dashboard.ejs`,
-`public/js/coaching-dashboard.js`) sits behind the dashboard's login and disabled-account check. It has two cards.
+`public/js/coaching-dashboard.js`) sits behind the dashboard's login and disabled-account check. It has **four tabs** (below) and, in the Bookings tab, the schedule.
 
-**Schedule.**
+**The four tabs.** Bookings (opens first), Schedule, Price and Settings. The last tab opened is remembered in
+`localStorage` (`coaching_tab`) and named on `<html data-coaching-tab>` before paint, like the dashboard's tabs; an
+unknown value opens Bookings; `?tab=` in the address wins (the card's refunds link uses `?tab=bookings`). On a phone
+the tabs are a scrollable row (arrow keys move between them). One form (`#cd-form`) wraps Schedule, Price and
+Settings, each with the same Save button and one save route; a refused save opens the tab of the field it names. The
+first save ("Save and open bookings") works from any of the three. Bookings is outside the form.
+
+**Bookings** (the schedule).
 - The bookings not over yet, grouped by day in the streamer's zone. Each shows its time, the viewer's Discord name
   and `@username`, its length, its note and its state.
 - Each booking also shows its price. Awaiting payment shows a pill with "Pay by <time>"; a paid session shows a Paid
@@ -140,9 +227,18 @@ not be booked.
 - Actions:
   - a waiting request has ✓ (Accept) and ✕ (Decline, after a confirmation). Accept answers `no_paypal` or `too_close`
     in the message line when it cannot;
-  - an awaiting-payment booking and a confirmed session that was never paid (from before this release) have Cancel
-    (after a confirmation);
-  - a **paid** session has no Cancel.
+  - **Cancel** (any waiting, awaiting-payment, confirmed or rescheduling session, paid too) opens a pop-up with a
+    required reason (500 characters); an empty reason is refused;
+  - **Reschedule** (a confirmed session before its start) opens a pop-up: "Propose a time" (a day and time from
+    `GET /dashboard/api/coaching/bookings/:id/proposal-starts`) or "Ask the viewer to pick", plus an optional note
+    (300 characters);
+  - a rescheduling session shows its state (the proposal, who made it, its note, when it lapses, and the 7-day end).
+    A viewer's proposal has **Accept** and "Propose another time" (the same pop-up, propose only).
+  The dialogs are native `<dialog>`s: Esc and a click on the backdrop close them.
+- A session that owes a refund shows **Refund pending**, then for **each pending payment** its amount, the payer's
+  PayPal name and email, the PayPal transaction (capture) id and a **Refunded** button (after a confirmation).
+  Payments from before this release have no payer details, so only the transaction id shows. A Refunded session reads
+  Refunded.
 - A paid session shows the room link, or the room's error with **Retry room** (below), then the transcript status once
   the session is over.
 - A payment that arrived for a booking already expired (and whose time is gone) shows a warning to refund it in
@@ -155,14 +251,18 @@ not be booked.
 - The page reads the bookings when it loads, from 30 days back to 60 days ahead. It does not refresh while open; the
   card is the live surface.
 
-**When I coach.**
-- **Bookings open**: its switch sits in the card's head and saves as it moves.
+**Schedule** (the second tab, When I coach).
+- **Bookings open**: its switch sits in the tab's head and saves as it moves.
 - The seven weekday rows.
+- The time zone (with the zone list `Intl` knows) and the days off.
+
+**Price** (the third tab, Lengths and prices).
 - **Lengths and prices**: six rows, each with a switch and a price in the tip page's currency. They save with the rest
   (`lengths`; `bad_lengths` for a bad price, `no_length` when all are off). The first save sets `prices_saved_at`.
 - Two notes: the PayPal email is missing (a link to `/dashboard/donations`), and "Check your prices" for a
   non-EUR currency that has not saved prices.
-- The time zone (with the zone list `Intl` knows) and the days off.
+
+**Settings** (the fourth tab, Where we meet).
 - **Where we meet**:
   - the coaching server, picked from the streamer's claimed servers the bot is in, plus the saved one while the bot
     cannot see it;
@@ -212,7 +312,9 @@ The card sits on the dashboard's Twitch tab, after Giveaways. Its files are `vie
     appears after a reload.
   - The next session (the earliest confirmed or awaiting-payment one), with "Paid <amount>" or "Awaiting payment, pay
     by <time>", and "Atleta could not message <name>" when that is so.
-  - Notes: the PayPal email missing, check your prices, and the number of sessions whose room failed.
+  - Notes: the PayPal email missing, check your prices, the number of sessions whose room failed, and **N refunds to
+    make** (`refundsPending`) with a link to `/dashboard/coaching?tab=bookings`. The card's views never carry payer
+    details.
   - The booking link with Copy and an open button.
   - The **Bookings open** switch (`POST /dashboard/api/coaching/open`; the newest value wins).
   - A tile to the coaching page.
@@ -253,11 +355,22 @@ streamer can see a 15th day: Lisbon's 18:00 to 22:00 falls between 02:00 and 06:
   - awaiting payment: **Pay <price>** and "Pay by <time>" (in the viewer's zone), shown only before the deadline;
   - confirmed: the room link (`https://discord.com/channels/<guild>/<channel>`, drawn only when it has that shape),
     or the streamer's "where" text when there is no open room;
-  - waiting and unpaid confirmed ones have Cancel until they start; a paid one has none.
+  - waiting and unpaid confirmed ones have **Withdraw** until they start; a paid one has none;
+  - cancelled by the coach: the coach's reason, then "Your coach will refund you" (Refund pending) or "Refunded". The
+    page never shows payer details;
+  - rescheduling: see below.
 - **Pay** (`POST /coaching/<login>/bookings/<id>/pay`) answers the PayPal approve address; the page goes there only if
   it is on paypal.com (the server checks too). PayPal returns to `/coaching/<login>/paid`, which captures, and the
   page opens with `?paid=1` or `?error=<code>`. `pay_unconfirmed` also carries `&order=<id>` and the page offers
   **Check again** (the same return route).
+
+**Rescheduling on the page.** A rescheduling booking shows, by case: the coach's proposal with **Accept** and
+"Propose another time"; a request to **Pick a new time** (way `ask`, or after a lapse); or the viewer's own waiting
+proposal. The picker reads `GET /coaching/<login>/bookings/<id>/starts` (the coach's free starts, never the original
+time, nothing held) and posts `POST .../propose { startsAt, note }`; Accept posts `POST .../accept-proposal`. The
+Discord message's link, `?booking=<id>`, scrolls to the booking and opens the picker when it is a "pick" case. These
+three routes share `coachingRescheduleLimiter`. **Pay** now carries a note: "<coach> will see your PayPal name and
+email, in case they need to refund you."
 
 **Join first.** Once a viewer is signed in, the page asks the bot whether they are a member of the coaching server.
 - If not, it shows "Join <server> first", the streamer's invite as a button, and "I've joined" to ask again. **Request
@@ -337,15 +450,26 @@ The Atleta bot sends them as direct messages through `src/discord.js`, the one p
 | Viewer | confirmed (payment verified) | the paid amount, when, length, the room link (`<#channel>`) or the where text |
 | Viewer | expired (not paid in time) | the booking link to pick another time |
 | Viewer | declined | "<streamer> declined your coaching request", when, length, the booking link to pick another time |
-| Viewer | cancelled by the streamer | "<streamer> cancelled your coaching session", when, length, the booking link |
+| Viewer | cancelled by the streamer | "<streamer> cancelled your coaching session", when, length, **the coach's reason**, "your coach will refund you" for a paid one, the booking link |
+| Viewer | reschedule started | way `propose`: the proposed time and note; way `ask`: the link to pick a time |
+| Viewer | a new proposal from the coach | the time, the note, the booking link |
+| Viewer | agreed | the new time and the room link |
+| Viewer | a coach proposal lapsed | pick a time instead (the link) |
+| Viewer | not rescheduled | the 7 days passed ("your coach will refund you" for a paid one) |
+| Viewer | refunded | "<streamer> refunded your coaching session" |
 | Streamer | a new request | "<viewer> asked for a coaching session", when, length, the note, a link to `/dashboard/coaching` |
 | Streamer | the viewer cancelled | "<viewer> withdrew their coaching request", when, length |
 | Streamer | paid | "<viewer> paid for their session", amount, when |
 | Streamer | not paid in time | the booking expired and the time is free again |
-| Streamer | a payment for an expired booking | refund it in PayPal (always sent, even with notifications off) |
+| Streamer | a payment for an expired booking | refund it in PayPal (always sent, even with notifications off; the payment is also marked Refund pending) |
+| Streamer | the viewer proposed a time | the time and note (always sent) |
+| Streamer | agreed | the new time (always sent) |
+| Streamer | a viewer proposal lapsed | a reminder (always sent) |
+| Streamer | not rescheduled | the 7 days passed; Refund pending for a paid one (always sent) |
 | Viewer and streamer | the transcript | the room's chat as a `.txt` file, with the shared files (below) |
 
-- **Nothing is sent** to the viewer for their own cancel, or to anyone for a request nobody answered.
+- **Nothing is sent** to the viewer for their own cancel, or to anyone for a request nobody answered. The cancel
+  reason, a proposal's note and the names go through `escapeLinkText()` like the other typed text.
 - **Languages.** The viewer's messages are in the language the booking page was in when they booked
   (`coaching_bookings.lang`). The streamer's are in the language of their last save of the coaching page
   (`coaching_settings.lang`; English until then).
@@ -416,10 +540,12 @@ alert, tip goal, tracker, voice or chat thank-you (tested).
    A COMPLETED order that fails a check is marked `refused` and logged; nothing else is recorded.
 3. **Recorded once.** The capture id is unique, so a replay or two returns at once change nothing. The booking gets
    `paid_at`, `paid_amount_cents`, `paid_currency`, `paypal_order_id`, `paypal_capture_id`, and becomes `confirmed`
-   (`recordCoachingPayment`: `recorded`, `duplicate`, `late_confirmed`, `late_issue`, `double`). The confirmation
-   messages go out and the room is made.
+   (`recordCoachingPayment`: `recorded`, `duplicate`, `late_confirmed`, `late_issue`, `double`). The payment row also
+   stores the payer's PayPal name, email and id (from the verified order; see Refunds). The confirmation messages go
+   out and the room is made.
 4. **A late capture** (the booking already expired): the payment is recorded; if its time is still free the booking is
-   confirmed, otherwise it stays expired with `payment_issue = 'late'` and the streamer is told to refund it in PayPal.
+   confirmed, otherwise it stays expired with `payment_issue = 'late'`, the payment is **Refund pending** and the
+   streamer is told to refund it in PayPal. A second capture on a paid booking (`double`) is marked pending too.
 5. **Expiry** (the tick): `expireDue` reads back every open order of an unpaid booking past `pay_by` before expiring
    it (a capture found confirms it instead). If PayPal cannot be asked, it waits up to 30 minutes past the deadline.
    The update skips a paid row, so a payment that lands in between wins.
@@ -450,6 +576,11 @@ private room, **only if the streamer set a Coaching category** (otherwise the "w
   again. Accept of a free length waits at most 8 seconds for the room link.
 - **Close.** `close_at` is the session's end plus 30 minutes. At that time the transcript is sent, then the channel and
   the role are deleted and the row is `closed`. A delete that fails stays `closing` and is retried without resending.
+- **Removal on cancel.** A coach's cancel (or a viewer's withdraw) of a confirmed or rescheduling session, and the
+  7-day close of a reschedule, delete the role and channel at once through `coachingRooms.removeFor(bookingId)`, with
+  no transcript.
+- **Reschedule.** `coachingRooms.reschedule(bookingId)` renames the role and channel to the new date, moves
+  `close_at`, and makes a room if a confirmed session has none. A rename that fails is only logged.
 - **Other removals.** Admin Remove of an account calls `coachingRooms.removeAllFor` before the rows go (best effort,
   never throws). Changing the coaching server or category leaves existing rooms until they close.
 
@@ -477,15 +608,18 @@ private room, **only if the streamer set a Coaching category** (otherwise the "w
 shutdown, `.unref()`'d, one run at a time. Each step runs on its own, so one that throws never stops the others:
 1. `expireDue`: unpaid bookings past `pay_by` expire (an open PayPal order is read back first), both sides are told;
 2. `reconcileStale`: old PayPal orders are read back;
-3. `finishOrCleanMaking`: half-made rooms from a run that is gone;
-4. `closeDue`: rooms past `close_at` get their transcripts and are deleted.
+3. `reschedules` (`runDueReschedules`): proposals past 48 hours or inside the last hour are dropped, and reschedules
+   7 days old are closed (room removed, refund pending for a paid one, both told);
+4. `finishOrCleanMaking`: half-made rooms from a run that is gone;
+5. `closeDue`: rooms past `close_at` get their transcripts and are deleted (a rescheduling session's room is skipped).
 
 None of it needs Discord to be up: the room steps wait for it.
 
 ## Routes
 
 The public routes are in `src/routes/coaching.js`, mounted at `/coaching`. They are not under `/api`, so only the
-general limit applies.
+general limit applies, except pay and return (`coachingPayLimiter`, 15 per 10 minutes) and the three reschedule routes
+(`coachingRescheduleLimiter`, 30 per 10 minutes per visitor).
 
 | Route | Does |
 |---|---|
@@ -493,6 +627,9 @@ general limit applies.
 | `GET /coaching/:username/state` | the page's state as JSON (below) |
 | `POST /coaching/:username/book` | JSON `{ startsAt, minutes, note }` → `{ ok: true, booking, unverified }` |
 | `POST /coaching/:username/bookings/:id/cancel` | the viewer's own booking, before payment and until it starts → `{ ok: true, booking }` (Withdrawn); a paid one answers `paid` |
+| `GET /coaching/:username/bookings/:id/starts` | the free starts for a reschedule of the viewer's own rescheduling booking (never the original time) → `{ ok: true, minutes, starts }` |
+| `POST /coaching/:username/bookings/:id/propose` | JSON `{ startsAt, note }` → `{ ok: true, booking }` |
+| `POST /coaching/:username/bookings/:id/accept-proposal` | accepts the coach's proposal → `{ ok: true, booking }` |
 | `POST /coaching/:username/bookings/:id/pay` | the viewer's own awaiting-payment booking → `{ ok: true, approveUrl }` (the PayPal page) |
 | `GET /coaching/:username/paid?token=<order>` | PayPal's return: captures and verifies, redirects to the page with `?paid=1` or `?error=` (`late`, `pay_invalid`, `pay_unconfirmed` (with `&order=`), `not_paid`, `paid`, `pay_closed`) |
 
@@ -500,7 +637,7 @@ general limit applies.
 `{ open, bookable, lengths: [{ minutes, priceCents }], currency, slots: { <minutes>: [...] }, viewer, member, inviteUrl, guildName, bookings, maxUpcoming, horizonDays, leadMs }`:
 - `slots` holds the free starts as UTC milliseconds for each offered length, and none while the page is not bookable;
 - `lengths` are the offered lengths only (on, and payable: a paid one needs the PayPal email);
-- a viewer's bookings carry `priceCents`, `payBy`, `paid`, `roomUrl` and, for confirmed ones, `whereText`;
+- a viewer's bookings carry `priceCents`, `payBy`, `paid`, `roomUrl` (only for confirmed or rescheduling ones), `whereText` for confirmed ones, `cancelReason`, `refundState` and `refundPending` (never payer details), and for rescheduling ones `proposal`, `rescheduleStartedAt`, `rescheduleEndsAt` and `originalStartsAt`;
 - `member` comes only with a viewer, and Discord is asked only while the page is bookable (its answer kept 30 s;
   `?recheck=1` asks again, see Join first);
 - `leadMs` is the hour of notice (`LEAD_MS`), for the page to drop starts that come inside it while it stays open;
@@ -513,10 +650,10 @@ A refusal is `{ ok: false, code, error }`, the error being the code's text in th
 
 | Code | Status |
 |---|---|
-| `bad_length`, `bad_note` | 400 |
+| `bad_length`, `bad_note`, `bad_time` (a time not on offer) | 400 |
 | `signin` | 401 |
 | `unavailable` (the page is not up), `not_found` (another viewer's booking, or another streamer's) | 404 |
-| `not_open`, `join_first`, `bad_time`, `taken`, `limit`, `too_late` (the session has started), `not_active` (already answered or withdrawn), `no_paypal`, `paid` (no cancel after payment), `not_awaiting`, `pay_closed` | 409 |
+| `not_open`, `join_first`, `bad_time`, `taken`, `limit`, `too_late` (the session has started), `not_active` (already answered or withdrawn), `no_paypal`, `paid` (no cancel after payment), `not_awaiting`, `pay_closed`, `not_rescheduling`, `no_proposal`, `not_yours_to_answer`, `proposal_too_close` | 409 |
 | `too_many` (six requests in the last 24 hours), `too_many_payments` | 429 |
 | `payment_failed` (PayPal could not make the order) | 502 |
 
@@ -530,15 +667,21 @@ The streamer's routes are in `src/routes/coachingDashboard.js`, mounted inside t
 | `POST /dashboard/api/coaching/settings` | JSON `{ timeZone, hours, daysOff, guildId, invite, where, notifyRequests, lengths, categoryId }` → `{ ok: true, settings, outsideHours, money }` (`lengths` and `categoryId` absent keep the saved ones; `categoryId: ''` clears) |
 | `POST /dashboard/api/coaching/open` | JSON `{ open }` (a strict switch value, `parseSwitch`) → `{ ok: true, open }` |
 | `POST /dashboard/api/coaching/bookings/:id/accept`, `…/decline`, `…/cancel` | → `{ ok: true, booking }`, with `messageError` when the viewer could not be messaged |
+| `POST /dashboard/api/coaching/bookings/:id/cancel` | JSON `{ reason }` (required, 1 to 500) |
+| `POST /dashboard/api/coaching/bookings/:id/reschedule` | JSON `{ way: 'propose' \| 'ask', startsAt?, note? }` → `{ ok: true, booking }` |
+| `POST /dashboard/api/coaching/bookings/:id/propose` | JSON `{ startsAt, note? }`: the coach's next proposal |
+| `POST /dashboard/api/coaching/bookings/:id/accept-proposal` | accepts the viewer's proposal |
+| `GET /dashboard/api/coaching/bookings/:id/proposal-starts` | `{ ok, minutes, starts }`: the half-hour starts the coach may propose (about 670) |
+| `POST /dashboard/api/coaching/payments/:orderId/refunded` | the coach's word that the refund was made → `{ ok, orderId, booking }` |
 | `POST /dashboard/api/coaching/bookings/:id/room` | Retry room → `{ ok: true, booking }` |
 
 Their refusal codes:
 
 | Code | Status |
 |---|---|
-| `bad_zone`, `bad_hours`, `bad_days_off`, `bad_server`, `bad_invite`, `invite_other_server`, `bad_where`, `bad_lengths`, `no_length`, `bad_category`, `category_not_found`, `category_permissions` (with `missing`), `bad_switch` | 400 |
+| `bad_reason`, `bad_way`, `bad_note`, `bad_time`, `bad_zone`, `bad_hours`, `bad_days_off`, `bad_server`, `bad_invite`, `invite_other_server`, `bad_where`, `bad_lengths`, `no_length`, `bad_category`, `category_not_found`, `category_permissions` (with `missing`), `bad_switch` | 400 |
 | `not_found` | 404 |
-| `not_set_up`, `too_late` (the session has started), `not_waiting`, `not_active`, `no_paypal`, `too_close`, `paid`, `no_category`, `room_not_failed`, `room_busy` | 409 |
+| `not_set_up`, `too_late` (the session has started), `not_waiting`, `not_active`, `no_paypal`, `too_close`, `paid`, `no_category`, `room_not_failed`, `room_busy`, `not_confirmed`, `taken`, `not_rescheduling`, `no_proposal`, `not_yours_to_answer`, `proposal_too_close`, `not_pending` | 409 |
 | `discord_down` | 503 |
 
 ## Tables
@@ -563,7 +706,10 @@ The first save opens bookings; later saves keep `open` as it is.
 - `starts_at` (UTC ms), `minutes`, `note`, `lang`, `status`, `message_error`, `decided_at`, `created_at`;
 - the price taken at request time: `price_cents`, `currency`;
 - the accept and payment: `accepted_at`, `pay_by`, `paid_at`, `paid_amount_cents`, `paid_currency`,
-  `paypal_order_id`, `paypal_capture_id`, `payment_issue` (`late`).
+  `paypal_order_id`, `paypal_capture_id`, `payment_issue` (`late`);
+- the reschedule and the cancel: `reschedule_started_at`, `reschedule_way` (`propose` or `ask`), `proposal_starts_at`,
+  `proposal_by` (`coach` or `viewer`), `proposal_at`, `proposal_note`, `original_starts_at`, `cancel_reason`. They are
+  added only when missing, with no log line.
 
 A status changes only from the states the action allows (`setCoachingBookingStatus` checks them in SQL), so two
 answers to one request cannot both win. Bookings are deleted 90 days after their start (`cleanupOldCoachingBookings`,
@@ -571,7 +717,9 @@ in the daily housekeeping of `src/index.js`).
 
 **`coaching_payments`**: one row per PayPal order, `order_id` (primary key), `booking_id`, `streamer_id`,
 `amount_cents`, `currency`, `payee_email`, `payee_merchant_id`, `status` (`created`, `captured`, `refused`),
-`capture_id` (unique when set), `created_at`, `captured_at`. Not part of `donations`. Rows still `created` after 24 hours
+`capture_id` (unique when set), `created_at`, `captured_at`, and since the cancel, reschedule and refund release
+`payer_name`, `payer_email`, `payer_id`, `refund_status` (NULL, `pending` or `refunded`), `refund_reason`,
+`refund_pending_at`, `refunded_at` (index `idx_coaching_payments_refund` on `(streamer_id, refund_status)`). Not part of `donations`. Rows still `created` after 24 hours
 are read back once and dropped by the tick.
 
 **`coaching_rooms`**: one row per room, `booking_id` (primary key), `streamer_id`, `guild_id`, `category_id`, `role_id`,
@@ -605,16 +753,17 @@ are read back once and dropped by the tick.
 
 ## Left out on purpose
 
-- **Refunds.** Atleta cannot refund: the money is in the streamer's PayPal. A late payment for an expired booking is
-  flagged for the streamer to refund there.
-- **Cancel after payment.** A paid session cannot be cancelled or withdrawn in the app; the two sort it out on
-  Discord.
+- **Automatic refunds.** Atleta cannot refund: the money is in the streamer's PayPal, and only that account (or a
+  partner PayPal has approved) can refund it. Atleta tracks Refund pending and Refunded by the coach's word and never
+  checks PayPal.
+- **The viewer cancelling a paid session** (still `paid`, 409), or starting a reschedule.
+- **Changing a session's length or price** while rescheduling, or rescheduling a request that is still waiting or
+  awaiting payment (the coach declines or cancels those).
 - **Voice recording or transcription.** Transcripts are text chat only.
 - **A staff or moderator role** for the rooms (owner and Administrators see them by Discord's rule), a payments
   history or CSV, and rooms for bookings made before this release.
 - **Reminders and calendars.** There are no reminders before a session, no calendar files (.ics) and no calendar
   sync.
-- **Rescheduling.** It is not one action: the streamer cancels and the viewer books again.
 - **Buttons in Discord.** Accept and Decline inside Discord would need Discord interactions; the message links to the
   schedule instead.
 - **Sessions of other kinds.** No group sessions, several coaches or session types.
@@ -634,7 +783,8 @@ are read back once and dropped by the tick.
 | `src/routes/auth.test.js` | the coaching sign-in creates a viewer session and no `streamers` row; a sign-in without the purpose still creates a streamer; a bad purpose is refused before Discord is asked |
 | `src/routes/coaching.test.js` | the page, `state` (with `?recheck=1`), booking and cancelling (`not_active`, `too_many`); names and notes holding `<script>` print as text |
 | `src/server.app.test.js`, `src/server.wiring.test.js` | a booking and a pay need the viewer session's CSRF token, on the real `server.js`; the pay limiter is wired; a disabled streamer's web session gives no viewer |
-| `src/routes/coachingDashboard.test.js` | the settings save, open, accept, decline and cancel, another streamer's booking, the schedule, the invite check after the page |
+| `src/routes/coachingDashboard.test.js` | the settings save, open, accept, decline and cancel (with its reason), reschedule, proposal and refund routes, another streamer's booking, the four tabs, the schedule, the invite check after the page |
+| `src/services/coachingTick.test.js` | the minute tick's steps, one failing step not stopping the others, the reschedule step |
 | `src/services/dashboardCards.test.js`, `src/routes/dashboard.test.js`, `tests/dashboardCardsCore.test.js` | the card, and the invite check after `/dashboard` is sent (never on the cards' refresh) |
 | `tests/coachingCore.test.js` | the page's day grouping across zones; the starts a page left open still offers |
 | `src/services/coachingPayments.test.js` | wrong payee, amount, currency, booking or streamer refused; a replay and two concurrent returns record once; a lost capture read back; expiry reads back first; a late capture; no `donations`, overlay or tip module touched |

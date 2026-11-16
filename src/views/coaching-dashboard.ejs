@@ -1,11 +1,27 @@
 <%- include('header', { title: t('coaching.dashboard.title'), streamer: streamer }) %>
 <%# The streamer's coaching page (routes/coachingDashboard.js GET /dashboard/coaching; the approved look: step 2 of
-    docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html). Two cards: Schedule (the bookings to come by day,
-    with Accept/Decline or Cancel, and the last 30 days) and When I coach (Bookings open, the seven weekdays, the time
-    zone, the days off, where we meet, the booking link). The server prints the frame and the form's saved values;
+    docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html), in four tabs: Bookings (the bookings to come by
+    day with Accept/Decline, Cancel with a reason, Reschedule, proposals and refunds, and the last 30 days), Schedule
+    (When I coach: Bookings open, the seven weekdays, the time zone, the days off), Price (the lengths and prices) and
+    Settings (where we meet, the booking link). Schedule, Price and Settings are one form with one save. The tab picked
+    last time (localStorage 'coaching_tab') is named on <html data-coaching-tab> before paint, like the dashboard's.
+    The server prints the frame and the form's saved values;
     public/js/coaching-dashboard.js draws the bookings, the weekday rows and the days off from
     window.COACHING_DASHBOARD_DATA (times as UTC instants, shown in the streamer's coaching zone) with
     window.COACHING_DASHBOARD_TEXTS, and puts every name and note in as text. %>
+
+<script>
+  // Names the tab to open before the tab bar is drawn: the one picked last time, else Bookings.
+  (function () {
+    var tabs = ['bookings', 'schedule', 'price', 'settings'];
+    var saved = null;
+    try { saved = localStorage.getItem('coaching_tab'); } catch (e) { /* storage refused: Bookings */ }
+    // A link that names a tab (?tab=bookings, the Coaching card's refunds) wins over the remembered one.
+    var asked = /[?&]tab=(\w+)/.exec(window.location.search);
+    if (asked && tabs.indexOf(asked[1]) >= 0) saved = asked[1];
+    document.documentElement.setAttribute('data-coaching-tab', tabs.indexOf(saved) >= 0 ? saved : 'bookings');
+  })();
+</script>
 
 <a href="/dashboard" class="cd-back">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
@@ -21,99 +37,155 @@
   <div class="cd-note warn" role="status"><span><%= t('coaching.dashboard.noServer') %></span> <a href="/dashboard"><%= t('coaching.dashboard.noServerAction') %></a></div>
 <% } %>
 <div class="cd-note warn" id="cd-no-paypal" role="status"<%= money.hasPaypal ? ' hidden' : '' %>><span><%= t('coaching.dashboard.noPaypal') %></span> <a href="/dashboard/donations"><%= t('coaching.dashboard.noPaypalAction') %></a></div>
-<div class="cd-note warn" id="cd-check-prices" role="status"<%= money.checkPrices ? '' : ' hidden' %>><span><%= t('coaching.dashboard.checkPrices', { currency: money.currency }) %></span> <a href="#cd-lengths"><%= t('coaching.dashboard.checkPricesAction') %></a></div>
-<div class="cd-note warn" id="cd-invite-broken" role="status"<%= setUp && settings.inviteOk === false ? '' : ' hidden' %>><span><%= t('coaching.dashboard.inviteBroken') %></span> <a href="#cd-invite"><%= t('coaching.dashboard.inviteFix') %></a></div>
+<div class="cd-note warn" id="cd-check-prices" role="status"<%= money.checkPrices ? '' : ' hidden' %>><span><%= t('coaching.dashboard.checkPrices', { currency: money.currency }) %></span> <a href="#cd-lengths" data-cd-tab="price"><%= t('coaching.dashboard.checkPricesAction') %></a></div>
+<div class="cd-note warn" id="cd-invite-broken" role="status"<%= setUp && settings.inviteOk === false ? '' : ' hidden' %>><span><%= t('coaching.dashboard.inviteBroken') %></span> <a href="#cd-invite" data-cd-tab="settings"><%= t('coaching.dashboard.inviteFix') %></a></div>
 
-<div class="cd-row">
-  <section class="card cd-card animate-in" aria-labelledby="cd-schedule-title">
-    <div class="cd-head">
-      <h3 class="cd-title" id="cd-schedule-title"><%= t('coaching.dashboard.schedule') %></h3>
-      <span class="cd-sub" id="cd-zone"></span>
-    </div>
-    <div id="cd-days"></div>
-    <p class="cd-empty" id="cd-empty" hidden></p>
-    <div id="cd-past-box" hidden>
-      <div class="cd-group cd-past-title"><%= t('coaching.dashboard.past') %></div>
-      <div id="cd-past"></div>
-    </div>
-    <div class="cd-msg" id="cd-schedule-msg" role="status" aria-live="polite" hidden></div>
-  </section>
+<div class="cd-tabs" role="tablist" id="cd-tabs" aria-label="<%= t('coaching.dashboard.tabs.label') %>">
+  <% for (const [_tab, _label] of [['bookings', t('coaching.dashboard.tabs.bookings')], ['schedule', t('coaching.dashboard.tabs.schedule')], ['price', t('coaching.dashboard.tabs.price')], ['settings', t('coaching.dashboard.tabs.settings')]]) { %>
+  <button type="button" class="cd-tab" role="tab" id="cd-tabbtn-<%= _tab %>" data-cd-tab="<%= _tab %>" aria-controls="cd-tab-<%= _tab %>" aria-selected="false"><%= _label %></button>
+  <% } %>
+</div>
 
-  <section class="card cd-card animate-in" aria-labelledby="cd-hours-title">
+<section class="card cd-card cd-panel" id="cd-tab-bookings" role="tabpanel" aria-labelledby="cd-tabbtn-bookings">
+  <div class="cd-head">
+    <h3 class="cd-title"><%= t('coaching.dashboard.bookings') %></h3>
+    <span class="cd-sub" id="cd-zone"></span>
+  </div>
+  <div id="cd-days"></div>
+  <p class="cd-empty" id="cd-empty" hidden></p>
+  <div id="cd-past-box" hidden>
+    <div class="cd-group cd-past-title"><%= t('coaching.dashboard.past') %></div>
+    <div id="cd-past"></div>
+  </div>
+  <div class="cd-msg" id="cd-schedule-msg" role="status" aria-live="polite" hidden></div>
+</section>
+
+<form id="cd-form" novalidate>
+  <section class="card cd-card cd-panel" id="cd-tab-schedule" role="tabpanel" aria-labelledby="cd-tabbtn-schedule">
     <div class="cd-head">
       <div class="cd-titles">
-        <h3 class="cd-title" id="cd-hours-title"><%= t('coaching.dashboard.hours') %></h3>
+        <h3 class="cd-title"><%= t('coaching.dashboard.hours') %></h3>
         <span class="cd-status" id="cd-status"></span>
       </div>
       <label class="pill-toggle" id="cd-open-switch" title="<%= t('coaching.dashboard.open') %>"<%= setUp ? '' : ' hidden' %>><input type="checkbox" role="switch" id="cd-open" aria-label="<%= t('coaching.dashboard.open') %>"<%= settings.open ? ' checked' : '' %>><span class="slider"></span></label>
     </div>
 
-    <form id="cd-form" novalidate>
-      <div class="cd-hours" id="cd-hours" role="group" aria-label="<%= t('coaching.dashboard.hours') %>"></div>
+    <div class="cd-hours" id="cd-hours" role="group" aria-label="<%= t('coaching.dashboard.hours') %>"></div>
 
-      <div class="form-group cd-field">
-        <label for="cd-zone-input"><%= t('coaching.dashboard.timeZone') %></label>
-        <input id="cd-zone-input" type="text" list="cd-zones" autocomplete="off" spellcheck="false" value="<%= settings.timeZone || '' %>">
-        <span class="cd-hint"><%= t('coaching.dashboard.timeZoneHint') %></span>
-      </div>
+    <div class="form-group cd-field">
+      <label for="cd-zone-input"><%= t('coaching.dashboard.timeZone') %></label>
+      <input id="cd-zone-input" type="text" list="cd-zones" autocomplete="off" spellcheck="false" value="<%= settings.timeZone || '' %>">
+      <span class="cd-hint"><%= t('coaching.dashboard.timeZoneHint') %></span>
+    </div>
 
-      <div class="cd-label"><%= t('coaching.dashboard.daysOff') %></div>
-      <div class="cd-chips" id="cd-daysoff"></div>
-      <div class="cd-add">
-        <input type="date" id="cd-dayoff-input" aria-label="<%= t('coaching.dashboard.dayOffLabel') %>">
-        <button type="button" class="btn btn-secondary cd-btn" id="cd-dayoff-add"><%= t('coaching.dashboard.addDayOff') %></button>
-      </div>
+    <div class="cd-label"><%= t('coaching.dashboard.daysOff') %></div>
+    <div class="cd-chips" id="cd-daysoff"></div>
+    <div class="cd-add">
+      <input type="date" id="cd-dayoff-input" aria-label="<%= t('coaching.dashboard.dayOffLabel') %>">
+      <button type="button" class="btn btn-secondary cd-btn" id="cd-dayoff-add"><%= t('coaching.dashboard.addDayOff') %></button>
+    </div>
 
-      <div class="cd-sec" id="cd-lengths"><span class="cd-label"><%= t('coaching.dashboard.lengths') %></span></div>
-      <p class="cd-hint cd-hint-top"><%= t('coaching.dashboard.lengthsHint', { currency: money.currency }) %></p>
-      <div class="cd-lengths" id="cd-lengths-list" role="group" aria-label="<%= t('coaching.dashboard.lengths') %>"></div>
-
-      <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.whereWeMeet') %></span></div>
-      <% if (servers.length) { %>
-      <div class="form-group cd-field">
-        <label for="cd-server"><%= t('coaching.dashboard.server') %></label>
-        <select id="cd-server"><% for (const server of servers) { %><option value="<%= server.id %>"<%= server.id === settings.guildId ? ' selected' : '' %>><%= server.name %></option><% } %></select>
-        <span class="cd-hint"><%= t('coaching.dashboard.serverHint') %></span>
-      </div>
-      <% } %>
-      <div class="form-group cd-field">
-        <label for="cd-category"><%= t('coaching.dashboard.category') %></label>
-        <select id="cd-category"></select>
-        <span class="cd-hint" id="cd-category-hint"><%= t('coaching.dashboard.categoryHint') %></span>
-      </div>
-      <div class="form-group cd-field">
-        <label for="cd-invite"><%= t('coaching.dashboard.invite') %></label>
-        <input id="cd-invite" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="200" placeholder="<%= t('coaching.dashboard.invitePlaceholder') %>" value="<%= settings.invite %>">
-        <span class="cd-hint"><%= t('coaching.dashboard.inviteHint') %></span>
-      </div>
-      <div class="form-group cd-field">
-        <label for="cd-where"><%= t('coaching.dashboard.whereFallback') %></label>
-        <input id="cd-where" type="text" maxlength="150" autocomplete="off" placeholder="<%= t('coaching.dashboard.wherePlaceholder') %>" value="<%= settings.where %>">
-        <span class="cd-hint"><%= t('coaching.dashboard.whereFallbackHint') %></span>
-      </div>
-      <div class="cd-switchrow">
-        <div class="cd-switchtext">
-          <span class="cd-switchname"><%= t('coaching.dashboard.notify') %></span>
-          <span class="cd-hint"><%= t('coaching.dashboard.notifyHint') %></span>
-        </div>
-        <label class="pill-toggle"><input type="checkbox" role="switch" id="cd-notify" aria-label="<%= t('coaching.dashboard.notify') %>"<%= settings.notifyRequests ? ' checked' : '' %>><span class="slider"></span></label>
-      </div>
-
-      <% if (bookingUrl) { %>
-      <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.link') %></span></div>
-      <div class="cd-link" id="cd-link"<%= setUp ? '' : ' hidden' %>>
-        <input type="text" readonly id="cd-link-input" value="<%= bookingUrl %>" aria-label="<%= t('coaching.dashboard.link') %>">
-        <button type="button" class="btn btn-secondary cd-btn" id="cd-copy"><%= t('coaching.dashboard.copy') %></button>
-      </div>
-      <p class="cd-hint" id="cd-link-hint"<%= setUp ? '' : ' hidden' %>><%= t('coaching.dashboard.linkHint') %></p>
-      <p class="cd-hint" id="cd-link-later"<%= setUp ? ' hidden' : '' %>><%= t('coaching.dashboard.linkLater') %></p>
-      <% } %>
-
-      <div class="cd-msg" id="cd-hours-msg" role="status" aria-live="polite" hidden></div>
-      <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn" id="cd-save"><%= setUp ? t('coaching.dashboard.save') : t('coaching.dashboard.saveFirst') %></button></div>
-    </form>
+    <div class="cd-msg cd-formmsg" role="status" aria-live="polite" hidden></div>
+    <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn cd-save"><%= setUp ? t('coaching.dashboard.save') : t('coaching.dashboard.saveFirst') %></button></div>
   </section>
-</div>
+
+  <section class="card cd-card cd-panel" id="cd-tab-price" role="tabpanel" aria-labelledby="cd-tabbtn-price">
+    <div class="cd-head" id="cd-lengths"><h3 class="cd-title"><%= t('coaching.dashboard.lengths') %></h3></div>
+    <p class="cd-hint cd-hint-top"><%= t('coaching.dashboard.lengthsHint', { currency: money.currency }) %></p>
+    <div class="cd-lengths" id="cd-lengths-list" role="group" aria-label="<%= t('coaching.dashboard.lengths') %>"></div>
+
+    <div class="cd-msg cd-formmsg" role="status" aria-live="polite" hidden></div>
+    <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn cd-save"><%= setUp ? t('coaching.dashboard.save') : t('coaching.dashboard.saveFirst') %></button></div>
+  </section>
+
+  <section class="card cd-card cd-panel" id="cd-tab-settings" role="tabpanel" aria-labelledby="cd-tabbtn-settings">
+    <div class="cd-head"><h3 class="cd-title"><%= t('coaching.dashboard.whereWeMeet') %></h3></div>
+    <% if (servers.length) { %>
+    <div class="form-group cd-field">
+      <label for="cd-server"><%= t('coaching.dashboard.server') %></label>
+      <select id="cd-server"><% for (const server of servers) { %><option value="<%= server.id %>"<%= server.id === settings.guildId ? ' selected' : '' %>><%= server.name %></option><% } %></select>
+      <span class="cd-hint"><%= t('coaching.dashboard.serverHint') %></span>
+    </div>
+    <% } %>
+    <div class="form-group cd-field">
+      <label for="cd-category"><%= t('coaching.dashboard.category') %></label>
+      <select id="cd-category"></select>
+      <span class="cd-hint" id="cd-category-hint"><%= t('coaching.dashboard.categoryHint') %></span>
+    </div>
+    <div class="form-group cd-field">
+      <label for="cd-invite"><%= t('coaching.dashboard.invite') %></label>
+      <input id="cd-invite" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="200" placeholder="<%= t('coaching.dashboard.invitePlaceholder') %>" value="<%= settings.invite %>">
+      <span class="cd-hint"><%= t('coaching.dashboard.inviteHint') %></span>
+    </div>
+    <div class="form-group cd-field">
+      <label for="cd-where"><%= t('coaching.dashboard.whereFallback') %></label>
+      <input id="cd-where" type="text" maxlength="150" autocomplete="off" placeholder="<%= t('coaching.dashboard.wherePlaceholder') %>" value="<%= settings.where %>">
+      <span class="cd-hint"><%= t('coaching.dashboard.whereFallbackHint') %></span>
+    </div>
+    <div class="cd-switchrow">
+      <div class="cd-switchtext">
+        <span class="cd-switchname"><%= t('coaching.dashboard.notify') %></span>
+        <span class="cd-hint"><%= t('coaching.dashboard.notifyHint') %></span>
+      </div>
+      <label class="pill-toggle"><input type="checkbox" role="switch" id="cd-notify" aria-label="<%= t('coaching.dashboard.notify') %>"<%= settings.notifyRequests ? ' checked' : '' %>><span class="slider"></span></label>
+    </div>
+
+    <% if (bookingUrl) { %>
+    <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.link') %></span></div>
+    <div class="cd-link" id="cd-link"<%= setUp ? '' : ' hidden' %>>
+      <input type="text" readonly id="cd-link-input" value="<%= bookingUrl %>" aria-label="<%= t('coaching.dashboard.link') %>">
+      <button type="button" class="btn btn-secondary cd-btn" id="cd-copy"><%= t('coaching.dashboard.copy') %></button>
+    </div>
+    <p class="cd-hint" id="cd-link-hint"<%= setUp ? '' : ' hidden' %>><%= t('coaching.dashboard.linkHint') %></p>
+    <p class="cd-hint" id="cd-link-later"<%= setUp ? ' hidden' : '' %>><%= t('coaching.dashboard.linkLater') %></p>
+    <% } %>
+
+    <div class="cd-msg cd-formmsg" role="status" aria-live="polite" hidden></div>
+    <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn cd-save"><%= setUp ? t('coaching.dashboard.save') : t('coaching.dashboard.saveFirst') %></button></div>
+  </section>
+</form>
+
+<dialog class="cd-dialog" id="cd-cancel-dialog" aria-labelledby="cd-cancel-title">
+  <form method="dialog" class="cd-dform" id="cd-cancel-form" novalidate>
+    <h3 class="cd-dtitle" id="cd-cancel-title"></h3>
+    <p class="cd-hint" id="cd-cancel-paid" hidden><%= t('coaching.dashboard.cancelPaidNote') %></p>
+    <label for="cd-cancel-reason" class="cd-dlabel"><%= t('coaching.dashboard.cancelReasonLabel') %></label>
+    <textarea id="cd-cancel-reason" rows="4" maxlength="<%= coachingData.limits.cancelReasonMax %>" required></textarea>
+    <div class="cd-count"><span class="cd-hint"><%= t('coaching.dashboard.cancelReasonHint') %></span><span class="cd-hint" id="cd-cancel-count"></span></div>
+    <div class="cd-msg" id="cd-cancel-msg" role="alert" hidden></div>
+    <div class="cd-dactions">
+      <button type="button" class="btn btn-secondary cd-btn" data-cd-close><%= t('coaching.dashboard.dialogKeep') %></button>
+      <button type="submit" class="btn btn-primary cd-btn cd-danger" id="cd-cancel-submit"><%= t('coaching.dashboard.cancelSubmit') %></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="cd-dialog" id="cd-resched-dialog" aria-labelledby="cd-resched-title">
+  <form method="dialog" class="cd-dform" id="cd-resched-form" novalidate>
+    <h3 class="cd-dtitle" id="cd-resched-title"></h3>
+    <fieldset class="cd-ways" id="cd-resched-ways">
+      <legend class="cd-dlabel"><%= t('coaching.dashboard.rescheduleHow') %></legend>
+      <label class="cd-way"><input type="radio" name="cd-way" value="propose" checked><span><%= t('coaching.dashboard.rescheduleWayPropose') %></span></label>
+      <label class="cd-way"><input type="radio" name="cd-way" value="ask"><span id="cd-way-ask"></span></label>
+    </fieldset>
+    <div id="cd-resched-pick">
+      <p class="cd-hint" id="cd-resched-loading"><%= t('coaching.dashboard.rescheduleLoading') %></p>
+      <div class="cd-pickrow" id="cd-resched-fields" hidden>
+        <div class="form-group cd-field"><label for="cd-resched-day"><%= t('coaching.dashboard.rescheduleDay') %></label><select id="cd-resched-day"></select></div>
+        <div class="form-group cd-field"><label for="cd-resched-time"><%= t('coaching.dashboard.rescheduleTime') %></label><select id="cd-resched-time"></select></div>
+      </div>
+      <span class="cd-hint" id="cd-resched-zone"></span>
+    </div>
+    <label for="cd-resched-note" class="cd-dlabel"><%= t('coaching.dashboard.rescheduleNote') %></label>
+    <textarea id="cd-resched-note" rows="3" maxlength="<%= coachingData.limits.noteMax %>"></textarea>
+    <div class="cd-count"><span></span><span class="cd-hint" id="cd-resched-count"></span></div>
+    <div class="cd-msg" id="cd-resched-msg" role="alert" hidden></div>
+    <div class="cd-dactions">
+      <button type="button" class="btn btn-secondary cd-btn" data-cd-close><%= t('coaching.dashboard.dialogClose') %></button>
+      <button type="submit" class="btn btn-primary cd-btn" id="cd-resched-submit"><%= t('coaching.dashboard.rescheduleSend') %></button>
+    </div>
+  </form>
+</dialog>
 
 <datalist id="cd-zones"></datalist>
 
@@ -130,7 +202,21 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-note { font-size: 13px; color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; }
   .cd-note.warn { color: var(--warning); border-color: rgba(247,144,9,0.25); background: var(--warning-bg); }
   .cd-note a { color: var(--accent-hover); font-weight: 600; }
-  .cd-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; align-items: start; }
+  .cd-tabs { display: flex; gap: 6px; margin: 0 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; border-bottom: 1px solid var(--border); }
+  .cd-tab { flex: none; border: 0; background: none; color: var(--text-secondary); font: 600 13px var(--font-display); padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .cd-tab:hover { color: var(--text-primary); }
+  .cd-tab:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: -2px; border-radius: 6px; }
+  .cd-panel { display: none; max-width: 760px; }
+  html[data-coaching-tab="bookings"] #cd-tab-bookings,
+  html[data-coaching-tab="schedule"] #cd-tab-schedule,
+  html[data-coaching-tab="price"] #cd-tab-price,
+  html[data-coaching-tab="settings"] #cd-tab-settings,
+  html:not([data-coaching-tab]) #cd-tab-bookings { display: block; }
+  html[data-coaching-tab="bookings"] #cd-tabbtn-bookings,
+  html[data-coaching-tab="schedule"] #cd-tabbtn-schedule,
+  html[data-coaching-tab="price"] #cd-tabbtn-price,
+  html[data-coaching-tab="settings"] #cd-tabbtn-settings,
+  html:not([data-coaching-tab]) #cd-tabbtn-bookings { color: var(--text-primary); border-bottom-color: var(--accent); }
   .cd-card { padding: 14px 16px; margin: 0; border-radius: 14px; box-shadow: var(--shadow-card); min-width: 0; font-size: 13px; line-height: 1.4; }
   .cd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .cd-titles { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -143,9 +229,9 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-past-title { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); }
   .cd-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
   .cd-group + .cd-line { border-top: 0; }
-  .cd-line.expired, .cd-line.declined, .cd-line.cancelled, .cd-line.withdrawn, .cd-line.unanswered { opacity: .6; }
+  .cd-line.expired, .cd-line.declined, .cd-line.cancelled, .cd-line.withdrawn, .cd-line.unanswered, .cd-line.not_rescheduled { opacity: .6; }
   .cd-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px; background: var(--text-muted); }
-  .cd-dot.waiting, .cd-dot.awaiting_payment { background: var(--warning); }
+  .cd-dot.waiting, .cd-dot.awaiting_payment, .cd-dot.rescheduling { background: var(--warning); }
   .cd-dot.confirmed { background: var(--success); }
   .cd-what { flex: 1; min-width: 0; }
   .cd-top { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; }
@@ -153,7 +239,7 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-name { color: var(--text-primary); overflow-wrap: anywhere; }
   .cd-what .cd-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 1px; }
   .cd-pill { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--bg-elevated); color: var(--text-secondary); }
-  .cd-pill.waiting, .cd-pill.awaiting_payment, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
+  .cd-pill.waiting, .cd-pill.awaiting_payment, .cd-pill.rescheduling, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
   .cd-pill.confirmed, .cd-pill.paid { background: var(--success-bg); color: var(--success); }
   .cd-note-text { background: var(--bg-base); border-radius: 8px; padding: 5px 8px; margin-top: 5px; color: var(--text-secondary); overflow-wrap: anywhere; white-space: pre-wrap; }
   .cd-warn { color: var(--warning); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
@@ -170,6 +256,33 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-cur { color: var(--text-muted); font-size: 12px; }
   .cd-acts { display: flex; gap: 4px; flex: none; }
   .cd-icon { width: 28px; height: 28px; border-radius: 7px; border: 0; display: inline-grid; place-items: center; font: 700 14px var(--font-body); cursor: pointer; }
+  .cd-acts { flex-wrap: wrap; justify-content: flex-end; }
+  .cd-sbtn.plain { background: var(--bg-elevated); color: var(--text-secondary); }
+  .cd-sbtn.go { background: var(--success-bg); color: var(--success); }
+  .cd-resched { background: var(--bg-base); border-radius: 8px; padding: 7px 9px; margin-top: 5px; color: var(--text-secondary); overflow-wrap: anywhere; }
+  .cd-resched p { margin: 0 0 3px; }
+  .cd-resched .cd-btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .cd-refund { border: 1px solid rgba(247,144,9,0.25); background: var(--warning-bg); border-radius: 8px; padding: 7px 9px; margin-top: 5px; overflow-wrap: anywhere; }
+  .cd-refund b { color: var(--warning); }
+  .cd-refund p { margin: 2px 0; color: var(--text-secondary); }
+  .cd-refund .cd-btnrow { margin-top: 6px; }
+  .cd-dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card, var(--bg-elevated)); color: var(--text-primary); padding: 0; margin: auto; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
+  .cd-dialog [hidden] { display: none !important; }
+  .cd-dialog::backdrop { background: rgba(0,0,0,.6); }
+  .cd-dform { padding: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+  .cd-dtitle { font: 600 15px var(--font-display); margin: 0 !important; overflow-wrap: anywhere; }
+  .cd-dlabel { font-weight: 600; font-size: 12px; padding: 0; }
+  .cd-dform textarea { width: 100%; resize: vertical; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: 13px var(--font-body); }
+  .cd-count { display: flex; justify-content: space-between; gap: 8px; }
+  .cd-dactions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .cd-danger { background: var(--danger) !important; border-color: var(--danger) !important; }
+  .cd-ways { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .cd-way { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .cd-pickrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cd-pickrow .cd-field { margin-bottom: 4px !important; }
+  .cd-pickrow select { width: 100%; }
+  @media (max-width: 420px) { .cd-pickrow { grid-template-columns: 1fr; } .cd-line { flex-wrap: wrap; } .cd-acts { width: 100%; justify-content: flex-start; } }
+  @media (max-width: 600px) { .cd-tab { min-height: 44px; } .cd-sbtn, .cd-dactions .cd-btn { min-height: 44px; padding-left: 14px; padding-right: 14px; } .cd-dform textarea, .cd-pickrow select { font-size: 16px; } .cd-way { min-height: 44px; } }
   .cd-icon.ok { background: var(--success-bg); color: var(--success); }
   .cd-icon.no { background: var(--danger-bg); color: var(--danger); }
   .cd-sbtn { border: 0; border-radius: 8px; padding: 4px 9px; font: 600 12px var(--font-body); cursor: pointer; background: var(--danger-bg); color: var(--danger); }

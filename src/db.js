@@ -4260,6 +4260,16 @@ try {
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_coaching_payments_capture ON coaching_payments(capture_id) WHERE capture_id IS NOT NULL');
   // The PayPal account id PayPal named for the payee when the order was made: the strongest proof the money reached it.
   addColumns('coaching_payments', [['payee_merchant_id', 'TEXT']]);
+  // Cancel, reschedule and refunds: the proposal lives on the booking, the refund and the payer's PayPal details on the payment.
+  addColumns('coaching_bookings', [
+    ['reschedule_started_at', 'INTEGER'], ['reschedule_way', 'TEXT'], ['proposal_starts_at', 'INTEGER'], ['proposal_by', 'TEXT'],
+    ['proposal_at', 'INTEGER'], ['proposal_note', 'TEXT'], ['cancel_reason', 'TEXT'], ['original_starts_at', 'INTEGER'],
+  ]);
+  addColumns('coaching_payments', [
+    ['payer_name', 'TEXT'], ['payer_email', 'TEXT'], ['payer_id', 'TEXT'],
+    ['refund_status', 'TEXT'], ['refund_reason', 'TEXT'], ['refund_pending_at', 'INTEGER'], ['refunded_at', 'INTEGER'],
+  ]);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_refund ON coaching_payments(streamer_id, refund_status)');
   db.exec(`
     CREATE TABLE IF NOT EXISTS coaching_rooms (
       booking_id INTEGER PRIMARY KEY,
@@ -5981,6 +5991,8 @@ function recordInviteCheck(streamerId, inviteCode, ok, checkedAt) {
 }
 
 const _HOLD_SQL = coaching.HOLDING.map((st) => `'${st}'`).join(', ');
+// The time a row holds: a rescheduling booking holds its proposal (and nothing without one), every other its start.
+const _HELD_AT = "(CASE WHEN status = 'rescheduling' THEN proposal_starts_at ELSE starts_at END)";
 
 // One viewer's requests of one streamer in the last 24 h (every status), then their upcoming ones, then the overlap.
 const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, minutes, note, lang, now, priceCents, currency }) => {
@@ -5989,12 +6001,12 @@ const _createCoachingBooking = db.transaction(({ streamerId, viewer, startsAt, m
   ).get(streamerId, viewer.discordUserId, now - 86400e3).n;
   if (recent >= coaching.MAX_REQUESTS_PER_DAY) return { ok: false, code: 'too_many' };
   const upcoming = db.prepare(
-    `SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND status IN (${_HOLD_SQL}) AND starts_at > ?`
+    `SELECT COUNT(*) AS n FROM coaching_bookings WHERE streamer_id = ? AND viewer_discord_id = ? AND status IN (${_HOLD_SQL}) AND (status = 'rescheduling' OR starts_at > ?)`
   ).get(streamerId, viewer.discordUserId, now).n;
   if (upcoming >= coaching.MAX_UPCOMING) return { ok: false, code: 'limit' };
   const end = startsAt + minutes * 60000;
   const clash = db.prepare(
-    `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND status IN (${_HOLD_SQL}) AND starts_at < ? AND starts_at + minutes * 60000 > ? LIMIT 1`
+    `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} < ? AND ${_HELD_AT} + minutes * 60000 > ? LIMIT 1`
   ).get(streamerId, end, startsAt);
   if (clash) return { ok: false, code: 'taken' };
   const info = db.prepare(`
@@ -6013,8 +6025,8 @@ function getCoachingBooking(id, streamerId) {
 
 function getHeldCoachingBookings(streamerId, fromMs) {
   return db.prepare(
-    `SELECT id, starts_at AS startsAt, minutes, status FROM coaching_bookings
-     WHERE streamer_id = ? AND status IN (${_HOLD_SQL}) AND starts_at + minutes * 60000 > ? ORDER BY starts_at`
+    `SELECT id, ${_HELD_AT} AS startsAt, minutes, status FROM coaching_bookings
+     WHERE streamer_id = ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} IS NOT NULL AND ${_HELD_AT} + minutes * 60000 > ? ORDER BY startsAt`
   ).all(streamerId, fromMs);
 }
 
@@ -6098,20 +6110,28 @@ function markCoachingPaymentRefused(orderId) {
 // 'recorded': an awaiting booking is now paid and confirmed. 'duplicate': this capture was recorded before; nothing changed.
 // 'late_confirmed' / 'late_issue': the booking had expired (or ended otherwise): the payment is kept, and the booking is
 // confirmed when its time is still free, else payment_issue = 'late'. 'double': the booking was already paid by another capture.
-const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, amountCents, currency, now }) => {
+const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, amountCents, currency, now, payer }) => {
   const booking = db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (!booking) return { ok: false, code: 'no_booking' };
   if (db.prepare('SELECT 1 FROM coaching_payments WHERE capture_id = ?').get(captureId)) return { ok: true, result: 'duplicate', booking };
+  const clip = (v, n) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null);
+  const payerName = payer ? clip(payer.name, 200) : null;
+  const payerEmail = payer ? clip(payer.email, 254) : null;
+  const payerId = payer ? clip(payer.payerId, 64) : null;
   const order = db.prepare('SELECT * FROM coaching_payments WHERE order_id = ?').get(orderId);
   if (order && (order.booking_id !== bookingId || order.streamer_id !== booking.streamer_id)) return { ok: false, code: 'mismatch' };
   if (order) {
-    db.prepare("UPDATE coaching_payments SET status = 'captured', capture_id = ?, captured_at = ? WHERE order_id = ?").run(captureId, now, orderId);
+    db.prepare("UPDATE coaching_payments SET status = 'captured', capture_id = ?, captured_at = ?, payer_name = ?, payer_email = ?, payer_id = ? WHERE order_id = ?")
+      .run(captureId, now, payerName, payerEmail, payerId, orderId);
   } else {
     db.prepare(`
-      INSERT INTO coaching_payments (order_id, booking_id, streamer_id, amount_cents, currency, payee_email, status, capture_id, created_at, captured_at)
-      VALUES (?, ?, ?, ?, ?, '', 'captured', ?, ?, ?)
-    `).run(orderId, bookingId, booking.streamer_id, amountCents, currency, captureId, now, now);
+      INSERT INTO coaching_payments (order_id, booking_id, streamer_id, amount_cents, currency, payee_email, status, capture_id, created_at, captured_at, payer_name, payer_email, payer_id)
+      VALUES (?, ?, ?, ?, ?, '', 'captured', ?, ?, ?, ?, ?, ?)
+    `).run(orderId, bookingId, booking.streamer_id, amountCents, currency, captureId, now, now, payerName, payerEmail, payerId);
   }
+  const markOwnPending = (reason) => db.prepare(
+    "UPDATE coaching_payments SET refund_status = 'pending', refund_reason = ?, refund_pending_at = ? WHERE order_id = ? AND refund_status IS NULL"
+  ).run(reason, now, orderId);
   const setPaid = (status, issue) => db.prepare(
     `UPDATE coaching_bookings SET status = ?, paid_at = ?, paid_amount_cents = ?, paid_currency = ?, paypal_order_id = ?, paypal_capture_id = ?, payment_issue = ?
      WHERE id = ?`
@@ -6119,6 +6139,7 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
   const reload = () => db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (booking.paid_at != null) {
     db.prepare("UPDATE coaching_bookings SET payment_issue = 'double' WHERE id = ?").run(bookingId);
+    markOwnPending('double');
     return { ok: true, result: 'double', booking: reload() };
   }
   if (booking.status === 'awaiting_payment') {
@@ -6128,7 +6149,7 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
   if (booking.status === 'expired' && booking.starts_at > now) {
     const end = booking.starts_at + booking.minutes * 60000;
     const clash = db.prepare(
-      `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND starts_at < ? AND starts_at + minutes * 60000 > ? LIMIT 1`
+      `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} < ? AND ${_HELD_AT} + minutes * 60000 > ? LIMIT 1`
     ).get(booking.streamer_id, bookingId, end, booking.starts_at);
     if (!clash) {
       setPaid('confirmed', null);
@@ -6136,6 +6157,7 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
     }
   }
   setPaid(booking.status, 'late');
+  markOwnPending('late');
   return { ok: true, result: 'late_issue', booking: reload() };
 });
 function recordCoachingPayment(args) { return _recordCoachingPayment.immediate(args); }
@@ -6169,7 +6191,8 @@ function listCoachingRoomsForBookings(bookingIds) {
 }
 
 function listDueCoachingRooms(now) {
-  return db.prepare("SELECT * FROM coaching_rooms WHERE state IN ('open', 'closing') AND close_at IS NOT NULL AND close_at <= ? ORDER BY close_at LIMIT 100").all(now);
+  return db.prepare(`SELECT * FROM coaching_rooms WHERE state IN ('open', 'closing') AND close_at IS NOT NULL AND close_at <= ?
+    AND booking_id NOT IN (SELECT id FROM coaching_bookings WHERE status = 'rescheduling') ORDER BY close_at LIMIT 100`).all(now);
 }
 
 function listMakingCoachingRooms(olderThanMs) {
@@ -6179,6 +6202,140 @@ function listMakingCoachingRooms(olderThanMs) {
 // Every room of a streamer that still holds a Discord role or channel, for the clean-up before the rows go.
 function listCoachingRoomsToRemove(streamerId) {
   return db.prepare("SELECT * FROM coaching_rooms WHERE streamer_id = ? AND (role_id IS NOT NULL OR channel_id IS NOT NULL) AND state != 'closed'").all(streamerId);
+}
+
+function updateCoachingRoomClose(bookingId, closeAt) {
+  return updateCoachingRoom(bookingId, { close_at: closeAt }, Date.now());
+}
+
+// Cancel, reschedule and refunds. Each function that holds time runs as one immediate transaction.
+const _holdClash = (streamerId, exceptId, startsAt, minutes) => db.prepare(
+  `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} < ? AND ${_HELD_AT} + minutes * 60000 > ? LIMIT 1`
+).get(streamerId, exceptId, startsAt + minutes * 60000, startsAt);
+
+const _markPaymentsPending = (bookingId, reason, now) => db.prepare(
+  `UPDATE coaching_payments SET refund_status = 'pending', refund_reason = ?, refund_pending_at = ?
+   WHERE booking_id = ? AND status = 'captured' AND refund_status IS NULL`
+).run(reason, now, bookingId);
+
+const _PROPOSAL_CLEAR = 'proposal_starts_at = NULL, proposal_by = NULL, proposal_at = NULL, proposal_note = NULL';
+const _cleanNote = (note) => (typeof note === 'string' && note.trim() ? note.trim() : null);
+
+// Confirmed and before its start -> rescheduling. The original time is released; a proposal (way 'propose') is held at once.
+const _startCoachingReschedule = db.transaction((id, streamerId, way, proposal, now) => {
+  const b = getCoachingBooking(id, streamerId);
+  if (!b || b.status !== 'confirmed' || b.starts_at <= now) return { ok: false, code: 'not_confirmed' };
+  if (way !== 'propose' && way !== 'ask') return { ok: false, code: 'bad_way' };
+  if (way === 'propose') {
+    if (!proposal || !Number.isInteger(proposal.startsAt)) return { ok: false, code: 'bad_time' };
+    if (_holdClash(streamerId, id, proposal.startsAt, b.minutes)) return { ok: false, code: 'taken' };
+  }
+  db.prepare(
+    `UPDATE coaching_bookings SET status = 'rescheduling', original_starts_at = starts_at, reschedule_started_at = ?, reschedule_way = ?,
+       proposal_starts_at = ?, proposal_by = ?, proposal_at = ?, proposal_note = ? WHERE id = ?`
+  ).run(now, way, way === 'propose' ? proposal.startsAt : null, way === 'propose' ? 'coach' : null,
+    way === 'propose' ? now : null, way === 'propose' ? _cleanNote(proposal.note) : null, id);
+  return { ok: true, booking: getCoachingBookingById(id) };
+});
+function startCoachingReschedule(id, streamerId, way, proposal, now) { return _startCoachingReschedule.immediate(id, streamerId, way, proposal || null, now); }
+
+// A new proposal from `by` replaces the one held; exactly one of two overlapping proposals or requests wins.
+const _proposeCoachingTime = db.transaction((id, by, startsAt, note, now) => {
+  const b = getCoachingBookingById(id);
+  if (!b || b.status !== 'rescheduling') return { ok: false, code: 'not_rescheduling' };
+  if (by !== 'coach' && by !== 'viewer') return { ok: false, code: 'bad_by' };
+  if (!Number.isInteger(startsAt)) return { ok: false, code: 'bad_time' };
+  if (_holdClash(b.streamer_id, id, startsAt, b.minutes)) return { ok: false, code: 'taken' };
+  db.prepare('UPDATE coaching_bookings SET proposal_starts_at = ?, proposal_by = ?, proposal_at = ?, proposal_note = ? WHERE id = ?')
+    .run(startsAt, by, now, _cleanNote(note), id);
+  return { ok: true, booking: getCoachingBookingById(id) };
+});
+function proposeCoachingTime(id, by, startsAt, note, now) { return _proposeCoachingTime.immediate(id, by, startsAt, note, now); }
+
+// Only the side that did not propose can accept; the proposal becomes the session's time.
+const _acceptCoachingProposal = db.transaction((id, by, now) => {
+  const b = getCoachingBookingById(id);
+  if (!b || b.status !== 'rescheduling') return { ok: false, code: 'not_rescheduling' };
+  if (b.proposal_starts_at == null) return { ok: false, code: 'no_proposal' };
+  if (b.proposal_by === by) return { ok: false, code: 'own_proposal' };
+  if (b.proposal_starts_at < now + coaching.LEAD_MS) return { ok: false, code: 'too_close' };
+  db.prepare(
+    `UPDATE coaching_bookings SET status = 'confirmed', starts_at = proposal_starts_at, ${_PROPOSAL_CLEAR},
+       reschedule_started_at = NULL, reschedule_way = NULL WHERE id = ?`
+  ).run(id);
+  return { ok: true, booking: getCoachingBookingById(id), previous: b };
+});
+function acceptCoachingProposal(id, by, now) { return _acceptCoachingProposal.immediate(id, by, now); }
+
+// A lapsed or too-close proposal: its time is freed and the session waits for a pick (way 'ask').
+const _dropCoachingProposal = db.transaction((id, now) => {
+  const b = getCoachingBookingById(id);
+  if (!b || b.status !== 'rescheduling' || b.proposal_starts_at == null) return { ok: false, code: 'no_proposal' };
+  const due = coaching.rescheduleDue(b, now);
+  if (due !== 'too_close' && due !== 'lapse_viewer' && due !== 'lapse_coach') return { ok: false, code: 'not_due' };
+  db.prepare(`UPDATE coaching_bookings SET ${_PROPOSAL_CLEAR}, reschedule_way = 'ask' WHERE id = ?`).run(id);
+  return { ok: true, booking: getCoachingBookingById(id), dropped: { by: b.proposal_by, startsAt: b.proposal_starts_at, note: b.proposal_note, at: b.proposal_at } };
+});
+function dropCoachingProposal(id, now) { return _dropCoachingProposal.immediate(id, now); }
+
+// 7 days with no agreement: not rescheduled; every captured payment of the booking owes a refund.
+const _closeCoachingReschedule = db.transaction((id, now) => {
+  const b = getCoachingBookingById(id);
+  if (!b || b.status !== 'rescheduling') return { ok: false, code: 'not_rescheduling' };
+  if (coaching.rescheduleDue(b, now) !== 'close') return { ok: false, code: 'not_due' };
+  db.prepare(`UPDATE coaching_bookings SET status = 'not_rescheduled', decided_at = ?, ${_PROPOSAL_CLEAR} WHERE id = ?`).run(now, id);
+  const pending = _markPaymentsPending(id, 'not_rescheduled', now).changes;
+  return { ok: true, booking: getCoachingBookingById(id), refundPending: pending > 0 };
+});
+function closeCoachingReschedule(id, now) { return _closeCoachingReschedule.immediate(id, now); }
+
+// The coach's cancel: waiting, awaiting payment or confirmed before the start (paid too), or rescheduling at any time.
+const _cancelCoachingBookingByCoach = db.transaction((id, streamerId, reason, now) => {
+  const info = db.prepare(
+    `UPDATE coaching_bookings SET status = 'cancelled', decided_at = ?, cancel_reason = ?, ${_PROPOSAL_CLEAR}
+     WHERE id = ? AND streamer_id = ? AND ((status IN ('waiting', 'awaiting_payment', 'confirmed') AND starts_at > ?) OR status = 'rescheduling')`
+  ).run(now, reason, id, streamerId, now);
+  if (!info.changes) return { ok: false, code: 'not_cancellable' };
+  const pending = _markPaymentsPending(id, 'cancelled', now).changes;
+  return { ok: true, booking: getCoachingBookingById(id), refundPending: pending > 0 };
+});
+function cancelCoachingBookingByCoach(id, streamerId, reason, now) { return _cancelCoachingBookingByCoach.immediate(id, streamerId, reason, now); }
+
+// Rescheduling bookings with something to act on: a lapsed or too-close proposal, or the 7 days up (the rules are coaching.rescheduleDue).
+function listDueReschedules(now) {
+  return db.prepare(
+    `SELECT * FROM coaching_bookings WHERE status = 'rescheduling' AND (
+       reschedule_started_at + ? <= ?
+       OR (proposal_starts_at IS NOT NULL AND (proposal_starts_at < ? OR proposal_at + ? <= ?))
+     ) ORDER BY reschedule_started_at LIMIT 200`
+  ).all(coaching.RESCHEDULE_WINDOW_MS, now, now + coaching.LEAD_MS, coaching.PROPOSAL_LAPSE_MS, now);
+}
+
+// Only the booking's streamer, only from pending.
+function markCoachingRefunded(orderId, streamerId, now) {
+  const info = db.prepare(
+    "UPDATE coaching_payments SET refund_status = 'refunded', refunded_at = ? WHERE order_id = ? AND streamer_id = ? AND refund_status = 'pending'"
+  ).run(now, orderId, streamerId);
+  return info.changes ? getCoachingPayment(orderId) : null;
+}
+
+// Every captured payment of the given bookings (the coach's schedule shows each one's refund state and payer).
+function listCoachingPaymentsForBookings(bookingIds) {
+  const ids = bookingIds.filter((n) => Number.isInteger(n));
+  if (!ids.length) return [];
+  return db.prepare(
+    `SELECT * FROM coaching_payments WHERE status = 'captured' AND booking_id IN (${ids.map(() => '?').join(',')}) ORDER BY captured_at`
+  ).all(...ids);
+}
+
+function listPendingCoachingRefunds(streamerId) {
+  return db.prepare(
+    "SELECT * FROM coaching_payments WHERE streamer_id = ? AND refund_status = 'pending' ORDER BY refund_pending_at LIMIT 200"
+  ).all(streamerId);
+}
+
+function countPendingCoachingRefunds(streamerId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM coaching_payments WHERE streamer_id = ? AND refund_status = 'pending'").get(streamerId).n;
 }
 
 function recordCoachingMessageError(id, error) {
@@ -7138,6 +7295,9 @@ module.exports = {
   acceptCoachingBooking, expireCoachingBooking, listExpirableCoachingBookings, getCoachingBookingById,
   createCoachingPayment, getCoachingPayment, listOpenCoachingPaymentsFor, listStaleCoachingPayments, deleteOpenCoachingPayment,
   markCoachingPaymentRefused, recordCoachingPayment,
+  updateCoachingRoomClose, startCoachingReschedule, proposeCoachingTime, acceptCoachingProposal, dropCoachingProposal,
+  closeCoachingReschedule, cancelCoachingBookingByCoach, listDueReschedules, markCoachingRefunded,
+  listPendingCoachingRefunds, countPendingCoachingRefunds, listCoachingPaymentsForBookings,
   createCoachingRoom, updateCoachingRoom, getCoachingRoom, listCoachingRoomsForBookings, listDueCoachingRooms,
   listMakingCoachingRooms, listCoachingRoomsToRemove,
   cleanupOldCoachingBookings, createViewerSession, getViewerSession, deleteViewerSession, cleanExpiredViewerSessions,

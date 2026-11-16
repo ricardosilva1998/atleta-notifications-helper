@@ -28,6 +28,8 @@
   var day = null; // the chosen day (YYYY-MM-DD in the viewer's zone)
   var pick = null; // the chosen start (UTC ms)
   var busy = false;
+  var panel = null; // the reschedule panel that is open: { id, starts, minutes, day, pick, loading }
+  var linkedBooking = C.bookingFromSearch(window.location.search); // ?booking=<id>: that booking's panel opens once
   var asked = !state.viewer; // whether /state has answered (the membership comes only from there)
   var lastRead = Date.now();
 
@@ -227,6 +229,7 @@
     clear(list);
     upcoming.concat(past).forEach(function (b) {
       var line = make('div', 'cz-line');
+      line.setAttribute('data-booking', String(b.id));
       line.appendChild(make('span', 'cz-dot ' + b.state));
       var what = make('div', 'cz-what');
       what.appendChild(make('span', 't', C.dateLabel(b.startsAt, zone, lang) + ', ' + time(b.startsAt)));
@@ -249,15 +252,37 @@
         }
       }
       if (b.note) what.appendChild(make('div', 'cz-sub', b.note));
+      if (b.state === 'cancelled' && b.cancelReason) what.appendChild(make('div', 'cz-sub', fill(T.cancelReason, { reason: b.cancelReason })));
+      var refund = C.refundLine(b);
+      if (refund === 'pending') what.appendChild(make('div', 'cz-sub cz-refund pending', T.refundPending));
+      if (refund === 'refunded') what.appendChild(make('div', 'cz-sub cz-refund done', T.refunded));
+      var mode = C.rescheduleMode(b, now);
+      if (mode) drawRescheduleInfo(what, b, mode);
       line.appendChild(what);
       line.appendChild(make('span', 'cz-pill ' + b.state, (T.states && T.states[b.state]) || b.state));
-      if (C.canPay(b, now) || C.canCancel(b, now)) {
-        var actions = make('div', 'cz-actions');
+      var actions = null;
+      var canAct = C.canPay(b, now) || C.canCancel(b, now) || mode === 'answer' || mode === 'pick';
+      if (canAct) {
+        actions = make('div', 'cz-actions');
+        if (mode === 'answer') {
+          var accept = make('button', 'cz-btn sm', T.reschedAccept);
+          accept.type = 'button';
+          accept.addEventListener('click', function () { acceptProposal(b.id, accept); });
+          actions.appendChild(accept);
+        }
+        if (mode === 'answer' || mode === 'pick') {
+          var other = make('button', 'cz-btn sm ghost', mode === 'pick' ? T.reschedPick : T.reschedOther);
+          other.type = 'button';
+          other.setAttribute('aria-expanded', String(!!panel && panel.id === b.id));
+          other.addEventListener('click', function () { togglePanel(b.id); });
+          actions.appendChild(other);
+        }
         if (C.canPay(b, now)) {
           var payButton = make('button', 'cz-btn sm', fill(T.pay, { price: price(b.priceCents, b.currency) }));
           payButton.type = 'button';
           payButton.addEventListener('click', function () { startPayment(b.id, payButton); });
           actions.appendChild(payButton);
+          actions.appendChild(make('div', 'cz-sub cz-paynote', fill(T.payNote, fields())));
         }
         if (C.canCancel(b, now)) {
           var cancel = make('button', 'cz-btn sm no', T.cancel);
@@ -268,8 +293,142 @@
         line.appendChild(actions);
       }
       list.appendChild(line);
+      if (panel && panel.id === b.id && (mode === 'answer' || mode === 'pick')) list.appendChild(drawPanelFor(b));
     });
     show($('cz-mine'), all.length > 0);
+    openLinked(now);
+  }
+
+  // Where a session being rescheduled stands: the coach's proposal, the viewer's own, or the request to pick; the original
+  // time; and when it closes without a new time.
+  function drawRescheduleInfo(what, b, mode) {
+    var p = b.proposal;
+    if (mode === 'answer') what.appendChild(make('div', 'cz-sub cz-hl', fill(T.reschedProposed, { name: DATA.name, when: whenOf(p.startsAt) })));
+    else if (mode === 'wait') what.appendChild(make('div', 'cz-sub cz-hl', fill(T.reschedMine, { name: DATA.name, when: whenOf(p.startsAt) })));
+    else what.appendChild(make('div', 'cz-sub cz-hl', fill(T.reschedAsk, { name: DATA.name })));
+    if (p && p.note && mode !== 'wait') what.appendChild(make('div', 'cz-sub', p.note));
+    if (b.originalStartsAt) what.appendChild(make('div', 'cz-sub', fill(T.reschedOriginal, { when: whenOf(b.originalStartsAt) })));
+    if (b.rescheduleEndsAt) what.appendChild(make('div', 'cz-sub', fill(T.reschedUntil, { when: whenOf(b.rescheduleEndsAt) })));
+  }
+  function whenOf(ms) { return C.dateLabel(ms, zone, lang) + ', ' + time(ms); }
+
+  // ── The reschedule panel: pick a new time (from the server's list, which leaves out the original time and held ones)
+  function bookingById(id) { return (state.bookings || []).filter(function (b) { return b.id === id; })[0]; }
+
+  function drawPanelFor(b) {
+    var box = make('div', 'cz-resched');
+    box.id = 'cz-resched-' + b.id;
+    if (panel.loading) { box.appendChild(make('p', 'cz-sub', T.reschedLoading)); return box; }
+    var now = Date.now();
+    var starts = C.bookableStarts(panel.starts || [], now, state.leadMs);
+    if (!starts.length) { box.appendChild(make('p', 'cz-sub', T.reschedNoTimes)); box.appendChild(closeButton()); return box; }
+    var days = C.groupByLocalDay(starts, zone, now, C.daysToShow(starts, zone, now, state.horizonDays || 14));
+    if (!panel.day || !days.some(function (d) { return d.date === panel.day; })) {
+      var first = days.filter(function (d) { return d.starts.length; })[0];
+      panel.day = first ? first.date : null;
+    }
+    if (panel.pick !== null && starts.indexOf(panel.pick) < 0) panel.pick = null;
+    var strip = make('div', 'cz-days');
+    days.forEach(function (d) {
+      var label = C.dayLabel(d.date, lang);
+      var button = make('button', 'cz-day' + (d.starts.length ? '' : ' off'), label.weekday);
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(d.date === panel.day));
+      button.appendChild(make('b', null, String(label.day)));
+      button.addEventListener('click', function () { panel.day = d.date; panel.pick = null; render(); });
+      strip.appendChild(button);
+    });
+    box.appendChild(strip);
+    var chosen = days.filter(function (d) { return d.date === panel.day; })[0];
+    var grid = make('div', 'cz-slots');
+    (chosen ? chosen.starts : []).forEach(function (s) {
+      var button = make('button', 'cz-slot', time(s));
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(s === panel.pick));
+      button.addEventListener('click', function () { panel.pick = s === panel.pick ? null : s; render(); });
+      grid.appendChild(button);
+    });
+    box.appendChild(grid);
+    if (panel.pick !== null) box.appendChild(make('p', 'cz-sub cz-hl', fill(T.reschedPicked, { when: whenOf(panel.pick) + '–' + time(panel.pick + panel.minutes * 60e3) })));
+    var note = make('textarea', 'cz-note');
+    note.id = 'cz-resched-note';
+    note.maxLength = 300;
+    note.rows = 2;
+    note.placeholder = T.reschedNote;
+    note.setAttribute('aria-label', T.reschedNote);
+    note.value = panel.note || '';
+    note.addEventListener('input', function () { panel.note = note.value; });
+    box.appendChild(note);
+    var row = make('div', 'cz-actions');
+    var send = make('button', 'cz-btn sm', T.reschedSend);
+    send.type = 'button';
+    send.disabled = panel.pick === null || busy;
+    send.addEventListener('click', function () { sendProposal(b.id); });
+    row.appendChild(send);
+    row.appendChild(closeButton());
+    box.appendChild(row);
+    return box;
+  }
+  function closeButton() {
+    var button = make('button', 'cz-btn sm ghost', T.reschedClose);
+    button.type = 'button';
+    button.addEventListener('click', function () { panel = null; render(); });
+    return button;
+  }
+
+  function togglePanel(id) {
+    if (panel && panel.id === id) { panel = null; render(); return; }
+    panel = { id: id, starts: [], minutes: (bookingById(id) || {}).minutes, day: null, pick: null, note: '', loading: true };
+    render();
+    api('GET', base + '/bookings/' + encodeURIComponent(String(id)) + '/starts').then(function (answer) {
+      if (!panel || panel.id !== id) return;
+      if (answer.ok) {
+        panel.starts = answer.data.starts || [];
+        panel.minutes = answer.data.minutes || panel.minutes;
+        panel.loading = false;
+        render();
+      } else {
+        panel = null;
+        refusal(answer);
+        refresh();
+      }
+    });
+  }
+
+  // ?booking=<id> opens that booking's panel (the session to reschedule, from the Discord message) once, and brings it into view.
+  function openLinked(now) {
+    if (linkedBooking === null || !asked) return;
+    var id = linkedBooking;
+    linkedBooking = null;
+    var b = bookingById(id);
+    if (!b) return;
+    var line = $('cz-list').querySelector('[data-booking="' + id + '"]');
+    if (line && line.scrollIntoView) line.scrollIntoView({ block: 'center' });
+    var mode = C.rescheduleMode(b, now);
+    if (mode === 'pick') togglePanel(id);
+  }
+
+  function acceptProposal(id, button) {
+    button.disabled = true;
+    message('');
+    api('POST', base + '/bookings/' + encodeURIComponent(String(id)) + '/accept-proposal').then(function (answer) {
+      if (answer.ok) { panel = null; message(T.reschedAgreed, true); }
+      else refusal(answer);
+      return refresh();
+    });
+  }
+
+  function sendProposal(id) {
+    if (!panel || panel.id !== id || panel.pick === null || busy) return;
+    busy = true;
+    message('');
+    render();
+    api('POST', base + '/bookings/' + encodeURIComponent(String(id)) + '/propose', { startsAt: panel.pick, note: panel.note || '' }).then(function (answer) {
+      busy = false;
+      if (answer.ok) { panel = null; message(fill(T.reschedSent, { name: DATA.name }), true); }
+      else refusal(answer);
+      return refresh();
+    });
   }
 
   // ── Actions ──

@@ -402,11 +402,17 @@ describe('Accept, Decline and Cancel', () => {
     const declined = await post(`/dashboard/api/coaching/bookings/${booking.id}/decline`, { streamer: s });
     assert.equal(declined.status, 409);
     assert.deepEqual(declined.json, { ok: false, code: 'not_waiting', error: errorOf('not_waiting') });
-    const cancelled = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    const noReason = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    assert.equal(noReason.status, 400);
+    assert.deepEqual(noReason.json, { ok: false, code: 'bad_reason', error: errorOf('bad_reason') });
+    const cancelled = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s, json: { reason: 'Clash with a race' } });
     assert.equal(cancelled.status, 200);
+    assert.match(discord.sent.at(-1).payload.embeds[0].description, /Clash with a race/);
+    assert.equal(cancelled.json.booking.cancelReason, 'Clash with a race');
+    assert.equal(cancelled.json.booking.roomUrl, null, 'a cancelled session shows no room');
     assert.equal(cancelled.json.booking.state, 'cancelled');
     assert.equal(cancelled.json.booking.messageError, null);
-    const again = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    const again = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s, json: { reason: 'Again' } });
     assert.equal(again.status, 409);
     assert.deepEqual(again.json, { ok: false, code: 'not_active', error: errorOf('not_active') });
   });
@@ -429,10 +435,10 @@ describe('Accept, Decline and Cancel', () => {
     assert.equal(db.getCoachingBooking(past.id, s.id).status, 'waiting');
   });
 
-  test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and no Cancel once paid', async () => {
+  test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and Cancel works once paid and owes a refund', async () => {
     const s = addStreamer();
-    const paidHold = (startsAt, now = Date.now()) => {
-      const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
+    const paidHold = (startsAt, now = Date.now(), owner = s) => {
+      const made = db.createCoachingBooking({ streamerId: owner.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
       assert.ok(made.ok, made.code);
       return made.booking;
     };
@@ -442,21 +448,65 @@ describe('Accept, Decline and Cancel', () => {
     assert.deepEqual(noPaypal.json, { ok: false, code: 'no_paypal', error: errorOf('no_paypal') });
 
     db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
-    const soon = paidHold(Date.now() + 24 * 60e3, Date.now() - 86400e3);
-    const close = await post(`/dashboard/api/coaching/bookings/${soon.id}/accept`, { streamer: s });
+    // The 24-minute hold belongs to a second coach, so it can never overlap the free time held above, whatever the time of day.
+    const s2 = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s2.id);
+    const soon = paidHold(Date.now() + 24 * 60e3, Date.now() - 86400e3, s2);
+    const close = await post(`/dashboard/api/coaching/bookings/${soon.id}/accept`, { streamer: s2 });
     assert.equal(close.status, 409);
     assert.deepEqual(close.json, { ok: false, code: 'too_close', error: errorOf('too_close') });
-    assert.equal(db.getCoachingBooking(soon.id, s.id).status, 'waiting');
+    assert.equal(db.getCoachingBooking(soon.id, s2.id).status, 'waiting');
 
     const ok = await post(`/dashboard/api/coaching/bookings/${booking.id}/accept`, { streamer: s });
     assert.equal(ok.status, 200);
     assert.equal(ok.json.booking.state, 'awaiting_payment');
     assert.equal(ok.json.booking.priceCents, 2500);
     db.recordCoachingPayment({ bookingId: booking.id, orderId: 'DASHORDER0001', captureId: 'DASHCAP0001', amountCents: 2500, currency: 'EUR', now: Date.now() });
-    const cancel = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
-    assert.equal(cancel.status, 409);
-    assert.deepEqual(cancel.json, { ok: false, code: 'paid', error: errorOf('paid') });
-    assert.equal(db.getCoachingBooking(booking.id, s.id).status, 'confirmed');
+    const cancel = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s, json: { reason: 'Flu' } });
+    assert.equal(cancel.status, 200);
+    assert.equal(cancel.json.booking.state, 'cancelled');
+    assert.equal(cancel.json.booking.refundPending, true);
+    assert.equal(db.getCoachingBooking(booking.id, s.id).status, 'cancelled');
+    assert.equal(db.getCoachingPayment('DASHORDER0001').refund_status, 'pending');
+  });
+
+  test('a cancelled paid session: Refunded is the booking\'s streamer only, only from pending, shows the payer to the coach and never fails on Discord', async () => {
+    const s = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
+    const who = viewer();
+    const made = db.createCoachingBooking({ streamerId: s.id, viewer: who, startsAt: freeNow(s)[0], minutes: 60, note: '', lang: 'en', now: Date.now(), priceCents: 2500, currency: 'EUR' });
+    const accepted = await post(`/dashboard/api/coaching/bookings/${made.booking.id}/accept`, { streamer: s });
+    assert.equal(accepted.json.booking.state, 'awaiting_payment');
+    db.recordCoachingPayment({
+      bookingId: made.booking.id, orderId: 'DASHORDER0002', captureId: 'DASHCAP0002', amountCents: 2500, currency: 'EUR', now: Date.now(),
+      payer: { name: 'Pat Payer', email: 'pat@example.com', payerId: 'PAYER0002' },
+    });
+    await post(`/dashboard/api/coaching/bookings/${made.booking.id}/cancel`, { streamer: s, json: { reason: 'Flu' } });
+
+    const page = await get('/dashboard/coaching', { streamer: s });
+    assert.equal(page.status, 200);
+    assert.match(page.text, /pat@example\.com/, 'the coach sees the payer');
+    assert.match(page.text, /DASHCAP0002/);
+
+    const other = addStreamer();
+    const wrong = await post('/dashboard/api/coaching/payments/DASHORDER0002/refunded', { streamer: other });
+    assert.equal(wrong.status, 404);
+    assert.deepEqual(wrong.json, { ok: false, code: 'not_found', error: t('en', 'coaching.error.not_found') });
+    assert.equal(db.getCoachingPayment('DASHORDER0002').refund_status, 'pending');
+    const unknown = await post('/dashboard/api/coaching/payments/NOSUCHORDER01/refunded', { streamer: s });
+    assert.equal(unknown.status, 404);
+
+    discord.dm = { ok: false, reason: 'not_ready' };
+    discord.sent = [];
+    const done = await post('/dashboard/api/coaching/payments/DASHORDER0002/refunded', { streamer: s });
+    assert.equal(done.status, 200);
+    assert.equal(done.json.orderId, 'DASHORDER0002');
+    assert.equal(done.json.booking.refundState, 'refunded');
+    assert.equal(done.json.booking.messageError, 'not_ready');
+    assert.equal(db.getCoachingPayment('DASHORDER0002').refund_status, 'refunded');
+    const again = await post('/dashboard/api/coaching/payments/DASHORDER0002/refunded', { streamer: s });
+    assert.equal(again.status, 409);
+    assert.deepEqual(again.json, { ok: false, code: 'not_pending', error: errorOf('not_pending') });
   });
 
   test('the Coaching category: checked against the server, named permissions refused, kept, cleared and offered', async () => {
@@ -574,7 +624,7 @@ describe('Accept, Decline and Cancel', () => {
     const booking = hold(theirs, viewer(), freeNow(theirs)[0]);
     for (const action of ['accept', 'decline', 'cancel']) {
       for (const id of [booking.id, 'abc', '0', '1e3', '99999999']) {
-        const res = await post(`/dashboard/api/coaching/bookings/${id}/${action}`, { streamer: mine });
+        const res = await post(`/dashboard/api/coaching/bookings/${id}/${action}`, { streamer: mine, json: { reason: 'Flu' } });
         assert.equal(res.status, 404, `${action} ${id}`);
         assert.deepEqual(res.json, { ok: false, code: 'not_found', error: t('en', 'coaching.error.not_found') });
       }
@@ -635,6 +685,49 @@ describe('the page', () => {
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(script), 'the page script builds with textContent only');
   });
 
+  test('the page is four tabs, Bookings first, one form with a Save in each of Schedule, Price and Settings', async () => {
+    const s = addStreamer();
+    const res = await get('/dashboard/coaching', { streamer: s });
+    assert.equal(res.status, 200);
+    const html = res.text;
+    const buttons = [...html.matchAll(/id="cd-tabbtn-(\w+)" data-cd-tab="(\w+)"/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(buttons, [['bookings', 'bookings'], ['schedule', 'schedule'], ['price', 'price'], ['settings', 'settings']]);
+    for (const name of ['bookings', 'schedule', 'price', 'settings']) {
+      assert.ok(html.includes(`id="cd-tab-${name}" role="tabpanel"`), `${name} panel`);
+      assert.ok(html.includes(esc(t('en', `coaching.dashboard.tabs.${name}`))), `${name} label`);
+    }
+    // The tab is named on <html> by a script that runs before the tab bar, and an unknown value opens Bookings.
+    assert.ok(html.indexOf("localStorage.getItem('coaching_tab')") < html.indexOf('id="cd-tabs"'));
+    assert.ok(html.includes("tabs.indexOf(saved) >= 0 ? saved : 'bookings'"));
+    // One form (one save call) holds the three form tabs; Bookings is outside it.
+    assert.equal((html.match(/<form id="cd-form"/g) || []).length, 1);
+    const form = html.slice(html.indexOf('<form id="cd-form"'), html.indexOf('</form>', html.indexOf('<form id="cd-form"')));
+    assert.equal((form.match(/class="btn btn-primary cd-btn cd-save"/g) || []).length, 3);
+    for (const name of ['schedule', 'price', 'settings']) assert.ok(form.includes(`id="cd-tab-${name}"`), `${name} is in the form`);
+    assert.ok(!form.includes('id="cd-tab-bookings"'));
+    // The pop-ups: the cancel reason is required and limited, the note limited.
+    assert.match(html, /id="cd-cancel-reason"[^>]*maxlength="500"[^>]*required/);
+    assert.match(html, /id="cd-resched-note"[^>]*maxlength="300"/);
+    const data = pageData(html);
+    assert.deepEqual(data.limits, { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 48 * 3600e3 });
+  });
+
+  test('every text the page script reads is in the page texts, the new states included', async () => {
+    const s = addStreamer();
+    const html = (await get('/dashboard/coaching', { streamer: s })).text;
+    const texts = JSON.parse(html.match(/window\.COACHING_DASHBOARD_TEXTS = (.*);<\/script>/)[1]);
+    const script = fs.readFileSync(PAGE_SCRIPT, 'utf8');
+    const used = new Set([...script.matchAll(/\bT\.(\w+)/g)].map((m) => m[1]));
+    const groups = new Set(['states', 'roomError', 'transcript']);
+    for (const name of used) {
+      assert.ok(Object.hasOwn(texts, name), `T.${name} is in the page texts`);
+      if (!groups.has(name)) assert.ok(typeof texts[name] === 'string' && texts[name], `T.${name} has a text`);
+    }
+    assert.equal(texts.states.rescheduling, t('en', 'coaching.state.rescheduling'));
+    assert.equal(texts.states.not_rescheduled, t('en', 'coaching.state.not_rescheduled'));
+    assert.ok(texts.refundPayer.includes('{{name}}') && texts.refundPayer.includes('{{email}}'), 'fields are kept for the script');
+  });
+
   test('the server picker lists the claimed servers the bot is in, and the saved one while the bot cannot see it', async () => {
     discord.guilds = { 123: 'Coach HQ live', 456: 'Visible' };
     const s = addStreamer({ guilds: { 123: 'Coach HQ', 456: 'Visible stored', 789: 'Bot gone' } });
@@ -685,5 +778,115 @@ describe('the page', () => {
     } finally {
       delete discord.fetchInvite;
     }
+  });
+});
+
+describe('reschedule routes (the coach)', () => {
+  function confirmedBooking(s, startsAt = freeNow(s)[0]) {
+    const b = hold(s, viewer(), startsAt);
+    assert.ok(db.acceptCoachingBooking(b.id, s.id, Date.now(), null));
+    return db.getCoachingBooking(b.id, s.id);
+  }
+  const base = (b) => `/dashboard/api/coaching/bookings/${b.id}`;
+
+  test('proposal-starts lists what the coach may offer, the original time and out-of-hours times included', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    const res = await get(`${base(b)}/proposal-starts`, { streamer: s });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.minutes, 60);
+    assert.ok(res.json.starts.includes(b.starts_at));
+    assert.ok(res.json.starts.some((x) => !freeNow(s).includes(x)), 'times outside the weekly hours are offered');
+    const other = addStreamer();
+    assert.equal((await get(`${base(b)}/proposal-starts`, { streamer: other })).status, 404);
+    assert.equal((await get('/dashboard/api/coaching/bookings/abc/proposal-starts', { streamer: s })).status, 404);
+  });
+
+  test('way 1: reschedule with a time; the view carries the proposal; a second start is refused', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    const start = (await get(`${base(b)}/proposal-starts`, { streamer: s })).json.starts[10];
+    const res = await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'propose', startsAt: start, note: 'Sorry' } });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.booking.state, 'rescheduling');
+    assert.equal(res.json.booking.proposal.startsAt, start);
+    assert.equal(res.json.booking.proposal.by, 'coach');
+    assert.equal(discord.sent.length, 1);
+    const again = await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask' } });
+    assert.equal(again.status, 409);
+    assert.equal(again.json.code, 'not_confirmed');
+  });
+
+  test('refusals: a time that is not on offer, a way that does not exist, a note over 300, another streamer, a string for a time', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    const bad = await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'propose', startsAt: Date.now() + 60e3 } });
+    assert.equal(bad.status, 409);
+    assert.equal(bad.json.code, 'bad_time');
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'propose', startsAt: String(b.starts_at) } })).json.code, 'bad_time');
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'nope' } })).status, 400);
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask', note: 'x'.repeat(301) } })).json.code, 'bad_note');
+    assert.equal((await post(`${base(b)}/reschedule`, { streamer: addStreamer(), json: { way: 'ask' } })).status, 404);
+    assert.equal(db.getCoachingBooking(b.id, s.id).status, 'confirmed');
+  });
+
+  test('a back and forth: the coach accepts the viewer\'s proposal, proposes another, never accepts their own', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask' } });
+    const own = await post(`${base(b)}/accept-proposal`, { streamer: s });
+    assert.equal(own.status, 409);
+    assert.equal(own.json.code, 'no_proposal');
+    const viewerStart = freeNow(s).find((x) => x !== b.starts_at);
+    assert.ok(db.proposeCoachingTime(b.id, 'viewer', viewerStart, 'This one', Date.now()).ok);
+    const counter = (await get(`${base(b)}/proposal-starts`, { streamer: s })).json.starts[40];
+    const prop = await post(`${base(b)}/propose`, { streamer: s, json: { startsAt: counter, note: 'Or this' } });
+    assert.equal(prop.status, 200);
+    assert.equal(prop.json.booking.proposal.by, 'coach');
+    const mine = await post(`${base(b)}/accept-proposal`, { streamer: s });
+    assert.equal(mine.json.code, 'not_yours_to_answer');
+    assert.ok(db.proposeCoachingTime(b.id, 'viewer', viewerStart, null, Date.now()).ok);
+    const done = await post(`${base(b)}/accept-proposal`, { streamer: s });
+    assert.equal(done.status, 200);
+    assert.equal(done.json.booking.state, 'confirmed');
+    assert.equal(done.json.booking.startsAt, viewerStart);
+    assert.equal(done.json.booking.proposal, null);
+    assert.equal((await post(`${base(b)}/accept-proposal`, { streamer: s })).json.code, 'not_rescheduling');
+  });
+
+  test('another streamer\'s booking answers 404 on every reschedule route', async () => {
+    const s = addStreamer();
+    const b = confirmedBooking(s);
+    await post(`${base(b)}/reschedule`, { streamer: s, json: { way: 'ask' } });
+    const other = addStreamer();
+    for (const route of ['propose', 'accept-proposal', 'reschedule']) {
+      assert.equal((await post(`${base(b)}/${route}`, { streamer: other, json: { way: 'ask', startsAt: Date.now() } })).status, 404, route);
+    }
+    assert.equal((await post(`${base(b)}/reschedule`, { json: { way: 'ask' } })).status, 302, 'signed out: the dashboard login');
+  });
+});
+
+describe('a rescheduling booking in the schedule', () => {
+  test('stays among the days to come after its original end, placed by its proposal; isOutside tests the proposal', async () => {
+    const s = addStreamer();
+    const [first, second] = twoDays(s);
+    const b = hold(s, { discordUserId: '777000000000000001', username: 'v', displayName: 'V' }, first);
+    assert.ok(db.acceptCoachingBooking(b.id, s.id, Date.now(), null));
+    assert.ok(db.startCoachingReschedule(b.id, s.id, 'propose', { startsAt: second, note: '' }, Date.now()).ok);
+    // The original time (inside the hours) is now 2 h past its end; the proposal is on a day that becomes a day off.
+    db.db.prepare('UPDATE coaching_bookings SET starts_at = ? WHERE id = ?').run(Date.now() - 3 * 3600e3, b.id);
+    db.saveCoachingSettings(s.id, {
+      timeZone: ZONE, hours: HOURS, daysOff: [coaching.localDateOf(second, ZONE)], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en',
+    });
+    const data = pageData((await get('/dashboard/coaching', { streamer: s })).text);
+    assert.deepEqual(data.schedule.past, []);
+    const listed = data.schedule.days.flatMap((d) => d.bookings);
+    assert.deepEqual(listed.map((x) => [x.id, x.state, x.outside]), [[b.id, 'rescheduling', true]]);
+    assert.equal(data.schedule.days[0].date, coaching.localDateOf(second, ZONE));
+
+    // The page script makes the same split.
+    const script = fs.readFileSync(PAGE_SCRIPT, 'utf8');
+    assert.match(script, /b\.state !== 'rescheduling' && b\.startsAt \+ b\.minutes \* MINUTE_MS <= now/);
+    assert.match(script, /b\.proposal \? b\.proposal\.startsAt : b\.startsAt/);
   });
 });

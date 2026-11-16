@@ -82,7 +82,7 @@ function checkPayment({ streamer, payment, booking }) {
 }
 
 // Pure decision on PayPal's order (the capture answer, or the order read back). Returns
-// { ok: true, captureId, amountCents, currency } or { ok: false, reason }.
+// { ok: true, captureId, amountCents, currency, payer } or { ok: false, reason }.
 function decideCoachingCapture({ streamer, payment, booking, order }) {
   const early = checkPayment({ streamer, payment, booking });
   if (early) return { ok: false, reason: early };
@@ -107,7 +107,23 @@ function decideCoachingCapture({ streamer, payment, booking, order }) {
     return { ok: false, reason: 'currency_mismatch' };
   }
   if (!payeeMatches(unit.payee, payment)) return { ok: false, reason: 'payee_mismatch' };
-  return { ok: true, captureId: capture.id, amountCents, currency };
+  return { ok: true, captureId: capture.id, amountCents, currency, payer: payerOf(order) };
+}
+
+// The payer's PayPal details from a verified order (name, email, payer id), kept for the coach to refund with. They are
+// never logged and never shown to the viewer's page.
+function payerOf(order) {
+  const p = order && order.payer && typeof order.payer === 'object' ? order.payer : null;
+  if (!p) return null;
+  const name = p.name && typeof p.name === 'object'
+    ? [p.name.given_name, p.name.surname].filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()).join(' ')
+    : '';
+  const out = {
+    name: name || null,
+    email: typeof p.email_address === 'string' ? p.email_address : null,
+    payerId: typeof p.payer_id === 'string' ? p.payer_id : null,
+  };
+  return out.name || out.email || out.payerId ? out : null;
 }
 
 // What PayPal answered, for the server log — never payer details.
@@ -146,7 +162,7 @@ function record(streamer, payment, verdict, now) {
   try {
     rec = db.recordCoachingPayment({
       bookingId: Number(payment.booking_id), orderId: payment.order_id, captureId: verdict.captureId,
-      amountCents: verdict.amountCents, currency: verdict.currency, now,
+      amountCents: verdict.amountCents, currency: verdict.currency, now, payer: verdict.payer || null,
     });
   } catch (e) {
     console.error(`[Coaching] payment ${payment.order_id} could not be recorded:`, e.message);

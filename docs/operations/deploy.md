@@ -845,3 +845,56 @@ Rolling back is safe for the data.
   `[DB] Removing streamers <id>: also deleted N row(s) from coaching_payments (streamer_id), a table the removal does not list`
   (the same for `coaching_rooms`). That also means the room's role and channel on Discord are not cleaned up. A build
   from before 2026-10-13 is covered by the Tracking and Coaching notes above, which come first.
+
+## Coaching: cancel, reschedule and refunds
+
+What changes when it deploys (`docs/features/coaching.md`, spec
+`docs/superpowers/specs/2026-11-16-coaching-cancel-reschedule-refund-design.md`, plan
+`docs/superpowers/plans/2026-11-16-coaching-cancel-reschedule-refund.md`):
+- **At boot**, on the existing database: eight new columns on `coaching_bookings` (`reschedule_started_at`,
+  `reschedule_way`, `proposal_starts_at`, `proposal_by`, `proposal_at`, `proposal_note`, `cancel_reason`,
+  `original_starts_at`) and seven on `coaching_payments` (`payer_name`, `payer_email`, `payer_id`, `refund_status`,
+  `refund_reason`, `refund_pending_at`, `refunded_at`), plus the index `idx_coaching_payments_refund`. They are created
+  quietly: **no** `[DB migration]` line, on the first boot and on every boot after. Nothing is seeded and **nothing is
+  backfilled**: payments from before this release have no payer details and no refund step.
+- **No new variable, no new Discord permission.** Room names are unchanged; a reschedule renames the role and channel
+  to the new date with the permissions the bot already has (Manage Roles, Manage Channels on the category).
+- **New states** `rescheduling` and `not_rescheduled`. The minute tick has a new step (`reschedules`) that drops
+  proposals after 48 hours and closes reschedules after 7 days.
+- **Rate limit:** the viewer's reschedule routes (`GET /coaching/:username/bookings/:id/starts`, `POST .../propose`,
+  `POST .../accept-proposal`) allow 30 requests per 10 minutes per visitor (`coachingRescheduleLimiter`).
+- **The coach's page** at `/dashboard/coaching` is now four tabs (Bookings, Schedule, Price, Settings).
+
+**What the coach does after the deploy** (the coaches' guide is `docs/guides/coaching-for-coaches.pdf`):
+1. **Cancel** needs a reason, and now works on a paid session too: the viewer is messaged with the reason, and a paid
+   session becomes **Refund pending**.
+2. **Refunds are manual.** Atleta never refunds. For each pending refund the schedule shows the amount, the payer's
+   PayPal name and email and the transaction id: the coach refunds that payment in PayPal, then presses **Refunded**
+   (the viewer is messaged). The Coaching card counts the pending refunds.
+3. **Reschedule** a confirmed session: propose a time, or ask the viewer to pick one, then answer each other's
+   proposals. A coach's proposal unanswered for 48 hours lapses and the viewer is asked to pick; with no agreement in
+   7 days the session ends as Not rescheduled (room deleted; a paid one becomes Refund pending).
+4. Late or double payments now also show Refund pending (from this release on).
+
+After the deploy (while no coach has a session starting):
+1. `/health` answers 200, and the boot log has no `[DB migration]` line and no `LOGIN REFUSED`.
+2. `/coaching/ricardobsilva98` answers 200; `/dashboard/coaching` shows the four tabs with Bookings first.
+3. A real check with a free session: confirm it, cancel it with a reason; the room and role are gone, the schedule
+   shows no "Open the room", and the viewer's message carries the reason.
+4. The log lines to expect: `[Coaching] tick step <name> failed: ...` (one step threw; the others still ran). A
+   failed role or channel rename after an agreement is logged only; the booking still moves.
+
+Watch after release: the new texts in the six non-English languages are machine-made and want a native read-through
+(pt is European Portuguese).
+
+### Rolling back (cancel, reschedule and refunds)
+
+Rolling back is safe for the data.
+- **The new columns stay**, and older code ignores them.
+- **Settle first:** a `rescheduling` booking is an unknown state to the previous release (it neither shows nor lapses
+  it, and its proposal is no longer held there, so the original time looks taken or free by the old rules). Let each
+  one be agreed or cancelled before rolling back. **Pending refunds** are invisible to the previous release: the coach
+  must refund and mark every one first (or note them elsewhere), or the viewer is left unrefunded with nothing on the
+  schedule to say so.
+- **A cancelled paid session** keeps its Refund pending state in the database; the previous release will not show it.
+- **Rooms** already removed stay removed; a rescheduling session's room stays until it is settled.

@@ -361,6 +361,58 @@ async function closeDue({ now = Date.now(), deps = {} } = {}) {
   return { closed };
 }
 
+// A cancelled (or not rescheduled) session's room goes at once, with no transcript: the row is marked cancelled and due
+// now, then the channel and role are deleted. When Discord cannot do it now the row stays `closing`, and closeDue
+// finishes it on a later pass (it never sends a transcript for a row already marked). Never throws; resolves true when
+// nothing is left on Discord.
+async function removeFor(bookingId, { now = Date.now() } = {}) {
+  try {
+    const room = db.getCoachingRoom(bookingId);
+    if (!room || room.state === 'closed') return true;
+    db.updateCoachingRoom(bookingId, { state: 'closing', transcript_status: 'cancelled', close_at: now }, now);
+    if (running.has(bookingId) || !discord.isReady()) return false;
+    running.add(bookingId);
+    try {
+      if (!(await clean(room))) return false;
+      db.updateCoachingRoom(bookingId, { state: 'closed', error: null }, now);
+      return true;
+    } finally { running.delete(bookingId); }
+  } catch (e) {
+    console.error(`[Coaching] removing room ${bookingId}:`, e && e.message);
+    return false;
+  }
+}
+
+// A session moved to a new time (the viewer and the coach agreed): the role and the voice channel are renamed to the new
+// date and the close moves to 30 minutes after the new end. A rename Discord refuses is logged and leaves the room
+// working under its old name; the agreement never fails on it. A confirmed session that has no room yet gets one as
+// usual. Never throws; resolves { url } when the room is open, else null.
+async function reschedule(bookingId, { now = Date.now() } = {}) {
+  try {
+    const booking = db.getCoachingBookingById(bookingId);
+    if (!booking || booking.status !== 'confirmed') return null;
+    const room = db.getCoachingRoom(bookingId);
+    if (!room) return await makeFor(bookingId, { now });
+    if (room.state === 'closed') return null;
+    db.updateCoachingRoomClose(bookingId, sessionEnd(booking) + CLOSE_DELAY_MS);
+    if (room.state !== 'open' && room.state !== 'closing') return null;
+    const settings = db.getCoachingSettings(booking.streamer_id);
+    const name = roomName(booking.viewer_username, booking.starts_at, settings ? settings.time_zone : 'UTC');
+    if (discord.isReady()) {
+      try { if (room.role_id) await discord.renameRole(room.guild_id, room.role_id, name); } catch (e) {
+        console.error(`[Coaching] could not rename the role of room ${bookingId}: ${(e && e.message) || e}`);
+      }
+      try { if (room.channel_id) await discord.renameChannel(room.guild_id, room.channel_id, name); } catch (e) {
+        console.error(`[Coaching] could not rename the channel of room ${bookingId}: ${(e && e.message) || e}`);
+      }
+    }
+    return room.state === 'open' && room.channel_id ? { url: roomUrlOf(room) } : null;
+  } catch (e) {
+    console.error(`[Coaching] rescheduling room ${bookingId}:`, e && e.message);
+    return null;
+  }
+}
+
 // Before a streamer's rows are deleted (admin Remove): the rooms they hold are deleted on Discord, best effort. The
 // rows are read at once, so the caller may delete them right after; resolves when Discord has been asked. Never throws.
 function removeAllFor(streamerId) {
@@ -375,7 +427,7 @@ function removeAllFor(streamerId) {
 }
 
 module.exports = {
-  makeFor, retry, finishOrCleanMaking, closeDue, removeAllFor, sendTranscripts,
+  makeFor, retry, finishOrCleanMaking, closeDue, removeAllFor, removeFor, reschedule, sendTranscripts,
   roomOverwrites, roomName, safeFileName, roomUrlOf, planAttachments, buildTranscript, errorCode,
   CLOSE_DELAY_MS, MAKING_STALE_MS, FILE_MAX_BYTES,
 };
