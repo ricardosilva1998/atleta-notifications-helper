@@ -55,7 +55,9 @@ function refuse(res, code) {
 // The texts public/js/coaching-page.js reads, as window.COACHING_TEXTS (name -> key; their {{fields}} are kept for the
 // script, which fills them in one pass), and the states' names under `states`.
 const PAGE_TEXT_KEYS = {
-  zone: 'coaching.page.zone', minutes30: 'coaching.page.minutes30', minutes60: 'coaching.page.minutes60',
+  zone: 'coaching.page.zone', lengthMin: 'coaching.page.lengthMin', lengthHour: 'coaching.page.lengthHour', free: 'coaching.page.free',
+  payBy: 'coaching.page.payBy', pay: 'coaching.page.pay', paying: 'coaching.page.paying', room: 'coaching.page.room',
+  where: 'coaching.page.where', paidOk: 'coaching.page.paidOk', checkAgain: 'coaching.page.checkAgain', paidAmount: 'coaching.page.paidAmount',
   noTimes: 'coaching.page.noTimes', noTimesDay: 'coaching.page.noTimesDay', pickTime: 'coaching.page.pickTime',
   request: 'coaching.page.request', requesting: 'coaching.page.requesting', requested: 'coaching.page.requested',
   unverified: 'coaching.page.unverified', joinFirst: 'coaching.page.joinFirst', serverFallback: 'coaching.page.serverFallback',
@@ -65,7 +67,7 @@ const PAGE_TEXT_KEYS = {
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
-  cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
+  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
 };
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {
@@ -73,6 +75,8 @@ function pageTexts(t) {
   for (const [name, key] of Object.entries(PAGE_TEXT_KEYS)) texts[name] = t(key, KEEP_FIELDS);
   texts.states = {};
   for (const [state, key] of Object.entries(STATE_KEYS)) texts.states[state] = t(key);
+  texts.returnErrors = {};
+  for (const [code, key] of Object.entries(RETURN_ERROR_KEYS)) texts.returnErrors[code] = t(key);
   return texts;
 }
 
@@ -123,6 +127,7 @@ function pageState(streamer, settings, viewer, now) {
     bookings: viewer
       ? coachingBookings.bookingViews(db.getViewerCoachingBookings(streamer.id, viewer.discordUserId, now - PAST_DAYS * DAY_MS), now, { forViewer: true })
       : [],
+    whereText: viewer && settings.where_text ? settings.where_text : '',
     maxUpcoming: coaching.MAX_UPCOMING,
     horizonDays: coaching.HORIZON_DAYS,
     leadMs: coaching.LEAD_MS, // the page drops starts that come inside the hour of notice while it stays open

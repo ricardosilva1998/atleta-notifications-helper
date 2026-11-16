@@ -86,17 +86,85 @@
     return safeFormat(lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: timeZone }).format(new Date(ms));
   }
 
-  var HOLDING = ['waiting', 'confirmed'];
-
-  // A booking the viewer can still cancel: waiting or confirmed, and not started.
-  function canCancel(booking, now) {
+  // A booking that holds its time: waiting, awaiting payment or confirmed, and not started.
+  var HOLDING = ['waiting', 'awaiting_payment', 'confirmed'];
+  function holds(booking, now) {
     return HOLDING.indexOf(booking.state) >= 0 && booking.startsAt > now;
   }
 
-  // How many of the viewer's bookings count toward the limit of upcoming ones.
-  function upcomingCount(bookings, now) {
-    return (bookings || []).filter(function (b) { return canCancel(b, now); }).length;
+  // A booking the viewer can still cancel: one that holds its time and is not paid (a paid one has no Cancel).
+  function canCancel(booking, now) {
+    return holds(booking, now) && !booking.paid;
   }
+
+  // A booking the viewer can pay now: accepted, priced, and before its pay-by time.
+  function canPay(booking, now) {
+    return booking.state === 'awaiting_payment' && !booking.paid && booking.priceCents > 0
+      && Number(booking.payBy) > now && booking.startsAt > now;
+  }
+
+  // How many of the viewer's bookings count toward the limit of upcoming ones (paid ones count too).
+  function upcomingCount(bookings, now) {
+    return (bookings || []).filter(function (b) { return holds(b, now); }).length;
+  }
+
+  // A price in cents as the viewer's language writes it ("EUR 25" as "25,00 EUR" or "EUR25.00"); no price (0, null) is
+  // `freeText`. A currency this engine does not know prints as "25.00 XXX".
+  function formatPrice(cents, currency, lang, freeText) {
+    if (!(Number(cents) > 0)) return freeText;
+    var amount = Number(cents) / 100;
+    try {
+      return new Intl.NumberFormat(lang, { style: 'currency', currency: currency || 'EUR' }).format(amount);
+    } catch (e) {
+      return amount.toFixed(2) + ' ' + (currency || 'EUR');
+    }
+  }
+
+  // A session length as text: 30 -> "30 min", 60 -> "1 h", 120 -> "2 h", 90 -> "90 min". `texts` holds lengthMin and
+  // lengthHour with their {{n}}.
+  function lengthLabel(minutes, texts) {
+    var hours = minutes / 60;
+    var text = minutes >= 60 && minutes % 60 === 0 ? texts.lengthHour : texts.lengthMin;
+    return String(text == null ? '' : text).replace('{{n}}', String(minutes >= 60 && minutes % 60 === 0 ? hours : minutes));
+  }
+
+  // The deadline to pay, in the viewer's zone: "Tue, 3 Nov, 18:30".
+  function payByLabel(ms, timeZone, lang) {
+    return dateLabel(ms, timeZone, lang) + ', ' + timeLabel(ms, timeZone, lang);
+  }
+
+  // The lengths the page offers: the ones the server lists ({ minutes, priceCents }) that still have a free start at
+  // least `leadMs` away (slots: minutes -> starts).
+  function lengthsToShow(lengths, slots, now, leadMs) {
+    return (lengths || []).filter(function (l) {
+      return bookableStarts((slots && slots[l.minutes]) || [], now, leadMs).length > 0;
+    });
+  }
+
+  var RETURN_CODES = ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed'];
+
+  // What PayPal's return left in the address (?paid=1, ?error=<code>, and &order=<id> for a payment not confirmed yet):
+  // { kind: 'paid' }, { kind: 'error', code, order } or null. A code or order id of another shape is ignored.
+  function returnNotice(search) {
+    var params = {};
+    String(search || '').replace(/^\?/, '').split('&').forEach(function (pair) {
+      if (!pair) return;
+      var at = pair.indexOf('=');
+      var key = at < 0 ? pair : pair.slice(0, at);
+      var value = at < 0 ? '' : pair.slice(at + 1);
+      try { params[decodeURIComponent(key)] = decodeURIComponent(value); } catch (e) { /* a broken escape is ignored */ }
+    });
+    if (params.paid === '1') return { kind: 'paid' };
+    if (RETURN_CODES.indexOf(params.error) >= 0) {
+      var order = /^[A-Za-z0-9-]{1,64}$/.test(params.order || '') ? params.order : null;
+      return { kind: 'error', code: params.error, order: params.error === 'pay_unconfirmed' ? order : null };
+    }
+    return null;
+  }
+
+  // Only a PayPal page is gone to after Pay, and only a Discord channel link is shown as a room.
+  function isPayPalUrl(url) { return /^https:\/\/([a-z0-9-]+\.)*paypal\.com\//i.test(String(url || '')); }
+  function isRoomUrl(url) { return /^https:\/\/discord\.com\/channels\/\d+\/\d+$/.test(String(url || '')); }
 
   // The starts a page left open still offers: at least `leadMs` from now, as the server counts them (the hour of
   // notice, /state's leadMs); without a lead, the starts still to come.
@@ -106,7 +174,9 @@
   }
 
   var CORE = { localDate: localDate, groupByLocalDay: groupByLocalDay, daysToShow: daysToShow, timeLabel: timeLabel,
-    dayLabel: dayLabel, dateLabel: dateLabel, canCancel: canCancel, upcomingCount: upcomingCount, bookableStarts: bookableStarts };
+    dayLabel: dayLabel, dateLabel: dateLabel, holds: holds, canCancel: canCancel, canPay: canPay, upcomingCount: upcomingCount,
+    bookableStarts: bookableStarts, formatPrice: formatPrice, lengthLabel: lengthLabel, payByLabel: payByLabel,
+    lengthsToShow: lengthsToShow, returnNotice: returnNotice, isPayPalUrl: isPayPalUrl, isRoomUrl: isRoomUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = CORE;
   if (typeof window !== 'undefined') window.COACHING_CORE = CORE;
 })();

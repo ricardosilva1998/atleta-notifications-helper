@@ -293,8 +293,7 @@ describe('the booking page', () => {
     assert.ok(read.length > 10);
     assert.deepEqual(read.filter((name) => !(name in texts)), [], 'the script reads texts the page does not hand over');
     assert.deepEqual(Object.keys(texts).filter((name) => !read.includes(name)), [], 'texts handed over but never read');
-    // awaiting_payment and expired get their texts with the booking page rework (T4)
-    for (const state of coaching.STATES.filter((st) => !['awaiting_payment', 'expired'].includes(st)).concat('unanswered')) assert.equal(typeof texts.states[state], 'string', state);
+    for (const state of coaching.STATES.concat('unanswered')) assert.equal(typeof texts.states[state], 'string', state);
   });
 });
 

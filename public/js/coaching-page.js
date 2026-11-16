@@ -24,8 +24,7 @@
   } catch (e) { zone = 'UTC'; }
 
   var state = DATA.state;
-  // 1 h first, as the mockup; 30 min when only half-hour times are free.
-  var minutes = state.slots && state.slots[60] && !state.slots[60].length && state.slots[30] && state.slots[30].length ? 30 : 60;
+  var minutes = null; // the chosen length; set by render() to one that has a free start
   var day = null; // the chosen day (YYYY-MM-DD in the viewer's zone)
   var pick = null; // the chosen start (UTC ms)
   var busy = false;
@@ -46,7 +45,8 @@
   }
   function serverName() { return state.guildName || T.serverFallback; }
   function fields() { return { name: DATA.name, zone: zone, server: serverName(), max: state.maxUpcoming }; }
-  function lengthText(m) { return m === 30 ? T.minutes30 : T.minutes60; }
+  function lengthText(m) { return C.lengthLabel(m, { lengthMin: T.lengthMin, lengthHour: T.lengthHour }); }
+  function price(cents, currency) { return C.formatPrice(cents, currency || state.currency, lang, T.free); }
   function time(ms) { return C.timeLabel(ms, zone, lang); }
 
   // ── Requests ──
@@ -107,22 +107,34 @@
 
   // ── Drawing ──
   // The chosen length's starts that are still at least the hour of notice away (a page left open).
+  function priceOf(m) {
+    var found = (state.lengths || []).filter(function (l) { return l.minutes === m; })[0];
+    return found ? found.priceCents : 0;
+  }
   function freeStarts(now) {
     return C.bookableStarts((state.slots && state.slots[minutes]) || [], now, state.leadMs);
+  }
+
+  // The lengths with a free start, each with its price; the chosen one stays if it is still offered, else the first.
+  function offered(now) {
+    var list = C.lengthsToShow(state.lengths, state.slots, now, state.leadMs);
+    if (!list.some(function (l) { return l.minutes === minutes; })) { minutes = list.length ? list[0].minutes : null; pick = null; }
+    return list;
   }
 
   function render() {
     var now = Date.now();
     var bookable = !!state.bookable;
+    var picker = $('cz-picker');
+    if (!picker) return; // signed out: Connect Discord is all the page offers
+    var needJoin = bookable && state.member === false;
     show($('cz-paused'), !bookable);
-    show($('cz-picker'), bookable);
-    show($('cz-length'), bookable);
+    show(picker, bookable && asked && !needJoin);
     $('cz-zone').textContent = bookable ? fill(T.zone, fields()) : '';
-    Array.prototype.forEach.call($('cz-length').querySelectorAll('button'), function (b) {
-      b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-minutes')) === minutes));
-    });
+    var list = offered(now);
+    drawLengths(list);
 
-    var starts = freeStarts(now);
+    var starts = minutes === null ? [] : freeStarts(now);
     if (pick !== null && starts.indexOf(pick) < 0) pick = null;
     var days = C.groupByLocalDay(starts, zone, now, C.daysToShow(starts, zone, now, state.horizonDays || 14));
     if (!day || !days.some(function (d) { return d.date === day; })) {
@@ -136,6 +148,20 @@
     empty.textContent = !starts.length ? T.noTimes : (chosen && !chosen.starts.length ? T.noTimesDay : '');
     show(empty, !!empty.textContent);
     drawPanel(now, bookable);
+  }
+
+  function drawLengths(list) {
+    var group = $('cz-length');
+    clear(group);
+    show(group, list.length > 0);
+    list.forEach(function (l) {
+      var button = make('button', 'cz-len', lengthText(l.minutes));
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(l.minutes === minutes));
+      button.appendChild(make('b', null, price(l.priceCents)));
+      button.addEventListener('click', function () { minutes = l.minutes; pick = null; message(''); render(); });
+      group.appendChild(button);
+    });
   }
 
   function drawDays(days) {
@@ -165,12 +191,11 @@
   }
 
   function drawPanel(now, bookable) {
-    if (!$('cz-pick')) return; // signed out: the sign-in button is all the page offers
-    show($('cz-pick-head'), bookable);
+    show($('cz-pick-head'), bookable && asked && state.member !== false);
     $('cz-pick').textContent = pick !== null
       ? C.dateLabel(pick, zone, lang) + ' · ' + time(pick) + '–' + time(pick + minutes * 60e3)
       : T.pickTime;
-    $('cz-pick-length').textContent = pick !== null ? lengthText(minutes) : '';
+    $('cz-pick-length').textContent = pick !== null ? lengthText(minutes) + ' · ' + price(priceOf(minutes)) : '';
 
     var needJoin = bookable && state.member === false;
     var atLimit = C.upcomingCount(state.bookings, now) >= state.maxUpcoming;
@@ -183,12 +208,12 @@
     var limit = $('cz-limit');
     limit.textContent = fill(T.limit, fields());
     show(limit, bookable && !needJoin && atLimit);
-    show($('cz-book'), bookable && !needJoin && !atLimit);
+    show($('cz-book'), bookable && asked && !needJoin && !atLimit);
     var unverified = $('cz-unverified');
     unverified.textContent = fill(T.unverified, fields());
     show(unverified, asked && state.member === null);
     var request = $('cz-request');
-    request.disabled = pick === null || busy || !asked;
+    request.disabled = pick === null || busy || !asked || minutes === null;
     request.textContent = busy ? T.requesting : T.request;
 
     drawBookings(now);
@@ -205,15 +230,42 @@
       line.appendChild(make('span', 'cz-dot ' + b.state));
       var what = make('div', 'cz-what');
       what.appendChild(make('span', 't', C.dateLabel(b.startsAt, zone, lang) + ', ' + time(b.startsAt)));
-      what.appendChild(make('span', 'cz-sub', ' · ' + lengthText(b.minutes)));
+      var cost = b.paid ? fill(T.paidAmount, { price: price(b.paidAmountCents, b.paidCurrency) }) : (b.priceCents == null ? '' : price(b.priceCents, b.currency));
+      what.appendChild(make('span', 'cz-sub', ' · ' + lengthText(b.minutes) + (cost ? ' · ' + cost : '')));
+      if (b.state === 'awaiting_payment' && b.payBy) {
+        what.appendChild(make('div', 'cz-sub', fill(T.payBy, { when: C.payByLabel(b.payBy, zone, lang) })));
+      }
+      if (b.state === 'confirmed') {
+        if (b.roomUrl && C.isRoomUrl(b.roomUrl)) {
+          var link = make('a', 'cz-sub', T.room);
+          link.href = b.roomUrl;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          var wrap = make('div');
+          wrap.appendChild(link);
+          what.appendChild(wrap);
+        } else if (state.whereText) {
+          what.appendChild(make('div', 'cz-sub', fill(T.where, { where: state.whereText })));
+        }
+      }
       if (b.note) what.appendChild(make('div', 'cz-sub', b.note));
       line.appendChild(what);
       line.appendChild(make('span', 'cz-pill ' + b.state, (T.states && T.states[b.state]) || b.state));
-      if (C.canCancel(b, now)) {
-        var cancel = make('button', 'cz-btn sm no', T.cancel);
-        cancel.type = 'button';
-        cancel.addEventListener('click', function () { withdraw(b.id, cancel); });
-        line.appendChild(cancel);
+      if (C.canPay(b, now) || C.canCancel(b, now)) {
+        var actions = make('div', 'cz-actions');
+        if (C.canPay(b, now)) {
+          var payButton = make('button', 'cz-btn sm', fill(T.pay, { price: price(b.priceCents, b.currency) }));
+          payButton.type = 'button';
+          payButton.addEventListener('click', function () { startPayment(b.id, payButton); });
+          actions.appendChild(payButton);
+        }
+        if (C.canCancel(b, now)) {
+          var cancel = make('button', 'cz-btn sm no', T.cancel);
+          cancel.type = 'button';
+          cancel.addEventListener('click', function () { withdraw(b.id, cancel); });
+          actions.appendChild(cancel);
+        }
+        line.appendChild(actions);
       }
       list.appendChild(line);
     });
@@ -250,13 +302,37 @@
     });
   }
 
-  Array.prototype.forEach.call($('cz-length').querySelectorAll('button'), function (b) {
-    b.addEventListener('click', function () {
-      minutes = Number(b.getAttribute('data-minutes')) === 30 ? 30 : 60;
-      message('');
-      render();
+  function startPayment(id, button) {
+    button.disabled = true;
+    button.textContent = T.paying;
+    message('');
+    api('POST', base + '/bookings/' + encodeURIComponent(String(id)) + '/pay').then(function (answer) {
+      if (answer.ok && answer.data && C.isPayPalUrl(answer.data.approveUrl)) {
+        window.location.assign(answer.data.approveUrl);
+        return null;
+      }
+      refusal(answer.ok ? { text: T.failed } : answer);
+      return refresh();
     });
-  });
+  }
+
+  // PayPal's return: ?paid=1, or ?error=<code> (an unconfirmed payment also &order=<id>, to check again).
+  function showReturn() {
+    var notice = C.returnNotice(window.location.search);
+    if (!notice) return;
+    if (notice.kind === 'paid') {
+      message(T.paidOk, true);
+    } else {
+      message((T.returnErrors && T.returnErrors[notice.code]) || T.failed, false);
+      if (notice.order) {
+        var again = make('a', null, T.checkAgain);
+        again.href = base + '/paid?token=' + encodeURIComponent(notice.order);
+        $('cz-msg').appendChild(again);
+      }
+    }
+    if (window.history && window.history.replaceState && !notice.order) window.history.replaceState(null, '', base);
+  }
+
   if ($('cz-request')) $('cz-request').addEventListener('click', requestTime);
   if ($('cz-joined')) {
     $('cz-joined').addEventListener('click', function () {
@@ -273,5 +349,5 @@
   });
 
   render();
-  if (state.viewer) refresh();
+  if (state.viewer) { showReturn(); refresh(); }
 })();
