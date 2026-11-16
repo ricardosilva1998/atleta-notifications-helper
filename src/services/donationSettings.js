@@ -28,6 +28,16 @@ const GOAL_ERRORS = {
   amount_invalid: 'donations.goal.error.amountInvalid',
 };
 
+// The PayPal email, as both forms that save it read it (the Donations page and coaching's Connections tab): trimmed,
+// absent (null or undefined) or '' is none, at most PAYPAL_EMAIL_MAX characters and one shape. { email } or { error: 'email' }.
+function paypalEmailFrom(raw) {
+  if (raw == null) return { email: null };
+  if (typeof raw !== 'string') return { error: 'email' };
+  const email = raw.trim();
+  if (email && (email.length > PAYPAL_EMAIL_MAX || !EMAIL_RE.test(email))) return { error: 'email' };
+  return { email: email || null };
+}
+
 // The donation settings form. Returns { settings } ready for
 // db.updateDonationSettings(), or { error: code } from SETTINGS_ERRORS.
 function parseDonationSettings(body) {
@@ -39,14 +49,12 @@ function parseDonationSettings(body) {
   const min = parseFloat(b.donation_min_amount);
   if (!Number.isFinite(min)) return { error: 'min_amount' };
 
-  const rawEmail = b.paypal_email == null ? '' : b.paypal_email;
-  if (typeof rawEmail !== 'string') return { error: 'email' };
-  const email = rawEmail.trim();
-  if (email && (email.length > PAYPAL_EMAIL_MAX || !EMAIL_RE.test(email))) return { error: 'email' };
+  const email = paypalEmailFrom(b.paypal_email);
+  if (email.error) return { error: 'email' };
 
   return {
     settings: {
-      paypal_email: email || null,
+      paypal_email: email.email,
       donation_page_enabled: b.donation_page_enabled ? 1 : 0,
       donation_min_amount: Math.round(Math.min(MIN_AMOUNT_CEIL, Math.max(MIN_AMOUNT_FLOOR, min)) * 100) / 100,
       donation_currency: currency,
@@ -90,6 +98,7 @@ module.exports = {
   SETTINGS_ERRORS,
   GOAL_ERRORS,
   parseDonationSettings,
+  paypalEmailFrom,
   parseTipGoalFields,
   errorMessage,
   goalCurrencyMismatch,

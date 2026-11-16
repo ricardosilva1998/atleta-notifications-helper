@@ -3,9 +3,11 @@
     docs/superpowers/specs/assets/2026-10-29-coaching-mockup.html), in four tabs: Bookings (the bookings to come by
     day with Accept/Decline, Cancel with a reason, Reschedule, proposals and refunds, and the last 30 days), Schedule
     (When I coach: Bookings open, the seven weekdays, the time zone, the days off), Price (the lengths and prices) and
-    Settings (where we meet, the booking link). Schedule, Price and Settings are one form with one save. The tab picked
-    last time (localStorage 'coaching_tab') is named on <html data-coaching-tab> before paint, like the dashboard's.
-    The server prints the frame and the form's saved values;
+    Connections (Discord: where we meet; Twitch: the account the booking page is named after; PayPal: the email the
+    paid lengths are paid to, its own form below the page's one form). Schedule, Price and the Discord block are one
+    form with one save; PayPal saves on its own; the tab id stays `settings` (old bookmarks and ?tab=settings keep
+    working). The tab picked last time (localStorage 'coaching_tab') is named on <html data-coaching-tab> before
+    paint, like the dashboard's. The server prints the frame and the form's saved values;
     public/js/coaching-dashboard.js draws the bookings, the weekday rows and the days off from
     window.COACHING_DASHBOARD_DATA (times as UTC instants, shown in the streamer's coaching zone) with
     window.COACHING_DASHBOARD_TEXTS, and puts every name and note in as text. %>
@@ -29,6 +31,7 @@
   html[data-coaching-tab="schedule"] #cd-tab-schedule,
   html[data-coaching-tab="price"] #cd-tab-price,
   html[data-coaching-tab="settings"] #cd-tab-settings,
+  html[data-coaching-tab="settings"] #cd-tab-paypal,
   html:not([data-coaching-tab]) #cd-tab-bookings { display: block; }
   html[data-coaching-tab="bookings"] #cd-tabbtn-bookings,
   html[data-coaching-tab="schedule"] #cd-tabbtn-schedule,
@@ -50,7 +53,7 @@
 <% if (!servers.length) { %>
   <div class="cd-note warn" role="status"><span><%= t('coaching.dashboard.noServer') %></span> <a href="/dashboard"><%= t('coaching.dashboard.noServerAction') %></a></div>
 <% } %>
-<div class="cd-note warn" id="cd-no-paypal" role="status"<%= money.hasPaypal ? ' hidden' : '' %>><span><%= t('coaching.dashboard.noPaypal') %></span> <a href="/dashboard/donations"><%= t('coaching.dashboard.noPaypalAction') %></a></div>
+<div class="cd-note warn" id="cd-no-paypal" role="status"<%= money.hasPaypal ? ' hidden' : '' %>><span><%= t('coaching.dashboard.noPaypal') %></span> <a href="#cd-tab-paypal" data-cd-tab="settings"><%= t('coaching.dashboard.noPaypalAction') %></a></div>
 <div class="cd-note warn" id="cd-check-prices" role="status"<%= money.checkPrices ? '' : ' hidden' %>><span><%= t('coaching.dashboard.checkPrices', { currency: money.currency }) %></span> <a href="#cd-lengths" data-cd-tab="price"><%= t('coaching.dashboard.checkPricesAction') %></a></div>
 <div class="cd-note warn" id="cd-invite-broken" role="status"<%= setUp && settings.inviteOk === false ? '' : ' hidden' %>><span><%= t('coaching.dashboard.inviteBroken') %></span> <a href="#cd-invite" data-cd-tab="settings"><%= t('coaching.dashboard.inviteFix') %></a></div>
 
@@ -113,7 +116,7 @@
   </section>
 
   <section class="card cd-card cd-panel" id="cd-tab-settings" role="tabpanel" aria-labelledby="cd-tabbtn-settings">
-    <div class="cd-head"><h3 class="cd-title"><%= t('coaching.dashboard.whereWeMeet') %></h3></div>
+    <div class="cd-sec cd-conn-head" style="margin-top: 0; padding-top: 0; border-top: 0;"><span class="cd-label"><%= t('coaching.dashboard.connDiscord') %></span><span class="cd-status" id="cd-conn-discord"></span></div>
     <% if (servers.length) { %>
     <div class="form-group cd-field">
       <label for="cd-server"><%= t('coaching.dashboard.server') %></label>
@@ -144,8 +147,17 @@
       <label class="pill-toggle"><input type="checkbox" role="switch" id="cd-notify" aria-label="<%= t('coaching.dashboard.notify') %>"<%= settings.notifyRequests ? ' checked' : '' %>><span class="slider"></span></label>
     </div>
 
+    <div class="cd-sec cd-conn-head"><span class="cd-label"><%= t('coaching.dashboard.connTwitch') %></span><span class="cd-status" id="cd-conn-twitch"></span></div>
+    <% if (connections.twitch.username) { %>
+    <div class="cd-account">
+      <% if (connections.twitch.avatar) { %><img class="cd-avatar" src="<%= connections.twitch.avatar %>" alt="" width="28" height="28"><% } %>
+      <span class="cd-account-name"><%= connections.twitch.displayName %></span>
+    </div>
+    <% } else { %>
+    <p class="cd-hint"><%= t('coaching.dashboard.connTwitchEffects') %></p>
+    <div class="cd-field"><a href="/auth/twitch" class="btn btn-secondary cd-btn"><%= t('dashboard.linkTwitch') %></a></div>
+    <% } %>
     <% if (bookingUrl) { %>
-    <div class="cd-sec"><span class="cd-label"><%= t('coaching.dashboard.link') %></span></div>
     <div class="cd-link" id="cd-link"<%= setUp ? '' : ' hidden' %>>
       <input type="text" readonly id="cd-link-input" value="<%= bookingUrl %>" aria-label="<%= t('coaching.dashboard.link') %>">
       <button type="button" class="btn btn-secondary cd-btn" id="cd-copy"><%= t('coaching.dashboard.copy') %></button>
@@ -156,6 +168,22 @@
 
     <div class="cd-msg cd-formmsg" role="status" aria-live="polite" hidden></div>
     <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn cd-save"><%= setUp ? t('coaching.dashboard.save') : t('coaching.dashboard.saveFirst') %></button></div>
+  </section>
+</form>
+
+<%# The Connections tab's PayPal block: its own form (the page's form above must not nest it), shown with the
+    Connections panel by the tab rules above. Saving writes the same streamers.paypal_email the tip page is paid to. %>
+<form id="cd-paypal-form" novalidate>
+  <section class="card cd-card cd-panel" id="cd-tab-paypal" role="group" aria-label="<%= t('coaching.dashboard.connPaypal') %>">
+    <div class="cd-sec cd-conn-head" style="margin-top: 0; padding-top: 0; border-top: 0;"><span class="cd-label"><%= t('coaching.dashboard.connPaypal') %></span><span class="cd-status" id="cd-conn-paypal"></span></div>
+    <div class="form-group cd-field">
+      <label for="cd-paypal-email"><%= t('coaching.dashboard.paypalEmail') %></label>
+      <input id="cd-paypal-email" type="email" autocomplete="off" spellcheck="false" maxlength="254" value="<%= connections.paypal.email %>">
+      <span class="cd-hint"><%= t('coaching.dashboard.connPaypalHint') %></span>
+    </div>
+    <p class="cd-hint"><%= t('coaching.dashboard.paypalCurrency', { currency: connections.paypal.currency }) %> <a href="/dashboard/donations"><%= t('coaching.dashboard.paypalCurrencyAction') %></a></p>
+    <div class="cd-msg" id="cd-paypal-msg" role="status" aria-live="polite" hidden></div>
+    <div class="cd-actions"><button type="submit" class="btn btn-primary cd-btn" id="cd-paypal-save"><%= t('coaching.dashboard.save') %></button></div>
   </section>
 </form>
 
@@ -228,6 +256,11 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-sub { font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
   .cd-status { font-size: 11px; font-weight: 600; color: var(--success); }
   .cd-status.off { color: var(--text-muted); }
+  .cd-status.warn { color: var(--warning); }
+  .cd-conn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .cd-account { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+  .cd-avatar { width: 28px; height: 28px; border-radius: 50%; flex: none; }
+  .cd-account-name { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
   .cd-group { font: 600 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 2px; }
   #cd-days > .cd-group:first-child { margin-top: 0; }
   .cd-past-title { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); }

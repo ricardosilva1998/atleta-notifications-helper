@@ -30,6 +30,7 @@
   var LENGTH_MINUTES = [30, 60, 120, 180, 240, 300];
   var lengths = copyLengths(settings.lengths);
   var money = DATA.money || { currency: 'EUR', hasPaypal: true, checkPrices: false };
+  var connections = DATA.connections || null;
   var categories = DATA.categories || [];
   var saving = false;
   var limits = DATA.limits || { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 48 * 3600e3 };
@@ -39,7 +40,7 @@
     bad_zone: 'schedule', bad_hours: 'schedule', bad_days_off: 'schedule',
     bad_lengths: 'price', no_length: 'price',
     bad_server: 'settings', bad_invite: 'settings', invite_other_server: 'settings', bad_where: 'settings', bad_switch: 'settings',
-    bad_category: 'settings', category_not_found: 'settings', category_permissions: 'settings',
+    bad_category: 'settings', category_not_found: 'settings', category_permissions: 'settings', bad_paypal: 'settings',
   };
 
   function copyLengths(map) {
@@ -723,6 +724,28 @@
     show($('cd-check-prices'), !!money.checkPrices);
   }
 
+  // The Connections tab's three status lines, from what the page knows (routes/coachingDashboard.js connectionsView):
+  // a line is warn unless what it needs is known to be fine. Nothing is known before the first save (Discord) or
+  // without the data (an older page in this browser's cache), and a missing line simply says nothing.
+  function connStatus(id, ok, okText, warnText) {
+    var el = $(id);
+    if (!el) return;
+    el.textContent = ok ? okText : warnText;
+    el.className = 'cd-status' + (ok ? '' : ' warn');
+  }
+  function drawConnections() {
+    var conn = connections || {};
+    var discord = conn.discord;
+    if (discord) {
+      if (discord.botSeen == null) connStatus('cd-conn-discord', false, '', T.statusNotSetUp);
+      else connStatus('cd-conn-discord', discord.botSeen && discord.categoryOk !== false && discord.inviteOk !== false, T.connDiscordOk, T.connDiscordWarn);
+    }
+    var paypal = conn.paypal;
+    if (paypal) connStatus('cd-conn-paypal', !!money.hasPaypal, fill(T.connPaypalOn, { email: paypal.email || '' }), T.connPaypalOff);
+    var twitch = conn.twitch;
+    if (twitch) connStatus('cd-conn-twitch', !!twitch.username, fill(T.connTwitchOk, { name: twitch.username || '' }), T.connTwitchNone);
+  }
+
   // Today in the zone the form names (a zone being typed that Intl does not know yet: the shown one).
   function formZone() {
     var typed = $('cd-zone-input').value.trim();
@@ -773,6 +796,7 @@
     drawLengths();
     drawCategories();
     drawMoney();
+    drawConnections();
     drawSchedule();
   }
 
@@ -846,6 +870,7 @@
       settings = answer.data.settings;
       lengths = copyLengths(settings.lengths);
       money = answer.data.money || money;
+      connections = answer.data.connections || connections;
       categories = answer.data.categories || categories;
       hours = copyHours(settings.hours);
       daysOff = (settings.daysOff || []).slice();
@@ -873,6 +898,27 @@
       var done = function () { copy.textContent = T.copied; setTimeout(function () { copy.textContent = copyLabel; }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(input.value).then(done, function () { input.select(); });
       else { input.select(); done(); }
+    });
+  }
+
+  // The Connections tab's PayPal form: its own save (the page's form above holds the Discord fields). On a refusal the
+  // route's text is shown; on a save the money view and the status lines come back and are redrawn.
+  var paypalForm = $('cd-paypal-form');
+  if (paypalForm) {
+    paypalForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var button = $('cd-paypal-save');
+      if (button) button.disabled = true;
+      api('POST', '/dashboard/api/coaching/paypal', { paypalEmail: $('cd-paypal-email').value }).then(function (answer) {
+        if (button) button.disabled = false;
+        if (!answer.ok) { message('cd-paypal-msg', answer.text); return; }
+        money = answer.data.money || money;
+        connections = answer.data.connections || connections;
+        $('cd-paypal-email').value = answer.data.email || '';
+        drawMoney();
+        drawConnections();
+        message('cd-paypal-msg', T.saved, 'ok');
+      });
     });
   }
 
