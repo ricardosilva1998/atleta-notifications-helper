@@ -3833,11 +3833,14 @@ try {
       donor_name TEXT NOT NULL,
       message TEXT,
       payee_merchant_id TEXT,
+      payee_email TEXT,
       captured_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (streamer_id) REFERENCES streamers(id) ON DELETE CASCADE
     )
   `);
+  const ptCols = db.pragma('table_info(pending_tips)').map(c => c.name);
+  if (!ptCols.includes('payee_email')) db.exec('ALTER TABLE pending_tips ADD COLUMN payee_email TEXT');
 } catch (e) { _migrationLog('pending_tips', e); }
 
 // Migration: Add channel point columns to streamers
@@ -5311,9 +5314,9 @@ function cleanupOldDonations() {
 
 function createPendingTip(t) {
   db.prepare(`
-    INSERT INTO pending_tips (order_id, streamer_id, donor_name, message, payee_merchant_id)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(t.order_id, t.streamer_id, t.donor_name, t.message || null, t.payee_merchant_id || null);
+    INSERT INTO pending_tips (order_id, streamer_id, donor_name, message, payee_merchant_id, payee_email)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(t.order_id, t.streamer_id, t.donor_name, t.message || null, t.payee_merchant_id || null, t.payee_email || null);
 }
 
 function getPendingTip(orderId) {

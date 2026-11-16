@@ -64,7 +64,9 @@ function sameEmail(a, b) {
 function payeeMatches(payee, streamer, pending) {
   if (!payee || typeof payee !== 'object') return false;
   if (pending.payee_merchant_id && payee.merchant_id) return payee.merchant_id === pending.payee_merchant_id;
-  return sameEmail(payee.email_address, streamer.paypal_email);
+  // The email the order was created with; older rows have none, so the
+  // streamer's current email stands in.
+  return sameEmail(payee.email_address, pending.payee_email || streamer.paypal_email);
 }
 
 // Before PayPal is called: can this return be tied to this streamer's tip page?

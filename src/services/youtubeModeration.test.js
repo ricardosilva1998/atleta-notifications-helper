@@ -68,3 +68,11 @@ test('banned words are tested once per YouTube message and apply to members too'
   assert.equal(bannedWordReads, 2);
   assert.deepEqual(deleted, ['m2']);
 });
+
+test('moderators and the channel owner are exempt from the filters, banned words still apply', async () => {
+  for (const who of [{ isChatModerator: true }, { isChatOwner: true }]) {
+    assert.deepEqual(await moderateYoutubeMessage(1, chatItem('m3', 'see http://example.com', who), 'chat-1', 'token'), { moderated: false });
+    assert.deepEqual(await moderateYoutubeMessage(1, chatItem('m4', 'scamlink', who), 'chat-1', 'token'), { moderated: true });
+  }
+  assert.deepEqual(await moderateYoutubeMessage(1, chatItem('m5', 'see http://example.com'), 'chat-1', 'token'), { moderated: true });
+});

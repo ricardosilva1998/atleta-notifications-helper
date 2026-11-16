@@ -9,7 +9,26 @@ const { deleteYoutubeChatMessage, banYoutubeChatUser } = require('./youtube');
 const permits = new Map();
 const lastMessages = new Map();
 const offenseCounts = new Map();
-const authorCache = new Map(); // "yt:streamerId:displayNameLower" -> channelId
+const authorCache = new Map(); // "yt:streamerId:displayNameLower" -> { channelId, cachedAt }
+
+const FIVE_MIN = 5 * 60 * 1000;
+const ONE_DAY = 24 * 60 * 60 * 1000;
+const sweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of lastMessages) {
+    if (now - (v?.timestamp || 0) > FIVE_MIN) lastMessages.delete(k);
+  }
+  for (const [k, expiry] of permits) {
+    if (now >= expiry) permits.delete(k);
+  }
+  for (const [k, v] of offenseCounts) {
+    if (now - (v?.lastOffense || 0) > ONE_DAY) offenseCounts.delete(k);
+  }
+  for (const [k, v] of authorCache) {
+    if (now - (v?.cachedAt || 0) > ONE_DAY) authorCache.delete(k);
+  }
+}, 60 * 1000);
+sweeper.unref();
 
 // ─── Exempt check for YouTube ────────────────────────────────────────────────
 function isExempt(authorDetails, streamer) {
@@ -188,7 +207,7 @@ async function moderateYoutubeMessage(streamerId, item, liveChatId, botToken) {
 
   // Cache author for !permit lookups
   const cacheKey = `yt:${streamerId}:${displayName.toLowerCase()}`;
-  authorCache.set(cacheKey, channelId);
+  authorCache.set(cacheKey, { channelId, cachedAt: Date.now() });
 
   // Check exemptions (banned words always enforced, even for exempt users)
   const exempt = isExempt(authorDetails, streamer);
@@ -220,8 +239,9 @@ async function moderateYoutubeMessage(streamerId, item, liveChatId, botToken) {
 
 // ─── Permit system ───────────────────────────────────────────────────────────
 function grantYoutubePermit(streamerId, displayName, durationSeconds) {
-  const channelId = authorCache.get(`yt:${streamerId}:${displayName.toLowerCase()}`);
-  if (!channelId) return false;
+  const cached = authorCache.get(`yt:${streamerId}:${displayName.toLowerCase()}`);
+  if (!cached) return false;
+  const channelId = cached.channelId;
   const key = `yt:${streamerId}:${channelId}`;
   permits.set(key, Date.now() + durationSeconds * 1000);
   return true;

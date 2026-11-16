@@ -53,6 +53,14 @@ describe('decideTipCapture', () => {
     assert.deepEqual(verdict, { ok: false, reason: 'payee_mismatch' });
   });
 
+  test('the payee email stored with the order wins over the streamer\'s current email', () => {
+    const pending = pendingRow({ payee_email: 'old@example.com' });
+    const ok = decideTipCapture({ streamer: STREAMER, pending, capture: captureResponse({ payee: { email_address: 'OLD@example.com' } }) });
+    assert.equal(ok.ok, true);
+    const changed = decideTipCapture({ streamer: STREAMER, pending, capture: captureResponse({ payee: { email_address: 'streamer@example.com' } }) });
+    assert.deepEqual(changed, { ok: false, reason: 'payee_mismatch' });
+  });
+
   test('payee missing from the response cannot be verified', () => {
     for (const payee of [null, {}]) {
       const verdict = decideTipCapture({ streamer: STREAMER, pending: pendingRow(), capture: captureResponse({ payee }) });

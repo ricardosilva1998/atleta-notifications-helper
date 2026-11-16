@@ -477,6 +477,19 @@ async function executeAction(client, channel, tags, action, reason, streamer) {
   }
 }
 
+// A flag-only finding (a first-time chatter) is recorded for the streamer,
+// never said in chat.
+function logFlag(tags, reason, streamer) {
+  try {
+    db.addModLogEntry(streamer.id, tags.username, tags['user-id'], 'flag', reason, null);
+  } catch (e) {
+    console.error('[Mod] Failed to save mod log:', e.message);
+  }
+  if (streamer.mod_log_discord_enabled && streamer.mod_log_discord_channel_id) {
+    logToDiscord(streamer, tags.username, reason, 'flag');
+  }
+}
+
 // ─── Discord mod log ──────────────────────────────────────────────────────────
 // Posted only into a channel of one of the streamer's claimed servers.
 function logToDiscord(streamer, username, reason, action) {
@@ -492,6 +505,7 @@ function logToDiscord(streamer, username, reason, action) {
       timeout_60: 'Timeout 60s',
       timeout_600: 'Timeout 10min',
       timeout_1800: 'Timeout 30min',
+      flag: 'Flagged (no action)',
     };
     sendToGuildChannel(guildId, streamer.id, channelId, {
       embeds: [{
@@ -692,6 +706,7 @@ module.exports = {
   runFilters,
   getAction,
   executeAction,
+  logFlag,
   grantPermit,
   handleModCommand,
   activateRaidProtection,

@@ -720,3 +720,16 @@ describe('the Twitch moderation requests give up after 10 seconds', () => {
     assert.equal(state.modLog.length, before + 1);
   });
 });
+
+describe('first-time chatter', () => {
+  test('is flagged by the filter and logFlag writes the mod log without saying anything in chat', async () => {
+    const streamer = streamerRow({ mod_first_chatter_enabled: 1, mod_link_protection_enabled: 0, mod_caps_enabled: 0, mod_symbol_spam_enabled: 0 });
+    const tags = viewerTags({ 'first-msg': true });
+    const violation = await mod.runFilters('#somestreamer', tags, 'hello', streamer);
+    assert.equal(violation.flagOnly, true);
+    const before = state.modLog.length;
+    mod.logFlag(tags, violation.reason, streamer);
+    assert.equal(state.modLog.length, before + 1);
+    assert.deepEqual(state.modLog[before].slice(0, 5), [1, 'viewer', '555', 'flag', 'First-time chatter: Viewer']);
+  });
+});

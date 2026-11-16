@@ -2,7 +2,7 @@ const tmi = require('tmi.js');
 const config = require('../config');
 const db = require('../db');
 const bus = require('./overlayBus');
-const { isExempt, runFilters, getAction, executeAction, handleModCommand, activateRaidProtection, checkBannedWords } = require('./chatModeration');
+const { isExempt, runFilters, getAction, executeAction, logFlag, handleModCommand, activateRaidProtection, checkBannedWords } = require('./chatModeration');
 const { isStreamerDisabled } = require('./streamerAccess');
 const { commandCooldownSeconds } = require('./chatCommands');
 const { fillChatTemplate } = require('./chatTemplate');
@@ -76,7 +76,7 @@ async function handleMessage(channel, tags, message, self) {
     const violation = await runFilters(channel, tags, message, streamer);
     if (violation) {
       if (violation.flagOnly) {
-        post(channel, `[Mod] ${violation.reason}`, 'high');
+        logFlag(tags, violation.reason, streamer);
       } else {
         const action = getAction(channel, tags.username, streamer);
         await executeAction(replies, channel, tags, action, violation.reason, streamer);

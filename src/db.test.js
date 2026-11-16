@@ -53,7 +53,7 @@ beforeEach(() => {
 test('the donation and pending tip migrations run cleanly on a fresh database', () => {
   assert.deepEqual(migrationErrors.filter((m) => /donation|pending_tips/i.test(m)), []);
   const cols = db.db.pragma('table_info(pending_tips)').map((c) => c.name);
-  assert.deepEqual(cols, ['order_id', 'streamer_id', 'donor_name', 'message', 'payee_merchant_id', 'captured_at', 'created_at']);
+  assert.deepEqual(cols, ['order_id', 'streamer_id', 'donor_name', 'message', 'payee_merchant_id', 'payee_email', 'captured_at', 'created_at']);
 });
 
 test('a brand-new database prints no migration error on its first boot, and already has every streamer column', () => {
@@ -110,12 +110,13 @@ describe('pending tips', () => {
   const row = (over) => ({ order_id: 'ORDER-1', streamer_id: streamerA, donor_name: 'Viewer', message: 'hi', payee_merchant_id: null, ...over });
 
   test('keeps the donor details by PayPal order id', () => {
-    db.createPendingTip(row({ payee_merchant_id: 'MERCHANT12345' }));
+    db.createPendingTip(row({ payee_merchant_id: 'MERCHANT12345', payee_email: 'p@example.com' }));
     const got = db.getPendingTip('ORDER-1');
     assert.equal(got.streamer_id, streamerA);
     assert.equal(got.donor_name, 'Viewer');
     assert.equal(got.message, 'hi');
     assert.equal(got.payee_merchant_id, 'MERCHANT12345');
+    assert.equal(got.payee_email, 'p@example.com');
     assert.equal(got.captured_at, null);
     assert.equal(db.getPendingTip('ORDER-UNKNOWN'), null);
   });

@@ -205,6 +205,19 @@ describe('the bot\'s access token', () => {
     assert.ok(fetchCalls >= 3, 'and the chat was read with it');
   });
 
+  test('a poll that finishes after the chat was stopped does not re-arm', async () => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    tokenAnswer = async () => { await gate; return { accessToken: 'late', expiresAt: clock + 59 * 60_000 }; };
+    youtubeChatManager.startPolling(STREAMER_ID, 'chat-1');
+    await flush();
+    youtubeChatManager.stopPolling(STREAMER_ID);
+    release();
+    await flush();
+    assert.equal(fetchCalls, 0, 'the stopped poller reads nothing');
+    assert.equal(youtubeChatManager.isPolling(STREAMER_ID), false);
+  });
+
   test('the chat polled by two streamers at the same moment shares one refresh', async () => {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });

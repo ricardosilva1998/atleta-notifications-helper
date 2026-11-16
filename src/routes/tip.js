@@ -146,6 +146,7 @@ router.post('/:username/create', async (req, res) => {
         donor_name: donorName,
         message,
         payee_merchant_id: orderPayeeMerchantId(order),
+        payee_email: streamer.paypal_email,
       });
       return res.redirect(approveUrl);
     }
