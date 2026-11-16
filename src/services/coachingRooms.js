@@ -20,6 +20,7 @@ const NAME_MAX = 100;
 const FILE_MAX_BYTES = 10 * 1024 * 1024; // one attachment re-uploaded at most this big
 const BATCH_MAX_BYTES = 10 * 1024 * 1024; // and one message carries at most this much
 const BATCH_MAX_FILES = 10;
+const TOTAL_FILES_MAX = 30; // a room's chat cannot make the bot hold more than this many files (or their bytes) in memory
 const CLOSE_GIVE_UP_MS = 6 * 3600e3; // a transcript that cannot even be read for this long after close_at is dropped
 
 const VIEW = ['ViewChannel', 'Connect', 'Speak', 'SendMessages', 'AttachFiles', 'ReadMessageHistory'];
@@ -209,16 +210,23 @@ function zoned(ms, timeZone) {
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
+// A name from a chat message is kept to plain characters before the bot uploads a file under it.
+function safeFileName(name) {
+  return String(name || 'file').replace(/[^\p{L}\p{N}._ -]/gu, '_').replace(/^\.+/, '_').slice(0, 100) || 'file';
+}
+
 // Which attachments are re-uploaded and in which messages: each at most FILE_MAX_BYTES (bigger ones are named as too
 // big), a message at most BATCH_MAX_FILES files and BATCH_MAX_BYTES. Pure. `files`: [{ key, size }]; resolves
 // { batches: [[key, ...]], tooBig: [key, ...] }.
-function planAttachments(files, { fileMax = FILE_MAX_BYTES, batchBytes = BATCH_MAX_BYTES, batchFiles = BATCH_MAX_FILES } = {}) {
+function planAttachments(files, { fileMax = FILE_MAX_BYTES, batchBytes = BATCH_MAX_BYTES, batchFiles = BATCH_MAX_FILES, totalFiles = TOTAL_FILES_MAX } = {}) {
   const batches = [];
   const tooBig = [];
   let current = [];
   let bytes = 0;
+  let taken = 0;
   for (const f of files) {
-    if (!(f.size <= fileMax)) { tooBig.push(f.key); continue; }
+    if (!(f.size <= fileMax) || taken >= totalFiles) { tooBig.push(f.key); continue; }
+    taken++;
     if (current.length && (current.length >= batchFiles || bytes + f.size > batchBytes)) {
       batches.push(current);
       current = [];
@@ -293,7 +301,7 @@ async function sendTranscripts(room, booking, streamer, settings, { fetchMessage
   });
   const sendable = plan.batches.map((batch) => batch.filter((k) => bytes.has(k)).map((k) => {
     const a = flat.find((x) => x.key === k);
-    return { attachment: Buffer.from(bytes.get(k)), name: a.name };
+    return { attachment: Buffer.from(bytes.get(k)), name: safeFileName(a.name) };
   })).filter((b) => b.length);
 
   const sides = [
@@ -368,6 +376,6 @@ function removeAllFor(streamerId) {
 
 module.exports = {
   makeFor, retry, finishOrCleanMaking, closeDue, removeAllFor, sendTranscripts,
-  roomOverwrites, roomName, roomUrlOf, planAttachments, buildTranscript, errorCode,
+  roomOverwrites, roomName, safeFileName, roomUrlOf, planAttachments, buildTranscript, errorCode,
   CLOSE_DELAY_MS, MAKING_STALE_MS, FILE_MAX_BYTES,
 };

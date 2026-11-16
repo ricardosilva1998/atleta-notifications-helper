@@ -513,7 +513,7 @@ describe('payment', () => {
         const id = `ROUTEORDER${String(nextOrder++).padStart(6, '0')}`;
         orders.set(id, { id, customId: unit.custom_id, payee: unit.payee.email_address, currency: unit.amount.currency_code, value: unit.amount.value });
         return reply(201, { id, status: 'CREATED', purchase_units: [{ payee: { email_address: unit.payee.email_address, merchant_id: 'MERCHANTROUTE' } }],
-          links: [{ rel: 'approve', href: `${PAYPAL}/checkoutnow?token=${id}` }] });
+          links: [{ rel: 'approve', href: `https://www.paypal.com/checkoutnow?token=${id}` }] });
       }
       const m = url.match(/\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/);
       const o = m && orders.get(m[1]);
@@ -561,7 +561,7 @@ describe('payment', () => {
     const mine = await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: v.cookie });
     assert.equal(mine.status, 200, mine.text);
     assert.equal(mine.json.ok, true);
-    assert.match(mine.json.approveUrl, /^https:\/\/paypal\.test\/checkoutnow\?token=ROUTEORDER\d+$/);
+    assert.match(mine.json.approveUrl, /^https:\/\/www\.paypal\.com\/checkoutnow\?token=ROUTEORDER\d+$/);
   });
 
   test('the return confirms the booking and sends the viewer back with paid=1; a replay too, recorded once', async () => {

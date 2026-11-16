@@ -33,6 +33,14 @@ const EXPIRE_GRACE_MS = 30 * MINUTE_MS; // while PayPal cannot be asked, a booki
 const OPEN_ORDERS_MAX = 5; // Pay pressed again and again: at most this many unpaid orders per booking
 const ORDER_ID = /^[A-Z0-9-]{10,64}$/i;
 
+// The viewer is sent to whatever PayPal's order says; only an https PayPal page is ever handed on.
+function isPayPalUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && (u.hostname === 'paypal.com' || u.hostname.endsWith('.paypal.com'));
+  } catch (e) { return false; }
+}
+
 // Reasons a capture is refused for good: the order was paid, but not as this booking needs (or not to this streamer).
 const MISMATCH = ['order_mismatch', 'booking_mismatch', 'payee_mismatch', 'amount_mismatch', 'currency_mismatch'];
 
@@ -210,7 +218,7 @@ async function startPayment(streamer, viewer, bookingId, { lang = 'en', now = Da
     return { ok: false, code: 'payment_failed' };
   }
   const approveUrl = approveUrlOf(order);
-  if (!approveUrl || !ORDER_ID.test(order.id)) {
+  if (!approveUrl || !ORDER_ID.test(order.id) || !isPayPalUrl(approveUrl)) {
     console.error(`[Coaching] PayPal order for booking ${booking.id} refused: ${paypalIssue(order)}`);
     return { ok: false, code: 'payment_failed' };
   }

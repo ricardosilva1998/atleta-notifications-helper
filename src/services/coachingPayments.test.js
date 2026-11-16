@@ -98,7 +98,7 @@ async function fakeFetch(url, opts = {}) {
     return reply(201, {
       id, status: 'CREATED',
       purchase_units: [{ reference_id: 'default', custom_id: unit.custom_id, amount: unit.amount, payee: { email_address: unit.payee.email_address, merchant_id: MERCHANT } }],
-      links: [{ rel: 'approve', href: `${PAYPAL}/checkoutnow?token=${id}` }],
+      links: [{ rel: 'approve', href: paypal.approveHost ? `${paypal.approveHost}/checkoutnow?token=${id}` : `https://www.paypal.com/checkoutnow?token=${id}` }],
     });
   }
   const m = url.match(/\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/);
@@ -299,6 +299,17 @@ describe('startPayment', () => {
     assert.deepEqual(await pay.startPayment(s, viewer(viewers), r.booking.id, { now: NOW }), { ok: false, code: 'not_awaiting' }, 'not accepted yet');
     assert.deepEqual(await pay.startPayment({ ...s, paypal_email: null }, v, booking.id, { now: NOW }), { ok: false, code: 'no_paypal' });
     assert.equal(paypal.calls.length, 0);
+  });
+
+  test('an approve link that is not a PayPal page is never handed on, and no order is stored', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v } = await awaiting(s);
+    for (const host of ['https://evil.example', 'https://paypal.com.evil.example', 'http://www.paypal.com', 'https://evilpaypal.com']) {
+      paypal.approveHost = host;
+      assert.deepEqual(await pay.startPayment(s, v, booking.id, { now: NOW }), { ok: false, code: 'payment_failed' }, host);
+    }
+    assert.equal(db.listOpenCoachingPaymentsFor(booking.id).length, 0);
+    paypal.approveHost = null;
   });
 
   test('PayPal down answers payment_failed and stores nothing', async () => {

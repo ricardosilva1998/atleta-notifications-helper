@@ -454,6 +454,21 @@ describe('planAttachments and buildTranscript', () => {
     assert.deepEqual(rooms.planAttachments(many).batches.map((b) => b.length), [10, 10, 3]);
   });
 
+  test('a chat full of files holds at most 30 for the bot; the rest are named too big', () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({ key: String(i), size: 1 }));
+    const plan = rooms.planAttachments(many);
+    assert.equal(plan.batches.flat().length, 30);
+    assert.equal(plan.tooBig.length, 50);
+  });
+
+  test('an attachment name from chat is cut to plain characters before it is uploaded', () => {
+    assert.equal(rooms.safeFileName('../../etc/passwd'), '__.._etc_passwd');
+    assert.equal(rooms.safeFileName('.hidden'), '_hidden');
+    assert.equal(rooms.safeFileName('a\nb<c>.png'), 'a_b_c_.png');
+    assert.equal(rooms.safeFileName('x'.repeat(300)).length, 100);
+    assert.equal(rooms.safeFileName(''), 'file');
+  });
+
   test('the transcript names the zone and lists each attachment\'s fate', () => {
     const t = (key, p = {}) => `${key}${p.name ? `:${p.name}` : ''}${p.zone ? `:${p.zone}` : ''}`;
     const text = rooms.buildTranscript({

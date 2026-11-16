@@ -786,6 +786,19 @@ describe('coaching: the viewer\'s own Discord sign-in, on the real session step 
     assert.equal(ok.json.ok, true);
     assert.equal(bookings(), before + 1);
 
+    const pay = (n, h) => send('POST', `/coaching/${login}/bookings/${n}/pay`, { peer: '203.0.113.77', headers: h });
+    const payNoToken = await pay(ok.json.booking.id, { Cookie: cookie, ...SITE });
+    assert.equal(payNoToken.status, 403, 'Pay needs the token too');
+    const payOther = await pay(ok.json.booking.id, { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(viewerSession(2)) });
+    assert.equal(payOther.status, 403, 'another session\'s token');
+    const own = { Cookie: cookie, ...SITE, 'X-CSRF-Token': tokenOf(sid) };
+    const notMine = await pay(999999, own);
+    assert.equal(notMine.status, 404, 'a booking that is not this viewer\'s answers not_found');
+    const waiting = await pay(ok.json.booking.id, own);
+    assert.equal(waiting.status, 409, 'a booking not awaiting payment is not payable');
+    for (let i = 0; i < 20; i++) await pay(999999, own);
+    assert.equal((await pay(999999, own)).status, 429, 'Pay is limited per visitor');
+
     const signOut = await send('POST', '/auth/coaching-signout', { headers: { Cookie: cookie, ...SITE } });
     assert.equal(signOut.status, 403, 'signing out needs the token too');
   });

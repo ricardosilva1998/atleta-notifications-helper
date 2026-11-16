@@ -167,7 +167,7 @@ test('every rate limit counts the visitor\'s address (clientIp.js), and trust pr
   at("const { clientIp } = require('./clientIp');");
   at('const byVisitor = (req) => ipKeyGenerator(clientIp(req));');
   const limiters = [...code.matchAll(/const (\w+) = rateLimit\(\{[\s\S]*?\}\);/g)];
-  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'authLimiter', 'apiLimiter', 'voiceLimiter']);
+  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'authLimiter', 'apiLimiter', 'voiceLimiter', 'coachingPayLimiter']);
   for (const [declaration, name] of limiters) assert.match(declaration, /\bkeyGenerator: byVisitor\b/, `${name} counts by visitor`);
   assert.equal(code.match(/\brateLimit\(/g).length, limiters.length, 'no other limiter');
 });
