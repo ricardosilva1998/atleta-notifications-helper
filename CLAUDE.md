@@ -456,3 +456,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** F1.1 in headless Chromium on `/overlay/<token>`: a redemption with a missing audio file then three follows shows A, then B, then C, one at a time (2193, 2595, 2997 ms); the pre-fix overlay.js shows A and B at the same instant (2209, 2209). F1.2 `git grep` over docs: only legitimate mentions (release notes, 410/redirect notes, donation-history StreamElements rows, coaching.md:3, the obsolete idea doc, the Racing alert-look family).
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-16 23:59 — team-qa
+**Task:** C2.1.2, full suite after the code review fixes (branch `fix/review-findings`)
+**Tests added/changed:** none
+**Suite result:** scratch copy (Node 26, better-sqlite3 rebuilt): 3981 tests, 3981 pass, 0 fail, 0 skipped. Two boots on empty then reused data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** none
+**Bugs found:** none. QA: pass.
+**Open:** none
