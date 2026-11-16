@@ -682,6 +682,49 @@ describe('the page', () => {
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(script), 'the page script builds with textContent only');
   });
 
+  test('the page is four tabs, Bookings first, one form with a Save in each of Schedule, Price and Settings', async () => {
+    const s = addStreamer();
+    const res = await get('/dashboard/coaching', { streamer: s });
+    assert.equal(res.status, 200);
+    const html = res.text;
+    const buttons = [...html.matchAll(/id="cd-tabbtn-(\w+)" data-cd-tab="(\w+)"/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(buttons, [['bookings', 'bookings'], ['schedule', 'schedule'], ['price', 'price'], ['settings', 'settings']]);
+    for (const name of ['bookings', 'schedule', 'price', 'settings']) {
+      assert.ok(html.includes(`id="cd-tab-${name}" role="tabpanel"`), `${name} panel`);
+      assert.ok(html.includes(esc(t('en', `coaching.dashboard.tabs.${name}`))), `${name} label`);
+    }
+    // The tab is named on <html> by a script that runs before the tab bar, and an unknown value opens Bookings.
+    assert.ok(html.indexOf("localStorage.getItem('coaching_tab')") < html.indexOf('id="cd-tabs"'));
+    assert.ok(html.includes("tabs.indexOf(saved) >= 0 ? saved : 'bookings'"));
+    // One form (one save call) holds the three form tabs; Bookings is outside it.
+    assert.equal((html.match(/<form id="cd-form"/g) || []).length, 1);
+    const form = html.slice(html.indexOf('<form id="cd-form"'), html.indexOf('</form>', html.indexOf('<form id="cd-form"')));
+    assert.equal((form.match(/class="btn btn-primary cd-btn cd-save"/g) || []).length, 3);
+    for (const name of ['schedule', 'price', 'settings']) assert.ok(form.includes(`id="cd-tab-${name}"`), `${name} is in the form`);
+    assert.ok(!form.includes('id="cd-tab-bookings"'));
+    // The pop-ups: the cancel reason is required and limited, the note limited.
+    assert.match(html, /id="cd-cancel-reason"[^>]*maxlength="500"[^>]*required/);
+    assert.match(html, /id="cd-resched-note"[^>]*maxlength="300"/);
+    const data = pageData(html);
+    assert.deepEqual(data.limits, { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 48 * 3600e3 });
+  });
+
+  test('every text the page script reads is in the page texts, the new states included', async () => {
+    const s = addStreamer();
+    const html = (await get('/dashboard/coaching', { streamer: s })).text;
+    const texts = JSON.parse(html.match(/window\.COACHING_DASHBOARD_TEXTS = (.*);<\/script>/)[1]);
+    const script = fs.readFileSync(PAGE_SCRIPT, 'utf8');
+    const used = new Set([...script.matchAll(/\bT\.(\w+)/g)].map((m) => m[1]));
+    const groups = new Set(['states', 'roomError', 'transcript']);
+    for (const name of used) {
+      assert.ok(Object.hasOwn(texts, name), `T.${name} is in the page texts`);
+      if (!groups.has(name)) assert.ok(typeof texts[name] === 'string' && texts[name], `T.${name} has a text`);
+    }
+    assert.equal(texts.states.rescheduling, t('en', 'coaching.state.rescheduling'));
+    assert.equal(texts.states.not_rescheduled, t('en', 'coaching.state.not_rescheduled'));
+    assert.ok(texts.refundPayer.includes('{{name}}') && texts.refundPayer.includes('{{email}}'), 'fields are kept for the script');
+  });
+
   test('the server picker lists the claimed servers the bot is in, and the saved one while the bot cannot see it', async () => {
     discord.guilds = { 123: 'Coach HQ live', 456: 'Visible' };
     const s = addStreamer({ guilds: { 123: 'Coach HQ', 456: 'Visible stored', 789: 'Bot gone' } });

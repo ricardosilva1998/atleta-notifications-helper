@@ -37,6 +37,9 @@
     <% if (card.roomErrors > 0) { %>
     <div class="wc-note"><span><%= t('cards.coaching.roomErrors', { count: card.roomErrors }) %></span><a href="/dashboard/coaching"><%= t('cards.coaching.roomErrorsAction') %></a></div>
     <% } %>
+    <% if (card.refundsPending > 0) { %>
+    <div class="wc-note"><span><%= t('cards.coaching.refundsPending', { count: card.refundsPending }) %></span><a href="/dashboard/coaching?tab=bookings"><%= t('cards.coaching.refundsPendingAction') %></a></div>
+    <% } %>
     <% if (card.inviteBroken) { %>
     <div class="wc-note"><span><%= t('coaching.dashboard.inviteBroken') %></span><a href="/dashboard/coaching"><%= t('coaching.dashboard.inviteFix') %></a></div>
     <% } %>

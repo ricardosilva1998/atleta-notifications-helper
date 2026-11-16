@@ -1,7 +1,9 @@
-// The streamer's coaching page (views/coaching-dashboard.ejs, routes/coachingDashboard.js). It draws the Schedule (the
-// bookings to come by day, with Accept and Decline for a waiting request and Cancel for a confirmed session, and the
-// last 30 days below) and the parts of When I coach that the server leaves to it (the seven weekday rows, the days
-// off, the status line), from window.COACHING_DASHBOARD_DATA, and redraws from each answer of the JSON routes under
+// The streamer's coaching page (views/coaching-dashboard.ejs, routes/coachingDashboard.js), in four tabs (Bookings,
+// Schedule, Price, Settings; the open one is kept in localStorage 'coaching_tab'). It draws the Bookings (the bookings
+// to come by day, with Accept and Decline for a waiting request, Reschedule and Cancel (with a reason, in a pop-up),
+// the state of a reschedule with Accept and Propose another time, and the refunds to make with Refunded; the last 30
+// days below) and the parts of the form that the server leaves to it (the seven weekday rows, the days off, the
+// lengths, the status line), from window.COACHING_DASHBOARD_DATA, and redraws from each answer of the JSON routes under
 // /dashboard/api/coaching/ ({ ok: true, ... } or { ok: false, code, error }, the error being the route's own text).
 // Times arrive as UTC instants and are shown in the streamer's coaching zone (window.COACHING_CORE,
 // public/js/coaching-core.js). Texts come from window.COACHING_DASHBOARD_TEXTS, their {{fields}} filled here; every
@@ -30,6 +32,15 @@
   var money = DATA.money || { currency: 'EUR', hasPaypal: true, checkPrices: false };
   var categories = DATA.categories || [];
   var saving = false;
+  var limits = DATA.limits || { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 48 * 3600e3 };
+  var TABS = ['bookings', 'schedule', 'price', 'settings'];
+  // The tab a refused save names: its field is there.
+  var TAB_OF_CODE = {
+    bad_zone: 'schedule', bad_hours: 'schedule', bad_days_off: 'schedule',
+    bad_lengths: 'price', no_length: 'price',
+    bad_server: 'settings', bad_invite: 'settings', invite_other_server: 'settings', bad_where: 'settings', bad_switch: 'settings',
+    bad_category: 'settings', category_not_found: 'settings', category_permissions: 'settings',
+  };
 
   function copyLengths(map) {
     var out = {};
@@ -117,6 +128,54 @@
     if (text && tone === 'ok') box._timer = setTimeout(function () { show(box, false); }, OK_MS);
   }
 
+  // The form's message line: one in each tab's panel, only the open tab's is seen.
+  function formMessage(text, tone) {
+    Array.prototype.forEach.call(document.querySelectorAll('.cd-formmsg'), function (box) {
+      clearTimeout(box._timer);
+      box.textContent = text || '';
+      box.className = 'cd-msg cd-formmsg' + (tone ? ' ' + tone : '');
+      show(box, !!text);
+      if (text && tone === 'ok') box._timer = setTimeout(function () { show(box, false); }, OK_MS);
+    });
+  }
+
+  // ── Tabs ──
+
+  function openTab(name, focus) {
+    if (TABS.indexOf(name) < 0) name = 'bookings';
+    document.documentElement.setAttribute('data-coaching-tab', name);
+    try { localStorage.setItem('coaching_tab', name); } catch (e) { /* storage refused: the tab is not kept */ }
+    TABS.forEach(function (t) {
+      var button = $('cd-tabbtn-' + t);
+      if (!button) return;
+      button.setAttribute('aria-selected', t === name ? 'true' : 'false');
+      button.tabIndex = t === name ? 0 : -1;
+    });
+    if (focus) $('cd-tabbtn-' + name).focus();
+  }
+  TABS.forEach(function (name, i) {
+    var button = $('cd-tabbtn-' + name);
+    button.addEventListener('click', function () { openTab(name); });
+    button.addEventListener('keydown', function (e) {
+      var to = null;
+      if (e.key === 'ArrowRight') to = TABS[(i + 1) % TABS.length];
+      else if (e.key === 'ArrowLeft') to = TABS[(i + TABS.length - 1) % TABS.length];
+      else if (e.key === 'Home') to = TABS[0];
+      else if (e.key === 'End') to = TABS[TABS.length - 1];
+      if (to) { e.preventDefault(); openTab(to, true); }
+    });
+  });
+  // The notes' links ("Check the prices", "Fix the invite") open the tab their field is in, then go to it.
+  Array.prototype.forEach.call(document.querySelectorAll('a[data-cd-tab]'), function (link) {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+      openTab(link.getAttribute('data-cd-tab'));
+      var target = $((link.getAttribute('href') || '').slice(1));
+      if (target) { target.scrollIntoView({ block: 'center' }); if (target.focus) target.focus({ preventScroll: true }); }
+    });
+  });
+  openTab(document.documentElement.getAttribute('data-coaching-tab'));
+
   // ── Schedule ──
 
   function eachBooking(fn) {
@@ -147,6 +206,13 @@
     };
     schedule.days.forEach(function (day) { swap(day.bookings); });
     swap(schedule.past);
+  }
+
+  // A booking changed by an answer: put in its place and drawn again (a new time can move it to another day).
+  function refresh(updated) {
+    replaceBooking(updated);
+    regroup();
+    drawSchedule();
   }
 
   function iconButton(className, glyph, label, onClick) {
@@ -211,12 +277,17 @@
     sub.appendChild(make('span', null, who + lengthText(b.minutes) + price));
     sub.appendChild(make('span', 'cd-pill ' + b.state, (T.states && T.states[b.state]) || b.state));
     if (b.paid) sub.appendChild(make('span', 'cd-pill paid', fill(T.paid, { price: priceText(b.paidAmountCents != null ? b.paidAmountCents : b.priceCents, b.paidCurrency || b.currency) })));
+    if (b.refundPending) sub.appendChild(make('span', 'cd-pill warn', T.refundPending));
+    else if (b.refundState === 'refunded') sub.appendChild(make('span', 'cd-pill paid', T.refunded));
     if (b.outside) sub.appendChild(make('span', 'cd-pill warn', T.outside));
     what.appendChild(sub);
     if (b.state === 'awaiting_payment' && b.payBy) {
       what.appendChild(make('div', 'cd-sub', fill(T.payBy, { when: C.payByLabel(b.payBy, zone, lang) })));
     }
     if (b.note) what.appendChild(make('div', 'cd-note-text', b.note));
+    if (b.state === 'cancelled' && b.cancelReason) what.appendChild(make('div', 'cd-note-text', fill(T.reasonGiven, { reason: b.cancelReason })));
+    if (b.state === 'rescheduling') what.appendChild(rescheduleBox(b));
+    refundBoxes(b, what);
     if (b.messageError) what.appendChild(make('div', 'cd-warn', fill(T.messageError, { name: b.viewerName })));
     if (b.paymentIssue === 'late') {
       what.appendChild(make('div', 'cd-warn', fill(T.paymentLate, { name: b.viewerName, price: priceText(b.paidAmountCents != null ? b.paidAmountCents : b.priceCents, b.paidCurrency || b.currency) })));
@@ -231,11 +302,19 @@
     if (b.startsAt > now && b.state === 'waiting') {
       actions.appendChild(iconButton('ok', '✓', T.accept, function () { act(b, 'accept', line); }));
       actions.appendChild(iconButton('no', '✕', T.decline, function () { act(b, 'decline', line); }));
-    } else if (b.startsAt > now && (b.state === 'confirmed' || b.state === 'awaiting_payment') && !b.paid) {
-      var cancel = make('button', 'cd-sbtn', T.cancel);
-      cancel.type = 'button';
-      cancel.addEventListener('click', function () { act(b, 'cancel', line); });
-      actions.appendChild(cancel);
+    } else {
+      if (b.startsAt > now && b.state === 'confirmed') {
+        var move = make('button', 'cd-sbtn plain', T.reschedule);
+        move.type = 'button';
+        move.addEventListener('click', function () { openReschedule(b, 'start'); });
+        actions.appendChild(move);
+      }
+      if ((b.startsAt > now && (b.state === 'confirmed' || b.state === 'awaiting_payment')) || b.state === 'rescheduling') {
+        var cancel = make('button', 'cd-sbtn', T.cancel);
+        cancel.type = 'button';
+        cancel.addEventListener('click', function () { openCancel(b); });
+        actions.appendChild(cancel);
+      }
     }
     if (actions.firstChild) line.appendChild(actions);
     return line;
@@ -261,11 +340,74 @@
 
   var DONE_TEXTS = { accept: 'accepted', decline: 'declined', cancel: 'cancelled' };
 
+  function dateTime(ms) { return C.dateLabel(ms, zone, lang) + ', ' + time(ms); }
+
+  // Where a reschedule stands, written from the booking: who proposed what, when it lapses, when the whole thing closes.
+  function rescheduleBox(b) {
+    var box = make('div', 'cd-resched');
+    var p = b.proposal;
+    var name = b.viewerName;
+    if (p && p.by === 'coach') box.appendChild(make('p', null, fill(T.reschedCoachProposed, { name: name, when: dateTime(p.startsAt), lapse: p.at ? dateTime(p.at + limits.proposalLapseMs) : '' })));
+    else if (p) box.appendChild(make('p', null, fill(T.reschedViewerProposed, { name: name, when: dateTime(p.startsAt) })));
+    else box.appendChild(make('p', null, fill(T.reschedWaitingViewer, { name: name })));
+    if (p && p.note) box.appendChild(make('p', null, '\u201c' + p.note + '\u201d'));
+    if (b.rescheduleEndsAt) box.appendChild(make('p', 'cd-sub', fill(T.reschedEnds, { when: dateTime(b.rescheduleEndsAt) })));
+    if (p && p.by === 'viewer') {
+      var row = make('div', 'cd-btnrow');
+      var accept = make('button', 'cd-sbtn go', T.acceptProposal);
+      accept.type = 'button';
+      accept.addEventListener('click', function () {
+        accept.disabled = true;
+        api('POST', '/dashboard/api/coaching/bookings/' + encodeURIComponent(String(b.id)) + '/accept-proposal').then(function (answer) {
+          if (!answer.ok) { accept.disabled = false; message('cd-schedule-msg', answer.text); return; }
+          var u = answer.data.booking;
+          refresh(u);
+          if (u.messageError) message('cd-schedule-msg', fill(T.messageError, { name: u.viewerName }), 'warn');
+          else message('cd-schedule-msg', fill(T.proposalAccepted, { name: u.viewerName, when: dateTime(u.startsAt) }), 'ok');
+        });
+      });
+      row.appendChild(accept);
+      var other = make('button', 'cd-sbtn plain', T.proposeAnother);
+      other.type = 'button';
+      other.addEventListener('click', function () { openReschedule(b, 'counter'); });
+      row.appendChild(other);
+      box.appendChild(row);
+    }
+    return box;
+  }
+
+  // The refunds this booking owes: each payment waiting for the coach, with the payer's PayPal details (this page only)
+  // and Refunded, which only records what the coach did in PayPal.
+  function refundBoxes(b, what) {
+    (b.refunds || []).forEach(function (r) {
+      if (r.status !== 'pending') return;
+      var box = make('div', 'cd-refund');
+      box.appendChild(make('b', null, fill(T.refundTitle, { price: priceText(r.amountCents, r.currency) })));
+      box.appendChild(make('p', null, r.payerName || r.payerEmail ? fill(T.refundPayer, { name: r.payerName || '-', email: r.payerEmail || '-' }) : T.refundNoPayer));
+      if (r.captureId) box.appendChild(make('p', null, fill(T.refundCapture, { id: r.captureId })));
+      var row = make('div', 'cd-btnrow');
+      var done = make('button', 'cd-sbtn go', T.refundedButton);
+      done.type = 'button';
+      done.addEventListener('click', function () {
+        if (!window.confirm(fill(T.refundConfirm, { name: b.viewerName }))) return;
+        done.disabled = true;
+        api('POST', '/dashboard/api/coaching/payments/' + encodeURIComponent(r.orderId) + '/refunded').then(function (answer) {
+          if (!answer.ok) { done.disabled = false; message('cd-schedule-msg', answer.text); return; }
+          if (answer.data.booking) replaceBooking(answer.data.booking);
+          drawSchedule();
+          message('cd-schedule-msg', fill(T.refundedDone, { name: b.viewerName }), 'ok');
+        });
+      });
+      row.appendChild(done);
+      box.appendChild(row);
+      what.appendChild(box);
+    });
+  }
+
   // Accept, Decline (after asking) or Cancel (after asking); the row is redrawn from the answer, which says whether
   // Atleta could message the viewer.
   function act(b, action, line) {
     if (action === 'decline' && !window.confirm(fill(T.declineConfirm, { name: b.viewerName }))) return;
-    if (action === 'cancel' && !window.confirm(fill(T.cancelConfirm, { name: b.viewerName }))) return;
     var buttons = Array.prototype.slice.call(line.querySelectorAll('button'));
     buttons.forEach(function (el) { el.disabled = true; });
     api('POST', '/dashboard/api/coaching/bookings/' + encodeURIComponent(String(b.id)) + '/' + action).then(function (answer) {
@@ -281,6 +423,173 @@
       else message('cd-schedule-msg', fill(T[DONE_TEXTS[action]], { name: updated.viewerName }), 'ok');
     });
   }
+
+  // ── Pop-ups: Cancel with a reason, Reschedule ──
+  // Native <dialog>s: Esc closes, focus stays inside and comes back to the button; a click on the backdrop closes too.
+
+  function closeOnBackdrop(dialog) {
+    dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
+    Array.prototype.forEach.call(dialog.querySelectorAll('[data-cd-close]'), function (b) {
+      b.addEventListener('click', function () { dialog.close(); });
+    });
+  }
+  function counter(input, out, max) {
+    var update = function () { out.textContent = input.value.length + ' / ' + max; };
+    input.addEventListener('input', update);
+    update();
+  }
+  function dialogMessage(id, text) {
+    var box = $(id);
+    box.textContent = text || '';
+    box.className = 'cd-msg';
+    show(box, !!text);
+  }
+
+  var cancelDialog = $('cd-cancel-dialog');
+  var cancelFor = null;
+  closeOnBackdrop(cancelDialog);
+  counter($('cd-cancel-reason'), $('cd-cancel-count'), limits.cancelReasonMax);
+
+  function openCancel(b) {
+    cancelFor = b;
+    $('cd-cancel-title').textContent = fill(T.cancelTitle, { name: b.viewerName });
+    show($('cd-cancel-paid'), !!b.paid);
+    $('cd-cancel-reason').value = '';
+    $('cd-cancel-reason').dispatchEvent(new Event('input'));
+    $('cd-cancel-submit').disabled = false;
+    dialogMessage('cd-cancel-msg', '');
+    cancelDialog.showModal();
+    $('cd-cancel-reason').focus();
+  }
+
+  $('cd-cancel-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var b = cancelFor;
+    if (!b) return;
+    var reason = $('cd-cancel-reason').value.trim();
+    if (!reason) { dialogMessage('cd-cancel-msg', T.reasonRequired); $('cd-cancel-reason').focus(); return; }
+    var submit = $('cd-cancel-submit');
+    submit.disabled = true;
+    api('POST', '/dashboard/api/coaching/bookings/' + encodeURIComponent(String(b.id)) + '/cancel', { reason: reason }).then(function (answer) {
+      submit.disabled = false;
+      if (!answer.ok) { dialogMessage('cd-cancel-msg', answer.text); return; }
+      var updated = answer.data.booking;
+      cancelDialog.close();
+      replaceBooking(updated);
+      drawSchedule();
+      if (updated.messageError) message('cd-schedule-msg', fill(T.messageError, { name: updated.viewerName }), 'warn');
+      else message('cd-schedule-msg', fill(T.cancelled, { name: updated.viewerName }), 'ok');
+    });
+  });
+
+  var reschedDialog = $('cd-resched-dialog');
+  var reschedFor = null;
+  var reschedMode = 'start';
+  var reschedDays = []; // [{ date, starts: [ms] }]
+  closeOnBackdrop(reschedDialog);
+  counter($('cd-resched-note'), $('cd-resched-count'), limits.noteMax);
+
+  function chosenWay() {
+    if (reschedMode === 'counter') return 'propose';
+    var checked = reschedDialog.querySelector('input[name="cd-way"]:checked');
+    return checked ? checked.value : 'propose';
+  }
+  function syncWay() {
+    show($('cd-resched-pick'), chosenWay() === 'propose');
+  }
+  Array.prototype.forEach.call(reschedDialog.querySelectorAll('input[name="cd-way"]'), function (r) { r.addEventListener('change', syncWay); });
+
+  function drawTimes() {
+    var day = reschedDays[$('cd-resched-day').selectedIndex];
+    var select = $('cd-resched-time');
+    clear(select);
+    (day ? day.starts : []).forEach(function (ms) {
+      var option = make('option', null, time(ms));
+      option.value = String(ms);
+      select.appendChild(option);
+    });
+  }
+  $('cd-resched-day').addEventListener('change', drawTimes);
+
+  function drawStarts(starts) {
+    reschedDays = [];
+    starts.forEach(function (ms) {
+      var date = C.localDate(ms, zone);
+      var last = reschedDays[reschedDays.length - 1];
+      if (!last || last.date !== date) reschedDays.push(last = { date: date, starts: [] });
+      last.starts.push(ms);
+    });
+    var daySelect = $('cd-resched-day');
+    clear(daySelect);
+    reschedDays.forEach(function (d) {
+      var option = make('option', null, C.dateLabel(d.starts[0], zone, lang));
+      option.value = d.date;
+      daySelect.appendChild(option);
+    });
+    drawTimes();
+    show($('cd-resched-loading'), false);
+    show($('cd-resched-fields'), reschedDays.length > 0);
+    if (!reschedDays.length) {
+      var loading = $('cd-resched-loading');
+      loading.textContent = T.rescheduleNoTimes;
+      show(loading, true);
+    }
+  }
+
+  function openReschedule(b, mode) {
+    reschedFor = b;
+    reschedMode = mode;
+    $('cd-resched-title').textContent = fill(mode === 'counter' ? T.proposeAnotherTitle : T.rescheduleTitle, { name: b.viewerName });
+    $('cd-way-ask').textContent = fill(T.rescheduleWayAsk, { name: b.viewerName });
+    show($('cd-resched-ways'), mode !== 'counter');
+    reschedDialog.querySelector('input[name="cd-way"][value="propose"]').checked = true;
+    $('cd-resched-note').value = '';
+    $('cd-resched-note').dispatchEvent(new Event('input'));
+    $('cd-resched-zone').textContent = fill(T.zone, { zone: zone });
+    $('cd-resched-loading').textContent = T.rescheduleLoading;
+    show($('cd-resched-loading'), true);
+    show($('cd-resched-fields'), false);
+    $('cd-resched-submit').disabled = true;
+    dialogMessage('cd-resched-msg', '');
+    syncWay();
+    reschedDialog.showModal();
+    api('GET', '/dashboard/api/coaching/bookings/' + encodeURIComponent(String(b.id)) + '/proposal-starts').then(function (answer) {
+      if (reschedFor !== b) return;
+      $('cd-resched-submit').disabled = false;
+      if (!answer.ok) {
+        show($('cd-resched-loading'), false);
+        dialogMessage('cd-resched-msg', answer.text);
+        return;
+      }
+      drawStarts(answer.data.starts || []);
+    });
+  }
+
+  $('cd-resched-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var b = reschedFor;
+    if (!b) return;
+    var way = chosenWay();
+    var body = { note: $('cd-resched-note').value.trim() };
+    if (way === 'propose') {
+      var picked = Number($('cd-resched-time').value);
+      if (!picked) { dialogMessage('cd-resched-msg', T.rescheduleNoTimes); return; }
+      body.startsAt = picked;
+    }
+    var url = '/dashboard/api/coaching/bookings/' + encodeURIComponent(String(b.id)) + (reschedMode === 'counter' ? '/propose' : '/reschedule');
+    if (reschedMode !== 'counter') body.way = way;
+    var submit = $('cd-resched-submit');
+    submit.disabled = true;
+    api('POST', url, body).then(function (answer) {
+      submit.disabled = false;
+      if (!answer.ok) { dialogMessage('cd-resched-msg', answer.text); return; }
+      var updated = answer.data.booking;
+      reschedDialog.close();
+      refresh(updated);
+      if (updated.messageError) message('cd-schedule-msg', fill(T.messageError, { name: updated.viewerName }), 'warn');
+      else message('cd-schedule-msg', fill(reschedMode === 'counter' || way === 'propose' ? T.proposalSent : T.askSent, { name: updated.viewerName }), 'ok');
+    });
+  });
 
   // ── When I coach ──
 
@@ -449,7 +758,7 @@
     status.className = 'cd-status' + (setUp && settings.open ? '' : ' off');
     show($('cd-open-switch'), setUp);
     $('cd-open').checked = !!settings.open;
-    $('cd-save').textContent = saving ? T.saving : (setUp ? T.save : T.saveFirst);
+    Array.prototype.forEach.call(document.querySelectorAll('.cd-save'), function (b) { b.textContent = saving ? T.saving : (setUp ? T.save : T.saveFirst); });
     show($('cd-invite-broken'), setUp && settings.inviteOk === false);
     show($('cd-link'), setUp);
     show($('cd-link-hint'), setUp);
@@ -475,9 +784,9 @@
       input.disabled = false;
       if (answer.ok) {
         settings.open = !!answer.data.open;
-        message('cd-hours-msg', '');
+        formMessage('');
       } else {
-        message('cd-hours-msg', answer.text);
+        formMessage(answer.text);
       }
       drawStatus();
     });
@@ -508,8 +817,8 @@
     e.preventDefault();
     if (saving) return;
     saving = true;
-    var save = $('cd-save');
-    save.disabled = true;
+    var saves = Array.prototype.slice.call(document.querySelectorAll('.cd-save'));
+    saves.forEach(function (b) { b.disabled = true; });
     drawStatus();
     var server = $('cd-server');
     api('POST', '/dashboard/api/coaching/settings', {
@@ -524,10 +833,11 @@
       categoryId: $('cd-category').disabled ? undefined : $('cd-category').value,
     }).then(function (answer) {
       saving = false;
-      save.disabled = false;
+      saves.forEach(function (b) { b.disabled = false; });
       if (!answer.ok) {
         drawStatus();
-        message('cd-hours-msg', answer.text);
+        if (answer.code && TAB_OF_CODE[answer.code]) openTab(TAB_OF_CODE[answer.code]);
+        formMessage(answer.text);
         return;
       }
       var first = !setUp;
@@ -549,8 +859,8 @@
       eachBooking(function (b) { b.outside = outside.indexOf(b.id) >= 0; });
       drawAll();
       var text = settings.inviteOk === null ? T.savedUnchecked : (first ? T.savedOpened : T.saved);
-      if (outside.length) message('cd-hours-msg', text + ' ' + T.outsideSaved, 'warn');
-      else message('cd-hours-msg', text, 'ok');
+      if (outside.length) formMessage(text + ' ' + T.outsideSaved, 'warn');
+      else formMessage(text, 'ok');
     });
   });
 

@@ -287,7 +287,7 @@ const coachingDashboardPage = ({ setUp = true, settings = {}, servers = [{ id: '
   const schedule = setUp ? { days: [{ date: '2026-10-21', bookings: [booking] }], past: [{ ...booking, id: 2, state: 'confirmed' }] } : { days: [], past: [] };
   return {
     streamer, setUp, settings: view, servers, bookingUrl, money,
-    coachingData: { lang: 'en', setUp, settings: view, money, categories: [], servers, bookingUrl, schedule, daysOffMax: 60 }, coachingTexts: { zone: 'x' },
+    coachingData: { lang: 'en', setUp, settings: view, money, categories: [], servers, bookingUrl, schedule, daysOffMax: 60, limits: { cancelReasonMax: 500, noteMax: 300, proposalLapseMs: 172800000 } }, coachingTexts: { zone: 'x' },
   };
 };
 PAGE_LOCALS['coaching-dashboard'] = [

@@ -415,7 +415,7 @@ function coachingCard({ coaching, coachingUrl }) {
     return {
       status: status(COACHING_SETUP_STATUS[c.setup], 'warn'), setup: c.setup, open: false, waiting: [], next: null,
       bookingUrl: null, inviteBroken: false, counts: { waiting: plain('') },
-      noPaypal: false, checkPrices: false, currency: 'EUR', roomErrors: 0,
+      noPaypal: false, checkPrices: false, currency: 'EUR', roomErrors: 0, refundsPending: 0,
     };
   }
   const count = Number(c.waitingCount) || 0;
@@ -438,6 +438,7 @@ function coachingCard({ coaching, coachingUrl }) {
     checkPrices: !!c.checkPrices,
     currency: c.currency || 'EUR',
     roomErrors: Number(c.roomErrors) || 0,
+    refundsPending: Number(c.refundsPending) || 0,
     counts: { waiting: count > 0 ? label('cards.coaching.badge', { count }) : plain('') },
   };
 }

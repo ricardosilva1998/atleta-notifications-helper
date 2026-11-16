@@ -3,9 +3,9 @@
 // The streamer's coaching page, /dashboard/coaching, and its JSON routes (docs/superpowers/specs/2026-10-29-coaching-
 // design.md, "The streamer's side" and "A dead invite"), mounted inside the dashboard router, so behind its login, the
 // disabled-account check and CSRF. The page (views/coaching-dashboard.ejs) is drawn by public/js/coaching-dashboard.js
-// from window.COACHING_DASHBOARD_DATA: the Schedule (the bookings to come, grouped by day in the streamer's zone, and
-// the last 30 days below) and When I coach (the weekly hours, the zone, the days off, where we meet, the booking
-// link). Every refusal is { ok: false, code, error }, the error being the code's text in the page's language. Times
+// from window.COACHING_DASHBOARD_DATA, in four tabs: Bookings (the bookings to come, grouped by day in the streamer's
+// zone, and the last 30 days below), Schedule (the weekly hours, the zone, the days off), Price (the lengths) and
+// Settings (where we meet, the booking link). Every refusal is { ok: false, code, error }, the error being the code's text in the page's language. Times
 // travel as UTC milliseconds.
 
 const { Router } = require('express');
@@ -91,10 +91,21 @@ const TEXT_KEYS = {
   saved: 'coaching.dashboard.saved', savedOpened: 'coaching.dashboard.savedOpened', savedUnchecked: 'coaching.dashboard.savedUnchecked',
   outsideSaved: 'coaching.dashboard.outsideSaved', copied: 'coaching.dashboard.copied',
   sessionEnded: 'coaching.dashboard.sessionEnded', failed: 'coaching.page.failed', offline: 'coaching.page.offline',
+  cancelTitle: 'coaching.dashboard.cancelTitle', reasonRequired: 'coaching.dashboard.error.bad_reason', reasonGiven: 'coaching.dashboard.reasonGiven',
+  reschedule: 'coaching.dashboard.reschedule', rescheduleTitle: 'coaching.dashboard.rescheduleTitle', proposeAnotherTitle: 'coaching.dashboard.proposeAnotherTitle',
+  rescheduleWayAsk: 'coaching.dashboard.rescheduleWayAsk', rescheduleLoading: 'coaching.dashboard.rescheduleLoading', rescheduleNoTimes: 'coaching.dashboard.rescheduleNoTimes',
+  reschedCoachProposed: 'coaching.dashboard.reschedCoachProposed', reschedViewerProposed: 'coaching.dashboard.reschedViewerProposed',
+  reschedWaitingViewer: 'coaching.dashboard.reschedWaitingViewer', reschedEnds: 'coaching.dashboard.reschedEnds',
+  acceptProposal: 'coaching.dashboard.acceptProposal', proposeAnother: 'coaching.dashboard.proposeAnother',
+  proposalAccepted: 'coaching.dashboard.proposalAccepted', proposalSent: 'coaching.dashboard.proposalSent', askSent: 'coaching.dashboard.askSent',
+  refundPending: 'coaching.dashboard.refundPending', refunded: 'coaching.dashboard.refunded', refundedButton: 'coaching.dashboard.refundedButton',
+  refundTitle: 'coaching.dashboard.refundTitle', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
+  refundCapture: 'coaching.dashboard.refundCapture', refundConfirm: 'coaching.dashboard.refundConfirm', refundedDone: 'coaching.dashboard.refundedDone',
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
   cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
+  rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
 const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'failed'];
 const TRANSCRIPT_STATUSES = ['sent', 'partial', 'failed', 'no_intent', 'no_channel'];
@@ -250,6 +261,7 @@ router.get('/coaching', async (req, res) => {
       bookingUrl: link,
       schedule: scheduleOf(streamer.id, settings, now),
       daysOffMax: coaching.DAYS_OFF_MAX,
+      limits: { cancelReasonMax: coaching.CANCEL_REASON_MAX, noteMax: coaching.PROPOSAL_NOTE_MAX, proposalLapseMs: coaching.PROPOSAL_LAPSE_MS },
     },
     coachingTexts: pageTexts(res.locals.t),
   });

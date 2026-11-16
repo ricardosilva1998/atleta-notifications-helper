@@ -463,6 +463,12 @@ describe('Coaching', () => {
     assert.deepEqual([notes.noPaypal, notes.checkPrices, notes.currency, notes.roomErrors], [true, true, 'USD', 2]);
   });
 
+  test('the card counts the refunds the coach still owes, none before it is set up', () => {
+    assert.equal(coach().refundsPending, 0);
+    assert.equal(coach({ refundsPending: 3 }).refundsPending, 3);
+    assert.equal(coach({ setup: 'hours', refundsPending: 3 }).refundsPending, 0);
+  });
+
   test('cardTexts translates its status and badge', () => {
     const t = (key, params) => `${key}${params && Object.keys(params).length ? JSON.stringify(params) : ''}`;
     const texts = cardTexts(build({ coaching: coachingInput({ waiting: [booking()], waitingCount: 1 }) }), t);
