@@ -464,3 +464,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** none
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-16 — team-qa
+**Task:** F2.5, check of fix round 2 (F2.1 70af68a, F2.2 fe50f65, F2.3 a9e98af, F2.4 b45b895 + 2013bbf)
+**Tests added/changed:** none
+**Suite result:** scratch copies (Node 26, npm ci): `fix/review-findings` 3984 tests, 3984 pass, 0 fail; `chore/remove-racing` 3958 tests, 3958 pass, 0 fail. Two boots per branch on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** README lines 3 and 79 on both branches are the new text and the `node --test` command; F2.1 to F2.3 behaviours covered by their passing tests (trackers with no rows all off, sponsor name cut at 500, reward template over 500 refused, missing watcher `not_found`).
+**Bugs found:** none. QA: pass.
+**Open:** none
