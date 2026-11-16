@@ -469,3 +469,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `coachingRooms.js` makes the role then the voice channel (ids written as made; `makeFor`, `retry`, `finishOrCleanMaking`, `closeDue`, `removeAllFor`); `coachingTick.js` runs every minute (expireDue, reconcileStale, making, close), started in `index.js`.
 - Settings save takes `categoryId` (checked: `category_not_found`, `category_permissions` naming what is missing); `POST /dashboard/api/coaching/bookings/:id/room` retries; `bookingView` now carries `roomUrl`, `roomError`, `transcriptStatus` (viewer views carry only `roomUrl`); admin Remove calls `removeAllFor` first.
 **Open:** T5 draws the category picker (`coachingData.categories`, `settings.categoryId`) and the room error and transcript texts (`coaching.dashboard.roomError.*`, `coaching.dashboard.transcript.*` exist in 7 locales).
+
+### 2026-11-16 21:30 — claude (frontend-dev, T4 of coaching payment and rooms)
+**Task:** The coaching booking page: Discord first, lengths with prices, Pay, room link
+**Files:** `src/views/coaching.ejs`, `public/js/coaching-page.js`, `public/js/coaching-core.js`, `src/routes/coaching.js` (texts, `whereText` in the state), `src/routes/coaching.test.js`, `tests/coachingCore.test.js`, `src/locales/*.json` (19 keys)
+**Decisions:**
+- Signed out the page shows only the coach's name, a short how-it-works and Connect Discord; the picker is not in the page until a viewer is signed in, and shows only after `/state` answered and the viewer is a member (or Discord could not say).
+- Lengths are drawn from `state.lengths`, only those with a free start; paid bookings count toward the limit but have no Cancel; Pay shows only before `payBy`, and the page goes only to a paypal.com `approveUrl`. `?paid=1` and `?error=` (with `&order=` to check again) are read from the address.
+- A viewer's state now carries `whereText`, shown on confirmed bookings with no room link. Texts `coaching.page.minutes30/60` are no longer read (left in the locales).
+**Open:** the owner's look at the signed-in page; a native read-through of the six machine translations (pt is pt-PT).
