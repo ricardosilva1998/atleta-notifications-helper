@@ -95,7 +95,9 @@ function writeAllTokens(db, id, tag) {
   db.updateStreamerYoutubeTokens(id, t.yt_access_token, t.yt_refresh_token, Date.now() + 3_600_000, 'Synthetic Channel');
   db.updateSpotifyTokens(id, t.spotify_access_token, t.spotify_refresh_token, Date.now() + 3_600_000);
   db.updateBotTokens(id, t.bot_access_token, t.bot_refresh_token, Date.now() + 3_600_000, 'synthetic_bot');
-  db.updateOverlayConfig(id, { streamelements_jwt: t.streamelements_jwt, overlay_enabled: 1 });
+  // No writer is left for the retired column: write it as an old row would hold it.
+  const stored = db.tokenEncryptionEnabled ? secretBox.seal(t.streamelements_jwt, KEY) : t.streamelements_jwt;
+  db.db.prepare('UPDATE streamers SET streamelements_jwt = ?, overlay_enabled = 1 WHERE id = ?').run(stored, id);
   return t;
 }
 
@@ -230,7 +232,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
     assert.ok('x = db.prepare("SELECT yt_access_token FROM streamers WHERE id = ?")'.match(/"[^"\n]*"/)[0].includes('yt_access_token'));
   });
 
-  test('no column whitelist of a dynamic UPDATE names a token column, except OVERLAY_COLUMNS (whose writer seals it)', () => {
+  test('no column whitelist of a dynamic UPDATE names a token column', () => {
     // A dynamic UPDATE takes its column names from a Set or an object of
     // allowed names; a token column there would be written without sealToken.
     const source = fs.readFileSync(DB_FILE, 'utf8');
@@ -242,7 +244,7 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
       assert.ok(lists.some(({ name }) => name === known), `the scan finds ${known}`);
     }
     const naming = lists.filter(({ body }) => TOKEN_COLUMNS.some((c) => new RegExp(`['"\`]${c}['"\`]`).test(body)));
-    assert.deepEqual(naming.map(({ name }) => name), ['OVERLAY_COLUMNS']);
+    assert.deepEqual(naming.map(({ name }) => name), []);
   });
 
   test('a renewed YouTube token is stored encrypted, and the channel name is left as it was', () => {
@@ -273,7 +275,6 @@ describe('tokens with TOKEN_ENCRYPTION_KEY', () => {
       inspect: (db) => {
         id = insertStreamer(db.db);
         db.updateSpotifyTokens(id, null, '', null);
-        db.updateOverlayConfig(id, { streamelements_jwt: null });
         const streamer = db.getStreamerById(id);
         assert.equal(streamer.spotify_access_token, null);
         assert.equal(streamer.spotify_refresh_token, '');

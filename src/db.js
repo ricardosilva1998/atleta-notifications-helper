@@ -2564,7 +2564,7 @@ const OVERLAY_COLUMNS = new Set([
   'overlay_bits_enabled', 'overlay_donation_enabled',
   'overlay_follow_duration', 'overlay_sub_duration',
   'overlay_bits_duration', 'overlay_donation_duration',
-  'overlay_volume', 'streamelements_jwt', // streamelements_jwt: kept only for the sealed-column checks
+  'overlay_volume',
   'overlay_raid_enabled', 'overlay_raid_duration',
   'cp_rewards_enabled',
   'overlay_giveaway_enabled', 'overlay_giveaway_duration',
@@ -2578,7 +2578,7 @@ function updateOverlayConfig(streamerId, config) {
   for (const [key, value] of Object.entries(config)) {
     if (!OVERLAY_COLUMNS.has(key)) continue; // Whitelist columns
     fields.push(`${key} = ?`);
-    values.push(TOKEN_COLUMNS.includes(key) ? sealToken(value) : value); // streamelements_jwt
+    values.push(TOKEN_COLUMNS.includes(key) ? sealToken(value) : value);
   }
   if (fields.length === 0) return;
   values.push(streamerId);
