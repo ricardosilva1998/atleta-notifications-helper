@@ -86,8 +86,8 @@
     return safeFormat(lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: timeZone }).format(new Date(ms));
   }
 
-  // A booking that holds its time: waiting, awaiting payment or confirmed, and not started.
-  var HOLDING = ['waiting', 'awaiting_payment', 'confirmed'];
+  // A booking that holds its time: waiting, awaiting payment, confirmed or rescheduling, and not started.
+  var HOLDING = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling'];
   function holds(booking, now) {
     return HOLDING.indexOf(booking.state) >= 0 && booking.startsAt > now;
   }
@@ -101,6 +101,31 @@
   function canPay(booking, now) {
     return booking.state === 'awaiting_payment' && !booking.paid && booking.priceCents > 0
       && Number(booking.payBy) > now && booking.startsAt > now;
+  }
+
+  // What the viewer can do about a session that is being rescheduled (only the coach starts one): 'answer' when the
+  // coach's proposal waits (accept it, or propose another time), 'pick' when there is none (the coach asked, or it
+  // lapsed: pick a time), 'wait' when the viewer's own proposal waits for the coach; null for any other booking.
+  function rescheduleMode(booking, now) {
+    if (!booking || booking.state !== 'rescheduling' || !(booking.startsAt > now)) return null;
+    var proposal = booking.proposal;
+    if (!proposal) return 'pick';
+    return proposal.by === 'coach' ? 'answer' : 'wait';
+  }
+
+  // The refund line of a booking: 'pending' (the coach will refund), 'refunded', or null (nothing owed). Only the flags
+  // the server sends the viewer; never anything about the payer.
+  function refundLine(booking) {
+    if (!booking) return null;
+    if (booking.refundState === 'pending' || booking.refundPending === true) return 'pending';
+    if (booking.refundState === 'refunded') return 'refunded';
+    return null;
+  }
+
+  // ?booking=<id> (the link in the Discord message of a session to reschedule): the id, or null.
+  function bookingFromSearch(search) {
+    var match = /(?:^|[?&])booking=(\d{1,15})(?:&|$)/.exec(String(search || ''));
+    return match ? Number(match[1]) : null;
   }
 
   // How many of the viewer's bookings count toward the limit of upcoming ones (paid ones count too).
@@ -176,7 +201,7 @@
   var CORE = { localDate: localDate, groupByLocalDay: groupByLocalDay, daysToShow: daysToShow, timeLabel: timeLabel,
     dayLabel: dayLabel, dateLabel: dateLabel, holds: holds, canCancel: canCancel, canPay: canPay, upcomingCount: upcomingCount,
     bookableStarts: bookableStarts, formatPrice: formatPrice, lengthLabel: lengthLabel, payByLabel: payByLabel,
-    lengthsToShow: lengthsToShow, returnNotice: returnNotice, isPayPalUrl: isPayPalUrl, isRoomUrl: isRoomUrl };
+    lengthsToShow: lengthsToShow, rescheduleMode: rescheduleMode, refundLine: refundLine, bookingFromSearch: bookingFromSearch, returnNotice: returnNotice, isPayPalUrl: isPayPalUrl, isRoomUrl: isRoomUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = CORE;
   if (typeof window !== 'undefined') window.COACHING_CORE = CORE;
 })();

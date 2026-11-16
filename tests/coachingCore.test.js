@@ -164,3 +164,39 @@ describe('payment helpers', () => {
     assert.equal(core.isRoomUrl('https://evil.test/channels/1/2'), false);
   });
 });
+
+describe('reschedule and refund helpers', () => {
+  const NOW = Date.UTC(2026, 9, 19, 9, 0);
+  const base = { state: 'rescheduling', startsAt: NOW + 86400e3, paid: true, proposal: null };
+
+  test('rescheduleMode says what the viewer can do', () => {
+    assert.equal(core.rescheduleMode({ ...base, proposal: { startsAt: NOW + 2 * 86400e3, by: 'coach' } }, NOW), 'answer');
+    assert.equal(core.rescheduleMode({ ...base, proposal: { startsAt: NOW + 2 * 86400e3, by: 'viewer' } }, NOW), 'wait');
+    assert.equal(core.rescheduleMode(base, NOW), 'pick', 'asked to pick, or the proposal lapsed');
+    assert.equal(core.rescheduleMode({ ...base, state: 'confirmed' }, NOW), null);
+    assert.equal(core.rescheduleMode({ ...base, startsAt: NOW - 1 }, NOW), null);
+    assert.equal(core.rescheduleMode(null, NOW), null);
+  });
+
+  test('a rescheduling booking holds its place, and a paid one has no Cancel while an unpaid one has Withdraw', () => {
+    assert.equal(core.holds(base, NOW), true);
+    assert.equal(core.upcomingCount([base, { ...base, state: 'cancelled' }], NOW), 1);
+    assert.equal(core.canCancel(base, NOW), false);
+    assert.equal(core.canCancel({ ...base, paid: false }, NOW), true);
+  });
+
+  test('refundLine reads only the flags', () => {
+    assert.equal(core.refundLine({ refundState: 'pending', refundPending: true }), 'pending');
+    assert.equal(core.refundLine({ refundState: 'refunded' }), 'refunded');
+    assert.equal(core.refundLine({ refundState: null }), null);
+    assert.equal(core.refundLine(null), null);
+  });
+
+  test('bookingFromSearch takes only a plain number', () => {
+    assert.equal(core.bookingFromSearch('?booking=42'), 42);
+    assert.equal(core.bookingFromSearch('?paid=1&booking=7'), 7);
+    assert.equal(core.bookingFromSearch('?booking=abc'), null);
+    assert.equal(core.bookingFromSearch('?booking=1<script>'), null);
+    assert.equal(core.bookingFromSearch(''), null);
+  });
+});

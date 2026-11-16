@@ -487,3 +487,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Cancel and Reschedule are native `<dialog>`s (Esc, backdrop click). Cancel needs a reason (500); Reschedule offers "Propose a time" (day and time from `GET .../proposal-starts`) or "Ask the viewer", note 300; a viewer's proposal shows Accept and "Propose another time" (the same dialog, propose only). Refund pending lists each pending payment with payer name, email and capture id and a confirmed Refunded button.
 - New texts: `coaching.state.rescheduling` and `not_rescheduled` (T5 can reuse them in `STATE_KEYS` of `routes/coaching.js`); the Coaching card shows `refundsPending` with a link to `/dashboard/coaching?tab=bookings`.
 **Open:** a native read-through of the 48 machine translations (pt is pt-PT); old keys `coaching.dashboard.schedule` and `cancelConfirm` are no longer read.
+
+### 2026-11-16 16:30 — frontend-dev (T5 of coaching cancel, reschedule, refund and tabs)
+**Task:** The viewer's booking page: reschedule panel, cancel reason, refund lines and the Pay note
+**Files:** `public/js/coaching-page.js`, `public/js/coaching-core.js`, `src/views/coaching.ejs`, `src/routes/coaching.js` (texts, `STATE_KEYS`), `src/locales/*.json` (20 keys), `tests/coachingCore.test.js`, `src/routes/coaching.test.js`
+**Decisions:**
+- A rescheduling booking shows the coach's proposal (Accept, Propose another time), a request to pick (Pick a new time) or the viewer's own waiting proposal; the picker reads `GET /bookings/:id/starts` (never the original time) and posts `/propose`; `?booking=<id>` scrolls to the booking and opens the picker when it is a "pick" case.
+- Withdraw still shows only for unpaid bookings (rescheduling counts as holding); cancelled bookings show the coach's reason, Refund pending reads "Your coach will refund you", Refunded reads as such; no payer details are on the page. The Pay step adds the PayPal name and email note.
+- `rescheduling` and `not_rescheduled` are in `STATE_KEYS`; the every-state-has-a-text assertion is whole again.
+**Open:** native read-through of the 20 machine translations.

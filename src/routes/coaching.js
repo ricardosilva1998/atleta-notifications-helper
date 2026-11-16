@@ -67,10 +67,18 @@ const PAGE_TEXT_KEYS = {
   notJoined: 'coaching.page.notJoined', limit: 'coaching.page.limit', cancel: 'coaching.page.cancel',
   cancelConfirm: 'coaching.page.cancelConfirm', withdrawn: 'coaching.page.withdrawn', signIn: 'coaching.page.signIn',
   failed: 'coaching.page.failed', offline: 'coaching.page.offline',
+  payNote: 'coaching.page.payNote', cancelReason: 'coaching.page.cancelReason', refundPending: 'coaching.page.refundPending',
+  refunded: 'coaching.page.refunded', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
+  reschedMine: 'coaching.page.reschedMine', reschedUntil: 'coaching.page.reschedUntil', reschedOriginal: 'coaching.page.reschedOriginal',
+  reschedAccept: 'coaching.page.reschedAccept', reschedOther: 'coaching.page.reschedOther', reschedPick: 'coaching.page.reschedPick',
+  reschedSend: 'coaching.page.reschedSend', reschedNote: 'coaching.page.reschedNote', reschedLoading: 'coaching.page.reschedLoading',
+  reschedNoTimes: 'coaching.page.reschedNoTimes', reschedSent: 'coaching.page.reschedSent', reschedAgreed: 'coaching.page.reschedAgreed',
+  reschedClose: 'coaching.page.reschedClose', reschedPicked: 'coaching.page.reschedPicked',
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
   cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
+  rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {
