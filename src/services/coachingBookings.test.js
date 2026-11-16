@@ -778,7 +778,7 @@ describe('reschedule (the coach starts it; a proposal is held like a booking)', 
     const r = await svc.startReschedule(s, id, { way: 'ask', now: NOW + MIN });
     assert.equal(r.ok, true);
     assert.match(to(v.discordUserId)[0].payload.embeds[0].title, /pick a new time/);
-    assert.match(to(v.discordUserId)[0].payload.embeds[0].description, new RegExp(`/coach\\d+\\?booking=${id}`));
+    assert.match(to(v.discordUserId)[0].payload.embeds[0].description, new RegExp(`/my-bookings\\?booking=${id}`));
     const { starts } = svc.viewerStarts(s, v, id, { now: NOW + MIN });
     assert.ok(starts.length > 0);
     assert.ok(!starts.includes(FREE), 'never the original time');

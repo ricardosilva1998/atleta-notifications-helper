@@ -73,12 +73,15 @@ function rescheduleLines(kind, { booking, t, bookingLink, roomUrl, guildName, re
 }
 
 function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, bookingLink, myBookingsUrl, roomUrl, reason, refund, lang, t }) {
-  const mine = myBookingsUrl ? [t('coaching.message.myBookings', { url: myBookingsUrl })] : [];
+  // The action lines of these kinds (pay, accept, pick a time) link to My bookings themselves: no second link line.
+  const actionHere = myBookingsUrl || bookingLink || bookingUrl;
+  const actionKinds = ['acceptedPay', 'rescheduleProposed', 'rescheduleAsk', 'proposal', 'proposalLapsed'];
+  const mine = myBookingsUrl && !actionKinds.includes(kind) ? [t('coaching.message.myBookings', { url: myBookingsUrl })] : [];
   if (VIEWER_RESCHEDULE.includes(kind)) {
     return {
       embeds: [{
         title: t(`coaching.message.${kind}.title`, { streamer: streamerName }),
-        description: rescheduleLines(kind, { booking, t, bookingLink: bookingLink || bookingUrl, roomUrl, guildName, refund, side: 'viewer' }).concat(mine).join('\n'),
+        description: rescheduleLines(kind, { booking, t, bookingLink: actionHere, roomUrl, guildName, refund, side: 'viewer' }).concat(mine).join('\n'),
         color: VIEWER_COLORS[kind] || RED,
       }],
     };
@@ -90,7 +93,7 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
   if (kind === 'acceptedPay') {
     lines.push(t('coaching.message.price', { price: formatPrice(booking.price_cents, booking.currency, lang) }));
     if (booking.pay_by) lines.push(t('coaching.message.payBy', { time: discordTime(booking.pay_by) }));
-    lines.push(t('coaching.message.payHere', { url: bookingUrl }));
+    lines.push(t('coaching.message.payHere', { url: actionHere }));
   } else if (kind === 'accepted' || kind === 'confirmed') {
     if (kind === 'confirmed' && booking.paid_amount_cents != null) {
       lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));

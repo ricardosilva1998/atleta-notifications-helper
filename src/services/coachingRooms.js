@@ -11,6 +11,7 @@
 const db = require('../db');
 const discord = require('../discord');
 const { t } = require('../i18n');
+const config = require('../config');
 const coaching = require('./coaching');
 
 const MINUTE_MS = 60e3;
@@ -310,7 +311,10 @@ async function sendTranscripts(room, booking, streamer, settings, { fetchMessage
   ].filter((s, i, all) => s.id && all.findIndex((x) => x.id === s.id) === i);
   let ok = 0;
   for (const side of sides) {
-    const content = t(side.lang, 'coaching.message.transcript.body', { other: discord.escapeLinkText(side.other) });
+    let content = t(side.lang, 'coaching.message.transcript.body', { other: discord.escapeLinkText(side.other) });
+    if (side.id === booking.viewer_discord_id) {
+      content += `\n${t(side.lang, 'coaching.message.myBookings', { url: `${config.app.url}/my-bookings?booking=${encodeURIComponent(booking.id)}` })}`;
+    }
     const first = await discord.sendDirectMessage(side.id, {
       content, files: [{ attachment: Buffer.from(text, 'utf8'), name: 'transcript.txt' }],
     }, { deadlineMs: 30000 });
