@@ -856,7 +856,7 @@
     if (previewAutoClose) { clearTimeout(previewAutoClose); previewAutoClose = null; }
 
     statusEl.textContent = I18N.firing;
-    iframe.src = overlayUrlBase;
+    iframe.src = overlayUrlBase + (overlayUrlBase.indexOf('?') === -1 ? '?' : '&') + 'preview=1';
     modal.classList.add('open');
 
     // Duration map for auto-close timing: the page's values, or the defaults for an empty field
