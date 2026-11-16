@@ -366,7 +366,7 @@ describe('the boot migration', () => {
 
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const DISCORD_SID = '0b6f9c2e-3d4a-4f5b-8c6d-7e8f9a0b1c2d'; // crypto.randomUUID() form
-const RACING_SID = 'a1'.repeat(32); // crypto.randomBytes(32).toString('hex') form
+const HEX_SID = 'a1'.repeat(32); // crypto.randomBytes(32).toString('hex') form
 const storedSids = (file) => raw(file, (h) => h.prepare('SELECT sid FROM sessions ORDER BY sid').all().map((r) => r.sid));
 
 describe('session ids', () => {
@@ -377,29 +377,30 @@ describe('session ids', () => {
       inspect: (db) => {
         const streamer = insertStreamer(db.db);
         const other = insertStreamer(db.db);
-        const racer = Number(db.db.prepare("INSERT INTO racing_users (username, password_hash) VALUES ('synthetic_racer', 'x')").run().lastInsertRowid);
 
         db.createSession(DISCORD_SID, streamer, soon);
-        db.createRacingSession(RACING_SID, racer, soon);
-        db.createLinkedSession('c3'.repeat(32), streamer, racer, soon);
+        db.createSession(HEX_SID, streamer, soon);
+        db.createSession('c3'.repeat(32), streamer, soon);
         db.createSession('second-device', streamer, soon);
         db.createSession('other-streamer', other, soon);
 
         assert.equal(db.hashSessionId(DISCORD_SID), sha256(DISCORD_SID));
         const sids = db.db.prepare('SELECT sid FROM sessions').all().map((r) => r.sid);
-        for (const cookie of [DISCORD_SID, RACING_SID, 'second-device']) {
+        for (const cookie of [DISCORD_SID, HEX_SID, 'second-device']) {
           assert.ok(sids.includes(sha256(cookie)), `${cookie} is stored hashed`);
           assert.ok(!sids.includes(cookie), `${cookie} is not stored as it is`);
         }
 
         assert.equal(db.getSession(DISCORD_SID).streamer_id, streamer);
-        assert.equal(db.getSession(RACING_SID).racing_user_id, racer);
+        assert.equal(db.getSession(HEX_SID).streamer_id, streamer);
         assert.equal(db.getSession(sha256(DISCORD_SID)), undefined, 'what the table holds does not log anyone in');
 
-        // "Log out other devices" (Racing account page) keeps the current one.
-        db.deleteOtherSessions(RACING_SID, { racingUserId: racer });
-        assert.ok(db.getSession(RACING_SID));
+        // "Log out other devices" keeps the current one.
+        db.deleteOtherSessions(HEX_SID, { streamerId: streamer });
+        assert.ok(db.getSession(HEX_SID));
         assert.equal(db.getSession('c3'.repeat(32)), undefined);
+        assert.equal(db.getSession('second-device'), undefined);
+        db.createSession('second-device', streamer, soon);
 
         // Logout ends that session only.
         db.deleteSession(DISCORD_SID);
@@ -427,32 +428,31 @@ describe('session ids', () => {
     // Production before this change: ids stored as they are, the migration not recorded.
     raw(file, (h) => {
       const streamer = insertStreamer(h);
-      const racer = Number(h.prepare("INSERT INTO racing_users (username, password_hash) VALUES ('legacy_racer', 'x')").run().lastInsertRowid);
-      const add = h.prepare('INSERT INTO sessions (sid, streamer_id, racing_user_id, expires_at) VALUES (?, ?, ?, ?)');
-      add.run(DISCORD_SID, streamer, null, soon);
-      add.run(RACING_SID, null, racer, soon);
-      add.run('d4'.repeat(32), streamer, racer, soon);
+      const add = h.prepare('INSERT INTO sessions (sid, streamer_id, expires_at) VALUES (?, ?, ?)');
+      add.run(DISCORD_SID, streamer, soon);
+      add.run(HEX_SID, streamer, soon);
+      add.run('d4'.repeat(32), streamer, soon);
       h.prepare("DELETE FROM data_migrations WHERE name = 'hash_web_session_ids'").run();
-      ids = { streamer, racer };
+      ids = { streamer };
     });
 
     const logs = boot(file, {
       inspect: (db) => {
         assert.equal(db.getSession(DISCORD_SID).streamer_id, ids.streamer, 'Discord login still logged in');
-        assert.equal(db.getSession(RACING_SID).racing_user_id, ids.racer, 'Racing login still logged in');
-        assert.equal(db.getSession('d4'.repeat(32)).racing_user_id, ids.racer, 'linked login still logged in');
+        assert.equal(db.getSession(HEX_SID).streamer_id, ids.streamer, 'hex-form login still logged in');
+        assert.equal(db.getSession('d4'.repeat(32)).streamer_id, ids.streamer, 'second hex-form login still logged in');
         // A session made after the migration, in the same 64-hex form a hash has.
-        db.createRacingSession('e5'.repeat(32), ids.racer, soon);
+        db.createSession('e5'.repeat(32), ids.streamer, soon);
       },
     });
     assert.ok(logs.some(([, line]) => line === '[DB] Stored 3 web session id(s) as hashes'), JSON.stringify(logs));
     assert.deepEqual(logs.filter(([level]) => level === 'error'), []);
     const hashed = storedSids(file);
-    assert.deepEqual(hashed, [DISCORD_SID, RACING_SID, 'd4'.repeat(32), 'e5'.repeat(32)].map(sha256).sort());
+    assert.deepEqual(hashed, [DISCORD_SID, HEX_SID, 'd4'.repeat(32), 'e5'.repeat(32)].map(sha256).sort());
 
     const again = boot(file, {
       inspect: (db) => {
-        for (const cookie of [DISCORD_SID, RACING_SID, 'd4'.repeat(32), 'e5'.repeat(32)]) assert.ok(db.getSession(cookie), cookie);
+        for (const cookie of [DISCORD_SID, HEX_SID, 'd4'.repeat(32), 'e5'.repeat(32)]) assert.ok(db.getSession(cookie), cookie);
       },
     });
     assert.deepEqual(storedSids(file), hashed, 'nothing hashed twice');

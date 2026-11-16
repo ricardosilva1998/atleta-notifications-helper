@@ -6,6 +6,7 @@
 const { test, describe, before, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const os = require('os');
 const Module = require('module');
 
 const DB_FILE = path.join(__dirname, 'db.js');
@@ -171,7 +172,6 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     watched_instagram_accounts: 'instagram_username',
     watched_tiktok_accounts: 'tiktok_username',
     watched_twitter_accounts: 'twitter_username',
-    watched_iracing_drivers: 'customer_id',
   };
 
   function addWatchers(guildId, streamerId) {
@@ -202,8 +202,8 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     assert.equal(db.getGuildConfig(G1, streamerA), undefined);
     assert.equal(watcherCount(G1, streamerA), 0);
     assert.ok(db.getGuildConfig(G1, streamerB), 'another streamer keeps the same server');
-    assert.equal(watcherCount(G1, streamerB), 6);
-    assert.equal(watcherCount(G2, streamerA), 6);
+    assert.equal(watcherCount(G1, streamerB), 5);
+    assert.equal(watcherCount(G2, streamerA), 5);
   });
 
   test('the boot cleanup removes watchers whose streamer no longer has the server, and is idempotent', () => {
@@ -213,9 +213,9 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     addWatchers(G1, streamerB); // G1 is claimed, but not by B
 
     const first = db.deleteOrphanWatchers(() => {});
-    assert.equal(first.total, 12);
+    assert.equal(first.total, 10);
     assert.equal(first.byTable.watched_channels, 2);
-    assert.equal(watcherCount(G1, streamerA), 6);
+    assert.equal(watcherCount(G1, streamerA), 5);
     assert.equal(watcherCount(G2, streamerA), 0);
     assert.equal(watcherCount(G1, streamerB), 0);
 
@@ -223,7 +223,7 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     const second = db.deleteOrphanWatchers((line) => lines.push(line));
     assert.equal(second.total, 0);
     assert.deepEqual(lines, [], 'nothing left to remove, nothing to log');
-    assert.equal(watcherCount(G1, streamerA), 6);
+    assert.equal(watcherCount(G1, streamerA), 5);
   });
 
   test('the boot cleanup logs each row it removes, with the columns that identify it, before deleting it', () => {
@@ -239,7 +239,7 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
       existedWhenLogged.push(!!db.db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(Number(id)));
     });
 
-    assert.equal(lines.length, 12);
+    assert.equal(lines.length, 10);
     assert.ok(existedWhenLogged.every(Boolean), 'each row is still there when its line is written');
     for (const [table, column] of Object.entries(WATCHERS)) {
       for (const [guildId, streamerId] of [[G2, streamerA], [G1, streamerB]]) {
@@ -256,7 +256,7 @@ describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
     const original = console.log;
     console.log = (line) => printed.push(line);
     try { db.deleteOrphanWatchers(); } finally { console.log = original; }
-    assert.equal(printed.length, 6);
+    assert.equal(printed.length, 5);
     assert.ok(printed.every((line) => line.startsWith('[DB] Removing orphaned watcher: table=')));
   });
 
@@ -586,5 +586,109 @@ describe('linkTwitch: the broadcaster authorization belongs to the Twitch accoun
     db.linkTwitch(streamerA, '9002', 'second_channel', 'Second_Channel');
     assert.deepEqual(db.linkTwitch(streamerB, '9001', 'first_channel', 'First_Channel').displaced, [], 'nobody has it linked any more');
     assert.equal(db.getStreamerByTwitchId('9001').id, streamerB);
+  });
+});
+
+const RACING_TABLES = [
+  'track_maps', 'track_stats', 'racing_sessions', 'session_laps', 'lap_telemetry', 'racing_users',
+  'password_reset_tokens', 'auth_log', 'teams', 'team_members', 'team_invites', 'notifications',
+  'bridge_logs', 'bridge_bug_reports', 'iracing_overlay_settings', 'watched_iracing_drivers',
+  'iracing_driver_state', 'iracing_race_cache',
+];
+
+// One boot of src/db.js on a file; returns what it logged.
+function bootFile(file, inspect) {
+  const origLoad = Module._load;
+  Module._load = function (request, parent, isMain) {
+    if (parent && parent.filename === DB_FILE) {
+      if (request === 'better-sqlite3') return function FileDatabase(_file, opts) { return new RealDatabase(file, opts); };
+      if (request === 'fs') return { ...realFs, existsSync: () => true, mkdirSync: () => {} };
+      if (request === './config') return { adminDiscordIds: [] };
+    }
+    return origLoad.call(this, request, parent, isMain);
+  };
+  const saved = { log: console.log, warn: console.warn, error: console.error };
+  const logs = [];
+  for (const level of ['log', 'warn', 'error']) console[level] = (...args) => logs.push(args.join(' '));
+  let mod;
+  try {
+    delete require.cache[DB_FILE];
+    mod = require(DB_FILE);
+    if (inspect) inspect(mod);
+  } finally {
+    Object.assign(console, saved);
+    Module._load = origLoad;
+    delete require.cache[DB_FILE];
+    if (mod) mod.db.close();
+  }
+  return logs;
+}
+
+describe('the Racing tables are dropped once', () => {
+  test('an old database loses all 18 tables and its Racing-only sessions; the next boot logs no migration line', () => {
+    const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'db-racing-drop-'));
+    const file = path.join(dir, 'old.db');
+    try {
+      const fresh = bootFile(file);
+      assert.deepEqual(fresh.filter((l) => /\[DB migration\]/.test(l)), [], 'a fresh database drops nothing noisily');
+      const handle = new RealDatabase(file);
+      try {
+        for (const table of RACING_TABLES) assert.equal(handle.prepare("SELECT 1 FROM sqlite_master WHERE name = ?").get(table), undefined, `${table} is not created on a fresh database`);
+        assert.equal(handle.pragma('table_info(sessions)').some((c) => c.name === 'racing_user_id'), false, 'a fresh sessions table has no racing_user_id');
+
+        // Shape an old database: Racing tables, the wider sessions table, a Racing-only session.
+        handle.pragma('foreign_keys = ON');
+        handle.exec(`
+          CREATE TABLE racing_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password_hash TEXT);
+          CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, owner_id INTEGER REFERENCES racing_users(id));
+          CREATE TABLE team_members (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER REFERENCES teams(id), user_id INTEGER REFERENCES racing_users(id));
+          CREATE TABLE racing_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, bridge_id TEXT);
+          CREATE TABLE session_laps (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER REFERENCES racing_sessions(id));
+          CREATE TABLE lap_telemetry (id INTEGER PRIMARY KEY AUTOINCREMENT, lap_id INTEGER REFERENCES session_laps(id));
+          CREATE TABLE iracing_overlay_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, streamer_id INTEGER);
+          INSERT INTO racing_users (username, password_hash) VALUES ('racer', 'x');
+          INSERT INTO teams (name, owner_id) VALUES ('t', 1);
+          INSERT INTO team_members (team_id, user_id) VALUES (1, 1);
+          INSERT INTO racing_sessions (bridge_id) VALUES ('b');
+          INSERT INTO session_laps (session_id) VALUES (1);
+          INSERT INTO lap_telemetry (lap_id) VALUES (1);
+        `);
+        for (const table of ['track_maps', 'track_stats', 'password_reset_tokens', 'auth_log', 'team_invites', 'notifications', 'bridge_logs', 'bridge_bug_reports', 'watched_iracing_drivers', 'iracing_driver_state', 'iracing_race_cache']) {
+          handle.exec(`CREATE TABLE ${table} (id INTEGER PRIMARY KEY AUTOINCREMENT)`);
+        }
+        handle.exec(`
+          DROP TABLE sessions;
+          CREATE TABLE sessions (sid TEXT PRIMARY KEY, streamer_id INTEGER, racing_user_id INTEGER, expires_at INTEGER NOT NULL);
+          INSERT INTO streamers (discord_user_id, discord_username) VALUES ('100000000000000009', 'kept');
+          INSERT INTO sessions (sid, streamer_id, racing_user_id, expires_at) VALUES ('streamer-sid', 1, NULL, 9999999999999);
+          INSERT INTO sessions (sid, streamer_id, racing_user_id, expires_at) VALUES ('linked-sid', 1, 1, 9999999999999);
+          INSERT INTO sessions (sid, streamer_id, racing_user_id, expires_at) VALUES ('racing-sid', NULL, 1, 9999999999999);
+          DELETE FROM data_migrations WHERE name = 'drop_racing_tables';
+        `);
+      } finally {
+        handle.close();
+      }
+
+      const upgrade = bootFile(file, (mod) => {
+        mod.createSession('new-cookie', 1, Date.now() + 60_000);
+        assert.ok(mod.getSession('new-cookie'), 'a session can still be made on the old-shaped table');
+      });
+      assert.deepEqual(upgrade.filter((l) => /\[DB migration\]/.test(l)), []);
+
+      const after = new RealDatabase(file);
+      try {
+        for (const table of RACING_TABLES) assert.equal(after.prepare("SELECT 1 FROM sqlite_master WHERE name = ?").get(table), undefined, `${table} is gone`);
+        const sids = after.prepare('SELECT sid FROM sessions ORDER BY sid').all().map((r) => r.sid);
+        assert.equal(sids.includes('racing-sid'), false, 'the Racing-only session is gone');
+        assert.equal(sids.length, 3, 'the streamer sessions stay (the two old ones as stored, plus the new one)');
+      } finally {
+        after.close();
+      }
+
+      const again = bootFile(file);
+      assert.deepEqual(again.filter((l) => /\[DB migration\]/.test(l)), []);
+    } finally {
+      realFs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
