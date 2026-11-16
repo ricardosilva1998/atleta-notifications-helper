@@ -15,21 +15,8 @@ const express = require('express');
 const DEFAULT_LIMIT = '100kb';
 
 const LARGE_BODY_ROUTES = Object.freeze([
-  // The Atleta Racing app
-  { method: 'post', path: '/api/session', limit: '10mb' }, // a new session with its first lap's telemetry
-  { method: 'post', path: '/api/session/:id/lap', limit: '5mb' }, // one lap with its 10 Hz telemetry
-  { method: 'post', path: '/api/track-map', limit: '5mb' }, // a track outline, up to 50 000 points
-  { method: 'post', path: '/api/bridge-logs', limit: '3mb' }, // up to 1 MB of log text, 3 bytes a character at most
-  { method: 'post', path: '/api/bridge-bug-reports', limit: '1mb' }, // an explanation and a suggested fix
-  // Track Database imports
-  { method: 'post', path: '/api/track-stats/import-screenshot', limit: '10mb' }, // a screenshot as a data URL
-  { method: 'post', path: '/api/track-stats/import-csv', limit: '10mb' }, // a results CSV
   // Issue reports (a pasted log can be long)
   { method: 'post', path: '/dashboard/report', limit: '1mb' },
-  // Racing pictures, sent as data URLs
-  { method: 'post', path: '/racing/account/avatar', limit: '2mb' },
-  { method: 'post', path: '/racing/teams/:teamId/picture', limit: '2mb' },
-  { method: 'post', path: '/racing/teams/:teamId/banner', limit: '2mb' },
 ]);
 
 // Registers the body parsers on the app: the large-body routes first, then the

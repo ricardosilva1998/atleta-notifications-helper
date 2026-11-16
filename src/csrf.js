@@ -22,9 +22,8 @@
 //      res.locals.csrfToken; views/csrf.ejs loads public/js/csrf.js, which adds
 //      it to the page's POST forms and to its fetch() and XMLHttpRequest calls.
 //
-// GET, HEAD and OPTIONS are never checked: the OBS overlay links, the pitwall
-// pages, the Discord voice API and every other read need no entry below. The
-// pitwall WebSockets are not Express routes at all (services/pitwallRelay.js).
+// GET, HEAD and OPTIONS are never checked: the OBS overlay links and every
+// other read need no entry below.
 //
 // A refused request gets 403 with a message asking to reload the page: a JSON
 // body for a request a script sent, the error page for a form post.
@@ -35,39 +34,17 @@ const { wantsJson, loggedPath } = require('./errorHandler');
 
 // Routes that skip the Origin check (check 1 above). Each is called by a
 // program, not from a page of this site: the program sends no Origin and no
-// session cookie, and is authenticated by something else (a bridge id, a
-// racing login, a shared secret) or the route is public by design. The token
+// session cookie, and is authenticated by something else (a shared
+// secret) or the route is public by design. The token
 // check (check 2) still applies to them. A request that carries a logged-in
 // session needs its token here too, so a browser cannot be made to use these
-// routes with its visitor's login: Whisper and Spotify control accept the
-// session as well, and the site's own pages that call some of these routes
-// (Track Database, iRacing, the tip form) send the token.
+// routes with its visitor's login: the site's own pages that call some of
+// these routes (the tip form) send the token.
 // Matched on the method and on the path as Express routes it (in any letter
 // case, with or without a trailing slash). A new route that one of these
 // programs calls with an unsafe method must be added here, or its requests are
 // refused with 403 and logged as "[CSRF] Refused ...".
 const CSRF_EXEMPT = Object.freeze([
-  // The Atleta Racing app (bridge/). Its requests come from Node's https module
-  // (no Origin, no cookie) or from fetch() in its own windows (Origin "null"),
-  // and name their racing account by bridge_id or log in to one.
-  { method: 'POST', path: '/api/session', why: 'Atleta Racing app: a recorded session (sessionRecorder.js)' },
-  { method: 'POST', path: '/api/session/:id/lap', why: 'Atleta Racing app: a lap of it (sessionRecorder.js)' },
-  { method: 'PATCH', path: '/api/session/:id/finish', why: 'Atleta Racing app: its result (sessionRecorder.js)' },
-  { method: 'PATCH', path: '/api/session/:id', why: 'Session API: share a session, by its bridge_id' },
-  { method: 'DELETE', path: '/api/session/:id', why: 'Session API: delete a session, by its bridge_id' },
-  { method: 'POST', path: '/api/track-map', why: 'Atleta Racing app: a track outline (telemetry.js)' },
-  { method: 'POST', path: '/api/track-stats', why: 'Atleta Racing app: race statistics (telemetry.js)' },
-  { method: 'POST', path: '/api/live-session', why: 'Atleta Racing app: the live session heartbeat (telemetry.js)' },
-  { method: 'POST', path: '/api/bridge-logs', why: 'Atleta Racing app: its log upload (main.js)' },
-  { method: 'POST', path: '/api/bridge-bug-reports', why: 'Bug reports about an Atleta Racing app, by bridgeId' },
-  { method: 'PATCH', path: '/api/bridge-bug-reports/:id', why: 'The status of one, by bridgeId' },
-  { method: 'POST', path: '/api/bridge/whisper', why: 'Atleta Racing app: voice to text (voiceInput.js)' },
-  { method: 'POST', path: '/api/bridge/spotify/control', why: 'Atleta Racing app: the Spotify overlay buttons (overlays/spotify.html)' },
-  { method: 'POST', path: '/racing/auth/login-api', why: 'Atleta Racing app: its login (login.html)' },
-  // Only with a JSON body: the website's own sign-up form is a form post and is
-  // checked. A page on another site cannot send JSON here, because the browser
-  // first asks this site's permission (a CORS preflight), which it never gives.
-  { method: 'POST', path: '/racing/auth/signup', json: true, why: 'Atleta Racing app: its sign-up (login.html, control-panel.html)' },
   // The multistream relay (MediaMTX), with MEDIAMTX_WEBHOOK_SECRET (routes/multistream.js).
   { method: 'POST', path: '/api/multistream/auth', why: 'Multistream relay: may this publish or read?' },
   { method: 'POST', path: '/api/multistream/webhook/on-ready', why: 'Multistream relay: a stream arrived' },
@@ -194,8 +171,8 @@ function csrfProtection({ appUrl, secret = csrfSecret() } = {}) {
     if (SAFE_METHODS.has(req.method)) return next();
 
     const presented = presentedToken(req);
-    // No route ever sees the field: the iRacing overlay settings, for one,
-    // save every field they are sent.
+    // No route ever sees the field: a route that saves every field it is sent
+    // would store it.
     if (req.body && typeof req.body === 'object') delete req.body._csrf;
 
     // 1. From this site, except on the routes programs call (CSRF_EXEMPT).

@@ -644,59 +644,6 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
-  CREATE TABLE IF NOT EXISTS watched_iracing_drivers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    guild_id TEXT NOT NULL,
-    streamer_id INTEGER NOT NULL REFERENCES streamers(id) ON DELETE CASCADE,
-    customer_id TEXT NOT NULL,
-    driver_name TEXT,
-    notify_channel_id TEXT,
-    enabled INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(guild_id, streamer_id, customer_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS iracing_driver_state (
-    customer_id TEXT PRIMARY KEY,
-    last_checked TEXT,
-    irating_road INTEGER DEFAULT 0,
-    irating_oval INTEGER DEFAULT 0,
-    irating_dirt_road INTEGER DEFAULT 0,
-    irating_dirt_oval INTEGER DEFAULT 0,
-    safety_rating_road REAL DEFAULT 0,
-    safety_rating_oval REAL DEFAULT 0,
-    safety_rating_dirt_road REAL DEFAULT 0,
-    safety_rating_dirt_oval REAL DEFAULT 0,
-    license_class TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS iracing_race_cache (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    subsession_id TEXT NOT NULL,
-    customer_id TEXT NOT NULL,
-    driver_name TEXT,
-    series_name TEXT,
-    track_name TEXT,
-    car_name TEXT,
-    category TEXT,
-    finish_position INTEGER,
-    starting_position INTEGER,
-    incidents INTEGER,
-    irating_change INTEGER,
-    new_irating INTEGER,
-    laps_completed INTEGER,
-    fastest_lap_time REAL,
-    qualifying_time REAL,
-    field_size INTEGER,
-    strength_of_field INTEGER,
-    race_date TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(subsession_id, customer_id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_iracing_cache_qualifying ON iracing_race_cache(category, qualifying_time);
-  CREATE INDEX IF NOT EXISTS idx_iracing_cache_customer ON iracing_race_cache(customer_id, race_date DESC);
-
   CREATE TABLE IF NOT EXISTS custom_overlays (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     streamer_id INTEGER NOT NULL,
@@ -934,334 +881,18 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_overlay_events_streamer_date ON overlay_events(streamer_id, created_at)`);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS track_maps (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    track_name TEXT NOT NULL UNIQUE,
-    track_data TEXT NOT NULL,
-    point_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS track_stats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    track_name TEXT NOT NULL,
-    car_class TEXT NOT NULL,
-    race_type TEXT NOT NULL,
-    avg_lap_time REAL DEFAULT 0,
-    avg_pit_time REAL DEFAULT 0,
-    avg_qualify_time REAL DEFAULT 0,
-    avg_sof REAL DEFAULT 0,
-    est_laps REAL DEFAULT 0,
-    avg_drivers REAL DEFAULT 0,
-    race_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(track_name, car_class, race_type)
-  )
-`);
-
-// Migration: add est_laps column to track_stats
-try { db.exec('ALTER TABLE track_stats ADD COLUMN est_laps REAL DEFAULT 0'); } catch(e) {}
-
-// Migration: recreate track_stats with flexible race_type and race_count
-try {
-  const _hasRaceCount = db.prepare("SELECT race_count FROM track_stats LIMIT 1").get();
-} catch(e) {
-  // Column doesn't exist or table has CHECK constraint — recreate
-  try {
-    db.exec('DROP TABLE IF EXISTS track_stats');
-    db.exec(`CREATE TABLE IF NOT EXISTS track_stats (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      track_name TEXT NOT NULL,
-      car_class TEXT NOT NULL,
-      race_type TEXT NOT NULL,
-      avg_lap_time REAL DEFAULT 0,
-      avg_pit_time REAL DEFAULT 0,
-      avg_qualify_time REAL DEFAULT 0,
-      avg_sof REAL DEFAULT 0,
-      est_laps REAL DEFAULT 0,
-      avg_drivers REAL DEFAULT 0,
-      race_count INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(track_name, car_class, race_type)
-    )`);
-  } catch(e2) {}
-}
-
-// Migration: add track metadata columns to track_maps
-try { db.exec('ALTER TABLE track_maps ADD COLUMN track_length TEXT'); } catch(e) {}
-try { db.exec('ALTER TABLE track_maps ADD COLUMN track_turns INTEGER'); } catch(e) {}
-try { db.exec('ALTER TABLE track_maps ADD COLUMN track_country TEXT'); } catch(e) {}
-try { db.exec('ALTER TABLE track_maps ADD COLUMN track_city TEXT'); } catch(e) {}
-
-// Migration: add top_car column to track_stats
-try { db.exec('ALTER TABLE track_stats ADD COLUMN top_car TEXT'); } catch(e) {}
-// Migration: add category column (road/formula/oval/dirt_oval/dirt_road) — existing data = road
-try { db.exec("ALTER TABLE track_stats ADD COLUMN category TEXT DEFAULT 'road'"); } catch(e) {}
-
-// Migration: add picture and banner to teams
-try { db.exec('ALTER TABLE teams ADD COLUMN picture TEXT'); } catch(e) {}
-try { db.exec('ALTER TABLE teams ADD COLUMN banner TEXT'); } catch(e) {}
-
-// ── Normalize race_type values (merge old snake_case → proper names) ──
-try {
-  const raceTypeMap = {
-    'vrs_open': 'VRS Open',
-    'vrs_sprint': 'VRS Sprint',
-    'imsa_open': 'IMSA Open',
-    'imsa_sprint': 'IMSA Sprint',
-    'lmp2_sprint': 'LMP2 Sprint',
-    'prototype_sprint': 'Proto Sprint',
-    'regionals': 'Regionals',
-    'sprint': 'VRS Sprint', // GT3 "Sprint" is always VRS Sprint
-  };
-  // Also merge properly-cased "Sprint" into VRS Sprint for GT3 classes
-  const gt3ClassNames = ['GT3', 'GT3 2025', 'GT3 2020', 'IMSA23'];
-  const allStats = db.prepare('SELECT * FROM track_stats').all();
-  const oldRows = allStats.filter(r => {
-    if (raceTypeMap[r.race_type]) return true;
-    // Merge "Sprint" → "VRS Sprint" for GT3 classes
-    if (r.race_type === 'Sprint' && gt3ClassNames.some(c => r.car_class.includes(c) || r.car_class === c)) return true;
-    return false;
-  });
-  // For GT3 Sprint → VRS Sprint, add to map dynamically
-  oldRows.forEach(r => {
-    if (r.race_type === 'Sprint' && gt3ClassNames.some(c => r.car_class.includes(c) || r.car_class === c)) {
-      // Will be handled as VRS Sprint
-    }
-  });
-  if (oldRows.length > 0) {
-    console.log('[DB] Normalizing ' + oldRows.length + ' race_type values...');
-    const mergeStmt = db.prepare(`
-      INSERT INTO track_stats (track_name, car_class, race_type, avg_lap_time, avg_pit_time, avg_qualify_time, avg_sof, est_laps, avg_drivers, race_count, top_car, category)
-      VALUES (@track_name, @car_class, @race_type, @avg_lap_time, @avg_pit_time, @avg_qualify_time, @avg_sof, @est_laps, @avg_drivers, @race_count, @top_car, @category)
-      ON CONFLICT(track_name, car_class, race_type) DO UPDATE SET
-        avg_lap_time = CASE WHEN excluded.race_count > 0 AND track_stats.race_count > 0
-          THEN (track_stats.avg_lap_time * track_stats.race_count + excluded.avg_lap_time * excluded.race_count) / (track_stats.race_count + excluded.race_count)
-          ELSE COALESCE(NULLIF(excluded.avg_lap_time, 0), track_stats.avg_lap_time) END,
-        avg_pit_time = CASE WHEN excluded.avg_pit_time > 0 AND track_stats.avg_pit_time > 0
-          THEN (track_stats.avg_pit_time * track_stats.race_count + excluded.avg_pit_time * excluded.race_count) / (track_stats.race_count + excluded.race_count)
-          ELSE COALESCE(NULLIF(excluded.avg_pit_time, 0), track_stats.avg_pit_time) END,
-        avg_qualify_time = CASE WHEN excluded.avg_qualify_time > 0 AND track_stats.avg_qualify_time > 0
-          THEN (track_stats.avg_qualify_time * track_stats.race_count + excluded.avg_qualify_time * excluded.race_count) / (track_stats.race_count + excluded.race_count)
-          ELSE COALESCE(NULLIF(excluded.avg_qualify_time, 0), track_stats.avg_qualify_time) END,
-        avg_sof = CASE WHEN excluded.avg_sof > 0 AND track_stats.avg_sof > 0
-          THEN (track_stats.avg_sof * track_stats.race_count + excluded.avg_sof * excluded.race_count) / (track_stats.race_count + excluded.race_count)
-          ELSE COALESCE(NULLIF(excluded.avg_sof, 0), track_stats.avg_sof) END,
-        est_laps = CASE WHEN excluded.est_laps > 0 AND track_stats.est_laps > 0
-          THEN (track_stats.est_laps * track_stats.race_count + excluded.est_laps * excluded.race_count) / (track_stats.race_count + excluded.race_count)
-          ELSE COALESCE(NULLIF(excluded.est_laps, 0), track_stats.est_laps) END,
-        avg_drivers = CASE WHEN excluded.avg_drivers > 0 AND track_stats.avg_drivers > 0
-          THEN (track_stats.avg_drivers * track_stats.race_count + excluded.avg_drivers * excluded.race_count) / (track_stats.race_count + excluded.race_count)
-          ELSE COALESCE(NULLIF(excluded.avg_drivers, 0), track_stats.avg_drivers) END,
-        race_count = track_stats.race_count + excluded.race_count,
-        top_car = COALESCE(NULLIF(excluded.top_car, ''), track_stats.top_car)
-    `);
-    const deleteStmt = db.prepare('DELETE FROM track_stats WHERE id = ?');
-    const txn = db.transaction(() => {
-      for (const row of oldRows) {
-        let newType = raceTypeMap[row.race_type];
-        // GT3 "Sprint" → "VRS Sprint"
-        if (!newType && row.race_type === 'Sprint') newType = 'VRS Sprint';
-        mergeStmt.run({
-          track_name: row.track_name, car_class: row.car_class, race_type: newType,
-          avg_lap_time: row.avg_lap_time || 0, avg_pit_time: row.avg_pit_time || 0,
-          avg_qualify_time: row.avg_qualify_time || 0, avg_sof: row.avg_sof || 0,
-          est_laps: row.est_laps || 0, avg_drivers: row.avg_drivers || 0,
-          race_count: row.race_count || 0, top_car: row.top_car || '',
-          category: row.category || 'road',
-        });
-        deleteStmt.run(row.id);
-      }
-    });
-    txn();
-    console.log('[DB] Normalized ' + oldRows.length + ' race_type values');
-  }
-} catch(e) { console.error('[DB] race_type normalization error:', e.message); }
-
-// ── Session data tables (session capture pipeline) ──────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS racing_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bridge_id TEXT NOT NULL,
-    iracing_name TEXT NOT NULL,
-    track_name TEXT NOT NULL,
-    car_class TEXT NOT NULL,
-    car_name TEXT NOT NULL,
-    session_type TEXT NOT NULL,
-    race_type TEXT,
-    is_public INTEGER DEFAULT 0,
-    share_token TEXT,
-    conditions TEXT,
-    sof INTEGER,
-    finish_position INTEGER,
-    irating_change INTEGER,
-    driver_count INTEGER,
-    best_lap_time REAL,
-    lap_count INTEGER,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_racing_sessions_track ON racing_sessions(track_name)'); } catch(e) {}
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_racing_sessions_bridge ON racing_sessions(bridge_id)'); } catch(e) {}
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_racing_sessions_share ON racing_sessions(share_token)'); } catch(e) {}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS session_laps (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL REFERENCES racing_sessions(id) ON DELETE CASCADE,
-    lap_number INTEGER NOT NULL,
-    lap_time REAL NOT NULL,
-    sector_times TEXT,
-    fuel_used REAL,
-    air_temp REAL,
-    track_temp REAL,
-    is_pit_lap INTEGER DEFAULT 0,
-    position INTEGER,
-    incidents INTEGER,
-    is_valid INTEGER DEFAULT 1
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_session_laps_session ON session_laps(session_id)'); } catch(e) {}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS lap_telemetry (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    lap_id INTEGER NOT NULL REFERENCES session_laps(id) ON DELETE CASCADE,
-    data TEXT NOT NULL
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_lap_telemetry_lap ON lap_telemetry(lap_id)'); } catch(e) {}
-
-// ── Racing users (standalone auth, no Discord required) ─────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS racing_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    password_hash TEXT NOT NULL,
-    iracing_name TEXT,
-    bridge_id TEXT,
-    streamer_id INTEGER,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_racing_users_bridge ON racing_users(bridge_id)'); } catch(e) {}
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_racing_users_streamer ON racing_users(streamer_id)'); } catch(e) {}
-try { db.exec('ALTER TABLE racing_users ADD COLUMN display_name TEXT'); } catch(e) {}
-try { db.exec('ALTER TABLE racing_users ADD COLUMN avatar TEXT'); } catch(e) {}
-try { db.exec('ALTER TABLE racing_users ADD COLUMN login_attempts INTEGER DEFAULT 0'); } catch(e) {}
-try { db.exec('ALTER TABLE racing_users ADD COLUMN locked_until INTEGER'); } catch(e) {}
-try { db.exec('ALTER TABLE racing_users ADD COLUMN pitwall_token TEXT'); } catch(e) {}
-try { db.exec('ALTER TABLE racing_users ADD COLUMN email TEXT'); } catch(e) {}
-// Password reset tokens
-db.exec(`
-  CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    token TEXT NOT NULL UNIQUE,
-    expires_at INTEGER NOT NULL,
-    used INTEGER DEFAULT 0,
-    created_at INTEGER DEFAULT (unixepoch() * 1000)
-  )
-`);
-// Auth activity log — tracks all login/signup attempts for spam detection
-db.exec(`
-  CREATE TABLE IF NOT EXISTS auth_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    action TEXT NOT NULL,
-    username TEXT,
-    ip TEXT,
-    success INTEGER DEFAULT 0,
-    reason TEXT,
-    user_agent TEXT,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_auth_log_ip ON auth_log(ip)'); } catch(e) {}
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_auth_log_created ON auth_log(created_at)'); } catch(e) {}
-
-// ── Teams (Pitwall Phase 1) ───────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS teams (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    owner_id INTEGER NOT NULL REFERENCES racing_users(id),
-    invite_code TEXT NOT NULL UNIQUE,
-    created_at DATETIME DEFAULT (datetime('now')),
-    picture TEXT,
-    banner TEXT
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS team_members (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES racing_users(id),
-    role TEXT NOT NULL DEFAULT 'member',
-    joined_at DATETIME DEFAULT (datetime('now')),
-    UNIQUE(team_id, user_id)
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id)'); } catch(e) {}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS team_invites (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    invited_user_id INTEGER NOT NULL REFERENCES racing_users(id),
-    invited_by INTEGER NOT NULL REFERENCES racing_users(id),
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME DEFAULT (datetime('now'))
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_team_invites_user ON team_invites(invited_user_id)'); } catch(e) {}
-
-// ── Notifications ─────────────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES racing_users(id) ON DELETE CASCADE,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    link TEXT,
-    action_type TEXT,
-    action_id INTEGER,
-    is_read INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )
-`);
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)'); } catch(e) {}
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at)'); } catch(e) {}
-
-try { db.exec('ALTER TABLE racing_sessions ADD COLUMN racing_user_id INTEGER'); } catch(e) {}
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_racing_sessions_user ON racing_sessions(racing_user_id)'); } catch(e) {}
-
-// Migrate sessions table: add racing_user_id + make streamer_id nullable
-try {
-  const sessionCols = db.prepare("PRAGMA table_info(sessions)").all();
-  const hasRacingCol = sessionCols.find(c => c.name === 'racing_user_id');
-  if (!hasRacingCol) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS sessions_new (
-        sid TEXT PRIMARY KEY,
-        streamer_id INTEGER,
-        racing_user_id INTEGER,
-        expires_at INTEGER NOT NULL
-      );
-      INSERT INTO sessions_new (sid, streamer_id, expires_at) SELECT sid, streamer_id, expires_at FROM sessions;
-      DROP TABLE sessions;
-      ALTER TABLE sessions_new RENAME TO sessions;
-    `);
-    console.log('[DB] Migrated sessions table: added racing_user_id, made streamer_id nullable');
-  }
-} catch(e) { console.error('[DB] Sessions migration error:', e.message); }
+// The Racing product was removed: its tables and the web sessions that only
+// belonged to a Racing account go once. Children come before parents.
+_runOnce('drop_racing_tables', () => {
+  for (const table of [
+    'lap_telemetry', 'session_laps', 'racing_sessions', 'track_stats', 'track_maps',
+    'team_invites', 'team_members', 'teams', 'notifications', 'password_reset_tokens',
+    'auth_log', 'racing_users', 'bridge_logs', 'bridge_bug_reports',
+    'iracing_race_cache', 'iracing_driver_state', 'watched_iracing_drivers',
+    'iracing_overlay_settings',
+  ]) db.exec('DROP TABLE IF EXISTS ' + table);
+  db.exec('DELETE FROM sessions WHERE streamer_id IS NULL');
+});
 
 // Session ids used to be stored as they are; from here on only their hash is
 // (hashSessionId). The ids already stored are hashed once, so every cookie in
@@ -1274,18 +905,6 @@ _runOnce('hash_web_session_ids', () => {
   for (const { sid } of rows) update.run(hashSessionId(sid), sid);
   if (rows.length > 0) console.log(`[DB] Stored ${rows.length} web session id(s) as hashes`);
 });
-
-// --- Bridge Remote Logs ---
-db.exec(`
-  CREATE TABLE IF NOT EXISTS bridge_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bridge_id TEXT NOT NULL,
-    lines TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
-db.exec(`CREATE INDEX IF NOT EXISTS idx_bridge_logs_lookup ON bridge_logs (bridge_id, created_at)`);
-try { db.exec('ALTER TABLE bridge_logs ADD COLUMN iracing_name TEXT'); } catch(e) {}
 
 // Hot-path lookup indexes (poller iterates per-channel + tier check on every request).
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_subscriptions_streamer_status ON subscriptions(streamer_id, status)'); } catch(e) {}
@@ -1304,19 +923,6 @@ try { db.exec("ALTER TABLE issues ADD COLUMN agent_analysis TEXT"); } catch(e) {
 try { db.exec("ALTER TABLE issues ADD COLUMN agent_status TEXT"); } catch(e) {}
 // When the AI analysis was started (ISO time): the daily limit counts these.
 try { db.exec("ALTER TABLE issues ADD COLUMN agent_analyzed_at TEXT"); } catch (e) { _migrationLog('issues.agent_analyzed_at', e); }
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS bridge_bug_reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bridge_id TEXT NOT NULL,
-    error_pattern TEXT NOT NULL,
-    explanation TEXT NOT NULL,
-    suggested_fix TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
-db.exec(`CREATE INDEX IF NOT EXISTS idx_bridge_bug_reports_lookup ON bridge_bug_reports (bridge_id, status)`);
 
 // --- Seed: ensure enterprise subscriptions for the admins ---
 // Matched by Discord user id, like admin access: names can be changed by anyone.
@@ -1480,8 +1086,7 @@ const _updateGuildConfig = db.prepare(`
     weekly_highlights_enabled = ?,
     instagram_enabled = ?,
     tiktok_enabled = ?,
-    twitter_enabled = ?,
-    iracing_enabled = ?
+    twitter_enabled = ?
   WHERE guild_id = ? AND streamer_id = ?
 `);
 const _deleteGuild = db.prepare('DELETE FROM guilds WHERE guild_id = ? AND streamer_id = ?');
@@ -1533,7 +1138,6 @@ function updateGuildConfig(guildId, streamerId, config) {
     config.instagram_enabled ? 1 : 0,
     config.tiktok_enabled ? 1 : 0,
     config.twitter_enabled ? 1 : 0,
-    config.iracing_enabled ? 1 : 0,
     guildId,
     streamerId
   );
@@ -1544,7 +1148,7 @@ function updateGuildConfig(guildId, streamerId, config) {
 // that server: once the claim is gone nobody can see or edit it.
 const WATCHER_TABLES = [
   'watched_channels', 'watched_youtube_channels', 'watched_instagram_accounts',
-  'watched_tiktok_accounts', 'watched_twitter_accounts', 'watched_iracing_drivers',
+  'watched_tiktok_accounts', 'watched_twitter_accounts',
 ];
 const _deleteClaimWatchers = WATCHER_TABLES.map((table) =>
   db.prepare(`DELETE FROM ${table} WHERE guild_id = ? AND streamer_id = ?`));
@@ -1556,7 +1160,6 @@ const WATCHER_IDENTITY_COLUMN = {
   watched_instagram_accounts: 'instagram_username',
   watched_tiktok_accounts: 'tiktok_username',
   watched_twitter_accounts: 'twitter_username',
-  watched_iracing_drivers: 'customer_id',
 };
 const orphanWatcherCondition = (table) =>
   `NOT EXISTS (SELECT 1 FROM guilds g WHERE g.guild_id = ${table}.guild_id AND g.streamer_id = ${table}.streamer_id)`;
@@ -1678,7 +1281,6 @@ function linkUser(streamerId, discordUserId, twitchUserId, twitchUsername) {
 const _createSession = db.prepare('INSERT OR REPLACE INTO sessions (sid, streamer_id, expires_at) VALUES (?, ?, ?)');
 const _getSession = db.prepare('SELECT * FROM sessions WHERE sid = ? AND expires_at > ?');
 const _deleteSession = db.prepare('DELETE FROM sessions WHERE sid = ?');
-const _deleteOtherSessionsByRacingUser = db.prepare('DELETE FROM sessions WHERE racing_user_id = ? AND sid != ?');
 const _deleteOtherSessionsByStreamer = db.prepare('DELETE FROM sessions WHERE streamer_id = ? AND sid != ?');
 const _cleanExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
@@ -1693,9 +1295,8 @@ function getSession(sid) {
 function deleteSession(sid) {
   _deleteSession.run(hashSessionId(sid));
 }
-function deleteOtherSessions(currentSid, { racingUserId, streamerId } = {}) {
+function deleteOtherSessions(currentSid, { streamerId } = {}) {
   const keep = hashSessionId(currentSid);
-  if (racingUserId) _deleteOtherSessionsByRacingUser.run(racingUserId, keep);
   if (streamerId) _deleteOtherSessionsByStreamer.run(streamerId, keep);
 }
 
@@ -1760,7 +1361,6 @@ const _getGuildNotificationStats = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
     COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
     COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
-    COALESCE(SUM(CASE WHEN type = 'iracing_result' THEN 1 ELSE 0 END), 0) AS iracing_result_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 ELSE 0 END), 0) AS week_total
   FROM notification_log WHERE streamer_id = ? AND guild_id = ?
@@ -1782,7 +1382,6 @@ const _getGuildStatsByPeriod = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
     COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
     COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
-    COALESCE(SUM(CASE WHEN type = 'iracing_result' THEN 1 ELSE 0 END), 0) AS iracing_result_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_count,
     COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS fail_count
@@ -1801,7 +1400,6 @@ const _getGuildStatsLifetime = db.prepare(`
     COALESCE(SUM(CASE WHEN type = 'instagram_post' THEN 1 ELSE 0 END), 0) AS instagram_post_count,
     COALESCE(SUM(CASE WHEN type = 'tiktok_video' THEN 1 ELSE 0 END), 0) AS tiktok_video_count,
     COALESCE(SUM(CASE WHEN type = 'twitter_tweet' THEN 1 ELSE 0 END), 0) AS twitter_tweet_count,
-    COALESCE(SUM(CASE WHEN type = 'iracing_result' THEN 1 ELSE 0 END), 0) AS iracing_result_count,
     COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_count,
     COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS fail_count
@@ -1898,8 +1496,7 @@ const _getRecentNotifications = db.prepare(`
   LIMIT 50
 `);
 
-// Disabling also ends every web session of the account (a linked Racing login
-// included), so it cannot keep using the site with a cookie it already has.
+// Disabling also ends every web session of the account, so it cannot keep using the site with a cookie it already has.
 const _disableStreamerAndSessions = db.transaction((id, note) => {
   _disableStreamer.run(note || null, id);
   _deleteSessionsForStreamer.run(id);
@@ -1915,7 +1512,7 @@ function enableStreamer(id) {
 
 // ── Removing an account ───────────────────────────────────────────────────
 // Most foreign keys here were declared without ON DELETE CASCADE, so deleting a
-// streamer or Racing user failed outright (and the rows that had no foreign key
+// streamer failed outright (and the rows that had no foreign key
 // at all were left behind). These delete everything an account owns, children
 // before parents, in one transaction: either all of it goes or none.
 
@@ -1977,7 +1574,6 @@ const STREAMER_OWNED_ROWS = [
   ['vtuber_models', 'streamer_id = ?'],
   ['banned_words', 'streamer_id = ?'],
   ['donations', 'streamer_id = ?'],
-  ['iracing_overlay_settings', 'streamer_id = ?'],
   ['moderation_log', 'streamer_id = ?'],
   ['notification_log', 'streamer_id = ?'],
   ['overlay_events', 'streamer_id = ?'],
@@ -1994,7 +1590,7 @@ const STREAMER_OWNED_ROWS = [
 
 const _deleteStreamerAndData = db.transaction((id) => {
   const tables = existingTables();
-  const named = new Set(['streamers', 'racing_users']);
+  const named = new Set(['streamers']);
   // A streamer points at its VTuber model and each model at its streamer.
   if (tables.has('vtuber_models')) {
     db.prepare('UPDATE streamers SET vtuber_model_id = NULL WHERE vtuber_model_id IN (SELECT id FROM vtuber_models WHERE streamer_id = ?)').run(id);
@@ -2003,8 +1599,6 @@ const _deleteStreamerAndData = db.transaction((id) => {
     named.add(table);
     if (tables.has(table)) db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(id);
   }
-  // A linked Racing account is a separate account: it only loses the link.
-  db.prepare('UPDATE racing_users SET streamer_id = NULL WHERE streamer_id = ?').run(id);
   deleteStrayForeignKeyRows('streamers', id, named, tables);
   return _deleteStreamer.run(id).changes > 0;
 });
@@ -2640,149 +2234,6 @@ function updateWatchedTwitterInfo(id, profileImageUrl, displayName) {
 
 function updateWatchedTwitterChannel(id, streamerId, notifyChannelId) {
   _updateWatchedTwitterChannel.run(notifyChannelId || null, id, streamerId);
-}
-
-// --- Watched iRacing Drivers ---
-
-const _addWatchedIracingDriver = db.prepare(`
-  INSERT OR IGNORE INTO watched_iracing_drivers (guild_id, streamer_id, customer_id, driver_name, notify_channel_id)
-  VALUES (?, ?, ?, ?, ?)
-`);
-const _removeWatchedIracingDriver = db.prepare('DELETE FROM watched_iracing_drivers WHERE id = ? AND streamer_id = ?');
-const _getWatchedIracingDriversForGuild = db.prepare('SELECT * FROM watched_iracing_drivers WHERE guild_id = ? AND streamer_id = ?');
-const _getAllUniqueWatchedIracingDrivers = db.prepare('SELECT DISTINCT customer_id FROM watched_iracing_drivers WHERE enabled = 1');
-const _getIracingWatchersForDriver = db.prepare(`
-  SELECT wid.*, s.id AS owner_id, s.enabled AS streamer_enabled
-  FROM watched_iracing_drivers wid
-  JOIN streamers s ON wid.streamer_id = s.id
-  WHERE wid.customer_id = ? AND wid.enabled = 1 AND s.enabled = 1
-`);
-const _getIracingDriverState = db.prepare('SELECT * FROM iracing_driver_state WHERE customer_id = ?');
-const _upsertIracingDriverState = db.prepare(`
-  INSERT INTO iracing_driver_state (customer_id) VALUES (?)
-  ON CONFLICT(customer_id) DO NOTHING
-`);
-const _updateIracingDriverState = db.prepare(`
-  UPDATE iracing_driver_state SET
-    last_checked = COALESCE(?, last_checked),
-    irating_road = COALESCE(?, irating_road),
-    irating_oval = COALESCE(?, irating_oval),
-    irating_dirt_road = COALESCE(?, irating_dirt_road),
-    irating_dirt_oval = COALESCE(?, irating_dirt_oval),
-    safety_rating_road = COALESCE(?, safety_rating_road),
-    safety_rating_oval = COALESCE(?, safety_rating_oval),
-    safety_rating_dirt_road = COALESCE(?, safety_rating_dirt_road),
-    safety_rating_dirt_oval = COALESCE(?, safety_rating_dirt_oval),
-    license_class = COALESCE(?, license_class)
-  WHERE customer_id = ?
-`);
-const _upsertIracingRaceCache = db.prepare(`
-  INSERT OR IGNORE INTO iracing_race_cache (subsession_id, customer_id, driver_name, series_name, track_name, car_name, category, finish_position, starting_position, incidents, irating_change, new_irating, laps_completed, fastest_lap_time, qualifying_time, field_size, strength_of_field, race_date)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-const _isRaceCached = db.prepare('SELECT 1 FROM iracing_race_cache WHERE subsession_id = ? AND customer_id = ?');
-const _getIracingRaceHistory = db.prepare('SELECT * FROM iracing_race_cache WHERE customer_id = ? ORDER BY race_date DESC LIMIT ?');
-const _searchIracingQualifying = db.prepare('SELECT * FROM iracing_race_cache WHERE qualifying_time IS NOT NULL AND qualifying_time > 0 ORDER BY qualifying_time ASC');
-const _searchIracingQualifyingByCategory = db.prepare('SELECT * FROM iracing_race_cache WHERE qualifying_time IS NOT NULL AND qualifying_time > 0 AND category = ? ORDER BY qualifying_time ASC');
-const _getIracingDriverStats = db.prepare(`
-  SELECT
-    COUNT(*) AS race_count,
-    COALESCE(SUM(CASE WHEN finish_position = 1 THEN 1 ELSE 0 END), 0) AS wins,
-    ROUND(AVG(finish_position), 1) AS avg_finish,
-    ROUND(AVG(incidents), 1) AS avg_incidents,
-    MIN(finish_position) AS best_finish
-  FROM iracing_race_cache WHERE customer_id = ?
-`);
-const _updateWatchedIracingDriverChannel = db.prepare(`
-  UPDATE watched_iracing_drivers SET notify_channel_id = ?
-  WHERE id = ? AND streamer_id = ?
-`);
-
-function addWatchedIracingDriver(guildId, streamerId, customerId, driverName, notifyChannelId) {
-  _addWatchedIracingDriver.run(guildId, streamerId, customerId, driverName || null, notifyChannelId || null);
-}
-
-function removeWatchedIracingDriver(id, streamerId) {
-  _removeWatchedIracingDriver.run(id, streamerId);
-}
-
-function getWatchedIracingDriversForGuild(guildId, streamerId) {
-  return _getWatchedIracingDriversForGuild.all(guildId, streamerId);
-}
-
-function getAllUniqueWatchedIracingDrivers() {
-  return _getAllUniqueWatchedIracingDrivers.all();
-}
-
-function getIracingWatchersForDriver(customerId) {
-  return _getIracingWatchersForDriver.all(customerId);
-}
-
-function getIracingDriverState(customerId) {
-  _upsertIracingDriverState.run(customerId);
-  return _getIracingDriverState.get(customerId);
-}
-
-function updateIracingDriverState(customerId, updates) {
-  _updateIracingDriverState.run(
-    updates.last_checked ?? null,
-    updates.irating_road ?? null,
-    updates.irating_oval ?? null,
-    updates.irating_dirt_road ?? null,
-    updates.irating_dirt_oval ?? null,
-    updates.safety_rating_road ?? null,
-    updates.safety_rating_oval ?? null,
-    updates.safety_rating_dirt_road ?? null,
-    updates.safety_rating_dirt_oval ?? null,
-    updates.license_class ?? null,
-    customerId
-  );
-}
-
-function upsertIracingRaceCache(raceData) {
-  _upsertIracingRaceCache.run(
-    raceData.subsession_id,
-    raceData.customer_id,
-    raceData.driver_name || null,
-    raceData.series_name || null,
-    raceData.track_name || null,
-    raceData.car_name || null,
-    raceData.category || null,
-    raceData.finish_position ?? null,
-    raceData.starting_position ?? null,
-    raceData.incidents ?? null,
-    raceData.irating_change ?? null,
-    raceData.new_irating ?? null,
-    raceData.laps_completed ?? null,
-    raceData.fastest_lap_time ?? null,
-    raceData.qualifying_time ?? null,
-    raceData.field_size ?? null,
-    raceData.strength_of_field ?? null,
-    raceData.race_date || null
-  );
-}
-
-function isRaceCached(subsessionId, customerId) {
-  return !!_isRaceCached.get(subsessionId, customerId);
-}
-
-function getIracingRaceHistory(customerId, limit = 50) {
-  return _getIracingRaceHistory.all(customerId, limit);
-}
-
-function searchIracingQualifying(category) {
-  if (category) {
-    return _searchIracingQualifyingByCategory.all(category);
-  }
-  return _searchIracingQualifying.all();
-}
-
-function getIracingDriverStats(customerId) {
-  return _getIracingDriverStats.get(customerId);
-}
-
-function updateWatchedIracingDriverChannel(id, streamerId, notifyChannelId) {
-  _updateWatchedIracingDriverChannel.run(notifyChannelId || null, id, streamerId);
 }
 
 // --- Subscriptions ---
@@ -3552,22 +3003,6 @@ function changeOverlayDesignStyle(streamerId, eventType, style) {
     screen_effect = 'default', animation_speed = 1.0 WHERE streamer_id = ? AND event_type = ?`).run(style || null, streamerId, eventType);
 }
 
-function getIracingOverlaySettings(streamerId) {
-  return db.prepare('SELECT * FROM iracing_overlay_settings WHERE streamer_id = ?').all(streamerId);
-}
-
-function getIracingOverlaySetting(streamerId, overlayType) {
-  return db.prepare('SELECT * FROM iracing_overlay_settings WHERE streamer_id = ? AND overlay_type = ?').get(streamerId, overlayType);
-}
-
-function upsertIracingOverlaySetting(streamerId, overlayType, enabled, settings) {
-  db.prepare(`
-    INSERT INTO iracing_overlay_settings (streamer_id, overlay_type, enabled, settings)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(streamer_id, overlay_type) DO UPDATE SET enabled = ?, settings = ?
-  `).run(streamerId, overlayType, enabled, settings, enabled, settings);
-}
-
 // Migration: Add card_image_scale to overlay_designs
 try {
   const cols = db.pragma('table_info(overlay_designs)').map(c => c.name);
@@ -3821,19 +3256,6 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_banned_words_streamer ON banned_words(st
     )
   `);
 }
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS iracing_overlay_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    streamer_id INTEGER NOT NULL,
-    overlay_type TEXT NOT NULL,
-    enabled INTEGER DEFAULT 0,
-    settings TEXT DEFAULT '{}',
-    created_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (streamer_id) REFERENCES streamers(id) ON DELETE CASCADE,
-    UNIQUE(streamer_id, overlay_type)
-  )
-`);
 
 // Migration: VTuber models table
 db.exec(`
@@ -4908,592 +4330,6 @@ function deleteVtuberModel(id, streamerId) {
 
 function selectVtuberModel(streamerId, modelId) {
   db.prepare('UPDATE streamers SET vtuber_model_id = ? WHERE id = ?').run(modelId, streamerId);
-}
-
-// --- Bridge Logs ---
-
-function insertBridgeLogs(bridgeId, lines) {
-  db.prepare('INSERT INTO bridge_logs (bridge_id, lines) VALUES (?, ?)').run(bridgeId, lines);
-}
-
-function getActiveBridgeIds(hours) {
-  const h = Math.min(Math.max(hours || 24, 1), 168);
-  return db.prepare(
-    "SELECT DISTINCT bridge_id FROM bridge_logs WHERE created_at >= datetime('now', '-' || ? || ' hours') ORDER BY bridge_id"
-  ).all(h).map(r => r.bridge_id);
-}
-
-function getBridgeUserStats() {
-  return db.prepare(`
-    SELECT
-      l.bridge_id,
-      MAX(l.iracing_name) AS iracing_name,
-      COUNT(*) AS log_batches,
-      SUM(LENGTH(l.lines)) AS total_bytes,
-      MIN(l.created_at) AS first_seen,
-      MAX(l.created_at) AS last_seen,
-      COALESCE(b.pending, 0) AS pending_reports,
-      COALESCE(b.approved, 0) AS approved_reports,
-      COALESCE(b.dismissed, 0) AS dismissed_reports
-    FROM bridge_logs l
-    LEFT JOIN (
-      SELECT bridge_id,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved,
-        SUM(CASE WHEN status = 'dismissed' THEN 1 ELSE 0 END) AS dismissed
-      FROM bridge_bug_reports GROUP BY bridge_id
-    ) b ON l.bridge_id = b.bridge_id
-    GROUP BY l.bridge_id
-    ORDER BY last_seen DESC
-  `).all();
-}
-
-function getBridgeLogs(bridgeId, hours) {
-  const h = Math.min(Math.max(hours || 24, 1), 168);
-  return db.prepare(
-    "SELECT id, lines, created_at FROM bridge_logs WHERE bridge_id = ? AND created_at >= datetime('now', '-' || ? || ' hours') ORDER BY created_at ASC"
-  ).all(bridgeId, h);
-}
-
-function cleanupOldBridgeLogs() {
-  const result = db.prepare("DELETE FROM bridge_logs WHERE created_at < datetime('now', '-7 days')").run();
-  if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} old bridge log entries`);
-}
-
-function insertBridgeBugReport(bridgeId, errorPattern, explanation, suggestedFix) {
-  const result = db.prepare('INSERT INTO bridge_bug_reports (bridge_id, error_pattern, explanation, suggested_fix) VALUES (?, ?, ?, ?)').run(bridgeId, errorPattern, explanation, suggestedFix);
-  return result.lastInsertRowid;
-}
-
-function getBridgeBugReports(bridgeId, status) {
-  if (status) {
-    return db.prepare('SELECT * FROM bridge_bug_reports WHERE bridge_id = ? AND status = ? ORDER BY created_at DESC').all(bridgeId, status);
-  }
-  return db.prepare('SELECT * FROM bridge_bug_reports WHERE bridge_id = ? ORDER BY created_at DESC').all(bridgeId);
-}
-
-function updateBridgeBugReportStatus(id, bridgeId, status) {
-  db.prepare('UPDATE bridge_bug_reports SET status = ? WHERE id = ? AND bridge_id = ?').run(status, id, bridgeId);
-}
-
-function cleanupOldBridgeBugReports() {
-  const result = db.prepare("DELETE FROM bridge_bug_reports WHERE status = 'dismissed' AND created_at < datetime('now', '-30 days')").run();
-  if (result.changes > 0) console.log(`[DB] Cleaned up ${result.changes} old dismissed bug reports`);
-}
-
-// ── Session data queries ────────────────────────────────────────────
-
-const _insertSession = db.prepare(`
-  INSERT INTO racing_sessions (bridge_id, iracing_name, track_name, car_class, car_name, session_type, race_type, is_public, share_token, conditions, sof, finish_position, irating_change, driver_count, best_lap_time, lap_count, racing_user_id)
-  VALUES (@bridge_id, @iracing_name, @track_name, @car_class, @car_name, @session_type, @race_type, @is_public, @share_token, @conditions, @sof, @finish_position, @irating_change, @driver_count, @best_lap_time, @lap_count, @racing_user_id)
-`);
-
-const _insertSessionLap = db.prepare(`
-  INSERT INTO session_laps (session_id, lap_number, lap_time, sector_times, fuel_used, air_temp, track_temp, is_pit_lap, position, incidents, is_valid)
-  VALUES (@session_id, @lap_number, @lap_time, @sector_times, @fuel_used, @air_temp, @track_temp, @is_pit_lap, @position, @incidents, @is_valid)
-`);
-
-const _insertLapTelemetry = db.prepare(`
-  INSERT INTO lap_telemetry (lap_id, data) VALUES (@lap_id, @data)
-`);
-
-const _getSessionsByTrack = db.prepare(`
-  SELECT s.*, (SELECT COUNT(*) FROM session_laps WHERE session_id = s.id) as actual_laps
-  FROM racing_sessions s
-  WHERE s.track_name = @track_name AND (s.bridge_id = @bridge_id OR s.is_public = 1)
-  ORDER BY s.created_at DESC
-  LIMIT @limit OFFSET @offset
-`);
-
-const _getSessionById = db.prepare(`
-  SELECT * FROM racing_sessions WHERE id = @id
-`);
-
-const _getSessionByShareToken = db.prepare(`
-  SELECT * FROM racing_sessions WHERE share_token = @token
-`);
-
-const _getSessionLaps = db.prepare(`
-  SELECT * FROM session_laps WHERE session_id = @session_id ORDER BY lap_number ASC
-`);
-
-const _getLapTelemetry = db.prepare(`
-  SELECT data FROM lap_telemetry WHERE lap_id = @lap_id
-`);
-
-const _updateSessionPublic = db.prepare(`
-  UPDATE racing_sessions SET is_public = @is_public WHERE id = @id AND bridge_id = @bridge_id
-`);
-
-const _deleteRacingSession = db.prepare(`
-  DELETE FROM racing_sessions WHERE id = @id AND bridge_id = @bridge_id
-`);
-
-function insertSession(session, laps, telemetry) {
-  const txn = db.transaction(() => {
-    const result = _insertSession.run(session);
-    const sessionId = result.lastInsertRowid;
-    for (const lap of laps) {
-      const lapResult = _insertSessionLap.run({ ...lap, session_id: sessionId });
-      const lapId = lapResult.lastInsertRowid;
-      const tel = telemetry.find(t => t.lap_number === lap.lap_number);
-      if (tel && tel.data) {
-        _insertLapTelemetry.run({ lap_id: lapId, data: tel.data });
-      }
-    }
-    return sessionId;
-  });
-  return txn();
-}
-
-// Insert a single lap + optional telemetry (for progressive upload)
-function insertSingleLap(sessionId, lap, telemetryData) {
-  const txn = db.transaction(() => {
-    const lapResult = _insertSessionLap.run({ ...lap, session_id: sessionId });
-    const lapId = lapResult.lastInsertRowid;
-    if (telemetryData) {
-      _insertLapTelemetry.run({ lap_id: lapId, data: telemetryData });
-    }
-    return lapId;
-  });
-  return txn();
-}
-
-// Update session best_lap_time and lap_count after appending a lap
-const _updateSessionLapStats = db.prepare(`
-  UPDATE racing_sessions SET
-    lap_count = (SELECT COUNT(*) FROM session_laps WHERE session_id = @id),
-    best_lap_time = CASE WHEN @lap_time > 0 AND (@lap_time < best_lap_time OR best_lap_time IS NULL OR best_lap_time = 0) THEN @lap_time ELSE best_lap_time END
-  WHERE id = @id
-`);
-function updateSessionLapStats(sessionId, lapTime) {
-  return _updateSessionLapStats.run({ id: sessionId, lap_time: lapTime || 0 });
-}
-
-// Update session with final race results
-const _updateSessionFinish = db.prepare(`
-  UPDATE racing_sessions SET
-    finish_position = COALESCE(@finish_position, finish_position),
-    irating_change = COALESCE(@irating_change, irating_change),
-    best_lap_time = CASE WHEN @best_lap_time > 0 THEN @best_lap_time ELSE best_lap_time END
-  WHERE id = @id
-`);
-function updateSessionFinish(sessionId, finishPosition, iratingChange, bestLapTime) {
-  return _updateSessionFinish.run({ id: sessionId, finish_position: finishPosition || null, irating_change: iratingChange || null, best_lap_time: bestLapTime || null });
-}
-
-function getSessionsByTrack(trackName, bridgeId, limit, offset) {
-  return _getSessionsByTrack.all({ track_name: trackName, bridge_id: bridgeId || '', limit: limit || 50, offset: offset || 0 });
-}
-
-const _getRecentSessionsByUser = db.prepare(`
-  SELECT s.*, (SELECT COUNT(*) FROM session_laps WHERE session_id = s.id) as actual_laps
-  FROM racing_sessions s
-  WHERE s.racing_user_id = @racing_user_id OR s.bridge_id = @bridge_id
-  ORDER BY s.created_at DESC
-  LIMIT @limit
-`);
-function getAllRacingUsers() {
-  return db.prepare('SELECT * FROM racing_users ORDER BY created_at DESC').all();
-}
-
-function getRecentSessionsByUser(racingUserId, bridgeId, limit) {
-  return _getRecentSessionsByUser.all({ racing_user_id: racingUserId || 0, bridge_id: bridgeId || '', limit: limit || 20 });
-}
-
-function getRacingSessionById(id) {
-  return _getSessionById.get({ id });
-}
-
-function getSessionByShareToken(token) {
-  return _getSessionByShareToken.get({ token });
-}
-
-function getSessionLaps(sessionId) {
-  return _getSessionLaps.all({ session_id: sessionId });
-}
-
-function getLapTelemetry(lapId) {
-  const row = _getLapTelemetry.get({ lap_id: lapId });
-  return row ? row.data : null;
-}
-
-function updateSessionPublic(id, bridgeId, isPublic) {
-  return _updateSessionPublic.run({ id, bridge_id: bridgeId, is_public: isPublic ? 1 : 0 });
-}
-
-function deleteRacingSession(id, bridgeId) {
-  return _deleteRacingSession.run({ id, bridge_id: bridgeId });
-}
-
-// ── Racing users queries ────────────────────────────────────────────
-const _insertRacingUser = db.prepare(`INSERT INTO racing_users (username, password_hash, iracing_name, bridge_id) VALUES (@username, @password_hash, @iracing_name, @bridge_id)`);
-const _getRacingUserByUsername = db.prepare(`SELECT * FROM racing_users WHERE username = @username COLLATE NOCASE`);
-const _getRacingUserById = db.prepare(`SELECT * FROM racing_users WHERE id = @id`);
-const _getRacingUserByBridgeId = db.prepare(`SELECT * FROM racing_users WHERE bridge_id = @bridge_id`);
-const _getRacingUserByStreamerId = db.prepare(`SELECT * FROM racing_users WHERE streamer_id = @streamer_id`);
-const _linkRacingUserToStreamer = db.prepare(`UPDATE racing_users SET streamer_id = @streamer_id WHERE id = @id`);
-const _updateRacingPassword = db.prepare(`UPDATE racing_users SET password_hash = @password_hash WHERE id = @id`);
-const _updateRacingIracingName = db.prepare(`UPDATE racing_users SET iracing_name = @iracing_name WHERE id = @id`);
-const _updateRacingProfile = db.prepare(`UPDATE racing_users SET display_name = @display_name, iracing_name = @iracing_name WHERE id = @id`);
-const _createRacingSession = db.prepare(`INSERT INTO sessions (sid, racing_user_id, expires_at) VALUES (?, ?, ?)`);
-const _createLinkedSession = db.prepare(`INSERT INTO sessions (sid, streamer_id, racing_user_id, expires_at) VALUES (?, ?, ?, ?)`);
-
-function createRacingUser(username, passwordHash, iracingName, bridgeId) {
-  return _insertRacingUser.run({ username, password_hash: passwordHash, iracing_name: iracingName || null, bridge_id: bridgeId || null });
-}
-function getRacingUserByUsername(username) { return _getRacingUserByUsername.get({ username }); }
-function getRacingUserById(id) { return _getRacingUserById.get({ id }); }
-function getRacingUserByBridgeId(bridgeId) { return _getRacingUserByBridgeId.get({ bridge_id: bridgeId }); }
-function getRacingUserByStreamerId(streamerId) { return _getRacingUserByStreamerId.get({ streamer_id: streamerId }); }
-function linkRacingUserToStreamer(racingUserId, streamerId) { return _linkRacingUserToStreamer.run({ id: racingUserId, streamer_id: streamerId }); }
-function updateRacingPassword(id, passwordHash) { return _updateRacingPassword.run({ id, password_hash: passwordHash }); }
-function updateRacingIracingName(id, iracingName) { return _updateRacingIracingName.run({ id, iracing_name: iracingName }); }
-function updateRacingProfile(id, displayName, iracingName) { return _updateRacingProfile.run({ id, display_name: displayName || null, iracing_name: iracingName || null }); }
-const _updateRacingAvatar = db.prepare('UPDATE racing_users SET avatar = @avatar WHERE id = @id');
-function updateRacingAvatar(id, avatar) { return _updateRacingAvatar.run({ id, avatar }); }
-// The recorded sessions that go with a Racing account (parameters: its id, its
-// Bridge id): the ones tied to it, and the ones recorded under its Bridge id
-// before they were tied to any account. A Bridge id is not unique to an account
-// (two accounts can use one install), so a session tied to another account is
-// never matched by Bridge id. One shared predicate: the telemetry, lap and
-// session deletes below must select the same sessions.
-const RECORDED_SESSIONS_OF_RACING_USER =
-  "SELECT id FROM racing_sessions WHERE racing_user_id = ? OR (racing_user_id IS NULL AND bridge_id = ? AND bridge_id != '')";
-
-// Deletes a Racing account and everything it owns (see "Removing an account"
-// above): web sessions, notifications and reset tokens; the sessions it
-// recorded with their laps and telemetry (RECORDED_SESSIONS_OF_RACING_USER);
-// the teams it owns with their members and invites; and its memberships and
-// invites in other teams. A linked streamer is a separate account and is not
-// touched. Logs and diagnostic reports kept per Bridge id are left alone: they
-// belong to the install, which another account may still use. True when the
-// user existed.
-const _deleteRacingUserAndData = db.transaction((id) => {
-  const user = db.prepare('SELECT bridge_id FROM racing_users WHERE id = ?').get(id);
-  if (!user) return false;
-  const bridge = user.bridge_id || '';
-  const tables = existingTables();
-  const named = new Set(['racing_users', 'streamers']);
-  const clear = (table, sql, ...params) => {
-    named.add(table);
-    if (tables.has(table)) db.prepare(sql).run(...params);
-  };
-
-  const recorded = RECORDED_SESSIONS_OF_RACING_USER;
-  clear('lap_telemetry', `DELETE FROM lap_telemetry WHERE lap_id IN (SELECT id FROM session_laps WHERE session_id IN (${recorded}))`, id, bridge);
-  clear('session_laps', `DELETE FROM session_laps WHERE session_id IN (${recorded})`, id, bridge);
-  clear('racing_sessions', `DELETE FROM racing_sessions WHERE id IN (${recorded})`, id, bridge);
-
-  const owned = 'SELECT id FROM teams WHERE owner_id = ?';
-  clear('team_invites', `DELETE FROM team_invites WHERE team_id IN (${owned}) OR invited_user_id = ? OR invited_by = ?`, id, id, id);
-  clear('team_members', `DELETE FROM team_members WHERE team_id IN (${owned}) OR user_id = ?`, id, id);
-  clear('teams', 'DELETE FROM teams WHERE owner_id = ?', id);
-
-  clear('notifications', 'DELETE FROM notifications WHERE user_id = ?', id);
-  clear('password_reset_tokens', 'DELETE FROM password_reset_tokens WHERE user_id = ?', id);
-  clear('sessions', 'DELETE FROM sessions WHERE racing_user_id = ?', id);
-
-  deleteStrayForeignKeyRows('racing_users', id, named, tables);
-  return db.prepare('DELETE FROM racing_users WHERE id = ?').run(id).changes > 0;
-});
-
-function deleteRacingUser(id) {
-  return _deleteRacingUserAndData(id);
-}
-// Web sessions (the cookie's id; stored hashed, see hashSessionId).
-function createRacingSession(sid, racingUserId, expiresAt) { return _createRacingSession.run(hashSessionId(sid), racingUserId, expiresAt); }
-function createLinkedSession(sid, streamerId, racingUserId, expiresAt) { return _createLinkedSession.run(hashSessionId(sid), streamerId, racingUserId, expiresAt); }
-
-// Account lockout
-const _recordFailedLogin = db.prepare('UPDATE racing_users SET login_attempts = login_attempts + 1 WHERE id = ?');
-const _lockAccount = db.prepare('UPDATE racing_users SET locked_until = ? WHERE id = ?');
-const _resetLoginAttempts = db.prepare('UPDATE racing_users SET login_attempts = 0, locked_until = NULL WHERE id = ?');
-function recordFailedLogin(userId) {
-  _recordFailedLogin.run(userId);
-  const user = _getRacingUserById.get({ id: userId });
-  if (user && user.login_attempts >= 5) {
-    // Permanent lock — only admin can unlock from the admin panel
-    _lockAccount.run(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000, userId);
-  }
-}
-function resetLoginAttempts(userId) { _resetLoginAttempts.run(userId); }
-function isAccountLocked(user) { return !!(user.locked_until && user.locked_until > Date.now()); }
-function unlockRacingAccount(userId) { _resetLoginAttempts.run(userId); }
-// Auth logging
-const _insertAuthLog = db.prepare(`INSERT INTO auth_log (action, username, ip, success, reason, user_agent) VALUES (@action, @username, @ip, @success, @reason, @user_agent)`);
-function logAuthAttempt(action, username, ip, success, reason, userAgent) {
-  try { _insertAuthLog.run({ action, username: username || null, ip: ip || null, success: success ? 1 : 0, reason: reason || null, user_agent: (userAgent || '').substring(0, 200) }); } catch(e) {}
-}
-
-function getSuspiciousActivity(hours) {
-  const since = new Date(Date.now() - (hours || 24) * 60 * 60 * 1000).toISOString();
-  return db.prepare(`
-    SELECT ip, username, action,
-      COUNT(*) as attempts,
-      SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failures,
-      SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successes,
-      MAX(created_at) as last_attempt,
-      MIN(created_at) as first_attempt
-    FROM auth_log
-    WHERE created_at >= ?
-    GROUP BY ip, username, action
-    HAVING failures >= 2
-    ORDER BY failures DESC, last_attempt DESC
-    LIMIT 50
-  `).all(since);
-}
-
-function getRecentAuthLog(limit) {
-  return db.prepare('SELECT * FROM auth_log ORDER BY created_at DESC LIMIT ?').all(limit || 50);
-}
-
-// Auto-cleanup: delete auth logs older than 7 days
-try { db.exec("DELETE FROM auth_log WHERE created_at < datetime('now', '-7 days')"); } catch(e) {}
-
-function lockRacingAccount(userId) {
-  // Permanent lock — only admin can unlock
-  db.prepare('UPDATE racing_users SET locked_until = ?, login_attempts = 99 WHERE id = ?').run(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000, userId);
-}
-
-// ── Team queries ──────────────────────────────────────────────────
-const _getTeamById = db.prepare('SELECT * FROM teams WHERE id = ?');
-const _getTeamMembership = db.prepare(`
-  SELECT tm.*, t.name AS team_name, t.owner_id, t.invite_code
-  FROM team_members tm JOIN teams t ON tm.team_id = t.id
-  WHERE tm.user_id = ?
-`);
-const _getTeamMembers = db.prepare(`
-  SELECT tm.*, ru.username, ru.display_name, ru.iracing_name, ru.avatar, ru.bridge_id
-  FROM team_members tm JOIN racing_users ru ON tm.user_id = ru.id
-  WHERE tm.team_id = ? ORDER BY tm.role = 'owner' DESC, tm.joined_at ASC
-`);
-const _getPendingInvitesForUser = db.prepare(`
-  SELECT ti.*, t.name AS team_name, inv.username AS invited_by_name
-  FROM team_invites ti
-  JOIN teams t ON ti.team_id = t.id
-  JOIN racing_users inv ON ti.invited_by = inv.id
-  WHERE ti.invited_user_id = ? AND ti.status = 'pending'
-`);
-const _getPendingInvitesForTeam = db.prepare(`
-  SELECT ti.*, ru.username AS invited_username
-  FROM team_invites ti JOIN racing_users ru ON ti.invited_user_id = ru.id
-  WHERE ti.team_id = ? AND ti.status = 'pending'
-`);
-const _getTeamInviteById = db.prepare('SELECT * FROM team_invites WHERE id = ?');
-const _insertTeam = db.prepare('INSERT INTO teams (name, owner_id, invite_code) VALUES (?, ?, ?)');
-const _insertTeamMember = db.prepare('INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)');
-const _insertTeamInvite = db.prepare('INSERT INTO team_invites (team_id, invited_user_id, invited_by) VALUES (?, ?, ?)');
-const _updateTeamInviteStatus = db.prepare('UPDATE team_invites SET status = ? WHERE id = ?');
-const _deleteTeamMember = db.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?');
-const _deleteTeam = db.prepare('DELETE FROM teams WHERE id = ?');
-const _getTeamByInviteCode = db.prepare('SELECT * FROM teams WHERE invite_code = ?');
-const _updateTeamPicture = db.prepare('UPDATE teams SET picture = ? WHERE id = ?');
-const _updateTeamBanner = db.prepare('UPDATE teams SET banner = ? WHERE id = ?');
-const _hasPendingInvite = db.prepare("SELECT id FROM team_invites WHERE team_id = ? AND invited_user_id = ? AND status = 'pending'");
-const _countTeamMembers = db.prepare('SELECT COUNT(*) AS count FROM team_members WHERE team_id = ?');
-const _getTeamMemberships = db.prepare(`
-  SELECT tm.*, t.name AS team_name, t.owner_id, t.invite_code, t.picture AS team_picture, t.banner AS team_banner
-  FROM team_members tm JOIN teams t ON tm.team_id = t.id
-  WHERE tm.user_id = ?
-  ORDER BY tm.joined_at ASC
-`);
-const _countUserTeams = db.prepare('SELECT COUNT(*) AS count FROM team_members WHERE user_id = ?');
-
-function createTeam(name, ownerId) {
-  const code = require('crypto').randomBytes(16).toString('base64url');
-  const txn = db.transaction(() => {
-    const result = _insertTeam.run(name, ownerId, code);
-    _insertTeamMember.run(result.lastInsertRowid, ownerId, 'owner');
-    return result.lastInsertRowid;
-  });
-  return txn();
-}
-
-function getTeamForUser(userId) {
-  return _getTeamMembership.get(userId) || null;
-}
-
-function getTeamsForUser(userId) {
-  return _getTeamMemberships.all(userId);
-}
-
-function countTeamsForUser(userId) {
-  return _countUserTeams.get(userId).count;
-}
-
-function getTeamMembers(teamId) {
-  return _getTeamMembers.all(teamId);
-}
-
-function getPendingInvitesForUser(userId) {
-  return _getPendingInvitesForUser.all(userId);
-}
-
-function getPendingInvitesForTeam(teamId) {
-  return _getPendingInvitesForTeam.all(teamId);
-}
-
-function getTeamInviteById(id) {
-  return _getTeamInviteById.get(id) || null;
-}
-
-function createTeamInvite(teamId, invitedUserId, invitedBy) {
-  const existing = _hasPendingInvite.get(teamId, invitedUserId);
-  if (existing) return null;
-  return _insertTeamInvite.run(teamId, invitedUserId, invitedBy).lastInsertRowid;
-}
-
-function acceptTeamInvite(inviteId) {
-  const txn = db.transaction(() => {
-    const invite = _getTeamInviteById.get(inviteId);
-    if (!invite || invite.status !== 'pending') return false;
-    const teamCount = _countUserTeams.get(invite.invited_user_id).count;
-    if (teamCount >= 5) return false;
-    _updateTeamInviteStatus.run('accepted', inviteId);
-    _insertTeamMember.run(invite.team_id, invite.invited_user_id, 'member');
-    return true;
-  });
-  return txn();
-}
-
-function declineTeamInvite(inviteId) {
-  _updateTeamInviteStatus.run('declined', inviteId);
-}
-
-function removeTeamMember(teamId, userId) {
-  _deleteTeamMember.run(teamId, userId);
-}
-
-function deleteTeamById(teamId) {
-  _deleteTeam.run(teamId);
-}
-
-function joinTeamByCode(code, userId) {
-  const txn = db.transaction(() => {
-    const team = _getTeamByInviteCode.get(code);
-    if (!team) return null;
-    const teamCount = _countUserTeams.get(userId).count;
-    if (teamCount >= 5) return null;
-    _insertTeamMember.run(team.id, userId, 'member');
-    return team;
-  });
-  return txn();
-}
-
-function getTeamById(teamId) {
-  return _getTeamById.get(teamId) || null;
-}
-
-function updateTeamPicture(teamId, base64) {
-  _updateTeamPicture.run(base64, teamId);
-}
-
-function updateTeamBanner(teamId, base64) {
-  _updateTeamBanner.run(base64, teamId);
-}
-
-function getTeamMemberCount(teamId) {
-  return _countTeamMembers.get(teamId).count;
-}
-
-const _searchRacingUsers = db.prepare(`
-  SELECT id, username, display_name, iracing_name, avatar
-  FROM racing_users
-  WHERE username LIKE ? COLLATE NOCASE OR iracing_name LIKE ? COLLATE NOCASE
-  LIMIT 8
-`);
-function searchRacingUsers(query) {
-  const pattern = '%' + query + '%';
-  return _searchRacingUsers.all(pattern, pattern);
-}
-
-// ── Notification queries ──────────────────────────────────────────
-const _getNotificationsForUser = db.prepare(`
-  SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20
-`);
-const _getUnreadCountForUser = db.prepare(`
-  SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0
-`);
-const _insertNotification = db.prepare(`
-  INSERT INTO notifications (user_id, type, title, message, link, action_type, action_id)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
-`);
-const _markNotificationRead = db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?');
-const _deleteNotification = db.prepare('DELETE FROM notifications WHERE id = ? AND user_id = ?');
-const _deleteAllNotifications = db.prepare('DELETE FROM notifications WHERE user_id = ?');
-const _deleteNotificationByAction = db.prepare('DELETE FROM notifications WHERE action_type = ? AND action_id = ? AND user_id = ?');
-const _cleanupOldNotifications = db.prepare("DELETE FROM notifications WHERE created_at < datetime('now', '-30 days')");
-const _getAllRacingUserIds = db.prepare('SELECT id FROM racing_users');
-const _getBridgeUserIds = db.prepare('SELECT id FROM racing_users WHERE bridge_id IS NOT NULL');
-const _getTeamMemberIds = db.prepare('SELECT user_id FROM team_members WHERE team_id = ?');
-const _hasNotification = db.prepare("SELECT id FROM notifications WHERE user_id = ? AND type = ? AND message = ? LIMIT 1");
-
-function getNotificationsForUser(userId) {
-  return _getNotificationsForUser.all(userId);
-}
-
-function getUnreadNotificationCount(userId) {
-  return _getUnreadCountForUser.get(userId).count;
-}
-
-function createNotification(userId, type, title, message, link, actionType, actionId) {
-  return _insertNotification.run(userId, type, title, message, link || null, actionType || null, actionId || null);
-}
-
-function markNotificationRead(id, userId) {
-  return _markNotificationRead.run(id, userId);
-}
-
-function dismissNotification(id, userId) {
-  return _deleteNotification.run(id, userId);
-}
-
-function dismissAllNotifications(userId) {
-  return _deleteAllNotifications.run(userId);
-}
-
-function dismissNotificationByAction(actionType, actionId, userId) {
-  return _deleteNotificationByAction.run(actionType, actionId, userId);
-}
-
-function notifyTeamMembers(teamId, excludeUserId, type, title, message, link) {
-  const members = _getTeamMemberIds.all(teamId);
-  for (const m of members) {
-    if (m.user_id !== excludeUserId) {
-      _insertNotification.run(m.user_id, type, title, message, link || null, null, null);
-    }
-  }
-}
-
-function createNotificationForAllUsers(type, title, message, link) {
-  const users = _getAllRacingUserIds.all();
-  const txn = db.transaction(() => {
-    for (const u of users) {
-      _insertNotification.run(u.id, type, title, message, link || null, null, null);
-    }
-  });
-  txn();
-  return users.length;
-}
-
-function createNotificationForBridgeUsers(type, title, message, link) {
-  const users = _getBridgeUserIds.all();
-  const txn = db.transaction(() => {
-    for (const u of users) {
-      _insertNotification.run(u.id, type, title, message, link || null, null, null);
-    }
-  });
-  txn();
-  return users.length;
-}
-
-function hasNotification(userId, type, message) {
-  return !!_hasNotification.get(userId, type, message);
-}
-
-function cleanupOldNotifications() {
-  return _cleanupOldNotifications.run();
 }
 
 // ── Channel Point Rewards queries ───────────────────────────────────
@@ -7062,19 +5898,6 @@ module.exports = {
   isAdmin,
   createFeedback,
   getAllFeedback,
-  addWatchedIracingDriver,
-  removeWatchedIracingDriver,
-  getWatchedIracingDriversForGuild,
-  getAllUniqueWatchedIracingDrivers,
-  getIracingWatchersForDriver,
-  getIracingDriverState,
-  updateIracingDriverState,
-  upsertIracingRaceCache,
-  isRaceCached,
-  getIracingRaceHistory,
-  searchIracingQualifying,
-  getIracingDriverStats,
-  updateWatchedIracingDriverChannel,
   getStreamerByOverlayToken,
   getOverlayEnabledStreamers,
   getOverlayOrChatbotStreamers,
@@ -7172,88 +5995,11 @@ module.exports = {
   getOverlayStats7d,
   getOverlayEventsRecent,
   cleanupOldOverlayEvents,
-  getIracingOverlaySettings,
-  getIracingOverlaySetting,
-  upsertIracingOverlaySetting,
   getVtuberModels,
   getVtuberModel,
   addVtuberModel,
   deleteVtuberModel,
   selectVtuberModel,
-  insertBridgeLogs,
-  getActiveBridgeIds,
-  getBridgeUserStats,
-  getBridgeLogs,
-  cleanupOldBridgeLogs,
-  insertBridgeBugReport,
-  getBridgeBugReports,
-  updateBridgeBugReportStatus,
-  cleanupOldBridgeBugReports,
-  insertSession,
-  getSessionsByTrack,
-  insertSingleLap,
-  updateSessionLapStats,
-  updateSessionFinish,
-  getAllRacingUsers,
-  getRecentSessionsByUser,
-  getRacingSessionById,
-  getSessionByShareToken,
-  getSessionLaps,
-  getLapTelemetry,
-  updateSessionPublic,
-  deleteRacingSession,
-  createRacingUser,
-  getRacingUserByUsername,
-  getRacingUserById,
-  getRacingUserByBridgeId,
-  getRacingUserByStreamerId,
-  linkRacingUserToStreamer,
-  updateRacingPassword,
-  updateRacingIracingName,
-  updateRacingProfile,
-  updateRacingAvatar,
-  deleteRacingUser,
-  createRacingSession,
-  createLinkedSession,
-  recordFailedLogin,
-  resetLoginAttempts,
-  isAccountLocked,
-  unlockRacingAccount,
-  logAuthAttempt,
-  getSuspiciousActivity,
-  getRecentAuthLog,
-  lockRacingAccount,
-  createTeam,
-  getTeamForUser,
-  getTeamsForUser,
-  countTeamsForUser,
-  getTeamMembers,
-  getPendingInvitesForUser,
-  getPendingInvitesForTeam,
-  getTeamInviteById,
-  createTeamInvite,
-  acceptTeamInvite,
-  declineTeamInvite,
-  removeTeamMember,
-  deleteTeamById,
-  joinTeamByCode,
-  getTeamById,
-  updateTeamPicture,
-  updateTeamBanner,
-  getTeamMemberCount,
-  searchRacingUsers,
-  getNotificationsForUser,
-  getUnreadNotificationCount,
-  createNotification,
-  markNotificationRead,
-  dismissNotification,
-  dismissAllNotifications,
-  dismissNotificationByAction,
-  notifyTeamMembers,
-  createNotificationForAllUsers,
-  createNotificationForBridgeUsers,
-  hasNotification,
-  cleanupOldNotifications,
   getRewards,
   getEnabledRewards,
   getRewardById,

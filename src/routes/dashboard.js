@@ -555,7 +555,7 @@ router.get('/guild/:guildId/stats', (req, res) => {
 
 // The tabs of the server page (the YouTube one only while config.features.youtube is on). ?tab= may name one;
 // the page prints it into its script, so anything else (a repeated parameter, any other text) counts as none.
-const GUILD_PAGE_TABS = ['twitch', 'youtube', 'discord', 'iracing', 'settings'];
+const GUILD_PAGE_TABS = ['twitch', 'youtube', 'discord', 'settings'];
 const guildPageTabs = () => (config.features.youtube ? GUILD_PAGE_TABS : GUILD_PAGE_TABS.filter((tab) => tab !== 'youtube'));
 
 // Guild config page
@@ -688,7 +688,6 @@ router.post('/guild/:guildId', async (req, res) => {
     instagram_enabled: req.body.instagram_enabled === 'on',
     tiktok_enabled: req.body.tiktok_enabled === 'on',
     twitter_enabled: req.body.twitter_enabled === 'on',
-    iracing_enabled: req.body.iracing_enabled === 'on',
   });
 
   console.log(`[Dashboard] Guild ${guildId} config updated by ${req.streamer.discord_username}`);
@@ -1777,35 +1776,6 @@ router.post('/donations', (req, res) => {
   if (parsed.error) return res.redirect(`/dashboard/donations?error=${encodeURIComponent(parsed.error)}`);
   db.updateDonationSettings(req.streamer.id, parsed.settings);
   res.redirect('/dashboard/donations');
-});
-
-// iRacing page
-router.get('/iracing', (req, res) => {
-  res.render('iracing', { streamer: req.streamer });
-});
-
-// iRacing overlay settings
-router.get('/iracing/overlays/:type', (req, res) => {
-  const validTypes = ['standings', 'relative', 'fuel', 'chat', 'wind', 'proximity'];
-  const type = req.params.type;
-  if (!validTypes.includes(type)) return res.redirect('/dashboard/iracing');
-  let setting = null;
-  try { setting = db.getIracingOverlaySetting(req.streamer.id, type); } catch (e) {}
-  const overlayUrl = req.streamer.overlay_token ? `${config.app.url}/overlay/iracing/${type}/${req.streamer.overlay_token}` : null;
-  res.render('iracing-overlay-settings', { streamer: req.streamer, overlayType: type, setting, overlayUrl });
-});
-
-router.post('/iracing/overlays/:type', (req, res) => {
-  const validTypes = ['standings', 'relative', 'fuel', 'chat', 'wind', 'proximity'];
-  const type = req.params.type;
-  if (!validTypes.includes(type)) return res.redirect('/dashboard/iracing');
-  const enabled = req.body.enabled ? 1 : 0;
-  const settings = {};
-  for (const [key, value] of Object.entries(req.body)) {
-    if (key !== 'enabled') settings[key] = value;
-  }
-  db.upsertIracingOverlaySetting(req.streamer.id, type, enabled, JSON.stringify(settings));
-  res.redirect(`/dashboard/iracing/overlays/${type}`);
 });
 
 // Chatbot config page

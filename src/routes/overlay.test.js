@@ -134,7 +134,7 @@ const PAGES = [
   (t) => `/overlay/${t}`,
   (t) => `/overlay/sponsors/${t}`,
   (t) => `/overlay/goal/${t}`,
-  (t) => `/overlay/iracing/standings/${t}`,
+  (t) => `/overlay/iracing/chat/${t}`,
   (t) => `/overlay/events/${t}`,
   (t) => `/overlay/sponsors/events/${t}`,
   (t) => `/overlay/goal/events/${t}`,
@@ -143,6 +143,27 @@ const PAGES = [
   (t) => `/overlay/sounds/${t}/follow`,
   (t) => `/overlay/tts/${t}/00000000-0000-4000-8000-0000000000aa.mp3`,
 ];
+
+describe('the Twitch chat overlay page (/overlay/iracing/:type/:token, kept at its old address)', () => {
+  test('chat answers 200 with a page that loads no Bridge socket code', async () => {
+    const { token } = addStreamer();
+    const page = await get(`/overlay/iracing/chat/${token}`);
+    assert.equal(page.status, 200);
+    assert.ok(page.text.includes('/overlay/iracing/chat.js'));
+    assert.ok(!page.text.includes('9100'));
+  });
+
+  test('every other type of the retired racing overlays answers 404', async () => {
+    const { token } = addStreamer();
+    for (const type of ['standings', 'relative', 'fuel', 'wind', 'proximity']) {
+      assert.equal((await get(`/overlay/iracing/${type}/${token}`)).status, 404, type);
+    }
+  });
+
+  test('an unknown token answers 404', async () => {
+    assert.equal((await get('/overlay/iracing/chat/not-a-token')).status, 404);
+  });
+});
 
 describe("the overlay page names the streamer's channel for the C1's rear window", () => {
   test("window.ATLETA_CHANNEL is the Twitch name in capitals, set before the registry loads", async () => {
@@ -357,7 +378,7 @@ describe('whether the alert overlay is open in OBS', () => {
     const { id, token } = addStreamer();
     assert.equal(presence.isOpen(id), false);
     const chat = await openStream(`/overlay/events/${token}`);
-    assert.equal(presence.isOpen(id), false, 'the iRacing chat overlay reads the same stream without the marker');
+    assert.equal(presence.isOpen(id), false, 'the Twitch chat overlay reads the same stream without the marker');
     const alerts = await openStream(`/overlay/events/${token}?source=alerts`);
     assert.equal(presence.isOpen(id), true);
     alerts.request.destroy();

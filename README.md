@@ -1,6 +1,6 @@
 # Atleta Notifications Helper
 
-A self-service Discord notification bot for streamers. Any streamer can sign up, add the bot to their Discord, and configure notifications — no code changes needed. The same site also hosts a Twitch chat bot, OBS alert overlays and a racing product (the Atleta Racing app for iRacing); `CLAUDE.md` describes the whole platform and its conventions.
+A self-service Discord notification bot for streamers. Any streamer can sign up, add the bot to their Discord, and configure notifications — no code changes needed. The same site also hosts a Twitch chat bot and OBS alert overlays; `CLAUDE.md` describes the whole platform and its conventions.
 
 ## Features
 
@@ -76,7 +76,7 @@ To run the site without the Discord bot (development only: no Discord login, sla
 `npm test` does nothing. The unit tests (what CI runs) are started explicitly:
 
 ```bash
-node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"
+node --test "src/**/*.test.js" "tests/**/*.test.js"
 ```
 
 ## Architecture

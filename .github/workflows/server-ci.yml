@@ -1,7 +1,6 @@
 name: Server CI
 
-# Checks the web server (everything except the Atleta Racing desktop app in
-# bridge/, which has its own workflow): syntax, the unit tests, and two boots in
+# Checks the web server: syntax, the unit tests, and two boots in
 # a row on a fresh database (each must answer /health, print no failed
 # migration and stop cleanly). No secrets: Discord is switched off with
 # DISCORD_DISABLED=1 and the Twitch credentials are dummies.
@@ -9,12 +8,8 @@ name: Server CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'bridge/**'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'bridge/**'
 
 permissions:
   contents: read
@@ -39,7 +34,7 @@ jobs:
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Unit tests
-        run: node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"
+        run: node --test "src/**/*.test.js" "tests/**/*.test.js"
 
       - name: Boot twice on a fresh database
         env:

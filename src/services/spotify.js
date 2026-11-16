@@ -1,7 +1,7 @@
 const config = require('../config');
 const db = require('../db');
 
-// In-flight refresh per streamer — chat polling + Bridge polling can hit
+// In-flight refresh per streamer — chat polling and the dashboard can hit
 // /currently-playing simultaneously, and on token expiry that races N parallel
 // refresh requests, each invalidating the others.
 const _refreshInFlight = new Map();

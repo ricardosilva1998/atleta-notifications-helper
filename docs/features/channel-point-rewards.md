@@ -82,7 +82,7 @@ The dashboard route MUST pre-compute `hasScope` via `hasRedemptionScope(req.stre
 
 ## Pure Helper
 
-`formatChatTemplate({user},{title},{cost})` lives in `redemptionTemplates.js` (no external deps) so it can be unit-tested without env vars. Same pattern as `incidentTracker.js` / `flagState.js` in bridge. Regex single-pass replacement prevents double-substitution when a user value contains a placeholder string (e.g., user=`{cost}`).
+`formatChatTemplate({user},{title},{cost})` lives in `redemptionTemplates.js` (no external deps) so it can be unit-tested without env vars. Regex single-pass replacement prevents double-substitution when a user value contains a placeholder string (e.g., user=`{cost}`).
 
 ## Files
 

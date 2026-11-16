@@ -24,9 +24,9 @@ const code = source.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '');
 test('a disabled account is moved out of req.streamer before res.locals.streamer is set', () => {
   const apply = source.indexOf('applyAccountStatus(req);');
   const expose = source.indexOf('res.locals.streamer = req.streamer');
-  const crossLoad = source.indexOf('req.streamer = db.getStreamerById(req.racingUser.streamer_id)');
+  const load = source.indexOf('req.streamer = db.getStreamerById(session.streamer_id)');
   assert.ok(apply > 0, 'the session middleware applies the account status');
-  assert.ok(crossLoad > 0 && apply > crossLoad, 'after a Racing login has loaded its linked streamer');
+  assert.ok(load > 0 && apply > load, 'after the session has loaded its streamer');
   assert.ok(expose > apply, 'before the streamer is shared with routes and views');
 });
 
@@ -80,13 +80,15 @@ test('every route that serves uploaded files from data/ sends the user-content h
   at('setUserContentHeaders(res, filePath);');
   // data/ itself (the database and its backups) is never served.
   const staticFolders = [...code.matchAll(/express\.static\(path\.join\(__dirname, '\.\.', ([^)]*)\)/g)].map((m) => m[1]);
-  assert.deepEqual(staticFolders, ["'public'", "'bridge', 'overlays'", "'data', folder"]);
+  assert.deepEqual(staticFolders, ["'public'", "'data', folder"]);
 });
 
-test('the public Discord voice route is served by routes/voice.js, behind its own rate limit', () => {
-  // What it answers is tested on the route itself (routes/voice.test.js).
-  at("app.use('/api/voice', voiceLimiter, require('./routes/voice'));");
-  assert.equal(code.match(/\/api\/voice/g).length, 1, 'no other /api/voice route');
+test('the retired Racing app paths answer 410 ahead of everything, and the old Racing pages lead home', () => {
+  const retired = at("if (RETIRED_RACING_API.test(req.path)) return res.status(410)");
+  assert.ok(at("app.use('/api', apiLimiter);") < retired, 'after the /api limit');
+  assert.ok(retired < at('app.use(cookieParser());'), 'before the cookies, the body parsers and every route');
+  assert.equal(code.match(/RETIRED_RACING_API\.test/g).length, 1, 'one 410 rule');
+  at("app.get(/^\\/(racing|tracks)(\\/.*)?$/, (req, res) => res.redirect('/'));");
 });
 
 test('every /api route is behind apiLimiter, which counts each request once', () => {
@@ -123,10 +125,10 @@ test('the CSRF check runs once, after the session and the body parsers, before e
   // Between the parsers and the check, only files are served (GET and HEAD).
   const between = source.slice(at('mountBodyParsers(app);'), csrf).replace(/^\s*\/\/.*$/gm, '');
   const mounted = [...between.matchAll(/app\.(use|get|post|put|patch|delete|all)\('([^']*)'/g)].map((m) => m[2]);
-  assert.deepEqual(mounted, ['/pitwall/overlays', '/sponsors', '/redemptions', '/avatars', '/issues-files', '/vtuber-models']);
+  assert.deepEqual(mounted, ['/sponsors', '/redemptions', '/avatars', '/issues-files', '/vtuber-models']);
   for (const route of ["app.get('/', (req, res)", "app.use('/auth', authRoutes);", "app.use('/dashboard', dashboardRoutes);",
-    "app.use('/racing/auth', authLimiter, racingAuthRoutes);", "app.use('/tip', tipRoutes);", "app.use('/overlay', overlayRoutes);",
-    "app.post('/api/session', (req, res)", "app.post('/set-language'", 'app.use(errorHandler);']) {
+    "app.use('/tip', tipRoutes);", "app.use('/overlay', overlayRoutes);",
+    "app.use('/api', apiRoutes);", "app.post('/set-language'", 'app.use(errorHandler);']) {
     assert.ok(csrf < at(route), `before ${route}`);
   }
 });
@@ -157,7 +159,7 @@ test('the relay\'s requests (with its secret) are counted by neither the general
   assert.match(general[0], /skip: fromRelay\b/);
   const api = code.match(/const apiLimiter = rateLimit\(\{[\s\S]*?\}\);/);
   assert.ok(api, 'apiLimiter is declared');
-  assert.match(api[0], /skip: \(req\) => fromRelay\(req\) \|\|/);
+  assert.match(api[0], /skip: fromRelay\b/);
   assert.equal(code.match(/\bfromRelay\b/g).length, 3, 'declared, and used by those two limits only');
 });
 
@@ -167,7 +169,7 @@ test('every rate limit counts the visitor\'s address (clientIp.js), and trust pr
   at("const { clientIp } = require('./clientIp');");
   at('const byVisitor = (req) => ipKeyGenerator(clientIp(req));');
   const limiters = [...code.matchAll(/const (\w+) = rateLimit\(\{[\s\S]*?\}\);/g)];
-  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'authLimiter', 'apiLimiter', 'voiceLimiter', 'coachingPayLimiter', 'coachingRescheduleLimiter']);
+  assert.deepEqual(limiters.map((m) => m[1]), ['generalLimiter', 'apiLimiter', 'coachingPayLimiter', 'coachingRescheduleLimiter']);
   for (const [declaration, name] of limiters) assert.match(declaration, /\bkeyGenerator: byVisitor\b/, `${name} counts by visitor`);
   assert.equal(code.match(/\brateLimit\(/g).length, limiters.length, 'no other limiter');
 });

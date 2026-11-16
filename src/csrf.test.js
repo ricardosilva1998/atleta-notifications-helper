@@ -2,7 +2,7 @@
 
 // The CSRF check (csrf.js) on a small Express app with the real middleware:
 // which requests reach the route and which are refused, the token, the routes
-// left alone (every request the Atleta Racing app makes among them), and a scan
+// left alone (the multistream relay's, the sync's, the tip form), and a scan
 // of the views: every page that sends a form or a request loads the token.
 // All sessions, secrets and addresses are synthetic.
 
@@ -92,7 +92,7 @@ describe('requests that change something', () => {
   });
 
   test('without a session the page gets no token', async () => {
-    assert.equal((await send('GET', '/racing')).json().token, '');
+    assert.equal((await send('GET', '/set-language')).json().token, '');
   });
 
   test('a logged-in POST from this site without the token is refused', async () => {
@@ -137,8 +137,8 @@ describe('requests that change something', () => {
   });
 
   test('without a session no token is asked for, only that the request comes from this site', async () => {
-    assert.ok(reached(await send('POST', '/racing/auth/login', { headers: { Origin: SITE }, form: { username: 'u', password: 'p' } })));
-    assert.equal((await send('POST', '/racing/auth/login', { headers: { Origin: 'https://elsewhere.example' }, form: { username: 'u', password: 'p' } })).status, 403);
+    assert.ok(reached(await send('POST', '/set-language', { headers: { Origin: SITE }, form: { lang: 'en' } })));
+    assert.equal((await send('POST', '/set-language', { headers: { Origin: 'https://elsewhere.example' }, form: { lang: 'en' } })).status, 403);
   });
 });
 
@@ -203,55 +203,25 @@ describe('the refusal', () => {
 });
 
 describe('the routes programs call (CSRF_EXEMPT): no Origin asked for', () => {
-  // Every request with an unsafe method that the Atleta Racing app (bridge/)
-  // sends to the site, as it sends them: no Origin, no cookie.
-  const BRIDGE_CALLS = [
-    ['POST', '/api/session', 'sessionRecorder.js'],
-    ['POST', '/api/session/42/lap', 'sessionRecorder.js'],
-    ['PATCH', '/api/session/42/finish', 'sessionRecorder.js'],
-    ['POST', '/api/track-map', 'telemetry.js'],
-    ['POST', '/api/track-stats', 'telemetry.js'],
-    ['POST', '/api/live-session', 'telemetry.js'],
-    ['POST', '/api/bridge-logs', 'main.js'],
-    ['POST', '/api/bridge/whisper?bridge_id=00000000-0000-0000-0000-000000000000', 'voiceInput.js'],
-    ['POST', '/api/bridge/spotify/control', 'overlays/spotify.html'],
-    ['POST', '/racing/auth/login-api', 'login.html'],
-    ['POST', '/racing/auth/signup', 'login.html, control-panel.html'],
-  ];
-
-  test('every request the Atleta Racing app makes goes through without an Origin or a token', async () => {
-    for (const [method, urlPath, from] of BRIDGE_CALLS) {
-      assert.ok(reached(await send(method, urlPath, { json: { bridge_id: 'synthetic' } })), `${method} ${urlPath} (${from})`);
-    }
-    // Its windows' fetch() sends Origin "null".
-    assert.ok(reached(await send('POST', '/racing/auth/signup', { headers: { Origin: 'null' }, json: { username: 'u' } })));
-  });
-
   test('the multistream relay, the development sync and the public tip form go through too', async () => {
     for (const urlPath of ['/api/multistream/auth', '/api/multistream/webhook/on-ready', '/api/multistream/webhook/on-not-ready', '/sync/trigger', '/tip/somestreamer/create']) {
       assert.ok(reached(await send('POST', urlPath, { json: {} })), urlPath);
     }
   });
 
-  test('the rest of the session API is left alone, by bridge_id', async () => {
-    assert.ok(reached(await send('PATCH', '/api/session/7?bridge_id=x', { json: { is_public: 1 } })));
-    assert.ok(reached(await send('DELETE', '/api/session/7?bridge_id=x')));
-  });
-
-  // Whisper and Spotify control also log in through the session; the Track
-  // Database, iRacing and tip pages call some of these routes while logged in.
+  // The tip page calls its route while logged in too.
   test('a request to one of them that carries a logged-in session still needs its token', async () => {
-    for (const urlPath of ['/api/bridge/whisper', '/api/bridge/spotify/control', '/api/track-stats', '/api/track-map', '/tip/somestreamer/create']) {
+    for (const urlPath of ['/tip/somestreamer/create', '/api/multistream/auth']) {
       const refused = await send('POST', urlPath, { headers: { 'x-test-session': SESSION, Origin: SITE }, json: { action: 'next' } });
       assert.equal(refused.status, 403, `${urlPath} without the token`);
       assert.ok(reached(await send('POST', urlPath, { headers: { 'x-test-session': SESSION, Origin: SITE, 'X-CSRF-Token': TOKEN }, json: { action: 'next' } })), `${urlPath} with it`);
     }
     // Another session's token does not do, with or without an Origin.
     const other = csrfToken('b'.repeat(64), SECRET);
-    assert.equal((await send('POST', '/api/bridge/spotify/control', { headers: { 'x-test-session': SESSION, 'X-CSRF-Token': other }, json: { action: 'next' } })).status, 403);
+    assert.equal((await send('POST', '/tip/somestreamer/create', { headers: { 'x-test-session': SESSION, 'X-CSRF-Token': other }, json: { action: 'next' } })).status, 403);
     // The Origin is still not asked for: the token is enough.
-    assert.ok(reached(await send('PATCH', '/api/bridge-bug-reports/3', { headers: { 'x-test-session': SESSION, 'X-CSRF-Token': TOKEN }, json: { status: 'approved' } })));
-    assert.match(logs[0], /^\[CSRF\] Refused POST \/api\/bridge\/whisper: no token$/);
+    assert.ok(reached(await send('POST', '/tip/somestreamer/create', { headers: { 'x-test-session': SESSION, 'X-CSRF-Token': TOKEN }, json: { status: 'approved' } })));
+    assert.match(logs[0], /^\[CSRF\] Refused POST \/tip\/somestreamer\/create: no token$/);
   });
 
   test('they never see the _csrf field either', async () => {
@@ -261,27 +231,16 @@ describe('the routes programs call (CSRF_EXEMPT): no Origin asked for', () => {
     assert.deepEqual(loggedIn.json().body, { amount: '5' });
   });
 
-  test('the website\'s own sign-up form (not JSON) is checked', async () => {
-    assert.equal((await send('POST', '/racing/auth/signup', { form: { username: 'u', password: 'p' } })).status, 403);
-    assert.ok(reached(await send('POST', '/racing/auth/signup', { headers: { Origin: SITE }, form: { username: 'u', password: 'p' } })));
-  });
-
   test('an entry covers its own method and path only, as Express routes them', () => {
     const req = (method, p, json = false) => ({ method, path: p, is: () => (json ? 'application/json' : false) });
-    assert.equal(isExempt(req('POST', '/API/Session/')), true, 'any letter case, a trailing slash');
-    assert.equal(isExempt(req('POST', '/api/session/42/lap/')), true);
-    assert.equal(isExempt(req('DELETE', '/api/track-map')), false, 'another method');
-    assert.equal(isExempt(req('POST', '/api/session/42/lap/extra')), false, 'a longer path');
-    assert.equal(isExempt(req('POST', '/api/sessionx')), false);
-    // Track Database pages that need a login stay checked.
-    assert.equal(isExempt(req('POST', '/api/track-stats/import-csv')), false);
-    assert.equal(isExempt(req('POST', '/api/track-stats/import-screenshot')), false);
-    assert.equal(isExempt(req('DELETE', '/api/track-stats/Spa/GT3/Sprint')), false);
+    assert.equal(isExempt(req('POST', '/API/Multistream/Auth/')), true, 'any letter case, a trailing slash');
+    assert.equal(isExempt(req('POST', '/api/multistream/webhook/on-ready')), true);
+    assert.equal(isExempt(req('DELETE', '/api/multistream/auth')), false, 'another method');
+    assert.equal(isExempt(req('POST', '/api/multistream/auth/extra')), false, 'a longer path');
+    assert.equal(isExempt(req('POST', '/api/multistreamx')), false);
     // Logged-in routes under these prefixes stay checked.
     assert.equal(isExempt(req('POST', '/overlay/clear')), false);
-    assert.equal(isExempt(req('POST', '/racing/auth/logout')), false);
-    assert.equal(isExempt(req('POST', '/racing/auth/signup')), false, 'sign-up only with a JSON body');
-    assert.equal(isExempt(req('POST', '/racing/auth/signup', true)), true);
+    assert.equal(isExempt(req('POST', '/auth/logout')), false);
   });
 
   test('each entry says why it skips the Origin check', () => {
@@ -349,7 +308,7 @@ describe('every page that sends a form or a request loads the token', () => {
       assert.ok(includesHeader(text) || PARTIAL.test(text), `${name} sends a form or a request but loads no CSRF token`);
     }
     // The pages that do not include the header (overlay builder, tip page) are among them.
-    for (const name of ['overlay-builder.ejs', 'tip.ejs', 'dashboard.ejs', 'tracks.ejs']) assert.ok(checked.includes(name), name);
+    for (const name of ['overlay-builder.ejs', 'tip.ejs', 'dashboard.ejs', 'account.ejs']) assert.ok(checked.includes(name), name);
   });
 
   test('a page that includes the partial itself has it in <head>, ahead of its scripts', () => {

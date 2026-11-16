@@ -334,7 +334,6 @@ before(async () => {
   app.use(require('../csrf').csrfProtection({ appUrl: 'https://atleta.example', secret: CSRF_SECRET }));
   app.use('/dashboard', require('./dashboard'));
   app.use('/auth', require('./auth'));
-  app.use('/racing/auth', require('./racing-auth'));
   app.use(errorHandler);
 
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -473,12 +472,6 @@ describe('a logged-in streamer\'s changes carry the session\'s CSRF token', () =
     assert.equal(db.getStreamerById(id).overlay_follow_duration, 20);
   });
 
-  test('the token is never stored by a route that saves every field it is sent (iRacing overlay settings)', async () => {
-    const res = await request('POST', '/dashboard/iracing/overlays/standings', { cookie, form: { enabled: '1', rows: '12', _csrf: await pageToken() } });
-    assert.equal(res.status, 302);
-    assert.deepEqual(JSON.parse(db.getIracingOverlaySetting(id, 'standings').settings), { rows: '12' });
-  });
-
   test('a raw-body upload without the X-CSRF-Token header is refused with JSON, before anything is written', async () => {
     const res = await upload();
     assert.equal(res.status, 403);
@@ -523,21 +516,6 @@ describe('a logged-in streamer\'s changes carry the session\'s CSRF token', () =
     assert.equal(res.headers.location, '/');
     assert.equal(db.getSession(sid), undefined);
     assert.match(res.headers['set-cookie'].join('\n'), /^session=;/m);
-  });
-
-  test('the racing logout too; and the password pages its route writes out carry the token', async () => {
-    const token = await pageToken();
-    const forgot = await request('GET', '/racing/auth/forgot', { cookie });
-    assert.ok(forgot.text.includes(`<script src="/js/csrf.js" data-csrf-token="${token}"></script>`));
-
-    const get = await request('GET', '/racing/auth/logout', { cookie });
-    assert.equal(get.headers.location, '/racing');
-    assert.ok(db.getSession(sid), 'a GET leaves the session');
-    assert.equal((await request('POST', '/racing/auth/logout', { cookie })).status, 403);
-    const res = await request('POST', '/racing/auth/logout', { cookie, form: { _csrf: token } });
-    assert.equal(res.status, 302);
-    assert.equal(res.headers.location, '/racing');
-    assert.equal(db.getSession(sid), undefined);
   });
 });
 
@@ -879,13 +857,13 @@ describe('the tab named in the server page URL', () => {
   const activeTab = async (query) => (await request('GET', `/dashboard/guild/${G}${query}`, { streamer: id, json: true })).json().locals.activeTab;
 
   test('a tab of the page is used, and without one the page opens on Twitch', async () => {
-    for (const tab of ['twitch', 'youtube', 'discord', 'iracing', 'settings']) assert.equal(await activeTab(`?tab=${tab}`), tab, tab);
+    for (const tab of ['twitch', 'youtube', 'discord', 'settings']) assert.equal(await activeTab(`?tab=${tab}`), tab, tab);
     assert.equal(await activeTab(''), 'twitch');
     assert.equal(await activeTab('?tab='), 'twitch');
   });
 
   test('anything else is the default, so it cannot reach the page\'s script', async () => {
-    const odd = ["x'); alert(1); ('", '\n', '\\', "'", '"', 'Twitch', 'twitch ', 'constructor', '__proto__', 'a'.repeat(5000)];
+    const odd = ['iracing', "x'); alert(1); ('", '\n', '\\', "'", '"', 'Twitch', 'twitch ', 'constructor', '__proto__', 'a'.repeat(5000)];
     for (const tab of odd) assert.equal(await activeTab(`?tab=${encodeURIComponent(tab)}`), 'twitch', JSON.stringify(tab.slice(0, 30)));
     assert.equal(await activeTab('?tab=discord&tab=settings'), 'twitch', 'a repeated parameter');
     assert.equal(await activeTab('?tab[x]=discord'), 'twitch', 'a parameter with a key');
@@ -921,13 +899,20 @@ describe('routes that were removed', () => {
       assert.equal(res.status, 404, route);
     }
     assert.equal(count('watched_instagram_accounts'), 0);
-    assert.equal(count('watched_iracing_drivers'), 0);
     assert.equal(db.getStreamerById(id).youtube_api_key, null);
+  });
+
+  test('the iRacing pages and overlay settings are gone', async () => {
+    const id = addStreamer();
+    for (const route of ['/dashboard/iracing', '/dashboard/iracing/overlays/chat', '/dashboard/iracing/overlays/standings']) {
+      assert.equal((await request('GET', route, { streamer: id, json: true })).status, 404, route);
+      assert.equal((await request('POST', route, { streamer: id, form: { enabled: '1' } })).status, 404, route);
+    }
   });
 
   test('the routes that stay still answer', async () => {
     const id = addStreamer();
-    for (const route of ['/dashboard/iracing', '/dashboard/overlay', '/dashboard/donations']) {
+    for (const route of ['/dashboard/overlay', '/dashboard/donations']) {
       const res = await request('GET', route, { streamer: id, json: true });
       assert.equal(res.status, 200, route);
     }

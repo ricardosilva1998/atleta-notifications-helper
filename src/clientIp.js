@@ -1,7 +1,6 @@
 'use strict';
 
-// The address a request comes from, as the rate limits (server.js) and the
-// Racing sign-in log (routes/racing-auth.js) count it.
+// The address a request comes from, as the rate limits (server.js) count it.
 //
 // Requests reach the site through Cloudflare, then Railway's edge. With
 // 'trust proxy' 1 (server.js), req.ip is the address that connected to

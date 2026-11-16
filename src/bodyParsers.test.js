@@ -22,17 +22,13 @@ function limitBytes(limit) {
   return Number(match[1]) * (match[2] === 'kb' ? 1024 : 1024 * 1024);
 }
 
-// A concrete URL for a route path (":id" and ":teamId" filled in).
-const concrete = (routePath) => routePath.replace(/:id\b/, '42').replace(/:teamId\b/, '7');
+// A concrete URL for a route path (":id" filled in).
+const concrete = (routePath) => routePath.replace(/:id\b/, '42');
 
 // Other routes that read a body: they must stay within 100 kb.
 const ORDINARY_ROUTES = [
   { method: 'post', path: '/dashboard/overlay-builder/save' },
   { method: 'post', path: '/dashboard/chatbot/commands' },
-  { method: 'post', path: '/api/live-session' },
-  { method: 'post', path: '/api/track-stats' },
-  { method: 'patch', path: '/api/session/:id/finish' },
-  { method: 'post', path: '/racing/auth/login-api' },
   { method: 'post', path: '/tip/someone/create' },
 ];
 
@@ -125,13 +121,6 @@ describe('every other route', () => {
     assert.equal((await send('post', '/dashboard/chatbot/commands', formOfSize(limit - MARGIN), type)).status, 200);
     assert.equal((await send('post', '/dashboard/chatbot/commands', formOfSize(limit + MARGIN), type)).status, 413);
   });
-
-  test('a larger limit applies to its own route only, not to the paths around it', async () => {
-    // POST /api/session takes 10 MB; the finish PATCH on a session still gets
-    // 100 kb, and a lap still stops at its own 5 MB.
-    assert.equal((await send('patch', '/api/session/42/finish', jsonOfSize(limit + MARGIN))).status, 413);
-    assert.equal((await send('post', '/api/session/42/lap', jsonOfSize(limitBytes('5mb') + MARGIN))).status, 413);
-  });
 });
 
 describe('the table names routes that exist', () => {
@@ -139,9 +128,6 @@ describe('the table names routes that exist', () => {
   // Where each route outside server.js is registered, and how it is written there.
   const registered = {
     '/dashboard/report': ['routes/dashboard.js', "router.post('/report',"],
-    '/racing/account/avatar': ['routes/racing.js', "router.post('/account/avatar',"],
-    '/racing/teams/:teamId/picture': ['routes/racing-team.js', "router.post('/:teamId/picture',"],
-    '/racing/teams/:teamId/banner': ['routes/racing-team.js', "router.post('/:teamId/banner',"],
   };
 
   for (const route of LARGE_BODY_ROUTES) {

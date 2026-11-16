@@ -82,7 +82,7 @@ async function handleMessage(channel, tags, message, self) {
     }
   }
 
-  // Chat overlay (iRacing chat): only after moderation, so a message the bot
+  // Twitch chat overlay: only after moderation, so a message the bot
   // removes never shows on stream.
   if (streamer.overlay_enabled) {
     bus.emit(`overlay:${streamerId}`, {

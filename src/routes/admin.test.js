@@ -60,7 +60,6 @@ const discordStub = {
   buildRecapEmbed: (data) => ({ recap: data }),
   buildMilestoneEmbed: (data) => ({ milestone: data }),
   buildWeeklyDigestEmbed: (data) => ({ digest: data }),
-  buildIracingResultEmbed: (data) => ({ iracing: data }),
   // escapeLinkText is the real helper's job (src/discord.test.js); a marker here shows the route uses it.
   escapeLinkText: (text) => `«${text}»`,
 };
@@ -125,7 +124,6 @@ before(async () => {
       if (request === '../discord') return discordStub;
       if (request === '../services/twitch') return twitchStub;
       if (request === '../services/youtube') return youtubeStub;
-      if (request === '../services/iracing') return { isConfigured: () => false };
     }
     if (from === LIFECYCLE_FILE && managers[request]) return managers[request];
     return saved.load(request, parent, isMain);

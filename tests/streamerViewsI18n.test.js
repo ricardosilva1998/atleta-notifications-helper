@@ -30,7 +30,7 @@ const PAGES = [
   'guild-config', 'overlay-config', 'overlay-builder', 'chatbot-config', 'mod-log', 'youtube-chatbot-config', 'multistream',
   'account-disabled', // what a streamer is shown once an admin has disabled the account
   // linked from the site's menus, or the pages a streamer meets before logging in
-  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'login', 'guild-stats', 'link-result',
+  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'guild-stats', 'link-result',
   // the home page: the streamer tools' features
   'home',
   // the Tracking page: the follower and sub goals and the six trackers (an overlay page, linked from the OBS overlay card)
@@ -44,7 +44,7 @@ const PAGES = [
 // Words that are not the page's own wording and may stay in every page: product names and units.
 // A text node made only of these (or of command names and {variables}) is fine.
 const ALLOWED_WORDS = new Set([
-  'Twitch', 'YouTube', 'Discord', 'Kick', 'iRacing', 'StreamElements', 'OBS', 'Atleta', 'PayPal', 'Spotify',
+  'Twitch', 'YouTube', 'Discord', 'Kick', 'StreamElements', 'OBS', 'Atleta', 'PayPal', 'Spotify',
   'px', 'kbps', 'AAC', 'NVENC', 'x264', 'min', 'sec', 'FPS', 'EUR', // 'EUR' is the amount of a fixed PayPal.me link
 ]);
 // What one page may keep besides that, and why.
@@ -175,9 +175,9 @@ const PAGE_LOCALS = {
   login: [{ streamer: null }],
   // a visitor, a streamer (YouTube go-live posts on), and YouTube switched off
   home: [
-    { streamer: null, racingUser: null, hideRacingNav: true, youtubeLive: false, features: { youtube: true } },
-    { streamer, racingUser: null, hideRacingNav: true, youtubeLive: true, features: { youtube: true } },
-    { streamer: null, racingUser: null, hideRacingNav: true, youtubeLive: false, features: { youtube: false } },
+    { streamer: null, youtubeLive: false, features: { youtube: true } },
+    { streamer, youtubeLive: true, features: { youtube: true } },
+    { streamer: null, youtubeLive: false, features: { youtube: false } },
   ],
   'guild-stats': [
     { streamer, guild: {}, guildName: 'GuildName', guildId: 'g1', period: '7d', stats: statsPage, chartData: series, twitchCount: 1, youtubeCount: 2, features: { youtube: true } },
@@ -314,7 +314,7 @@ const marked = (key, params) => {
 // What server.js puts on res.locals: t(), and esc() and rich() (from src/i18n.js) with rich() built on that t().
 function render(page, locals, translate = marked) {
   return ejs.render(fs.readFileSync(path.join(VIEWS, page + '.ejs'), 'utf8'), {
-    racingUser: null, isAdmin: false, features: { youtube: false }, lang: 'en', csrfToken: 'token', currentPath: '/x', notifications: [], unreadNotifCount: 0, streamerTier: 'free',
+    isAdmin: false, features: { youtube: false }, lang: 'en', csrfToken: 'token', currentPath: '/x', streamerTier: 'free',
     SUPPORTED_LANGS: ['en'], t: translate, esc, rich: richFor(translate), ...locals,
   }, { filename: path.join(VIEWS, page + '.ejs'), views: [VIEWS] });
 }

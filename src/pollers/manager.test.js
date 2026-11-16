@@ -101,14 +101,13 @@ const discordStub = {
   buildInstagramEmbed: () => ({}),
   buildTikTokEmbed: () => ({}),
   buildTwitterEmbed: () => ({}),
-  buildIracingResultEmbed: () => ({}),
 };
 
 // Tracking's trackers: the manager tells them when a channel's stream starts.
 const streamStarts = [];
 const trackersStub = { streamStarted: (login) => streamStarts.push(login) };
 
-const noopPollers = ['./twitchClips', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed', './iracingResults'];
+const noopPollers = ['./twitchClips', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed'];
 
 let db;
 let manager;
@@ -128,7 +127,6 @@ before(() => {
       if (request === '../config') return configStub;
       if (request === '../discord') return discordStub;
       if (request === '../services/twitch') return twitchStub;
-      if (request === '../services/iracing') return { isConfigured: () => false };
       if (request === '../services/youtube') return youtubeStub;
       if (request === '../services/youtubeLiveChat') return chatManagerStub;
       if (request === '../services/trackers') return trackersStub;

@@ -60,7 +60,7 @@ function boot(file, inspect, stubs = {}) {
   return errors;
 }
 
-const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|longer_alert_durations|c1_donation_for_andre_vilela|tracking_seed_trackers/i.test(line));
+const ownErrors = (errors) => errors.filter((line) => /data_migrations|cp_rewards|hash_web_session_ids|drop_racing_tables|longer_alert_durations|c1_donation_for_andre_vilela|tracking_seed_trackers/i.test(line));
 
 test('a fresh database boots twice: each data migration is recorded once, without errors', () => {
   const file = path.join(tmpDir, 'fresh.db');
@@ -69,7 +69,7 @@ test('a fresh database boots twice: each data migration is recorded once, withou
 
   const raw = new RealDatabase(file);
   try {
-    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED].sort());
+    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED, 'drop_racing_tables'].sort());
   } finally {
     raw.close();
   }
