@@ -163,9 +163,15 @@ function moneyView(streamer, settings) {
 const rulesOf = (settings) => ({ hours: settings.hours, timeZone: settings.time_zone, daysOff: settings.days_off });
 
 // Waiting or confirmed, not started, and no longer inside the hours (a day off or a shorter window added after it).
+// A rescheduling booking holds its proposal's time (nothing without one), so that is the time tested.
 function isOutside(row, rules, now) {
-  return coaching.HOLDING.includes(row.status) && row.starts_at > now && coaching.outsideHours(row, rules);
+  if (!coaching.HOLDING.includes(row.status)) return false;
+  const at = row.status === 'rescheduling' ? row.proposal_starts_at : row.starts_at;
+  return at != null && at > now && coaching.outsideHours({ starts_at: at, minutes: row.minutes }, rules);
 }
+
+// Where the schedule places a row: a rescheduling one by its proposal when there is one, else its original time.
+const placedAt = (row) => (row.status === 'rescheduling' && row.proposal_starts_at != null ? row.proposal_starts_at : row.starts_at);
 
 // A booking as the schedule shows it: the booking page's view plus whether it fell outside the hours.
 function viewOf(row, settings, now, room, payments) {
@@ -185,13 +191,15 @@ function scheduleOf(streamerId, settings, now) {
     if (!paymentsOf.has(p.booking_id)) paymentsOf.set(p.booking_id, []);
     paymentsOf.get(p.booking_id).push(p);
   }
-  for (const row of rows) {
+  // A rescheduling booking stays among the days to come until it is agreed, dropped or closed, whatever its original time.
+  const placed = rows.slice().sort((a, b) => placedAt(a) - placedAt(b));
+  for (const row of placed) {
     const view = viewOf(row, settings, now, roomOf.get(row.id) || null, paymentsOf.get(row.id) || []);
-    if (row.starts_at + row.minutes * MINUTE_MS <= now) {
+    if (row.status !== 'rescheduling' && row.starts_at + row.minutes * MINUTE_MS <= now) {
       past.unshift(view);
       continue;
     }
-    const date = coaching.localDateOf(row.starts_at, settings.time_zone);
+    const date = coaching.localDateOf(placedAt(row), settings.time_zone);
     let day = days[days.length - 1];
     if (!day || day.date !== date) days.push(day = { date, bookings: [] });
     day.bookings.push(view);

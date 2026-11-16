@@ -862,3 +862,28 @@ describe('reschedule routes (the coach)', () => {
     assert.equal((await post(`${base(b)}/reschedule`, { json: { way: 'ask' } })).status, 302, 'signed out: the dashboard login');
   });
 });
+
+describe('a rescheduling booking in the schedule', () => {
+  test('stays among the days to come after its original end, placed by its proposal; isOutside tests the proposal', async () => {
+    const s = addStreamer();
+    const [first, second] = twoDays(s);
+    const b = hold(s, { discordUserId: '777000000000000001', username: 'v', displayName: 'V' }, first);
+    assert.ok(db.acceptCoachingBooking(b.id, s.id, Date.now(), null));
+    assert.ok(db.startCoachingReschedule(b.id, s.id, 'propose', { startsAt: second, note: '' }, Date.now()).ok);
+    // The original time (inside the hours) is now 2 h past its end; the proposal is on a day that becomes a day off.
+    db.db.prepare('UPDATE coaching_bookings SET starts_at = ? WHERE id = ?').run(Date.now() - 3 * 3600e3, b.id);
+    db.saveCoachingSettings(s.id, {
+      timeZone: ZONE, hours: HOURS, daysOff: [coaching.localDateOf(second, ZONE)], guildId: '123', inviteCode: 'abc', whereText: '', notifyRequests: 0, lang: 'en',
+    });
+    const data = pageData((await get('/dashboard/coaching', { streamer: s })).text);
+    assert.deepEqual(data.schedule.past, []);
+    const listed = data.schedule.days.flatMap((d) => d.bookings);
+    assert.deepEqual(listed.map((x) => [x.id, x.state, x.outside]), [[b.id, 'rescheduling', true]]);
+    assert.equal(data.schedule.days[0].date, coaching.localDateOf(second, ZONE));
+
+    // The page script makes the same split.
+    const script = fs.readFileSync(PAGE_SCRIPT, 'utf8');
+    assert.match(script, /b\.state !== 'rescheduling' && b\.startsAt \+ b\.minutes \* MINUTE_MS <= now/);
+    assert.match(script, /b\.proposal \? b\.proposal\.startsAt : b\.startsAt/);
+  });
+});

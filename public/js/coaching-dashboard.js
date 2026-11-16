@@ -190,9 +190,10 @@
     eachBooking(function (b) { all.push(b); });
     var days = [];
     var past = [];
-    all.sort(function (a, b) { return a.startsAt - b.startsAt; }).forEach(function (b) {
-      if (b.startsAt + b.minutes * MINUTE_MS <= now) { past.unshift(b); return; }
-      var date = C.localDate(b.startsAt, zone);
+    var placedAt = function (b) { return b.state === 'rescheduling' && b.proposal ? b.proposal.startsAt : b.startsAt; };
+    all.sort(function (a, b) { return placedAt(a) - placedAt(b); }).forEach(function (b) {
+      if (b.state !== 'rescheduling' && b.startsAt + b.minutes * MINUTE_MS <= now) { past.unshift(b); return; }
+      var date = C.localDate(placedAt(b), zone);
       var last = days[days.length - 1];
       if (!last || last.date !== date) days.push(last = { date: date, bookings: [] });
       last.bookings.push(b);
