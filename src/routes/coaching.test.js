@@ -262,6 +262,28 @@ describe('the booking page', () => {
     assert.ok(!asStreamer.text.includes('action="/auth/coaching-signout"'));
   });
 
+  test('the page is four steps: a visitor sees step 1 only, a viewer steps 2 to 4 (hidden until the script opens one), with a My bookings line', async () => {
+    const s = addStreamer();
+    const visitor = await get(`/coaching/${s.login}`);
+    assert.ok(visitor.text.includes(esc(t('en', 'coaching.page.step', { n: 1, total: 4 }))));
+    assert.ok(!visitor.text.includes('id="cz-s3"'));
+    assert.ok(!visitor.text.includes('href="/my-bookings"'), 'no bookings line for a visitor');
+
+    const v = addViewer();
+    const first = await get(`/coaching/${s.login}`, { cookie: v.cookie });
+    for (const n of [2, 3, 4]) {
+      assert.match(first.text, new RegExp(`id="cz-s${n}"[^>]*hidden`), `step ${n} starts hidden`);
+      assert.ok(first.text.includes(esc(t('en', 'coaching.page.step', { n, total: 4 }))));
+    }
+    assert.ok(!first.text.includes('id="cz-list"'), 'the bookings list is gone from the coach page');
+    assert.ok(!first.text.includes('href="/my-bookings"'), 'no bookings, no line');
+
+    hold(s, v, freeNow(s, 30)[0], 30);
+    const second = await get(`/coaching/${s.login}`, { cookie: v.cookie });
+    assert.ok(second.text.includes(esc(t('en', 'coaching.page.mineOne', { name: s.name }))));
+    assert.ok(second.text.includes('href="/my-bookings"'));
+  });
+
   test("a paused streamer's page answers 200 and says not taking bookings", async () => {
     const s = addStreamer();
     const v = addViewer();
@@ -293,7 +315,6 @@ describe('the booking page', () => {
     assert.ok(read.length > 10);
     assert.deepEqual(read.filter((name) => !(name in texts)), [], 'the script reads texts the page does not hand over');
     assert.deepEqual(Object.keys(texts).filter((name) => !read.includes(name)), [], 'texts handed over but never read');
-    for (const state of coaching.STATES.concat('unanswered')) assert.equal(typeof texts.states[state], 'string', state);
   });
 });
 

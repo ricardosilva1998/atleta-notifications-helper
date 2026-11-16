@@ -56,38 +56,19 @@ function refuse(res, code) {
 }
 
 // The texts public/js/coaching-page.js reads, as window.COACHING_TEXTS (name -> key; their {{fields}} are kept for the
-// script, which fills them in one pass), and the states' names under `states`.
+// script, which fills them in one pass).
 const PAGE_TEXT_KEYS = {
   zone: 'coaching.page.zone', lengthMin: 'coaching.page.lengthMin', lengthHour: 'coaching.page.lengthHour', free: 'coaching.page.free',
-  payBy: 'coaching.page.payBy', pay: 'coaching.page.pay', paying: 'coaching.page.paying', room: 'coaching.page.room',
-  where: 'coaching.page.where', paidOk: 'coaching.page.paidOk', checkAgain: 'coaching.page.checkAgain', paidAmount: 'coaching.page.paidAmount',
-  noTimes: 'coaching.page.noTimes', noTimesDay: 'coaching.page.noTimesDay', pickTime: 'coaching.page.pickTime',
-  request: 'coaching.page.request', requesting: 'coaching.page.requesting', requested: 'coaching.page.requested',
+  noTimes: 'coaching.page.noTimes', noTimesDay: 'coaching.page.noTimesDay',
+  request: 'coaching.page.request', requesting: 'coaching.page.requesting',
   unverified: 'coaching.page.unverified', joinFirst: 'coaching.page.joinFirst', serverFallback: 'coaching.page.serverFallback',
-  notJoined: 'coaching.page.notJoined', limit: 'coaching.page.limit', cancel: 'coaching.page.cancel',
-  cancelConfirm: 'coaching.page.cancelConfirm', withdrawn: 'coaching.page.withdrawn', signIn: 'coaching.page.signIn',
+  notJoined: 'coaching.page.notJoined', limit: 'coaching.page.limit', signIn: 'coaching.page.signIn',
   failed: 'coaching.page.failed', offline: 'coaching.page.offline',
-  payNote: 'coaching.page.payNote', cancelReason: 'coaching.page.cancelReason', refundPending: 'coaching.page.refundPending',
-  refunded: 'coaching.page.refunded', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
-  reschedMine: 'coaching.page.reschedMine', reschedUntil: 'coaching.page.reschedUntil', reschedOriginal: 'coaching.page.reschedOriginal',
-  reschedAccept: 'coaching.page.reschedAccept', reschedOther: 'coaching.page.reschedOther', reschedPick: 'coaching.page.reschedPick',
-  reschedSend: 'coaching.page.reschedSend', reschedNote: 'coaching.page.reschedNote', reschedLoading: 'coaching.page.reschedLoading',
-  reschedNoTimes: 'coaching.page.reschedNoTimes', reschedSent: 'coaching.page.reschedSent', reschedAgreed: 'coaching.page.reschedAgreed',
-  reschedClose: 'coaching.page.reschedClose', reschedPicked: 'coaching.page.reschedPicked',
-};
-const STATE_KEYS = {
-  waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
-  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
-  rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {
   const texts = {};
   for (const [name, key] of Object.entries(PAGE_TEXT_KEYS)) texts[name] = t(key, KEEP_FIELDS);
-  texts.states = {};
-  for (const [state, key] of Object.entries(STATE_KEYS)) texts.states[state] = t(key);
-  texts.returnErrors = {};
-  for (const [code, key] of Object.entries(RETURN_ERROR_KEYS)) texts.returnErrors[code] = t(key);
   return texts;
 }
 
