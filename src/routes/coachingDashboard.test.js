@@ -502,6 +502,37 @@ describe('Accept, Decline and Cancel', () => {
     assert.equal(db.getCoachingSettings(s.id).category_id, null);
   });
 
+  test('lengths and prices: the defaults on the page, a save keeps or replaces them, all-off and bad prices are refused, and the notes follow PayPal and the currency', async () => {
+    const s = addStreamer({ settings: null });
+    const save = (over) => post('/dashboard/api/coaching/settings', { streamer: s, json: saveBody(over) });
+    const first = pageData((await get('/dashboard/coaching', { streamer: s })).text);
+    assert.deepEqual(first.settings.lengths, coaching.lengthsFor(null), 'the defaults before any save');
+    assert.deepEqual(first.money, { currency: 'EUR', hasPaypal: false, checkPrices: false });
+
+    const custom = { 30: { on: true, price: 0 }, 60: { on: true, price: 3000 }, 120: { on: false, price: 4500 }, 180: { on: false, price: 6000 }, 240: { on: false, price: 7000 }, 300: { on: false, price: 8000 } };
+    const ok = await save({ lengths: custom });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.json.settings.lengths, custom);
+    assert.ok(db.getCoachingSettings(s.id).prices_saved_at, 'the first save of prices is recorded');
+    assert.deepEqual((await save({})).json.settings.lengths, custom, 'a save without lengths keeps them');
+
+    const none = Object.fromEntries(Object.entries(custom).map(([m, l]) => [m, { ...l, on: false }]));
+    const off = await save({ lengths: none });
+    assert.equal(off.status, 400);
+    assert.deepEqual(off.json, { ok: false, code: 'no_length', error: errorOf('no_length') });
+    for (const bad of [{ ...custom, 60: { on: true, price: null } }, { ...custom, 60: { on: true, price: 100001 } }, { ...custom, 60: { on: true, price: 12.5 } }, { 60: { on: true, price: 100 } }, 'x']) {
+      const r = await save({ lengths: bad });
+      assert.equal(r.json.code, 'bad_lengths');
+    }
+    assert.deepEqual(db.getCoachingSettings(s.id).lengths && coaching.lengthsFor(db.getCoachingSettings(s.id)), custom, 'refusals changed nothing');
+
+    db.db.prepare("UPDATE streamers SET paypal_email = 'pay@example.test', donation_currency = 'USD' WHERE id = ?").run(s.id);
+    const other = addStreamer({ settings: null });
+    db.db.prepare("UPDATE streamers SET paypal_email = 'pay@example.test', donation_currency = 'USD' WHERE id = ?").run(other.id);
+    assert.deepEqual(pageData((await get('/dashboard/coaching', { streamer: s })).text).money, { currency: 'USD', hasPaypal: true, checkPrices: false }, 'prices were saved');
+    assert.deepEqual(pageData((await get('/dashboard/coaching', { streamer: other })).text).money, { currency: 'USD', hasPaypal: true, checkPrices: true }, 'defaults in a currency other than EUR');
+  });
+
   test('Retry room: refused without a category or for a room that is not failed, remakes a failed room', async () => {
     const s = addStreamer();
     db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);

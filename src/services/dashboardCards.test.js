@@ -404,7 +404,7 @@ describe('Giveaways', () => {
 describe('Coaching', () => {
   const URL = 'https://atleta.example/coaching/synthetic_channel';
   const coach = (over = {}, coachingUrl = URL) => build({ coaching: coachingInput(over), coachingUrl }).coaching;
-  const row = (b) => ({ id: b.id, startsAt: b.startsAt, minutes: b.minutes, viewerName: b.viewerName, viewerUsername: b.viewerUsername, note: b.note, messageError: b.messageError });
+  const row = (b) => ({ id: b.id, startsAt: b.startsAt, minutes: b.minutes, viewerName: b.viewerName, viewerUsername: b.viewerUsername, note: b.note, messageError: b.messageError, state: b.state, priceCents: b.priceCents == null ? null : b.priceCents, currency: b.currency || null, payBy: b.payBy || null, paid: !!b.paid });
 
   test('coaching comes after giveaways in ORDER, with the overlay features off too; it does not need the chatbot', () => {
     assert.equal(ORDER.indexOf('coaching'), ORDER.indexOf('giveaways') + 1);
@@ -451,6 +451,16 @@ describe('Coaching', () => {
     assert.equal(broken.inviteBroken, true);
     assert.deepEqual(broken.counts, { waiting: { key: 'cards.coaching.badge', params: { count: 2 } } });
     assert.equal(coach({ inviteBroken: true, open: false }).status.key, 'cards.coaching.status.inviteBroken');
+  });
+
+  test('the card carries each booking\'s price and payment state, and the PayPal, prices and room notes', () => {
+    const paidNext = booking({ id: 8, state: 'awaiting_payment', priceCents: 4500, currency: 'EUR', payBy: 1792000000000 });
+    const card = coach({ waiting: [booking({ id: 7, priceCents: 2500, currency: 'EUR' })], waitingCount: 1, next: paidNext, hasPaypal: true, checkPrices: false, currency: 'EUR', roomErrors: 0 });
+    assert.deepEqual(card.waiting[0], { ...row(booking({ id: 7 })), priceCents: 2500, currency: 'EUR' });
+    assert.deepEqual([card.next.state, card.next.priceCents, card.next.payBy, card.next.paid], ['awaiting_payment', 4500, 1792000000000, false]);
+    assert.deepEqual([card.noPaypal, card.checkPrices, card.roomErrors], [false, false, 0]);
+    const notes = coach({ hasPaypal: false, checkPrices: true, currency: 'USD', roomErrors: 2 });
+    assert.deepEqual([notes.noPaypal, notes.checkPrices, notes.currency, notes.roomErrors], [true, true, 'USD', 2]);
   });
 
   test('cardTexts translates its status and badge', () => {

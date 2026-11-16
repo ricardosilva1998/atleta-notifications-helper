@@ -35,6 +35,8 @@ const REFUSALS = {
   bad_invite: [400, 'coaching.dashboard.error.bad_invite'],
   invite_other_server: [400, 'coaching.dashboard.error.invite_other_server'],
   bad_where: [400, 'coaching.dashboard.error.bad_where'],
+  bad_lengths: [400, 'coaching.dashboard.error.bad_lengths'],
+  no_length: [400, 'coaching.dashboard.error.no_length'],
   bad_switch: [400, 'coaching.dashboard.error.bad_switch'],
   not_set_up: [409, 'coaching.dashboard.error.not_set_up'],
   not_found: [404, 'coaching.error.not_found'],
@@ -62,7 +64,11 @@ function refuse(res, code, extra = {}, params = {}) {
 // are kept for the script, which fills them), and the states' names under `states` (the booking page's).
 const TEXT_KEYS = {
   zone: 'coaching.dashboard.zone', empty: 'coaching.dashboard.empty', emptyNotSetUp: 'coaching.dashboard.emptyNotSetUp',
-  minutes30: 'coaching.page.minutes30', minutes60: 'coaching.page.minutes60',
+  lengthMin: 'coaching.page.lengthMin', lengthHour: 'coaching.page.lengthHour', free: 'coaching.page.free',
+  payBy: 'coaching.page.payBy', priceFor: 'coaching.dashboard.priceFor', paid: 'coaching.dashboard.paid', openRoom: 'coaching.dashboard.openRoom',
+  retryRoom: 'coaching.dashboard.retryRoom', retrying: 'coaching.dashboard.retrying', roomRetried: 'coaching.dashboard.roomRetried',
+  paymentLate: 'coaching.dashboard.paymentLate', categoryNone: 'coaching.dashboard.categoryNone',
+  categoryAfterSave: 'coaching.dashboard.categoryAfterSave', categoryUnavailable: 'coaching.dashboard.categoryUnavailable',
   accept: 'coaching.dashboard.accept', decline: 'coaching.dashboard.decline', cancel: 'coaching.dashboard.cancel',
   declineConfirm: 'coaching.dashboard.declineConfirm', cancelConfirm: 'coaching.dashboard.cancelConfirm',
   accepted: 'coaching.dashboard.accepted', declined: 'coaching.dashboard.declined', cancelled: 'coaching.dashboard.cancelled',
@@ -76,15 +82,21 @@ const TEXT_KEYS = {
   sessionEnded: 'coaching.dashboard.sessionEnded', failed: 'coaching.page.failed', offline: 'coaching.page.offline',
 };
 const STATE_KEYS = {
-  waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
+  waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
   cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
 };
+const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'failed'];
+const TRANSCRIPT_STATUSES = ['sent', 'partial', 'failed', 'no_intent', 'no_channel'];
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {
   const texts = {};
   for (const [name, key] of Object.entries(TEXT_KEYS)) texts[name] = t(key, KEEP_FIELDS);
   texts.states = {};
   for (const [state, key] of Object.entries(STATE_KEYS)) texts.states[state] = t(key);
+  texts.roomError = {};
+  for (const code of ROOM_ERRORS) texts.roomError[code] = t(`coaching.dashboard.roomError.${code}`);
+  texts.transcript = {};
+  for (const code of TRANSCRIPT_STATUSES) texts.transcript[code] = t(`coaching.dashboard.transcript.${code}`);
   return texts;
 }
 
@@ -96,6 +108,7 @@ function settingsView(settings, now, servers) {
     return {
       open: false, timeZone: null, hours: coaching.DEFAULT_HOURS, daysOff: [],
       guildId: servers.length ? servers[0].id : null, categoryId: null, invite: '', inviteOk: null, where: '', notifyRequests: true,
+      lengths: coaching.lengthsFor(null),
     };
   }
   const today = coaching.localDateOf(now, settings.time_zone);
@@ -110,6 +123,18 @@ function settingsView(settings, now, servers) {
     inviteOk: settings.invite_ok == null ? null : !!settings.invite_ok,
     where: settings.where_text || '',
     notifyRequests: !!settings.notify_requests,
+    lengths: coaching.lengthsFor(settings),
+  };
+}
+
+// The money side of the page: the prices' currency (the tip page's), whether a PayPal email is set (a paid length needs
+// it), and whether the prices still carry the defaults in a currency other than EUR (planning decision 4).
+function moneyView(streamer, settings) {
+  const currency = coachingBookings.currencyOf(streamer);
+  return {
+    currency,
+    hasPaypal: !!streamer.paypal_email,
+    checkPrices: currency !== 'EUR' && !(settings && settings.prices_saved_at),
   };
 }
 
@@ -196,12 +221,14 @@ router.get('/coaching', async (req, res) => {
     streamer,
     setUp: !!settings,
     settings: view,
+    money: moneyView(streamer, settings),
     servers,
     bookingUrl: link,
     coachingData: {
       lang: res.locals.lang || 'en',
       setUp: !!settings,
       settings: view,
+      money: moneyView(streamer, settings),
       servers,
       categories,
       bookingUrl: link,
@@ -236,6 +263,13 @@ router.post('/api/coaching/settings', async (req, res) => {
   if (!where.ok) return refuse(res, where.code);
   const notify = parseSwitch(body.notifyRequests);
   if (notify === null) return refuse(res, 'bad_switch');
+  // Absent keeps the saved lengths and prices; present is checked whole (every length, at least one on).
+  let lengths;
+  if (body.lengths !== undefined) {
+    const parsed = coaching.parseLengths(body.lengths);
+    if (!parsed.ok) return refuse(res, parsed.code);
+    lengths = parsed.lengths;
+  }
 
   // The Coaching category: absent keeps the saved one (cleared when the server changes), '' or null clears it, an id is
   // checked against the server (it must be one of its categories and hold the bot's permissions).
@@ -265,7 +299,7 @@ router.post('/api/coaching/settings', async (req, res) => {
 
   const saved = db.saveCoachingSettings(streamer.id, {
     timeZone, hours: hours.hours, daysOff: daysOff.daysOff, guildId, inviteCode, whereText: where.where,
-    notifyRequests: notify, lang: res.locals.lang || 'en', categoryId,
+    notifyRequests: notify, lang: res.locals.lang || 'en', categoryId, lengths,
   });
   if (invite && invite.ok) db.recordInviteCheck(streamer.id, inviteCode, 1, now);
   const settings = db.getCoachingSettings(streamer.id) || saved;
@@ -274,7 +308,7 @@ router.post('/api/coaching/settings', async (req, res) => {
     .filter((b) => b.startsAt > now && coaching.outsideHours({ starts_at: b.startsAt, minutes: b.minutes }, rules))
     .map((b) => b.id);
   const servers = serverOptions(claims, settings);
-  res.json({ ok: true, settings: settingsView(settings, now, servers), outsideHours, categories: await categoryOptions(settings) });
+  res.json({ ok: true, settings: settingsView(settings, now, servers), money: moneyView(streamer, settings), outsideHours, categories: await categoryOptions(settings) });
 });
 
 // JSON { open }: Bookings open, paused without losing the hours. A value that is not a switch value is refused.

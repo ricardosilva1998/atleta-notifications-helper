@@ -278,22 +278,23 @@ PAGE_LOCALS.coaching = [
 // The streamer's coaching page: set up (bookings, a server, the link), set up with a dead invite while the bot cannot
 // see any server, and not set up without a server or a Twitch account.
 const coachingHours = Array.from({ length: 7 }, (_, i) => ({ on: i < 5, start: 1080, end: 1320 }));
-const coachingDashboardPage = ({ setUp = true, settings = {}, servers = [{ id: '123', name: 'GuildName' }], bookingUrl = 'https://app.test/coaching/tester_tv' } = {}) => {
+const coachingDashboardPage = ({ setUp = true, settings = {}, servers = [{ id: '123', name: 'GuildName' }], bookingUrl = 'https://app.test/coaching/tester_tv', money = { currency: 'EUR', hasPaypal: true, checkPrices: false } } = {}) => {
   const view = {
     open: setUp, timeZone: setUp ? 'Europe/Lisbon' : null, hours: coachingHours, daysOff: setUp ? ['2026-11-12'] : [], guildId: servers.length ? servers[0].id : null,
-    invite: setUp ? 'https://discord.gg/abc' : '', inviteOk: setUp ? true : null, where: setUp ? 'TitleText' : '', notifyRequests: true, ...settings,
+    invite: setUp ? 'https://discord.gg/abc' : '', inviteOk: setUp ? true : null, where: setUp ? 'TitleText' : '', notifyRequests: true, categoryId: null, lengths: {}, ...settings,
   };
   const booking = { id: 1, startsAt: 1792429200000, minutes: 60, state: 'waiting', viewerName: 'Tester', viewerUsername: 'tester', viewerAvatar: null, note: 'TitleText', messageError: null, outside: false };
   const schedule = setUp ? { days: [{ date: '2026-10-21', bookings: [booking] }], past: [{ ...booking, id: 2, state: 'confirmed' }] } : { days: [], past: [] };
   return {
-    streamer, setUp, settings: view, servers, bookingUrl,
-    coachingData: { lang: 'en', setUp, settings: view, servers, bookingUrl, schedule, daysOffMax: 60 }, coachingTexts: { zone: 'x' },
+    streamer, setUp, settings: view, servers, bookingUrl, money,
+    coachingData: { lang: 'en', setUp, settings: view, money, categories: [], servers, bookingUrl, schedule, daysOffMax: 60 }, coachingTexts: { zone: 'x' },
   };
 };
 PAGE_LOCALS['coaching-dashboard'] = [
   coachingDashboardPage(),
   coachingDashboardPage({ settings: { open: false, inviteOk: false }, servers: [] }),
   coachingDashboardPage({ setUp: false, servers: [], bookingUrl: null }),
+  coachingDashboardPage({ money: { currency: 'USD', hasPaypal: false, checkPrices: true } }),
 ];
 // The account page shows YouTube's channels and posts only while YouTube is (features.youtube): each sample both ways.
 PAGE_LOCALS.account = PAGE_LOCALS.account.flatMap((locals) => [true, false].map((youtube) => ({ ...locals, features: { youtube } })));

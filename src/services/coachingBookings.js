@@ -336,8 +336,14 @@ function cardData(streamer, { now = Date.now(), claimedGuildIds: claimed = [] } 
     ? db.getCoachingSchedule(streamer.id, now, now + 60 * DAY_MS).filter((r) => r.starts_at > now)
     : [];
   const waiting = upcoming.filter((r) => r.status === 'waiting');
-  const confirmed = upcoming.find((r) => r.status === 'confirmed');
+  const confirmed = upcoming.find((r) => r.status === 'confirmed' || r.status === 'awaiting_payment');
+  const money = {
+    currency: currencyOf(streamer),
+    hasPaypal: !!streamer.paypal_email,
+    checkPrices: currencyOf(streamer) !== 'EUR' && !(settings && settings.prices_saved_at),
+  };
   return {
+    ...money,
     setup,
     open: !!(settings && settings.open),
     bookable: coaching.bookable(settings, claimed),

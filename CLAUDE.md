@@ -478,3 +478,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Lengths are drawn from `state.lengths`, only those with a free start; paid bookings count toward the limit but have no Cancel; Pay shows only before `payBy`, and the page goes only to a paypal.com `approveUrl`. `?paid=1` and `?error=` (with `&order=` to check again) are read from the address.
 - A viewer's state now carries `whereText`, shown on confirmed bookings with no room link. Texts `coaching.page.minutes30/60` are no longer read (left in the locales).
 **Open:** the owner's look at the signed-in page; a native read-through of the six machine translations (pt is pt-PT).
+
+### 2026-11-16 14:00 — claude (frontend-dev, Task 5 of Coaching payment and rooms)
+**Task:** Coaching dashboard page and card: lengths and prices, Coaching category picker, PayPal and check-prices notes, schedule payment and room lines, card prices
+**Files:** `src/views/coaching-dashboard.ejs`, `public/js/coaching-dashboard.js`, `src/views/cards/{coaching,_style}.ejs`, `public/js/dashboard-coaching.js`, `src/views/dashboard.ejs`, `src/services/{dashboardCards,coachingBookings}.js`, `src/routes/coachingDashboard.js`, `src/locales/*.json` (28 keys), tests
+**Decisions:**
+- `POST /dashboard/api/coaching/settings` now takes `lengths` (all six, `parseLengths`; absent keeps the saved ones; `bad_lengths`, `no_length`) and answers `money { currency, hasPaypal, checkPrices }`; the page data carries `money` and `settings.lengths`.
+- The card's `next` is now the earliest confirmed or awaiting-payment session; each row carries state, price, payBy and paid, and the card has `noPaypal`, `checkPrices`, `roomErrors`; prices and pay lines are written by the script from `data-*`, like the times.
+- Schedule: Cancel on awaiting payment and unpaid confirmed only; paid sessions show the amount, the room link or the room error with Retry room, the transcript status and the late-payment warning.
+**Open:** a native read-through of the 28 new texts; the old `coaching.page.minutes30/60` and `coaching.dashboard.where*` keys are now unused.

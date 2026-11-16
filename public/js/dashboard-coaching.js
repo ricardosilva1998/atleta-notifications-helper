@@ -28,7 +28,8 @@
   }
   const zone = browserZone();
   const when = (ms) => C.dateLabel(ms, zone, lang) + ', ' + C.timeLabel(ms, zone, lang);
-  const lengthText = (minutes) => (Number(minutes) === 30 ? CT.minutes30 : CT.minutes60) || '';
+  const lengthText = (minutes) => C.lengthLabel(Number(minutes), { lengthMin: CT.lengthMin, lengthHour: CT.lengthHour });
+  const priceText = (cents, currency) => C.formatPrice(cents, currency || 'EUR', lang, CT.free);
 
   // A row's time from its instant.
   function writeTime(row) {
@@ -36,7 +37,27 @@
     const out = $('[data-when]', row);
     if (out && row.dataset.at && Number.isFinite(at)) out.textContent = when(at);
   }
+  // A row's price (after the length) and, for the next session, whether it is paid or waiting for payment. A booking
+  // from before prices existed has no price (data-price empty) and shows none.
+  function writePay(row) {
+    const raw = row.dataset.price;
+    const cents = raw === '' || raw === undefined ? null : Number(raw);
+    const part = $('[data-price-part]', row);
+    if (part) part.textContent = cents === null ? '' : ' · ' + priceText(cents, row.dataset.currency);
+    const line = $('[data-pay-line]', row);
+    if (!line) return;
+    let text = '';
+    if (row.dataset.paid) text = core.fill(CT.paid, { price: priceText(cents, row.dataset.currency) });
+    else if (row.dataset.state === 'awaiting_payment') {
+      text = CT.awaitingPayment;
+      const by = Number(row.dataset.payBy);
+      if (row.dataset.payBy && Number.isFinite(by)) text += ' · ' + core.fill(CT.payBy, { when: when(by) });
+    }
+    line.textContent = text;
+    line.hidden = !text;
+  }
   $$('[data-at]', card).forEach(writeTime);
+  $$('[data-price]', card).forEach(writePay);
 
   // A message that says what happened goes after a moment; a refusal or a warning stays until the next action.
   let infoTimer = null;
@@ -61,6 +82,11 @@
     const shown = Number(next.dataset.at);
     if (!next.hidden && Number.isFinite(shown) && next.dataset.at && shown <= booking.startsAt) return;
     next.dataset.at = String(booking.startsAt);
+    next.dataset.price = booking.priceCents == null ? '' : String(booking.priceCents);
+    next.dataset.currency = booking.currency || '';
+    next.dataset.state = booking.state || '';
+    next.dataset.paid = booking.paid ? '1' : '';
+    next.dataset.payBy = booking.payBy ? String(booking.payBy) : '';
     const name = $('[data-name]', next);
     if (name) name.textContent = booking.viewerName || '';
     const length = $('[data-length]', next);
@@ -71,6 +97,7 @@
       problem.hidden = !booking.messageError;
     }
     writeTime(next);
+    writePay(next);
     next.hidden = false;
   }
 

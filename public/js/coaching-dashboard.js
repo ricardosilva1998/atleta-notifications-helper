@@ -25,7 +25,20 @@
   var schedule = DATA.schedule || { days: [], past: [] };
   var hours = copyHours(settings.hours);
   var daysOff = (settings.daysOff || []).slice();
+  var LENGTH_MINUTES = [30, 60, 120, 180, 240, 300];
+  var lengths = copyLengths(settings.lengths);
+  var money = DATA.money || { currency: 'EUR', hasPaypal: true, checkPrices: false };
+  var categories = DATA.categories || [];
   var saving = false;
+
+  function copyLengths(map) {
+    var out = {};
+    LENGTH_MINUTES.forEach(function (m) {
+      var l = map && map[m] ? map[m] : { on: false, price: 0 };
+      out[m] = { on: !!l.on, price: Number(l.price) || 0 };
+    });
+    return out;
+  }
 
   function copyHours(list) {
     return (list || []).map(function (d) { return { on: !!d.on, start: d.start, end: d.end }; });
@@ -59,7 +72,8 @@
   function addDays(iso, n) { return new Date(Date.parse(iso + 'T00:00:00Z') + n * DAY_MS).toISOString().slice(0, 10); }
   function dateText(iso) { return C.dateLabel(Date.parse(iso + 'T12:00:00Z'), 'UTC', lang); }
   function time(ms) { return C.timeLabel(ms, zone, lang); }
-  function lengthText(m) { return m === 30 ? T.minutes30 : T.minutes60; }
+  function lengthText(m) { return C.lengthLabel(m, T); }
+  function priceText(cents, currency) { return C.formatPrice(cents, currency || money.currency, lang, T.free); }
 
   // ── Requests ──
   // { ok: true, data } or { ok: false, code, text }: a redirect (to sign in, which leads off the site) or a 401/403
@@ -144,6 +158,43 @@
     return button;
   }
 
+  // The room's link while it is open, or why it failed with Retry room.
+  function roomParts(b, what, line) {
+    if (b.roomUrl && C.isRoomUrl(b.roomUrl)) {
+      var box = make('div', 'cd-room');
+      var link = make('a', null, T.openRoom);
+      link.href = b.roomUrl;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      box.appendChild(link);
+      what.appendChild(box);
+    } else if (b.roomError) {
+      var fail = make('div', 'cd-room');
+      fail.appendChild(make('span', 'cd-warn', (T.roomError && (T.roomError[b.roomError] || T.roomError.failed)) || ''));
+      var retry = make('button', 'cd-sbtn', T.retryRoom);
+      retry.type = 'button';
+      retry.addEventListener('click', function () { retryRoom(b, retry, line); });
+      fail.appendChild(retry);
+      what.appendChild(fail);
+    }
+  }
+
+  function retryRoom(b, button, line) {
+    button.disabled = true;
+    button.textContent = T.retrying;
+    api('POST', '/dashboard/api/coaching/bookings/' + encodeURIComponent(String(b.id)) + '/room').then(function (answer) {
+      if (!answer.ok) {
+        button.disabled = false;
+        button.textContent = T.retryRoom;
+        message('cd-schedule-msg', answer.text);
+        return;
+      }
+      replaceBooking(answer.data.booking);
+      drawSchedule();
+      message('cd-schedule-msg', fill(T.roomRetried, { name: answer.data.booking.viewerName }), answer.data.booking.roomError ? 'warn' : 'ok');
+    });
+  }
+
   function bookingLine(b, now, withDate) {
     var line = make('div', 'cd-line ' + b.state);
     line.appendChild(make('span', 'cd-dot ' + b.state));
@@ -156,19 +207,31 @@
     what.appendChild(top);
     var sub = make('div', 'cd-sub');
     var who = b.viewerUsername && b.viewerUsername !== b.viewerName ? '@' + b.viewerUsername + ' · ' : '';
-    sub.appendChild(make('span', null, who + lengthText(b.minutes)));
+    var price = b.priceCents == null ? '' : ' · ' + priceText(b.priceCents, b.currency);
+    sub.appendChild(make('span', null, who + lengthText(b.minutes) + price));
     sub.appendChild(make('span', 'cd-pill ' + b.state, (T.states && T.states[b.state]) || b.state));
+    if (b.paid) sub.appendChild(make('span', 'cd-pill paid', fill(T.paid, { price: priceText(b.paidAmountCents != null ? b.paidAmountCents : b.priceCents, b.paidCurrency || b.currency) })));
     if (b.outside) sub.appendChild(make('span', 'cd-pill warn', T.outside));
     what.appendChild(sub);
+    if (b.state === 'awaiting_payment' && b.payBy) {
+      what.appendChild(make('div', 'cd-sub', fill(T.payBy, { when: C.payByLabel(b.payBy, zone, lang) })));
+    }
     if (b.note) what.appendChild(make('div', 'cd-note-text', b.note));
     if (b.messageError) what.appendChild(make('div', 'cd-warn', fill(T.messageError, { name: b.viewerName })));
+    if (b.paymentIssue === 'late') {
+      what.appendChild(make('div', 'cd-warn', fill(T.paymentLate, { name: b.viewerName, price: priceText(b.paidAmountCents != null ? b.paidAmountCents : b.priceCents, b.paidCurrency || b.currency) })));
+    }
+    roomParts(b, what, line);
+    if (b.transcriptStatus && T.transcript && T.transcript[b.transcriptStatus]) {
+      what.appendChild(make('div', b.transcriptStatus === 'sent' ? 'cd-sub' : 'cd-warn', T.transcript[b.transcriptStatus]));
+    }
     line.appendChild(what);
 
     var actions = make('div', 'cd-acts');
     if (b.startsAt > now && b.state === 'waiting') {
       actions.appendChild(iconButton('ok', '✓', T.accept, function () { act(b, 'accept', line); }));
       actions.appendChild(iconButton('no', '✕', T.decline, function () { act(b, 'decline', line); }));
-    } else if (b.startsAt > now && b.state === 'confirmed') {
+    } else if (b.startsAt > now && (b.state === 'confirmed' || b.state === 'awaiting_payment') && !b.paid) {
       var cancel = make('button', 'cd-sbtn', T.cancel);
       cancel.type = 'button';
       cancel.addEventListener('click', function () { act(b, 'cancel', line); });
@@ -277,6 +340,79 @@
     });
   }
 
+  function drawLengths() {
+    var box = $('cd-lengths-list');
+    clear(box);
+    LENGTH_MINUTES.forEach(function (m) {
+      var l = lengths[m];
+      var name = lengthText(m);
+      var row = make('div', 'cd-lrow' + (l.on ? '' : ' off'));
+      var toggle = make('label', 'pill-toggle mini');
+      var input = make('input');
+      input.type = 'checkbox';
+      input.setAttribute('role', 'switch');
+      input.checked = l.on;
+      input.setAttribute('aria-label', name);
+      toggle.appendChild(input);
+      toggle.appendChild(make('span', 'slider'));
+      row.appendChild(toggle);
+      row.appendChild(make('span', 'cd-ln', name));
+      var price = make('span', 'cd-lp');
+      var field = make('input');
+      field.type = 'number';
+      field.min = '0';
+      field.max = '1000';
+      field.step = '0.01';
+      field.inputMode = 'decimal';
+      field.value = (l.price / 100).toFixed(2);
+      field.disabled = !l.on;
+      field.setAttribute('aria-label', fill(T.priceFor, { length: name, currency: money.currency }));
+      price.appendChild(field);
+      price.appendChild(make('span', 'cd-cur', money.currency));
+      row.appendChild(price);
+      input.addEventListener('change', function () {
+        l.on = input.checked;
+        row.classList.toggle('off', !l.on);
+        field.disabled = !l.on;
+      });
+      field.addEventListener('input', function () {
+        var n = Number(field.value);
+        l.price = field.value !== '' && isFinite(n) ? Math.round(n * 100) : NaN;
+      });
+      box.appendChild(row);
+    });
+  }
+
+  // The category picker: none (no rooms) and the coaching server's categories; a server just picked has none to list
+  // until it is saved.
+  function drawCategories() {
+    var select = $('cd-category');
+    var server = $('cd-server');
+    var changed = server && settings.guildId && server.value !== settings.guildId;
+    clear(select);
+    var none = make('option', null, T.categoryNone);
+    none.value = '';
+    select.appendChild(none);
+    if (!changed) {
+      categories.forEach(function (c) {
+        var option = make('option', null, c.name);
+        option.value = c.id;
+        select.appendChild(option);
+      });
+    }
+    select.value = !changed && settings.categoryId ? settings.categoryId : '';
+    select.disabled = !!changed || !setUp;
+    var hint = $('cd-category-hint');
+    var base = hint.getAttribute('data-base') || hint.textContent;
+    hint.setAttribute('data-base', base);
+    hint.textContent = changed || !setUp ? T.categoryAfterSave : (setUp && !categories.length ? T.categoryUnavailable : base);
+  }
+
+  function drawMoney() {
+    show($('cd-no-paypal'), !money.hasPaypal);
+    show($('cd-check-prices'), !!money.checkPrices);
+  }
+
   // Today in the zone the form names (a zone being typed that Intl does not know yet: the shown one).
   function formZone() {
     var typed = $('cd-zone-input').value.trim();
@@ -324,6 +460,9 @@
     drawStatus();
     drawHours();
     drawDaysOff();
+    drawLengths();
+    drawCategories();
+    drawMoney();
     drawSchedule();
   }
 
@@ -353,6 +492,17 @@
     drawDaysOff();
   });
   $('cd-zone-input').addEventListener('change', drawDaysOff);
+  if ($('cd-server')) $('cd-server').addEventListener('change', drawCategories);
+
+  // The six lengths as the server reads them: every length, on or off, with its price in whole cents (a price that is
+  // not a number goes as null, which the server refuses with its own text).
+  function lengthsBody() {
+    var out = {};
+    LENGTH_MINUTES.forEach(function (m) {
+      out[m] = { on: lengths[m].on, price: isNaN(lengths[m].price) ? null : lengths[m].price };
+    });
+    return out;
+  }
 
   $('cd-form').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -370,6 +520,8 @@
       invite: $('cd-invite').value.trim(),
       where: $('cd-where').value,
       notifyRequests: $('cd-notify').checked,
+      lengths: lengthsBody(),
+      categoryId: $('cd-category').disabled ? undefined : $('cd-category').value,
     }).then(function (answer) {
       saving = false;
       save.disabled = false;
@@ -381,6 +533,9 @@
       var first = !setUp;
       setUp = true;
       settings = answer.data.settings;
+      lengths = copyLengths(settings.lengths);
+      money = answer.data.money || money;
+      categories = answer.data.categories || categories;
       hours = copyHours(settings.hours);
       daysOff = (settings.daysOff || []).slice();
       $('cd-zone-input').value = settings.timeZone;
