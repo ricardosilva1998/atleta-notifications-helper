@@ -164,7 +164,8 @@ function save(streamer, body, { db, followUps, ttsAvailable = false }) {
   try {
     db.runInTransaction(() => {
       for (const p of plan) {
-        if (write(db, streamer.id, p.key, p.setting, p.value, p.target) === false && p.setting.writer === 'watcher') throw notFound;
+        const written = write(db, streamer.id, p.key, p.setting, p.value, p.target);
+        if ((written === false || written === null) && p.setting.writer === 'watcher') throw notFound;
       }
     });
   } catch (e) {

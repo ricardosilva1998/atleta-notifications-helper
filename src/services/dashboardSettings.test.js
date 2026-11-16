@@ -163,8 +163,8 @@ describe('settings that need something first', () => {
     const noWatcher = { guilds: { [GUILD]: {} }, watchers: [] };
     assert.deepEqual(run({ key: 'notify_live', guildId: GUILD, value: 1 }, noWatcher).result.code, 'no_channel');
     const offWithout = run({ key: 'notify_live', guildId: GUILD, value: 0 }, noWatcher);
-    assert.deepEqual(offWithout.result.values, { notify_live: 0 });
-    assert.deepEqual(offWithout.writes, [], 'nothing to switch off');
+    assert.deepEqual(offWithout.result, { ok: false, code: 'not_found', status: 404 }, 'the watcher is gone: not reported as saved');
+    assert.deepEqual(offWithout.writes, [], 'nothing written');
     const gone = run({ key: 'notify_live', guildId: GUILD, value: 0 }, { guilds, watchers, watcherChanges: false });
     assert.deepEqual(gone.result, { ok: false, code: 'not_found', status: 404 }, 'no row changed');
   });
