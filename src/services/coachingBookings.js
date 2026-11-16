@@ -167,6 +167,7 @@ async function messageViewer(streamer, settings, row, kind, { roomUrl = null, re
       whereText: settings && settings.where_text ? settings.where_text : '',
       bookingUrl: bookingUrl(streamer),
       bookingLink,
+      myBookingsUrl: `${config.app.url}/my-bookings?booking=${encodeURIComponent(row.id)}`,
       roomUrl,
       reason: cancelReason,
       refund,

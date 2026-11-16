@@ -2551,6 +2551,7 @@
   "coaching.state.not_rescheduled": "未改期",
   "cards.coaching.refundsPending": "待办退款：{{count}}",
   "cards.coaching.refundsPendingAction": "打开预约",
+  "coaching.message.myBookings": "查看你的所有预约：{{url}}",
   "coaching.page.payNote": "{{name}} 将看到你的 PayPal 姓名和邮箱，以便在需要时向你退款。",
   "coaching.page.cancelReason": "教练的理由：{{reason}}",
   "coaching.page.refundPending": "你的教练将向你退款。",

@@ -215,6 +215,15 @@ describe('answering', () => {
     assert.match(discord.sent[0].payload.embeds[0].title, new RegExp(s.twitch_display_name));
   });
 
+  test('accept and decline messages carry the My bookings link with the booking id', async () => {
+    const one = await waiting();
+    await svc.accept(one.s, one.id, { now: NOW });
+    assert.ok(discord.sent[0].payload.embeds[0].description.includes(`https://atleta.test/my-bookings?booking=${one.id}`));
+    const two = await waiting(addStreamer(), viewer(2));
+    await svc.decline(two.s, two.id, { now: NOW });
+    assert.ok(discord.sent[0].payload.embeds[0].description.includes(`/my-bookings?booking=${two.id}`));
+  });
+
   test('a refused message is kept as messageError and the booking stays confirmed', async () => {
     const { s, id } = await waiting();
     discord.sendResult = { ok: false, reason: 'unreachable' };

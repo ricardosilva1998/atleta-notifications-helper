@@ -2551,6 +2551,7 @@
   "coaching.state.not_rescheduled": "Não reagendada",
   "cards.coaching.refundsPending": "Reembolsos por fazer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir as marcações",
+  "coaching.message.myBookings": "Vê todas as tuas marcações: {{url}}",
   "coaching.page.payNote": "{{name}} vai ver o teu nome e email do PayPal, caso precise de te devolver o dinheiro.",
   "coaching.page.cancelReason": "Motivo do teu treinador: {{reason}}",
   "coaching.page.refundPending": "O teu treinador vai devolver-te o dinheiro.",

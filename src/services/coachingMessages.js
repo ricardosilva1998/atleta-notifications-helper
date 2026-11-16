@@ -72,12 +72,13 @@ function rescheduleLines(kind, { booking, t, bookingLink, roomUrl, guildName, re
   return lines;
 }
 
-function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, bookingLink, roomUrl, reason, refund, lang, t }) {
+function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, bookingLink, myBookingsUrl, roomUrl, reason, refund, lang, t }) {
+  const mine = myBookingsUrl ? [t('coaching.message.myBookings', { url: myBookingsUrl })] : [];
   if (VIEWER_RESCHEDULE.includes(kind)) {
     return {
       embeds: [{
         title: t(`coaching.message.${kind}.title`, { streamer: streamerName }),
-        description: rescheduleLines(kind, { booking, t, bookingLink: bookingLink || bookingUrl, roomUrl, guildName, refund, side: 'viewer' }).join('\n'),
+        description: rescheduleLines(kind, { booking, t, bookingLink: bookingLink || bookingUrl, roomUrl, guildName, refund, side: 'viewer' }).concat(mine).join('\n'),
         color: VIEWER_COLORS[kind] || RED,
       }],
     };
@@ -111,7 +112,7 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
   return {
     embeds: [{
       title: t(`coaching.message.${kind}.title`, { streamer: streamerName }),
-      description: lines.join('\n'),
+      description: lines.concat(mine).join('\n'),
       color: VIEWER_COLORS[kind] || RED,
     }],
   };

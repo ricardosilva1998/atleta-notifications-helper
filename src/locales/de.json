@@ -2551,6 +2551,7 @@
   "coaching.state.not_rescheduled": "Nicht verschoben",
   "cards.coaching.refundsPending": "Offene Rückerstattungen: {{count}}",
   "cards.coaching.refundsPendingAction": "Buchungen öffnen",
+  "coaching.message.myBookings": "Alle deine Buchungen ansehen: {{url}}",
   "coaching.page.payNote": "{{name}} sieht deinen PayPal-Namen und deine E-Mail-Adresse, falls eine Rückerstattung nötig ist.",
   "coaching.page.cancelReason": "Grund deines Coaches: {{reason}}",
   "coaching.page.refundPending": "Dein Coach erstattet dir den Betrag.",

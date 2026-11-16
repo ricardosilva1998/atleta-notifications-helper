@@ -219,3 +219,27 @@ describe('reschedule messages', () => {
     }
   });
 });
+
+describe('every viewer message links to My bookings', () => {
+  const base = {
+    booking: booking({ id: 42, original_starts_at: 1793000000000, proposal_starts_at: 1793100000000 }),
+    streamerName: 'Coach', guildName: 'Coach HQ', bookingUrl: 'https://x/coaching/coach',
+    bookingLink: 'https://x/coaching/coach?booking=42', myBookingsUrl: 'https://x/my-bookings?booking=42', t,
+  };
+  const kinds = ['accepted', 'acceptedPay', 'confirmed', 'declined', 'cancelled', 'refunded', 'expired',
+    'rescheduleProposed', 'rescheduleAsk', 'proposal', 'proposalLapsed', 'rescheduleAgreed', 'notRescheduled'];
+
+  for (const kind of kinds) {
+    test(`${kind} carries the link`, () => {
+      const d = m.viewerMessage(kind, base).embeds[0].description;
+      assert.ok(d.includes('https://x/my-bookings?booking=42'), kind);
+    });
+  }
+
+  test('declined and cancelled keep the link to the coach page to book again', () => {
+    for (const kind of ['declined', 'cancelled']) {
+      const d = m.viewerMessage(kind, base).embeds[0].description;
+      assert.ok(d.includes('https://x/coaching/coach'), kind);
+    }
+  });
+});
