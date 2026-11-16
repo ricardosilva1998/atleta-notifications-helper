@@ -26,8 +26,10 @@ const scheduleUrl = () => `${config.app.url}/dashboard/coaching`;
 const claimedGuildIds = (streamer) => db.getGuildsForStreamer(streamer.id).map((g) => g.guild_id);
 
 // The room's link while it is open; its error code while it failed; what became of the transcript afterwards.
-function roomFields(room, { forViewer = false } = {}) {
-  const open = room && (room.state === 'open' || room.state === 'closing') && room.channel_id;
+// Only a session that is on (confirmed, or rescheduling with its room kept) shows a room: an ended one never does.
+const ROOM_SHOWN_FOR = ['confirmed', 'rescheduling'];
+function roomFields(room, row, { forViewer = false } = {}) {
+  const open = room && ROOM_SHOWN_FOR.includes(row.status) && (room.state === 'open' || room.state === 'closing') && room.channel_id;
   return {
     roomUrl: open ? rooms.roomUrlOf(room) : null,
     roomError: !forViewer && room && room.state === 'failed' ? room.error || 'failed' : null,
@@ -35,7 +37,32 @@ function roomFields(room, { forViewer = false } = {}) {
   };
 }
 
+// What a booking owes: a refund status read off its payments, the same for both sides (a flag, nothing about the payer).
+function refundStateOf(payments) {
+  if (payments.some((p) => p.refund_status === 'pending')) return 'pending';
+  if (payments.some((p) => p.refund_status === 'refunded')) return 'refunded';
+  return null;
+}
+
+// The coach's list of payments, one per capture, each with its refund status (null: nothing owed): the payer's PayPal
+// details are in it, so it is built only for the coach's views (never for a viewer's).
+function refundsOf(payments) {
+  return payments.map((p) => ({
+    orderId: p.order_id,
+    amountCents: p.amount_cents,
+    currency: p.currency,
+    payerName: p.payer_name || null,
+    payerEmail: p.payer_email || null,
+    captureId: p.capture_id || null,
+    status: p.refund_status,
+    reason: p.refund_reason || null,
+  }));
+}
+
 function bookingView(row, now, room = null, opts = {}) {
+  const payments = opts.payments || db.listCoachingPaymentsForBookings([row.id]);
+  const refundState = refundStateOf(payments);
+  const coachOnly = opts.forViewer ? {} : { refunds: refundsOf(payments) };
   return {
     id: row.id,
     startsAt: row.starts_at,
@@ -54,14 +81,23 @@ function bookingView(row, now, room = null, opts = {}) {
     paidAmountCents: row.paid_amount_cents == null ? null : row.paid_amount_cents,
     paidCurrency: row.paid_currency || null,
     paymentIssue: row.payment_issue || null,
-    ...roomFields(room, opts),
+    cancelReason: row.cancel_reason || '',
+    refundState,
+    refundPending: refundState === 'pending',
+    ...coachOnly,
+    ...roomFields(room, row, opts),
   };
 }
 
 // Several bookings as views, their rooms read in one query.
 function bookingViews(rows, now, opts = {}) {
   const byBooking = new Map(db.listCoachingRoomsForBookings(rows.map((r) => r.id)).map((r) => [r.booking_id, r]));
-  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, opts));
+  const paid = new Map();
+  for (const p of db.listCoachingPaymentsForBookings(rows.map((r) => r.id))) {
+    if (!paid.has(p.booking_id)) paid.set(p.booking_id, []);
+    paid.get(p.booking_id).push(p);
+  }
+  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, { ...opts, payments: paid.get(r.id) || [] }));
 }
 
 // The currency of a streamer's coaching prices: their tip page's.
@@ -111,7 +147,7 @@ function forgetMembers() {
 
 // The viewer's message, awaited: a failure's reason is stored and returned; a message that goes out clears the
 // reason a previous one left.
-async function messageViewer(streamer, settings, row, kind, { roomUrl = null } = {}) {
+async function messageViewer(streamer, settings, row, kind, { roomUrl = null, reason: cancelReason = null, refund = false } = {}) {
   const lang = row.lang || 'en';
   let reason = null;
   try {
@@ -124,6 +160,8 @@ async function messageViewer(streamer, settings, row, kind, { roomUrl = null } =
       whereText: settings && settings.where_text ? settings.where_text : '',
       bookingUrl: bookingUrl(streamer),
       roomUrl,
+      reason: cancelReason,
+      refund,
       lang,
       t: (key, params) => t(lang, key, params),
     });
@@ -245,8 +283,41 @@ async function accept(streamer, id, { now = Date.now() } = {}) {
 
 const decline = (streamer, id, { now = Date.now() } = {}) =>
   decide(streamer, id, { from: ['waiting'], to: 'declined', kind: 'declined', noCode: 'not_waiting' }, now);
-const cancel = (streamer, id, { now = Date.now() } = {}) =>
-  decide(streamer, id, { from: coaching.HOLDING, to: 'cancelled', kind: 'cancelled', noCode: 'not_active', unpaidOnly: true }, now);
+
+// The coach's cancel: a waiting, awaiting-payment or confirmed booking before its start (paid ones too), or a
+// rescheduling one at any time, always with a reason (1-500 characters). Its room and role are deleted at once, a paid
+// booking's payments owe a refund (the coach refunds in PayPal and presses Refunded: Atleta never refunds), and the
+// viewer is messaged with the reason. Discord being down never fails the cancel.
+async function cancel(streamer, id, { reason, now = Date.now() } = {}) {
+  const row = db.getCoachingBooking(id, streamer.id);
+  if (!row) return { ok: false, code: 'not_found' };
+  const parsed = coaching.parseCancelReason(reason);
+  if (!parsed.ok) return { ok: false, code: parsed.code };
+  if (!coaching.canCoachCancel(row, now)) {
+    return { ok: false, code: coaching.HOLDING.includes(row.status) ? 'too_late' : 'not_active' };
+  }
+  const done = db.cancelCoachingBookingByCoach(id, streamer.id, parsed.reason, now);
+  if (!done.ok) return { ok: false, code: 'not_active' };
+  const refund = done.refundPending === true;
+  const [, messageError] = await Promise.all([
+    rooms.removeFor(id, { now }),
+    messageViewer(streamer, db.getCoachingSettings(streamer.id), done.booking, 'cancelled', { reason: parsed.reason, refund }),
+  ]);
+  return { ok: true, booking: { ...done.booking, message_error: messageError, messageError }, refundPending: refund };
+}
+
+// "Refunded": the coach says they refunded this payment in PayPal. Only that payment's streamer, only from pending;
+// Atleta checks nothing with PayPal. The viewer is messaged (a failure is kept on the booking, never fails this).
+async function markRefunded(streamer, orderId, { now = Date.now() } = {}) {
+  if (typeof orderId !== 'string' || !/^[A-Z0-9-]{10,64}$/i.test(orderId)) return { ok: false, code: 'not_found' };
+  const payment = db.getCoachingPayment(orderId);
+  if (!payment || Number(payment.streamer_id) !== Number(streamer.id)) return { ok: false, code: 'not_found' };
+  const updated = db.markCoachingRefunded(orderId, streamer.id, now);
+  if (!updated) return { ok: false, code: 'not_pending' };
+  const booking = db.getCoachingBooking(payment.booking_id, streamer.id);
+  const messageError = booking ? await messageViewer(streamer, db.getCoachingSettings(streamer.id), booking, 'refunded') : null;
+  return { ok: true, payment: updated, booking: booking ? { ...booking, message_error: messageError, messageError } : null };
+}
 
 // The viewer's own booking, waiting, awaiting payment or confirmed (else not_active: answered or withdrawn already), until
 // it starts; never once paid (paid).
@@ -351,6 +422,7 @@ function cardData(streamer, { now = Date.now(), claimedGuildIds: claimed = [] } 
     waiting: bookingViews(waiting.slice(0, 5), now),
     waitingCount: settings ? db.countWaitingCoaching(streamer.id, now) : 0,
     next: confirmed ? bookingViews([confirmed], now)[0] : null,
+    refundsPending: settings ? db.countPendingCoachingRefunds(streamer.id) : 0,
     roomErrors: upcoming.filter((r) => r.status === 'confirmed').length
       ? db.listCoachingRoomsForBookings(upcoming.filter((r) => r.status === 'confirmed').map((r) => r.id)).filter((r) => r.state === 'failed').length
       : 0,
@@ -358,6 +430,6 @@ function cardData(streamer, { now = Date.now(), claimedGuildIds: claimed = [] } 
 }
 
 module.exports = {
-  bookingView, bookingViews, offeredLengths, currencyOf, isMember, forgetMembers, request, accept, decline, cancel, withdraw,
+  bookingView, bookingViews, offeredLengths, currencyOf, isMember, forgetMembers, request, accept, decline, cancel, markRefunded, withdraw,
   afterPayment, afterExpired, checkInvite, checkInviteLater, cardData,
 };

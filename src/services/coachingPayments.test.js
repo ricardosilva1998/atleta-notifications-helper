@@ -55,6 +55,7 @@ function completed(order, over = {}) {
   return {
     id: order.id,
     status: 'COMPLETED',
+    ...(over.payer ? { payer: over.payer } : {}),
     purchase_units: [{
       reference_id: 'default',
       custom_id: over.customId !== undefined ? over.customId : order.customId,
@@ -228,7 +229,14 @@ describe('decideCoachingCapture', () => {
   const decide = (over = {}) => pay.decideCoachingCapture({ streamer, booking, payment, order: completed(order), ...over });
 
   test('a completed capture to the streamer, of the booking\'s amount and currency, counts', () => {
-    assert.deepEqual(decide(), { ok: true, captureId: 'CAP-ORDER0000001', amountCents: 4500, currency: 'EUR' });
+    assert.deepEqual(decide(), { ok: true, captureId: 'CAP-ORDER0000001', amountCents: 4500, currency: 'EUR', payer: null });
+  });
+
+  test('the payer of a verified order is read: name from given name and surname, email, payer id', () => {
+    const payer = { name: { given_name: 'Pat', surname: 'Payer' }, email_address: 'pat@example.com', payer_id: 'PAYERID001' };
+    assert.deepEqual(decide({ order: completed(order, { payer }) }).payer, { name: 'Pat Payer', email: 'pat@example.com', payerId: 'PAYERID001' });
+    assert.deepEqual(decide({ order: completed(order, { payer: { email_address: 'only@example.com' } }) }).payer, { name: null, email: 'only@example.com', payerId: null });
+    assert.equal(decide({ order: completed(order, { payer: {} }) }).payer, null);
   });
 
   test('wrong payee, amount, currency, booking, order or streamer is refused', () => {
@@ -360,6 +368,28 @@ describe('handleReturn', () => {
     const toStreamer = discord.sent.find((m) => m.userId === s.discord_user_id);
     assert.match(toStreamer.payload.embeds[0].title, /paid for their coaching session/);
     assertNoTipEffects();
+  });
+
+  test('the payer from the verified order is saved on the payment, and shown only in the coach\'s views', async () => {
+    const s = addStreamer();
+    const { booking, orderId } = await ordered(s);
+    const payer = { name: { given_name: 'Pat', surname: 'Payer' }, email_address: 'pat@example.com', payer_id: 'PAYERID001' };
+    paypal.capture = (order) => { order.captured = true; return reply(201, completed(order, { payer })); };
+    const logged = [];
+    const { log, error } = console;
+    console.log = (...a) => logged.push(a.join(' '));
+    console.error = (...a) => logged.push(a.join(' '));
+    let result;
+    try { result = await pay.handleReturn({ streamer: s, orderId, now: NOW + 5 * MIN }); } finally { console.log = log; console.error = error; }
+    assert.equal(result.ok, true);
+    await result.followUp;
+    const stored = db.getCoachingPayment(orderId);
+    assert.deepEqual([stored.payer_name, stored.payer_email, stored.payer_id], ['Pat Payer', 'pat@example.com', 'PAYERID001']);
+    assert.equal(stored.refund_status, null, 'a normal payment owes no refund');
+    assert.doesNotMatch(logged.join('\n'), /pat@example|Pat Payer|PAYERID001/, 'never logged');
+    const row = bookingNow(booking.id);
+    assert.doesNotMatch(JSON.stringify(svc.bookingViews([row], NOW, { forViewer: true })), /pat@example|Pat Payer|PAYERID001/);
+    assert.match(JSON.stringify(svc.bookingViews([row], NOW)), /pat@example\.com/);
   });
 
   test('a replayed return records once and captures once', async () => {

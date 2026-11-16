@@ -22,7 +22,12 @@ const realFs = require('fs');
 let db;
 let svc;
 // The room hook (services/coachingRooms.js): records which bookings asked for a room.
-const rooms = { made: [], url: null, async makeFor(id) { this.made.push(id); return this.url ? { url: this.url } : null; } };
+const rooms = {
+  made: [], removed: [], url: null,
+  async makeFor(id) { this.made.push(id); return this.url ? { url: this.url } : null; },
+  async removeFor(id) { this.removed.push(id); return true; },
+  roomUrlOf(room) { return `https://discord.com/channels/${room.guild_id}/${room.channel_id}`; },
+};
 let counter = 0;
 const discord = {
   sent: [], sendResult: { ok: true }, member: true, memberCalls: 0, memberGate: null,
@@ -75,7 +80,7 @@ beforeEach(() => {
   discord.inviteCalls = 0; discord.inviteGate = null;
   discord.invite = { ok: true, guildId: '123', guildName: 'HQ' };
   svc.forgetMembers(); // each test starts with no membership answer kept
-  rooms.made = []; rooms.url = null;
+  rooms.made = []; rooms.removed = []; rooms.url = null;
 });
 
 const coachingRules = require('./coaching');
@@ -241,12 +246,12 @@ describe('answering', () => {
     const b = await waiting();
     await svc.accept(b.s, b.id, { now: NOW });
     discord.sent = [];
-    const c = await svc.cancel(b.s, b.id, { now: NOW });
+    const c = await svc.cancel(b.s, b.id, { reason: 'I am ill', now: NOW });
     assert.equal(c.booking.status, 'cancelled');
     assert.match(discord.sent[0].payload.embeds[0].title, /cancelled/);
-    assert.deepEqual(await svc.cancel(b.s, b.id, { now: NOW }), { ok: false, code: 'not_active' });
+    assert.deepEqual(await svc.cancel(b.s, b.id, { reason: 'I am ill', now: NOW }), { ok: false, code: 'not_active' });
     const late = await waiting();
-    assert.equal((await svc.cancel(late.s, late.id, { now: FREE })).code, 'too_late');
+    assert.equal((await svc.cancel(late.s, late.id, { reason: 'I am ill', now: FREE })).code, 'too_late');
   });
 
   test('a booking id of another streamer answers not_found (Review Focus 4)', async () => {
@@ -276,7 +281,7 @@ describe('answering', () => {
     assert.deepEqual(await svc.withdraw(a.s, a.v, a.id, { now: NOW }), { ok: false, code: 'not_active' }, 'declined');
     const b = await waiting(addStreamer(), viewer(2));
     await svc.accept(b.s, b.id, { now: NOW });
-    await svc.cancel(b.s, b.id, { now: NOW });
+    await svc.cancel(b.s, b.id, { reason: 'I am ill', now: NOW });
     assert.deepEqual(await svc.withdraw(b.s, b.v, b.id, { now: NOW }), { ok: false, code: 'not_active' }, 'cancelled');
     const c = await waiting(addStreamer(), viewer(3));
     assert.deepEqual(await svc.withdraw(c.s, c.v, c.id, { now: FREE }), { ok: false, code: 'too_late' });
@@ -293,7 +298,7 @@ describe('answering', () => {
     await svc.accept(s, id, { now: NOW });
     assert.equal(db.getCoachingBooking(id, s.id).message_error, 'unreachable');
     discord.sendResult = { ok: true };
-    const c = await svc.cancel(s, id, { now: NOW });
+    const c = await svc.cancel(s, id, { reason: 'I am ill', now: NOW });
     assert.equal(c.ok, true);
     assert.equal(c.booking.messageError, null);
     assert.equal(db.getCoachingBooking(id, s.id).message_error, null);
@@ -414,8 +419,9 @@ describe('cardData', () => {
     assert.equal(card.next.id, ids[1]);
     assert.equal(card.next.state, 'confirmed');
     assert.deepEqual(Object.keys(card.next).sort(), [
-      'currency', 'id', 'messageError', 'minutes', 'note', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy', 'paymentIssue',
-      'priceCents', 'roomError', 'roomUrl', 'startsAt', 'state', 'transcriptStatus', 'viewerAvatar', 'viewerName', 'viewerUsername',
+      'cancelReason', 'currency', 'id', 'messageError', 'minutes', 'note', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy',
+      'paymentIssue', 'priceCents', 'refundPending', 'refundState', 'refunds', 'roomError', 'roomUrl', 'startsAt', 'state',
+      'transcriptStatus', 'viewerAvatar', 'viewerName', 'viewerUsername',
     ]);
     db.setCoachingOpen(s.id, 1);
     db.recordInviteCheck(s.id, 'abc', 0, NOW);
@@ -510,14 +516,13 @@ describe('lengths, prices and the accept change (planning decisions 3, 5, 6, 9)'
     assert.equal(a.booking.status, 'confirmed');
   });
 
-  test('Cancel and Withdraw of a paid booking answer paid and change nothing; before payment both work', async () => {
+  test('Withdraw of a paid booking answers paid and changes nothing; before payment Withdraw and Cancel work', async () => {
     const s = addStreamer();
     const v = viewer(1);
     const r = await askPaid(s, v);
     await svc.accept(s, r.booking.id, { now: NOW });
     const rec = db.recordCoachingPayment({ bookingId: r.booking.id, orderId: 'ORDERPAID0001', captureId: 'CAPPAID0001', amountCents: 4500, currency: 'EUR', now: NOW + MIN });
     assert.equal(rec.result, 'recorded');
-    assert.deepEqual(await svc.cancel(s, r.booking.id, { now: NOW + 2 * MIN }), { ok: false, code: 'paid' });
     assert.deepEqual(await svc.withdraw(s, v, r.booking.id, { now: NOW + 2 * MIN }), { ok: false, code: 'paid' });
     const row = db.getCoachingBooking(r.booking.id, s.id);
     assert.equal(row.status, 'confirmed');
@@ -528,10 +533,10 @@ describe('lengths, prices and the accept change (planning decisions 3, 5, 6, 9)'
     assert.equal((await svc.withdraw(s, viewer(2), r2.booking.id, { now: NOW })).booking.status, 'withdrawn', 'awaiting payment: Withdraw works');
     const r3 = await askPaid(s, viewer(3), { startsAt: FREE + 48 * HOUR });
     await svc.accept(s, r3.booking.id, { now: NOW });
-    assert.equal((await svc.cancel(s, r3.booking.id, { now: NOW })).booking.status, 'cancelled', 'awaiting payment: Cancel works');
+    assert.equal((await svc.cancel(s, r3.booking.id, { reason: 'I am ill', now: NOW })).booking.status, 'cancelled', 'awaiting payment: Cancel works');
   });
 
-  test('a payment recorded between the check and the update wins: Cancel answers paid', async () => {
+  test('a payment recorded between the check and the update is caught by the cancel: it owes a refund', async () => {
     const s = addStreamer();
     const r = await askPaid(s, viewer(1));
     await svc.accept(s, r.booking.id, { now: NOW });
@@ -545,9 +550,12 @@ describe('lengths, prices and the accept change (planning decisions 3, 5, 6, 9)'
       return row; // the row as it was read before the payment
     };
     try {
-      assert.deepEqual(await svc.cancel(s, r.booking.id, { now: NOW }), { ok: false, code: 'paid' });
+      const done = await svc.cancel(s, r.booking.id, { reason: 'I am ill', now: NOW });
+      assert.equal(done.ok, true);
+      assert.equal(done.refundPending, true, 'the payment that landed in between owes a refund');
     } finally { db.getCoachingBooking = real; }
-    assert.equal(db.getCoachingBooking(r.booking.id, s.id).status, 'confirmed');
+    assert.equal(db.getCoachingBooking(r.booking.id, s.id).status, 'cancelled');
+    assert.equal(db.getCoachingPayment('ORDERRACE0001').refund_status, 'pending');
   });
 
   test('offeredLengths lists the lengths that are on, a paid one only with a PayPal email', () => {
@@ -555,5 +563,143 @@ describe('lengths, prices and the accept change (planning decisions 3, 5, 6, 9)'
     assert.deepEqual(svc.offeredLengths({ paypal_email: 'a@b.c' }, settings).map((l) => [l.minutes, l.priceCents]),
       [[30, 0], [60, 2500], [120, 4500], [180, 6000], [240, 7000], [300, 8000]]);
     assert.deepEqual(svc.offeredLengths({ paypal_email: null }, settings).map((l) => l.minutes), [30]);
+  });
+});
+
+describe('cancel with a reason, the refund step and the payer details', () => {
+  const MIN = 60e3;
+  const PAYER = { name: 'Pat Payer', email: 'pat@example.com', payerId: 'PAYERID001' };
+  let orderSeq = 0;
+  async function paidConfirmed(s = addStreamer(), v = viewer(1), orderId = `ORDERCANCEL${String(++orderSeq).padStart(3, '0')}`) {
+    const r = await ask(s, v, { minutes: 120 });
+    await svc.accept(s, r.booking.id, { now: NOW });
+    const rec = db.recordCoachingPayment({ bookingId: r.booking.id, orderId, captureId: `CAP${orderId}`, amountCents: 4500, currency: 'EUR', now: NOW + MIN, payer: PAYER });
+    assert.equal(rec.result, 'recorded');
+    discord.sent = [];
+    return { s, v, id: r.booking.id, orderId };
+  }
+
+  test('a cancel needs a reason of 1 to 500 characters: nothing changes without one', async () => {
+    const s = addStreamer();
+    const r = await ask(s, viewer(1));
+    await svc.accept(s, r.booking.id, { now: NOW });
+    for (const reason of [undefined, null, '', '   \n ', 'x'.repeat(501), 42]) {
+      assert.deepEqual(await svc.cancel(s, r.booking.id, { reason, now: NOW }), { ok: false, code: 'bad_reason' });
+    }
+    assert.equal(db.getCoachingBooking(r.booking.id, s.id).status, 'confirmed');
+    const ok = await svc.cancel(s, r.booking.id, { reason: `${'x'.repeat(250)}\n${'y'.repeat(249)}`, now: NOW });
+    assert.equal(ok.ok, true);
+    assert.equal(db.getCoachingBooking(r.booking.id, s.id).cancel_reason.length, 500, 'line breaks become spaces');
+    assert.ok(!db.getCoachingBooking(r.booking.id, s.id).cancel_reason.includes('\n'));
+  });
+
+  test('cancelling a paid confirmed session: cancelled, room removed, payment pending, the viewer is told the reason and the refund', async () => {
+    const { s, v, id, orderId } = await paidConfirmed();
+    const done = await svc.cancel(s, id, { reason: 'I have the flu, sorry', now: NOW + 2 * MIN });
+    assert.equal(done.ok, true);
+    assert.equal(done.refundPending, true);
+    assert.equal(done.booking.status, 'cancelled');
+    assert.deepEqual(rooms.removed, [id]);
+    assert.equal(db.getCoachingPayment(orderId).refund_status, 'pending');
+    assert.equal(db.getCoachingPayment(orderId).payer_email, 'pat@example.com');
+    assert.equal(discord.sent[0].userId, v.discordUserId);
+    const embed = discord.sent[0].payload.embeds[0];
+    assert.match(embed.title, /cancelled/);
+    assert.match(embed.description, /I have the flu, sorry/);
+    assert.match(embed.description, /refund you/);
+  });
+
+  test('an unpaid cancel owes nothing; a booking after its start cannot be cancelled (too_late), a rescheduling one can', async () => {
+    const s = addStreamer();
+    const r = await ask(s, viewer(1));
+    await svc.accept(s, r.booking.id, { now: NOW });
+    const done = await svc.cancel(s, r.booking.id, { reason: 'Clash', now: NOW });
+    assert.equal(done.refundPending, false);
+    assert.doesNotMatch(discord.sent.at(-1).payload.embeds[0].description, /refund/);
+    const late = await ask(s, viewer(2), { startsAt: NEXT_FREE + 24 * HOUR });
+    await svc.accept(s, late.booking.id, { now: NOW });
+    assert.equal((await svc.cancel(s, late.booking.id, { reason: 'Clash', now: NEXT_FREE + 25 * HOUR })).code, 'too_late');
+    const re = db.startCoachingReschedule(late.booking.id, s.id, 'ask', null, NOW + MIN);
+    assert.equal(re.ok, true);
+    const after = await svc.cancel(s, late.booking.id, { reason: 'Clash', now: NEXT_FREE + 25 * HOUR });
+    assert.equal(after.ok, true);
+    assert.equal(after.booking.status, 'cancelled');
+  });
+
+  test('Discord down never fails a cancel: the failure is kept as messageError', async () => {
+    const { s, id } = await paidConfirmed();
+    discord.sendResult = { ok: false, reason: 'unreachable' };
+    const done = await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    assert.equal(done.ok, true);
+    assert.equal(done.booking.messageError, 'unreachable');
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'cancelled');
+  });
+
+  test('a cancelled booking shows no room link, only a confirmed one does', async () => {
+    const { s, id } = await paidConfirmed();
+    db.createCoachingRoom({ bookingId: id, streamerId: s.id, guildId: '123', categoryId: '5', closeAt: NOW + 9 * HOUR, now: NOW });
+    db.updateCoachingRoom(id, { channel_id: '555', role_id: '666', state: 'open' }, NOW);
+    assert.match(svc.bookingViews([db.getCoachingBooking(id, s.id)], NOW)[0].roomUrl, /discord\.com\/channels\/123\/555/);
+    await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    const row = db.getCoachingBooking(id, s.id);
+    assert.equal(svc.bookingViews([row], NOW)[0].roomUrl, null);
+    assert.equal(svc.bookingViews([row], NOW, { forViewer: true })[0].roomUrl, null);
+  });
+
+  test('the coach sees the payer and each refund; no viewer view carries payer details or the payments', async () => {
+    const { s, id, orderId } = await paidConfirmed();
+    await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    const row = db.getCoachingBooking(id, s.id);
+    const coachView = svc.bookingViews([row], NOW)[0];
+    assert.equal(coachView.cancelReason, 'Flu');
+    assert.equal(coachView.refundPending, true);
+    assert.deepEqual(coachView.refunds, [{
+      orderId, amountCents: 4500, currency: 'EUR', payerName: 'Pat Payer', payerEmail: 'pat@example.com',
+      captureId: `CAP${orderId}`, status: 'pending', reason: 'cancelled',
+    }]);
+    const viewerViews = [svc.bookingViews([row], NOW, { forViewer: true })[0], svc.bookingView(row, NOW, null, { forViewer: true })];
+    for (const view of viewerViews) {
+      const text = JSON.stringify(view);
+      assert.doesNotMatch(text, /pat@example|Pat Payer|PAYERID001|refunds|payerEmail|CAPORDER/);
+      assert.equal(view.refundPending, true, 'only the flag, for "your coach will refund you"');
+      assert.equal(view.cancelReason, 'Flu');
+    }
+  });
+
+  test('cardData counts the pending refunds', async () => {
+    const { s, id } = await paidConfirmed();
+    assert.equal(svc.cardData(s, { now: NOW, claimedGuildIds: ['123'] }).refundsPending, 0);
+    await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    assert.equal(svc.cardData(s, { now: NOW, claimedGuildIds: ['123'] }).refundsPending, 1);
+  });
+
+  test('Refunded: only that payment\'s streamer, only from pending, and the viewer is messaged', async () => {
+    const { s, v, id, orderId } = await paidConfirmed();
+    await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    discord.sent = [];
+    const other = addStreamer();
+    assert.deepEqual(await svc.markRefunded(other, orderId, { now: NOW + 3 * MIN }), { ok: false, code: 'not_found' });
+    assert.deepEqual(await svc.markRefunded(s, 'NOSUCHORDER01', { now: NOW + 3 * MIN }), { ok: false, code: 'not_found' });
+    assert.deepEqual(await svc.markRefunded(s, 'bad id!', { now: NOW + 3 * MIN }), { ok: false, code: 'not_found' });
+    assert.equal(db.getCoachingPayment(orderId).refund_status, 'pending');
+    assert.equal(discord.sent.length, 0);
+    const done = await svc.markRefunded(s, orderId, { now: NOW + 3 * MIN });
+    assert.equal(done.ok, true);
+    assert.equal(done.payment.refund_status, 'refunded');
+    assert.equal(db.getCoachingPayment(orderId).refunded_at, NOW + 3 * MIN);
+    assert.equal(discord.sent[0].userId, v.discordUserId);
+    assert.match(discord.sent[0].payload.embeds[0].title, /refunded your coaching session/);
+    assert.deepEqual(await svc.markRefunded(s, orderId, { now: NOW + 4 * MIN }), { ok: false, code: 'not_pending' });
+    assert.equal(svc.bookingViews([db.getCoachingBooking(id, s.id)], NOW)[0].refundState, 'refunded');
+  });
+
+  test('Refunded with Discord down still records it', async () => {
+    const { s, id, orderId } = await paidConfirmed();
+    await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
+    discord.sendResult = { ok: false, reason: 'not_ready' };
+    const done = await svc.markRefunded(s, orderId, { now: NOW + 3 * MIN });
+    assert.equal(done.ok, true);
+    assert.equal(done.booking.messageError, 'not_ready');
+    assert.equal(db.getCoachingPayment(orderId).refund_status, 'refunded');
   });
 });

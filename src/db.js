@@ -6316,6 +6316,15 @@ function markCoachingRefunded(orderId, streamerId, now) {
   return info.changes ? getCoachingPayment(orderId) : null;
 }
 
+// Every captured payment of the given bookings (the coach's schedule shows each one's refund state and payer).
+function listCoachingPaymentsForBookings(bookingIds) {
+  const ids = bookingIds.filter((n) => Number.isInteger(n));
+  if (!ids.length) return [];
+  return db.prepare(
+    `SELECT * FROM coaching_payments WHERE status = 'captured' AND booking_id IN (${ids.map(() => '?').join(',')}) ORDER BY captured_at`
+  ).all(...ids);
+}
+
 function listPendingCoachingRefunds(streamerId) {
   return db.prepare(
     "SELECT * FROM coaching_payments WHERE streamer_id = ? AND refund_status = 'pending' ORDER BY refund_pending_at LIMIT 200"
@@ -7285,7 +7294,7 @@ module.exports = {
   markCoachingPaymentRefused, recordCoachingPayment,
   updateCoachingRoomClose, startCoachingReschedule, proposeCoachingTime, acceptCoachingProposal, dropCoachingProposal,
   closeCoachingReschedule, cancelCoachingBookingByCoach, listDueReschedules, markCoachingRefunded,
-  listPendingCoachingRefunds, countPendingCoachingRefunds,
+  listPendingCoachingRefunds, countPendingCoachingRefunds, listCoachingPaymentsForBookings,
   createCoachingRoom, updateCoachingRoom, getCoachingRoom, listCoachingRoomsForBookings, listDueCoachingRooms,
   listMakingCoachingRooms, listCoachingRoomsToRemove,
   cleanupOldCoachingBookings, createViewerSession, getViewerSession, deleteViewerSession, cleanExpiredViewerSessions,

@@ -420,6 +420,47 @@ describe('closeDue', () => {
   });
 });
 
+describe('removeFor (a cancelled session)', () => {
+  test('deletes the channel and role at once, with no transcript, and closes the row as cancelled', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    calls.length = 0;
+    assert.equal(await rooms.removeFor(booking.id, { now: NOW }), true);
+    assert.deepEqual(names(), ['deleteChannel', 'deleteRole']);
+    const row = db.getCoachingRoom(booking.id);
+    assert.deepEqual([row.state, row.transcript_status], ['closed', 'cancelled']);
+    assert.deepEqual(discord.sent, [], 'no transcript is sent');
+    assert.equal(await rooms.removeFor(booking.id, { now: NOW }), true, 'again: nothing left to do');
+    assert.equal(await rooms.removeFor(987654, { now: NOW }), true, 'a booking with no room');
+  });
+
+  test('with Discord down the row stays closing and cancelled; closeDue finishes it later without a transcript', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    calls.length = 0;
+    discord.ready = false;
+    assert.equal(await rooms.removeFor(booking.id, { now: NOW }), false);
+    let row = db.getCoachingRoom(booking.id);
+    assert.deepEqual([row.state, row.transcript_status], ['closing', 'cancelled']);
+    discord.ready = true;
+    await rooms.closeDue({ now: NOW + 1 });
+    row = db.getCoachingRoom(booking.id);
+    assert.equal(row.state, 'closed');
+    assert.deepEqual(discord.sent, []);
+  });
+
+  test('a delete that fails never throws and leaves the row for closeDue', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    fail.deleteChannel = new Error('boom');
+    assert.equal(await rooms.removeFor(booking.id, { now: NOW }), false);
+    assert.equal(db.getCoachingRoom(booking.id).state, 'closing');
+  });
+});
+
 describe('removeAllFor', () => {
   test('deletes the channel and role of every open room of the streamer, other streamers\' rooms are left', async () => {
     const a = addStreamer();

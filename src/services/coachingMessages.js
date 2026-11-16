@@ -6,7 +6,7 @@
 // escapeLinkText; the send itself adds allowedMentions: { parse: [] }.
 //
 // Viewer kinds: accepted (a free length, confirmed at once), acceptedPay (pay to confirm), confirmed (paid), declined,
-// cancelled, expired (not paid in time). Streamer kinds: request, withdrawn, paid, unpaid (not paid in time), paymentLate (a payment that
+// cancelled (with the coach's reason, and a refund line when a payment is owed), refunded, expired (not paid in time). Streamer kinds: request, withdrawn, paid, unpaid (not paid in time), paymentLate (a payment that
 // arrived for a booking that could not take it: to be refunded in PayPal).
 
 const { escapeLinkText } = require('../discord');
@@ -29,9 +29,9 @@ function formatPrice(cents, currency, lang = 'en') {
   }
 }
 
-const VIEWER_COLORS = { accepted: GREEN, acceptedPay: AMBER, confirmed: GREEN };
+const VIEWER_COLORS = { accepted: GREEN, acceptedPay: AMBER, confirmed: GREEN, refunded: GREEN };
 
-function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, roomUrl, lang, t }) {
+function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, roomUrl, reason, refund, lang, t }) {
   const lines = [
     t('coaching.message.when', { time: discordTime(booking.starts_at) }),
     t('coaching.message.length', { minutes: booking.minutes }),
@@ -48,7 +48,14 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
     if (roomUrl) lines.push(t('coaching.message.room', { url: roomUrl }));
     else if (whereText) lines.push(t('coaching.message.where', { where: escapeLinkText(whereText) }));
     if (inviteUrl) lines.push(t('coaching.message.invite', { url: inviteUrl }));
+  } else if (kind === 'refunded') {
+    if (booking.paid_amount_cents != null) {
+      lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));
+    }
+    lines.push(t('coaching.message.refundedBody'));
   } else {
+    if (kind === 'cancelled' && reason) lines.push(t('coaching.message.cancelReason', { reason: escapeLinkText(reason) }));
+    if (kind === 'cancelled' && refund) lines.push(t('coaching.message.willRefund'));
     lines.push(t('coaching.message.pickAnother', { url: bookingUrl }));
   }
   return {

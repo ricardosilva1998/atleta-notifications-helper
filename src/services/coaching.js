@@ -144,6 +144,12 @@ function parseNote(text) {
   return note === null ? { ok: false, code: 'bad_note' } : { ok: true, note };
 }
 
+// The coach's reason for a cancel: required, 1 to CANCEL_REASON_MAX characters, line breaks to spaces.
+function parseCancelReason(text) {
+  const reason = cleanText(text, CANCEL_REASON_MAX);
+  return reason ? { ok: true, reason } : { ok: false, code: 'bad_reason' };
+}
+
 const pad = (n, width = 2) => String(n).padStart(width, '0');
 
 function localDateOf(ms, timeZone) {
@@ -270,6 +276,6 @@ module.exports = {
   LENGTHS, STEP_MINUTES, HORIZON_DAYS, LEAD_MS, MAX_UPCOMING, MAX_REQUESTS_PER_DAY, NOTE_MAX, WHERE_MAX, DAYS_OFF_MAX,
   INVITE_CHECK_MS, HOLDING, STATES, PROPOSAL_LAPSE_MS, RESCHEDULE_WINDOW_MS, CANCEL_REASON_MAX, PROPOSAL_NOTE_MAX, DEFAULT_HOURS, DEFAULT_LENGTHS, PRICE_MAX_CENTS, PAY_WINDOW_MS,
   parseLengths, lengthsFor, payBy, canAcceptPaid,
-  parseHours, parseDaysOff, parseInvite, parseWhere, parseNote,
+  parseHours, parseDaysOff, parseInvite, parseWhere, parseNote, parseCancelReason,
   localDateOf, localInstant, freeStarts, viewerRescheduleStarts, coachProposalStarts, canReschedule, canCoachCancel, rescheduleDue, bookingState, outsideHours, bookable,
 };

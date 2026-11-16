@@ -361,6 +361,28 @@ async function closeDue({ now = Date.now(), deps = {} } = {}) {
   return { closed };
 }
 
+// A cancelled (or not rescheduled) session's room goes at once, with no transcript: the row is marked cancelled and due
+// now, then the channel and role are deleted. When Discord cannot do it now the row stays `closing`, and closeDue
+// finishes it on a later pass (it never sends a transcript for a row already marked). Never throws; resolves true when
+// nothing is left on Discord.
+async function removeFor(bookingId, { now = Date.now() } = {}) {
+  try {
+    const room = db.getCoachingRoom(bookingId);
+    if (!room || room.state === 'closed') return true;
+    db.updateCoachingRoom(bookingId, { state: 'closing', transcript_status: 'cancelled', close_at: now }, now);
+    if (running.has(bookingId) || !discord.isReady()) return false;
+    running.add(bookingId);
+    try {
+      if (!(await clean(room))) return false;
+      db.updateCoachingRoom(bookingId, { state: 'closed', error: null }, now);
+      return true;
+    } finally { running.delete(bookingId); }
+  } catch (e) {
+    console.error(`[Coaching] removing room ${bookingId}:`, e && e.message);
+    return false;
+  }
+}
+
 // Before a streamer's rows are deleted (admin Remove): the rooms they hold are deleted on Discord, best effort. The
 // rows are read at once, so the caller may delete them right after; resolves when Discord has been asked. Never throws.
 function removeAllFor(streamerId) {
@@ -375,7 +397,7 @@ function removeAllFor(streamerId) {
 }
 
 module.exports = {
-  makeFor, retry, finishOrCleanMaking, closeDue, removeAllFor, sendTranscripts,
+  makeFor, retry, finishOrCleanMaking, closeDue, removeAllFor, removeFor, sendTranscripts,
   roomOverwrites, roomName, safeFileName, roomUrlOf, planAttachments, buildTranscript, errorCode,
   CLOSE_DELAY_MS, MAKING_STALE_MS, FILE_MAX_BYTES,
 };

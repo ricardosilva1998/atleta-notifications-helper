@@ -460,3 +460,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - New db functions return `{ ok, booking }` or `{ ok:false, code }` (`not_confirmed`, `taken`, `not_rescheduling`, `no_proposal`, `own_proposal`, `too_close`, `not_cancellable`); accept refuses a proposal under 1 h away (`too_close`); drop sets `reschedule_way = 'ask'`; accept keeps `original_starts_at`.
 - Refund pending is set only by coach cancel, reschedule close, and own-payment late/double; `recordCoachingPayment` takes `payer { name, email, payerId }`.
 **Open:** T2 and T3 build the services and routes on these; `STATE_KEYS` in `routes/coaching.js` still lacks the two new states.
+
+### 2026-11-16 22:00 — backend-dev (T2 of coaching cancel, reschedule and refund)
+**Task:** Cancel with a reason, the room bug, payer details and the refund step (services and routes)
+**Files:** `src/services/{coachingBookings,coachingRooms,coachingPayments,coachingMessages,coaching}.js`, `src/routes/coachingDashboard.js`, `src/db.js` (one read: `listCoachingPaymentsForBookings`), `src/locales/*.json` (6 keys + the `bad_length` text), tests
+**Decisions:**
+- `cancel(streamer, id, { reason, now })` needs a reason (`coaching.parseCancelReason`, 1-500, `bad_reason`), cancels paid ones too, removes the room at once (`coachingRooms.removeFor`, no transcript, `transcript_status = cancelled`; with Discord down the row stays `closing` for `closeDue`), and DMs the viewer the reason (+ "your coach will refund you" when `refundPending`). `markRefunded(streamer, orderId)` and `POST /dashboard/api/coaching/payments/:orderId/refunded` record the coach's word (404 other streamer, 409 `not_pending`) and DM the viewer.
+- Views: both sides carry `cancelReason`, `refundState` (`pending|refunded|null`), `refundPending`; only the coach's carry `refunds: [{orderId, amountCents, currency, payerName, payerEmail, captureId, status, reason}]` (every captured payment, status null when nothing is owed). `roomUrl` only for `confirmed`/`rescheduling`. `cardData.refundsPending` counts pending refunds.
+- `decideCoachingCapture` returns `payer {name, email, payerId}` from the verified order; every record path stores it; never logged.
+**Open:** the dashboard page script (`public/js/coaching-dashboard.js`) still posts Cancel without a reason (400 `bad_reason`) until T4; `coaching.dashboard.error.paid` and the old cancel-confirm texts are now unused.

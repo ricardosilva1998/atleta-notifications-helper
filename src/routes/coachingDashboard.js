@@ -46,6 +46,8 @@ const REFUSALS = {
   no_paypal: [409, 'coaching.dashboard.error.no_paypal'],
   too_close: [409, 'coaching.dashboard.error.too_close'],
   paid: [409, 'coaching.dashboard.error.paid'],
+  bad_reason: [400, 'coaching.dashboard.error.bad_reason'],
+  not_pending: [409, 'coaching.dashboard.error.not_pending'],
   bad_category: [400, 'coaching.dashboard.error.bad_category'],
   category_not_found: [400, 'coaching.dashboard.error.category_not_found'],
   category_permissions: [400, 'coaching.dashboard.error.category_permissions'],
@@ -146,9 +148,9 @@ function isOutside(row, rules, now) {
 }
 
 // A booking as the schedule shows it: the booking page's view plus whether it fell outside the hours.
-function viewOf(row, settings, now, room) {
+function viewOf(row, settings, now, room, payments) {
   const rm = room === undefined ? db.getCoachingRoom(row.id) : room;
-  return { ...coachingBookings.bookingView(row, now, rm), outside: settings ? isOutside(row, rulesOf(settings), now) : false };
+  return { ...coachingBookings.bookingView(row, now, rm, payments ? { payments } : {}), outside: settings ? isOutside(row, rulesOf(settings), now) : false };
 }
 
 // The bookings not over yet, by day in the streamer's zone (in time order), and those of the last 30 days, newest first.
@@ -158,8 +160,13 @@ function scheduleOf(streamerId, settings, now) {
   if (!settings) return { days, past };
   const rows = db.getCoachingSchedule(streamerId, now - PAST_DAYS * DAY_MS, now + AHEAD_DAYS * DAY_MS);
   const roomOf = new Map(db.listCoachingRoomsForBookings(rows.map((r) => r.id)).map((r) => [r.booking_id, r]));
+  const paymentsOf = new Map();
+  for (const p of db.listCoachingPaymentsForBookings(rows.map((r) => r.id))) {
+    if (!paymentsOf.has(p.booking_id)) paymentsOf.set(p.booking_id, []);
+    paymentsOf.get(p.booking_id).push(p);
+  }
   for (const row of rows) {
-    const view = viewOf(row, settings, now, roomOf.get(row.id) || null);
+    const view = viewOf(row, settings, now, roomOf.get(row.id) || null, paymentsOf.get(row.id) || []);
     if (row.starts_at + row.minutes * MINUTE_MS <= now) {
       past.unshift(view);
       continue;
@@ -319,19 +326,33 @@ router.post('/api/coaching/open', (req, res) => {
   res.json({ ok: true, open: !!open });
 });
 
-// Accept or Decline a waiting request, Cancel a waiting or confirmed booking; one of this streamer's, not started. The
-// viewer's Discord message is awaited: a message that did not go out is in the answer's messageError.
+// Accept or Decline a waiting request, Cancel a booking (waiting, awaiting payment, confirmed or rescheduling, paid
+// ones too) with a required reason; one of this streamer's. The viewer's Discord message is awaited: a message that did
+// not go out is in the answer's messageError.
 const BOOKING_ID = /^\d{1,15}$/;
 for (const action of ['accept', 'decline', 'cancel']) {
   router.post(`/api/coaching/bookings/:id/${action}`, async (req, res) => {
     const id = BOOKING_ID.test(req.params.id) ? Number(req.params.id) : 0;
     if (!id) return refuse(res, 'not_found');
     const now = Date.now();
-    const result = await coachingBookings[action](req.streamer, id, { now });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const result = await coachingBookings[action](req.streamer, id, action === 'cancel' ? { now, reason: body.reason } : { now });
     if (!result.ok) return refuse(res, result.code);
     res.json({ ok: true, booking: viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) });
   });
 }
+
+// "Refunded": the coach says they refunded one payment in PayPal. Only this streamer's payment, only from pending.
+router.post('/api/coaching/payments/:orderId/refunded', async (req, res) => {
+  const result = await coachingBookings.markRefunded(req.streamer, req.params.orderId, { now: Date.now() });
+  if (!result.ok) return refuse(res, result.code);
+  const now = Date.now();
+  res.json({
+    ok: true,
+    orderId: req.params.orderId,
+    booking: result.booking ? viewOf(result.booking, db.getCoachingSettings(req.streamer.id), now) : null,
+  });
+});
 
 // Retry room: a confirmed session's failed room is made again (the half-made role and channel are deleted first).
 router.post('/api/coaching/bookings/:id/room', async (req, res) => {

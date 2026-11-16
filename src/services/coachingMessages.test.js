@@ -143,4 +143,29 @@ describe('coachingMessages: payment kinds', () => {
     assert.ok(!/Price/.test(m.streamerMessage('request', { booking: booking({ price_cents: 0 }), scheduleUrl: 'u', lang: 'en', t }).embeds[0].description), 'a free one does not');
     for (const k of ['unpaid', 'paid', 'paymentLate', 'request']) missing(s(k).title + s(k).description);
   });
+
+  test('the cancelled message carries the coach\'s reason, escaped, and the refund line only for a paid session', () => {
+    const base = { booking: booking(), streamerName: 'Coach', bookingUrl: 'https://x/coaching/coach', t };
+    const paid = m.viewerMessage('cancelled', { ...base, reason: 'Ill [click](https://evil.example)', refund: true }).embeds[0];
+    assert.match(paid.title, /Coach cancelled your coaching session/);
+    assert.match(paid.description, /Reason: Ill/);
+    assert.match(paid.description, /\\\]\(https/, 'the bracket is escaped, so it cannot become a link');
+    assert.match(paid.description, /Your coach will refund you in PayPal\./);
+    assert.match(paid.description, /https:\/\/x\/coaching\/coach/);
+    const free = m.viewerMessage('cancelled', { ...base, reason: 'Ill', refund: false }).embeds[0];
+    assert.doesNotMatch(free.description, /refund/);
+    const none = m.viewerMessage('cancelled', base).embeds[0];
+    assert.doesNotMatch(none.description, /Reason:/);
+  });
+
+  test('the refunded message names the coach and the amount, and offers nothing to book', () => {
+    const e = m.viewerMessage('refunded', {
+      booking: booking({ paid_amount_cents: 4500, paid_currency: 'EUR' }), streamerName: 'Coach', bookingUrl: 'https://x/b', lang: 'en', t,
+    }).embeds[0];
+    assert.match(e.title, /Coach refunded your coaching session/);
+    assert.match(e.description, /refund has been sent through PayPal/);
+    assert.match(e.description, /45\.00/);
+    assert.doesNotMatch(e.description, /Pick another time/);
+    assert.equal(e.color, 0x3ecf8e);
+  });
 });

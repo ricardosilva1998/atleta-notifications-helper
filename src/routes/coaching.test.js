@@ -607,3 +607,14 @@ describe('payment', () => {
     }
   });
 });
+
+describe('the bad_length text', () => {
+  test('fits six lengths in every language: it names no fixed length', () => {
+    assert.equal(t('en', 'coaching.error.bad_length'), 'Pick one of the lengths on offer.');
+    for (const lang of ['en', 'pt', 'es', 'fr', 'de', 'zh', 'ja']) {
+      const text = t(lang, 'coaching.error.bad_length');
+      assert.notEqual(text, 'coaching.error.bad_length', lang);
+      assert.doesNotMatch(text, /30|60|1 h/, lang);
+    }
+  });
+});

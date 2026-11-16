@@ -402,11 +402,17 @@ describe('Accept, Decline and Cancel', () => {
     const declined = await post(`/dashboard/api/coaching/bookings/${booking.id}/decline`, { streamer: s });
     assert.equal(declined.status, 409);
     assert.deepEqual(declined.json, { ok: false, code: 'not_waiting', error: errorOf('not_waiting') });
-    const cancelled = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    const noReason = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    assert.equal(noReason.status, 400);
+    assert.deepEqual(noReason.json, { ok: false, code: 'bad_reason', error: errorOf('bad_reason') });
+    const cancelled = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s, json: { reason: 'Clash with a race' } });
     assert.equal(cancelled.status, 200);
+    assert.match(discord.sent.at(-1).payload.embeds[0].description, /Clash with a race/);
+    assert.equal(cancelled.json.booking.cancelReason, 'Clash with a race');
+    assert.equal(cancelled.json.booking.roomUrl, null, 'a cancelled session shows no room');
     assert.equal(cancelled.json.booking.state, 'cancelled');
     assert.equal(cancelled.json.booking.messageError, null);
-    const again = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
+    const again = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s, json: { reason: 'Again' } });
     assert.equal(again.status, 409);
     assert.deepEqual(again.json, { ok: false, code: 'not_active', error: errorOf('not_active') });
   });
@@ -429,7 +435,7 @@ describe('Accept, Decline and Cancel', () => {
     assert.equal(db.getCoachingBooking(past.id, s.id).status, 'waiting');
   });
 
-  test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and no Cancel once paid', async () => {
+  test('a paid request: no_paypal without the PayPal email, too_close 24 minutes before its start, and Cancel works once paid and owes a refund', async () => {
     const s = addStreamer();
     const paidHold = (startsAt, now = Date.now()) => {
       const made = db.createCoachingBooking({ streamerId: s.id, viewer: viewer(), startsAt, minutes: 60, note: '', lang: 'en', now, priceCents: 2500, currency: 'EUR' });
@@ -453,10 +459,51 @@ describe('Accept, Decline and Cancel', () => {
     assert.equal(ok.json.booking.state, 'awaiting_payment');
     assert.equal(ok.json.booking.priceCents, 2500);
     db.recordCoachingPayment({ bookingId: booking.id, orderId: 'DASHORDER0001', captureId: 'DASHCAP0001', amountCents: 2500, currency: 'EUR', now: Date.now() });
-    const cancel = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s });
-    assert.equal(cancel.status, 409);
-    assert.deepEqual(cancel.json, { ok: false, code: 'paid', error: errorOf('paid') });
-    assert.equal(db.getCoachingBooking(booking.id, s.id).status, 'confirmed');
+    const cancel = await post(`/dashboard/api/coaching/bookings/${booking.id}/cancel`, { streamer: s, json: { reason: 'Flu' } });
+    assert.equal(cancel.status, 200);
+    assert.equal(cancel.json.booking.state, 'cancelled');
+    assert.equal(cancel.json.booking.refundPending, true);
+    assert.equal(db.getCoachingBooking(booking.id, s.id).status, 'cancelled');
+    assert.equal(db.getCoachingPayment('DASHORDER0001').refund_status, 'pending');
+  });
+
+  test('a cancelled paid session: Refunded is the booking\'s streamer only, only from pending, shows the payer to the coach and never fails on Discord', async () => {
+    const s = addStreamer();
+    db.db.prepare('UPDATE streamers SET paypal_email = ? WHERE id = ?').run('coach@example.com', s.id);
+    const who = viewer();
+    const made = db.createCoachingBooking({ streamerId: s.id, viewer: who, startsAt: freeNow(s)[0], minutes: 60, note: '', lang: 'en', now: Date.now(), priceCents: 2500, currency: 'EUR' });
+    const accepted = await post(`/dashboard/api/coaching/bookings/${made.booking.id}/accept`, { streamer: s });
+    assert.equal(accepted.json.booking.state, 'awaiting_payment');
+    db.recordCoachingPayment({
+      bookingId: made.booking.id, orderId: 'DASHORDER0002', captureId: 'DASHCAP0002', amountCents: 2500, currency: 'EUR', now: Date.now(),
+      payer: { name: 'Pat Payer', email: 'pat@example.com', payerId: 'PAYER0002' },
+    });
+    await post(`/dashboard/api/coaching/bookings/${made.booking.id}/cancel`, { streamer: s, json: { reason: 'Flu' } });
+
+    const page = await get('/dashboard/coaching', { streamer: s });
+    assert.equal(page.status, 200);
+    assert.match(page.text, /pat@example\.com/, 'the coach sees the payer');
+    assert.match(page.text, /DASHCAP0002/);
+
+    const other = addStreamer();
+    const wrong = await post('/dashboard/api/coaching/payments/DASHORDER0002/refunded', { streamer: other });
+    assert.equal(wrong.status, 404);
+    assert.deepEqual(wrong.json, { ok: false, code: 'not_found', error: t('en', 'coaching.error.not_found') });
+    assert.equal(db.getCoachingPayment('DASHORDER0002').refund_status, 'pending');
+    const unknown = await post('/dashboard/api/coaching/payments/NOSUCHORDER01/refunded', { streamer: s });
+    assert.equal(unknown.status, 404);
+
+    discord.dm = { ok: false, reason: 'not_ready' };
+    discord.sent = [];
+    const done = await post('/dashboard/api/coaching/payments/DASHORDER0002/refunded', { streamer: s });
+    assert.equal(done.status, 200);
+    assert.equal(done.json.orderId, 'DASHORDER0002');
+    assert.equal(done.json.booking.refundState, 'refunded');
+    assert.equal(done.json.booking.messageError, 'not_ready');
+    assert.equal(db.getCoachingPayment('DASHORDER0002').refund_status, 'refunded');
+    const again = await post('/dashboard/api/coaching/payments/DASHORDER0002/refunded', { streamer: s });
+    assert.equal(again.status, 409);
+    assert.deepEqual(again.json, { ok: false, code: 'not_pending', error: errorOf('not_pending') });
   });
 
   test('the Coaching category: checked against the server, named permissions refused, kept, cleared and offered', async () => {
@@ -574,7 +621,7 @@ describe('Accept, Decline and Cancel', () => {
     const booking = hold(theirs, viewer(), freeNow(theirs)[0]);
     for (const action of ['accept', 'decline', 'cancel']) {
       for (const id of [booking.id, 'abc', '0', '1e3', '99999999']) {
-        const res = await post(`/dashboard/api/coaching/bookings/${id}/${action}`, { streamer: mine });
+        const res = await post(`/dashboard/api/coaching/bookings/${id}/${action}`, { streamer: mine, json: { reason: 'Flu' } });
         assert.equal(res.status, 404, `${action} ${id}`);
         assert.deepEqual(res.json, { ok: false, code: 'not_found', error: t('en', 'coaching.error.not_found') });
       }
