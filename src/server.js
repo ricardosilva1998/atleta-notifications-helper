@@ -89,7 +89,7 @@ const apiLimiter = rateLimit({
 });
 app.use(generalLimiter);
 // Every /api route (the multistream webhooks, the api router) is behind this one limiter. It is mounted ahead of the body
-// parsers, so a refused request is answered before its body (up to 10 MB on
+// parsers, so a refused request is answered before its body (up to 1 MB on
 // some routes) is read, and it counts each request once: no /api route may be
 // given apiLimiter again.
 app.use('/api', apiLimiter);

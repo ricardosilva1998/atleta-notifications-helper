@@ -109,7 +109,6 @@ src/
 │   ├── backups.js        # Nightly copy to data/backups/bot-YYYY-MM-DD.db (03:30 UTC, SQLite backup API), kept 7 days
 │   ├── storageQuota.js   # Upload guard: 200 MB must stay free on data/, 250 MB of media per streamer
 │   ├── userContentHeaders.js # Headers for uploaded files served from data/ (sandbox CSP, nosniff, attachment)
-│   ├── voicePresence.js  # Public-voice-channel lookup for GET /api/voice/:discordUserId
 │   ├── discordGuards.js  # Who may claim a server; which channels and sub roles a server's settings may use; welcome cap; the bot invite's permissions
 │   ├── discordLogin.js   # Discord bot login with retries (30 s doubling to 10 min); never stops the site
 │   ├── linkSignature.js  # Signs and verifies the /link URLs (HMAC, 15 minutes)
@@ -308,9 +307,6 @@ Runbooks: `docs/operations/deploy.md` (Railway service settings, variables, the 
 - Open Graph meta tags in `header.ejs` for social sharing previews.
 - Domain: `atletanotifications.com` (Cloudflare DNS → Railway).
 - Public tip pages at `/tip/:username` are NOT behind auth middleware.
-- **Public API endpoints (placed BEFORE the `/api` auth middleware in `server.js`, and after the one `apiLimiter`):**
-  - Track maps: `GET /api/track-maps`, `GET /api/track-map/:name`, `POST /api/track-map`
-  - Sessions: `POST /api/session`, `POST /api/session/:id/lap`, `PATCH /api/session/:id/finish`, `GET /api/sessions/:trackName`, `GET /api/session/:id`, `GET /api/session/share/:token`
 - `process.on('unhandledRejection')` and `uncaughtException` handlers in `src/index.js` log and continue (long-running server must not crash on a single bad promise).
 - Token refresh paths in `src/services/twitch.js` and `src/services/spotify.js` use in-flight promise locks (per-streamer for spotify, single global for twitch app auth) to prevent concurrent callers from racing parallel refresh requests. The broadcaster token has a per-streamer lock too, `refreshBroadcasterTokenShared` in `twitch.js`, shared by the follow checks and the polls client (both refresh a token past its stored expiry before their request; the polls client refreshes at most once per call): a refresh token Twitch no longer accepts clears the stored scopes, and any other refresh failure stays retryable.
 - In-memory Maps and caches get a sweeper that drops stale entries and is `.unref()`'d so it does not hold the process. Pattern: `chatModeration.js` (`permits`, `lastMessages`, `followCache`, `offenseCounts` and the compiled banned-word matchers, swept every 60 s); also `testCooldown.js`, `messageDedupe.js`.

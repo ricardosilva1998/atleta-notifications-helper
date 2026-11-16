@@ -58,7 +58,7 @@ const CSRF_EXEMPT = Object.freeze([
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-// An Express-style path ("/api/session/:id/lap") as a regular expression that
+// An Express-style path ("/coaching/:username/bookings/:id/cancel") as a regular expression that
 // matches it the way the router does: any letter case, optional trailing slash.
 function routePattern(routePath) {
   const source = routePath.split('/')
