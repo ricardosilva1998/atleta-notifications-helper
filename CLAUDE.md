@@ -449,3 +449,14 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - The docs follow the code as built: refunds are per payment on `coaching_payments`, payer details go only to the booking's coach, the viewer's reschedule routes share `coachingRescheduleLimiter` (30 per 10 minutes), and the coach always refunds in PayPal and presses Refunded (Atleta never refunds).
 - The deploy note lists the new columns (quiet, no `[DB migration]` line), what the coach does after deploy, and a rollback note (tables and columns stay; settle rescheduling bookings and pending refunds first).
 **Open:** T9 QA walks the flows; ship pushes and opens the PR (the spec, PDF and plan copy are already committed here).
+
+### 2026-11-16 15:00 — team-qa
+**Task:** T9, QA of Coaching cancel, reschedule, refund and tabs: full suite, two clean boots, end-to-end walk in headless Chromium at 1600 and 375 px
+**Tests added/changed:** none in the repo (throwaway harness and screenshots in the gitignored `.superpowers/sdd/2026-11-16-coaching-cancel-reschedule-refund/`)
+**Suite result:** `node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"` on a scratch copy (Node 26, better-sqlite3 rebuilt there): 4092 tests, 4091 pass, 0 fail, 1 pre-existing skip. Two boots on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** 80 checks, 0 failed, 80 screenshots, no horizontal scroll, no console errors (Discord, PayPal and Discord OAuth stubbed).
+- Coach cancels a free confirmed session: reason required, room role and channel deleted, viewer DM has the reason, no "Open the room", no refund line. Paid session: cancel allowed, Refund pending with payer name, email and capture id (coach page only), Refunded after a confirm sends the viewer DM; viewer page shows only "Your coach will refund you." then Refunded; a second press answers 409.
+- Reschedule way 1 accepted by the viewer: room renamed, close moved to new end + 30 min. Way 2 with three rounds, coach accepts the viewer's last time. A coach proposal older than 48 h lapses on the tick and the viewer is asked to pick (link `?booking=`). A paid reschedule open 8 days closes as Not rescheduled with Refund pending and the room removed. A late payment (booking expired, time past) is kept and marked Refund pending.
+- Four tabs remembered across reloads; a bad price opens Price, a category refusal opens Settings; the Pay note and the `bad_length` text show.
+**Bugs found:** none. QA: pass.
+**Open:** walk harness note: all traffic comes from localhost, so it spreads requests over fake X-Forwarded-For addresses to stay under the 200/min general limiter (not a site bug).
