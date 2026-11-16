@@ -769,3 +769,79 @@ Two things to know:
 
     That throws away every streamer's hours and bookings. If the release comes back, its first boot creates the tables
     again, empty.
+
+## Coaching: payment, rooms and sign-in first
+
+What changes when it deploys (`docs/features/coaching.md`, plan `docs/superpowers/plans/2026-11-16-coaching-payment-rooms.md`):
+- **At boot**, on the existing database: new columns on `coaching_settings` (`lengths`, `prices_saved_at`,
+  `category_id`) and `coaching_bookings` (the price, the accept time, the deadline and the payment), and two new tables,
+  `coaching_payments` and `coaching_rooms`. They are created quietly: **no** `[DB migration]` line, on the first boot
+  and on every boot after. Nothing is seeded: a settings row with no `lengths` reads as the defaults.
+- **No new variable.** `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_MODE` are the tip page's.
+- **Booking page.** Signed-out visitors see only the coach's name and **Connect Discord**; the lengths, days and times
+  come after sign-in and joining the server. Bookings made before this release keep their state and have no price or
+  room.
+- **Everyone's lengths.** Every streamer who has coaching starts with the defaults below until they change them on
+  `/dashboard/coaching`.
+- **A new minute tick** (`coachingTick`) expires unpaid bookings, reads stale PayPal orders back and closes rooms. It
+  starts 20 seconds after boot and stops on shutdown.
+- **Rate limit:** the pay route and PayPal's return (`/coaching/:username/bookings/:id/pay`, `/coaching/:username/paid`)
+  allow 15 requests per 10 minutes per visitor.
+
+**The owner's steps** (none of them is code):
+1. **Switch on the Message Content intent** in the Discord Developer Portal (the application, Bot, Privileged Gateway
+   Intents, Message Content Intent). The bot now asks for it so it can read a room's chat for the transcript.
+   - **If it is not switched on**, Discord refuses the login with "disallowed intents". The bot logs
+     `[Discord] LOGIN REFUSED for an intent: ... Logging in again without Message Content ...` loudly once and logs in again without it, so the site and every other bot
+     feature keep working. Rooms still work, but **transcripts are not sent** (never an empty one): the schedule shows
+     `no_intent` ("Switch on Message Content in the Discord Developer Portal"). Switch it on and the next restart
+     (a deploy) brings it back; rooms closed in between got no transcript.
+2. **Create the Coaching category** in the coaching Discord server, and give the bot these permissions **on that
+   category** (a bot can only grant what it holds): Manage Channels, Manage Permissions, View Channel, Connect, Speak,
+   Send Messages, Attach Files and Read Message History. The bot also needs Manage Roles at server level, which the
+   existing invite (`268553216`) already grants, and its top role must sit **above** the roles it creates (new roles
+   land below it). No new invite or re-invite is needed. Then each streamer picks the category on
+   `/dashboard/coaching`; the save refuses a category that is missing a permission and names which.
+3. **Check the default lengths and prices** with each streamer: EUR **1 h 25, 2 h 45, 3 h 60, 4 h 70, 5 h 80**, all on;
+   30 min off. A streamer whose tip-page currency is not EUR gets the same numbers in their currency and a "Check your
+   prices" note until they save prices once.
+4. **PayPal must be live:** `PAYPAL_MODE=live` on the Railway service, and the streamer's PayPal email set on
+   `/dashboard/donations`. Without the email a streamer can offer only free lengths (the page and the card say so).
+
+After the deploy (while no streamer is live):
+1. `/health` answers 200, and the boot log has no `[DB migration]` line.
+2. Booking page signed out: only the intro and **Connect Discord**. Signed in as a test viewer: the join step, then the
+   lengths with prices.
+3. A real end-to-end check needs a small paid length: request, accept, **Pay**, return to `?paid=1`, the confirmation
+   message with the room link, the room visible only to that viewer, and (30 minutes after the end) both transcripts
+   and the room and role gone. Nothing may appear in the donation history, and no tip alert, goal or voice may fire.
+4. The log lines to expect:
+   - `[Coaching] ... REFUSED ...`: a PayPal order that completed but failed a check (payee, amount, currency, booking).
+     Nothing was recorded; look at the order in PayPal.
+   - `[Coaching] return of order <id> ... not counted: <reason>`: a return that confirmed nothing (an unfinished
+     payment, usually).
+   - `[Coaching] tick step <name> failed: ...`: one step of the minute tick threw; the others still ran.
+
+No refunds go through Atleta. A payment that arrives for a booking that already expired (and whose time is gone) is
+recorded and shown on the schedule as late: the streamer refunds it in PayPal.
+
+Watch after release:
+- The new texts in the six non-English languages are machine-made and want a native read-through.
+- Room failures (`missing_permissions` most often) show on the card as a count and on the schedule with **Retry room**.
+
+### Rolling back (payment and rooms)
+
+Rolling back is safe for the data.
+- **The new tables and columns stay**, and older code ignores them.
+- **A booking awaiting payment** is an unknown state to the previous release: it still holds its time in the database
+  but the previous release neither shows nor expires it. Settle those first (let them pay or expire) before rolling
+  back, or decline them by hand.
+- **A paid booking stays confirmed**, with its payment recorded. The previous release lets the streamer cancel it,
+  which would leave the money with the streamer and the viewer unrefunded.
+- **Rooms already made stay** on Discord (role and voice channel) with nothing to close them: delete them by hand.
+- **Removing an account:** the previous release lists neither `coaching_payments` nor `coaching_rooms` in its
+  `STREAMER_OWNED_ROWS`. It has no foreign keys, so a removal still goes through; the stray-row sweep of any build since
+  2026-10-13 deletes them and logs
+  `[DB] Removing streamers <id>: also deleted N row(s) from coaching_payments (streamer_id), a table the removal does not list`
+  (the same for `coaching_rooms`). That also means the room's role and channel on Discord are not cleaned up. A build
+  from before 2026-10-13 is covered by the Tracking and Coaching notes above, which come first.
