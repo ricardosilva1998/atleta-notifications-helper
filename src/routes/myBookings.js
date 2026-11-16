@@ -9,6 +9,7 @@ const { Router } = require('express');
 const db = require('../db');
 const coaching = require('../services/coaching');
 const coachingBookings = require('../services/coachingBookings');
+const { RETURN_ERROR_KEYS } = require('./coaching');
 
 const router = Router();
 
@@ -36,12 +37,6 @@ const STATE_KEYS = {
   cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired',
   withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
   rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
-};
-// The codes /coaching/<login>/paid sends back as ?error= (routes/coaching.js RETURN_ERROR_KEYS has the same table).
-const RETURN_ERROR_KEYS = {
-  pay_invalid: 'coaching.error.pay_invalid', pay_unconfirmed: 'coaching.error.pay_unconfirmed',
-  not_paid: 'coaching.error.not_paid', late: 'coaching.error.late',
-  paid: 'coaching.error.paid', pay_closed: 'coaching.error.pay_closed',
 };
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {
