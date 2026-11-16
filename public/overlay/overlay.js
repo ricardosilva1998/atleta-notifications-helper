@@ -1411,7 +1411,13 @@ function applyRectToElement(el, rect) {
   el.style.height = rect.height || '';
 }
 
+// One id per playback: onerror, onended, the cap timer and a rejected play() can
+// all report the same clip ending, and only the first may advance the queue.
+let _redemptionActive = 0;
+let _redemptionSeq = 0;
+
 function stopRedemption(andPlayNext) {
+  _redemptionActive = 0;
   if (_redemptionCapTimer) { clearTimeout(_redemptionCapTimer); _redemptionCapTimer = null; }
 
   const vid = document.getElementById('redemption-video');
@@ -1423,12 +1429,14 @@ function stopRedemption(andPlayNext) {
     try { vid.load(); } catch (e) {}
     vid.style.display = 'none';
     vid.onended = null;
+    vid.onerror = null;
   }
   if (aud) {
     try { aud.pause(); } catch (e) {}
     aud.removeAttribute('src');
     try { aud.load(); } catch (e) {}
     aud.onended = null;
+    aud.onerror = null;
   }
 
   if (andPlayNext !== false) {
@@ -1447,6 +1455,9 @@ function playRedemption(event) {
 
   console.log('[Redemption] play', { mediaType, mediaUrl, finalVolume, masterVolume, rewardVolume });
   stopRedemption(false);
+  const playId = ++_redemptionSeq;
+  _redemptionActive = playId;
+  const finish = () => { if (_redemptionActive === playId) stopRedemption(true); };
 
   if (mediaType === 'video') {
     const vid = document.getElementById('redemption-video');
@@ -1457,22 +1468,22 @@ function playRedemption(event) {
     vid.src = mediaUrl;
     vid.volume = finalVolume;
     vid.style.display = 'block';
-    vid.onerror = () => { console.error('[Redemption] video error', vid.error, 'src=', vid.currentSrc); stopRedemption(true); };
+    vid.onerror = () => { console.error('[Redemption] video error', vid.error, 'src=', vid.currentSrc); finish(); };
 
-    _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
-    vid.onended = () => stopRedemption(true);
-    vid.play().catch(err => { console.error('[Redemption] video.play() rejected:', err.message, 'src=', vid.currentSrc); stopRedemption(true); });
+    _redemptionCapTimer = setTimeout(() => finish(), maxPlaySec * 1000);
+    vid.onended = () => finish();
+    vid.play().catch(err => { console.error('[Redemption] video.play() rejected:', err.message, 'src=', vid.currentSrc); finish(); });
   } else {
     const aud = document.getElementById('redemption-audio');
     if (!aud) { console.error('[Redemption] #redemption-audio element missing'); alertTimer(playNext, 200); return; }
 
     aud.src = mediaUrl;
     aud.volume = finalVolume;
-    aud.onerror = () => { console.error('[Redemption] audio error', aud.error, 'src=', aud.currentSrc); stopRedemption(true); };
+    aud.onerror = () => { console.error('[Redemption] audio error', aud.error, 'src=', aud.currentSrc); finish(); };
 
-    _redemptionCapTimer = setTimeout(() => stopRedemption(true), maxPlaySec * 1000);
-    aud.onended = () => stopRedemption(true);
-    aud.play().catch(err => { console.error('[Redemption] audio.play() rejected:', err.message, 'src=', aud.currentSrc); stopRedemption(true); });
+    _redemptionCapTimer = setTimeout(() => finish(), maxPlaySec * 1000);
+    aud.onended = () => finish();
+    aud.play().catch(err => { console.error('[Redemption] audio.play() rejected:', err.message, 'src=', aud.currentSrc); finish(); });
   }
 }
 
