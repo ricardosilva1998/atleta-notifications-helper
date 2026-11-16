@@ -460,3 +460,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Four tabs remembered across reloads; a bad price opens Price, a category refusal opens Settings; the Pay note and the `bad_length` text show.
 **Bugs found:** none. QA: pass.
 **Open:** walk harness note: all traffic comes from localhost, so it spreads requests over fake X-Forwarded-For addresses to stay under the 200/min general limiter (not a site bug).
+
+### 2026-11-16 — team-qa
+**Task:** F1.4, check of fix round 1 (F1.1 017bcb1, F1.2 a44143d, F1.3 df34d53): full suite, two clean boots, F1.1 reproduction
+**Tests added/changed:** none (throwaway repro on a scratch copy)
+**Suite result:** `node --test "src/**/*.test.js" "tests/**/*.test.js" "bridge/test-*.js"` on a scratch copy (Node 26, better-sqlite3 rebuilt there): 4095 tests, 4094 pass, 0 fail, 1 pre-existing skip. Two boots on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** F1.1 reproduction (status `rescheduling`, paid_at NULL, starts_at = original_starts_at = now - 1 h, reschedule_started_at = now - 2 h, way `ask`) through `coachingBookings.withdraw` answers `{ ok: true }`, booking `withdrawn`.
+**Bugs found:** none. QA: pass.
+**Open:** none
