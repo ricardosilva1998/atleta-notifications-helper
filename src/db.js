@@ -5780,7 +5780,7 @@ function ensureTrackerSettings(streamerId, trackers) {
 }
 
 // Creates or changes a tracker's row; what the call does not name stays as it
-// was (a new row starts on, with no colour). `color: null` clears the colour.
+// was (a new row starts off, with no colour). `color: null` clears the colour.
 function setTrackerSetting(streamerId, tracker, settings) {
   const s = settings || {};
   const hasEnabled = s.enabled !== undefined;
