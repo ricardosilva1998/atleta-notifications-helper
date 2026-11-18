@@ -646,7 +646,7 @@ describe('payment', () => {
 
   test('every code the return sends back has its text', () => {
     const { RETURN_ERROR_KEYS } = require(ROUTE);
-    for (const code of ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed']) {
+    for (const code of ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'duplicate', 'paid', 'pay_closed']) {
       const key = RETURN_ERROR_KEYS[code];
       assert.ok(key, code);
       assert.notEqual(t('en', key), key, `${code} has an English text`);

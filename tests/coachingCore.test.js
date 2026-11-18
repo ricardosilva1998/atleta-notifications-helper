@@ -146,6 +146,7 @@ describe('payment helpers', () => {
   test('returnNotice reads what PayPal left in the address and nothing else', () => {
     assert.deepEqual(core.returnNotice('?paid=1'), { kind: 'paid' });
     assert.deepEqual(core.returnNotice('?error=late'), { kind: 'error', code: 'late', order: null });
+    assert.deepEqual(core.returnNotice('?error=duplicate'), { kind: 'error', code: 'duplicate', order: null });
     assert.deepEqual(core.returnNotice('?error=pay_unconfirmed&order=5O190127TN364715T'), { kind: 'error', code: 'pay_unconfirmed', order: '5O190127TN364715T' });
     assert.equal(core.returnNotice('?error=pay_unconfirmed&order=a%20b').order, null, 'an order id of another shape is dropped');
     assert.equal(core.returnNotice('?error=late&order=ABC').order, null, 'only an unconfirmed payment keeps its order');

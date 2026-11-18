@@ -554,6 +554,21 @@ describe('handleReturn', () => {
     assert.equal(captureCalls().length, 1);
     assert.equal(pay.returnErrorCode('paid'), 'paid');
   });
+
+  test('a second order PayPal already captured is a duplicate: its own outcome, the booking stands', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v } = await awaiting(s);
+    const first = await pay.startPayment(s, v, booking.id, { now: NOW });
+    const second = await pay.startPayment(s, v, booking.id, { now: NOW });
+    const id1 = new URL(first.approveUrl).searchParams.get('token');
+    const id2 = new URL(second.approveUrl).searchParams.get('token');
+    assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + MIN })).outcome, 'paid');
+    paypal.orders.get(id2).captured = true;
+    const result = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 2 * MIN });
+    assert.deepEqual([result.ok, result.outcome, result.result], [true, 'duplicate', 'double']);
+    assert.equal(db.getCoachingPayment(id2).refund_reason, 'double');
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+  });
 });
 
 // ── The deadline and the stale orders ────────────────────────────────

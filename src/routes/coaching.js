@@ -45,7 +45,7 @@ const ERROR_KEYS = {
 // script shows them (paid and pay_closed are above).
 const RETURN_ERROR_KEYS = {
   pay_invalid: 'coaching.error.pay_invalid', pay_unconfirmed: 'coaching.error.pay_unconfirmed',
-  not_paid: 'coaching.error.not_paid', late: 'coaching.error.late',
+  not_paid: 'coaching.error.not_paid', late: 'coaching.error.late', duplicate: 'coaching.error.duplicate',
   paid: 'coaching.error.paid', pay_closed: 'coaching.error.pay_closed',
 };
 
@@ -258,7 +258,7 @@ router.get('/:username/paid', async (req, res) => {
   const result = await coachingPayments.handleReturn({ streamer: page.streamer, orderId });
   const bookingPart = paidBooking && paidBooking.streamer_id === page.streamer.id ? `booking=${paidBooking.id}&` : '';
   const base = `/my-bookings?${bookingPart}`;
-  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}paid=1` : `${base}error=late`);
+  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}paid=1` : `${base}error=${result.outcome === 'duplicate' ? 'duplicate' : 'late'}`);
   console.error(`[Coaching] return of order ${/^[A-Z0-9-]{1,64}$/i.test(orderId) ? orderId : '(invalid)'} for streamer ${page.streamer.id} not counted: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`);
   const code = coachingPayments.returnErrorCode(result.reason);
   res.redirect(`${base}error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);

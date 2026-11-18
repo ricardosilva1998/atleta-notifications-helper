@@ -546,7 +546,7 @@ async function afterPayment(streamer, booking, result) {
     if (result === 'recorded' || result === 'late_confirmed') {
       await Promise.all([afterConfirmed(streamer, booking, 'confirmed'), messageStreamer(streamer, settings, booking, 'paid')]);
     } else if (result === 'late_issue' || result === 'double') {
-      const tasks = [messageStreamer(streamer, settings, booking, 'paymentLate', { always: true })];
+      const tasks = [messageStreamer(streamer, settings, booking, result === 'double' ? 'paymentDuplicate' : 'paymentLate', { always: true })];
       if (result === 'late_issue') tasks.push(messageViewer(streamer, settings, booking, 'paymentLateViewer'));
       await Promise.all(tasks);
     }
