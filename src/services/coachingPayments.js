@@ -410,6 +410,7 @@ function expireDue({ now = Date.now() } = {}) {
         for (const payment of db.listOpenCoachingPaymentsFor(booking.id)) {
           let order;
           try { order = await paypal.getOrder(payment.order_id); } catch (e) { unsure = true; continue; }
+          order = await captureIfApproved(payment, order, now);
           const verdict = decideCoachingCapture({ streamer, payment, booking, order });
           if (verdict.reason === 'pending') keepPending(payment, now);
           if (!verdict.ok) continue;
