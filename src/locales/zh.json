@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "未改期",
   "cards.coaching.refundsPending": "待办退款：{{count}}",
   "cards.coaching.refundsPendingAction": "打开预约",
+  "cards.chatbot.status.tokenRefused": "Twitch 拒绝了聊天机器人的登录。网站所有者需要更新机器人令牌。",
   "redemptions.outcome.refundedInterrupted": "已退还（已中断）",
   "coaching.dashboard.refundTitleDuplicate": "在 PayPal 中退还重复付款 {{price}}",
   "coaching.message.proposalTooCloseBody": "建议的时间离开始时间太近，因此已被取消。",

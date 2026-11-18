@@ -486,8 +486,54 @@ function logFlag(tags, reason, streamer) {
     console.error('[Mod] Failed to save mod log:', e.message);
   }
   if (streamer.mod_log_discord_enabled && streamer.mod_log_discord_channel_id) {
-    logToDiscord(streamer, tags.username, reason, 'flag');
+    queueFlagForDiscord(streamer, tags.username, reason);
   }
+}
+
+// A raid brings dozens of first-time chatters at once: the first flag is posted at once, the ones that follow
+// within a minute wait and go out as one embed listing the names (at most FLAG_BATCH_NAMES of them).
+const FLAG_BATCH_WINDOW_MS = 60 * 1000;
+const FLAG_BATCH_NAMES = 25;
+const flagBatches = new Map(); // streamerId -> { lastSentAt, names: [], reason, timer, streamer }
+
+function flushFlagBatch(streamerId) {
+  const batch = flagBatches.get(streamerId);
+  if (!batch) return;
+  batch.timer = null;
+  if (batch.names.length === 0) { flagBatches.delete(streamerId); return; }
+  const shown = batch.names.slice(0, FLAG_BATCH_NAMES);
+  const more = batch.names.length - shown.length;
+  const list = shown.join(', ') + (more > 0 ? ` and ${more} more` : '');
+  batch.names = [];
+  batch.lastSentAt = Date.now();
+  logToDiscord(batch.streamer, list, batch.reason, 'flag');
+  // Keep the entry for one more window so a steady trickle stays at one embed a minute.
+  batch.timer = setTimeout(() => {
+    batch.timer = null;
+    if (batch.names.length > 0) flushFlagBatch(streamerId);
+    else flagBatches.delete(streamerId);
+  }, FLAG_BATCH_WINDOW_MS);
+  if (batch.timer.unref) batch.timer.unref();
+}
+
+function queueFlagForDiscord(streamer, username, reason) {
+  let batch = flagBatches.get(streamer.id);
+  if (!batch) {
+    batch = { lastSentAt: Date.now(), names: [], reason, timer: null, streamer };
+    flagBatches.set(streamer.id, batch);
+    logToDiscord(streamer, username, reason, 'flag');
+    batch.timer = setTimeout(() => {
+      batch.timer = null;
+      if (batch.names.length > 0) flushFlagBatch(streamer.id);
+      else flagBatches.delete(streamer.id);
+    }, FLAG_BATCH_WINDOW_MS);
+    if (batch.timer.unref) batch.timer.unref();
+    return;
+  }
+  batch.streamer = streamer;
+  batch.reason = 'First-time chatters';
+  // A bounded memory: past the shown names only the count matters.
+  if (batch.names.length < FLAG_BATCH_NAMES + 1000) batch.names.push(username);
 }
 
 // ─── Discord mod log ──────────────────────────────────────────────────────────

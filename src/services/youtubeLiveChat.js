@@ -1,5 +1,6 @@
 const config = require('../config');
 const db = require('../db');
+const { isStreamerDisabled } = require('./streamerAccess');
 const bus = require('./overlayBus');
 const { requestYoutubeBotToken, sendYoutubeChatMessage, fetchLiveChatMessages } = require('./youtube');
 const { getBuiltinResponse, getCommandsList } = require('./builtinCommands');
@@ -40,6 +41,7 @@ async function handleChatMessage(streamerId, item) {
   switch (type) {
     case 'superChatEvent': {
       const details = item.snippet.superChatDetails;
+      if (!details) break;
       const data = {
         username: authorName,
         amount: details.amountDisplayString || `${(details.amountMicros / 1000000).toFixed(2)}`,
@@ -219,6 +221,13 @@ async function pollChat(streamerId) {
   if (!poller) return;
 
   try {
+    // Switched off or disabled since the last poll: stop at once.
+    const current = db.getStreamerById(streamerId);
+    if (!current || !current.yt_chatbot_enabled || isStreamerDisabled(current)) {
+      console.log(`[YT Chat] Chatbot off or account disabled for streamer ${streamerId}, stopping`);
+      youtubeChatManager.stopPolling(streamerId);
+      return;
+    }
     const token = await ensureBotToken();
     if (activePollers.get(streamerId) !== poller) return;
     if (!token) {
@@ -247,7 +256,8 @@ async function pollChat(streamerId) {
     // Process new messages (skip first poll to avoid replaying old messages)
     if (poller.initialized) {
       for (const item of data.items || []) {
-        handleChatMessage(streamerId, item);
+        handleChatMessage(streamerId, item)
+          .catch((err) => console.error(`[YT Chat] Message handling failed for streamer ${streamerId}:`, err.message));
       }
     }
     poller.initialized = true;
@@ -266,7 +276,7 @@ const youtubeChatManager = {
     this.stopPolling(streamerId);
 
     const streamer = db.getStreamerById(streamerId);
-    if (!streamer?.yt_chatbot_enabled) return;
+    if (!streamer?.yt_chatbot_enabled || isStreamerDisabled(streamer)) return;
 
     console.log(`[YT Chat] Starting chat polling for streamer ${streamerId} (chatId: ${liveChatId})`);
     activePollers.set(streamerId, { liveChatId, pageToken: null, timer: null, initialized: false });

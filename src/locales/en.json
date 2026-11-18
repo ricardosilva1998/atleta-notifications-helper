@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "Not rescheduled",
   "cards.coaching.refundsPending": "Refunds to make: {{count}}",
   "cards.coaching.refundsPendingAction": "Open the bookings",
+  "cards.chatbot.status.tokenRefused": "Twitch refused the chat bot's login. The site owner has to renew the bot token.",
   "redemptions.outcome.refundedInterrupted": "Refunded (interrupted)",
   "coaching.dashboard.refundTitleDuplicate": "Refund the duplicate payment of {{price}} in PayPal",
   "coaching.message.proposalTooCloseBody": "The proposed time came too close to its start, so it was dropped.",

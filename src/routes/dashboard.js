@@ -384,7 +384,7 @@ function gatherCards(req, discord, lang) {
     features: config.features,
     now,
     appUrl: config.app.url,
-    bot: { connected: chatManager.isConnected(), moderator: chatManager.moderatorStatus(s.id), username: config.bot.twitchUsername },
+    bot: { connected: chatManager.isConnected(), refused: chatManager.authRefused(), moderator: chatManager.moderatorStatus(s.id), username: config.bot.twitchUsername },
     overlay: { url: s.overlay_token ? `${config.app.url}/overlay/${s.overlay_token}` : null, open: overlayPresence.isOpen(s.id) },
     discord,
     commands: db.getChatCommands(s.id),
@@ -2186,6 +2186,13 @@ router.post('/youtube-chatbot', (req, res) => {
     settings.yt_overlay_giftmember_enabled = b.yt_overlay_giftmember_enabled ? 1 : 0;
   }
   db.updateYoutubeChatbotConfig(req.streamer.id, settings);
+  if (!settings.yt_chatbot_enabled) {
+    try {
+      require('../services/youtubeLiveChat').youtubeChatManager.stopPolling(req.streamer.id);
+    } catch (e) {
+      console.error('[YT Chat] Could not stop polling:', e.message);
+    }
+  }
   pushOverlayConfig(req.streamer.id);
   res.redirect('/dashboard/youtube-chatbot');
 });

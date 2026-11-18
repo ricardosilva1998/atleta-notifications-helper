@@ -581,3 +581,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `raid_protection.prev_unknown` (new column): when Twitch did not report the previous followers-only setting, the end of the protection leaves the chat settings alone. The restore uses the stored `channel_login` even with the Twitch link removed; a new raid waits for a running restore.
 - Redemptions left `pending` for over 10 minutes are settled by `settleStalePending` (boot and minute tick): unfulfilled ones are refunded, outcome `refunded_interrupted` (new text, 7 locales); others marked `disabled`. The missing-media path uses `refundRedemption()`, so an affiliate-gated answer is recorded `error`.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T14, chat bots)
+**Task:** D22-D25: YouTube chat re-check, bot token refused, flag batching, async catches
+**Files:** src/services/youtubeLiveChat.js, twitchChat.js, chatModeration.js, dashboardCards.js, src/routes/dashboard.js, src/commands.js, src/locales/*.json, tests
+**Decisions:**
+- YouTube poller re-reads `yt_chatbot_enabled` and the account status every poll; the YouTube chatbot save stops it when switched off.
+- `chatManager.authRefused()` is set when Twitch refuses `BOT_TWITCH_TOKEN` (logged once, cleared on connect); the chatbot card shows `cards.chatbot.status.tokenRefused`.
+- First-time-chatter Discord mod-log embeds: first at once, the rest of the minute as one embed (25 names + "and N more"); the mod log table still gets every row; nothing is said in chat.
+**Open:** none

@@ -811,6 +811,32 @@ describe('the Twitch moderation requests give up after 10 seconds', () => {
   });
 });
 
+describe('first-time chatter Discord log', () => {
+  test('100 first-timers in a raid make a bounded number of embeds', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const posts = [];
+    const discordPath = require.resolve('../discord');
+    const prior = require.cache[discordPath];
+    require.cache[discordPath] = { id: discordPath, filename: discordPath, loaded: true, exports: {
+      streamerGuildForChannel: () => 'guild-1',
+      sendToGuildChannel: (_g, _s, _c, body) => { posts.push(body.embeds[0]); return Promise.resolve(); },
+    } };
+    try {
+      const streamer = streamerRow({ id: 77, mod_log_discord_enabled: 1, mod_log_discord_channel_id: 'chan-1' });
+      for (let i = 0; i < 100; i++) mod.logFlag({ username: `viewer${i}`, 'user-id': String(i) }, `First-time chatter: viewer${i}`, streamer);
+      assert.equal(posts.length, 1, 'the first one goes at once');
+      t.mock.timers.tick(60_000);
+      assert.equal(posts.length, 2, 'the rest are one embed');
+      const names = posts[1].fields.find((f) => f.name === 'User').value;
+      assert.ok(names.includes('viewer1') && names.includes('and 74 more'), names);
+      t.mock.timers.tick(10 * 60_000);
+      assert.equal(posts.length, 2);
+    } finally {
+      if (prior) require.cache[discordPath] = prior; else delete require.cache[discordPath];
+    }
+  });
+});
+
 describe('first-time chatter', () => {
   test('is flagged by the filter and logFlag writes the mod log without saying anything in chat', async () => {
     const streamer = streamerRow({ mod_first_chatter_enabled: 1, mod_link_protection_enabled: 0, mod_caps_enabled: 0, mod_symbol_spam_enabled: 0 });

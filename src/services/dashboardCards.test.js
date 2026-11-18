@@ -129,6 +129,11 @@ describe('Chatbot', () => {
     assert.deepEqual(card.counts.thankYous, { key: 'cards.common.nOfM', params: { on: 5, total: 6 } });
   });
 
+  test('Twitch refusing the bot token shows its own status line', () => {
+    const refused = build({ bot: { connected: false, refused: true, moderator: null, username: 'atleta_bot' } }).chatbot.status;
+    assert.deepEqual(refused, { key: 'cards.chatbot.status.tokenRefused', params: {}, tone: 'warn' });
+  });
+
   test('off; connecting while the bot\'s chat connection is down; Twitch to link first', () => {
     const off = build({ streamer: { chatbot_enabled: 0 } });
     assert.deepEqual(off.chatbot.status, { key: 'cards.chatbot.status.off', params: {}, tone: 'off' });

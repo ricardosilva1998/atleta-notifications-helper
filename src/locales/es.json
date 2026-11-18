@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "No reprogramada",
   "cards.coaching.refundsPending": "Reembolsos por hacer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir las reservas",
+  "cards.chatbot.status.tokenRefused": "Twitch rechazó el inicio de sesión del bot de chat. El responsable del sitio debe renovar el token del bot.",
   "redemptions.outcome.refundedInterrupted": "Reembolsado (interrumpido)",
   "coaching.dashboard.refundTitleDuplicate": "Reembolsa el pago duplicado de {{price}} en PayPal",
   "coaching.message.proposalTooCloseBody": "La hora propuesta quedó demasiado cerca del inicio, así que se descartó.",

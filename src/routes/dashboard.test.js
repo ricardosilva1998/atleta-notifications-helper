@@ -97,6 +97,7 @@ const chatStub = {
     startForStreamer: (...args) => managerCalls.push(['chat.start', ...args]),
     stopForStreamer: (...args) => managerCalls.push(['chat.stop', ...args]),
     moderatorStatus: () => null,
+    authRefused: () => false,
     recheckModerator: async (id) => { chatCalls.push(['recheck', id]); return true; },
   },
 };
