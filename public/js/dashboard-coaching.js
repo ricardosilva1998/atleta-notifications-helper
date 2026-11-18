@@ -48,7 +48,7 @@
     if (!line) return;
     let text = '';
     if (row.dataset.paid) text = core.fill(CT.paid, { price: priceText(cents, row.dataset.currency) });
-    else if (row.dataset.state === 'payment_processing') text = CT.paymentProcessing;
+    else if (row.dataset.state === 'payment_processing') text = CT.paymentProcessing + ' · ' + CT.cancelBlocked;
     else if (row.dataset.state === 'awaiting_payment') {
       text = CT.awaitingPayment;
       const by = Number(row.dataset.payBy);

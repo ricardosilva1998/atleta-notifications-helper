@@ -2512,6 +2512,7 @@
   "sponsors.error.badUrl": "链接必须以 http:// 或 https:// 开头，且不超过 200 个字符。",
   "redemptions.error.tooMany": "你已有 {{max}} 个奖励，这是 Twitch 允许的上限。请先删除一个。",
   "redemptions.outcome.refundedInterrupted": "已退还（已中断）",
+  "coaching.dashboard.error.payment_processing": "PayPal 仍在处理一笔付款；待其完成或时段被释放后，你才可以取消。",
   "coaching.message.paymentDuplicate.title": "{{viewer}} 为同一场课程付款了两次",
   "coaching.message.paymentDuplicateBody": "请在 PayPal 中退还多付的款项。课程保持有效。",
   "coaching.error.duplicate": "这场课程已经付款。教练会退还多付的款项,您的课程保持有效。",

@@ -315,6 +315,7 @@ async function cancel(streamer, id, { reason, now = Date.now() } = {}) {
   if (!coaching.canCoachCancel(row, now)) {
     return { ok: false, code: coaching.HOLDING.includes(row.status) ? 'too_late' : 'not_active' };
   }
+  if (db.pendingCoachingPaymentBookingIds([id]).has(row.id)) return { ok: false, code: 'payment_processing' };
   const done = db.cancelCoachingBookingByCoach(id, streamer.id, parsed.reason, now);
   if (!done.ok) return { ok: false, code: 'not_active' };
   const refund = done.refundPending === true;

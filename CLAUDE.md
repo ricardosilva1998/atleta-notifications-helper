@@ -691,4 +691,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Suite result:** scratch exports (Node 26, better-sqlite3 rebuilt): money 4030/4030, robustness 4070/4070, chore 4060/4060 pass, 0 fail. Two boots on chore (empty data/): `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM both times.
 **Manual checks:** none
 **Bugs found:** none. QA: pass.
+### 2026-11-18 — backend-dev (F3.1)
+**Task:** The coach's cancel is refused while a payment on the booking is pending
+**Files:** src/services/coachingBookings.js, src/routes/coachingDashboard.js, src/views/dashboard.ejs, public/js/coaching-dashboard.js, public/js/dashboard-coaching.js, src/locales/*.json, src/services/coachingPayments.test.js
+**Decisions:**
+- `cancel` answers `payment_processing` (409) when a `coaching_payments` row of the booking is `pending`, before any change or DM; the schedule hides Cancel for that state and shows the reason, the Coaching card's payment line appends it. The start - 15 min release still applies.
+- New key `coaching.dashboard.error.payment_processing` in all seven locales (pt-PT).
 **Open:** none

@@ -2512,6 +2512,7 @@
   "sponsors.error.badUrl": "Der Link muss mit http:// oder https:// beginnen und darf höchstens 200 Zeichen lang sein.",
   "redemptions.error.tooMany": "Du hast bereits {{max}} Prämien, das Maximum, das Twitch erlaubt. Lösche zuerst eine.",
   "redemptions.outcome.refundedInterrupted": "Erstattet (unterbrochen)",
+  "coaching.dashboard.error.payment_processing": "Eine Zahlung wird noch bei PayPal verarbeitet; du kannst stornieren, sobald sie abgeschlossen ist oder der Termin freigegeben wird.",
   "coaching.message.paymentDuplicate.title": "{{viewer}} hat für eine Sitzung doppelt bezahlt",
   "coaching.message.paymentDuplicateBody": "Erstatte die zusätzliche Zahlung in PayPal. Die Sitzung bleibt bestehen.",
   "coaching.error.duplicate": "Diese Sitzung war bereits bezahlt. Dein Coach erstattet die zusätzliche Zahlung. Deine Sitzung bleibt bestehen.",
