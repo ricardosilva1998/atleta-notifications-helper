@@ -405,7 +405,9 @@ own page across **every coach**. It stands alone like the booking page (no `head
   changed Twitch account or login; the viewer's Discord id must still own the booking (else 404, or 401 signed out).
   `/paid` finds the coach through the order's booking. Their rules, limiters (`coachingPayLimiter`,
   `coachingRescheduleLimiter`) and CSRF are unchanged. A coach who stopped coaching (disabled, or hours never saved)
-  shows `available: false`: the row has its state and a note, and no actions.
+  shows `available: false`: the row has its state and a note, and no actions. `coach_available` needs an enabled account
+  and saved coaching settings, **not** a linked Twitch login: with no login the row shows the coach's Discord name, and
+  its action and Pay-return URLs use `/coaching/-/...` (an old URL with the login still works).
 - **The query string:** `?booking=<id>` scrolls to and highlights the booking (and opens the picker for a "pick"
   case); `&new=1` shows "Request sent, waiting for <coach>"; `&paid=1` or `&error=<code>` (with `&order=<id>` for
   `pay_unconfirmed`, which offers **Check again**) show the payment's result. Every viewer Discord message links to
@@ -605,6 +607,13 @@ logged, and the row stays for the coach to check in PayPal. While a payment is p
 until 15 minutes before its start, shows **Payment processing** (viewer, schedule and card), and cannot start another
 order (`payment_processing`). If the booking ends unpaid with a payment still pending, the payment is kept and logged.
 
+The coach's **Cancel** is refused with `payment_processing` (409) while a payment row is pending (the card and page hide
+the button and say why), so a capture that settles later is never left on a cancelled session.
+
+A second capture of the same booking is a `double` (the session stands, Refund pending for the duplicate) only while the
+booking is `confirmed` or `rescheduling`; on a booking that is cancelled, expired or otherwise ended it is a `late`
+payment (`late_issue`): Refund pending, the coach told.
+
 The return **lands on My bookings**: `/my-bookings?booking=<id>&paid=1` or `…&error=<code>` (with `&order=<id>` for
 `pay_unconfirmed`); the booking id is added only when the order's booking belongs to this streamer.
 
@@ -780,7 +789,7 @@ The first save opens bookings; later saves keep `open` as it is.
   added only when missing, with no log line.
 
 A status changes only from the states the action allows (`setCoachingBookingStatus` checks them in SQL), so two
-answers to one request cannot both win. Bookings are deleted 90 days after their start (`cleanupOldCoachingBookings`,
+answers to one request cannot both win. Bookings are deleted 90 days after their start, except one whose payment has a refund still pending or a payment status `pending`, which is kept until settled (`cleanupOldCoachingBookings`,
 in the daily housekeeping of `src/index.js`).
 
 **`coaching_payments`**: one row per PayPal order, `order_id` (primary key), `booking_id`, `streamer_id`,
