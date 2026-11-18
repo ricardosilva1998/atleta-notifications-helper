@@ -5370,9 +5370,12 @@ function countWaitingCoaching(streamerId, now) {
 
 function cleanupOldCoachingBookings(now) {
   const cutoff = now - 90 * 86400e3;
-  db.prepare('DELETE FROM coaching_rooms WHERE booking_id IN (SELECT id FROM coaching_bookings WHERE starts_at < ?)').run(cutoff);
-  db.prepare('DELETE FROM coaching_payments WHERE booking_id IN (SELECT id FROM coaching_bookings WHERE starts_at < ?)').run(cutoff);
-  db.prepare('DELETE FROM coaching_bookings WHERE starts_at < ?').run(cutoff);
+  // A refund still owed, or a capture still pending, keeps its booking (and payments, rooms) until it settles.
+  const old = `SELECT id FROM coaching_bookings WHERE starts_at < ? AND id NOT IN (
+    SELECT booking_id FROM coaching_payments WHERE refund_status = 'pending' OR status = 'pending')`;
+  db.prepare(`DELETE FROM coaching_rooms WHERE booking_id IN (${old})`).run(cutoff);
+  db.prepare(`DELETE FROM coaching_payments WHERE booking_id IN (${old})`).run(cutoff);
+  db.prepare(`DELETE FROM coaching_bookings WHERE id IN (${old})`).run(cutoff);
 }
 
 // The viewer's own sign-in; the row holds only the hash of the cookie's id.

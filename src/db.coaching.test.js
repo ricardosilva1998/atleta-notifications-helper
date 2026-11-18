@@ -601,6 +601,27 @@ describe('coaching reschedule and refunds', () => {
     db.cleanupOldCoachingBookings(START + 91 * 86400e3 + 3600e3);
     assert.equal(db.getCoachingPayment(`RO${b.id}`), null);
   });
+
+  test('the 90-day cleanup keeps a booking whose refund is owed or whose payment is pending, until it settles', () => {
+    const id = addStreamer();
+    const later = START + 100 * 86400e3;
+    const owed = confirmed(id, 'CL2', START, 60, true);
+    db.cancelCoachingBookingByCoach(owed.id, id, 'x', NOW);
+    const plain = confirmed(id, 'CL3', START + 3600e3 * 2, 60, false);
+    const pend = confirmed(id, 'CL4', START + 3600e3 * 5, 60, true);
+    sql.prepare("UPDATE coaching_payments SET status = 'pending' WHERE order_id = ?").run(`RO${pend.id}`);
+    db.cleanupOldCoachingBookings(later);
+    assert.ok(db.getCoachingBooking(owed.id, id), 'refund owed survives');
+    assert.ok(db.getCoachingPayment(`RO${owed.id}`));
+    assert.ok(db.getCoachingBooking(pend.id, id), 'pending payment survives');
+    assert.equal(db.getCoachingBooking(plain.id, id), null, 'ordinary booking is deleted');
+    db.markCoachingRefunded(`RO${owed.id}`, id, later);
+    sql.prepare("UPDATE coaching_payments SET status = 'lapsed' WHERE order_id = ?").run(`RO${pend.id}`);
+    db.cleanupOldCoachingBookings(later);
+    assert.equal(db.getCoachingBooking(owed.id, id), null);
+    assert.equal(db.getCoachingPayment(`RO${owed.id}`), null);
+    assert.equal(db.getCoachingBooking(pend.id, id), null);
+  });
 });
 
 describe('getViewerBookingsAllCoaches', () => {
