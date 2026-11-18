@@ -401,3 +401,10 @@ describe('coaching: the viewer\'s own Discord sign-in, on the real session step 
     assert.equal(bookings(), before, 'nothing was booked');
   });
 });
+
+describe('a POST with no body', () => {
+  test('/set-language answers a redirect, never a 500', async () => {
+    const res = await send('POST', '/set-language', { headers: { Origin: `http://127.0.0.1:${port}` } });
+    assert.ok(res.status < 500, `status ${res.status}`);
+  });
+});

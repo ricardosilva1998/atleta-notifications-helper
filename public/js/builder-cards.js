@@ -78,8 +78,10 @@
       look = got.look;
       if (!look) { this.running = false; return; }   // nothing to play (a card without a look): no loop, and a later start() tries again
       var design = got.design || {};
-      timings = C.loopTimings(look, C.speedOf(look, design));
       played = this.play(look, design, got.sample || {});
+      // play() answers the look it drew: the alert's own object when the picked look threw
+      if (played) look = played;
+      timings = C.loopTimings(look, C.speedOf(look, design));
     } catch (e) {
       played = false;
     }
@@ -96,7 +98,15 @@
   // objects and the C1), sets its colour and speed (kit.slotVars) and plays its entrance.
   Looper.prototype.play = function (look, design, sample) {
     var K = kit(), slot = this.slot;
-    var html = look.render(K && look.family ? K.lookData(look, sample, design) : sample);
+    var own = root.ATLETA_OBJECTS && root.ATLETA_OBJECTS[look.eventType];
+    var dataFor = function (l) { return K && l.family ? K.lookData(l, sample, design) : sample; };
+    // The same guarded draw as the OBS overlay (kit.drawGuarded): a look that throws is drawn as the alert's own object
+    var drawn = K && K.drawGuarded
+      ? K.drawGuarded(look, own && own.key === look.eventType ? own : null, dataFor)
+      : (function () { try { return { look: look, html: look.render(dataFor(look)) }; } catch (e) { return { look: null, html: null }; } })();
+    if (!drawn.look) return false;
+    var html = drawn.html;
+    look = drawn.look;
     slot.classList.remove('playing', 'exiting');
     slot.innerHTML = html || '';
     this.vars.forEach(function (name) { slot.style.removeProperty(name); });
@@ -111,7 +121,7 @@
     if (this.opts.onPlay) {
       try { this.opts.onPlay(look, design); } catch (e) { /* a sound that cannot play does not stop the loop */ }
     }
-    return true;
+    return look;
   };
   // The look's exit, as the OBS overlay plays it (.exiting in objects.css).
   Looper.prototype.exit = function (look) {

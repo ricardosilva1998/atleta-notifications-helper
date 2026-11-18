@@ -7,6 +7,7 @@
     refunded_disabled: t('redemptions.outcome.refundedDisabled'),
     refunded_deleted: t('redemptions.outcome.refundedDeleted'),
     refunded_switch_off: t('redemptions.outcome.refundedSwitchOff'),
+    refunded_interrupted: t('redemptions.outcome.refundedInterrupted'),
     disabled: t('redemptions.outcome.disabled'),
     error: t('redemptions.outcome.error'),
     pending: t('redemptions.outcome.pending'),
@@ -179,7 +180,7 @@
   .outcome-chip { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
   .outcome-chip.played { background: rgba(62,207,142,0.15); color: var(--success); }
   .outcome-chip.refunded_no_file { background: var(--warning-bg); color: var(--warning); }
-  .outcome-chip.refunded_disabled, .outcome-chip.refunded_deleted, .outcome-chip.refunded_switch_off { background: var(--warning-bg); color: var(--warning); }
+  .outcome-chip.refunded_disabled, .outcome-chip.refunded_deleted, .outcome-chip.refunded_switch_off, .outcome-chip.refunded_interrupted { background: var(--warning-bg); color: var(--warning); }
   .outcome-chip.pending { background: var(--accent-glow); color: var(--accent); }
   .outcome-chip.disabled { background: var(--bg-elevated); color: var(--text-muted); }
   .outcome-chip.error { background: var(--danger-bg); color: var(--danger); }

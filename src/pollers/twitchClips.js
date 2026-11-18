@@ -47,6 +47,16 @@ async function check(twitchUsername, channelState, nowMs = Date.now()) {
     console.log(`[TwitchClips] ${twitchUsername}: found ${clips.length} clips since ${startedAt}`);
   }
 
+  // First look at this channel: what is already there is the baseline, never
+  // posted (as milestones do). With no clip yet, now is the baseline.
+  if (!channelState.last_clip_created_at) {
+    const newestAny = clips.length > 0
+      ? clips.reduce((a, b) => (Date.parse(a.created_at) > Date.parse(b.created_at) ? a : b)).created_at
+      : endedAt;
+    console.log(`[TwitchClips] ${twitchUsername}: ${clips.length} existing clips recorded as the starting point`);
+    return { notify: false, stateUpdate: { last_clip_created_at: newestAny } };
+  }
+
   const newClips = selectNewClips(clips, channelState.last_clip_created_at);
 
   if (newClips.length === 0) return null;

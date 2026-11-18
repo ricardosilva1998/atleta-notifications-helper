@@ -92,7 +92,7 @@ async function handleRedemption(streamerId, eventData) {
       return;
     }
     try {
-      await fulfillRedemption(streamer, twitchRewardId, twitchRedemptionId, 'CANCELED');
+      await refundRedemption(streamer, twitchRewardId, twitchRedemptionId);
     } catch (e) {
       console.error('[Redemption] refund failed:', e.message);
       db.setRedemptionOutcome(logId, 'error', `refund failed: ${e.message}`);
@@ -189,11 +189,41 @@ async function settleDueAutoFulfills(nowMs) {
   }
 }
 
+// A restart can leave a redemption 'pending' (recorded, never acted on). After
+// STALE_PENDING_MS one still waiting in Twitch's queue is refunded; any other is marked.
+const STALE_PENDING_MS = 10 * 60 * 1000;
+async function settleStalePending(nowMs) {
+  const now = nowMs || Date.now();
+  const cutoff = new Date(now - STALE_PENDING_MS).toISOString().slice(0, 19).replace('T', ' ');
+  for (const row of db.getStalePendingRedemptions(cutoff, 100)) {
+    if (settling.has(`p${row.id}`)) continue;
+    settling.add(`p${row.id}`);
+    try {
+      if (String(row.status).toLowerCase() !== 'unfulfilled') {
+        db.setRedemptionOutcome(row.id, 'disabled', 'interrupted by a restart');
+        continue;
+      }
+      const streamer = db.getStreamerById(row.streamer_id);
+      if (!streamer) { db.setRedemptionOutcome(row.id, 'error', 'interrupted by a restart'); continue; }
+      try {
+        await refundRedemption(streamer, row.twitch_reward_id, row.twitch_redemption_id);
+        db.setRedemptionOutcome(row.id, 'refunded_interrupted', 'interrupted by a restart');
+      } catch (e) {
+        db.setRedemptionOutcome(row.id, 'error', `interrupted by a restart; refund failed: ${e.message}`);
+      }
+    } finally {
+      settling.delete(`p${row.id}`);
+    }
+  }
+}
+
 function startTicks() {
   if (tickTimer) return;
+  settleStalePending().catch((e) => console.error('[Redemption] stale settle failed:', e.message));
   settleDueAutoFulfills().catch((e) => console.error('[Redemption] boot settle failed:', e.message));
   tickTimer = setInterval(() => {
     settleDueAutoFulfills().catch((e) => console.error('[Redemption] tick failed:', e.message));
+    settleStalePending().catch((e) => console.error('[Redemption] stale settle failed:', e.message));
   }, 60 * 1000);
   tickTimer.unref();
 }
@@ -203,4 +233,4 @@ function stopTicks() {
   tickTimer = null;
 }
 
-module.exports = { handleRedemption, formatChatTemplate, settleDueAutoFulfills, startTicks, stopTicks };
+module.exports = { handleRedemption, formatChatTemplate, settleDueAutoFulfills, settleStalePending, startTicks, stopTicks };

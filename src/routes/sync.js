@@ -39,7 +39,8 @@ router.get('/backup', requireSyncSecret, async (req, res) => {
     fs.mkdirSync(tmpDir, { recursive: true });
     // Create consistent SQLite snapshot
     await db.backup(backupPath);
-    console.log('[Sync] Database backup created');
+    db.scrubSnapshot(backupPath);
+    console.log('[Sync] Database backup created and scrubbed');
 
     // Build list of items to include in tar
     const items = [BACKUP_FILE];
@@ -90,8 +91,7 @@ router.post('/trigger', requireSyncSecret, (req, res) => {
 // GET /sync/status — last sync info
 router.get('/status', requireSyncSecret, (req, res) => {
   try {
-    const { lastSync } = require('../services/sync');
-    res.json(lastSync);
+    res.json(require('../services/sync').getLastSync());
   } catch {
     res.json({ time: null, status: 'never' });
   }

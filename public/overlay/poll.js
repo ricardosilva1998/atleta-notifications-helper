@@ -11,9 +11,6 @@
   const root = document.getElementById('poll-root');
   let state = null;
   let offset = 0; // the server's clock minus this machine's
-  let serverVersion = null;
-  let source = null;
-  let retryTimer = null;
   let shown = null; // { key, corner, rows: [{ row, fill, percent, extra }], footer }
 
   const now = () => Date.now() + offset;
@@ -79,42 +76,17 @@
     shown.footer.textContent = drawn.footer;
   }
 
-// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
-// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
-function retryDelay(url) {
-  if (typeof fetch !== 'function') return Promise.resolve(5000);
-  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
-    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
-    .catch(() => 5000);
-}
-
   function connect() {
-    if (source) source.close();
-    source = new EventSource(`/overlay/poll/events/${window.OVERLAY_TOKEN}`);
-    source.onmessage = (event) => {
-      let data;
-      try { data = JSON.parse(event.data); } catch (err) { return; }
-      if (data.type === 'config') {
-        // A new server version (a deploy): load the page again, for its new script.
-        if (serverVersion && data.serverVersion && data.serverVersion !== serverVersion) { location.reload(); return; }
-        serverVersion = data.serverVersion;
-        return;
-      }
-      if (data.type === 'poll-state') {
-        if (typeof data.serverNow === 'number') offset = data.serverNow - Date.now();
-        state = { poll: data.poll || null, prediction: data.prediction || null };
-        draw();
-      }
-    };
-    source.onerror = () => {
-      source.close();
-      source = null;
-      if (!retryTimer) {
-        retryTimer = true;
-        retryDelay(`/overlay/poll/events/${window.OVERLAY_TOKEN}`).then((ms) => { retryTimer = setTimeout(() => { retryTimer = null; connect(); }, ms); });
-      }
-    };
+    window.AtletaSSE.connect({
+      url: `/overlay/poll/events/${window.OVERLAY_TOKEN}`,
+      onMessage: (data) => {
+        if (data.type === 'poll-state') {
+          if (typeof data.serverNow === 'number') offset = data.serverNow - Date.now();
+          state = { poll: data.poll || null, prediction: data.prediction || null };
+          draw();
+        }
+      },
+    });
   }
 
   setInterval(draw, 250);

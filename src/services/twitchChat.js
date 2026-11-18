@@ -18,6 +18,8 @@ const channelMap = new Map(); // channelName -> streamerId
 const JOIN_SPACING_MS = 500; // 20 JOINs per 10 s is Twitch's limit
 const joinQueue = []; // [streamerId, channel] waiting for their turn
 let joinTimer = null;
+// Set when Twitch refuses BOT_TWITCH_TOKEN (login failed / authentication failed); cleared on a connect.
+let authRefused = false;
 const cooldowns = new Map(); // "streamerId:command" -> timestamp
 
 const chatTypeMap = { subscription: 'sub', follow: 'follow', giftsub: 'giftsub', bits: 'bits', donation: 'donation', raid: 'raid' };
@@ -184,6 +186,16 @@ function channelToJoin(streamerId) {
   return streamer.twitch_username.toLowerCase();
 }
 
+// Twitch's answers for a token it does not accept: "Login authentication failed",
+// "Login unsuccessful", "Improperly formatted auth". Logged loudly once per refusal streak.
+function noteConnectionFailure(reason) {
+  const text = String((reason && reason.message) || reason || '');
+  if (!/login (authentication )?(failed|unsuccessful)|improperly formatted auth|authentication failed/i.test(text)) return;
+  if (authRefused) return;
+  authRefused = true;
+  console.error('[Chat] TWITCH REFUSED BOT_TWITCH_TOKEN: the chat bot cannot log in. Make a new token with the chat scopes and set BOT_TWITCH_TOKEN.');
+}
+
 const chatManager = {
   connect() {
     const { twitchUsername, twitchToken } = config.bot;
@@ -216,12 +228,14 @@ const chatManager = {
 
     client.on('connected', () => {
       console.log(`[Chat] Bot connected as ${twitchUsername}`);
+      authRefused = false;
 
       this.syncChannels();
     });
 
     client.on('disconnected', (reason) => {
       console.log(`[Chat] Bot disconnected: ${reason}`);
+      noteConnectionFailure(reason);
     });
 
     client.on('notice', (channel, msgid, message) => {
@@ -236,11 +250,20 @@ const chatManager = {
       if (self) console.log(`[Chat] Left ${channel}`);
     });
 
-    client.on('message', handleMessage);
+    client.on('message', (channel, tags, message, self) => {
+      return handleMessage(channel, tags, message, self)
+        .catch((err) => console.error('[Chat] Message handling failed:', err.message));
+    });
 
     client.connect().catch((err) => {
       console.error(`[Chat] Failed to connect:`, err.message);
+      noteConnectionFailure(err);
     });
+  },
+
+  // True while Twitch refuses BOT_TWITCH_TOKEN: the chatbot card says so instead of "connecting".
+  authRefused() {
+    return authRefused;
   },
 
   disconnect() {
@@ -257,6 +280,7 @@ const chatManager = {
     joinQueue.length = 0;
     channelMap.clear();
     cooldowns.clear();
+    authRefused = false;
   },
 
   // One rejoin mechanism. tmi.js rejoins the channels in its own lists after a reconnect (it copies the lists right

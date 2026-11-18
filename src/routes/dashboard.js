@@ -129,6 +129,14 @@ function vtuberPage(req, res, next) {
   res.redirect('/dashboard');
 }
 
+// The JSON routes of a feature that is switched off answer 404 JSON, like the pages redirect (one gate for all of them).
+const flagGate = (isOn) => (req, res, next) => {
+  if (isOn()) return next();
+  res.status(404).json({ ok: false, error: res.locals.t('dashboard.settings.error.notFound') });
+};
+const overlaysOn = flagGate(() => config.features.overlays);
+const vtuberOn = flagGate(() => config.features.overlays && config.features.vtuber);
+
 // The same for a page that exists only for YouTube (the YouTube chatbot) while config.features.youtube is off.
 // Its POST routes stay as they are, like the overlay pages' ones.
 function youtubePage(req, res, next) {
@@ -338,7 +346,7 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
       recaps: onOff(server.recap_enabled && liveChannel),
       milestones: server.milestones_enabled && liveChannel ? (authorized ? 'on' : 'wait') : 'off',
       highlights: onOff(server.weekly_highlights_enabled && own
-        && db.getDigestChannelForGuild(server.guild_id)),
+        && db.getDigestChannelForGuild(server.guild_id, streamer.id)),
       subRoles: server.sub_sync_enabled && server.sub_role_id ? (authorized ? 'on' : 'wait') : 'off',
       // The working card's switches (services/dashboardCards.js): what each one stores, where the posts go (the
       // channel names, when the bot sees them) and what is set.
@@ -384,7 +392,7 @@ function gatherCards(req, discord, lang) {
     features: config.features,
     now,
     appUrl: config.app.url,
-    bot: { connected: chatManager.isConnected(), moderator: chatManager.moderatorStatus(s.id), username: config.bot.twitchUsername },
+    bot: { connected: chatManager.isConnected(), refused: chatManager.authRefused(), moderator: chatManager.moderatorStatus(s.id), username: config.bot.twitchUsername },
     overlay: { url: s.overlay_token ? `${config.app.url}/overlay/${s.overlay_token}` : null, open: overlayPresence.isOpen(s.id) },
     discord,
     commands: db.getChatCommands(s.id),
@@ -1342,7 +1350,7 @@ router.post('/donations/tts', (req, res) => {
 // services/tipVoice.js (it counts toward the month, has its own 10 s cooldown, and plays in OBS when it is open).
 // Answers the URL the page plays it from, or the reason it could not (a TTS_ERRORS code).
 const TTS_TEST_STATUS = Object.freeze({ cooldown: 429, limit: 409, credit_floor: 503, unavailable: 503, failed: 502, bad_language: 400 });
-router.post('/donations/tts/test', async (req, res) => {
+router.post('/donations/tts/test', overlaysOn, async (req, res) => {
   let streamer = req.streamer;
   const body = req.body || {};
   if (body.tts_language !== undefined) {
@@ -1665,6 +1673,7 @@ router.get('/tracking', overlayPage, (req, res) => {
   });
 });
 
+router.use('/api/tracking', overlaysOn);
 router.get('/api/tracking/state', trackingAnswer);
 
 // Start a goal (ending the active one of its kind). A lifetime goal reads Twitch's total first: no answer refuses
@@ -1810,7 +1819,9 @@ router.get('/chatbot', (req, res) => {
   } catch (e) {}
 
   // Only a known error code from the URL becomes a message; anything else shows nothing.
-  const commandError = errorMessage(COMMAND_ERRORS, req.query.cmd_error, res.locals.t, { max: COMMAND_RESPONSE_MAX });
+  const commandError = req.query.cmd_error === 'too_many'
+    ? res.locals.t('chatbot.commands.error.tooMany', { max: COMMANDS_PER_STREAMER_MAX })
+    : errorMessage(COMMAND_ERRORS, req.query.cmd_error, res.locals.t, { max: COMMAND_RESPONSE_MAX });
 
   res.render('chatbot-config', { streamer, commands, botConnected, botUsername, bannedWords, discordChannels, commandError });
 });
@@ -1822,6 +1833,14 @@ router.get('/chatbot', (req, res) => {
 router.post('/chatbot', (req, res) => {
   const b = req.body || {};
   if (b.form !== 'connection') {
+    const templates = {};
+    for (const event of ['follow', 'sub', 'giftsub', 'bits', 'donation', 'raid']) {
+      const key = `chat_${event}_template`;
+      if (b[key] === undefined || b[key] === '') { templates[key] = ''; continue; }
+      const read = dashboardSettings.readSetting(key, b[key]);
+      if (read.error) return res.status(400).type('text/plain').send(res.locals.t(dashboardSettings.ERRORS[read.error].text));
+      templates[key] = read.value;
+    }
     db.updateChatbotConfig(req.streamer.id, {
       chat_follow_enabled: b.chat_follow_enabled ? 1 : 0,
       chat_sub_enabled: b.chat_sub_enabled ? 1 : 0,
@@ -1829,12 +1848,12 @@ router.post('/chatbot', (req, res) => {
       chat_bits_enabled: b.chat_bits_enabled ? 1 : 0,
       chat_donation_enabled: b.chat_donation_enabled ? 1 : 0,
       chat_raid_enabled: b.chat_raid_enabled ? 1 : 0,
-      chat_follow_template: b.chat_follow_template || '',
-      chat_sub_template: b.chat_sub_template || '',
-      chat_giftsub_template: b.chat_giftsub_template || '',
-      chat_bits_template: b.chat_bits_template || '',
-      chat_donation_template: b.chat_donation_template || '',
-      chat_raid_template: b.chat_raid_template || '',
+      chat_follow_template: templates.chat_follow_template,
+      chat_sub_template: templates.chat_sub_template,
+      chat_giftsub_template: templates.chat_giftsub_template,
+      chat_bits_template: templates.chat_bits_template,
+      chat_donation_template: templates.chat_donation_template,
+      chat_raid_template: templates.chat_raid_template,
     });
     return res.redirect('/dashboard/chatbot?tab=events');
   }
@@ -2077,6 +2096,7 @@ function commandsBack(res, error) {
 router.post('/chatbot/commands', (req, res) => {
   const parsed = parseCommand(req.body);
   if (parsed.error) return commandsBack(res, parsed.error);
+  if (db.countChatCommands(req.streamer.id) >= COMMANDS_PER_STREAMER_MAX) return commandsBack(res, 'too_many');
 
   try {
     db.addChatCommand(req.streamer.id, parsed.command, parsed.response, parsed.cooldown);
@@ -2098,7 +2118,7 @@ router.post('/chatbot/commands/:id/update', (req, res) => {
       req.streamer.id,
       parsed.command,
       parsed.response,
-      req.body.enabled ? 1 : 0,
+      (req.body || {}).enabled ? 1 : 0,
       parsed.cooldown
     );
   } catch (err) {
@@ -2186,6 +2206,13 @@ router.post('/youtube-chatbot', (req, res) => {
     settings.yt_overlay_giftmember_enabled = b.yt_overlay_giftmember_enabled ? 1 : 0;
   }
   db.updateYoutubeChatbotConfig(req.streamer.id, settings);
+  if (!settings.yt_chatbot_enabled) {
+    try {
+      require('../services/youtubeLiveChat').youtubeChatManager.stopPolling(req.streamer.id);
+    } catch (e) {
+      console.error('[YT Chat] Could not stop polling:', e.message);
+    }
+  }
   pushOverlayConfig(req.streamer.id);
   res.redirect('/dashboard/youtube-chatbot');
 });
@@ -2497,8 +2524,8 @@ router.post('/sponsors/:id/update', (req, res) => {
 
 // Reorder sponsor images
 router.post('/sponsors/reorder', (req, res) => {
-  const { ids } = req.body;
-  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+  const ids = reorderIds(req.body, 500);
+  if (!ids) return res.status(400).json({ error: res.locals.t('dashboard.settings.error.invalid') });
   db.updateSponsorImageOrder(req.streamer.id, ids);
   res.json({ ok: true });
 });
@@ -2529,6 +2556,23 @@ router.post('/sponsors/toggle-rotation', (req, res) => {
 
 // --- Sponsor Chat Messages ---
 
+const SPONSOR_MESSAGES_MAX = 50;
+const SPONSOR_URL_MAX = 200;
+// A sponsor link is empty or an http(s) address of at most 200 characters.
+function sponsorUrlOk(url) {
+  if (!url) return true;
+  if (url.length > SPONSOR_URL_MAX) return false;
+  try { return ['http:', 'https:'].includes(new URL(url).protocol); } catch (e) { return false; }
+}
+
+// The ids a reorder names: an array of at most `max` positive integers, no repeats; null otherwise.
+function reorderIds(body, max) {
+  const ids = body && body.ids;
+  if (!Array.isArray(ids) || ids.length > max) return null;
+  if (!ids.every((id) => Number.isInteger(id) && id > 0)) return null;
+  return new Set(ids).size === ids.length ? ids : null;
+}
+
 router.post('/sponsor-messages/add', (req, res) => {
   const t = res.locals.t;
   const b = req.body || {};
@@ -2536,6 +2580,10 @@ router.post('/sponsor-messages/add', (req, res) => {
   if (!text) return res.status(400).json({ ok: false, code: 'required', error: t('sponsors.error.textRequired') });
   if (text.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ ok: false, code: 'too_long', error: t('dashboard.settings.error.tooLong') });
   const url = typeof b.url === 'string' ? b.url.trim() : '';
+  if (!sponsorUrlOk(url)) return res.status(400).json({ ok: false, code: 'bad_url', error: t('sponsors.error.badUrl') });
+  if (db.getSponsorMessages(req.streamer.id).length >= SPONSOR_MESSAGES_MAX) {
+    return res.status(409).json({ ok: false, code: 'too_many', error: t('sponsors.error.tooMany', { max: SPONSOR_MESSAGES_MAX }) });
+  }
   const id = Number(db.addSponsorMessage(req.streamer.id, text, url).lastInsertRowid);
   // The rotation reads the enabled messages when it starts: with none before this one it was not running.
   try {
@@ -2560,7 +2608,10 @@ router.post('/sponsor-messages/:id/update', (req, res) => {
     if (text.length > dashboardSettings.TEMPLATE_MAX) return res.status(400).json({ ok: false, code: 'too_long', error: t('dashboard.settings.error.tooLong') });
     fields.message_text = text;
   }
-  if (b.url !== undefined) fields.url = typeof b.url === 'string' ? b.url.trim() : '';
+  if (b.url !== undefined) {
+    fields.url = typeof b.url === 'string' ? b.url.trim() : '';
+    if (!sponsorUrlOk(fields.url)) return res.status(400).json({ ok: false, code: 'bad_url', error: t('sponsors.error.badUrl') });
+  }
   let enabled = null;
   if (b.enabled !== undefined) {
     enabled = parseSwitch(b.enabled);
@@ -2620,6 +2671,9 @@ function clamp(val, min, max) {
   if (isNaN(n)) return min;
   return Math.min(max, Math.max(min, n));
 }
+
+// Twitch allows 50 custom rewards on a channel.
+const REWARDS_MAX = 50;
 
 // The message for a bad reward field, in the streamer's language (the page shows it).
 function validateRewardFields(fields, res) {
@@ -2701,6 +2755,9 @@ router.post('/redemptions/upload', async (req, res) => {
   const positionPreset = req.query.position_preset || 'center-large';
 
   if (!validateRewardFields({ title, cost, prompt, position_preset: positionPreset }, res)) return;
+  if (db.getRewards(req.streamer.id).length >= REWARDS_MAX) {
+    return res.status(409).json({ error: res.locals.t('redemptions.error.tooMany', { max: REWARDS_MAX }) });
+  }
   if (refuseUpload(req, res, buf.length)) return;
 
   const cooldownSeconds = Math.min(REWARD_COOLDOWN_MAX, Math.max(0, parseInt(req.query.cooldown_seconds, 10) || 0));
@@ -2982,8 +3039,8 @@ router.post('/redemptions/:id/test', (req, res) => {
 });
 
 router.post('/redemptions/reorder', (req, res) => {
-  const { ids } = req.body;
-  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+  const ids = reorderIds(req.body, 500);
+  if (!ids) return res.status(400).json({ error: res.locals.t('dashboard.settings.error.invalid') });
   db.reorderRewards(req.streamer.id, ids);
   res.json({ ok: true });
 });
@@ -3238,8 +3295,11 @@ router.post('/overlay-builder/save', (req, res) => {
     return res.status(400).json({ ok: false, field: 'style', error: t('overlayBuilder.error.style') });
   }
   // The look first: another look starts from its own settings, then the design is what the builder sent.
-  if (namesStyle) db.setOverlayDesignStyle(req.streamer.id, eventType, style);
-  db.saveOverlayDesign(req.streamer.id, eventType, checked.design);
+  // One transaction: a failed design write never leaves the new look with the old design.
+  db.runInTransaction(() => {
+    if (namesStyle) db.setOverlayDesignStyle(req.streamer.id, eventType, style);
+    db.saveOverlayDesign(req.streamer.id, eventType, checked.design);
+  });
   pushOverlayDesigns(req.streamer.id);
   res.json({ ok: true });
 });
@@ -3285,6 +3345,8 @@ router.get('/vtuber-preview', vtuberPage, (req, res) => {
 });
 
 // --- VTuber Model Endpoints ---
+
+router.use('/api/vtuber', vtuberOn);
 
 router.get('/api/vtuber/models', (req, res) => {
   const models = db.getVtuberModels(req.streamer.id);

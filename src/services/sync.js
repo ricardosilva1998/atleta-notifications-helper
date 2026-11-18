@@ -8,21 +8,32 @@ const db = require('../db');
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const RESTORE_DIR = '/tmp/sync-restore';
 
+const FETCH_TIMEOUT_MS = 10 * 60 * 1000;
+
 let lastSync = { time: null, status: 'never', error: null };
 
+let running = false;
+
 async function performSync() {
+  if (running) {
+    console.log('[Sync] Already running, skipping');
+    return;
+  }
   if (!config.app.syncSourceUrl || !config.app.syncSecret) {
     console.log('[Sync] Skipping — SYNC_SOURCE_URL or SYNC_SECRET not set');
     return;
   }
 
   console.log(`[Sync] Starting data sync from ${config.app.syncSourceUrl}...`);
+  running = true;
+  let dbClosed = false;
   lastSync = { time: new Date().toISOString(), status: 'in_progress', error: null };
 
   try {
     // Download backup tarball from prod
     const res = await fetch(`${config.app.syncSourceUrl}/sync/backup`, {
       headers: { Authorization: `Bearer ${config.app.syncSecret}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -57,6 +68,7 @@ async function performSync() {
 
     // Close the database before replacing the file
     db.closeDb();
+    dbClosed = true;
     console.log('[Sync] Database closed');
 
     // Replace database file
@@ -86,14 +98,20 @@ async function performSync() {
 
     lastSync = { time: new Date().toISOString(), status: 'success', error: null };
     console.log('[Sync] Data restored, restarting process...');
-    process.exit(0); // Railway auto-restarts the container
+    process.exit(1); // non-zero so Railway's ON_FAILURE policy restarts the container
   } catch (err) {
     lastSync = { time: new Date().toISOString(), status: 'error', error: err.message };
     console.error(`[Sync] Failed: ${err.message}`);
     // Clean up temp directory on error
     try { fs.rmSync(RESTORE_DIR, { recursive: true, force: true }); } catch {}
-    // Don't crash — dev keeps running with its existing data
+    // The DB is closed once the restore began: the process cannot keep serving, so
+    // leave non-zero and let the restart policy bring dev back.
+    if (dbClosed) process.exit(1);
+  } finally {
+    running = false;
   }
 }
 
-module.exports = { performSync, lastSync };
+function getLastSync() { return lastSync; }
+
+module.exports = { performSync, getLastSync };

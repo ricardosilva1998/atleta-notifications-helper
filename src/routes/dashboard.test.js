@@ -97,6 +97,7 @@ const chatStub = {
     startForStreamer: (...args) => managerCalls.push(['chat.start', ...args]),
     stopForStreamer: (...args) => managerCalls.push(['chat.stop', ...args]),
     moderatorStatus: () => null,
+    authRefused: () => false,
     recheckModerator: async (id) => { chatCalls.push(['recheck', id]); return true; },
   },
 };
@@ -3584,6 +3585,7 @@ describe('channel point rewards', () => {
       refunded_disabled: 'redemptions.outcome.refundedDisabled',
       refunded_deleted: 'redemptions.outcome.refundedDeleted',
       refunded_switch_off: 'redemptions.outcome.refundedSwitchOff',
+      refunded_interrupted: 'redemptions.outcome.refundedInterrupted',
       disabled: 'redemptions.outcome.disabled',
       error: 'redemptions.outcome.error',
       pending: 'redemptions.outcome.pending',
@@ -6053,5 +6055,113 @@ describe('reading tips aloud', () => {
     db.logDonation(never, { source: 'paypal', donor_name: 'Plain Donor', amount: 3, currency: 'EUR', external_id: 'tts-history-4' });
     const plain = (await request('GET', '/dashboard/donations/history', { streamer: never })).text;
     assert.ok(plain.includes('Plain Donor') && !plain.includes('class="dh-tts'), 'no column for a streamer who never read tips');
+  });
+});
+
+// ── Dashboard and server input rules (E26 to E29) ────────────────────────
+
+describe('input rules of the legacy forms and JSON routes', () => {
+  const { features } = require('../config');
+
+  test('the 101st custom command from the old form is refused', async () => {
+    const id = addStreamer();
+    for (let i = 0; i < 100; i++) db.addChatCommand(id, `cmd${i}`, 'hi', 5);
+    const res = await request('POST', '/dashboard/chatbot/commands', { streamer: id, form: { command: 'extra', response: 'hi' } });
+    assert.equal(res.status, 302);
+    assert.match(res.headers.location, /cmd_error=too_many/);
+    assert.equal(db.countChatCommands(id), 100);
+    const page = await request('GET', '/dashboard/chatbot?tab=commands&cmd_error=too_many', { streamer: id });
+    assert.ok(page.text.includes(esc(t('en', 'chatbot.commands.error.tooMany', { max: 100 }))));
+  });
+
+  test('a thank-you template that is an array or too long answers 400 and keeps what was stored', async () => {
+    const id = addStreamer();
+    const before = db.getStreamerById(id).chat_follow_template;
+    const array = await request('POST', '/dashboard/chatbot', { streamer: id, rawBody: 'chat_follow_template[]=a&chat_follow_template[]=b' });
+    assert.equal(array.status, 400);
+    const long = await request('POST', '/dashboard/chatbot', { streamer: id, form: { chat_sub_template: 'x'.repeat(501) } });
+    assert.equal(long.status, 400);
+    assert.equal(db.getStreamerById(id).chat_follow_template, before);
+    const ok = await request('POST', '/dashboard/chatbot', { streamer: id, form: { chat_follow_template: ' Hi {username} ' } });
+    assert.equal(ok.status, 302);
+    assert.equal(db.getStreamerById(id).chat_follow_template, 'Hi {username}');
+  });
+
+  test('the VTuber JSON routes answer 404 while the VTuber tab is off, and work when it is on', async () => {
+    const id = addStreamer();
+    features.vtuber = false;
+    try {
+      assert.equal((await request('GET', '/dashboard/api/vtuber/models', { streamer: id })).status, 404);
+      assert.equal((await request('GET', '/dashboard/api/vtuber/x', { streamer: id })).status, 404);
+      assert.equal((await request('PUT', '/dashboard/api/vtuber/select', { streamer: id, body: { modelId: null } })).status, 404);
+    } finally { features.vtuber = true; }
+    assert.equal((await request('GET', '/dashboard/api/vtuber/models', { streamer: id })).status, 200);
+  });
+
+  test('the Tracking JSON routes and the voice test answer 404 JSON while the overlays are off', async () => {
+    const id = addStreamer();
+    features.overlays = false;
+    try {
+      for (const [method, route] of [['GET', '/dashboard/api/tracking/state'], ['POST', '/dashboard/api/tracking/goal/follow'], ['POST', '/dashboard/donations/tts/test']]) {
+        const res = await request(method, route, { streamer: id, body: {} });
+        assert.equal(res.status, 404, route);
+        assert.equal(res.json().ok, false, route);
+      }
+    } finally { features.overlays = true; }
+    assert.equal((await request('GET', '/dashboard/api/tracking/state', { streamer: id })).status, 200);
+  });
+
+  test('the 51st sponsor message is refused, and a sponsor link must be http(s) and at most 200 characters', async () => {
+    const id = addStreamer();
+    const add = (body) => request('POST', '/dashboard/sponsor-messages/add', { streamer: id, body });
+    assert.equal((await add({ message_text: 'a', url: 'javascript:alert(1)' })).status, 400);
+    assert.equal((await add({ message_text: 'a', url: `https://x.example/${'a'.repeat(200)}` })).status, 400);
+    assert.equal((await add({ message_text: 'a', url: 'https://x.example/ok' })).status, 200);
+    for (let i = 1; i < 50; i++) db.addSponsorMessage(id, `m${i}`, '');
+    const over = await add({ message_text: 'one more' });
+    assert.equal(over.status, 409);
+    assert.equal(over.json().code, 'too_many');
+    assert.equal(db.getSponsorMessages(id).length, 50);
+    const msg = db.getSponsorMessages(id)[0].id;
+    const bad = await request('POST', `/dashboard/sponsor-messages/${msg}/update`, { streamer: id, body: { url: 'ftp://x.example' } });
+    assert.equal(bad.status, 400);
+  });
+
+  test('a 51st reward is refused', async () => {
+    const id = addStreamer();
+    for (let i = 0; i < 50; i++) {
+      db.insertReward({ streamer_id: id, title: `Reward ${i}`, cost: 10, prompt: null, cooldown_seconds: 0, enabled: 1, media_type: 'audio', media_filename: `f${i}.mp3`, media_mime: 'audio/mpeg', media_size_bytes: 1, position_preset: 'center-large', custom_x: null, custom_y: null, custom_w: null, custom_h: null, volume: 1, max_play_seconds: 5, chat_message_template: null, auto_fulfill: 1, sort_order: i, twitch_sync_status: 'ok' });
+    }
+    const res = await request('POST', '/dashboard/redemptions/upload?media_type=audio&ext=mp3&title=Extra&cost=10', { streamer: id, rawBody: Buffer.from('ID3....'), contentType: 'application/octet-stream' });
+    assert.equal(res.status, 409);
+    assert.equal(res.json().error, t('en', 'redemptions.error.tooMany', { max: 50 }));
+    assert.equal(db.getRewards(id).length, 50);
+  });
+
+  test('a reorder with bad ids answers 400, never 500', async () => {
+    const id = addStreamer();
+    for (const route of ['/dashboard/sponsors/reorder', '/dashboard/redemptions/reorder']) {
+      for (const ids of [undefined, 'x', [1, 'a'], [1, 1], [{}], [-1], [1.5], Array.from({ length: 501 }, (_, i) => i + 1)]) {
+        const res = await request('POST', route, { streamer: id, body: { ids } });
+        assert.equal(res.status, 400, `${route} ${JSON.stringify(ids)}`);
+      }
+      assert.equal((await request('POST', route, { streamer: id, body: { ids: [3, 2, 1] } })).status, 200, route);
+    }
+    assert.equal((await request('POST', '/dashboard/sponsors/reorder', { streamer: id })).status, 400);
+  });
+
+  test('the builder save writes the look and the design in one transaction', async () => {
+    const id = addStreamer();
+    const style = 'follow-racing';
+    const design = require('../services/overlayDesign').EVENT_DEFAULTS.follow;
+    let wrapped = 0;
+    const realTx = db.runInTransaction;
+    db.runInTransaction = (fn) => { wrapped++; return realTx(fn); };
+    try {
+      const res = await request('POST', '/dashboard/overlay-builder/save', { streamer: id, body: { eventType: 'follow', design, style } });
+      assert.equal(res.status, 200);
+    } finally { db.runInTransaction = realTx; }
+    assert.equal(wrapped, 1);
+    assert.equal(db.getOverlayDesign(id, 'follow').style, style);
   });
 });

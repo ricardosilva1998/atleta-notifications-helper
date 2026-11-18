@@ -792,3 +792,27 @@ describe('joining and leaving around a (re)connect', () => {
     assert.deepEqual(tmiClient.opts.channels, []);
   });
 });
+
+describe('Twitch refusing the bot token', () => {
+  test('is exposed once the login fails, logged once, and cleared on a connect', () => {
+    const errors = [];
+    const realError = console.error;
+    console.error = (...a) => errors.push(a.join(' '));
+    try {
+      assert.equal(chatManager.authRefused(), false);
+      tmiClient.handlers.disconnected('Login authentication failed');
+      tmiClient.handlers.disconnected('Login authentication failed');
+      assert.equal(chatManager.authRefused(), true);
+      assert.equal(errors.filter((e) => e.includes('REFUSED BOT_TWITCH_TOKEN')).length, 1);
+      tmiClient.handlers.connected();
+      assert.equal(chatManager.authRefused(), false);
+    } finally {
+      console.error = realError;
+    }
+  });
+
+  test('an ordinary disconnect is not a refusal', () => {
+    tmiClient.handlers.disconnected('Connection closed.');
+    assert.equal(chatManager.authRefused(), false);
+  });
+});

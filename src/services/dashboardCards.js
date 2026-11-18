@@ -108,6 +108,7 @@ function chatbotCard({ streamer, bot }) {
   let st;
   if (!twitchLinked(streamer)) st = status('cards.chatbot.status.noTwitch', 'warn');
   else if (!on) st = status('cards.chatbot.status.off', 'off');
+  else if (bot.refused) st = status('cards.chatbot.status.tokenRefused', 'warn');
   else if (!bot.connected) st = status('cards.chatbot.status.connecting', 'warn');
   else st = status('cards.chatbot.status.online', 'ok', { channel: streamer.twitch_username });
   return {

@@ -215,6 +215,7 @@ router.get('/sponsors/:token', (req, res) => {
 <body>
   <div id="timed-container"></div>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token)};</script>
+  <script src="/overlay/sse.js"></script>
   <script src="/overlay/sponsors.js"></script>
 </body>
 </html>`);
@@ -266,6 +267,7 @@ function goalPageHtml(bootScript) {
 <body>
   <div id="goal-root"></div>
   <script>${bootScript}</script>
+  <script src="/overlay/sse.js"></script>
   <script src="/overlay/goal.js"></script>
 </body>
 </html>`;
@@ -329,6 +331,7 @@ function trackingPageHtml(req, title, pageConfig) {
 <body>
   <div id="tracking-root"></div>
   <script>window.TRACKING_PAGE = ${JSON.stringify(pageConfig).replace(/</g, '\\u003c')}; window.TRACKING_TEXTS = ${JSON.stringify(texts).replace(/</g, '\\u003c')};</script>
+  <script src="/overlay/sse.js"></script>
   <script src="/overlay/tracking.js"></script>
 </body>
 </html>`;
@@ -536,6 +539,7 @@ router.get('/poll/:token', (req, res) => {
   <div id="poll-root"></div>
   <script>window.OVERLAY_TOKEN = ${JSON.stringify(streamer.overlay_token).replace(/</g, '\\u003c')}; window.POLL_BAR_TEXTS = ${JSON.stringify(texts).replace(/</g, '\\u003c')};</script>
   <script src="/overlay/pollModel.js"></script>
+  <script src="/overlay/sse.js"></script>
   <script src="/overlay/poll.js"></script>
 </body>
 </html>`);
@@ -575,6 +579,7 @@ router.get('/iracing/:type/:token', (req, res) => {
     window.STREAMER_ID = ${streamer.id};
   </script>
   <script src="/overlay/iracing/shared.js"></script>
+  <script src="/overlay/sse.js"></script>
   <script src="/overlay/iracing/chat.js"></script>
 </body>
 </html>`);
@@ -610,6 +615,7 @@ router.get('/:token', (req, res) => {
   <script src="/overlay/objects/styles.js?v=${alertStyles().version}"></script>
   <script src="/overlay/fx.js"></script>
   <script src="/overlay/tipVoiceTiming.js"></script>
+  <script src="/overlay/sse.js"></script>
   <script src="/overlay/placement.js"></script>
   <script src="/overlay/overlay.js"></script>
 </body>

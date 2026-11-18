@@ -1,7 +1,4 @@
 // Tip goal overlay — progress bar, separate OBS browser source (/overlay/goal/:token)
-let serverVersion = null;
-let evtSource = null;
-let reconnectTimer = null;
 let currentGoalId = null;
 let displayedAmount = 0;
 let countAnim = null;
@@ -22,47 +19,13 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
-// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
-function retryDelay(url) {
-  if (typeof fetch !== 'function') return Promise.resolve(5000);
-  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
-    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
-    .catch(() => 5000);
-}
-
 function connectSSE() {
-  if (evtSource) { evtSource.close(); evtSource = null; }
-
-  evtSource = new EventSource(`/overlay/goal/events/${window.OVERLAY_TOKEN}`);
-
-  evtSource.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-
-    if (data.type === 'config') {
-      if (serverVersion && data.serverVersion && data.serverVersion !== serverVersion) {
-        location.reload();
-        return;
-      }
-      serverVersion = data.serverVersion;
-      return;
-    }
-
-    if (data.type === 'tip_goal') {
-      renderGoal(data.goal, data);
-    }
-  };
-
-  evtSource.onerror = () => {
-    evtSource.close();
-    evtSource = null;
-    if (!reconnectTimer) {
-      retryDelay(`/overlay/goal/events/${window.OVERLAY_TOKEN}`).then((ms) => {
-        reconnectTimer = setTimeout(() => { reconnectTimer = null; connectSSE(); }, ms);
-      });
-    }
-  };
+  window.AtletaSSE.connect({
+    url: `/overlay/goal/events/${window.OVERLAY_TOKEN}`,
+    onMessage: (data) => {
+      if (data.type === 'tip_goal') renderGoal(data.goal, data);
+    },
+  });
 }
 
 function buildCard(goal) {

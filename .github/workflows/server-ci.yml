@@ -33,6 +33,9 @@ jobs:
       - name: Syntax check
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
 
+      - name: Syntax check (public scripts)
+        run: find public -name '*.js' -print0 | xargs -0 -n1 node --check
+
       - name: Unit tests
         run: node --test "src/**/*.test.js" "tests/**/*.test.js"
 

@@ -14,6 +14,7 @@ const vm = require('node:vm');
 
 const OVERLAY_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
 const OBJECTS_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
+const SSE_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'sse.js'), 'utf8');
 const PLACEMENT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'placement.js'), 'utf8');
 const KIT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'kit.js'), 'utf8');
 const TIP_VOICE_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'tipVoiceTiming.js'), 'utf8');
@@ -184,6 +185,7 @@ function loadOverlay({ objects = true, styles = false, kit = styles, designs = {
   vm.runInContext(FX_JS, context, { filename: 'fx.js' });
   vm.runInContext(TIP_VOICE_JS, context, { filename: 'tipVoiceTiming.js' });
   vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
+  vm.runInContext(SSE_JS, context, { filename: 'sse.js' });
   vm.runInContext(OVERLAY_JS, context, { filename: 'overlay.js' });
 
   const overlay = {
@@ -374,6 +376,30 @@ describe('Clear All', () => {
     overlay.send({ type: 'clear' });
     assert.equal(overlay.run('alertTimers.size'), 0);
     assert.equal(overlay.clock.pending, 0, 'no timer of the cleared alert is left to fire');
+  });
+
+  test('an alert that throws while it starts is dropped and the next one plays', () => {
+    const overlay = loadOverlay();
+    overlay.run("window.thrown = 0; const realSound = soundEffects.follow; soundEffects.follow = () => { if (window.thrown++ === 0) throw new Error('boom'); realSound && realSound(); };");
+    overlay.send(follow('A')); overlay.send(follow('B'));
+    const seen = watch(overlay);
+    overlay.clock.advance(1000, seen.sample);
+    assert.equal(overlay.run('window.thrown'), 2, 'the second alert was started after the first threw');
+    assert.equal(overlay.slots().length, 1, 'only the second alert is on screen');
+    overlay.clock.advance(120000, seen.sample);
+    assert.equal(overlay.slots().length, 0);
+    assert.equal(overlay.run('isPlaying'), false, 'the queue ended cleanly');
+  });
+
+  test('an alert that throws while it is dismissed does not stall the queue', () => {
+    const overlay = loadOverlay();
+    overlay.run("window.calls = 0; const realStop = stopTipVoice; stopTipVoice = () => { if (++window.calls === 2) throw new Error('boom'); realStop(); };");
+    const seen = watch(overlay);
+    overlay.send(follow('A')); overlay.send(follow('B'));
+    overlay.clock.advance(120000, seen.sample);
+    assert.equal(seen.shown, 2, 'both alerts were shown');
+    assert.equal(overlay.slots().length, 0);
+    assert.equal(overlay.run('isPlaying'), false);
   });
 
   test('two alerts that come after a clear play one at a time, not on top of each other', () => {

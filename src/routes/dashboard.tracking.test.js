@@ -44,7 +44,7 @@ const STUBS = {
   '../discord': { client: { guilds: { cache: new Map() }, application: { id: '1480000000000000000' } }, fetchGuildChannel: async () => null, streamerGuildForChannel: () => null },
   '../services/twitch': { getUserProfile: async () => null, hasRedemptionScope: () => true, hasPollsScope: () => false, needsBroadcasterReauth: () => false },
   '../services/youtube': { resolveChannelId: async () => null, getLatestVideos: async () => [], getChannelInfo: async () => null },
-  '../services/twitchChat': { chatManager: { isConnected: () => false, sendEventMessage: () => {}, sendMessage: () => {}, startForStreamer: record('chat.start'), stopForStreamer: record('chat.stop'), moderatorStatus: () => null } },
+  '../services/twitchChat': { chatManager: { isConnected: () => false, sendEventMessage: () => {}, sendMessage: () => {}, startForStreamer: record('chat.start'), stopForStreamer: record('chat.stop'), moderatorStatus: () => null, authRefused: () => false } },
   '../services/shoutouts': { shoutouts: { testInChat: async () => 'sent' } },
   '../services/youtubeLiveChat': { youtubeChatManager: { isPolling: () => false, getLiveChatId: () => null, startPolling: () => {}, stopPolling: () => {} } },
   '../services/agentTriage': { analyzeIssue: async () => {} },

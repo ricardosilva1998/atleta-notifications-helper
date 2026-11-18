@@ -158,3 +158,26 @@ test('the clip title in the message is escaped, the creator, numbers and URL are
     message: `**New clip by someone** — «x](https://example.test/phish) [y»\n📊 12 views · ⏱️ 30s\nhttps://clips.twitch.tv/${created}`,
   }]);
 });
+
+test('the first look at a channel records the newest clip as the baseline and posts nothing', async (t) => {
+  t.mock.method(console, 'log', () => {});
+  const older = new Date(NOW - 3 * HOUR).toISOString();
+  const newer = new Date(NOW - 1 * HOUR).toISOString();
+  const { poller } = loadPoller([clip(newer), clip(older)]);
+
+  const result = await poller.check('andre_vilela_', { twitch_broadcaster_id: '632557806', last_clip_created_at: null }, NOW);
+
+  assert.strictEqual(result.notify, false);
+  assert.strictEqual(result.clipData, undefined);
+  assert.strictEqual(result.stateUpdate.last_clip_created_at, newer);
+});
+
+test('the first look at a channel with no clips records now, so its first clip is announced', async (t) => {
+  t.mock.method(console, 'log', () => {});
+  const { poller } = loadPoller([]);
+
+  const result = await poller.check('andre_vilela_', { twitch_broadcaster_id: '632557806', last_clip_created_at: null }, NOW);
+
+  assert.strictEqual(result.notify, false);
+  assert.strictEqual(Date.parse(result.stateUpdate.last_clip_created_at), NOW);
+});

@@ -250,3 +250,33 @@ describe('the bot\'s access token', () => {
     assert.ok(fetchCalls >= 1, 'read as soon as a token came');
   });
 });
+
+describe('the chatbot switched off or the account disabled while polling', () => {
+  test('the next poll stops the poller', async () => {
+    pages.push({ items: [], nextPageToken: 'a', pollingIntervalMillis: 5000 });
+    youtubeChatManager.startPolling(STREAMER_ID, 'chat-1');
+    await flush();
+    assert.equal(youtubeChatManager.isPolling(STREAMER_ID), true);
+    streamerExtra = { yt_chatbot_enabled: 0 };
+    const reads = fetchCalls;
+    mock.timers.tick(5000);
+    await flush();
+    assert.equal(youtubeChatManager.isPolling(STREAMER_ID), false);
+    assert.equal(fetchCalls, reads, 'nothing was read after the switch went off');
+  });
+
+  test('a disabled account is not polled', async () => {
+    pages.push({ items: [], nextPageToken: 'a', pollingIntervalMillis: 5000 });
+    youtubeChatManager.startPolling(STREAMER_ID, 'chat-1');
+    await flush();
+    streamerExtra = { enabled: 0 };
+    mock.timers.tick(5000);
+    await flush();
+    assert.equal(youtubeChatManager.isPolling(STREAMER_ID), false);
+  });
+
+  test('a Super Chat with no details does not throw', async () => {
+    await deliver([{ snippet: { type: 'superChatEvent' }, authorDetails: { displayName: 'V' } }]);
+    assert.equal(youtubeChatManager.isPolling(STREAMER_ID), true);
+  });
+});

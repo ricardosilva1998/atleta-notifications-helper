@@ -121,6 +121,25 @@ describe('the loop', () => {
     lp.stop();
   });
 
+  test('a look that throws is drawn as the alert\'s own object, and a throwing own object leaves the slot empty', () => {
+    const KIT = require('../public/overlay/objects/kit.js');
+    const own = { ...LOOK, key: 'follow', family: undefined, render: () => '<div class="obj o-own"></div>' };
+    const { Looper } = load({ ATLETA_KIT: { ...KIT, lookData: (l, s) => s, slotVars: () => ({}) }, ATLETA_OBJECTS: { follow: own } });
+    const slot = element();
+    const broken = { ...LOOK, render: () => { throw new Error('boom'); } };
+    const lp = new Looper(slot, () => ({ look: broken, design: {}, sample: {} }), { hold: 2000, gap: 700 });
+    lp.start();
+    assert.equal(slot.innerHTML, '<div class="obj o-own"></div>', 'the fallback is drawn');
+    assert.ok(slot.classList.contains('playing'));
+    lp.stop();
+
+    own.render = () => { throw new Error('boom'); };
+    const lp2 = new Looper(slot, () => ({ look: broken, design: {}, sample: {} }), { hold: 2000, gap: 700 });
+    assert.doesNotThrow(() => lp2.start());
+    assert.equal(slot.innerHTML, '');
+    lp2.stop();
+  });
+
   test('stop() clears the slot and no timer fires afterwards', () => {
     const { Looper } = load();
     const slot = element();

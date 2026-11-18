@@ -114,7 +114,7 @@ async function pollWeeklyDigest(now = new Date()) {
       if (digestState?.last_digest_date === todayStr) continue;
 
       // Get posting channel
-      const channelId = db.getDigestChannelForGuild(guild_id);
+      const channelId = db.getDigestChannelForGuild(guild_id, streamer_id);
       if (!channelId) continue;
 
       const key = attemptKey(guild_id, streamer_id);

@@ -33,7 +33,7 @@ function start() {
       return interaction.reply({
         content: 'This server has not been configured yet. Ask the server owner to set it up.',
         flags: 64,
-      });
+      }).catch((err) => console.error(`[Commands] Reply failed: ${err.message}`));
     }
 
     // Find the config with sub sync enabled, or fall back to the first one
@@ -50,7 +50,9 @@ function start() {
       footer: { text: 'Your Twitch account will be linked to your Discord account' },
     });
 
-    await interaction.reply({ embeds: [embed], flags: 64 });
+    // An interaction answered too late (3 s) is gone; there is nobody left to tell.
+    await interaction.reply({ embeds: [embed], flags: 64 })
+      .catch((err) => console.error(`[Commands] Reply failed: ${err.message}`));
   });
 }
 

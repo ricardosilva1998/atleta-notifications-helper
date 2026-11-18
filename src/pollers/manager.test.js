@@ -25,7 +25,7 @@ const G2 = '400000000000000042';
 
 // ── What the stubs record and answer ────────────────────────────────────────
 
-const calls = { getStreams: [], getFollowerCount: [], getSubscriberCount: [], getSubscribers: [] };
+const calls = { getStreams: [], getFollowerCount: [], getSubscriberCount: [], getSubscribers: [], refresh: [] };
 const sent = []; // sendNotification: { channelId, type, guildId, streamerId, embed, liveAtSend }
 let liveStreams; // login -> the stream Twitch would return
 let failBatch; // (index of the request) => true makes that request fail
@@ -74,6 +74,7 @@ const twitchStub = {
     return streams;
   },
   getFollowerCount: async (...args) => { calls.getFollowerCount.push(args); return counts.followers; },
+  refreshBroadcasterTokenShared: async (streamer) => { calls.refresh.push(streamer.id); return 'fresh-' + streamer.id; },
   getSubscriberCount: async (...args) => { calls.getSubscriberCount.push(args); return counts.subscribers; },
   getSubscribers: async () => { calls.getSubscribers.push(true); throw new Error('the whole subscriber list must not be read for a count'); },
   getClips: async () => [{ title: 'best clip', view_count: 50, url: 'https://clips.test/best' }],
@@ -544,6 +545,20 @@ describe('pollAllTwitchLive: milestones', () => {
     row = db.getChannelMilestones('some_channel');
     assert.equal(row.last_follower_milestone, 2000);
     assert.equal(row.last_subscriber_count, 63);
+  });
+
+  test('the broadcaster\'s own token is preferred over another watcher\'s, and an expired one is refreshed', async () => {
+    watch(G1, streamerA, 'some_channel');
+    db.getChannelState('some_channel');
+    db.updateChannelState('some_channel', { twitch_broadcaster_id: '777' });
+    // streamerB is the broadcaster; streamerA only watches, and is first in line.
+    db.db.prepare('UPDATE streamers SET twitch_user_id = ?, broadcaster_token_expires_at = ? WHERE id = ?').run('777', Date.now() - 1000, streamerB);
+    liveStreams.some_channel = stream('some_channel');
+    await pollTwitchLive();
+
+    assert.deepEqual(calls.refresh, [streamerB]);
+    assert.deepEqual(calls.getFollowerCount, [['777', `fresh-${streamerB}`]]);
+    assert.deepEqual(calls.getSubscriberCount, [['777', `fresh-${streamerB}`]]);
   });
 
   test('subscribers are counted with one small request, never by reading the whole list', async () => {
