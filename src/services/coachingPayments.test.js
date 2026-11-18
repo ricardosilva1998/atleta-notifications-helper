@@ -665,6 +665,29 @@ describe('approved orders read back', () => {
     assert.equal(bookingNow(closed.booking.id).paid_at, null);
   });
 
+  test('expireDue: APPROVED at the deadline is captured and confirms the booking', async () => {
+    const s = addStreamer();
+    const { booking, orderId, order } = await ordered(s);
+    order.approved = true;
+    const out = await pay.expireDue({ now: booking.pay_by + MIN });
+    assert.deepEqual(out, { expired: 0, confirmed: 1 });
+    assert.equal(captureCalls().length, 1);
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+    assert.equal(db.getCoachingPayment(orderId).status, 'captured');
+  });
+
+  test('expireDue: APPROVED whose capture answers PENDING ends pending, not expired', async () => {
+    const s = addStreamer();
+    const { booking, orderId, order } = await ordered(s);
+    order.approved = true;
+    paypal.capture = (o) => { o.captured = true; return reply(201, completed(o, { captureStatus: 'PENDING' })); };
+    paypal.getOrder = (o) => reply(200, o.captured ? completed(o, { captureStatus: 'PENDING' }) : approved(o));
+    const out = await pay.expireDue({ now: booking.pay_by + MIN });
+    assert.deepEqual(out, { expired: 0, confirmed: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    assert.equal(bookingNow(booking.id).status, 'awaiting_payment');
+  });
+
   test('a return and the tick finding the same order capture it once', async () => {
     const s = addStreamer();
     const { booking, orderId, order } = await ordered(s);
