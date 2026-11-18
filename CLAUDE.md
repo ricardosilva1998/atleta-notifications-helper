@@ -643,3 +643,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Removed 33 keys no source names (`landing.*`, `subscription.notificationDelay`, unused `overlayBuilder.*` and two `coaching.*`) from all seven locales; the t() placeholder test uses `nav.timeMinutes`.
 - Keys built from template-string prefixes (families, looks, sounds, coaching.message, report.analyze, tts.currency, lang) were kept.
 **Open:** none
+
+### 2026-11-18 — claude (general-purpose, T21 of deep-review-fixes)
+**Task:** pt.json to European Portuguese, part 1 (lines 2-1503)
+**Files:** src/locales/pt.json
+**Decisions:**
+- Split point: lines 2-1503 done, last key `chatbot.cmd.deleteConfirm`; T22 starts at line 1504 (`chatbot.mod.note`). Keys are flat and interleaved, so go by line number.
+- 590 values changed; keys, order, `{{placeholders}}` and HTML unchanged. Gerunds became "a + infinitivo", "você" dropped, "ligar" used for connect, "subscritor"/"em direto"/"espetador" for sub/live/viewer.
+**Open:** none
