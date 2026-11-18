@@ -634,4 +634,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Suite result:** scratch copy (Node 26): 4065 tests, 4065 pass, 0 fail. `node --check` on public/**/*.js ok. Two boots on empty then reused data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
 **Manual checks:** headless Chromium, seeded streamer: the alert overlay and the chat overlay both reconnect (and reload on the new serverVersion) after the server is stopped and started on the same data dir and token; no page errors.
 **Bugs found:** none. Brief items B, D, E have tests (no gaps). QA: pass.
+
+### 2026-11-18 — backend-dev (C3.1.1)
+**Task:** A replayed return of a duplicate order says `duplicate`, not `late`
+**Files:** src/services/coachingPayments.js, src/services/coachingPayments.test.js
+**Decisions:**
+- `outcomeOf` checks the booking's own order (`paid`), then the payment row's `refund_reason === 'double'` (`duplicate`), else `late`; no route change.
 **Open:** none
