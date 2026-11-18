@@ -606,3 +606,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `_addColumn(table, name, def)` in `db.js` checks `table_info` per column; the PR #21 hotfix uses it. Every silent `catch {}` in db.js now goes to `_migrationLog`. The `design_version` backfill is `_runOnce('design_version_backfill')`; the forced `sponsor_interval_seconds` ALTER is a per-column check (silent on a fresh DB).
 - The fixture is the 5a9ac56 schema (the first one migrated in place; a4f8167 is dropped whole). `sessions` is not rebuilt, documented in deploy.md. CI also runs `node --check` over `public/`.
 **Open:** multi-column ALTER blocks gated on one column still exist; the new test shows none is missing today.
+
+### 2026-11-18 — backend-dev (T17, dev sync hardening)
+**Task:** E31: the production sync snapshot is scrubbed on the copy; the dev side is guarded
+**Files:** src/db.js (`scrubSnapshot`), src/routes/sync.js, src/services/sync.js, src/db.sync.test.js
+**Decisions:**
+- `GET /sync/backup` runs `db.scrubSnapshot()` on the snapshot file only: PayPal and payer emails/names/ids, pending tip donor data, coaching viewer ids/names/notes and viewer sessions removed; overlay and multistream tokens replaced by fresh random values; sealed OAuth tokens left sealed.
+- `services/sync.js`: in-flight guard, 10 min fetch timeout, exits 1 after a restore (and in the catch once the DB is closed) so ON_FAILURE restarts dev; `/sync/status` reads `getLastSync()`.
+**Open:** none

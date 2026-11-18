@@ -5945,6 +5945,45 @@ try {
   }
 } catch (e) { _migrationLog('token encryption', e); }
 
+// Personal data and live link tokens removed from a COPY of the database (the
+// development sync's snapshot, routes/sync.js). Opens `file` itself, never the
+// live connection. Each table and column is checked first, so an older schema
+// is scrubbed as far as it goes. Sealed OAuth tokens stay sealed.
+function scrubSnapshot(file) {
+  const copy = new Database(file);
+  try {
+    const cols = (table) => copy.pragma(`table_info(${table})`).map(c => c.name);
+    const has = (table, col) => cols(table).includes(col);
+    copy.transaction(() => {
+      if (has('streamers', 'paypal_email')) copy.exec('UPDATE streamers SET paypal_email = NULL');
+      for (const col of ['overlay_token', 'multistream_token']) {
+        if (!has('streamers', col)) continue;
+        const rows = copy.prepare(`SELECT id FROM streamers WHERE ${col} IS NOT NULL`).all();
+        const upd = copy.prepare(`UPDATE streamers SET ${col} = ? WHERE id = ?`);
+        for (const r of rows) upd.run(crypto.randomBytes(24).toString('base64url'), r.id);
+      }
+      const nullify = (table, list, empty = []) => {
+        const present = list.filter(c => has(table, c));
+        const blank = empty.filter(c => has(table, c));
+        const sets = [...present.map(c => `${c} = NULL`), ...blank.map(c => `${c} = ''`)];
+        if (sets.length) copy.exec(`UPDATE ${table} SET ${sets.join(', ')}`);
+      };
+      nullify('coaching_payments', ['payer_name', 'payer_email', 'payer_id'], ['payee_email', 'payee_merchant_id']);
+      nullify('pending_tips', ['message', 'payee_email', 'payee_merchant_id']);
+      if (has('pending_tips', 'donor_name')) copy.exec("UPDATE pending_tips SET donor_name = 'Anonymous'");
+      if (has('coaching_bookings', 'viewer_discord_id')) {
+        copy.exec(`UPDATE coaching_bookings SET
+          viewer_discord_id = 'v' || substr(hex(randomblob(8)), 1, 16) || '-' || id,
+          viewer_username = 'viewer-' || id`);
+        nullify('coaching_bookings', ['viewer_display_name', 'viewer_avatar', 'note', 'proposal_note', 'cancel_reason', 'message_error']);
+      }
+      for (const t of ['viewer_sessions']) {
+        if (cols(t).length) copy.exec(`DELETE FROM ${t}`);
+      }
+    })();
+  } finally { copy.close(); }
+}
+
 module.exports = {
   db,
   // Whether stored tokens are encrypted (TOKEN_ENCRYPTION_KEY is set); index.js warns at boot when not.
@@ -6296,6 +6335,7 @@ module.exports = {
   getTrackerSettings,
   setTrackerSetting,
   ensureTrackerSettings,
+  scrubSnapshot,
   closeDb() { db.close(); },
   backup(dest) { return db.backup(dest); },
   // GET /health: throws when the database cannot answer (or has been closed).
