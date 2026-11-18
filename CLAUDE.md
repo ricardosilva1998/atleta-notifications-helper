@@ -635,3 +635,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** headless Chromium, seeded streamer: the alert overlay and the chat overlay both reconnect (and reload on the new serverVersion) after the server is stopped and started on the same data dir and token; no page errors.
 **Bugs found:** none. Brief items B, D, E have tests (no gaps). QA: pass.
 **Open:** none
+
+### 2026-11-18 — claude (general-purpose, T20)
+**Task:** English pass and unused locale keys (F33)
+**Files:** src/locales/*.json, src/i18n.test.js
+**Decisions:**
+- Removed 33 keys no source names (`landing.*`, `subscription.notificationDelay`, unused `overlayBuilder.*` and two `coaching.*`) from all seven locales; the t() placeholder test uses `nav.timeMinutes`.
+- Keys built from template-string prefixes (families, looks, sounds, coaching.message, report.analyze, tts.currency, lang) were kept.
+**Open:** none
