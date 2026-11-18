@@ -572,6 +572,32 @@ describe('handleReturn', () => {
     assert.deepEqual([again.replay, again.outcome], [true, 'duplicate']);
     assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + 3 * MIN })).outcome, 'paid');
   });
+
+  for (const ended of ['cancelled', 'expired']) {
+    test(`a second payment for a paid booking that was then ${ended} is late with Refund pending, not a duplicate`, async () => {
+      const s = addStreamer();
+      const { booking, viewer: v } = await awaiting(s);
+      const first = await pay.startPayment(s, v, booking.id, { now: NOW });
+      const second = await pay.startPayment(s, v, booking.id, { now: NOW });
+      const id1 = new URL(first.approveUrl).searchParams.get('token');
+      const id2 = new URL(second.approveUrl).searchParams.get('token');
+      assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + MIN })).outcome, 'paid');
+      db.db.prepare('UPDATE coaching_bookings SET status = ? WHERE id = ?').run(ended, booking.id);
+      paypal.orders.get(id2).captured = true;
+      discord.sent.length = 0;
+      const result = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 2 * MIN });
+      assert.deepEqual([result.ok, result.outcome, result.result], [true, 'late', 'late_issue']);
+      await result.followUp;
+      const row = db.getCoachingPayment(id2);
+      assert.deepEqual([row.refund_status, row.refund_reason], ['pending', 'late']);
+      assert.equal(bookingNow(booking.id).status, ended);
+      assert.ok(discord.sent.some((m) => m.userId === v.discordUserId), 'the viewer is told');
+      assert.ok(discord.sent.some((m) => m.userId === s.discord_user_id), 'the coach is told');
+      assert.doesNotMatch(JSON.stringify(discord.sent), /stands/);
+      const again = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 3 * MIN });
+      assert.deepEqual([again.replay, again.outcome], [true, 'late']);
+    });
+  }
 });
 
 // ── The deadline and the stale orders ────────────────────────────────
