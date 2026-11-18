@@ -19,7 +19,7 @@ const dbStub = {
   getGuildsWithWeeklyHighlights: () => world.guilds,
   getStreamerTier: () => world.tier,
   getWeeklyDigestState: (guildId, streamerId) => (world.postedOn[`${guildId}:${streamerId}`] ? { last_digest_date: world.postedOn[`${guildId}:${streamerId}`] } : undefined),
-  getDigestChannelForGuild: (guildId) => world.channelOf[guildId] || null,
+  getDigestChannelForGuild: (guildId, streamerId) => { world.channelAsks.push([guildId, streamerId]); return world.channelOf[guildId] || null; },
   getWatchedChannelsForGuild: (guildId) => (world.watched[guildId] || []).map((twitch_username) => ({ twitch_username })),
   getChannelState: () => ({ twitch_broadcaster_id: '777' }),
   updateChannelState: () => {},
@@ -83,6 +83,7 @@ beforeEach(() => {
     twitchDown: false,
     recordFails: false,
     twitchCalls: [],
+    channelAsks: [],
     sends: [],
     recorded: [],
     sendOutcome: () => true,
@@ -101,6 +102,11 @@ const tick = (time, date = monday) => pollWeeklyDigest(new Date(`${date}T${time}
 const dayAfter = (date, days) => new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
 
 describe('what gets posted', () => {
+  test('the digest channel is asked for with the streamer whose digest it is', async () => {
+    await tick('09:05');
+    assert.deepEqual(world.channelAsks, [[G1, 1]]);
+  });
+
   test('a week with streams but no clips is posted, with no categories and no top clip', async () => {
     await tick('09:05');
 

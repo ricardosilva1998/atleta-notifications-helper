@@ -1909,12 +1909,12 @@ function listRaidProtections() { return _listRaidProtections.all(); }
 
 const _getDigestChannelForGuild = db.prepare(`
   SELECT wc.live_channel_id FROM watched_channels wc
-  WHERE wc.guild_id = ? AND wc.live_channel_id IS NOT NULL
+  WHERE wc.guild_id = ? AND wc.streamer_id = ? AND wc.enabled = 1 AND wc.live_channel_id IS NOT NULL
   ORDER BY wc.id ASC LIMIT 1
 `);
 
-function getDigestChannelForGuild(guildId) {
-  const row = _getDigestChannelForGuild.get(guildId);
+function getDigestChannelForGuild(guildId, streamerId) {
+  const row = _getDigestChannelForGuild.get(guildId, streamerId);
   return row?.live_channel_id || null;
 }
 

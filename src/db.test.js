@@ -348,6 +348,17 @@ describe('the channels the pollers watch', () => {
     assert.deepEqual(db.getAllUniqueWatchedChannels(), []);
   });
 
+  test('the digest channel is the streamer\'s own enabled watcher in the server, not another streamer\'s', () => {
+    db.addWatchedChannel(G1, streamerA, 'a_channel', '1', null, true, false);
+    db.addWatchedChannel(G1, streamerB, 'b_channel', '1', null, true, false);
+    db.db.prepare('UPDATE watched_channels SET live_channel_id = ? WHERE streamer_id = ?').run('CH-A', streamerA);
+    db.db.prepare('UPDATE watched_channels SET live_channel_id = ? WHERE streamer_id = ?').run('CH-B', streamerB);
+    assert.equal(db.getDigestChannelForGuild(G1, streamerB), 'CH-B');
+    assert.equal(db.getDigestChannelForGuild(G1, streamerA), 'CH-A');
+    db.db.prepare('UPDATE watched_channels SET enabled = 0 WHERE streamer_id = ?').run(streamerB);
+    assert.equal(db.getDigestChannelForGuild(G1, streamerB), null, 'a paused watcher gives no channel');
+  });
+
   test('the same rules hold for YouTube channels', () => {
     db.addWatchedYoutubeChannel(G1, streamerA, 'UCshared', 'Shared', 'V1', 'L1', null);
     db.addWatchedYoutubeChannel(G2, streamerA, 'UCshared', 'Shared', 'V1', 'L1', null);

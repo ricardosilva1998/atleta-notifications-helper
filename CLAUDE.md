@@ -548,3 +548,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** reviewed the diff's tests against brief items A1-A7 and C11-C15: every item has a test; none missing.
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T10, pollers: digest, milestones, clips)
+**Task:** B8 digest channel per streamer, B9 broadcaster's own token for milestones and recap counts, B10 clips baseline
+**Files:** src/db.js, src/pollers/weeklyDigest.js, src/pollers/manager.js, src/pollers/twitchClips.js, src/routes/dashboard.js, src/db.test.js, src/pollers/weeklyDigest.test.js, src/pollers/manager.test.js, tests/twitchClips.test.js
+**Decisions:**
+- `getDigestChannelForGuild(guildId, streamerId)` reads that streamer's enabled watcher row only.
+- Milestones and the recap's follower count use the streamer whose `twitch_user_id` is the broadcaster, else a watcher with a token; a token past its expiry goes through `refreshBroadcasterTokenShared`.
+- First clip look (no `last_clip_created_at`) stores the newest clip's time (or now when none) and posts nothing.
+**Open:** none

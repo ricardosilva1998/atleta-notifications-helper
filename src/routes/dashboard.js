@@ -338,7 +338,7 @@ function discordNotificationsCard(streamer, servers, { needsReauth }) {
       recaps: onOff(server.recap_enabled && liveChannel),
       milestones: server.milestones_enabled && liveChannel ? (authorized ? 'on' : 'wait') : 'off',
       highlights: onOff(server.weekly_highlights_enabled && own
-        && db.getDigestChannelForGuild(server.guild_id)),
+        && db.getDigestChannelForGuild(server.guild_id, streamer.id)),
       subRoles: server.sub_sync_enabled && server.sub_role_id ? (authorized ? 'on' : 'wait') : 'off',
       // The working card's switches (services/dashboardCards.js): what each one stores, where the posts go (the
       // channel names, when the bot sees them) and what is set.
