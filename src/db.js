@@ -5020,8 +5020,8 @@ function getViewerCoachingBookings(streamerId, discordUserId, sinceMs) {
 function getViewerBookingsAllCoaches(discordUserId, sinceMs) {
   return db.prepare(
     `SELECT b.*, s.twitch_username AS coach_login, s.twitch_display_name AS coach_name,
-            s.twitch_profile_image AS coach_avatar,
-            CASE WHEN COALESCE(s.enabled, 1) <> 0 AND cs.streamer_id IS NOT NULL AND s.twitch_username IS NOT NULL THEN 1 ELSE 0 END AS coach_available
+            s.twitch_profile_image AS coach_avatar, s.discord_username AS coach_discord_name,
+            CASE WHEN COALESCE(s.enabled, 1) <> 0 AND cs.streamer_id IS NOT NULL THEN 1 ELSE 0 END AS coach_available
      FROM coaching_bookings b
      JOIN streamers s ON s.id = b.streamer_id
      LEFT JOIN coaching_settings cs ON cs.streamer_id = b.streamer_id

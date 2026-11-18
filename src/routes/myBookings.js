@@ -65,7 +65,7 @@ function bookingsOf(viewer, now) {
     ...view,
     coach: {
       login: rows[i].coach_login,
-      name: rows[i].coach_name || rows[i].coach_login,
+      name: rows[i].coach_name || rows[i].coach_login || rows[i].coach_discord_name || '',
       avatar: rows[i].coach_avatar || null,
       available: !!rows[i].coach_available,
     },
