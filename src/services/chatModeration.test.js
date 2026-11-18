@@ -14,9 +14,9 @@ const dbStub = {
   getBannedWords: () => state.bannedWords,
   addModLogEntry: (...args) => state.modLog.push(args),
   getRaidProtection: (id) => state.raidRows.get(id),
-  saveRaidProtection: (id, endsAt, mode, duration, login) => {
+  saveRaidProtection: (id, endsAt, mode, duration, login, unknown) => {
     const old = state.raidRows.get(id);
-    state.raidRows.set(id, old ? { ...old, ends_at: endsAt } : { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0, channel_login: login || null });
+    state.raidRows.set(id, old ? { ...old, ends_at: endsAt } : { streamer_id: id, ends_at: endsAt, prev_follower_mode: mode ? 1 : 0, prev_follower_mode_duration: duration || 0, channel_login: login || null, prev_unknown: unknown ? 1 : 0 });
   },
   deleteRaidProtection: (id) => { state.raidRows.delete(id); },
   deleteRaidProtectionIf: (id, endsAt) => {
@@ -384,7 +384,7 @@ describe('raid protection', () => {
     state.streamers.set(1, streamerRow());
     const client = fakeClient();
     await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
-    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_120_000, prev_follower_mode: 1, prev_follower_mode_duration: 30, channel_login: 'somestreamer' });
+    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_120_000, prev_follower_mode: 1, prev_follower_mode_duration: 30, channel_login: 'somestreamer', prev_unknown: 0 });
     t.mock.timers.tick(120_000);
     await flush();
     assertSettingsRequest(helixCalls[1], { follower_mode: true, follower_mode_duration: 30 });
@@ -399,7 +399,7 @@ describe('raid protection', () => {
     chatSettingsNow = { follower_mode: true, follower_mode_duration: 10 }; // the protection itself
     t.mock.timers.tick(60_000);
     await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
-    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_180_000, prev_follower_mode: 1, prev_follower_mode_duration: 30, channel_login: 'somestreamer' });
+    assert.deepEqual(state.raidRows.get(1), { streamer_id: 1, ends_at: 5_180_000, prev_follower_mode: 1, prev_follower_mode_duration: 30, channel_login: 'somestreamer', prev_unknown: 0 });
   });
 
   test('a raid during the restore keeps its own protection and timer', async (t) => {
@@ -423,16 +423,20 @@ describe('raid protection', () => {
     t.mock.timers.tick(120_000);
     await flush();
     assert.equal(held, true, 'the restore is pending');
-    await mod.activateRaidProtection(client, 'somestreamer', protectedRow());
-    assert.equal(state.raidRows.get(1).ends_at, 5_240_000);
+    const second = mod.activateRaidProtection(client, 'somestreamer', protectedRow());
+    await flush();
+    assert.equal(state.raidRows.get(1).ends_at, 5_120_000, 'the second raid waits for the restore');
     release();
+    await second;
     await flush();
     assert.equal(state.raidRows.get(1)?.ends_at, 5_240_000, 'the second raid\'s row survives');
-    assert.ok(!client.said.some((s) => s.text.startsWith('Raid protection ended')));
+    assertSettingsRequest(helixCalls[helixCalls.length - 1], { follower_mode: true, follower_mode_duration: 10 });
+    const ended = () => client.said.filter((s) => s.text.startsWith('Raid protection ended')).length;
+    assert.equal(ended(), 1, 'the first protection ended once');
     t.mock.timers.tick(120_000);
     await flush();
     assert.equal(state.raidRows.size, 0);
-    assert.equal(client.said.filter((s) => s.text.startsWith('Raid protection ended')).length, 1);
+    assert.equal(ended(), 2, 'the second one ends on its own timer');
   });
 
   test('after a restart an overdue protection is ended and a running one is re-armed', async (t) => {
@@ -468,6 +472,38 @@ describe('raid protection', () => {
     assertSettingsRequest(helixCalls[1], { follower_mode: false });
     assert.match(helixCalls[1].url, /broadcaster_id=111(&|$)/, 'restored on the old channel, not the new one');
     assert.equal(state.raidRows.has(1), false);
+  });
+
+  test('D20: unknown previous settings are left alone at the end', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 5_000_000 });
+    stubTwitch(200);
+    const answer = global.fetch;
+    global.fetch = async (url, opts = {}) => {
+      if (String(url).startsWith('https://api.twitch.tv/helix/chat/settings?') && !opts.method) return { ok: false, status: 500, json: async () => ({}) };
+      return answer(url, opts);
+    };
+    state.streamers.set(1, streamerRow());
+    await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
+    assert.equal(state.raidRows.get(1).prev_unknown, 1);
+    const before = helixCalls.length;
+    t.mock.timers.tick(120_000);
+    await flush();
+    assert.equal(helixCalls.length, before, 'no request switches followers-only off');
+    assert.equal(state.raidRows.size, 0);
+  });
+
+  test('D20: the restore goes through the stored channel login when the Twitch link was removed', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    stubTwitch(200);
+    state.streamers.set(1, streamerRow());
+    await mod.activateRaidProtection(fakeClient(), 'somestreamer', protectedRow());
+    state.streamers.set(1, streamerRow({ twitch_user_id: null, twitch_username: null }));
+    followStub.getUserId = async () => '111';
+    t.after(() => { delete followStub.getUserId; });
+    t.mock.timers.tick(120_000);
+    await flush();
+    assertSettingsRequest(helixCalls[helixCalls.length - 1], { follower_mode: false });
+    assert.equal(state.raidRows.size, 0);
   });
 
   test('a failed restore keeps the row, retries on the minute tick and gives up after an hour', async (t) => {

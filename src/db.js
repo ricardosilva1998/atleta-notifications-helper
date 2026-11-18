@@ -1885,11 +1885,14 @@ function getGuildsWithWeeklyHighlights() {
 if (!db.prepare('PRAGMA table_info(raid_protection)').all().some((c) => c.name === 'channel_login')) {
   db.exec('ALTER TABLE raid_protection ADD COLUMN channel_login TEXT');
 }
+if (!db.prepare('PRAGMA table_info(raid_protection)').all().some((c) => c.name === 'prev_unknown')) {
+  db.exec('ALTER TABLE raid_protection ADD COLUMN prev_unknown INTEGER NOT NULL DEFAULT 0');
+}
 
 const _getRaidProtection = db.prepare('SELECT * FROM raid_protection WHERE streamer_id = ?');
 const _saveRaidProtection = db.prepare(`
-  INSERT INTO raid_protection (streamer_id, ends_at, prev_follower_mode, prev_follower_mode_duration, channel_login)
-  VALUES (?, ?, ?, ?, ?)
+  INSERT INTO raid_protection (streamer_id, ends_at, prev_follower_mode, prev_follower_mode_duration, channel_login, prev_unknown)
+  VALUES (?, ?, ?, ?, ?, ?)
   ON CONFLICT(streamer_id) DO UPDATE SET ends_at = excluded.ends_at
 `);
 const _deleteRaidProtection = db.prepare('DELETE FROM raid_protection WHERE streamer_id = ?');
@@ -1898,8 +1901,9 @@ const _listRaidProtections = db.prepare('SELECT * FROM raid_protection');
 
 function getRaidProtection(streamerId) { return _getRaidProtection.get(streamerId); }
 // A second raid only moves the end: the settings to restore stay the first ones.
-function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration, channelLogin) {
-  _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0, channelLogin || null);
+// prevUnknown: Twitch did not say what the setting was, so the end leaves it alone.
+function saveRaidProtection(streamerId, endsAt, prevMode, prevDuration, channelLogin, prevUnknown) {
+  _saveRaidProtection.run(streamerId, endsAt, prevMode ? 1 : 0, prevDuration || 0, channelLogin || null, prevUnknown ? 1 : 0);
 }
 function deleteRaidProtection(streamerId) { _deleteRaidProtection.run(streamerId); }
 function deleteRaidProtectionIf(streamerId, endsAt) { return _deleteRaidProtectionIf.run(streamerId, endsAt).changes > 0; }
@@ -4571,6 +4575,17 @@ function getDueRedemptionAutoFulfills(nowIso, limit) {
   `).all(nowIso, limit || 100);
 }
 
+// Redemptions a restart left 'pending' (the process died between recording and
+// acting): older than the cutoff, so one still being handled is never touched.
+function getStalePendingRedemptions(beforeIso, limit) {
+  return db.prepare(`
+    SELECT id, streamer_id, twitch_redemption_id, twitch_reward_id, status
+    FROM channel_point_redemptions
+    WHERE outcome = 'pending' AND is_test = 0 AND created_at <= ?
+    ORDER BY created_at LIMIT ?
+  `).all(beforeIso, limit || 100);
+}
+
 function getRedemptionsRecent(streamerId, limit) {
   return db.prepare('SELECT * FROM channel_point_redemptions WHERE streamer_id = ? ORDER BY created_at DESC LIMIT ?')
     .all(streamerId, limit || 50);
@@ -6018,6 +6033,7 @@ module.exports = {
   getChannelMilestones,
   updateChannelMilestones,
   getWeeklyDigestState,
+  getStalePendingRedemptions,
   getRaidProtection,
   saveRaidProtection,
   deleteRaidProtection,

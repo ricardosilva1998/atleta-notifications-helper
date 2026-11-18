@@ -573,3 +573,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `kit.drawGuarded(look, own, dataFor, onBroken)` is the one draw: a throwing look is replaced by the alert's own object, else `{ look: null }` (overlay: legacy card; builder: empty slot). `drawAlert` and `Looper.play` both use it.
 - `playNext` and the dismiss callback catch any throw, remove the slot and effects, and go on with `alertTimer(playNext, 500)`.
 **Open:** none
+
+### 2026-11-18 — backend-dev
+**Task:** T13, raid protection and redemptions (D20, D21)
+**Files:** src/services/chatModeration.js, src/services/redemptionDispatcher.js, src/db.js, src/views/redemptions-config.ejs, src/locales/*.json, tests next to them
+**Decisions:**
+- `raid_protection.prev_unknown` (new column): when Twitch did not report the previous followers-only setting, the end of the protection leaves the chat settings alone. The restore uses the stored `channel_login` even with the Twitch link removed; a new raid waits for a running restore.
+- Redemptions left `pending` for over 10 minutes are settled by `settleStalePending` (boot and minute tick): unfulfilled ones are refunded, outcome `refunded_interrupted` (new text, 7 locales); others marked `disabled`. The missing-media path uses `refundRedemption()`, so an affiliate-gated answer is recorded `error`.
+**Open:** none

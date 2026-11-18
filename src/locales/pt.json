@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "Não reagendada",
   "cards.coaching.refundsPending": "Reembolsos por fazer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir as marcações",
+  "redemptions.outcome.refundedInterrupted": "Reembolsado (interrompido)",
   "coaching.dashboard.refundTitleDuplicate": "Reembolsar o pagamento duplicado de {{price}} no PayPal",
   "coaching.message.proposalTooCloseBody": "A hora proposta ficou demasiado perto do início, por isso foi descartada.",
   "coaching.message.viewerTooCloseBody": "A hora proposta ficou demasiado perto do início, por isso foi descartada. Propõe tu uma hora ou espera por outra.",

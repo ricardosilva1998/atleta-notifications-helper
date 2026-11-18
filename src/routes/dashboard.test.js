@@ -3584,6 +3584,7 @@ describe('channel point rewards', () => {
       refunded_disabled: 'redemptions.outcome.refundedDisabled',
       refunded_deleted: 'redemptions.outcome.refundedDeleted',
       refunded_switch_off: 'redemptions.outcome.refundedSwitchOff',
+      refunded_interrupted: 'redemptions.outcome.refundedInterrupted',
       disabled: 'redemptions.outcome.disabled',
       error: 'redemptions.outcome.error',
       pending: 'redemptions.outcome.pending',

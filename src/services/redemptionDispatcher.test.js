@@ -237,6 +237,45 @@ describe('the redemption flow', () => {
     });
   });
 
+  describe('D21: stale pending redemptions and the missing-media refund', () => {
+    const ageRow = (event, minutes) => db.db.prepare("UPDATE channel_point_redemptions SET created_at = datetime('now', ?) WHERE twitch_redemption_id = ?").run(`-${minutes} minutes`, event.twitchRedemptionId);
+
+    test('a redemption left pending by a restart is refunded after 10 minutes, not before', async () => {
+      const id = addStreamer();
+      const reward = addReward(id);
+      const event = redemption(reward);
+      db.claimRedemption({ streamer_id: id, reward_id: reward.id, twitch_redemption_id: event.twitchRedemptionId, twitch_reward_id: event.twitchRewardId, user_id: '55', user_login: 'v', cost: 500, status: 'unfulfilled', redeemed_at: null });
+      ageRow(event, 5);
+      await dispatcher.settleStalePending();
+      assert.deepEqual(outcomes(event), ['pending']);
+      ageRow(event, 11);
+      await dispatcher.settleStalePending();
+      assert.deepEqual(helix.statusesOf(event), ['CANCELED']);
+      assert.deepEqual(outcomes(event), ['refunded_interrupted']);
+    });
+
+    test('a pending one that was not waiting in the queue is only marked', async () => {
+      const id = addStreamer();
+      const reward = addReward(id);
+      const event = redemption(reward);
+      db.claimRedemption({ streamer_id: id, reward_id: reward.id, twitch_redemption_id: event.twitchRedemptionId, twitch_reward_id: event.twitchRewardId, user_id: '55', user_login: 'v', cost: 500, status: 'fulfilled', redeemed_at: null });
+      ageRow(event, 30);
+      await dispatcher.settleStalePending();
+      assert.deepEqual(helix.statusesOf(event), []);
+      assert.deepEqual(outcomes(event), ['disabled']);
+    });
+
+    test('an affiliate-gated answer on the missing-media path is not recorded as refunded', async () => {
+      const id = addStreamer();
+      const reward = addReward(id); // no file on disk
+      const event = redemption(reward);
+      global.fetch = async () => ({ ok: false, status: 403, text: async () => '{"message":"The broadcaster must have affiliate or partner status"}', json: async () => ({ message: 'The broadcaster must have affiliate or partner status' }) });
+      await dispatcher.handleRedemption(id, event);
+      assert.deepEqual(outcomes(event), ['error']);
+      assert.equal(chatLines.length, 0);
+    });
+  });
+
   describe('the redemption is in the history before anything is done for it', () => {
     test('before its clip plays', async () => {
       const id = addStreamer();

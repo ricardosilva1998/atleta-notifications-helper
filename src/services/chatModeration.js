@@ -609,12 +609,13 @@ let raidTick = null;
 
 // Puts the channel's followers-only setting back and forgets the row. A failed
 // restore keeps the row for the next minute tick. Returns true when it is done.
-const endingRaids = new Set();
+const endingRaids = new Map();
 async function endRaidProtection(streamerId, say) {
   if (endingRaids.has(streamerId)) return false;
-  endingRaids.add(streamerId);
+  const run = finishRaidProtection(streamerId, say);
+  endingRaids.set(streamerId, run.catch(() => false));
   try {
-    return await finishRaidProtection(streamerId, say);
+    return await run;
   } finally {
     endingRaids.delete(streamerId);
   }
@@ -624,14 +625,23 @@ async function finishRaidProtection(streamerId, say) {
   const row = db.getRaidProtection(streamerId);
   if (!row) return true;
   const streamer = db.getStreamerById(streamerId);
-  if (!streamer || !streamer.twitch_username) {
+  // The stored channel login is enough to restore even when the Twitch link
+  // was removed since; only an account that is gone has nothing to restore.
+  const channel = row.channel_login || (streamer && streamer.twitch_username);
+  if (!streamer || !channel) {
     db.deleteRaidProtection(streamerId);
+    return true;
+  }
+  // What the channel had before is unknown: never overwrite it.
+  if (row.prev_unknown) {
+    db.deleteRaidProtectionIf(streamerId, row.ends_at);
+    console.warn(`[Mod] Previous followers-only setting unknown for streamer ${streamerId}; left as it is`);
     return true;
   }
   // After a Twitch account change the streamer's stored user id belongs to the
   // new channel, so the old channel is looked up by its login instead.
-  const channel = row.channel_login || streamer.twitch_username;
-  const target = channel.toLowerCase() === streamer.twitch_username.toLowerCase() ? streamer : { ...streamer, twitch_user_id: null };
+  const sameChannel = streamer.twitch_username && channel.toLowerCase() === streamer.twitch_username.toLowerCase();
+  const target = sameChannel ? streamer : { ...streamer, twitch_user_id: null };
   if (await updateChatSettings(channel, target, restoreBody(row))) {
     // A raid that arrived during the restore moved ends_at: its row and timer stay.
     if (!db.deleteRaidProtectionIf(streamerId, row.ends_at)) {
@@ -690,6 +700,9 @@ function stopRaidProtectionTicks() {
 
 async function activateRaidProtection(client, channel, streamer) {
   if (!streamer.mod_raid_protection_enabled) return;
+  // A restore under way would switch followers-only off right after this raid
+  // switched it on: wait for it, then start afresh.
+  if (endingRaids.has(streamer.id)) await endingRaids.get(streamer.id);
   const seconds = clampInt(streamer.mod_raid_protection_duration, 30, 600, 120);
   // A second raid keeps the first one's stored settings: what Twitch reports
   // now is the protection itself, not what the streamer had.
@@ -704,7 +717,7 @@ async function activateRaidProtection(client, channel, streamer) {
 
   // Only replace the stored end once followers-only mode is on, so a failed
   // request can never cancel the end of an earlier raid's protection.
-  db.saveRaidProtection(streamer.id, Date.now() + seconds * 1000, existing ? existing.prev_follower_mode : previous?.mode, existing ? existing.prev_follower_mode_duration : previous?.duration, existing ? existing.channel_login : channel);
+  db.saveRaidProtection(streamer.id, Date.now() + seconds * 1000, existing ? existing.prev_follower_mode : previous?.mode, existing ? existing.prev_follower_mode_duration : previous?.duration, existing ? existing.channel_login : channel, existing ? existing.prev_unknown : !previous);
   client.say(channel, `Raid protection activated for ${seconds} seconds. Followers-only mode enabled.`).catch(() => {});
   armRaidTimer(streamer.id, seconds * 1000, (_s, text) => client.say(channel, text).catch(() => {}));
 }

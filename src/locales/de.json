@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "Nicht verschoben",
   "cards.coaching.refundsPending": "Offene Rückerstattungen: {{count}}",
   "cards.coaching.refundsPendingAction": "Buchungen öffnen",
+  "redemptions.outcome.refundedInterrupted": "Erstattet (unterbrochen)",
   "coaching.dashboard.refundTitleDuplicate": "Doppelte Zahlung von {{price}} in PayPal erstatten",
   "coaching.message.proposalTooCloseBody": "Die vorgeschlagene Zeit liegt zu nah am Beginn, deshalb wurde sie verworfen.",
   "coaching.message.viewerTooCloseBody": "Die vorgeschlagene Zeit liegt zu nah am Beginn, deshalb wurde sie verworfen. Schlage selbst eine Zeit vor oder warte auf eine andere.",
