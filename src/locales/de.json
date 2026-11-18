@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "Nicht verschoben",
   "cards.coaching.refundsPending": "Offene Rückerstattungen: {{count}}",
   "cards.coaching.refundsPendingAction": "Buchungen öffnen",
+  "coaching.dashboard.error.payment_processing": "Eine Zahlung wird noch bei PayPal verarbeitet; du kannst stornieren, sobald sie abgeschlossen ist oder der Termin freigegeben wird.",
   "coaching.message.paymentDuplicate.title": "{{viewer}} hat für eine Sitzung doppelt bezahlt",
   "coaching.message.paymentDuplicateBody": "Erstatte die zusätzliche Zahlung in PayPal. Die Sitzung bleibt bestehen.",
   "coaching.error.duplicate": "Diese Sitzung war bereits bezahlt. Dein Coach erstattet die zusätzliche Zahlung. Deine Sitzung bleibt bestehen.",

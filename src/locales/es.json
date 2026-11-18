@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "No reprogramada",
   "cards.coaching.refundsPending": "Reembolsos por hacer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir las reservas",
+  "coaching.dashboard.error.payment_processing": "Un pago aún se está procesando en PayPal; puedes cancelar cuando se complete o cuando se libere el horario.",
   "coaching.message.paymentDuplicate.title": "{{viewer}} pagó dos veces por una sesión",
   "coaching.message.paymentDuplicateBody": "Reembolsa el pago extra en PayPal. La sesión sigue en pie.",
   "coaching.error.duplicate": "Esta sesión ya estaba pagada. Tu coach reembolsará el pago extra. Tu sesión sigue en pie.",

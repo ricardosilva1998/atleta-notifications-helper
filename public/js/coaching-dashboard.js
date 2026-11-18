@@ -311,13 +311,14 @@
         move.addEventListener('click', function () { openReschedule(b, 'start'); });
         actions.appendChild(move);
       }
-      if ((b.startsAt > now && (b.state === 'confirmed' || b.state === 'awaiting_payment' || b.state === 'payment_processing')) || b.state === 'rescheduling') {
+      if ((b.startsAt > now && (b.state === 'confirmed' || b.state === 'awaiting_payment')) || b.state === 'rescheduling') {
         var cancel = make('button', 'cd-sbtn', T.cancel);
         cancel.type = 'button';
         cancel.addEventListener('click', function () { openCancel(b); });
         actions.appendChild(cancel);
       }
     }
+    if (b.startsAt > now && b.state === 'payment_processing' && T.cancelBlocked) what.appendChild(make('div', 'cd-sub', T.cancelBlocked));
     if (actions.firstChild) line.appendChild(actions);
     return line;
   }

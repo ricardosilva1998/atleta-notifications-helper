@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "未改期",
   "cards.coaching.refundsPending": "待办退款：{{count}}",
   "cards.coaching.refundsPendingAction": "打开预约",
+  "coaching.dashboard.error.payment_processing": "PayPal 仍在处理一笔付款；待其完成或时段被释放后，你才可以取消。",
   "coaching.message.paymentDuplicate.title": "{{viewer}} 为同一场课程付款了两次",
   "coaching.message.paymentDuplicateBody": "请在 PayPal 中退还多付的款项。课程保持有效。",
   "coaching.error.duplicate": "这场课程已经付款。教练会退还多付的款项,您的课程保持有效。",

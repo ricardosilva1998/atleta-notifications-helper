@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "変更なし",
   "cards.coaching.refundsPending": "対応する返金：{{count}}件",
   "cards.coaching.refundsPendingAction": "予約を開く",
+  "coaching.dashboard.error.payment_processing": "PayPalで支払いがまだ処理中です。処理が完了するか、時間枠が解放されるとキャンセルできます。",
   "coaching.message.paymentDuplicate.title": "{{viewer}} が1つのセッションに二重で支払いました",
   "coaching.message.paymentDuplicateBody": "PayPal で余分な支払いを返金してください。セッションは有効です。",
   "coaching.error.duplicate": "このセッションはすでに支払い済みです。コーチが余分な支払いを返金します。セッションは有効です。",

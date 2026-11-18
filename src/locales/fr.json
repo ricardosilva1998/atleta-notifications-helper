@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "Non reportée",
   "cards.coaching.refundsPending": "Remboursements à faire : {{count}}",
   "cards.coaching.refundsPendingAction": "Ouvrir les réservations",
+  "coaching.dashboard.error.payment_processing": "Un paiement est encore en cours de traitement chez PayPal ; tu pourras annuler une fois qu'il sera réglé ou que le créneau sera libéré.",
   "coaching.message.paymentDuplicate.title": "{{viewer}} a payé deux fois pour une session",
   "coaching.message.paymentDuplicateBody": "Rembourse le paiement en trop dans PayPal. La session est maintenue.",
   "coaching.error.duplicate": "Cette session était déjà payée. Votre coach remboursera le paiement en trop. Votre session est maintenue.",

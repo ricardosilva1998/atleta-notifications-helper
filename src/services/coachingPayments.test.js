@@ -770,6 +770,15 @@ describe('pending captures', () => {
     assert.deepEqual(await svc.withdraw(s, v, booking.id, { now: NOW + 6 * MIN }), { ok: false, code: 'payment_processing' });
   });
 
+  test('the coach cannot cancel while a payment is pending: nothing changes, no message (a cancel with no pending row is covered in coachingBookings.test.js)', async () => {
+    const { s, booking, orderId } = await pendingBooking();
+    const sentBefore = discord.sent.length;
+    assert.deepEqual(await svc.cancel(s, booking.id, { reason: 'I am ill', now: NOW + 6 * MIN }), { ok: false, code: 'payment_processing' });
+    assert.equal(bookingNow(booking.id).status, 'awaiting_payment');
+    assert.equal(discord.sent.length, sentBefore);
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+
   test('it is kept past the deadline and past 72 hours: the booking holds its time, no pass deletes the row', async () => {
     const { booking, orderId } = await pendingBooking();
     assert.deepEqual(await pay.expireDue({ now: booking.pay_by + 31 * MIN }), { expired: 0, confirmed: 0 });
