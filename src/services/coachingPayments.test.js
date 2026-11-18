@@ -290,7 +290,8 @@ describe('startPayment', () => {
     assert.equal(unit.payee.email_address, s.paypal_email);
     assert.equal(unit.custom_id, String(booking.id));
     const body = JSON.parse(create.body);
-    assert.equal(body.application_context.return_url, `https://atleta.test/coaching/${s.twitch_username}/paid`);
+    assert.equal(body.application_context.return_url, 'https://atleta.test/coaching/-/paid');
+    assert.equal(body.application_context.cancel_url, 'https://atleta.test/my-bookings');
     const row = db.getCoachingPayment(orderId);
     assert.deepEqual([row.booking_id, row.streamer_id, row.amount_cents, row.currency, row.payee_email, row.payee_merchant_id, row.status],
       [booking.id, s.id, 4500, 'EUR', s.paypal_email, MERCHANT, 'created']);

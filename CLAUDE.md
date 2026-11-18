@@ -570,3 +570,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Decisions:**
 - `recordCoachingPayment` answers `double` only while the paid booking is `confirmed` or `rescheduling`; any other status (cancelled, expired, not_rescheduled...) records the extra payment as `late_issue` (Refund pending, reason `late`, both sides told, booking untouched); a replayed return follows the stored refund reason.
 **Open:** none
+
+### 2026-11-18 — backend-dev (F3.3)
+**Task:** My bookings keeps its actions when the coach's Twitch login is gone
+**Files:** src/db.js, src/routes/myBookings.js, src/services/coachingPayments.js, public/js/my-bookings.js, tests
+**Decisions:**
+- `coach_available` no longer needs a Twitch login (enabled account + coaching settings); the coach's name falls back to their Discord name; the coach link is drawn only with a login.
+- Per-booking action URLs use `/coaching/-/...` and Pay's return URL is `/coaching/-/paid` (cancel URL `/my-bookings`); the routes already find the coach by the booking/order, and old login URLs still work.
+**Open:** none

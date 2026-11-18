@@ -269,7 +269,9 @@ async function startPayment(streamer, viewer, bookingId, { lang = 'en', now = Da
   }
   if (open.length >= OPEN_ORDERS_MAX) return { ok: false, code: 'too_many_payments' };
 
-  const login = encodeURIComponent(streamer.twitch_username);
+  // The return path names no login: the coach's Twitch login can move to another streamer while the order is open, and
+  // the return finds the coach by the order's booking. '-' is not a possible Twitch login.
+  const login = '-';
   let order;
   try {
     order = await paypal.createOrder({
@@ -285,7 +287,7 @@ async function startPayment(streamer, viewer, bookingId, { lang = 'en', now = Da
       }],
       application_context: {
         return_url: `${config.app.url}/coaching/${login}/paid`,
-        cancel_url: `${config.app.url}/coaching/${login}`,
+        cancel_url: `${config.app.url}/my-bookings`,
         brand_name: 'Atleta',
         user_action: 'PAY_NOW',
         shipping_preference: 'NO_SHIPPING',

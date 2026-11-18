@@ -48,7 +48,8 @@
   function time(ms) { return C.timeLabel(ms, zone, lang); }
   function whenOf(ms) { return C.dateLabel(ms, zone, lang) + ', ' + time(ms); }
   function bookingById(id) { return (state.bookings || []).filter(function (b) { return b.id === id; })[0]; }
-  function base(b) { return '/coaching/' + encodeURIComponent(b.coach.login); }
+  // Actions name no login (the server finds the coach by the booking); the coach's page link needs one.
+  function base(b) { return '/coaching/-'; }
   function bookingUrl(b, tail) { return base(b) + '/bookings/' + encodeURIComponent(String(b.id)) + tail; }
 
   // ── Requests ──
@@ -149,8 +150,8 @@
     line.setAttribute('data-booking', String(b.id));
     line.appendChild(avatarOf(b.coach));
     var what = make('div', 'cz-what');
-    var coachLink = make('a', 'mb-coach');
-    coachLink.href = base(b);
+    var coachLink = make(b.coach.login ? 'a' : 'span', 'mb-coach');
+    if (b.coach.login) coachLink.href = '/coaching/' + encodeURIComponent(b.coach.login);
     coachLink.appendChild(make('span', null, b.coach.name));
     what.appendChild(coachLink);
     var when = make('div');
