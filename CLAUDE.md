@@ -627,3 +627,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Boot and shutdown lists the three ticks that exist (`trackingGoals`, `redemptionDispatcher`, `coachingTick`); `trackers.js` has no tick, only a 10 s test-revert timer, so none is claimed for it.
 - New bullets: shared SSE client and `drawGuarded`, migrations and their test (`sessions` not rebuilt, by decision), the robustness rules, the scrubbed dev sync. deploy.md has a PR 2 release note next to T16's migration-test section.
 **Open:** none
+
+### 2026-11-18 — team-qa
+**Task:** T19, QA of the robustness branch (T10-T18)
+**Tests added/changed:** none
+**Suite result:** scratch copy (Node 26): 4065 tests, 4065 pass, 0 fail. `node --check` on public/**/*.js ok. Two boots on empty then reused data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** headless Chromium, seeded streamer: the alert overlay and the chat overlay both reconnect (and reload on the new serverVersion) after the server is stopped and started on the same data dir and token; no page errors.
+**Bugs found:** none. Brief items B, D, E have tests (no gaps). QA: pass.
+**Open:** none
