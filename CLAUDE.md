@@ -670,3 +670,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - i18n line and `docs/features/i18n.md` name `tests/ptPt.test.js` and its guarded markers; deploy.md has a short release note (no schema change).
 - `/avatars` and the profile-picture functions were kept (the account page still uploads avatars); the dead tables stay.
 **Open:** none
+
+### 2026-11-18 — team-qa
+**Task:** T25, final QA of the three deep-review branches
+**Tests added/changed:** none
+**Suite result:** scratch exports (Node 26): money 4025/4025, robustness 4065/4065, chore 4055/4055 pass, 0 fail. Two boots on chore (empty then reused data/): `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM. `node --check` on all public and src files ok.
+**Manual checks:** headless Chromium, lang=pt, 375 and 1280 px, 10 pages (dashboard, my-bookings, coaching page, Overlay Builder, coaching dashboard, overlay settings, tracking, donations, tutorial, home): no console errors, no raw keys, no Brazilian wording.
+**Bugs found:** [P3] `/dashboard/overlay` at 375 px in pt scrolls horizontally (442 px): the "Limpar Todos os Alertas" + "Guardar Definições" row; English fits. Older layout, not from this run.
+**Open:** the P3 above for team-ux.
