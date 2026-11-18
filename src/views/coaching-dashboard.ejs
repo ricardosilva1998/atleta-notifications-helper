@@ -268,7 +268,7 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-group + .cd-line { border-top: 0; }
   .cd-line.expired, .cd-line.declined, .cd-line.cancelled, .cd-line.withdrawn, .cd-line.unanswered, .cd-line.not_rescheduled { opacity: .6; }
   .cd-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px; background: var(--text-muted); }
-  .cd-dot.waiting, .cd-dot.awaiting_payment, .cd-dot.payment_processing, .cd-dot.rescheduling { background: var(--warning); }
+  .cd-dot.waiting, .cd-dot.awaiting_payment, .cd-dot.payment_processing, .cd-dot.payment_unsettled, .cd-dot.rescheduling { background: var(--warning); }
   .cd-dot.confirmed { background: var(--success); }
   .cd-what { flex: 1; min-width: 0; }
   .cd-top { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; }
@@ -276,7 +276,7 @@ window.COACHING_DASHBOARD_TEXTS = <%- JSON.stringify(coachingTexts).replace(/</g
   .cd-name { color: var(--text-primary); overflow-wrap: anywhere; }
   .cd-what .cd-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 1px; }
   .cd-pill { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--bg-elevated); color: var(--text-secondary); }
-  .cd-pill.waiting, .cd-pill.awaiting_payment, .cd-pill.payment_processing, .cd-pill.rescheduling, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
+  .cd-pill.waiting, .cd-pill.awaiting_payment, .cd-pill.payment_processing, .cd-pill.payment_unsettled, .cd-pill.rescheduling, .cd-pill.warn { background: var(--warning-bg); color: var(--warning); }
   .cd-pill.confirmed, .cd-pill.paid { background: var(--success-bg); color: var(--success); }
   .cd-note-text { background: var(--bg-base); border-radius: 8px; padding: 5px 8px; margin-top: 5px; color: var(--text-secondary); overflow-wrap: anywhere; white-space: pre-wrap; }
   .cd-warn { color: var(--warning); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }

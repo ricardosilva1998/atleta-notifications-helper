@@ -61,7 +61,7 @@ function refundsOf(payments) {
 
 function bookingView(row, now, room = null, opts = {}) {
   const payments = opts.payments || db.listCoachingPaymentsForBookings([row.id]);
-  if (opts.paymentPending === undefined && row.status === 'awaiting_payment') {
+  if (opts.paymentPending === undefined && (row.status === 'awaiting_payment' || row.status === 'expired')) {
     opts = { ...opts, paymentPending: db.pendingCoachingPaymentBookingIds([row.id]).has(row.id) };
   }
   const refundState = refundStateOf(payments);
@@ -71,7 +71,8 @@ function bookingView(row, now, room = null, opts = {}) {
     id: row.id,
     startsAt: row.starts_at,
     minutes: row.minutes,
-    state: opts.paymentPending && row.status === 'awaiting_payment' ? 'payment_processing' : coaching.bookingState(row, now),
+    state: opts.paymentPending && row.status === 'awaiting_payment' ? 'payment_processing'
+      : opts.paymentPending && row.status === 'expired' ? 'payment_unsettled' : coaching.bookingState(row, now),
     viewerName: row.viewer_display_name || row.viewer_username,
     viewerUsername: row.viewer_username,
     viewerAvatar: row.viewer_avatar || null,
@@ -109,7 +110,7 @@ function bookingViews(rows, now, opts = {}) {
     if (!paid.has(p.booking_id)) paid.set(p.booking_id, []);
     paid.get(p.booking_id).push(p);
   }
-  const processing = db.pendingCoachingPaymentBookingIds(rows.filter((r) => r.status === 'awaiting_payment').map((r) => r.id));
+  const processing = db.pendingCoachingPaymentBookingIds(rows.filter((r) => r.status === 'awaiting_payment' || r.status === 'expired').map((r) => r.id));
   return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, { ...opts, payments: paid.get(r.id) || [], paymentPending: processing.has(r.id) }));
 }
 
@@ -558,7 +559,12 @@ async function afterPayment(streamer, booking, result) {
 async function afterExpired(streamer, booking) {
   const settings = db.getCoachingSettings(streamer.id);
   try {
-    await Promise.all([messageViewer(streamer, settings, booking, 'expired'), messageStreamer(streamer, settings, booking, 'unpaid')]);
+    // A payment PayPal still holds as PENDING: the viewer is not told they did not pay.
+    const held = db.pendingCoachingPaymentBookingIds([booking.id]).has(booking.id);
+    await Promise.all([
+      messageViewer(streamer, settings, booking, held ? 'expiredPending' : 'expired'),
+      messageStreamer(streamer, settings, booking, held ? 'unpaidPending' : 'unpaid'),
+    ]);
   } catch (e) {
     console.error(`[Coaching] after the expiry of booking ${booking.id}:`, e && e.message);
   }

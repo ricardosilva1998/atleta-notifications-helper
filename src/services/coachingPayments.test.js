@@ -762,6 +762,24 @@ describe('pending captures', () => {
     assert.equal(db.getCoachingPayment(orderId).status, 'pending');
   });
 
+  test('released with the payment still pending: the viewer is not told it was unpaid, and the state says so', async () => {
+    const { s, booking, orderId, viewer: v } = await pendingBooking();
+    discord.sent = [];
+    const out = await pay.expireDue({ now: booking.starts_at - 10 * MIN });
+    assert.deepEqual(out, { expired: 1, confirmed: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    const toViewer = discord.sent.find((m) => m.userId === v.discordUserId).payload.embeds[0];
+    assert.match(toViewer.title, /still processing at PayPal/);
+    assert.doesNotMatch(toViewer.title + toViewer.description, /not paid in time/);
+    assert.match(toViewer.description, /refunded/);
+    const toCoach = discord.sent.find((m) => m.userId === s.discord_user_id).payload.embeds[0];
+    assert.doesNotMatch(toCoach.title, /did not pay/);
+    const row = bookingNow(booking.id);
+    assert.equal(row.status, 'expired');
+    assert.equal(svc.bookingView(row, booking.starts_at - 9 * MIN, null, { forViewer: true }).state, 'payment_unsettled');
+    assert.equal(svc.bookingViews([row], booking.starts_at - 9 * MIN)[0].state, 'payment_unsettled');
+  });
+
   test('a payment first seen pending by the expiry pass is kept too', async () => {
     const s = addStreamer();
     const { booking, orderId } = await ordered(s);
@@ -815,7 +833,7 @@ describe('pending captures', () => {
     assert.equal(db.getCoachingPayment(orderId).status, 'pending');
     assert.ok(discord.sent.find((m) => m.userId === v.discordUserId), 'the viewer is told');
     assert.ok(discord.sent.find((m) => m.userId === s.discord_user_id), 'the coach is told');
-    assert.equal(svc.bookingView(bookingNow(booking.id), booking.starts_at - 14 * MIN, null, { forViewer: true }).state, 'expired');
+    assert.equal(svc.bookingView(bookingNow(booking.id), booking.starts_at - 14 * MIN, null, { forViewer: true }).state, 'payment_unsettled');
   });
 
   test('a pending payment that completes later is recorded as late, Refund pending, the coach told', async () => {
