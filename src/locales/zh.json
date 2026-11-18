@@ -2538,6 +2538,8 @@
   "coaching.state.not_rescheduled": "未改期",
   "cards.coaching.refundsPending": "待办退款：{{count}}",
   "cards.coaching.refundsPendingAction": "打开预约",
+  "coaching.state.payment_processing": "付款处理中",
+  "coaching.error.payment_processing": "PayPal 仍在处理你的付款。此预约会保留其时间，PayPal 处理完成后会在此确认。",
   "coaching.page.step": "第 {{n}} 步，共 {{total}} 步",
   "coaching.page.stepConnect": "连接你的 Discord 账号",
   "coaching.page.stepJoin": "加入 Discord 服务器",

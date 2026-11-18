@@ -108,7 +108,7 @@ const TEXT_KEYS = {
   connTwitchOk: 'coaching.dashboard.connTwitchOk', connTwitchNone: 'coaching.dashboard.connTwitchNone',
 };
 const STATE_KEYS = {
-  waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
+  waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', payment_processing: 'coaching.state.payment_processing', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
   cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
   rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };

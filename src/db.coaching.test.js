@@ -311,6 +311,26 @@ describe('coaching payment', () => {
     assert.equal(db.deleteOpenCoachingPayment('ORDS1'), true);
     assert.equal(db.getCoachingPayment('ORDS1'), null);
   });
+
+  test('a pending payment is kept: never listed as stale, never deleted, read when due, closed with its row kept', () => {
+    const id = addStreamer();
+    const a = paidBook(id, 'P1', T, 60).booking;
+    db.createCoachingPayment({ orderId: 'ORDP1', bookingId: a.id, streamerId: id, amountCents: 4500, currency: 'EUR', payeeEmail: 'c@x.io', now: 1000 });
+    assert.equal(db.markCoachingPaymentPending('ORDP1', 1500, 5000), true);
+    assert.equal(db.markCoachingPaymentPending('ORDP1', 2500, 6000), true);
+    const row = db.getCoachingPayment('ORDP1');
+    assert.deepEqual([row.status, row.pending_since, row.next_read_at], ['pending', 1500, 6000], 'first sighting is kept');
+    assert.equal(db.listStaleCoachingPayments(10 ** 9).some((p) => p.order_id === 'ORDP1'), false);
+    assert.equal(db.listOpenCoachingPaymentsFor(a.id).length, 0);
+    assert.equal(db.deleteOpenCoachingPayment('ORDP1'), false);
+    assert.ok(db.getCoachingPayment('ORDP1'));
+    assert.deepEqual(db.listDueCoachingPendingPayments(5999), []);
+    assert.equal(db.listDueCoachingPendingPayments(6000).length, 1);
+    assert.deepEqual([...db.pendingCoachingPaymentBookingIds([a.id, 999])], [a.id]);
+    assert.equal(db.closeCoachingPayment('ORDP1'), true);
+    assert.equal(db.getCoachingPayment('ORDP1').status, 'closed');
+    assert.equal(db.pendingCoachingPaymentBookingIds([a.id]).size, 0);
+  });
 });
 
 describe('coaching rooms', () => {

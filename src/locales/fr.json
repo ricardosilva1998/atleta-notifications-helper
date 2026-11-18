@@ -2538,6 +2538,8 @@
   "coaching.state.not_rescheduled": "Non reportée",
   "cards.coaching.refundsPending": "Remboursements à faire : {{count}}",
   "cards.coaching.refundsPendingAction": "Ouvrir les réservations",
+  "coaching.state.payment_processing": "Paiement en cours de traitement",
+  "coaching.error.payment_processing": "Ton paiement est encore en cours de traitement par PayPal. Cette réservation garde son créneau et sera confirmée ici dès que PayPal aura terminé.",
   "coaching.page.step": "Étape {{n}} sur {{total}}",
   "coaching.page.stepConnect": "Connecte ton compte Discord",
   "coaching.page.stepJoin": "Rejoins le serveur Discord",

@@ -472,3 +472,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** README lines 3 and 79 on both branches are the new text and the `node --test` command; F2.1 to F2.3 behaviours covered by their passing tests (trackers with no rows all off, sponsor name cut at 500, reward template over 500 refused, missing watcher `not_found`).
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T1 of deep review fixes)
+**Task:** Coaching: a PENDING PayPal capture is kept, never lost (A1)
+**Files:** src/db.js, src/services/coachingPayments.js, coachingTick.js, coachingBookings.js, coaching.js, src/routes/coaching.js, coachingDashboard.js, myBookings.js, public/js/coaching-core.js, coaching-dashboard.js, two views (pill colours), locales (2 keys x 7), tests
+**Decisions:**
+- `coaching_payments.status` gains `pending` (columns `pending_since`, `next_read_at`), plus `closed` and `lapsed`; `deleteOpenCoachingPayment` only deletes `created`, so a pending row is never deleted. New tick step `readPending` (hourly the first day, then daily, lapsed after 30 days with a log line; voided/declined closed with a log line).
+- A booking with a pending payment keeps its time until start - 15 min; its view state is `payment_processing` (view only, never stored); Pay and viewer withdraw answer `payment_processing`. A pending payment that completes after the booking ended is always `late_issue` (Refund pending, coach DMed; the viewer gets no new DM).
+**Open:** none
+

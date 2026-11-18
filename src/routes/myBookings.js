@@ -34,7 +34,7 @@ const PAGE_TEXT_KEYS = {
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
-  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired',
+  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', payment_processing: 'coaching.state.payment_processing', expired: 'coaching.state.expired',
   withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
   rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };

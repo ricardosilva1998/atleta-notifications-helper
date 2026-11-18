@@ -3769,6 +3769,11 @@ try {
     ['refund_status', 'TEXT'], ['refund_reason', 'TEXT'], ['refund_pending_at', 'INTEGER'], ['refunded_at', 'INTEGER'],
   ]);
   db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_refund ON coaching_payments(streamer_id, refund_status)');
+  // A capture PayPal reports PENDING is kept (status 'pending'), read back on a schedule and never deleted: when it
+  // was first seen pending and when it is read next.
+  addColumns('coaching_payments', [['pending_since', 'INTEGER']]);
+  addColumns('coaching_payments', [['next_read_at', 'INTEGER']]);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_pending ON coaching_payments(status, next_read_at)');
   db.exec(`
     CREATE TABLE IF NOT EXISTS coaching_rooms (
       booking_id INTEGER PRIMARY KEY,
@@ -5063,7 +5068,41 @@ function deleteOpenCoachingPayment(orderId) {
 }
 
 function markCoachingPaymentRefused(orderId) {
-  return db.prepare("UPDATE coaching_payments SET status = 'refused' WHERE order_id = ? AND status = 'created'").run(orderId).changes > 0;
+  return db.prepare("UPDATE coaching_payments SET status = 'refused', next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending')").run(orderId).changes > 0;
+}
+
+// A capture PayPal holds as PENDING: kept, never deleted, read again at nextReadAt (pending_since stays the first sighting).
+function markCoachingPaymentPending(orderId, now, nextReadAt) {
+  return db.prepare(
+    "UPDATE coaching_payments SET status = 'pending', pending_since = COALESCE(pending_since, ?), next_read_at = ? WHERE order_id = ? AND status IN ('created', 'pending')"
+  ).run(now, nextReadAt, orderId).changes > 0;
+}
+
+function scheduleCoachingPaymentRead(orderId, nextReadAt) {
+  return db.prepare("UPDATE coaching_payments SET next_read_at = ? WHERE order_id = ? AND status = 'pending'").run(nextReadAt, orderId).changes > 0;
+}
+
+// A pending payment PayPal voided or declined ('closed'), or one still pending after 30 days ('lapsed'): the row stays.
+function closeCoachingPayment(orderId, status = 'closed') {
+  if (status !== 'closed' && status !== 'lapsed') throw new Error('bad status');
+  return db.prepare("UPDATE coaching_payments SET status = ?, next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending')").run(status, orderId).changes > 0;
+}
+
+function listPendingCoachingPaymentsFor(bookingId) {
+  return db.prepare("SELECT * FROM coaching_payments WHERE booking_id = ? AND status = 'pending' ORDER BY created_at").all(bookingId);
+}
+
+function listDueCoachingPendingPayments(now, limit = 200) {
+  return db.prepare("SELECT * FROM coaching_payments WHERE status = 'pending' AND (next_read_at IS NULL OR next_read_at <= ?) ORDER BY next_read_at LIMIT ?").all(now, limit);
+}
+
+// The ids (of those given) of bookings with a payment still pending at PayPal.
+function pendingCoachingPaymentBookingIds(bookingIds) {
+  const ids = [...new Set(bookingIds.map(Number).filter(Number.isFinite))];
+  if (!ids.length) return new Set();
+  return new Set(db.prepare(
+    `SELECT DISTINCT booking_id FROM coaching_payments WHERE status = 'pending' AND booking_id IN (${ids.map(() => '?').join(',')})`
+  ).all(...ids).map((r) => r.booking_id));
 }
 
 // A verified capture, recorded once. The caller has already checked payee, amount, currency and status.
@@ -5106,7 +5145,9 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
     setPaid('confirmed', null);
     return { ok: true, result: 'recorded', booking: reload() };
   }
-  if (booking.status === 'expired' && booking.starts_at > now) {
+  // A payment that was PENDING when the booking ended unpaid is always a late one (the streamer refunds it), never a
+  // session confirmed minutes before it starts.
+  if (booking.status === 'expired' && booking.starts_at > now && !(order && order.status === 'pending')) {
     const end = booking.starts_at + booking.minutes * 60000;
     const clash = db.prepare(
       `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} < ? AND ${_HELD_AT} + minutes * 60000 > ? LIMIT 1`
@@ -6176,7 +6217,8 @@ module.exports = {
   getViewerCoachingBookings, getViewerBookingsAllCoaches, setCoachingBookingStatus, recordCoachingMessageError, countWaitingCoaching,
   acceptCoachingBooking, expireCoachingBooking, listExpirableCoachingBookings, getCoachingBookingById,
   createCoachingPayment, getCoachingPayment, listOpenCoachingPaymentsFor, listStaleCoachingPayments, deleteOpenCoachingPayment,
-  markCoachingPaymentRefused, recordCoachingPayment,
+  markCoachingPaymentRefused, recordCoachingPayment, markCoachingPaymentPending, scheduleCoachingPaymentRead, closeCoachingPayment,
+  listPendingCoachingPaymentsFor, listDueCoachingPendingPayments, pendingCoachingPaymentBookingIds,
   updateCoachingRoomClose, startCoachingReschedule, proposeCoachingTime, acceptCoachingProposal, dropCoachingProposal,
   closeCoachingReschedule, cancelCoachingBookingByCoach, listDueReschedules, markCoachingRefunded,
   listPendingCoachingRefunds, countPendingCoachingRefunds, listCoachingPaymentsForBookings,

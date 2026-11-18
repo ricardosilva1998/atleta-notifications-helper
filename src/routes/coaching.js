@@ -26,7 +26,7 @@ const REFUSAL_STATUS = {
   signin: 401, unavailable: 404, not_found: 404, bad_length: 400, bad_note: 400,
   not_open: 409, join_first: 409, bad_time: 409, taken: 409, limit: 409, too_late: 409, not_active: 409, too_many: 429,
   not_rescheduling: 409, not_yours_to_answer: 409, no_proposal: 409, proposal_too_close: 409,
-  no_paypal: 409, paid: 409, not_awaiting: 409, pay_closed: 409, too_many_payments: 429, payment_failed: 502,
+  no_paypal: 409, paid: 409, not_awaiting: 409, pay_closed: 409, too_many_payments: 429, payment_processing: 409, payment_failed: 502,
 };
 // bad_time and taken read the same: a time someone holds is refused as bad_time (it is no longer a free start) before
 // the insert's own check (taken) ever sees it, and for the viewer both mean "someone was quicker".
@@ -39,7 +39,7 @@ const ERROR_KEYS = {
   not_awaiting: 'coaching.error.not_awaiting', pay_closed: 'coaching.error.pay_closed',
   not_rescheduling: 'coaching.error.not_rescheduling', not_yours_to_answer: 'coaching.error.not_yours_to_answer',
   no_proposal: 'coaching.error.no_proposal', proposal_too_close: 'coaching.error.proposal_too_close',
-  too_many_payments: 'coaching.error.too_many_payments', payment_failed: 'coaching.error.payment_failed',
+  too_many_payments: 'coaching.error.too_many_payments', payment_processing: 'coaching.error.payment_processing', payment_failed: 'coaching.error.payment_failed',
 };
 // The codes /paid sends back to the page as ?error= (coachingPayments.returnErrorCode), with their texts; the page's
 // script shows them (paid and pay_closed are above).

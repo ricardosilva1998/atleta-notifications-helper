@@ -61,13 +61,16 @@ function refundsOf(payments) {
 
 function bookingView(row, now, room = null, opts = {}) {
   const payments = opts.payments || db.listCoachingPaymentsForBookings([row.id]);
+  if (opts.paymentPending === undefined && row.status === 'awaiting_payment') {
+    opts = { ...opts, paymentPending: db.pendingCoachingPaymentBookingIds([row.id]).has(row.id) };
+  }
   const refundState = refundStateOf(payments);
   const coachOnly = opts.forViewer || opts.noPayer ? {} : { refunds: refundsOf(payments) };
   return {
     id: row.id,
     startsAt: row.starts_at,
     minutes: row.minutes,
-    state: coaching.bookingState(row, now),
+    state: opts.paymentPending && row.status === 'awaiting_payment' ? 'payment_processing' : coaching.bookingState(row, now),
     viewerName: row.viewer_display_name || row.viewer_username,
     viewerUsername: row.viewer_username,
     viewerAvatar: row.viewer_avatar || null,
@@ -104,7 +107,8 @@ function bookingViews(rows, now, opts = {}) {
     if (!paid.has(p.booking_id)) paid.set(p.booking_id, []);
     paid.get(p.booking_id).push(p);
   }
-  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, { ...opts, payments: paid.get(r.id) || [] }));
+  const processing = db.pendingCoachingPaymentBookingIds(rows.filter((r) => r.status === 'awaiting_payment').map((r) => r.id));
+  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, { ...opts, payments: paid.get(r.id) || [], paymentPending: processing.has(r.id) }));
 }
 
 // The currency of a streamer's coaching prices: their tip page's.
@@ -335,6 +339,7 @@ async function withdraw(streamer, viewer, id, { now = Date.now() } = {}) {
   const row = db.getCoachingBooking(id, streamer.id);
   if (!row || row.viewer_discord_id !== viewer.discordUserId) return { ok: false, code: 'not_found' };
   if (row.paid_at != null) return { ok: false, code: 'paid' };
+  if (row.status === 'awaiting_payment' && db.pendingCoachingPaymentBookingIds([id]).has(row.id)) return { ok: false, code: 'payment_processing' };
   if (!coaching.HOLDING.includes(row.status)) return { ok: false, code: 'not_active' };
   if (row.status !== 'rescheduling' && row.starts_at <= now) return { ok: false, code: 'too_late' }; // a rescheduling row's starts_at is the original time, which limits nothing
   const updated = db.setCoachingBookingStatus(id, streamer.id, coaching.HOLDING, 'withdrawn', now, { unpaidOnly: true });

@@ -29,6 +29,11 @@ const paypal = paypalClient(config.paypal);
 const MINUTE_MS = 60e3;
 const STALE_MS = 24 * 3600e3; // an order not captured after a day is read back once, then dropped
 const STALE_GIVE_UP_MS = 72 * 3600e3; // ... and dropped unread when PayPal could not be asked for two more days
+const HOUR_MS = 3600e3;
+const DAY_MS = 24 * HOUR_MS;
+const PENDING_HOURLY_MS = DAY_MS; // a pending capture is read hourly for its first day ...
+const PENDING_GIVE_UP_MS = 30 * DAY_MS; // ... then daily, until 30 days after it was first seen pending
+const PENDING_HOLD_LEAD_MS = 15 * MINUTE_MS; // a booking with a pending payment keeps its time until this long before its start
 const EXPIRE_GRACE_MS = 30 * MINUTE_MS; // while PayPal cannot be asked, a booking past its deadline waits this long
 const OPEN_ORDERS_MAX = 5; // Pay pressed again and again: at most this many unpaid orders per booking
 const ORDER_ID = /^[A-Z0-9-]{10,64}$/i;
@@ -155,6 +160,30 @@ function mayCapture(booking, now) {
     .some((h) => h.id !== booking.id && booking.starts_at < h.startsAt + h.minutes * MINUTE_MS && h.startsAt < end);
 }
 
+// When a pending capture is read next: an hour from now during its first day, a day from now after that.
+function nextPendingRead(pendingSince, now) {
+  return now + (now - pendingSince < PENDING_HOURLY_MS ? HOUR_MS : DAY_MS);
+}
+
+// A capture PayPal reports PENDING is kept (never deleted) and read again on that schedule.
+function keepPending(payment, now) {
+  const since = payment.pending_since || now;
+  if (db.markCoachingPaymentPending(payment.order_id, now, nextPendingRead(since, now))) {
+    if (payment.status !== 'pending') console.log(`[Coaching] order ${payment.order_id} for booking ${payment.booking_id}: capture PENDING at PayPal, kept and read back`);
+  }
+}
+
+// PayPal's answer says the payment will never settle: the order was voided, or its capture ended in anything but
+// COMPLETED or PENDING (declined, failed, refunded).
+function isDeadOrder(order) {
+  if (!order || typeof order !== 'object') return false;
+  if (order.status === 'VOIDED') return true;
+  const unit = Array.isArray(order.purchase_units) ? order.purchase_units[0] : null;
+  const captures = unit && unit.payments && unit.payments.captures;
+  const capture = Array.isArray(captures) ? captures[0] : null;
+  return !!(capture && typeof capture.status === 'string' && capture.status !== 'COMPLETED' && capture.status !== 'PENDING');
+}
+
 // A verified capture into the database, then what follows it (coachingBookings.afterPayment: the confirmation, the room
 // hook, or the streamer told to refund). Returns { ok, result, booking, followUp } or { ok: false, reason }.
 function record(streamer, payment, verdict, now) {
@@ -195,11 +224,15 @@ async function startPayment(streamer, viewer, bookingId, { lang = 'en', now = Da
   if (!booking.pay_by || now >= booking.pay_by) return { ok: false, code: 'pay_closed' };
   if (!streamer.paypal_email) return { ok: false, code: 'no_paypal' };
 
+  // A payment PayPal holds as PENDING is waiting to settle: a second order would be paid twice.
+  if (db.listPendingCoachingPaymentsFor(booking.id).length) return { ok: false, code: 'payment_processing' };
+
   const open = db.listOpenCoachingPaymentsFor(booking.id);
   for (const payment of open) {
     let order;
     try { order = await paypal.getOrder(payment.order_id); } catch (e) { continue; }
     const verdict = decideCoachingCapture({ streamer, payment, booking, order });
+    if (verdict.reason === 'pending') { keepPending(payment, now); return { ok: false, code: 'payment_processing' }; }
     if (verdict.ok) {
       const done = record(streamer, payment, verdict, now);
       if (done.ok) return { ok: false, code: 'paid' };
@@ -263,8 +296,10 @@ async function handleReturn({ streamer, orderId, now = Date.now() }) {
   if (early) return { ok: false, reason: early };
   if (payment.status === 'captured') return { ok: true, replay: true, outcome: outcomeOf(booking, orderId) };
   if (payment.status === 'refused') return { ok: false, reason: 'refused' };
+  if (payment.status === 'closed' || payment.status === 'lapsed') return { ok: false, reason: 'closed' };
 
-  const capturing = mayCapture(booking, now);
+  // A payment PayPal already holds as PENDING is read, never captured again.
+  const capturing = payment.status !== 'pending' && mayCapture(booking, now);
   let answer = null;
   let failure = null;
   if (capturing) {
@@ -282,6 +317,7 @@ async function handleReturn({ streamer, orderId, now = Date.now() }) {
     const now2 = db.getCoachingPayment(orderId);
     if (now2 && now2.status === 'captured') return { ok: true, replay: true, outcome: outcomeOf(db.getCoachingBookingById(payment.booking_id), orderId) };
     const detail = [paypalIssue(answer || order), failure].filter(Boolean).join('; ');
+    if (verdict.reason === 'pending') keepPending(payment, now);
     if (MISMATCH.includes(verdict.reason) && order && order.status === 'COMPLETED') {
       // Money moved, but not as this booking needs: never counted. Kept as refused so it is not read again.
       db.markCoachingPaymentRefused(orderId);
@@ -346,18 +382,22 @@ function expireDue({ now = Date.now() } = {}) {
           let order;
           try { order = await paypal.getOrder(payment.order_id); } catch (e) { unsure = true; continue; }
           const verdict = decideCoachingCapture({ streamer, payment, booking, order });
-          if (verdict.reason === 'pending') unsure = true;
+          if (verdict.reason === 'pending') keepPending(payment, now);
           if (!verdict.ok) continue;
           const done = record(streamer, payment, verdict, now);
           if (done.ok) { paid = true; confirmed++; followUps.push(done.followUp); break; }
           unsure = true;
         }
         if (paid) continue;
+        // A payment PayPal holds as PENDING keeps the booking's time until shortly before it starts; the payment itself
+        // is read by readPending and is never deleted.
+        if (db.listPendingCoachingPaymentsFor(booking.id).length && now < booking.starts_at - PENDING_HOLD_LEAD_MS) continue;
         if (unsure && now - booking.pay_by < EXPIRE_GRACE_MS) continue;
         const row = db.expireCoachingBooking(booking.id, now);
         if (!row) continue;
         expired++;
         console.log(`[Coaching] booking ${booking.id} of streamer ${streamer.id} expired unpaid`);
+        if (db.listPendingCoachingPaymentsFor(booking.id).length) console.log(`[Coaching] booking ${booking.id} ended unpaid with a payment still PENDING at PayPal: the payment is kept and read back`);
         followUps.push(coachingBookings.afterExpired(streamer, row));
       } catch (e) {
         console.error(`[Coaching] expiry of booking ${booking.id} failed:`, e.message);
@@ -398,7 +438,8 @@ function reconcileStale({ now = Date.now() } = {}) {
           console.error(`[Coaching] stale order ${payment.order_id} REFUSED (${verdict.reason}): check it in PayPal`);
           continue;
         }
-        if (verdict.reason === 'pending' && now - payment.created_at < STALE_GIVE_UP_MS) continue;
+        if (verdict.reason === 'pending') { keepPending(payment, now); continue; }
+        if (isDeadOrder(order)) console.log(`[Coaching] stale order ${payment.order_id} closed (${paypalIssue(order)})`);
         if (db.deleteOpenCoachingPayment(payment.order_id)) dropped++;
       } catch (e) {
         console.error(`[Coaching] stale order ${payment.order_id} failed:`, e.message);
@@ -409,7 +450,64 @@ function reconcileStale({ now = Date.now() } = {}) {
   });
 }
 
+// Payments PayPal held as PENDING (planning decision: never lost): each is read back when its time comes (hourly for the
+// first day, then daily, up to 30 days after it was first seen). A capture that settles is recorded (a booking that
+// ended unpaid in the meantime takes it by the late rule: the streamer is told to refund it); a voided or declined one
+// is closed with a log line; one still pending after 30 days is marked lapsed and logged. The row is never deleted.
+// Resolves to { recorded, closed, pending }.
+function readPending({ now = Date.now() } = {}) {
+  return once('pending', async () => {
+    let recorded = 0;
+    let closed = 0;
+    let pending = 0;
+    const followUps = [];
+    for (const payment of db.listDueCoachingPendingPayments(now)) {
+      try {
+        const streamer = streamerOf(payment.streamer_id);
+        const booking = db.getCoachingBookingById(payment.booking_id);
+        const since = payment.pending_since || payment.created_at;
+        if (!streamer || !booking) {
+          console.error(`[Coaching] pending order ${payment.order_id}: its streamer or booking is gone; the payment is kept, check it in PayPal`);
+          db.closeCoachingPayment(payment.order_id, 'lapsed');
+          closed++;
+          continue;
+        }
+        let order = null;
+        let asked = true;
+        try { order = await paypal.getOrder(payment.order_id); } catch (e) { asked = false; }
+        const verdict = asked ? decideCoachingCapture({ streamer, payment, booking, order }) : { ok: false, reason: 'unasked' };
+        if (verdict.ok) {
+          const done = record(streamer, payment, verdict, now);
+          if (done.ok) { recorded++; followUps.push(done.followUp); continue; }
+        } else if (MISMATCH.includes(verdict.reason) && order && order.status === 'COMPLETED') {
+          db.markCoachingPaymentRefused(payment.order_id);
+          console.error(`[Coaching] pending order ${payment.order_id} REFUSED (${verdict.reason}): check it in PayPal`);
+          closed++;
+          continue;
+        } else if (asked && isDeadOrder(order)) {
+          db.closeCoachingPayment(payment.order_id, 'closed');
+          console.log(`[Coaching] pending order ${payment.order_id} closed: ${paypalIssue(order)}`);
+          closed++;
+          continue;
+        }
+        if (now - since >= PENDING_GIVE_UP_MS) {
+          db.closeCoachingPayment(payment.order_id, 'lapsed');
+          console.error(`[Coaching] pending order ${payment.order_id} still not settled after 30 days (${asked ? paypalIssue(order) : 'PayPal not reachable'}): the payment is kept, check it in PayPal`);
+          closed++;
+          continue;
+        }
+        db.scheduleCoachingPaymentRead(payment.order_id, nextPendingRead(since, now));
+        pending++;
+      } catch (e) {
+        console.error(`[Coaching] pending order ${payment.order_id} failed:`, e.message);
+      }
+    }
+    await Promise.all(followUps);
+    return { recorded, closed, pending };
+  });
+}
+
 module.exports = {
-  decideCoachingCapture, centsOf, startPayment, handleReturn, returnErrorCode, expireDue, reconcileStale,
-  STALE_MS, EXPIRE_GRACE_MS, OPEN_ORDERS_MAX,
+  decideCoachingCapture, centsOf, startPayment, handleReturn, returnErrorCode, expireDue, reconcileStale, readPending, nextPendingRead,
+  STALE_MS, EXPIRE_GRACE_MS, PENDING_HOLD_LEAD_MS, PENDING_GIVE_UP_MS, OPEN_ORDERS_MAX,
 };

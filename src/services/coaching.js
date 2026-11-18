@@ -20,6 +20,8 @@ const WHERE_MAX = 150;
 const DAYS_OFF_MAX = 60;
 const INVITE_CHECK_MS = 3600000;
 const HOLDING = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling'];
+// A view-only state: an awaiting_payment booking whose payment PayPal holds as PENDING (never stored on the booking).
+const PAYMENT_PROCESSING = 'payment_processing';
 const STATES = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling', 'declined', 'cancelled', 'withdrawn', 'expired', 'not_rescheduled'];
 // A proposal nobody answers lapses after 48 h; a reschedule with no agreement closes after 7 days.
 const PROPOSAL_LAPSE_MS = 48 * 3600e3;
@@ -274,7 +276,7 @@ function bookable(settings, claimedGuildIds) {
 
 module.exports = {
   LENGTHS, STEP_MINUTES, HORIZON_DAYS, LEAD_MS, MAX_UPCOMING, MAX_REQUESTS_PER_DAY, NOTE_MAX, WHERE_MAX, DAYS_OFF_MAX,
-  INVITE_CHECK_MS, HOLDING, STATES, PROPOSAL_LAPSE_MS, RESCHEDULE_WINDOW_MS, CANCEL_REASON_MAX, PROPOSAL_NOTE_MAX, DEFAULT_HOURS, DEFAULT_LENGTHS, PRICE_MAX_CENTS, PAY_WINDOW_MS,
+  INVITE_CHECK_MS, HOLDING, STATES, PAYMENT_PROCESSING, PROPOSAL_LAPSE_MS, RESCHEDULE_WINDOW_MS, CANCEL_REASON_MAX, PROPOSAL_NOTE_MAX, DEFAULT_HOURS, DEFAULT_LENGTHS, PRICE_MAX_CENTS, PAY_WINDOW_MS,
   parseLengths, lengthsFor, payBy, canAcceptPaid,
   parseHours, parseDaysOff, parseInvite, parseWhere, parseNote, parseCancelReason,
   localDateOf, localInstant, freeStarts, viewerRescheduleStarts, coachProposalStarts, canReschedule, canCoachCancel, rescheduleDue, bookingState, outsideHours, bookable,

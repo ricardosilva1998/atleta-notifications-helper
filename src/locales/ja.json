@@ -2538,6 +2538,8 @@
   "coaching.state.not_rescheduled": "変更なし",
   "cards.coaching.refundsPending": "対応する返金：{{count}}件",
   "cards.coaching.refundsPendingAction": "予約を開く",
+  "coaching.state.payment_processing": "支払い処理中",
+  "coaching.error.payment_processing": "お支払いはまだ PayPal で処理中です。この予約は時間を確保したまま、PayPal の処理が終わり次第ここで確定されます。",
   "coaching.page.step": "ステップ {{n}} / {{total}}",
   "coaching.page.stepConnect": "Discord アカウントを接続",
   "coaching.page.stepJoin": "Discord サーバーに参加",

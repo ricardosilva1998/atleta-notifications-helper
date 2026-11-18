@@ -28,6 +28,7 @@ async function runOnce({ now = Date.now(), deps = null } = {}) {
   try {
     await step('expire', () => d.payments.expireDue({ now }));
     await step('stale', () => d.payments.reconcileStale({ now }));
+    await step('pending', () => d.payments.readPending({ now }));
     await step('reschedules', () => d.bookings.runDueReschedules({ now }));
     await step('making', () => d.rooms.finishOrCleanMaking({ now }));
     await step('close', () => d.rooms.closeDue({ now }));

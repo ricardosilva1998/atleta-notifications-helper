@@ -87,7 +87,7 @@
   }
 
   // A booking that holds its time: waiting, awaiting payment, confirmed or rescheduling, and not started.
-  var HOLDING = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling'];
+  var HOLDING = ['waiting', 'awaiting_payment', 'payment_processing', 'confirmed', 'rescheduling'];
   function holds(booking, now) {
     if (booking.state === 'rescheduling') return true; // startsAt is the original time, which limits nothing now
     return HOLDING.indexOf(booking.state) >= 0 && booking.startsAt > now;
@@ -95,7 +95,7 @@
 
   // A booking the viewer can still cancel: one that holds its time and is not paid (a paid one has no Cancel).
   function canCancel(booking, now) {
-    return holds(booking, now) && !booking.paid;
+    return holds(booking, now) && !booking.paid && booking.state !== 'payment_processing';
   }
 
   // A booking the viewer can pay now: accepted, priced, and before its pay-by time.

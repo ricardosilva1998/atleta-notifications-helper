@@ -2538,6 +2538,8 @@
   "coaching.state.not_rescheduled": "Nicht verschoben",
   "cards.coaching.refundsPending": "Offene Rückerstattungen: {{count}}",
   "cards.coaching.refundsPendingAction": "Buchungen öffnen",
+  "coaching.state.payment_processing": "Zahlung wird verarbeitet",
+  "coaching.error.payment_processing": "Deine Zahlung wird noch von PayPal verarbeitet. Diese Buchung behält ihren Termin und wird hier bestätigt, sobald PayPal fertig ist.",
   "coaching.page.step": "Schritt {{n}} von {{total}}",
   "coaching.page.stepConnect": "Verbinde dein Discord-Konto",
   "coaching.page.stepJoin": "Tritt dem Discord-Server bei",
