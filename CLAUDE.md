@@ -525,3 +525,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - The per-booking viewer routes (cancel, starts, propose, accept-proposal, pay) find the coach by the booking's `streamer_id`; the login in the URL is ignored there. Access is still the viewer's Discord id (another's booking: 404). `/paid` finds the coach from the order's booking, falling back to the login for an order not on record (so an order opened under another login now counts for its own coach).
 - `proposalLapsedBody`/`viewerLapsedBody` say "48 hours"; new `proposalTooCloseBody`/`viewerTooCloseBody` are used when the tick dropped the proposal as too close (`tooClose` option).
 **Open:** none
+
+### 2026-11-18 — frontend-dev (T7, deep-review fixes)
+**Task:** Coaching pages show the new states (payment processing, duplicate refund, server_gone)
+**Files:** public/js/coaching-dashboard.js, public/js/dashboard-coaching.js, src/views/dashboard.ejs, src/routes/coachingDashboard.js, src/locales/*.json
+**Decisions:**
+- T1/T3/T5 had already wired My bookings, coaching-core, the state pills and the `server_gone` room error; T7 added only the gaps: the Coaching card's "Payment processing" line, and the coach's refund box title for a duplicate payment (new key `coaching.dashboard.refundTitleDuplicate`, 7 locales).
+**Open:** 360/1280 px not browser-checked (text-only changes).

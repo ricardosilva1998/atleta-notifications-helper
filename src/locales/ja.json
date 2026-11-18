@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "変更なし",
   "cards.coaching.refundsPending": "対応する返金：{{count}}件",
   "cards.coaching.refundsPendingAction": "予約を開く",
+  "coaching.dashboard.refundTitleDuplicate": "PayPal で重複した支払い {{price}} を返金する",
   "coaching.message.proposalTooCloseBody": "提案された時間が開始時刻に近すぎるため、取り消されました。",
   "coaching.message.viewerTooCloseBody": "提案された時間が開始時刻に近すぎるため、取り消されました。ご自分で時間を提案するか、別の時間をお待ちください。",
   "coaching.dashboard.error.server_gone": "ボットがコーチングサーバーにいないため、ルームを作成できません。",

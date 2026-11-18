@@ -102,7 +102,7 @@ const TEXT_KEYS = {
   acceptProposal: 'coaching.dashboard.acceptProposal', proposeAnother: 'coaching.dashboard.proposeAnother',
   proposalAccepted: 'coaching.dashboard.proposalAccepted', proposalSent: 'coaching.dashboard.proposalSent', askSent: 'coaching.dashboard.askSent',
   refundPending: 'coaching.dashboard.refundPending', refunded: 'coaching.dashboard.refunded', refundedButton: 'coaching.dashboard.refundedButton',
-  refundTitle: 'coaching.dashboard.refundTitle', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
+  refundTitle: 'coaching.dashboard.refundTitle', refundTitleDuplicate: 'coaching.dashboard.refundTitleDuplicate', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
   refundCapture: 'coaching.dashboard.refundCapture', refundConfirm: 'coaching.dashboard.refundConfirm', refundedDone: 'coaching.dashboard.refundedDone',
   connDiscordOk: 'coaching.dashboard.connDiscordOk', connDiscordWarn: 'coaching.dashboard.connDiscordWarn',
   connPaypalOn: 'coaching.dashboard.connPaypalOn', connPaypalOff: 'coaching.dashboard.connPaypalOff',

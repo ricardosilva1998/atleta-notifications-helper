@@ -384,7 +384,7 @@
     (b.refunds || []).forEach(function (r) {
       if (r.status !== 'pending') return;
       var box = make('div', 'cd-refund');
-      box.appendChild(make('b', null, fill(T.refundTitle, { price: priceText(r.amountCents, r.currency) })));
+      box.appendChild(make('b', null, fill(r.reason === 'double' && T.refundTitleDuplicate ? T.refundTitleDuplicate : T.refundTitle, { price: priceText(r.amountCents, r.currency) })));
       box.appendChild(make('p', null, r.payerName || r.payerEmail ? fill(T.refundPayer, { name: r.payerName || '-', email: r.payerEmail || '-' }) : T.refundNoPayer));
       if (r.captureId) box.appendChild(make('p', null, fill(T.refundCapture, { id: r.captureId })));
       var row = make('div', 'cd-btnrow');

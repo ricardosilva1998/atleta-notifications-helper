@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "Not rescheduled",
   "cards.coaching.refundsPending": "Refunds to make: {{count}}",
   "cards.coaching.refundsPendingAction": "Open the bookings",
+  "coaching.dashboard.refundTitleDuplicate": "Refund the duplicate payment of {{price}} in PayPal",
   "coaching.message.proposalTooCloseBody": "The proposed time came too close to its start, so it was dropped.",
   "coaching.message.viewerTooCloseBody": "The proposed time came too close to its start, so it was dropped. Propose a time yourself or wait for another.",
   "coaching.dashboard.error.server_gone": "The bot is no longer in the coaching server, so the room cannot be made.",

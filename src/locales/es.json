@@ -2538,6 +2538,7 @@
   "coaching.state.not_rescheduled": "No reprogramada",
   "cards.coaching.refundsPending": "Reembolsos por hacer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir las reservas",
+  "coaching.dashboard.refundTitleDuplicate": "Reembolsa el pago duplicado de {{price}} en PayPal",
   "coaching.message.proposalTooCloseBody": "La hora propuesta quedó demasiado cerca del inicio, así que se descartó.",
   "coaching.message.viewerTooCloseBody": "La hora propuesta quedó demasiado cerca del inicio, así que se descartó. Propón tú una hora o espera otra.",
   "coaching.dashboard.error.server_gone": "El bot ya no está en el servidor de coaching, así que no se puede crear la sala.",
