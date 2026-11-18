@@ -1009,3 +1009,7 @@ reporter or an admin only; `/sync/backup` makes its own `data/.sync-<random>/` f
 **Rolling back:** the new tables and columns are additive and older code ignores them. The cleared StreamElements tokens
 are not restored (the integration is gone in both directions).
 
+
+## Migration test and the `sessions` table
+
+`tests/migrations.test.js` opens today's `src/db.js` over `tests/fixtures/schema-oldest.sql` (schema only, from `src/db.js` at 5a9ac56, the oldest schema that is migrated in place; the one before it has no `discord_user_id` and is dropped whole by "Migration 1") and compares every table's columns with a fresh database. A new column needs its own `PRAGMA table_info` check (`_addColumn()` in `db.js`), or this test fails. Known exception: `sessions` is not rebuilt, so production's keeps a nullable `streamer_id` and the `racing_user_id` column; the test only requires that it has every column a fresh one has.

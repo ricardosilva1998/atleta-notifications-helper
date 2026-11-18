@@ -57,6 +57,17 @@ function _runOnce(name, migrate) {
   } catch (e) { _migrationLog(name, e); }
 }
 
+// Adds one column when table_info does not list it. Each column has its own check, so a block that adds
+// several can never skip the later ones because the first already exists (the PR #21 hotfix's lesson).
+// A table that does not exist yet is left alone; any other failure is logged.
+function _addColumn(table, name, definition) {
+  try {
+    const cols = db.pragma(`table_info(${table})`).map((c) => c.name);
+    if (cols.length === 0 || cols.includes(name)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  } catch (e) { _migrationLog(`${table}.${name}`, e); }
+}
+
 // ── Secrets at rest ──────────────────────────────────────────────────────
 // The OAuth tokens below are stored encrypted
 // (enc:v1:, services/secretBox.js) when TOKEN_ENCRYPTION_KEY is set. Every
@@ -139,7 +150,7 @@ try {
     db.exec('DROP TABLE IF EXISTS streamers');
     console.log('[DB] Old tables dropped, will recreate with new schema');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 1: drop old schema if it doesnt have discord_user_id', e); }
 
 // Migration 2: add enabled/admin_note columns if missing
 try {
@@ -149,7 +160,7 @@ try {
     db.exec('ALTER TABLE streamers ADD COLUMN admin_note TEXT');
     console.log('[DB] Added enabled/admin_note columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 2: add enabled/admin_note columns if missing', e); }
 
 // Migration 3: rename discord_channel_id to live_channel_id + add clips_channel_id
 try {
@@ -161,7 +172,7 @@ try {
     db.exec('UPDATE watched_channels SET clips_channel_id = live_channel_id');
     console.log('[DB] Migrated watched_channels: split discord_channel_id into live_channel_id + clips_channel_id');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 3: rename discord_channel_id to live_channel_id + add cli', e); }
 
 // Migration 4: add activity feed toggle columns to guilds
 try {
@@ -172,7 +183,7 @@ try {
     db.exec('ALTER TABLE guilds ADD COLUMN weekly_highlights_enabled INTEGER DEFAULT 0');
     console.log('[DB] Added activity feed toggle columns to guilds');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 4: add activity feed toggle columns to guilds', e); }
 
 // Migration 5: add stream session columns to channel_state
 try {
@@ -184,7 +195,7 @@ try {
     db.exec('ALTER TABLE channel_state ADD COLUMN stream_started_at TEXT');
     console.log('[DB] Added stream session columns to channel_state');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 5: add stream session columns to channel_state', e); }
 
 // Migration 9: add peak_viewers to channel_state
 try {
@@ -193,7 +204,7 @@ try {
     db.exec('ALTER TABLE channel_state ADD COLUMN peak_viewers INTEGER DEFAULT 0');
     console.log('[DB] Added peak_viewers column to channel_state');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 9: add peak_viewers to channel_state', e); }
 
 // Migration 9b: remember which broadcast a channel was last announced live for,
 // and how many polls in a row found it offline. The live poller needs both to
@@ -211,7 +222,7 @@ try {
       }
     }
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 9b: remember which broadcast a channel was last announced', e); }
 
 // Migration 6: add profile_image_url to watched_channels
 try {
@@ -220,7 +231,7 @@ try {
     db.exec('ALTER TABLE watched_channels ADD COLUMN profile_image_url TEXT');
     console.log('[DB] Added profile_image_url column to watched_channels');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 6: add profile_image_url to watched_channels', e); }
 
 // Migration 7: add profile_image_url to watched_youtube_channels
 try {
@@ -229,7 +240,7 @@ try {
     db.exec('ALTER TABLE watched_youtube_channels ADD COLUMN profile_image_url TEXT');
     console.log('[DB] Added profile_image_url column to watched_youtube_channels');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 7: add profile_image_url to watched_youtube_channels', e); }
 
 // Migration 8: add social media toggle columns to guilds
 try {
@@ -240,7 +251,7 @@ try {
     db.exec('ALTER TABLE guilds ADD COLUMN twitter_enabled INTEGER DEFAULT 0');
     console.log('[DB] Added social media toggle columns to guilds');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 8: add social media toggle columns to guilds', e); }
 
 // Migration 10: add iracing_enabled to guilds
 try {
@@ -249,7 +260,7 @@ try {
     db.exec('ALTER TABLE guilds ADD COLUMN iracing_enabled INTEGER DEFAULT 0');
     console.log('[DB] Added iracing_enabled column to guilds');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration 10: add iracing_enabled to guilds', e); }
 
 // Migration: Create overlay_designs table
 db.exec(`
@@ -290,7 +301,7 @@ try {
     `);
     console.log('[DB] Added custom x/y position to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add custom x/y position to overlay_designs', e); }
 
 // --- Schema ---
 
@@ -705,7 +716,7 @@ try {
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_overlay_token ON streamers(overlay_token) WHERE overlay_token IS NOT NULL');
     console.log('[DB] Added overlay notification columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add overlay notification columns to streamers', e); }
 
 // Migration: Add chatbot columns to streamers
 try {
@@ -732,7 +743,7 @@ try {
     `);
     console.log('[DB] Added chatbot columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add chatbot columns to streamers', e); }
 
 // Migration: Create chat_commands table
 {
@@ -761,7 +772,7 @@ try {
     `);
     console.log('[DB] Added overlay raid columns');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add overlay raid columns', e); }
 
 // Migration: Add YouTube chatbot/overlay columns to streamers
 try {
@@ -784,7 +795,7 @@ try {
     `);
     console.log('[DB] Added YouTube chatbot/overlay columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add YouTube chatbot/overlay columns to streamers', e); }
 
 // Migration: Add YouTube OAuth columns to streamers
 try {
@@ -798,7 +809,7 @@ try {
     `);
     console.log('[DB] Added YouTube OAuth columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add YouTube OAuth columns to streamers', e); }
 
 // Migration: Add Spotify OAuth columns to streamers
 try {
@@ -811,7 +822,7 @@ try {
     `);
     console.log('[DB] Added Spotify columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add Spotify OAuth columns to streamers', e); }
 
 // Migration: Add donation page columns to streamers
 try {
@@ -825,7 +836,7 @@ try {
     `);
     console.log('[DB] Added donation page columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add donation page columns to streamers', e); }
 
 // Migration: Add multistream relay columns to streamers (Twitch + YouTube passthrough via MediaMTX)
 try {
@@ -952,7 +963,7 @@ for (const discordUserId of config.adminDiscordIds) {
         console.log(`[DB] Granted enterprise subscription to streamer ${streamer.id}`);
       }
     }
-  } catch {}
+  } catch (e) { _migrationLog('Migration: record why a go-live only reached some destinations, so', e); }
 }
 
 // --- Admin access control ---
@@ -3064,7 +3075,7 @@ try {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN card_image_scale REAL DEFAULT 1.0`);
     console.log('[DB] Added card_image_scale to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add card_image_scale to overlay_designs', e); }
 
 // Migration: Add sponsor_animation to overlay_designs
 try {
@@ -3073,7 +3084,7 @@ try {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN sponsor_animation TEXT DEFAULT 'fade'`);
     console.log('[DB] Added sponsor_animation to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add sponsor_animation to overlay_designs', e); }
 
 // Migration: Add per-text styling columns to overlay_designs
 try {
@@ -3095,7 +3106,7 @@ try {
     `);
     console.log('[DB] Added per-text styling columns to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add per-text styling columns to overlay_designs', e); }
 
 // Migration: Add card_side_icon to overlay_designs
 try {
@@ -3104,7 +3115,7 @@ try {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN card_side_icon TEXT`);
     console.log('[DB] Added card_side_icon to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add card_side_icon to overlay_designs', e); }
 
 // Migration: Add effect_amount and effect_size to overlay_designs
 try {
@@ -3116,7 +3127,7 @@ try {
     `);
     console.log('[DB] Added effect_amount and effect_size to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add effect_amount and effect_size to overlay_designs', e); }
 
 // Migration: Add effect_direction to overlay_designs
 try {
@@ -3125,7 +3136,7 @@ try {
     db.exec(`ALTER TABLE overlay_designs ADD COLUMN effect_direction TEXT DEFAULT 'down'`);
     console.log('[DB] Added effect_direction to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add effect_direction to overlay_designs', e); }
 
 // Migration: Add advanced theme columns to overlay_designs
 try {
@@ -3146,7 +3157,7 @@ try {
     `);
     console.log('[DB] Added advanced theme columns to overlay_designs');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add advanced theme columns to overlay_designs', e); }
 
 // Migration: Create sponsor_images table
 {
@@ -3176,12 +3187,12 @@ try {
     `);
     console.log('[DB] Added sponsor rotation columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add sponsor rotation columns to streamers', e); }
 // The block above is skipped on a fresh database (its CREATE TABLE already has
 // sponsor_rotation_enabled), which left sponsor_interval_seconds missing there
 // and made /dashboard/sponsors/settings fail. Idempotent: existing databases
 // already have it.
-try { db.exec('ALTER TABLE streamers ADD COLUMN sponsor_interval_seconds INTEGER DEFAULT 30'); } catch (e) { _migrationLog('sponsor_interval_seconds', e); }
+_addColumn('streamers', 'sponsor_interval_seconds', 'INTEGER DEFAULT 30');
 
 // Migration: Add display_duration to sponsor_images
 try {
@@ -3190,7 +3201,7 @@ try {
     db.exec(`ALTER TABLE sponsor_images ADD COLUMN display_duration INTEGER DEFAULT 30`);
     console.log('[DB] Added display_duration to sponsor_images');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add display_duration to sponsor_images', e); }
 
 // Migration: Add image_scale to sponsor_images
 try {
@@ -3199,7 +3210,7 @@ try {
     db.exec(`ALTER TABLE sponsor_images ADD COLUMN image_scale REAL DEFAULT 1.0`);
     console.log('[DB] Added image_scale to sponsor_images');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add image_scale to sponsor_images', e); }
 
 // Migration: Create sponsor_messages table
 {
@@ -3273,7 +3284,7 @@ try {
     `);
     console.log('[DB] Added built-in command columns to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add sponsor_chat_interval_minutes to streamers', e); }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS banned_words (
@@ -3332,7 +3343,7 @@ try {
     db.exec('ALTER TABLE streamers ADD COLUMN vtuber_model_id INTEGER REFERENCES vtuber_models(id)');
     console.log('[DB] Added vtuber_model_id column to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add vtuber_model_id to streamers', e); }
 
 // Migration: Add yt_mod_enabled to streamers
 try {
@@ -3341,7 +3352,7 @@ try {
     db.exec('ALTER TABLE streamers ADD COLUMN yt_mod_enabled INTEGER DEFAULT 0');
     console.log('[DB] Added yt_mod_enabled column to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add yt_mod_enabled to streamers', e); }
 
 // Migration: Add platform column to moderation_log
 try {
@@ -3350,7 +3361,7 @@ try {
     db.exec("ALTER TABLE moderation_log ADD COLUMN platform TEXT DEFAULT 'twitch'");
     console.log('[DB] Added platform column to moderation_log');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add platform column to moderation_log', e); }
 
 // Migration: Add profile_picture column to streamers
 try {
@@ -3359,24 +3370,16 @@ try {
     db.exec('ALTER TABLE streamers ADD COLUMN profile_picture TEXT');
     console.log('[DB] Added profile_picture column to streamers');
   }
-} catch {}
+} catch (e) { _migrationLog('Migration: Add profile_picture column to streamers', e); }
 
 // Migration: add three streamers columns that were only in the CREATE TABLE (so brand-new databases had them and
 // every test passed) but never had an ALTER for databases from before they were added — like the production one.
 // `twitch_profile_image` is the coach's avatar (My bookings reads it in SQL, so a database without the column made
 // /my-bookings answer 500; the tip and coaching pages read it as a property that was simply absent); the other two
 // were never read in SQL and only as absent properties, so nothing had crashed on them yet.
-try {
-  const cols = db.pragma('table_info(streamers)').map(c => c.name);
-  if (!cols.includes('twitch_profile_image')) {
-    db.exec(`
-      ALTER TABLE streamers ADD COLUMN twitch_profile_image TEXT;
-      ALTER TABLE streamers ADD COLUMN discord_guild_id TEXT;
-      ALTER TABLE streamers ADD COLUMN sponsor_rotation_interval INTEGER DEFAULT 60;
-    `);
-    console.log('[DB] Added twitch_profile_image, discord_guild_id and sponsor_rotation_interval to streamers');
-  }
-} catch {}
+_addColumn('streamers', 'twitch_profile_image', 'TEXT');
+_addColumn('streamers', 'discord_guild_id', 'TEXT');
+_addColumn('streamers', 'sponsor_rotation_interval', 'INTEGER DEFAULT 60');
 _updateProfilePicture = db.prepare('UPDATE streamers SET profile_picture = ? WHERE id = ?');
 _clearProfilePicture = db.prepare('UPDATE streamers SET profile_picture = NULL WHERE id = ?');
 
@@ -3526,7 +3529,7 @@ try {
     console.log('[DB] Added overlay_giveaway_duration column to streamers');
   }
   // Fix for the 8000ms default that shipped briefly in dev: the column holds seconds, like the other overlay_*_duration columns
-  try { db.prepare('UPDATE streamers SET overlay_giveaway_duration = ? WHERE overlay_giveaway_duration = 8000').run(DEFAULT_DURATION_SECONDS.overlay_giveaway_duration); } catch (_) {}
+  try { db.prepare('UPDATE streamers SET overlay_giveaway_duration = ? WHERE overlay_giveaway_duration = 8000').run(DEFAULT_DURATION_SECONDS.overlay_giveaway_duration); } catch (e) { _migrationLog('Migration: Giveaways tables', e); }
 } catch (e) { _migrationLog('overlay_giveaway_duration', e); }
 
 // The alert durations' defaults went up on 2026-10-14 (overlaySettings) so that
@@ -4027,13 +4030,13 @@ try {
   }
 } catch (e) { _migrationLog('overlay_designs_v0_backup', e); }
 
-try {
+_runOnce('design_version_backfill', () => {
   const info = db.prepare(`
     UPDATE overlay_designs SET design_version = 1
     WHERE design_version = 0
       AND event_type IN ('follow','subscription','bits','donation','raid')`).run();
   if (info.changes > 0) console.log(`[DB] Marked ${info.changes} overlay_designs rows as design_version=1`);
-} catch (e) { _migrationLog('design_version backfill', e); }
+});
 
 // Migration: the style an alert is drawn in (overlay_designs.style). NULL is the alert's own
 // look; 'donation-c1' is andre_vilela_'s C1 (switched on below). A save and Reset keep it.
@@ -5814,7 +5817,7 @@ function seedTrackerValues() {
   return db.transaction(() => {
     for (const row of events) {
       let data = null;
-      try { data = row.data ? JSON.parse(row.data) : null; } catch {}
+      try { data = row.data ? JSON.parse(row.data) : null; } catch (e) { _migrationLog('Migration: last failed post into a claimed server (see recordDelive', e); }
       if (!data || typeof data !== 'object') data = {};
       if (data.username == null) data.username = row.username;
       const set = valueOfEvent({ type: row.event_type, data });

@@ -598,3 +598,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `dashboardSettings.readSetting(key, raw)` is the one reader of text settings; `POST /dashboard/chatbot` uses it (400 text, nothing saved, on a bad template; empty still allowed).
 - `flagGate` in routes/dashboard.js answers 404 JSON: `/api/vtuber/*` (vtuber+overlays), `/api/tracking/*` and `/donations/tts/test` (overlays). Caps: 50 sponsor messages, 50 rewards, 100 commands on the old form; sponsor url http(s) <= 200; reorder ids validated.
 **Open:** none
+
+### 2026-11-18 — backend-dev
+**Task:** T16, migrations hardening and the migration test (E30, CI part of G36)
+**Files:** src/db.js, src/db.dataMigrations.test.js, tests/migrations.test.js, tests/fixtures/schema-oldest.sql, .github/workflows/server-ci.yml, docs/operations/deploy.md, CLAUDE.md
+**Decisions:**
+- `_addColumn(table, name, def)` in `db.js` checks `table_info` per column; the PR #21 hotfix uses it. Every silent `catch {}` in db.js now goes to `_migrationLog`. The `design_version` backfill is `_runOnce('design_version_backfill')`; the forced `sponsor_interval_seconds` ALTER is a per-column check (silent on a fresh DB).
+- The fixture is the 5a9ac56 schema (the first one migrated in place; a4f8167 is dropped whole). `sessions` is not rebuilt, documented in deploy.md. CI also runs `node --check` over `public/`.
+**Open:** multi-column ALTER blocks gated on one column still exist; the new test shows none is missing today.

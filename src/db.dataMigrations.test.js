@@ -70,7 +70,7 @@ test('a fresh database boots twice: each data migration is recorded once, withou
 
   const raw = new RealDatabase(file);
   try {
-    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED, SE_TOKENS, 'drop_racing_tables', 'weekly_digest_state_per_streamer'].sort());
+    assert.deepEqual(raw.prepare('SELECT name FROM data_migrations ORDER BY name').all().map((r) => r.name), [SWITCH_MIGRATION, SESSION_HASH_MIGRATION, DURATIONS_MIGRATION, C1_MIGRATION, TRACKERS_SEED, SE_TOKENS, 'drop_racing_tables', 'weekly_digest_state_per_streamer', 'design_version_backfill'].sort());
   } finally {
     raw.close();
   }
