@@ -33,7 +33,7 @@ function formatPrice(cents, currency, lang = 'en') {
 }
 
 const VIEWER_COLORS = {
-  accepted: GREEN, acceptedPay: AMBER, confirmed: GREEN, refunded: GREEN,
+  accepted: GREEN, acceptedPay: AMBER, confirmed: GREEN, refunded: GREEN, duplicateRefunded: GREEN, paymentLateViewer: AMBER,
   rescheduleProposed: AMBER, rescheduleAsk: AMBER, proposal: AMBER, rescheduleAgreed: GREEN, proposalLapsed: AMBER,
 };
 const VIEWER_RESCHEDULE = ['rescheduleProposed', 'rescheduleAsk', 'proposal', 'rescheduleAgreed', 'proposalLapsed', 'notRescheduled'];
@@ -102,6 +102,10 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
     if (roomUrl) lines.push(t('coaching.message.room', { url: roomUrl }));
     else if (whereText) lines.push(t('coaching.message.where', { where: escapeLinkText(whereText) }));
     if (inviteUrl) lines.push(t('coaching.message.invite', { url: inviteUrl }));
+  } else if (kind === 'paymentLateViewer') {
+    lines.push(t('coaching.message.paymentLateViewerBody', { streamer: streamerName }));
+  } else if (kind === 'duplicateRefunded') {
+    lines.push(t('coaching.message.duplicateRefundedBody'));
   } else if (kind === 'refunded') {
     if (booking.paid_amount_cents != null) {
       lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));

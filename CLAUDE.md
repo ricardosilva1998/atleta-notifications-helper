@@ -490,3 +490,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `captureOnce(orderId)` shares one PayPal capture call per order between the return, Pay and the tick.
 - Test fake: an uncaptured order now reads CREATED unless `order.approved` is set.
 **Open:** none
+
+### 2026-11-18 — backend-dev
+**Task:** T3, coaching duplicate payment and a capture after the start (A3, A4)
+**Files:** src/db.js, src/services/coachingBookings.js, src/services/coachingMessages.js, public/js/coaching-core.js, public/js/my-bookings.js, src/routes/myBookings.js, src/locales/*.json, their tests
+**Decisions:**
+- `double` lives on the payment row only; the booking stays confirmed with no `payment_issue`. A refunded duplicate DMs the viewer `duplicateRefunded` (the session stands); views carry `refundDuplicate` and My bookings shows its own refund lines.
+- A capture for an `awaiting_payment` booking whose start has passed is recorded `late_issue` (status `expired`, Refund pending), never confirmed.
+- A `late_issue` payment now DMs the viewer too (`paymentLateViewer`) as well as the coach.
+**Open:** none

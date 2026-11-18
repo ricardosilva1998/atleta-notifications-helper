@@ -536,10 +536,23 @@ describe('coaching reschedule and refunds', () => {
     const dbl = db.recordCoachingPayment({ bookingId: b.id, orderId: 'LDO2', captureId: 'LDC2', amountCents: 4500, currency: 'EUR', now: NOW });
     assert.equal(dbl.result, 'double');
     assert.equal(db.getCoachingPayment('LDO2').refund_reason, 'double');
+    assert.equal(dbl.booking.payment_issue, null, 'double lives on the payment, never on the booking');
+    assert.equal(dbl.booking.status, 'confirmed');
     assert.equal(db.getCoachingPayment('LDO2').payer_name, null);
     assert.equal(db.getCoachingPayment(`RO${b.id}`).refund_status, null);
     const c = confirmed(id, 'LD4', START + 60 * 3600e3, 60, true);
     assert.equal(db.getCoachingPayment(`RO${c.id}`).refund_status, null);
+  });
+
+  test('a capture for an awaiting booking whose start has passed is late: Refund pending, never confirmed', () => {
+    const id = addStreamer();
+    const a = db.createCoachingBooking({ streamerId: id, viewer: viewer('PS1'), startsAt: START, minutes: 60, note: null, lang: 'en', now: NOW, priceCents: 4500, currency: 'EUR' }).booking;
+    db.acceptCoachingBooking(a.id, id, NOW, START - 3600e3);
+    const r = db.recordCoachingPayment({ bookingId: a.id, orderId: 'PSO1', captureId: 'PSC1', amountCents: 4500, currency: 'EUR', now: START + 60000 });
+    assert.equal(r.result, 'late_issue');
+    assert.notEqual(r.booking.status, 'confirmed');
+    assert.equal(r.booking.payment_issue, 'late');
+    assert.equal(db.getCoachingPayment('PSO1').refund_status, 'pending');
   });
 
   test('markCoachingRefunded only from pending and only for the payment\'s streamer', () => {

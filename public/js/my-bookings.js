@@ -174,6 +174,8 @@
     var refund = C.refundLine(b);
     if (refund === 'pending') what.appendChild(make('div', 'cz-sub cz-refund pending', T.refundPending));
     if (refund === 'refunded') what.appendChild(make('div', 'cz-sub cz-refund done', T.refunded));
+    if (refund === 'pendingDuplicate') what.appendChild(make('div', 'cz-sub cz-refund pending', T.refundPendingDuplicate));
+    if (refund === 'refundedDuplicate') what.appendChild(make('div', 'cz-sub cz-refund done', T.refundedDuplicate));
     var mode = C.rescheduleMode(b, now);
     if (mode) drawRescheduleInfo(what, b, mode);
     if (!active) what.appendChild(make('div', 'cz-sub mb-off', fill(T.unavailable, { name: b.coach.name })));

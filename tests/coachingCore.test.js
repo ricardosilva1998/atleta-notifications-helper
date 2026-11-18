@@ -191,6 +191,8 @@ describe('reschedule and refund helpers', () => {
   test('refundLine reads only the flags', () => {
     assert.equal(core.refundLine({ refundState: 'pending', refundPending: true }), 'pending');
     assert.equal(core.refundLine({ refundState: 'refunded' }), 'refunded');
+    assert.equal(core.refundLine({ refundState: 'pending', refundDuplicate: true }), 'pendingDuplicate');
+    assert.equal(core.refundLine({ refundState: 'refunded', refundDuplicate: true }), 'refundedDuplicate');
     assert.equal(core.refundLine({ refundState: null }), null);
     assert.equal(core.refundLine(null), null);
   });

@@ -118,8 +118,8 @@
   // the server sends the viewer; never anything about the payer.
   function refundLine(booking) {
     if (!booking) return null;
-    if (booking.refundState === 'pending' || booking.refundPending === true) return 'pending';
-    if (booking.refundState === 'refunded') return 'refunded';
+    if (booking.refundState === 'pending' || booking.refundPending === true) return booking.refundDuplicate === true ? 'pendingDuplicate' : 'pending';
+    if (booking.refundState === 'refunded') return booking.refundDuplicate === true ? 'refundedDuplicate' : 'refunded';
     return null;
   }
 

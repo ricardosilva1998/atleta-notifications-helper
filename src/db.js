@@ -5108,7 +5108,7 @@ function pendingCoachingPaymentBookingIds(bookingIds) {
 // A verified capture, recorded once. The caller has already checked payee, amount, currency and status.
 // 'recorded': an awaiting booking is now paid and confirmed. 'duplicate': this capture was recorded before; nothing changed.
 // 'late_confirmed' / 'late_issue': the booking had expired (or ended otherwise): the payment is kept, and the booking is
-// confirmed when its time is still free, else payment_issue = 'late'. 'double': the booking was already paid by another capture.
+// confirmed when its time is still free, else payment_issue = 'late'. 'double': the booking was already paid by another capture (kept on the payment row, never on the booking).
 const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, amountCents, currency, now, payer }) => {
   const booking = db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (!booking) return { ok: false, code: 'no_booking' };
@@ -5137,13 +5137,19 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
   ).run(status, now, amountCents, currency, orderId, captureId, issue, bookingId);
   const reload = () => db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (booking.paid_at != null) {
-    db.prepare("UPDATE coaching_bookings SET payment_issue = 'double' WHERE id = ?").run(bookingId);
+    // 'double' is on the payment row only: the booking stands as it was.
     markOwnPending('double');
     return { ok: true, result: 'double', booking: reload() };
   }
-  if (booking.status === 'awaiting_payment') {
+  if (booking.status === 'awaiting_payment' && booking.starts_at > now) {
     setPaid('confirmed', null);
     return { ok: true, result: 'recorded', booking: reload() };
+  }
+  // Captured after the session's start: never a confirmed session, the streamer refunds it.
+  if (booking.status === 'awaiting_payment') {
+    setPaid('expired', 'late');
+    markOwnPending('late');
+    return { ok: true, result: 'late_issue', booking: reload() };
   }
   // A payment that was PENDING when the booking ended unpaid is always a late one (the streamer refunds it), never a
   // session confirmed minutes before it starts.

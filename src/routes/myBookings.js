@@ -23,7 +23,7 @@ const PAGE_TEXT_KEYS = {
   cancel: 'coaching.page.cancel', cancelConfirm: 'coaching.page.cancelConfirm', withdrawn: 'coaching.page.withdrawn',
   signIn: 'coaching.page.signIn', failed: 'coaching.page.failed', offline: 'coaching.page.offline',
   payNote: 'coaching.page.payNote', cancelReason: 'coaching.page.cancelReason', refundPending: 'coaching.page.refundPending',
-  refunded: 'coaching.page.refunded', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
+  refunded: 'coaching.page.refunded', refundPendingDuplicate: 'coaching.page.refundPendingDuplicate', refundedDuplicate: 'coaching.page.refundedDuplicate', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
   reschedMine: 'coaching.page.reschedMine', reschedUntil: 'coaching.page.reschedUntil', reschedOriginal: 'coaching.page.reschedOriginal',
   reschedAccept: 'coaching.page.reschedAccept', reschedOther: 'coaching.page.reschedOther', reschedPick: 'coaching.page.reschedPick',
   reschedSend: 'coaching.page.reschedSend', reschedNote: 'coaching.page.reschedNote', reschedLoading: 'coaching.page.reschedLoading',

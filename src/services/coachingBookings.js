@@ -65,6 +65,7 @@ function bookingView(row, now, room = null, opts = {}) {
     opts = { ...opts, paymentPending: db.pendingCoachingPaymentBookingIds([row.id]).has(row.id) };
   }
   const refundState = refundStateOf(payments);
+  const refundDuplicate = refundState != null && payments.filter((p) => p.refund_status === refundState).every((p) => p.refund_reason === 'double');
   const coachOnly = opts.forViewer || opts.noPayer ? {} : { refunds: refundsOf(payments) };
   return {
     id: row.id,
@@ -93,6 +94,7 @@ function bookingView(row, now, room = null, opts = {}) {
     rescheduleEndsAt: row.status === 'rescheduling' && row.reschedule_started_at != null ? row.reschedule_started_at + coaching.RESCHEDULE_WINDOW_MS : null,
     originalStartsAt: row.status === 'rescheduling' ? row.original_starts_at || null : null,
     refundState,
+    refundDuplicate,
     refundPending: refundState === 'pending',
     ...coachOnly,
     ...roomFields(room, row, opts),
@@ -329,7 +331,8 @@ async function markRefunded(streamer, orderId, { now = Date.now() } = {}) {
   const updated = db.markCoachingRefunded(orderId, streamer.id, now);
   if (!updated) return { ok: false, code: 'not_pending' };
   const booking = db.getCoachingBooking(payment.booking_id, streamer.id);
-  const messageError = booking ? await messageViewer(streamer, db.getCoachingSettings(streamer.id), booking, 'refunded') : null;
+  const kind = payment.refund_reason === 'double' ? 'duplicateRefunded' : 'refunded';
+  const messageError = booking ? await messageViewer(streamer, db.getCoachingSettings(streamer.id), booking, kind) : null;
   return { ok: true, payment: updated, booking: booking ? { ...booking, message_error: messageError, messageError } : null };
 }
 
@@ -540,7 +543,9 @@ async function afterPayment(streamer, booking, result) {
     if (result === 'recorded' || result === 'late_confirmed') {
       await Promise.all([afterConfirmed(streamer, booking, 'confirmed'), messageStreamer(streamer, settings, booking, 'paid')]);
     } else if (result === 'late_issue' || result === 'double') {
-      await messageStreamer(streamer, settings, booking, 'paymentLate', { always: true });
+      const tasks = [messageStreamer(streamer, settings, booking, 'paymentLate', { always: true })];
+      if (result === 'late_issue') tasks.push(messageViewer(streamer, settings, booking, 'paymentLateViewer'));
+      await Promise.all(tasks);
     }
   } catch (e) {
     console.error(`[Coaching] after the payment of booking ${booking.id}:`, e && e.message);
