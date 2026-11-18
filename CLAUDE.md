@@ -720,3 +720,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Decisions:**
 - `cleanupOldCoachingBookings` skips bookings with a payment `refund_status = 'pending'` or `status = 'pending'` (and keeps their payments and rooms rows); a later run deletes them once refunded, settled or lapsed.
 **Open:** none
+
+### 2026-11-18 — team-qa
+**Task:** F3.5, docs and full suite after fix round 3 (F3.1-F3.4)
+**Tests added/changed:** none
+**Suite result:** scratch copies (Node 26, npm ci, better-sqlite3 rebuilt): money 4036/4036, robustness 4076/4076, chore 4066/4066 pass, 0 fail. Two boots on chore: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** docs/features/coaching.md and the CLAUDE.md Coaching bullet updated for F3.1-F3.4; committed on money, merged forward to robustness and chore.
+**Bugs found:** none. QA: pass.
+**Open:** none
