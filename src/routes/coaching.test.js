@@ -603,6 +603,17 @@ describe('payment', () => {
     assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
   });
 
+  test('a coach with no Twitch login: Pay returns a return URL without a login, and that return confirms the booking', async () => {
+    const { s, v, id } = await accepted();
+    const pay = await post(`/coaching/-/bookings/${id}/pay`, { cookie: v.cookie });
+    assert.equal(pay.status, 200, pay.text);
+    db.db.prepare('UPDATE streamers SET twitch_username = NULL WHERE id = ?').run(s.id);
+    const token = new URL(pay.json.approveUrl).searchParams.get('token');
+    const back = await get(`/coaching/-/paid?token=${token}`);
+    assert.equal(back.headers.location, `/my-bookings?booking=${id}&paid=1`);
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
+  });
+
   test("a return with another streamer's order, an unknown one or none goes back with error=pay_invalid", async () => {
     const { s, v, id } = await accepted();
     const token = new URL((await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: v.cookie })).json.approveUrl).searchParams.get('token');
