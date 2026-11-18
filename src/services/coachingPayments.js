@@ -307,15 +307,18 @@ async function startPayment(streamer, viewer, bookingId, { lang = 'en', now = Da
   return { ok: true, approveUrl };
 }
 
-// What a finished return tells the viewer, by the booking as it is now: paid (this order confirmed it) or late (the
-// payment arrived when the booking could not take it; the streamer was told to refund it).
+// What a finished return tells the viewer, by the booking as it is now: paid (this order confirmed it), duplicate (a
+// second order for a booking already paid) or late (the payment arrived when the booking could not take it; the
+// streamer was told to refund it).
 function outcomeOf(booking, orderId) {
   if (booking && booking.paypal_order_id === orderId && booking.status === 'confirmed' && !booking.payment_issue) return 'paid';
+  const p = db.getCoachingPayment(orderId);
+  if (p && p.refund_reason === 'double') return 'duplicate';
   return 'late';
 }
 
 // PayPal sends the viewer back with the order id (`token`): capture it (or read it back when the answer is lost or not
-// a completed order), check it, record it once. Returns { ok: true, outcome: 'paid'|'late', result?, followUp? } or
+// a completed order), check it, record it once. Returns { ok: true, outcome: 'paid'|'late'|'duplicate', result?, followUp? } or
 // { ok: false, reason, detail? }. The viewer's sign-in is not needed: the order alone says what was paid and to whom.
 async function handleReturn({ streamer, orderId, now = Date.now() }) {
   if (typeof orderId !== 'string' || !ORDER_ID.test(orderId)) return { ok: false, reason: 'invalid_token' };
