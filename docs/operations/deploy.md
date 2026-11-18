@@ -894,6 +894,36 @@ Rolling back is safe for the data.
 - **A cancelled paid session** keeps its Refund pending state in the database; the previous release will not show it.
 - **Rooms** already removed stay removed; a rescheduling session's room stays until it is settled.
 
+## Deep-review fixes: money (2026-11-18, PR 1)
+
+Coaching payments, coaching rooms and the tip path (`docs/features/coaching.md`, plan
+`docs/superpowers/plans/2026-11-18-deep-review-fixes.md`).
+- **At boot**, on the existing database: two new columns on `coaching_payments` (`pending_since`, `next_read_at`) and the
+  index `idx_coaching_payments_pending` on `(status, next_read_at)`, created quietly: **no** `[DB migration]` line, on
+  the first boot or any after. Nothing is backfilled. `coaching_payments.status` gains `pending`, `closed` and `lapsed`
+  (next to `created`, `captured`, `refused`).
+- **No new variable, no new Discord permission.** The minute tick has a new step, `pending`.
+- **New limiter:** `POST /tip/:username/create` allows 15 per 10 minutes per visitor.
+- **Behaviour:** a PayPal capture reported PENDING is kept and read back (hourly for a day, then daily, up to 30 days);
+  an APPROVED order is captured; a capture after the session's start is Refund pending (the viewer is told); a duplicate
+  payment is marked on its payment row; failed, orphaned and racing rooms are cleaned up; bookings follow their coach
+  by `streamer_id`; the tip reconcile reads every unfinished tip in pages; a recovered tip keeps its paid time; a refund
+  delete updates Top tipper and Latest tip.
+
+After the deploy:
+1. `/health` answers 200; the boot log has no `[DB migration]` line and no `LOGIN REFUSED`.
+2. `/coaching/ricardobsilva98`, `/my-bookings` and `/dashboard` load (the Coaching card and a booking row still render).
+3. Log lines to expect, only when the case happens: `[Coaching] order <id> for booking <id>: capture PENDING at PayPal,
+   kept and read back`; `[Coaching] pending order <id> closed: ...`; `[Coaching] pending order <id> still not settled
+   after 30 days ...` (check it in PayPal); `[Coaching] capture of approved order <id> failed: ...`; `[Coaching] server
+   <id> of room <id> is gone; the room is closed as orphaned`; `[Tip] Reconcile: order <id> is captured but was
+   refused (<reason>)` (check it in PayPal). No `coaching_payments` row is deleted by the new code paths.
+
+### Rolling back (deep-review fixes, money)
+
+Safe for the data: the new columns stay and older code ignores them. A payment left `pending` is unknown to the
+previous release, which would not read it back or show Payment processing; settle or note each one in PayPal first.
+
 ## Coaching booking in four steps and My bookings (2026-11-16)
 
 No schema change: no new tables or columns, so no `[DB migration]` line on the boot (the second CI boot stays quiet).

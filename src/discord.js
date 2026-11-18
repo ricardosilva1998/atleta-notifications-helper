@@ -309,7 +309,8 @@ const isSnowflake = (id) => typeof id === 'string' && SNOWFLAKE.test(id);
 function readyGuild(guildId) {
   if (!client.isReady()) throw new Error('not_ready');
   const guild = client.guilds.cache.get(String(guildId));
-  if (!guild) throw new Error('not_ready');
+  // The bot is logged in and the server is not among its servers: removed from it or deleted, not Discord being down.
+  if (!guild) { const e = new Error('guild_gone'); e.code = 'guild_gone'; throw e; }
   return guild;
 }
 

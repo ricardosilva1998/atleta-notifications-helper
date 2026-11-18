@@ -117,3 +117,12 @@ test('sendTest rejects invalid targets', () => {
   assert.equal(tipGoals.sendTest(7, { goal: { target: 'abc', current: 1 } }), false);
   assert.equal(events.length, 0);
 });
+
+test('a recovered tip paid before the goal started does not count toward it', () => {
+  _goal.created_at = '2026-11-18 12:00:00';
+  tipGoals.recordDonation(7, 5, 'EUR', { silent: true, at: '2026-11-18 11:00:00' });
+  assert.equal(_goal.current_amount, 0);
+  assert.equal(events.length, 0);
+  tipGoals.recordDonation(7, 5, 'EUR', { silent: true, at: '2026-11-18 12:30:00' });
+  assert.equal(_goal.current_amount, 5);
+});

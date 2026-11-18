@@ -369,3 +369,38 @@ describe('testing a tracker', () => {
     assert.deepEqual(w.emitted, [{ channel: `tracker:${id}`, payload: { type: 'tracker', tracker: 'latest_follower', value: null } }], 'no value stored: the source hides again');
   });
 });
+
+describe('onTipRemoved (a refund)', () => {
+  test('Top tipper is worked out again, and Latest tip falls back to the newest remaining tip or empties', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const emitted = [];
+    const tr = trackers.createTrackers({ db, emit: (n, p) => emitted.push(p), now: () => Date.now() });
+    addTip(id, 'Old', 3, 'EUR', sqlite(Date.now() - HOUR));
+    addTip(id, 'New', 9, 'EUR');
+    tr.onTip(id, { name: 'New', amount: 9, currency: 'EUR' });
+    emitted.length = 0;
+
+    const newest = db.db.prepare("SELECT id FROM donations WHERE donor_name = 'New'").get().id;
+    db.deleteDonation(newest, id);
+    tr.onTipRemoved(id, { name: 'New', amount: 9, currency: 'EUR' });
+    assert.deepEqual(emitted.map((e) => [e.tracker, e.value && e.value.name]), [['latest_tip', 'Old'], ['top_tipper', 'Old']]);
+
+    emitted.length = 0;
+    db.db.prepare('DELETE FROM donations WHERE streamer_id = ?').run(id);
+    tr.onTipRemoved(id, { name: 'Old', amount: 3, currency: 'EUR' });
+    assert.deepEqual(emitted.map((e) => [e.tracker, e.value]), [['latest_tip', null], ['top_tipper', null]]);
+    assert.equal(tr.values(id).latest_tip, null);
+  });
+
+  test('a refund of a tip that is not the latest leaves Latest tip alone', () => {
+    const id = addStreamer({ donation_currency: 'EUR' });
+    const emitted = [];
+    const tr = trackers.createTrackers({ db, emit: (n, p) => emitted.push(p), now: () => Date.now() });
+    addTip(id, 'Shown', 4, 'EUR');
+    tr.onTip(id, { name: 'Shown', amount: 4, currency: 'EUR' });
+    emitted.length = 0;
+    tr.onTipRemoved(id, { name: 'Other', amount: 1, currency: 'EUR' });
+    assert.deepEqual(emitted.map((e) => e.tracker), ['top_tipper']);
+    assert.equal(tr.values(id).latest_tip.name, 'Shown');
+  });
+});

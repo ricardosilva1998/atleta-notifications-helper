@@ -33,13 +33,13 @@ function formatPrice(cents, currency, lang = 'en') {
 }
 
 const VIEWER_COLORS = {
-  accepted: GREEN, acceptedPay: AMBER, confirmed: GREEN, refunded: GREEN,
+  accepted: GREEN, acceptedPay: AMBER, confirmed: GREEN, refunded: GREEN, duplicateRefunded: GREEN, paymentLateViewer: AMBER,
   rescheduleProposed: AMBER, rescheduleAsk: AMBER, proposal: AMBER, rescheduleAgreed: GREEN, proposalLapsed: AMBER,
 };
 const VIEWER_RESCHEDULE = ['rescheduleProposed', 'rescheduleAsk', 'proposal', 'rescheduleAgreed', 'proposalLapsed', 'notRescheduled'];
 
 // A session's time while it moves: `starts_at` is still the original one until a proposal is accepted.
-function rescheduleLines(kind, { booking, t, bookingLink, roomUrl, guildName, refund, side }) {
+function rescheduleLines(kind, { booking, t, bookingLink, roomUrl, guildName, refund, side, tooClose }) {
   const lines = [t('coaching.message.length', { minutes: booking.minutes })];
   const proposed = booking.proposal_starts_at != null ? t('coaching.message.proposedTime', { time: discordTime(booking.proposal_starts_at) }) : null;
   const note = booking.proposal_note ? t('coaching.message.note', { note: escapeLinkText(booking.proposal_note) }) : null;
@@ -59,10 +59,10 @@ function rescheduleLines(kind, { booking, t, bookingLink, roomUrl, guildName, re
   } else if (kind === 'rescheduleAsk') {
     lines.push(t('coaching.message.rescheduleAskBody', { url: bookingLink }));
   } else if (kind === 'proposalLapsed') {
-    lines.push(t('coaching.message.proposalLapsedBody'));
+    lines.push(t(tooClose ? 'coaching.message.proposalTooCloseBody' : 'coaching.message.proposalLapsedBody'));
     lines.push(t('coaching.message.rescheduleAskBody', { url: bookingLink }));
   } else if (kind === 'viewerLapsed') {
-    lines.push(t('coaching.message.viewerLapsedBody'));
+    lines.push(t(tooClose ? 'coaching.message.viewerTooCloseBody' : 'coaching.message.viewerLapsedBody'));
     lines.push(t('coaching.message.schedule', { url: bookingLink }));
   } else if (kind === 'notRescheduled' || kind === 'notRescheduledCoach') {
     lines.push(t('coaching.message.notRescheduledBody'));
@@ -72,7 +72,7 @@ function rescheduleLines(kind, { booking, t, bookingLink, roomUrl, guildName, re
   return lines;
 }
 
-function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, bookingLink, myBookingsUrl, roomUrl, reason, refund, lang, t }) {
+function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, whereText, bookingUrl, bookingLink, myBookingsUrl, roomUrl, reason, refund, tooClose, lang, t }) {
   // The action lines of these kinds (pay, accept, pick a time) link to My bookings themselves: no second link line.
   const actionHere = myBookingsUrl || bookingLink || bookingUrl;
   const actionKinds = ['acceptedPay', 'rescheduleProposed', 'rescheduleAsk', 'proposal', 'proposalLapsed'];
@@ -81,7 +81,7 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
     return {
       embeds: [{
         title: t(`coaching.message.${kind}.title`, { streamer: streamerName }),
-        description: rescheduleLines(kind, { booking, t, bookingLink: actionHere, roomUrl, guildName, refund, side: 'viewer' }).concat(mine).join('\n'),
+        description: rescheduleLines(kind, { booking, t, bookingLink: actionHere, roomUrl, guildName, refund, side: 'viewer', tooClose }).concat(mine).join('\n'),
         color: VIEWER_COLORS[kind] || RED,
       }],
     };
@@ -102,6 +102,12 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
     if (roomUrl) lines.push(t('coaching.message.room', { url: roomUrl }));
     else if (whereText) lines.push(t('coaching.message.where', { where: escapeLinkText(whereText) }));
     if (inviteUrl) lines.push(t('coaching.message.invite', { url: inviteUrl }));
+  } else if (kind === 'paymentLateViewer') {
+    lines.push(t('coaching.message.paymentLateViewerBody', { streamer: streamerName }));
+  } else if (kind === 'expiredPending') {
+    lines.push(t('coaching.message.expiredPendingBody', { streamer: streamerName }));
+  } else if (kind === 'duplicateRefunded') {
+    lines.push(t('coaching.message.duplicateRefundedBody'));
   } else if (kind === 'refunded') {
     if (booking.paid_amount_cents != null) {
       lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));
@@ -121,16 +127,16 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
   };
 }
 
-const STREAMER_COLORS = { request: GREEN, paid: GREEN, paymentLate: AMBER, viewerProposed: AMBER, agreedCoach: GREEN, viewerLapsed: AMBER };
+const STREAMER_COLORS = { request: GREEN, paid: GREEN, paymentLate: AMBER, paymentDuplicate: AMBER, unpaidPending: AMBER, expiredPending: AMBER, viewerProposed: AMBER, agreedCoach: GREEN, viewerLapsed: AMBER };
 const STREAMER_RESCHEDULE = ['viewerProposed', 'agreedCoach', 'viewerLapsed', 'notRescheduledCoach'];
 
-function streamerMessage(kind, { booking, scheduleUrl, lang, refund, t }) {
+function streamerMessage(kind, { booking, scheduleUrl, lang, refund, tooClose, t }) {
   const name = escapeLinkText(booking.viewer_display_name || booking.viewer_username);
   if (STREAMER_RESCHEDULE.includes(kind)) {
     return {
       embeds: [{
         title: t(`coaching.message.${kind}.title`, { viewer: name }),
-        description: rescheduleLines(kind, { booking, t, bookingLink: scheduleUrl, refund, side: 'coach' }).join('\n'),
+        description: rescheduleLines(kind, { booking, t, bookingLink: scheduleUrl, refund, side: 'coach', tooClose }).join('\n'),
         color: STREAMER_COLORS[kind] || RED,
       }],
     };
@@ -145,6 +151,13 @@ function streamerMessage(kind, { booking, scheduleUrl, lang, refund, t }) {
     lines.push(t('coaching.message.review', { url: scheduleUrl }));
   } else if (kind === 'paid') {
     lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));
+    lines.push(t('coaching.message.schedule', { url: scheduleUrl }));
+  } else if (kind === 'unpaidPending') {
+    lines.push(t('coaching.message.unpaidPendingBody'));
+    lines.push(t('coaching.message.schedule', { url: scheduleUrl }));
+  } else if (kind === 'paymentDuplicate') {
+    lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));
+    lines.push(t('coaching.message.paymentDuplicateBody'));
     lines.push(t('coaching.message.schedule', { url: scheduleUrl }));
   } else if (kind === 'paymentLate') {
     lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));

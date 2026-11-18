@@ -3769,6 +3769,11 @@ try {
     ['refund_status', 'TEXT'], ['refund_reason', 'TEXT'], ['refund_pending_at', 'INTEGER'], ['refunded_at', 'INTEGER'],
   ]);
   db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_refund ON coaching_payments(streamer_id, refund_status)');
+  // A capture PayPal reports PENDING is kept (status 'pending'), read back on a schedule and never deleted: when it
+  // was first seen pending and when it is read next.
+  addColumns('coaching_payments', [['pending_since', 'INTEGER']]);
+  addColumns('coaching_payments', [['next_read_at', 'INTEGER']]);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_coaching_payments_pending ON coaching_payments(status, next_read_at)');
   db.exec(`
     CREATE TABLE IF NOT EXISTS coaching_rooms (
       booking_id INTEGER PRIMARY KEY,
@@ -4827,11 +4832,13 @@ function logDonation(streamerId, d) {
   const amount = Math.round(parseFloat(d.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) return false;
   const result = db.prepare(`
-    INSERT OR IGNORE INTO donations (streamer_id, source, donor_name, amount, currency, message, external_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO donations (streamer_id, source, donor_name, amount, currency, message, external_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
   `).run(streamerId, d.source, (d.donor_name || 'Anonymous').substring(0, 100), amount,
     d.currency ? String(d.currency).toUpperCase() : null, d.message ? String(d.message).substring(0, 500) : null,
-    d.external_id || null);
+    d.external_id || null,
+    // A recovered tip keeps the time it was paid (SQLite UTC text), not the time the reconcile found it.
+    typeof d.created_at === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d.created_at) ? d.created_at : null);
   return result.changes > 0;
 }
 
@@ -4877,7 +4884,12 @@ function getDonationMonthly(streamerId, currency, source) {
 }
 
 function getDonationById(id, streamerId) {
-  return db.prepare('SELECT id, amount, currency, created_at FROM donations WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+  return db.prepare('SELECT id, donor_name, amount, currency, created_at FROM donations WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+// The newest donation row, for the Latest tip tracker after a refund removed the one it showed.
+function getLatestDonation(streamerId) {
+  return db.prepare('SELECT donor_name, amount, currency FROM donations WHERE streamer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1').get(streamerId) || null;
 }
 
 function deleteDonation(id, streamerId) {
@@ -4990,8 +5002,8 @@ function getViewerCoachingBookings(streamerId, discordUserId, sinceMs) {
 function getViewerBookingsAllCoaches(discordUserId, sinceMs) {
   return db.prepare(
     `SELECT b.*, s.twitch_username AS coach_login, s.twitch_display_name AS coach_name,
-            s.twitch_profile_image AS coach_avatar,
-            CASE WHEN COALESCE(s.enabled, 1) <> 0 AND cs.streamer_id IS NOT NULL AND s.twitch_username IS NOT NULL THEN 1 ELSE 0 END AS coach_available
+            s.twitch_profile_image AS coach_avatar, s.discord_username AS coach_discord_name,
+            CASE WHEN COALESCE(s.enabled, 1) <> 0 AND cs.streamer_id IS NOT NULL THEN 1 ELSE 0 END AS coach_available
      FROM coaching_bookings b
      JOIN streamers s ON s.id = b.streamer_id
      LEFT JOIN coaching_settings cs ON cs.streamer_id = b.streamer_id
@@ -5063,13 +5075,47 @@ function deleteOpenCoachingPayment(orderId) {
 }
 
 function markCoachingPaymentRefused(orderId) {
-  return db.prepare("UPDATE coaching_payments SET status = 'refused' WHERE order_id = ? AND status = 'created'").run(orderId).changes > 0;
+  return db.prepare("UPDATE coaching_payments SET status = 'refused', next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending')").run(orderId).changes > 0;
+}
+
+// A capture PayPal holds as PENDING: kept, never deleted, read again at nextReadAt (pending_since stays the first sighting).
+function markCoachingPaymentPending(orderId, now, nextReadAt) {
+  return db.prepare(
+    "UPDATE coaching_payments SET status = 'pending', pending_since = COALESCE(pending_since, ?), next_read_at = ? WHERE order_id = ? AND status IN ('created', 'pending')"
+  ).run(now, nextReadAt, orderId).changes > 0;
+}
+
+function scheduleCoachingPaymentRead(orderId, nextReadAt) {
+  return db.prepare("UPDATE coaching_payments SET next_read_at = ? WHERE order_id = ? AND status = 'pending'").run(nextReadAt, orderId).changes > 0;
+}
+
+// A pending payment PayPal voided or declined ('closed'), or one still pending after 30 days ('lapsed'): the row stays.
+function closeCoachingPayment(orderId, status = 'closed') {
+  if (status !== 'closed' && status !== 'lapsed') throw new Error('bad status');
+  return db.prepare("UPDATE coaching_payments SET status = ?, next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending')").run(status, orderId).changes > 0;
+}
+
+function listPendingCoachingPaymentsFor(bookingId) {
+  return db.prepare("SELECT * FROM coaching_payments WHERE booking_id = ? AND status = 'pending' ORDER BY created_at").all(bookingId);
+}
+
+function listDueCoachingPendingPayments(now, limit = 200) {
+  return db.prepare("SELECT * FROM coaching_payments WHERE status = 'pending' AND (next_read_at IS NULL OR next_read_at <= ?) ORDER BY next_read_at LIMIT ?").all(now, limit);
+}
+
+// The ids (of those given) of bookings with a payment still pending at PayPal.
+function pendingCoachingPaymentBookingIds(bookingIds) {
+  const ids = [...new Set(bookingIds.map(Number).filter(Number.isFinite))];
+  if (!ids.length) return new Set();
+  return new Set(db.prepare(
+    `SELECT DISTINCT booking_id FROM coaching_payments WHERE status = 'pending' AND booking_id IN (${ids.map(() => '?').join(',')})`
+  ).all(...ids).map((r) => r.booking_id));
 }
 
 // A verified capture, recorded once. The caller has already checked payee, amount, currency and status.
 // 'recorded': an awaiting booking is now paid and confirmed. 'duplicate': this capture was recorded before; nothing changed.
 // 'late_confirmed' / 'late_issue': the booking had expired (or ended otherwise): the payment is kept, and the booking is
-// confirmed when its time is still free, else payment_issue = 'late'. 'double': the booking was already paid by another capture.
+// confirmed when its time is still free, else payment_issue = 'late'. 'double': the booking was already paid by another capture (kept on the payment row, never on the booking).
 const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, amountCents, currency, now, payer }) => {
   const booking = db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (!booking) return { ok: false, code: 'no_booking' };
@@ -5098,15 +5144,29 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
   ).run(status, now, amountCents, currency, orderId, captureId, issue, bookingId);
   const reload = () => db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (booking.paid_at != null) {
-    db.prepare("UPDATE coaching_bookings SET payment_issue = 'double' WHERE id = ?").run(bookingId);
-    markOwnPending('double');
-    return { ok: true, result: 'double', booking: reload() };
+    if (booking.status === 'confirmed' || booking.status === 'rescheduling') {
+      // 'double' is on the payment row only: the booking stands as it was.
+      markOwnPending('double');
+      return { ok: true, result: 'double', booking: reload() };
+    }
+    // The paid booking has ended (cancelled, expired, not rescheduled): the extra payment is a late one, and the
+    // booking keeps its own paid fields.
+    markOwnPending('late');
+    return { ok: true, result: 'late_issue', booking: reload() };
   }
-  if (booking.status === 'awaiting_payment') {
+  if (booking.status === 'awaiting_payment' && booking.starts_at > now) {
     setPaid('confirmed', null);
     return { ok: true, result: 'recorded', booking: reload() };
   }
-  if (booking.status === 'expired' && booking.starts_at > now) {
+  // Captured after the session's start: never a confirmed session, the streamer refunds it.
+  if (booking.status === 'awaiting_payment') {
+    setPaid('expired', 'late');
+    markOwnPending('late');
+    return { ok: true, result: 'late_issue', booking: reload() };
+  }
+  // A payment that was PENDING when the booking ended unpaid is always a late one (the streamer refunds it), never a
+  // session confirmed minutes before it starts.
+  if (booking.status === 'expired' && booking.starts_at > now && !(order && order.status === 'pending')) {
     const end = booking.starts_at + booking.minutes * 60000;
     const clash = db.prepare(
       `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} < ? AND ${_HELD_AT} + minutes * 60000 > ? LIMIT 1`
@@ -5151,7 +5211,8 @@ function listCoachingRoomsForBookings(bookingIds) {
 }
 
 function listDueCoachingRooms(now) {
-  return db.prepare(`SELECT * FROM coaching_rooms WHERE state IN ('open', 'closing') AND close_at IS NOT NULL AND close_at <= ?
+  return db.prepare(`SELECT * FROM coaching_rooms WHERE (state IN ('open', 'closing') OR (state = 'failed' AND (role_id IS NOT NULL OR channel_id IS NOT NULL)))
+    AND close_at IS NOT NULL AND close_at <= ?
     AND booking_id NOT IN (SELECT id FROM coaching_bookings WHERE status = 'rescheduling') ORDER BY close_at LIMIT 100`).all(now);
 }
 
@@ -5309,9 +5370,12 @@ function countWaitingCoaching(streamerId, now) {
 
 function cleanupOldCoachingBookings(now) {
   const cutoff = now - 90 * 86400e3;
-  db.prepare('DELETE FROM coaching_rooms WHERE booking_id IN (SELECT id FROM coaching_bookings WHERE starts_at < ?)').run(cutoff);
-  db.prepare('DELETE FROM coaching_payments WHERE booking_id IN (SELECT id FROM coaching_bookings WHERE starts_at < ?)').run(cutoff);
-  db.prepare('DELETE FROM coaching_bookings WHERE starts_at < ?').run(cutoff);
+  // A refund still owed, or a capture still pending, keeps its booking (and payments, rooms) until it settles.
+  const old = `SELECT id FROM coaching_bookings WHERE starts_at < ? AND id NOT IN (
+    SELECT booking_id FROM coaching_payments WHERE refund_status = 'pending' OR status = 'pending')`;
+  db.prepare(`DELETE FROM coaching_rooms WHERE booking_id IN (${old})`).run(cutoff);
+  db.prepare(`DELETE FROM coaching_payments WHERE booking_id IN (${old})`).run(cutoff);
+  db.prepare(`DELETE FROM coaching_bookings WHERE id IN (${old})`).run(cutoff);
 }
 
 // The viewer's own sign-in; the row holds only the hash of the cookie's id.
@@ -5353,12 +5417,12 @@ function markPendingTipCaptured(orderId) {
 // Unfinished PayPal tips for the daily reconcile pass, oldest first. Younger
 // than an hour may still be on their way back from PayPal; there is no upper
 // age bound, so a row is still checked on the run that is about to delete it.
-function getUnfinishedPendingTips(limit = 500) {
+function getUnfinishedPendingTips(limit = 500, offset = 0) {
   return db.prepare(`
     SELECT * FROM pending_tips
     WHERE captured_at IS NULL AND created_at <= datetime('now', '-1 hour')
-    ORDER BY created_at LIMIT ?
-  `).all(limit);
+    ORDER BY created_at, order_id LIMIT ? OFFSET ?
+  `).all(limit, offset);
 }
 
 function cleanupOldPendingTips() {
@@ -6169,6 +6233,7 @@ module.exports = {
   getDonationTotals,
   getDonationMonthly,
   getDonationById,
+  getLatestDonation,
   deleteDonation,
   cleanupOldDonations,
   getCoachingSettings, saveCoachingSettings, setCoachingOpen, recordInviteCheck,
@@ -6176,7 +6241,8 @@ module.exports = {
   getViewerCoachingBookings, getViewerBookingsAllCoaches, setCoachingBookingStatus, recordCoachingMessageError, countWaitingCoaching,
   acceptCoachingBooking, expireCoachingBooking, listExpirableCoachingBookings, getCoachingBookingById,
   createCoachingPayment, getCoachingPayment, listOpenCoachingPaymentsFor, listStaleCoachingPayments, deleteOpenCoachingPayment,
-  markCoachingPaymentRefused, recordCoachingPayment,
+  markCoachingPaymentRefused, recordCoachingPayment, markCoachingPaymentPending, scheduleCoachingPaymentRead, closeCoachingPayment,
+  listPendingCoachingPaymentsFor, listDueCoachingPendingPayments, pendingCoachingPaymentBookingIds,
   updateCoachingRoomClose, startCoachingReschedule, proposeCoachingTime, acceptCoachingProposal, dropCoachingProposal,
   closeCoachingReschedule, cancelCoachingBookingByCoach, listDueReschedules, markCoachingRefunded,
   listPendingCoachingRefunds, countPendingCoachingRefunds, listCoachingPaymentsForBookings,

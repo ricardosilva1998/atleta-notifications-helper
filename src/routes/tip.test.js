@@ -482,8 +482,11 @@ describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
 
   test('a captured order is recorded once, without an alert or chat; the next run does nothing', async () => {
     addPending('RECONCILE00000001', 3);
+    db.db.prepare("UPDATE tip_goals SET created_at = datetime('now', '-1 day') WHERE streamer_id = ?").run(streamerA);
     assert.equal(await tipRoutes.reconcilePendingTips(), 1);
     assert.equal(count('donations'), 1);
+    const stored = db.db.prepare('SELECT created_at FROM donations').get().created_at;
+    assert.equal(stored, db.getPendingTip('RECONCILE00000001').created_at, 'the tip keeps the time it was paid');
     assert.equal(db.db.prepare('SELECT external_id FROM donations').get().external_id, 'RECONCILE00000001');
     assert.equal(db.getActiveTipGoal(streamerA).current_amount, 7);
     assert.equal(goalUpdates.length, 0, 'a recovered tip plays no late added animation');
@@ -526,6 +529,17 @@ describe('daily reconcile of tips PayPal captured but nobody recorded', () => {
     db.cleanupOldPendingTips();
     const left = db.db.prepare('SELECT order_id FROM pending_tips ORDER BY order_id').all().map((r) => r.order_id);
     assert.deepEqual(left, ['RECONCILE00000002', 'RECONCILE00000003', 'RECONCILE00000004']);
+  });
+});
+
+describe('a recovered tip and a tip goal that started after it was paid', () => {
+  test('is recorded but not counted toward that goal', async () => {
+    db.createPendingTip({ order_id: 'RECONCILE00000020', streamer_id: streamerA, donor_name: 'Early Viewer', message: '', payee_merchant_id: 'MERCHANT12345' });
+    db.db.prepare("UPDATE pending_tips SET created_at = datetime('now', '-300 minutes') WHERE order_id = ?").run('RECONCILE00000020');
+    db.db.prepare("UPDATE tip_goals SET created_at = datetime('now', '-60 minutes') WHERE streamer_id = ?").run(streamerA);
+    const before = db.getActiveTipGoal(streamerA).current_amount;
+    assert.equal(await tipRoutes.reconcilePendingTips(), 1);
+    assert.equal(db.getActiveTipGoal(streamerA).current_amount, before);
   });
 });
 

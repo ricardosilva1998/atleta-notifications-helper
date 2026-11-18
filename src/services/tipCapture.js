@@ -220,7 +220,7 @@ async function handleTipReturn({ streamer, orderId }, deps) {
 // counted toward the tip goal, without the overlay alert or the chat thank-you
 // (hours later they would be stale). Anything else is left as it is, and a
 // failure only skips its own row.
-//   listUnfinished()           -> pending rows without captured_at, at least 1 h old
+//   listUnfinished(limit, offset) -> one page of pending rows without captured_at, at least 1 h old, oldest first
 //   getStreamer(id)            -> the streamer row, or null
 //   getOrder(orderId)          -> the order as PayPal has it now (may throw)
 //   logDonation(streamer, d)   -> true / false / null, as for handleTipReturn
@@ -230,14 +230,25 @@ async function handleTipReturn({ streamer, orderId }, deps) {
 // Returns how many tips it recovered.
 async function reconcilePendingTips(deps) {
   let recovered = 0;
-  for (const pending of deps.listUnfinished()) {
+  // Every unfinished row, in pages of PAGE (oldest first), read before any is settled so the offsets stay true.
+  const PAGE = 500;
+  const rows = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const page = deps.listUnfinished(PAGE, offset);
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  for (const pending of rows) {
     try {
       const streamer = deps.getStreamer(pending.streamer_id);
       if (!streamer) continue;
       const order = await deps.getOrder(pending.order_id);
       const verdict = decideTipCapture({ streamer, pending, capture: order });
-      if (!verdict.ok) continue;
-      const isNew = deps.logDonation(streamer, verdict.donation);
+      if (!verdict.ok) {
+        if (order && order.status === 'COMPLETED') deps.logError(`[Tip] Reconcile: order ${pending.order_id} is captured but was refused (${verdict.reason})`);
+        continue;
+      }
+      const isNew = deps.logDonation(streamer, { ...verdict.donation, createdAt: pending.created_at });
       if (isNew !== true && isNew !== false) {
         deps.logError(`[Tip] Reconcile: order ${pending.order_id} could not be recorded; left for the next run`);
         continue;

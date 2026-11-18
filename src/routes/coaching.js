@@ -26,7 +26,7 @@ const REFUSAL_STATUS = {
   signin: 401, unavailable: 404, not_found: 404, bad_length: 400, bad_note: 400,
   not_open: 409, join_first: 409, bad_time: 409, taken: 409, limit: 409, too_late: 409, not_active: 409, too_many: 429,
   not_rescheduling: 409, not_yours_to_answer: 409, no_proposal: 409, proposal_too_close: 409,
-  no_paypal: 409, paid: 409, not_awaiting: 409, pay_closed: 409, too_many_payments: 429, payment_failed: 502,
+  no_paypal: 409, paid: 409, not_awaiting: 409, pay_closed: 409, too_many_payments: 429, payment_processing: 409, payment_failed: 502,
 };
 // bad_time and taken read the same: a time someone holds is refused as bad_time (it is no longer a free start) before
 // the insert's own check (taken) ever sees it, and for the viewer both mean "someone was quicker".
@@ -39,13 +39,13 @@ const ERROR_KEYS = {
   not_awaiting: 'coaching.error.not_awaiting', pay_closed: 'coaching.error.pay_closed',
   not_rescheduling: 'coaching.error.not_rescheduling', not_yours_to_answer: 'coaching.error.not_yours_to_answer',
   no_proposal: 'coaching.error.no_proposal', proposal_too_close: 'coaching.error.proposal_too_close',
-  too_many_payments: 'coaching.error.too_many_payments', payment_failed: 'coaching.error.payment_failed',
+  too_many_payments: 'coaching.error.too_many_payments', payment_processing: 'coaching.error.payment_processing', payment_failed: 'coaching.error.payment_failed',
 };
 // The codes /paid sends back to the page as ?error= (coachingPayments.returnErrorCode), with their texts; the page's
 // script shows them (paid and pay_closed are above).
 const RETURN_ERROR_KEYS = {
   pay_invalid: 'coaching.error.pay_invalid', pay_unconfirmed: 'coaching.error.pay_unconfirmed',
-  not_paid: 'coaching.error.not_paid', late: 'coaching.error.late',
+  not_paid: 'coaching.error.not_paid', late: 'coaching.error.late', duplicate: 'coaching.error.duplicate',
   paid: 'coaching.error.paid', pay_closed: 'coaching.error.pay_closed',
 };
 
@@ -78,6 +78,18 @@ function coachingPage(req) {
   if (!streamer || isStreamerDisabled(streamer)) return null;
   const settings = db.getCoachingSettings(streamer.id);
   return settings ? { streamer, settings } : null;
+}
+// The coach of a booking the signed-in viewer owns, found by the booking's own streamer_id: the login in the URL is not
+// read, so a coach whose Twitch login moved to another streamer keeps working for the bookings already made. Access
+// stays by the viewer's Discord id (another viewer's booking, or none, answers not_found).
+function bookingCoach(req, res) {
+  if (!req.viewer) { refuse(res, 'signin'); return null; }
+  const id = /^\d{1,15}$/.test(req.params.id) ? Number(req.params.id) : 0;
+  const booking = id ? db.getCoachingBookingById(id) : null;
+  if (!booking || booking.viewer_discord_id !== req.viewer.discordUserId) { refuse(res, 'not_found'); return null; }
+  const streamer = db.getStreamerById(booking.streamer_id);
+  if (!streamer || isStreamerDisabled(streamer) || !db.getCoachingSettings(streamer.id)) { refuse(res, 'unavailable'); return null; }
+  return { streamer, id };
 }
 const unavailablePage = (res) => res.status(404).send(res.locals.t('coaching.error.pageUnavailable'));
 
@@ -178,13 +190,10 @@ router.post('/:username/book', async (req, res) => {
 
 // The viewer's own booking only (another's answers not_found), until it starts; it becomes Withdrawn.
 router.post('/:username/bookings/:id/cancel', async (req, res) => {
-  const page = coachingPage(req);
-  if (!page) return refuse(res, 'unavailable');
-  if (!req.viewer) return refuse(res, 'signin');
-  const id = /^\d{1,15}$/.test(req.params.id) ? Number(req.params.id) : 0;
-  if (!id) return refuse(res, 'not_found');
+  const ctx = bookingCoach(req, res);
+  if (!ctx) return;
   const now = Date.now();
-  const result = await coachingBookings.withdraw(page.streamer, req.viewer, id, { now });
+  const result = await coachingBookings.withdraw(ctx.streamer, req.viewer, ctx.id, { now });
   if (!result.ok) return refuse(res, result.code);
   res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0] });
 });
@@ -193,19 +202,12 @@ router.post('/:username/bookings/:id/cancel', async (req, res) => {
 // they may propose (never the session's original time); propose answers the coach's proposal with another time;
 // accept-proposal takes the coach's. The viewer never starts or closes one. These routes have their own limiter
 // (server.js).
-const viewerBooking = (req, res) => {
-  const page = coachingPage(req);
-  if (!page) { refuse(res, 'unavailable'); return null; }
-  if (!req.viewer) { refuse(res, 'signin'); return null; }
-  const id = /^\d{1,15}$/.test(req.params.id) ? Number(req.params.id) : 0;
-  if (!id) { refuse(res, 'not_found'); return null; }
-  return { page, id };
-};
+const viewerBooking = bookingCoach;
 
 router.get('/:username/bookings/:id/starts', (req, res) => {
   const ctx = viewerBooking(req, res);
   if (!ctx) return;
-  const result = coachingBookings.viewerStarts(ctx.page.streamer, req.viewer, ctx.id, { now: Date.now() });
+  const result = coachingBookings.viewerStarts(ctx.streamer, req.viewer, ctx.id, { now: Date.now() });
   if (!result.ok) return refuse(res, result.code);
   res.json({ ok: true, minutes: result.minutes, starts: result.starts });
 });
@@ -215,7 +217,7 @@ router.post('/:username/bookings/:id/propose', async (req, res) => {
   if (!ctx) return;
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const now = Date.now();
-  const result = await coachingBookings.viewerPropose(ctx.page.streamer, req.viewer, ctx.id, {
+  const result = await coachingBookings.viewerPropose(ctx.streamer, req.viewer, ctx.id, {
     startsAt: Number.isInteger(body.startsAt) ? body.startsAt : null, note: body.note, now,
   });
   if (!result.ok) return refuse(res, result.code);
@@ -226,7 +228,7 @@ router.post('/:username/bookings/:id/accept-proposal', async (req, res) => {
   const ctx = viewerBooking(req, res);
   if (!ctx) return;
   const now = Date.now();
-  const result = await coachingBookings.viewerAccept(ctx.page.streamer, req.viewer, ctx.id, { now });
+  const result = await coachingBookings.viewerAccept(ctx.streamer, req.viewer, ctx.id, { now });
   if (!result.ok) return refuse(res, result.code);
   res.json({ ok: true, booking: coachingBookings.bookingViews([result.booking], now, { forViewer: true })[0] });
 });
@@ -234,12 +236,9 @@ router.post('/:username/bookings/:id/accept-proposal', async (req, res) => {
 // Pay for a booking the streamer accepted: the viewer's own, awaiting payment, before its deadline. Answers
 // { ok: true, approveUrl }, the PayPal page the script sends the viewer to.
 router.post('/:username/bookings/:id/pay', async (req, res) => {
-  const page = coachingPage(req);
-  if (!page) return refuse(res, 'unavailable');
-  if (!req.viewer) return refuse(res, 'signin');
-  const id = /^\d{1,15}$/.test(req.params.id) ? Number(req.params.id) : 0;
-  if (!id) return refuse(res, 'not_found');
-  const result = await coachingPayments.startPayment(page.streamer, req.viewer, id, { lang: res.locals.lang });
+  const ctx = bookingCoach(req, res);
+  if (!ctx) return;
+  const result = await coachingPayments.startPayment(ctx.streamer, req.viewer, ctx.id, { lang: res.locals.lang });
   if (!result.ok) return refuse(res, result.code);
   res.json({ ok: true, approveUrl: result.approveUrl });
 });
@@ -248,16 +247,18 @@ router.post('/:username/bookings/:id/pay', async (req, res) => {
 // word, then the viewer goes back to the page with ?paid=1 or ?error=<code>. A payment PayPal has not confirmed yet
 // (pay_unconfirmed) also carries &order=<id>, so the page can offer to check again (this route, again).
 router.get('/:username/paid', async (req, res) => {
-  const page = coachingPage(req);
-  if (!page) return unavailablePage(res);
   const orderId = typeof req.query.token === 'string' ? req.query.token : '';
-  const result = await coachingPayments.handleReturn({ streamer: page.streamer, orderId });
-  // The viewer lands on My bookings, on the booking this order paid (only one of this streamer's).
+  // The coach is the one of the booking this order was made for (its own streamer_id), not the login in the URL, which
+  // is only the fallback for an order that is not on record.
   const payment = /^[A-Z0-9-]{1,64}$/i.test(orderId) ? db.getCoachingPayment(orderId) : null;
   const paidBooking = payment ? db.getCoachingBookingById(payment.booking_id) : null;
+  const owner = paidBooking ? db.getStreamerById(paidBooking.streamer_id) : null;
+  const page = owner && !isStreamerDisabled(owner) && db.getCoachingSettings(owner.id) ? { streamer: owner } : coachingPage(req);
+  if (!page) return unavailablePage(res);
+  const result = await coachingPayments.handleReturn({ streamer: page.streamer, orderId });
   const bookingPart = paidBooking && paidBooking.streamer_id === page.streamer.id ? `booking=${paidBooking.id}&` : '';
   const base = `/my-bookings?${bookingPart}`;
-  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}paid=1` : `${base}error=late`);
+  if (result.ok) return res.redirect(result.outcome === 'paid' ? `${base}paid=1` : `${base}error=${result.outcome === 'duplicate' ? 'duplicate' : 'late'}`);
   console.error(`[Coaching] return of order ${/^[A-Z0-9-]{1,64}$/i.test(orderId) ? orderId : '(invalid)'} for streamer ${page.streamer.id} not counted: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`);
   const code = coachingPayments.returnErrorCode(result.reason);
   res.redirect(`${base}error=${code}${code === 'pay_unconfirmed' ? `&order=${encodeURIComponent(orderId)}` : ''}`);

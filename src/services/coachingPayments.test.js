@@ -71,7 +71,7 @@ function completed(order, over = {}) {
   };
 }
 function approved(order) {
-  return { id: order.id, status: 'APPROVED', purchase_units: [{ custom_id: order.customId, payee: { email_address: order.payeeEmail, merchant_id: MERCHANT } }] };
+  return { id: order.id, status: order.approved ? 'APPROVED' : 'CREATED', purchase_units: [{ custom_id: order.customId, payee: { email_address: order.payeeEmail, merchant_id: MERCHANT } }] };
 }
 
 function resetPayPal() {
@@ -290,7 +290,8 @@ describe('startPayment', () => {
     assert.equal(unit.payee.email_address, s.paypal_email);
     assert.equal(unit.custom_id, String(booking.id));
     const body = JSON.parse(create.body);
-    assert.equal(body.application_context.return_url, `https://atleta.test/coaching/${s.twitch_username}/paid`);
+    assert.equal(body.application_context.return_url, 'https://atleta.test/coaching/-/paid');
+    assert.equal(body.application_context.cancel_url, 'https://atleta.test/my-bookings');
     const row = db.getCoachingPayment(orderId);
     assert.deepEqual([row.booking_id, row.streamer_id, row.amount_cents, row.currency, row.payee_email, row.payee_merchant_id, row.status],
       [booking.id, s.id, 4500, 'EUR', s.paypal_email, MERCHANT, 'created']);
@@ -554,6 +555,50 @@ describe('handleReturn', () => {
     assert.equal(captureCalls().length, 1);
     assert.equal(pay.returnErrorCode('paid'), 'paid');
   });
+
+  test('a second order PayPal already captured is a duplicate: its own outcome, the booking stands', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v } = await awaiting(s);
+    const first = await pay.startPayment(s, v, booking.id, { now: NOW });
+    const second = await pay.startPayment(s, v, booking.id, { now: NOW });
+    const id1 = new URL(first.approveUrl).searchParams.get('token');
+    const id2 = new URL(second.approveUrl).searchParams.get('token');
+    assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + MIN })).outcome, 'paid');
+    paypal.orders.get(id2).captured = true;
+    const result = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 2 * MIN });
+    assert.deepEqual([result.ok, result.outcome, result.result], [true, 'duplicate', 'double']);
+    assert.equal(db.getCoachingPayment(id2).refund_reason, 'double');
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+    const again = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 3 * MIN });
+    assert.deepEqual([again.replay, again.outcome], [true, 'duplicate']);
+    assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + 3 * MIN })).outcome, 'paid');
+  });
+
+  for (const ended of ['cancelled', 'expired']) {
+    test(`a second payment for a paid booking that was then ${ended} is late with Refund pending, not a duplicate`, async () => {
+      const s = addStreamer();
+      const { booking, viewer: v } = await awaiting(s);
+      const first = await pay.startPayment(s, v, booking.id, { now: NOW });
+      const second = await pay.startPayment(s, v, booking.id, { now: NOW });
+      const id1 = new URL(first.approveUrl).searchParams.get('token');
+      const id2 = new URL(second.approveUrl).searchParams.get('token');
+      assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + MIN })).outcome, 'paid');
+      db.db.prepare('UPDATE coaching_bookings SET status = ? WHERE id = ?').run(ended, booking.id);
+      paypal.orders.get(id2).captured = true;
+      discord.sent.length = 0;
+      const result = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 2 * MIN });
+      assert.deepEqual([result.ok, result.outcome, result.result], [true, 'late', 'late_issue']);
+      await result.followUp;
+      const row = db.getCoachingPayment(id2);
+      assert.deepEqual([row.refund_status, row.refund_reason], ['pending', 'late']);
+      assert.equal(bookingNow(booking.id).status, ended);
+      assert.ok(discord.sent.some((m) => m.userId === v.discordUserId), 'the viewer is told');
+      assert.ok(discord.sent.some((m) => m.userId === s.discord_user_id), 'the coach is told');
+      assert.doesNotMatch(JSON.stringify(discord.sent), /stands/);
+      const again = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 3 * MIN });
+      assert.deepEqual([again.replay, again.outcome], [true, 'late']);
+    });
+  }
 });
 
 // ── The deadline and the stale orders ────────────────────────────────
@@ -631,5 +676,264 @@ describe('reconcileStale', () => {
     assert.deepEqual(await pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN }), { recorded: 0, dropped: 0 });
     assert.ok(db.getCoachingPayment(orderId));
     assert.deepEqual(await pay.reconcileStale({ now: NOW + 72 * HOUR + 2 * MIN }), { recorded: 0, dropped: 1 });
+  });
+});
+
+// ── An approved order is captured when read back ─────────────────────
+
+describe('approved orders read back', () => {
+  test('startPayment: APPROVED while the booking awaits payment is captured and confirmed', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v, orderId, order } = await ordered(s);
+    order.approved = true;
+    const again = await pay.startPayment(s, v, booking.id, { now: NOW + 2 * MIN });
+    assert.deepEqual(again, { ok: false, code: 'paid' });
+    assert.equal(captureCalls().length, 1);
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+    assert.equal(db.getCoachingPayment(orderId).status, 'captured');
+    assert.equal(paypal.orders.size, 1, 'no second order');
+  });
+
+  test('the stale pass: APPROVED on a booking that may take payment is captured; a booking that may not is only read', async () => {
+    const s = addStreamer();
+    const ok = await ordered(s);
+    const closed = await ordered(s, { startsAt: START + 24 * HOUR });
+    ok.order.approved = true;
+    closed.order.approved = true;
+    db.expireCoachingBooking(ok.booking.id, ok.booking.pay_by + 31 * MIN); // its time is still free and ahead: may capture
+    db.db.prepare("UPDATE coaching_bookings SET status = 'cancelled' WHERE id = ?").run(closed.booking.id);
+    const out = await pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN });
+    assert.equal(out.recorded, 1);
+    assert.equal(captureCalls().length, 1, 'only the first order was captured');
+    assert.equal(db.getCoachingPayment(ok.orderId).status, 'captured');
+    assert.equal(paypal.orders.get(closed.orderId).captured, false);
+    assert.equal(bookingNow(closed.booking.id).paid_at, null);
+  });
+
+  test('expireDue: APPROVED at the deadline is captured and confirms the booking', async () => {
+    const s = addStreamer();
+    const { booking, orderId, order } = await ordered(s);
+    order.approved = true;
+    const out = await pay.expireDue({ now: booking.pay_by + MIN });
+    assert.deepEqual(out, { expired: 0, confirmed: 1 });
+    assert.equal(captureCalls().length, 1);
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+    assert.equal(db.getCoachingPayment(orderId).status, 'captured');
+  });
+
+  test('expireDue: APPROVED whose capture answers PENDING ends pending, not expired', async () => {
+    const s = addStreamer();
+    const { booking, orderId, order } = await ordered(s);
+    order.approved = true;
+    paypal.capture = (o) => { o.captured = true; return reply(201, completed(o, { captureStatus: 'PENDING' })); };
+    paypal.getOrder = (o) => reply(200, o.captured ? completed(o, { captureStatus: 'PENDING' }) : approved(o));
+    const out = await pay.expireDue({ now: booking.pay_by + MIN });
+    assert.deepEqual(out, { expired: 0, confirmed: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    assert.equal(bookingNow(booking.id).status, 'awaiting_payment');
+  });
+
+  test('a return and the tick finding the same order capture it once', async () => {
+    const s = addStreamer();
+    const { booking, orderId, order } = await ordered(s);
+    order.approved = true;
+    db.expireCoachingBooking(booking.id, booking.pay_by + 31 * MIN);
+    const [ret, tick] = await Promise.all([
+      pay.handleReturn({ streamer: s, orderId, now: NOW + pay.STALE_MS + 2 * MIN }),
+      pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN }),
+    ]);
+    assert.equal(captureCalls().length, 1, 'one capture call');
+    assert.equal(ret.ok, true);
+    assert.ok(tick.recorded <= 1);
+    assert.equal(db.getCoachingPayment(orderId).status, 'captured');
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM coaching_payments WHERE order_id = ?').get(orderId).n, 1);
+  });
+
+  test('a capture answering PENDING is kept pending (T1)', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v, orderId, order: placed } = await ordered(s);
+    placed.approved = true;
+    paypal.capture = (order) => { order.captured = true; return reply(201, completed(order, { captureStatus: 'PENDING' })); };
+    paypal.getOrder = (order) => reply(200, order.captured ? completed(order, { captureStatus: 'PENDING' }) : approved(order));
+    const again = await pay.startPayment(s, v, booking.id, { now: NOW + 2 * MIN });
+    assert.deepEqual(again, { ok: false, code: 'payment_processing' });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    assert.equal(bookingNow(booking.id).paid_at, null);
+  });
+});
+
+// ── A PENDING capture is kept, never lost ────────────────────────────
+
+describe('pending captures', () => {
+  const DAY = 24 * HOUR;
+  const pendingAtPayPal = (order) => { order.captured = true; order.pending = true; };
+  function useOrderStates() {
+    paypal.capture = (order) => { pendingAtPayPal(order); return reply(201, completed(order, { captureStatus: 'PENDING' })); };
+    paypal.getOrder = (order) => {
+      if (order.voided) return reply(200, { id: order.id, status: 'VOIDED', purchase_units: [{ custom_id: order.customId }] });
+      if (order.declined) return reply(200, completed(order, { captureStatus: 'DECLINED' }));
+      if (order.pending) return reply(200, completed(order, { captureStatus: 'PENDING' }));
+      return reply(200, order.captured ? completed(order) : approved(order));
+    };
+  }
+  async function pendingBooking({ startsAt = START } = {}) {
+    const s = addStreamer();
+    const o = await ordered(s, { startsAt });
+    useOrderStates();
+    const result = await pay.handleReturn({ streamer: s, orderId: o.orderId, now: NOW + 5 * MIN });
+    assert.equal(result.reason, 'pending');
+    return { s, ...o };
+  }
+
+  test('the return stores the payment as pending with the next read an hour on, and the booking shows payment processing', async () => {
+    const { s, booking, orderId, viewer: v } = await pendingBooking();
+    const row = db.getCoachingPayment(orderId);
+    assert.deepEqual([row.status, row.pending_since, row.next_read_at], ['pending', NOW + 5 * MIN, NOW + 5 * MIN + HOUR]);
+    const view = svc.bookingView(bookingNow(booking.id), NOW + 6 * MIN, null, { forViewer: true });
+    assert.equal(view.state, 'payment_processing');
+    assert.equal(svc.bookingViews([bookingNow(booking.id)], NOW + 6 * MIN)[0].state, 'payment_processing');
+    // not paid twice: no second order, no withdraw while PayPal holds it
+    assert.deepEqual(await pay.startPayment(s, v, booking.id, { lang: 'en', now: NOW + 6 * MIN }), { ok: false, code: 'payment_processing' });
+    assert.deepEqual(await svc.withdraw(s, v, booking.id, { now: NOW + 6 * MIN }), { ok: false, code: 'payment_processing' });
+  });
+
+  test('the coach cannot cancel while a payment is pending: nothing changes, no message (a cancel with no pending row is covered in coachingBookings.test.js)', async () => {
+    const { s, booking, orderId } = await pendingBooking();
+    const sentBefore = discord.sent.length;
+    assert.deepEqual(await svc.cancel(s, booking.id, { reason: 'I am ill', now: NOW + 6 * MIN }), { ok: false, code: 'payment_processing' });
+    assert.equal(bookingNow(booking.id).status, 'awaiting_payment');
+    assert.equal(discord.sent.length, sentBefore);
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+
+  test('it is kept past the deadline and past 72 hours: the booking holds its time, no pass deletes the row', async () => {
+    const { booking, orderId } = await pendingBooking();
+    assert.deepEqual(await pay.expireDue({ now: booking.pay_by + 31 * MIN }), { expired: 0, confirmed: 0 });
+    assert.equal(bookingNow(booking.id).status, 'awaiting_payment');
+    assert.equal(db.deleteOpenCoachingPayment(orderId), false, 'the delete refuses a pending row');
+    const out = await pay.reconcileStale({ now: NOW + 80 * HOUR });
+    assert.deepEqual(out, { recorded: 0, dropped: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+
+  test('released with the payment still pending: the viewer is not told it was unpaid, and the state says so', async () => {
+    const { s, booking, orderId, viewer: v } = await pendingBooking();
+    discord.sent = [];
+    const out = await pay.expireDue({ now: booking.starts_at - 10 * MIN });
+    assert.deepEqual(out, { expired: 1, confirmed: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    const toViewer = discord.sent.find((m) => m.userId === v.discordUserId).payload.embeds[0];
+    assert.match(toViewer.title, /still processing at PayPal/);
+    assert.doesNotMatch(toViewer.title + toViewer.description, /not paid in time/);
+    assert.match(toViewer.description, /refunded/);
+    const toCoach = discord.sent.find((m) => m.userId === s.discord_user_id).payload.embeds[0];
+    assert.doesNotMatch(toCoach.title, /did not pay/);
+    const row = bookingNow(booking.id);
+    assert.equal(row.status, 'expired');
+    assert.equal(svc.bookingView(row, booking.starts_at - 9 * MIN, null, { forViewer: true }).state, 'payment_unsettled');
+    assert.equal(svc.bookingViews([row], booking.starts_at - 9 * MIN)[0].state, 'payment_unsettled');
+  });
+
+  test('a payment first seen pending by the expiry pass is kept too', async () => {
+    const s = addStreamer();
+    const { booking, orderId } = await ordered(s);
+    useOrderStates();
+    pendingAtPayPal(paypal.orders.get(orderId));
+    assert.deepEqual(await pay.expireDue({ now: booking.pay_by + MIN }), { expired: 0, confirmed: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+
+  test('a stale open order that turns out pending is kept, not dropped', async () => {
+    const s = addStreamer();
+    const { booking, orderId } = await ordered(s);
+    useOrderStates();
+    db.expireCoachingBooking(booking.id, booking.pay_by + 31 * MIN);
+    pendingAtPayPal(paypal.orders.get(orderId));
+    assert.deepEqual(await pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN }), { recorded: 0, dropped: 0 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+
+  test('back-off: read hourly for the first day, then daily, and only when due', async () => {
+    const { orderId } = await pendingBooking();
+    const t0 = NOW + 5 * MIN;
+    assert.equal(pay.nextPendingRead(t0, t0 + 3 * HOUR), t0 + 3 * HOUR + HOUR);
+    assert.equal(pay.nextPendingRead(t0, t0 + 25 * HOUR), t0 + 25 * HOUR + DAY);
+    const reads = () => paypal.calls.filter((c) => c.method === 'GET' && c.url.endsWith(`/orders/${orderId}`)).length;
+    const before = reads();
+    assert.deepEqual(await pay.readPending({ now: t0 + 30 * MIN }), { recorded: 0, closed: 0, pending: 0 }, 'not due yet');
+    assert.equal(reads(), before);
+    assert.deepEqual(await pay.readPending({ now: t0 + HOUR }), { recorded: 0, closed: 0, pending: 1 });
+    assert.equal(db.getCoachingPayment(orderId).next_read_at, t0 + 2 * HOUR);
+    const late = t0 + 26 * HOUR;
+    assert.deepEqual(await pay.readPending({ now: late }), { recorded: 0, closed: 0, pending: 1 });
+    assert.equal(db.getCoachingPayment(orderId).next_read_at, late + DAY, 'daily after the first day');
+  });
+
+  test('still pending 30 days after it was first seen: lapsed with a log line, the row stays', async () => {
+    const { orderId } = await pendingBooking();
+    const at = NOW + 5 * MIN + pay.PENDING_GIVE_UP_MS;
+    assert.deepEqual(await pay.readPending({ now: at }), { recorded: 0, closed: 1, pending: 0 });
+    const row = db.getCoachingPayment(orderId);
+    assert.equal(row.status, 'lapsed');
+    assert.ok(logs.some((l) => l.includes(orderId) && l.includes('30 days')));
+  });
+
+  test('at 15 minutes before the start the booking ends unpaid and the payment row stays pending', async () => {
+    const { s, booking, orderId, viewer: v } = await pendingBooking();
+    assert.deepEqual(await pay.expireDue({ now: booking.starts_at - 16 * MIN }), { expired: 0, confirmed: 0 });
+    discord.sent = [];
+    assert.deepEqual(await pay.expireDue({ now: booking.starts_at - 15 * MIN }), { expired: 1, confirmed: 0 });
+    assert.equal(bookingNow(booking.id).status, 'expired');
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    assert.ok(discord.sent.find((m) => m.userId === v.discordUserId), 'the viewer is told');
+    assert.ok(discord.sent.find((m) => m.userId === s.discord_user_id), 'the coach is told');
+    assert.equal(svc.bookingView(bookingNow(booking.id), booking.starts_at - 14 * MIN, null, { forViewer: true }).state, 'payment_unsettled');
+  });
+
+  test('a pending payment that completes later is recorded as late, Refund pending, the coach told', async () => {
+    const { s, booking, orderId } = await pendingBooking();
+    await pay.expireDue({ now: booking.starts_at - 15 * MIN });
+    discord.sent = [];
+    const order = paypal.orders.get(orderId);
+    order.pending = false; // PayPal settled it
+    const at = booking.starts_at - 10 * MIN; // the booking's time is still ahead and free, yet it is never re-confirmed
+    db.db.prepare('UPDATE coaching_payments SET next_read_at = ? WHERE order_id = ?').run(at, orderId);
+    const out = await pay.readPending({ now: at });
+    assert.deepEqual(out, { recorded: 1, closed: 0, pending: 0 });
+    const row = bookingNow(booking.id);
+    assert.deepEqual([row.status, row.payment_issue], ['expired', 'late']);
+    const payment = db.getCoachingPayment(orderId);
+    assert.deepEqual([payment.status, payment.refund_status, payment.refund_reason], ['captured', 'pending', 'late']);
+    const msg = discord.sent.find((m) => m.userId === s.discord_user_id);
+    assert.match(msg.payload.embeds[0].description, /refund it to the viewer in PayPal/);
+  });
+
+  test('a pending payment that completes before the booking ended confirms it', async () => {
+    const { booking, orderId } = await pendingBooking();
+    paypal.orders.get(orderId).pending = false;
+    const at = NOW + 2 * HOUR;
+    db.db.prepare('UPDATE coaching_payments SET next_read_at = ? WHERE order_id = ?').run(at, orderId);
+    assert.deepEqual(await pay.readPending({ now: at }), { recorded: 1, closed: 0, pending: 0 });
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+  });
+
+  test('a voided or declined pending payment is closed with a log line and kept', async () => {
+    const a = await pendingBooking();
+    const b = await pendingBooking({ startsAt: START + 24 * HOUR });
+    paypal.orders.get(a.orderId).voided = true;
+    paypal.orders.get(b.orderId).declined = true;
+    const at = NOW + 2 * HOUR;
+    assert.deepEqual(await pay.readPending({ now: at }), { recorded: 0, closed: 2, pending: 0 });
+    assert.equal(db.getCoachingPayment(a.orderId).status, 'closed');
+    assert.equal(db.getCoachingPayment(b.orderId).status, 'closed');
+    assert.ok(logs.some((l) => l.includes(a.orderId) && l.includes('closed')));
+    assert.equal(bookingNow(a.booking.id).paid_at, null);
+  });
+
+  test('a read PayPal cannot answer keeps the payment pending', async () => {
+    const { orderId } = await pendingBooking();
+    paypal.down = true;
+    assert.deepEqual(await pay.readPending({ now: NOW + 2 * HOUR }), { recorded: 0, closed: 0, pending: 1 });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
   });
 });

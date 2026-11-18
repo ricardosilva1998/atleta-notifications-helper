@@ -87,7 +87,7 @@
   }
 
   // A booking that holds its time: waiting, awaiting payment, confirmed or rescheduling, and not started.
-  var HOLDING = ['waiting', 'awaiting_payment', 'confirmed', 'rescheduling'];
+  var HOLDING = ['waiting', 'awaiting_payment', 'payment_processing', 'confirmed', 'rescheduling'];
   function holds(booking, now) {
     if (booking.state === 'rescheduling') return true; // startsAt is the original time, which limits nothing now
     return HOLDING.indexOf(booking.state) >= 0 && booking.startsAt > now;
@@ -95,7 +95,7 @@
 
   // A booking the viewer can still cancel: one that holds its time and is not paid (a paid one has no Cancel).
   function canCancel(booking, now) {
-    return holds(booking, now) && !booking.paid;
+    return holds(booking, now) && !booking.paid && booking.state !== 'payment_processing';
   }
 
   // A booking the viewer can pay now: accepted, priced, and before its pay-by time.
@@ -118,8 +118,8 @@
   // the server sends the viewer; never anything about the payer.
   function refundLine(booking) {
     if (!booking) return null;
-    if (booking.refundState === 'pending' || booking.refundPending === true) return 'pending';
-    if (booking.refundState === 'refunded') return 'refunded';
+    if (booking.refundState === 'pending' || booking.refundPending === true) return booking.refundDuplicate === true ? 'pendingDuplicate' : 'pending';
+    if (booking.refundState === 'refunded') return booking.refundDuplicate === true ? 'refundedDuplicate' : 'refunded';
     return null;
   }
 
@@ -167,7 +167,7 @@
     });
   }
 
-  var RETURN_CODES = ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed'];
+  var RETURN_CODES = ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'duplicate', 'paid', 'pay_closed'];
 
   // What PayPal's return left in the address (?paid=1, ?error=<code>, and &order=<id> for a payment not confirmed yet):
   // { kind: 'paid' }, { kind: 'error', code, order } or null. A code or order id of another shape is ignored.

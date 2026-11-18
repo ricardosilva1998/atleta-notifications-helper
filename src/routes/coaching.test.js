@@ -463,7 +463,7 @@ describe('booking', () => {
     assert.equal((await post(`/coaching/${s.login}/bookings/${id}/cancel`)).json.code, 'signin');
     assert.equal((await post(`/coaching/${s.login}/bookings/abc/cancel`, { cookie: owner.cookie })).json.code, 'not_found');
     const elsewhere = addStreamer();
-    assert.equal((await post(`/coaching/${elsewhere.login}/bookings/${id}/cancel`, { cookie: owner.cookie })).json.code, 'not_found', "through another streamer's page");
+    assert.equal((await post(`/coaching/${elsewhere.login}/bookings/${id}/cancel`, { cookie: addViewer().cookie })).json.code, 'not_found', "another viewer's, through another streamer's page");
 
     const mine = await post(`/coaching/${s.login}/bookings/${id}/cancel`, { cookie: owner.cookie });
     assert.equal(mine.status, 200);
@@ -603,12 +603,23 @@ describe('payment', () => {
     assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
   });
 
+  test('a coach with no Twitch login: Pay returns a return URL without a login, and that return confirms the booking', async () => {
+    const { s, v, id } = await accepted();
+    const pay = await post(`/coaching/-/bookings/${id}/pay`, { cookie: v.cookie });
+    assert.equal(pay.status, 200, pay.text);
+    db.db.prepare('UPDATE streamers SET twitch_username = NULL WHERE id = ?').run(s.id);
+    const token = new URL(pay.json.approveUrl).searchParams.get('token');
+    const back = await get(`/coaching/-/paid?token=${token}`);
+    assert.equal(back.headers.location, `/my-bookings?booking=${id}&paid=1`);
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
+  });
+
   test("a return with another streamer's order, an unknown one or none goes back with error=pay_invalid", async () => {
     const { s, v, id } = await accepted();
     const token = new URL((await post(`/coaching/${s.login}/bookings/${id}/pay`, { cookie: v.cookie })).json.approveUrl).searchParams.get('token');
     const elsewhere = addStreamer();
     calls = [];
-    for (const [login, query] of [[elsewhere.login, `token=${token}`], [s.login, 'token=NOSUCHORDER01'], [s.login, '']]) {
+    for (const [login, query] of [[elsewhere.login, 'token=NOSUCHORDER01'], [s.login, 'token=NOSUCHORDER01'], [s.login, '']]) {
       const res = await get(`/coaching/${login}/paid?${query}`);
       assert.equal(res.status, 302);
       assert.equal(res.headers.location, `/my-bookings?error=pay_invalid`);
@@ -618,9 +629,35 @@ describe('payment', () => {
     assert.equal((await get('/coaching/nobody_here/paid?token=ABCDEFGHIJ')).status, 404);
   });
 
+  test('a coach whose login moved to another streamer keeps working: My bookings, Pay, the return and Withdraw follow the booking', async () => {
+    const { s, v, id } = await accepted();
+    const oldLogin = s.login;
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run('moved_away_login', s.id);
+    const taker = addStreamer();
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run(oldLogin, taker.id);
+    assert.equal(db.getStreamerByUsername(oldLogin).id, taker.id);
+
+    const pay = await post(`/coaching/${oldLogin}/bookings/${id}/pay`, { cookie: v.cookie });
+    assert.equal(pay.status, 200, pay.text);
+    const token = new URL(pay.json.approveUrl).searchParams.get('token');
+    assert.equal((await post(`/coaching/${oldLogin}/bookings/${id}/pay`, { cookie: addViewer().cookie })).json.code, 'not_found', "another viewer's booking stays hidden");
+    const back = await get(`/coaching/${oldLogin}/paid?token=${token}`);
+    assert.equal(back.headers.location, `/my-bookings?booking=${id}&paid=1`);
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
+    assert.equal(db.getCoachingBooking(id, taker.id), null);
+
+    const second = await post('/coaching/moved_away_login/book', { cookie: v.cookie, json: { startsAt: freeNow(s, 60)[1], minutes: 60 } });
+    assert.equal(second.status, 200, second.text);
+    const withdrawn = await post(`/coaching/${oldLogin}/bookings/${second.json.booking.id}/cancel`, { cookie: v.cookie });
+    assert.equal(withdrawn.status, 200, withdrawn.text);
+    assert.equal(withdrawn.json.booking.state, 'withdrawn');
+    const listed = db.getViewerBookingsAllCoaches(v.discordUserId, 0).find((b) => b.id === id);
+    assert.equal(listed.coach_login, 'moved_away_login');
+  });
+
   test('every code the return sends back has its text', () => {
     const { RETURN_ERROR_KEYS } = require(ROUTE);
-    for (const code of ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed']) {
+    for (const code of ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'duplicate', 'paid', 'pay_closed']) {
       const key = RETURN_ERROR_KEYS[code];
       assert.ok(key, code);
       assert.notEqual(t('en', key), key, `${code} has an English text`);

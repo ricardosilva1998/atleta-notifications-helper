@@ -61,13 +61,18 @@ function refundsOf(payments) {
 
 function bookingView(row, now, room = null, opts = {}) {
   const payments = opts.payments || db.listCoachingPaymentsForBookings([row.id]);
+  if (opts.paymentPending === undefined && (row.status === 'awaiting_payment' || row.status === 'expired')) {
+    opts = { ...opts, paymentPending: db.pendingCoachingPaymentBookingIds([row.id]).has(row.id) };
+  }
   const refundState = refundStateOf(payments);
+  const refundDuplicate = refundState != null && payments.filter((p) => p.refund_status === refundState).every((p) => p.refund_reason === 'double');
   const coachOnly = opts.forViewer || opts.noPayer ? {} : { refunds: refundsOf(payments) };
   return {
     id: row.id,
     startsAt: row.starts_at,
     minutes: row.minutes,
-    state: coaching.bookingState(row, now),
+    state: opts.paymentPending && row.status === 'awaiting_payment' ? 'payment_processing'
+      : opts.paymentPending && row.status === 'expired' ? 'payment_unsettled' : coaching.bookingState(row, now),
     viewerName: row.viewer_display_name || row.viewer_username,
     viewerUsername: row.viewer_username,
     viewerAvatar: row.viewer_avatar || null,
@@ -90,6 +95,7 @@ function bookingView(row, now, room = null, opts = {}) {
     rescheduleEndsAt: row.status === 'rescheduling' && row.reschedule_started_at != null ? row.reschedule_started_at + coaching.RESCHEDULE_WINDOW_MS : null,
     originalStartsAt: row.status === 'rescheduling' ? row.original_starts_at || null : null,
     refundState,
+    refundDuplicate,
     refundPending: refundState === 'pending',
     ...coachOnly,
     ...roomFields(room, row, opts),
@@ -104,7 +110,8 @@ function bookingViews(rows, now, opts = {}) {
     if (!paid.has(p.booking_id)) paid.set(p.booking_id, []);
     paid.get(p.booking_id).push(p);
   }
-  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, { ...opts, payments: paid.get(r.id) || [] }));
+  const processing = db.pendingCoachingPaymentBookingIds(rows.filter((r) => r.status === 'awaiting_payment' || r.status === 'expired').map((r) => r.id));
+  return rows.map((r) => bookingView(r, now, byBooking.get(r.id) || null, { ...opts, payments: paid.get(r.id) || [], paymentPending: processing.has(r.id) }));
 }
 
 // The currency of a streamer's coaching prices: their tip page's.
@@ -154,7 +161,7 @@ function forgetMembers() {
 
 // The viewer's message, awaited: a failure's reason is stored and returned; a message that goes out clears the
 // reason a previous one left.
-async function messageViewer(streamer, settings, row, kind, { roomUrl = null, reason: cancelReason = null, refund = false, bookingLink = null } = {}) {
+async function messageViewer(streamer, settings, row, kind, { roomUrl = null, reason: cancelReason = null, refund = false, bookingLink = null, tooClose = false } = {}) {
   const lang = row.lang || 'en';
   let reason = null;
   try {
@@ -171,6 +178,7 @@ async function messageViewer(streamer, settings, row, kind, { roomUrl = null, re
       roomUrl,
       reason: cancelReason,
       refund,
+      tooClose,
       lang,
       t: (key, params) => t(lang, key, params),
     });
@@ -185,7 +193,7 @@ async function messageViewer(streamer, settings, row, kind, { roomUrl = null, re
 
 // The streamer's message: started, never awaited by the caller (the promise is returned for the tests), failures
 // logged. `always`: sent even with "Message me about new requests" off (a payment to refund cannot wait for a visit).
-function messageStreamer(streamer, settings, row, kind, { always = false, refund = false } = {}) {
+function messageStreamer(streamer, settings, row, kind, { always = false, refund = false, tooClose = false } = {}) {
   if (!settings || (!settings.notify_requests && !always)) return Promise.resolve();
   return (async () => {
     try {
@@ -194,6 +202,7 @@ function messageStreamer(streamer, settings, row, kind, { always = false, refund
         booking: row,
         scheduleUrl: scheduleUrl(),
         refund,
+        tooClose,
         lang,
         t: (key, params) => t(lang, key, params),
       });
@@ -306,6 +315,7 @@ async function cancel(streamer, id, { reason, now = Date.now() } = {}) {
   if (!coaching.canCoachCancel(row, now)) {
     return { ok: false, code: coaching.HOLDING.includes(row.status) ? 'too_late' : 'not_active' };
   }
+  if (db.pendingCoachingPaymentBookingIds([id]).has(row.id)) return { ok: false, code: 'payment_processing' };
   const done = db.cancelCoachingBookingByCoach(id, streamer.id, parsed.reason, now);
   if (!done.ok) return { ok: false, code: 'not_active' };
   const refund = done.refundPending === true;
@@ -325,7 +335,8 @@ async function markRefunded(streamer, orderId, { now = Date.now() } = {}) {
   const updated = db.markCoachingRefunded(orderId, streamer.id, now);
   if (!updated) return { ok: false, code: 'not_pending' };
   const booking = db.getCoachingBooking(payment.booking_id, streamer.id);
-  const messageError = booking ? await messageViewer(streamer, db.getCoachingSettings(streamer.id), booking, 'refunded') : null;
+  const kind = payment.refund_reason === 'double' ? 'duplicateRefunded' : 'refunded';
+  const messageError = booking ? await messageViewer(streamer, db.getCoachingSettings(streamer.id), booking, kind) : null;
   return { ok: true, payment: updated, booking: booking ? { ...booking, message_error: messageError, messageError } : null };
 }
 
@@ -335,6 +346,7 @@ async function withdraw(streamer, viewer, id, { now = Date.now() } = {}) {
   const row = db.getCoachingBooking(id, streamer.id);
   if (!row || row.viewer_discord_id !== viewer.discordUserId) return { ok: false, code: 'not_found' };
   if (row.paid_at != null) return { ok: false, code: 'paid' };
+  if (row.status === 'awaiting_payment' && db.pendingCoachingPaymentBookingIds([id]).has(row.id)) return { ok: false, code: 'payment_processing' };
   if (!coaching.HOLDING.includes(row.status)) return { ok: false, code: 'not_active' };
   if (row.status !== 'rescheduling' && row.starts_at <= now) return { ok: false, code: 'too_late' }; // a rescheduling row's starts_at is the original time, which limits nothing
   const updated = db.setCoachingBookingStatus(id, streamer.id, coaching.HOLDING, 'withdrawn', now, { unpaidOnly: true });
@@ -515,8 +527,8 @@ async function runDueReschedules({ now = Date.now() } = {}) {
           const done = db.dropCoachingProposal(row.id, now);
           if (!done.ok) continue;
           result.dropped++;
-          if (done.dropped.by === 'viewer') await messageStreamer(streamer, settings, done.booking, 'viewerLapsed', { always: true });
-          else await messageViewer(streamer, settings, done.booking, 'proposalLapsed', { bookingLink: bookingLinkOf(streamer, row.id) });
+          if (done.dropped.by === 'viewer') await messageStreamer(streamer, settings, done.booking, 'viewerLapsed', { always: true, tooClose: action === 'too_close' });
+          else await messageViewer(streamer, settings, done.booking, 'proposalLapsed', { bookingLink: bookingLinkOf(streamer, row.id), tooClose: action === 'too_close' });
         }
       } catch (e) {
         console.error(`[Coaching] reschedule of booking ${row.id}:`, e && e.message);
@@ -535,7 +547,9 @@ async function afterPayment(streamer, booking, result) {
     if (result === 'recorded' || result === 'late_confirmed') {
       await Promise.all([afterConfirmed(streamer, booking, 'confirmed'), messageStreamer(streamer, settings, booking, 'paid')]);
     } else if (result === 'late_issue' || result === 'double') {
-      await messageStreamer(streamer, settings, booking, 'paymentLate', { always: true });
+      const tasks = [messageStreamer(streamer, settings, booking, result === 'double' ? 'paymentDuplicate' : 'paymentLate', { always: true })];
+      if (result === 'late_issue') tasks.push(messageViewer(streamer, settings, booking, 'paymentLateViewer'));
+      await Promise.all(tasks);
     }
   } catch (e) {
     console.error(`[Coaching] after the payment of booking ${booking.id}:`, e && e.message);
@@ -546,7 +560,12 @@ async function afterPayment(streamer, booking, result) {
 async function afterExpired(streamer, booking) {
   const settings = db.getCoachingSettings(streamer.id);
   try {
-    await Promise.all([messageViewer(streamer, settings, booking, 'expired'), messageStreamer(streamer, settings, booking, 'unpaid')]);
+    // A payment PayPal still holds as PENDING: the viewer is not told they did not pay.
+    const held = db.pendingCoachingPaymentBookingIds([booking.id]).has(booking.id);
+    await Promise.all([
+      messageViewer(streamer, settings, booking, held ? 'expiredPending' : 'expired'),
+      messageStreamer(streamer, settings, booking, held ? 'unpaidPending' : 'unpaid'),
+    ]);
   } catch (e) {
     console.error(`[Coaching] after the expiry of booking ${booking.id}:`, e && e.message);
   }

@@ -51,8 +51,12 @@ function roomName(viewerUsername, startsAt, timeZone) {
 const roomUrlOf = (room) => `https://discord.com/channels/${room.guild_id}/${room.channel_id}`;
 const sessionEnd = (booking) => booking.starts_at + booking.minutes * MINUTE_MS;
 
+// Discord says the server is gone (the bot was removed or it was deleted); not the same as Discord being down.
+const guildGone = (e) => !!e && (e.message === 'guild_gone' || e.code === 'guild_gone' || e.code === 10004);
+
 function errorCode(e, step) {
   const code = e && e.code;
+  if (guildGone(e)) return 'server_gone';
   if (e && (e.message === 'not_ready' || e.message === 'deadline')) return 'discord_down';
   if (code === 50013 || code === 50001) return 'missing_permissions';
   if (step === 'role_member' && code === 10007) return 'viewer_not_member';
@@ -94,6 +98,13 @@ async function build(bookingId, now) {
       }
       room = db.updateCoachingRoom(bookingId, { channel_id: channelId }, now);
     }
+    // The booking may have been cancelled while the room was being made: what was made goes again, nothing is announced.
+    const latest = db.getCoachingBookingById(bookingId);
+    if (!latest || (latest.status !== 'confirmed' && latest.status !== 'rescheduling')) {
+      if (await clean(room)) db.updateCoachingRoom(bookingId, { state: 'closed', error: null }, now);
+      else db.updateCoachingRoom(bookingId, { state: 'closing', transcript_status: 'cancelled', close_at: now }, now);
+      return null;
+    }
     room = db.updateCoachingRoom(bookingId, { state: 'open', error: null }, now);
     return { url: roomUrlOf(room) };
   } catch (e) {
@@ -128,11 +139,20 @@ async function makeFor(bookingId, { now = Date.now() } = {}) {
   }
 }
 
-// Deletes whatever a room holds on Discord; resolves true when nothing is left there (or never was).
+// Deletes whatever a room holds on Discord; resolves true when nothing is left there (or never was). A server that is
+// gone holds nothing either: that resolves true too (the room is orphaned) and `room.orphaned` is set for the caller.
 async function clean(room) {
   let ok = true;
-  try { await discord.deleteChannel(room.guild_id, room.channel_id); } catch (e) { ok = false; }
-  try { await discord.deleteRole(room.guild_id, room.role_id); } catch (e) { ok = false; }
+  const attempt = async (fn) => {
+    try { await fn(); } catch (e) {
+      if (guildGone(e)) {
+        if (!room.orphaned) console.error(`[Coaching] server ${room.guild_id} of room ${room.booking_id} is gone; the room is closed as orphaned`);
+        room.orphaned = true;
+      } else ok = false;
+    }
+  };
+  await attempt(() => discord.deleteChannel(room.guild_id, room.channel_id));
+  await attempt(() => discord.deleteRole(room.guild_id, room.role_id));
   return ok;
 }
 
@@ -156,6 +176,10 @@ async function retry(streamer, bookingId, { now = Date.now() } = {}) {
         if (!(await clean(room))) {
           db.updateCoachingRoom(bookingId, { error: 'discord_down' }, now);
           return { ok: false, code: 'discord_down', room: db.getCoachingRoom(bookingId) };
+        }
+        if (room.orphaned) {
+          db.updateCoachingRoom(bookingId, { state: 'closed', error: 'server_gone' }, now);
+          return { ok: false, code: 'server_gone', room: db.getCoachingRoom(bookingId) };
         }
         room = db.updateCoachingRoom(bookingId, {
           role_id: null, channel_id: null, state: 'making', error: null, guild_id: settings.guild_id,
@@ -186,7 +210,7 @@ async function finishOrCleanMaking({ now = Date.now() } = {}) {
     running.add(room.booking_id);
     try {
       const booking = db.getCoachingBookingById(room.booking_id);
-      if (booking && booking.status === 'confirmed' && sessionEnd(booking) > now) {
+      if (booking && (booking.status === 'confirmed' || booking.status === 'rescheduling') && sessionEnd(booking) > now) {
         const made = await build(room.booking_id, now);
         if (made) finished++;
       } else if (discord.isReady()) {
@@ -339,7 +363,9 @@ async function closeDue({ now = Date.now(), deps = {} } = {}) {
     if (running.has(room.booking_id)) continue;
     running.add(room.booking_id);
     try {
-      let current = db.updateCoachingRoom(room.booking_id, { state: 'closing' }, now);
+      // A room that never got made has no chat worth a transcript: it is only cleaned up.
+      let current = db.updateCoachingRoom(room.booking_id, room.state === 'failed'
+        ? { state: 'closing', transcript_status: 'cancelled' } : { state: 'closing' }, now);
       const booking = db.getCoachingBookingById(room.booking_id);
       const streamer = booking ? db.getStreamerById(booking.streamer_id) : null;
       const settings = streamer ? db.getCoachingSettings(streamer.id) : null;
@@ -348,7 +374,8 @@ async function closeDue({ now = Date.now(), deps = {} } = {}) {
         if (!booking || !streamer || !settings) status = 'failed';
         else {
           try { status = await sendTranscripts(current, booking, streamer, settings, deps); } catch (e) {
-            if (now - room.close_at < CLOSE_GIVE_UP_MS) continue; // Discord could not be read: next pass
+            if (guildGone(e)) status = 'failed';
+            else if (now - room.close_at < CLOSE_GIVE_UP_MS) continue; // Discord could not be read: next pass
             status = 'failed';
           }
         }

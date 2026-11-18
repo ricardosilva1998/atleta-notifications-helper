@@ -175,6 +175,8 @@ Only the streamer starts it. Code: `coachingBookings.js` (`startReschedule`, `co
   - a coach's proposal unanswered for **48 hours**, or whose time comes within 1 hour, is dropped and the viewer is
     asked to pick a time instead (way `ask`, with the `?booking=<id>` link);
   - a viewer's proposal that lapses the same way is dropped and the coach is reminded;
+  - the message says which: the 48-hour lapse and the "too close to the time" lapse have separate texts
+    (`proposalTooCloseBody`, `viewerTooCloseBody` against the 48-hour ones);
   - **7 days** after the reschedule started with no agreement, the booking ends as `not_rescheduled`: the room and
     role are deleted (no transcript), both are told, and a paid session becomes **Refund pending**.
 - **Cancel** still works during a reschedule. The viewer's Withdraw still works on an unpaid one, never on a paid one.
@@ -398,9 +400,14 @@ own page across **every coach**. It stands alone like the booking page (no `head
   Refunded line, and the reschedule panel (Accept, Propose another time, Pick a new time; the picker reads the
   coach's free starts). No payer details appear.
 - **The actions call the per-booking coach routes** (`/coaching/<coach login>/bookings/<id>/pay`, `/cancel`,
-  `/starts`, `/propose`, `/accept-proposal`), so their rules, limiters (`coachingPayLimiter`,
+  `/starts`, `/propose`, `/accept-proposal`). Those routes find the coach **by the booking's `streamer_id`**
+  (`bookingCoach()` in `src/routes/coaching.js`), not by the login in the URL, so a booking still works after its coach
+  changed Twitch account or login; the viewer's Discord id must still own the booking (else 404, or 401 signed out).
+  `/paid` finds the coach through the order's booking. Their rules, limiters (`coachingPayLimiter`,
   `coachingRescheduleLimiter`) and CSRF are unchanged. A coach who stopped coaching (disabled, or hours never saved)
-  shows `available: false`: the row has its state and a note, and no actions.
+  shows `available: false`: the row has its state and a note, and no actions. `coach_available` needs an enabled account
+  and saved coaching settings, **not** a linked Twitch login: with no login the row shows the coach's Discord name, and
+  its action and Pay-return URLs use `/coaching/-/...` (an old URL with the login still works).
 - **The query string:** `?booking=<id>` scrolls to and highlights the booking (and opens the picker for a "pick"
   case); `&new=1` shows "Request sent, waiting for <coach>"; `&paid=1` or `&error=<code>` (with `&order=<id>` for
   `pay_unconfirmed`, which offers **Check again**) show the payment's result. Every viewer Discord message links to
@@ -549,30 +556,63 @@ alert, tip goal, tracker, voice or chat thank-you (tested).
 
 1. **Pay** (`POST /coaching/:username/bookings/:id/pay`): the signed-in viewer who owns the booking, state
    `awaiting_payment`, before `pay_by`. It first reads back the booking's open orders (a capture whose answer was lost
-   confirms the booking instead of starting a second order; at most 5 open orders per booking), then creates a PayPal
+   confirms the booking instead of starting a second order; an order read back as **APPROVED**, approved at PayPal but
+   whose return never reached us, is captured on the spot while the booking may still take the payment; at most 5 open
+   orders per booking). A booking with a payment PayPal holds as PENDING answers `payment_processing` (409) instead of
+   starting a second order. Then it creates a PayPal
    order with `payee: { email_address }` set to the streamer's PayPal email, the booking's price and currency and
    `custom_id` = the booking id, and stores a `coaching_payments` row (status `created`).
 2. **Return** (`GET /coaching/:username/paid?token=<order id>`): captures (`Prefer: return=representation`) and reads
    the order back when the answer is lost or slow. A capture counts only when **all** of these hold:
    - the `coaching_payments` row exists for this streamer and this booking, and the order id matches;
-   - the order and its capture are COMPLETED (PENDING waits and shows `pay_unconfirmed`);
+   - the order and its capture are COMPLETED (a capture PayPal reports PENDING is **kept**, never deleted: see
+     "Pending payments" below; the viewer sees `payment_processing`);
    - `custom_id` is the booking id;
    - the payee is the account named at creation (the PayPal merchant id when PayPal gave one, else the email);
    - the amount in cents (read strictly) and the currency equal both the order row and the booking's price.
    A COMPLETED order that fails a check is marked `refused` and logged; nothing else is recorded.
 3. **Recorded once.** The capture id is unique, so a replay or two returns at once change nothing. The booking gets
    `paid_at`, `paid_amount_cents`, `paid_currency`, `paypal_order_id`, `paypal_capture_id`, and becomes `confirmed`
+   (only while its start is still ahead)
    (`recordCoachingPayment`: `recorded`, `duplicate`, `late_confirmed`, `late_issue`, `double`). The payment row also
    stores the payer's PayPal name, email and id (from the verified order; see Refunds). The confirmation messages go
    out and the room is made.
-4. **A late capture** (the booking already expired): the payment is recorded; if its time is still free the booking is
-   confirmed, otherwise it stays expired with `payment_issue = 'late'`, the payment is **Refund pending** and the
-   streamer is told to refund it in PayPal. A second capture on a paid booking (`double`) is marked pending too.
+4. **A late capture** (the booking already expired, or still awaiting payment but **already started**): the payment is
+   recorded; if the booking expired and its time is still free (and the payment was not PENDING in between) it is
+   confirmed, otherwise it is `expired` with `payment_issue = 'late'`, the payment is **Refund pending** and the
+   streamer is told to refund it in PayPal. For a booking that was awaiting payment at its start the viewer is told
+   as well ("your payment arrived too late, your coach will refund it"). A capture is never a confirmed session once
+   the session has started.
+   A second capture on a paid booking (**duplicate payment**) is recorded on the payment row only
+   (`refund_reason = 'double'`, Refund pending); the booking stands as it was (no `payment_issue` on the booking). The
+   coach's refund box is titled for a duplicate payment, the viewer's My bookings line says the duplicate will be
+   refunded, and **Refunded** sends the viewer a duplicate-specific message.
+   **One capture at a time per order:** the return page, the viewer's Pay and the minute tick share one PayPal capture
+   call per order (`captureOnce`), so they never capture twice.
 5. **Expiry** (the tick): `expireDue` reads back every open order of an unpaid booking past `pay_by` before expiring
    it (a capture found confirms it instead). If PayPal cannot be asked, it waits up to 30 minutes past the deadline.
    The update skips a paid row, so a payment that lands in between wins.
 6. **Stale orders.** `reconcileStale` reads each order still `created` after 24 hours once, then records, refuses or
-   drops it (kept up to 72 h when PayPal cannot be reached).
+   closes it (kept up to 72 h when PayPal cannot be reached). An APPROVED order is captured first, as in Pay. An order
+   PayPal voided, or whose capture was declined, failed or refunded, is closed with a log line; a PENDING one is kept.
+
+### Pending payments
+
+A capture PayPal reports PENDING (an eCheck, a review) is never deleted or given up on early. The payment row gets
+`status = 'pending'`, `pending_since` (first seen) and `next_read_at`. The tick's `pending` step (`readPending`) reads
+each due one back: hourly during its first day, then daily, up to 30 days after it was first seen. When it settles it
+is recorded by the normal rules (a booking that ended unpaid takes it by the late rule: the coach is told to refund
+it); a voided or declined order is closed (`closed`) with a log line; one still pending after 30 days is `lapsed` and
+logged, and the row stays for the coach to check in PayPal. While a payment is pending the booking keeps its time
+until 15 minutes before its start, shows **Payment processing** (viewer, schedule and card), and cannot start another
+order (`payment_processing`). If the booking ends unpaid with a payment still pending, the payment is kept and logged.
+
+The coach's **Cancel** is refused with `payment_processing` (409) while a payment row is pending (the card and page hide
+the button and say why), so a capture that settles later is never left on a cancelled session.
+
+A second capture of the same booking is a `double` (the session stands, Refund pending for the duplicate) only while the
+booking is `confirmed` or `rescheduling`; on a booking that is cancelled, expired or otherwise ended it is a `late`
+payment (`late_issue`): Refund pending, the coach told.
 
 The return **lands on My bookings**: `/my-bookings?booking=<id>&paid=1` or `…&error=<code>` (with `&order=<id>` for
 `pay_unconfirmed`); the booking id is added only when the order's booking belongs to this streamer.
@@ -594,7 +634,15 @@ private room, **only if the streamer set a Coaching category** (otherwise the "w
   Message History (the bot also Manage Channels). The server owner and Administrators see every room by Discord's own
   rule. Nothing outside the category is touched, and no new bot invite is needed.
 - **Restart-safe.** The row in `coaching_rooms` (state `making`, `open`, `closing`, `closed` or `failed`) stores each
-  id as it is made. The tick finishes or cleans a `making` row older than 2 minutes.
+  id as it is made. The tick finishes or cleans a `making` row older than 2 minutes. A `failed` row that still holds a
+  role or channel id is cleaned up at `close_at` like an open room, with no transcript (nothing was shared in it).
+- **Cancelled while being made.** Before a room is opened the booking is read again: if it was cancelled meanwhile
+  (anything but confirmed or rescheduling), what was made is deleted and nothing is announced. A rescheduling session
+  keeps or gets its room.
+- **Server gone.** When the bot is logged in and the coaching server is no longer among its servers (removed from it or
+  deleted: Discord error 10004 or `guild_gone`), deleting the room counts as done (there is nothing left there), the
+  room is closed with `error = 'server_gone'` and a log line, and **Retry room** answers `server_gone` instead of
+  `discord_down`. Discord not being ready stays `discord_down` and is retried later.
 - **Failure never undoes the booking.** The room's `state = 'failed'` and its `error` (`missing_permissions`,
   `viewer_not_member`, `discord_down`, `failed`, or `no_category` on Retry) show on the schedule and the card. The
   streamer's **Retry room** (`POST /dashboard/api/coaching/bookings/:id/room`) deletes any half-made pair and tries
@@ -635,8 +683,9 @@ shutdown, `.unref()`'d, one run at a time. Each step runs on its own, so one tha
 2. `reconcileStale`: old PayPal orders are read back;
 3. `reschedules` (`runDueReschedules`): proposals past 48 hours or inside the last hour are dropped, and reschedules
    7 days old are closed (room removed, refund pending for a paid one, both told);
-4. `finishOrCleanMaking`: half-made rooms from a run that is gone;
-5. `closeDue`: rooms past `close_at` get their transcripts and are deleted (a rescheduling session's room is skipped).
+4. `pending` (`readPending`): PayPal captures that were PENDING are read back when due (see Pending payments);
+5. `finishOrCleanMaking`: half-made rooms from a run that is gone;
+6. `closeDue`: rooms past `close_at` get their transcripts and are deleted (a failed room that holds a role or channel is only cleaned up) (a rescheduling session's room is skipped).
 
 None of it needs Discord to be up: the room steps wait for it.
 
@@ -681,7 +730,7 @@ A refusal is `{ ok: false, code, error }`, the error being the code's text in th
 | `bad_length`, `bad_note`, `bad_time` (a time not on offer) | 400 |
 | `signin` | 401 |
 | `unavailable` (the page is not up), `not_found` (another viewer's booking, or another streamer's) | 404 |
-| `not_open`, `join_first`, `bad_time`, `taken`, `limit`, `too_late` (the session has started), `not_active` (already answered or withdrawn), `no_paypal`, `paid` (no cancel after payment), `not_awaiting`, `pay_closed`, `not_rescheduling`, `no_proposal`, `not_yours_to_answer`, `proposal_too_close` | 409 |
+| `not_open`, `join_first`, `bad_time`, `taken`, `limit`, `too_late` (the session has started), `not_active` (already answered or withdrawn), `no_paypal`, `paid` (no cancel after payment), `not_awaiting`, `pay_closed`, `payment_processing` (a PayPal capture is still pending), `not_rescheduling`, `no_proposal`, `not_yours_to_answer`, `proposal_too_close` | 409 |
 | `too_many` (six requests in the last 24 hours), `too_many_payments` | 429 |
 | `payment_failed` (PayPal could not make the order) | 502 |
 
@@ -709,7 +758,7 @@ Their refusal codes:
 |---|---|
 | `bad_reason`, `bad_way`, `bad_note`, `bad_time`, `bad_zone`, `bad_hours`, `bad_days_off`, `bad_server`, `bad_invite`, `invite_other_server`, `bad_where`, `bad_lengths`, `no_length`, `bad_category`, `category_not_found`, `category_permissions` (with `missing`), `bad_switch` | 400 |
 | `not_found` | 404 |
-| `not_set_up`, `too_late` (the session has started), `not_waiting`, `not_active`, `no_paypal`, `too_close`, `paid`, `no_category`, `room_not_failed`, `room_busy`, `not_confirmed`, `taken`, `not_rescheduling`, `no_proposal`, `not_yours_to_answer`, `proposal_too_close`, `not_pending` | 409 |
+| `not_set_up`, `too_late` (the session has started), `not_waiting`, `not_active`, `no_paypal`, `too_close`, `paid`, `no_category`, `room_not_failed`, `room_busy`, `server_gone`, `not_confirmed`, `taken`, `not_rescheduling`, `no_proposal`, `not_yours_to_answer`, `proposal_too_close`, `not_pending` | 409 |
 | `discord_down` | 503 |
 
 ## Tables
@@ -734,20 +783,20 @@ The first save opens bookings; later saves keep `open` as it is.
 - `starts_at` (UTC ms), `minutes`, `note`, `lang`, `status`, `message_error`, `decided_at`, `created_at`;
 - the price taken at request time: `price_cents`, `currency`;
 - the accept and payment: `accepted_at`, `pay_by`, `paid_at`, `paid_amount_cents`, `paid_currency`,
-  `paypal_order_id`, `paypal_capture_id`, `payment_issue` (`late`);
+  `paypal_order_id`, `paypal_capture_id`, `payment_issue` (`late`; a duplicate payment is marked on its payment row only);
 - the reschedule and the cancel: `reschedule_started_at`, `reschedule_way` (`propose` or `ask`), `proposal_starts_at`,
   `proposal_by` (`coach` or `viewer`), `proposal_at`, `proposal_note`, `original_starts_at`, `cancel_reason`. They are
   added only when missing, with no log line.
 
 A status changes only from the states the action allows (`setCoachingBookingStatus` checks them in SQL), so two
-answers to one request cannot both win. Bookings are deleted 90 days after their start (`cleanupOldCoachingBookings`,
+answers to one request cannot both win. Bookings are deleted 90 days after their start, except one whose payment has a refund still pending or a payment status `pending`, which is kept until settled (`cleanupOldCoachingBookings`,
 in the daily housekeeping of `src/index.js`).
 
 **`coaching_payments`**: one row per PayPal order, `order_id` (primary key), `booking_id`, `streamer_id`,
-`amount_cents`, `currency`, `payee_email`, `payee_merchant_id`, `status` (`created`, `captured`, `refused`),
+`amount_cents`, `currency`, `payee_email`, `payee_merchant_id`, `status` (`created`, `pending`, `captured`, `refused`, `closed`, `lapsed`),
 `capture_id` (unique when set), `created_at`, `captured_at`, and since the cancel, reschedule and refund release
 `payer_name`, `payer_email`, `payer_id`, `refund_status` (NULL, `pending` or `refunded`), `refund_reason`,
-`refund_pending_at`, `refunded_at` (index `idx_coaching_payments_refund` on `(streamer_id, refund_status)`). Not part of `donations`. Rows still `created` after 24 hours
+`refund_pending_at`, `refunded_at`, and since the deep-review release `pending_since` and `next_read_at` (index `idx_coaching_payments_pending` on `(status, next_read_at)`; index `idx_coaching_payments_refund` on `(streamer_id, refund_status)`). Not part of `donations`. Rows still `created` after 24 hours
 are read back once and dropped by the tick.
 
 **`coaching_rooms`**: one row per room, `booking_id` (primary key), `streamer_id`, `guild_id`, `category_id`, `role_id`,

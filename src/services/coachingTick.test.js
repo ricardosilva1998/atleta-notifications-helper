@@ -23,7 +23,7 @@ const NOW = Date.UTC(2026, 10, 2, 12, 0);
 
 function deps(log, over = {}) {
   return {
-    payments: { expireDue: async () => { log.push('expire'); return 1; }, reconcileStale: async () => { log.push('stale'); return 2; } },
+    payments: { expireDue: async () => { log.push('expire'); return 1; }, reconcileStale: async () => { log.push('stale'); return 2; }, readPending: async ({ now }) => { log.push(`pending@${now}`); return 5; } },
     bookings: { runDueReschedules: async ({ now }) => { log.push(`reschedules@${now}`); return { dropped: 1, closed: 0 }; } },
     rooms: { finishOrCleanMaking: async () => { log.push('making'); return 3; }, closeDue: async () => { log.push('close'); return 4; } },
     ...over,
@@ -31,17 +31,17 @@ function deps(log, over = {}) {
 }
 
 describe('the tick', () => {
-  test('runs expire, stale, reschedules, making and close in that order, the reschedules with the tick\'s clock', async () => {
+  test('runs expire, stale, pending, reschedules, making and close in that order, the reschedules with the tick\'s clock', async () => {
     const log = [];
     const result = await tick.runOnce({ now: NOW, deps: deps(log) });
-    assert.deepEqual(log, ['expire', 'stale', `reschedules@${NOW}`, 'making', 'close']);
-    assert.deepEqual(result, { expire: 1, stale: 2, reschedules: { dropped: 1, closed: 0 }, making: 3, close: 4 });
+    assert.deepEqual(log, ['expire', 'stale', `pending@${NOW}`, `reschedules@${NOW}`, 'making', 'close']);
+    assert.deepEqual(result, { expire: 1, stale: 2, pending: 5, reschedules: { dropped: 1, closed: 0 }, making: 3, close: 4 });
   });
 
   test('a reschedule step that throws (Discord down, a bad row) does not stop the rooms\' steps', async () => {
     const log = [];
     const result = await tick.runOnce({ now: NOW, deps: deps(log, { bookings: { runDueReschedules: async () => { throw new Error('boom'); } } }) });
-    assert.deepEqual(log, ['expire', 'stale', 'making', 'close']);
+    assert.deepEqual(log, ['expire', 'stale', `pending@${NOW}`, 'making', 'close']);
     assert.equal(result.reschedules, undefined);
     assert.equal(result.close, 4);
   });
@@ -50,7 +50,7 @@ describe('the tick', () => {
     const log = [];
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
-    const slow = deps(log, { payments: { expireDue: async () => { await gate; log.push('expire'); return 1; }, reconcileStale: async () => 2 } });
+    const slow = deps(log, { payments: { expireDue: async () => { await gate; log.push('expire'); return 1; }, reconcileStale: async () => 2, readPending: async () => 5 } });
     const first = tick.runOnce({ now: NOW, deps: slow });
     assert.equal(await tick.runOnce({ now: NOW, deps: deps(log) }), null);
     release();

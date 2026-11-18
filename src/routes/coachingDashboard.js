@@ -48,6 +48,7 @@ const REFUSALS = {
   no_paypal: [409, 'coaching.dashboard.error.no_paypal'],
   too_close: [409, 'coaching.dashboard.error.too_close'],
   paid: [409, 'coaching.dashboard.error.paid'],
+  payment_processing: [409, 'coaching.dashboard.error.payment_processing'],
   bad_reason: [400, 'coaching.dashboard.error.bad_reason'],
   not_pending: [409, 'coaching.dashboard.error.not_pending'],
   not_confirmed: [409, 'coaching.dashboard.error.not_active'],
@@ -65,6 +66,7 @@ const REFUSALS = {
   no_category: [409, 'coaching.dashboard.error.no_category'],
   room_not_failed: [409, 'coaching.dashboard.error.room_not_failed'],
   room_busy: [409, 'coaching.dashboard.error.room_busy'],
+  server_gone: [409, 'coaching.dashboard.error.server_gone'],
   discord_down: [503, 'coaching.dashboard.error.discord_down'],
   failed: [500, 'coaching.page.failed'],
 };
@@ -93,7 +95,7 @@ const TEXT_KEYS = {
   saved: 'coaching.dashboard.saved', savedOpened: 'coaching.dashboard.savedOpened', savedUnchecked: 'coaching.dashboard.savedUnchecked',
   outsideSaved: 'coaching.dashboard.outsideSaved', copied: 'coaching.dashboard.copied',
   sessionEnded: 'coaching.dashboard.sessionEnded', failed: 'coaching.page.failed', offline: 'coaching.page.offline',
-  cancelTitle: 'coaching.dashboard.cancelTitle', reasonRequired: 'coaching.dashboard.error.bad_reason', reasonGiven: 'coaching.dashboard.reasonGiven',
+  cancelTitle: 'coaching.dashboard.cancelTitle', reasonRequired: 'coaching.dashboard.error.bad_reason', reasonGiven: 'coaching.dashboard.reasonGiven', cancelBlocked: 'coaching.dashboard.error.payment_processing',
   reschedule: 'coaching.dashboard.reschedule', rescheduleTitle: 'coaching.dashboard.rescheduleTitle', proposeAnotherTitle: 'coaching.dashboard.proposeAnotherTitle',
   rescheduleWayAsk: 'coaching.dashboard.rescheduleWayAsk', rescheduleLoading: 'coaching.dashboard.rescheduleLoading', rescheduleNoTimes: 'coaching.dashboard.rescheduleNoTimes',
   reschedCoachProposed: 'coaching.dashboard.reschedCoachProposed', reschedViewerProposed: 'coaching.dashboard.reschedViewerProposed',
@@ -101,18 +103,18 @@ const TEXT_KEYS = {
   acceptProposal: 'coaching.dashboard.acceptProposal', proposeAnother: 'coaching.dashboard.proposeAnother',
   proposalAccepted: 'coaching.dashboard.proposalAccepted', proposalSent: 'coaching.dashboard.proposalSent', askSent: 'coaching.dashboard.askSent',
   refundPending: 'coaching.dashboard.refundPending', refunded: 'coaching.dashboard.refunded', refundedButton: 'coaching.dashboard.refundedButton',
-  refundTitle: 'coaching.dashboard.refundTitle', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
+  refundTitle: 'coaching.dashboard.refundTitle', refundTitleDuplicate: 'coaching.dashboard.refundTitleDuplicate', refundPayer: 'coaching.dashboard.refundPayer', refundNoPayer: 'coaching.dashboard.refundNoPayer',
   refundCapture: 'coaching.dashboard.refundCapture', refundConfirm: 'coaching.dashboard.refundConfirm', refundedDone: 'coaching.dashboard.refundedDone',
   connDiscordOk: 'coaching.dashboard.connDiscordOk', connDiscordWarn: 'coaching.dashboard.connDiscordWarn',
   connPaypalOn: 'coaching.dashboard.connPaypalOn', connPaypalOff: 'coaching.dashboard.connPaypalOff',
   connTwitchOk: 'coaching.dashboard.connTwitchOk', connTwitchNone: 'coaching.dashboard.connTwitchNone',
 };
 const STATE_KEYS = {
-  waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
+  waiting: 'coaching.state.waiting', awaiting_payment: 'coaching.state.awaiting_payment', payment_processing: 'coaching.state.payment_processing', payment_unsettled: 'coaching.state.payment_unsettled', expired: 'coaching.state.expired', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
   cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
   rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
-const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'failed'];
+const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'server_gone', 'failed'];
 const TRANSCRIPT_STATUSES = ['sent', 'partial', 'failed', 'no_intent', 'no_channel'];
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {

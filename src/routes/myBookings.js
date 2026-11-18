@@ -23,7 +23,7 @@ const PAGE_TEXT_KEYS = {
   cancel: 'coaching.page.cancel', cancelConfirm: 'coaching.page.cancelConfirm', withdrawn: 'coaching.page.withdrawn',
   signIn: 'coaching.page.signIn', failed: 'coaching.page.failed', offline: 'coaching.page.offline',
   payNote: 'coaching.page.payNote', cancelReason: 'coaching.page.cancelReason', refundPending: 'coaching.page.refundPending',
-  refunded: 'coaching.page.refunded', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
+  refunded: 'coaching.page.refunded', refundPendingDuplicate: 'coaching.page.refundPendingDuplicate', refundedDuplicate: 'coaching.page.refundedDuplicate', reschedProposed: 'coaching.page.reschedProposed', reschedAsk: 'coaching.page.reschedAsk',
   reschedMine: 'coaching.page.reschedMine', reschedUntil: 'coaching.page.reschedUntil', reschedOriginal: 'coaching.page.reschedOriginal',
   reschedAccept: 'coaching.page.reschedAccept', reschedOther: 'coaching.page.reschedOther', reschedPick: 'coaching.page.reschedPick',
   reschedSend: 'coaching.page.reschedSend', reschedNote: 'coaching.page.reschedNote', reschedLoading: 'coaching.page.reschedLoading',
@@ -34,7 +34,7 @@ const PAGE_TEXT_KEYS = {
 };
 const STATE_KEYS = {
   waiting: 'coaching.state.waiting', confirmed: 'coaching.state.confirmed', declined: 'coaching.state.declined',
-  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', expired: 'coaching.state.expired',
+  cancelled: 'coaching.state.cancelled', awaiting_payment: 'coaching.state.awaiting_payment', payment_processing: 'coaching.state.payment_processing', payment_unsettled: 'coaching.state.payment_unsettled', expired: 'coaching.state.expired',
   withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
   rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
@@ -65,7 +65,7 @@ function bookingsOf(viewer, now) {
     ...view,
     coach: {
       login: rows[i].coach_login,
-      name: rows[i].coach_name || rows[i].coach_login,
+      name: rows[i].coach_name || rows[i].coach_login || rows[i].coach_discord_name || '',
       avatar: rows[i].coach_avatar || null,
       available: !!rows[i].coach_available,
     },

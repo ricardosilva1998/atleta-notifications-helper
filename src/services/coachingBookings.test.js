@@ -430,7 +430,7 @@ describe('cardData', () => {
     assert.equal(card.next.state, 'confirmed');
     assert.deepEqual(Object.keys(card.next).sort(), [
       'cancelReason', 'currency', 'id', 'messageError', 'minutes', 'note', 'originalStartsAt', 'paid', 'paidAmountCents', 'paidCurrency', 'payBy',
-      'paymentIssue', 'priceCents', 'proposal', 'refundPending', 'refundState', 'rescheduleEndsAt', 'rescheduleStartedAt', 'roomError', 'roomUrl', 'startsAt', 'state',
+      'paymentIssue', 'priceCents', 'proposal', 'refundDuplicate', 'refundPending', 'refundState', 'rescheduleEndsAt', 'rescheduleStartedAt', 'roomError', 'roomUrl', 'startsAt', 'state',
       'transcriptStatus', 'viewerAvatar', 'viewerName', 'viewerUsername',
     ]);
     db.setCoachingOpen(s.id, 1);
@@ -713,6 +713,43 @@ describe('cancel with a reason, the refund step and the payer details', () => {
     assert.match(discord.sent[0].payload.embeds[0].title, /refunded your coaching session/);
     assert.deepEqual(await svc.markRefunded(s, orderId, { now: NOW + 4 * MIN }), { ok: false, code: 'not_pending' });
     assert.equal(svc.bookingViews([db.getCoachingBooking(id, s.id)], NOW)[0].refundState, 'refunded');
+  });
+
+  test('refunding a duplicate payment tells the viewer the session stands, and the view says duplicate', async () => {
+    const { s, v, id } = await paidConfirmed();
+    const dbl = db.recordCoachingPayment({ bookingId: id, orderId: 'DUPORDER0001', captureId: 'DUPCAP1', amountCents: 4500, currency: 'EUR', now: NOW + MIN });
+    assert.equal(dbl.result, 'double');
+    assert.equal(db.getCoachingBooking(id, s.id).payment_issue, null);
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
+    const view = svc.bookingViews([db.getCoachingBooking(id, s.id)], NOW, { forViewer: true })[0];
+    assert.equal(view.refundState, 'pending');
+    assert.equal(view.refundDuplicate, true);
+    discord.sent = [];
+    const done = await svc.markRefunded(s, 'DUPORDER0001', { now: NOW + 3 * MIN });
+    assert.equal(done.ok, true);
+    assert.equal(discord.sent[0].userId, v.discordUserId);
+    assert.match(discord.sent[0].payload.embeds[0].title, /duplicate payment/);
+    assert.doesNotMatch(discord.sent[0].payload.embeds[0].title, /refunded your coaching session/);
+    assert.equal(db.getCoachingBooking(id, s.id).status, 'confirmed');
+  });
+
+  test('a late payment that could not confirm the booking messages the viewer as well as the coach', async () => {
+    const { s, v, id } = await paidConfirmed();
+    discord.sent = [];
+    await svc.afterPayment(s, db.getCoachingBooking(id, s.id), 'late_issue');
+    assert.ok(discord.sent.some((m) => m.userId === v.discordUserId && /too late/.test(m.payload.embeds[0].title)));
+  });
+
+  test('a duplicate payment tells the streamer its own message, a late one keeps the late wording', async () => {
+    const { s, id } = await paidConfirmed();
+    discord.sent = [];
+    await svc.afterPayment(s, db.getCoachingBooking(id, s.id), 'double');
+    assert.equal(discord.sent.length, 1);
+    assert.match(discord.sent[0].payload.embeds[0].title, /paid twice/);
+    assert.match(discord.sent[0].payload.embeds[0].description, /The session stands/);
+    discord.sent = [];
+    await svc.afterPayment(s, db.getCoachingBooking(id, s.id), 'late_issue');
+    assert.ok(discord.sent.some((m) => /cannot take it/.test(m.payload.embeds[0].title)));
   });
 
   test('Refunded with Discord down still records it', async () => {

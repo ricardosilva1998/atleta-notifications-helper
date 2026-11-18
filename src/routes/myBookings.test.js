@@ -148,6 +148,31 @@ describe('My bookings', () => {
     assert.ok(!res.text.includes('someone else'), "another viewer's note never shown");
   });
 
+  test("lists a booking under its own coach even when the coach's old login now belongs to another streamer", async () => {
+    const a = addStreamer();
+    const b = addStreamer();
+    const me = addViewer();
+    const mine = hold(a, me, 5);
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run('a_new_login', a.id);
+    db.db.prepare('UPDATE streamers SET twitch_username = ? WHERE id = ?').run(a.login, b.id);
+    const res = await get('/my-bookings/state', { cookie: me.cookie });
+    const row = res.json.bookings.find((x) => x.id === mine.id);
+    assert.equal(row.coach.login, 'a_new_login');
+    assert.equal(row.coach.available, true);
+  });
+
+  test('a coach with no Twitch login keeps the booking actionable, named by their Discord name', async () => {
+    const a = addStreamer();
+    const me = addViewer();
+    const mine = hold(a, me, 5);
+    db.db.prepare('UPDATE streamers SET twitch_username = NULL, twitch_display_name = NULL WHERE id = ?').run(a.id);
+    const res = await get('/my-bookings/state', { cookie: me.cookie });
+    const row = res.json.bookings.find((x) => x.id === mine.id);
+    assert.equal(row.coach.login, null);
+    assert.equal(row.coach.available, true);
+    assert.equal(row.coach.name, db.getStreamerById(a.id).discord_username);
+  });
+
   test('carries no payer details and no coach-only fields', async () => {
     const a = addStreamer();
     const me = addViewer();

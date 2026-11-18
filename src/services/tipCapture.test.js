@@ -485,6 +485,36 @@ function reconcileWorld(rows, orders) {
 const capturedOrder = (id, over) => ({ ...captureResponse(over), id });
 
 describe('reconcilePendingTips', () => {
+  test('every unfinished row is read, in pages of 500', async () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => pendingRow({ order_id: `P${i}` }));
+    const orders = {};
+    for (const r of rows) orders[r.order_id] = APPROVED_ORDER;
+    const w = reconcileWorld(rows, orders);
+    const calls = [];
+    const base = w.deps.listUnfinished;
+    w.deps.listUnfinished = (limit, offset) => { calls.push([limit, offset]); return base().slice(offset, offset + limit); };
+    await reconcilePendingTips(w.deps);
+    assert.deepEqual(calls, [[500, 0], [500, 500], [500, 1000]]);
+    assert.equal(w.state.reads.length, 1200);
+  });
+
+  test('a captured order that is refused is logged with its id and the reason, without donor data', async () => {
+    const w = reconcileWorld([pendingRow({ order_id: 'O9' })], {
+      O9: capturedOrder('O9', { payee: { email_address: 'someone-else@example.com' } }),
+    });
+    await reconcilePendingTips(w.deps);
+    assert.equal(w.state.errors.length, 1);
+    assert.match(w.state.errors[0], /O9.*payee_mismatch/);
+  });
+
+  test('the donation carries the time the tip was started', async () => {
+    const w = reconcileWorld([pendingRow({ order_id: 'O8', created_at: '2026-11-17 10:00:00' })], { O8: capturedOrder('O8') });
+    let seen;
+    w.deps.logDonation = (s, d) => { seen = d; return true; };
+    await reconcilePendingTips(w.deps);
+    assert.equal(seen.createdAt, '2026-11-17 10:00:00');
+  });
+
   test('a captured order is recorded and counted toward the goal once; the next run does nothing', async () => {
     const w = reconcileWorld([pendingRow({ order_id: 'O1' })], { O1: capturedOrder('O1') });
     assert.equal(await reconcilePendingTips(w.deps), 1);
@@ -511,8 +541,9 @@ describe('reconcilePendingTips', () => {
     assert.equal(w.state.goal.length, 0);
     assert.ok(w.state.rows.every((r) => !r.captured_at));
     assert.deepEqual(w.state.reads, ['O2', 'O3', 'O4']);
-    assert.equal(w.state.errors.length, 1);
-    assert.match(w.state.errors[0], /O3.*fetch failed/);
+    assert.equal(w.state.errors.length, 2);
+    assert.ok(w.state.errors.some((e) => /O3.*fetch failed/.test(e)));
+    assert.ok(w.state.errors.some((e) => /O4.*payee_mismatch/.test(e)));
   });
 
   test('a failing row does not stop the others', async () => {

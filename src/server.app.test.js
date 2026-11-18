@@ -65,6 +65,11 @@ before(async () => {
     if (parent && parent.filename === SERVER_FILE) {
       if (request === 'express') return express;
       if (request === './routes/multistream') return { dashboardRouter: realExpress.Router(), apiRouter: realExpress.Router() };
+      if (request === './routes/tip') {
+        const tip = realExpress.Router();
+        tip.post('/:username/create', (_req, res) => res.status(404).json({ error: 'not_found' }));
+        return tip;
+      }
       if (request.startsWith('./routes/') && !REAL_ROUTES.has(request)) return realExpress.Router();
     }
     let resolved = null;
@@ -123,6 +128,14 @@ const CF_MADRID = '172.71.30.40';
 const CF_IPV6 = '2a06:98c0:3600::103';
 
 describe('the rate limits count each visitor, not the Cloudflare edge in front of them', () => {
+  test('creating a tip order is limited to 15 per 10 minutes per visitor', async () => {
+    const create = (peer) => send('POST', '/tip/nobody/create', { peer, json: { amount: 5 } });
+    const peer = '203.0.113.88';
+    for (let i = 0; i < 15; i++) assert.notEqual((await create(peer)).status, 429, `request ${i + 1}`);
+    assert.equal((await create(peer)).status, 429, 'the 16th');
+    assert.notEqual((await create('203.0.113.89')).status, 429, 'another visitor has their own count');
+  });
+
   const remaining = (res) => Number(res.headers['ratelimit-remaining']);
 
   test('a request that did not come through Cloudflare counts as its own address, whatever CF-Connecting-IP says', async () => {
