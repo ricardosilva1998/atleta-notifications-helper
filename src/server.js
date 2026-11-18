@@ -28,7 +28,6 @@ const overlayRoutes = require('./routes/overlay');
 const vtuberRoutes = require('./routes/vtuber');
 const syncRoutes = require('./routes/sync');
 const multistreamRoutes = require('./routes/multistream');
-// const customOverlayRoutes = require('./routes/customOverlays'); // DISABLED for now
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
@@ -142,8 +141,6 @@ app.use('/redemptions', dataFiles('redemptions', (res) => res.set('Cache-Control
 app.use('/avatars', dataFiles('avatars'));
 // Custom VTuber models
 app.use('/vtuber-models', dataFiles('vtuber-models'));
-// Serve custom overlay uploads from persistent data volume — DISABLED for now
-// app.use('/uploads/custom', express.static(path.join(__dirname, '..', 'data', 'uploads', 'custom')));
 
 // EJS setup
 app.set('view engine', 'ejs');
@@ -261,7 +258,6 @@ app.use('/auth', authRoutes);
 app.use('/dashboard/multistream', multistreamRoutes.dashboardRouter);
 app.use('/api/multistream', multistreamRoutes.apiRouter);
 app.use('/dashboard', dashboardRoutes);
-// app.use('/dashboard/custom-overlays', customOverlayRoutes); // DISABLED for now
 app.use('/payment', paymentRoutes);
 app.use('/tip', tipRoutes);
 // The public coaching booking page (its viewers sign in with /auth/coaching-signin). Pay starts a PayPal order and
@@ -285,8 +281,7 @@ app.use('/my-bookings', require('./routes/myBookings'));
 // The Racing product is gone: its old front doors lead home.
 app.get(/^\/(racing|tracks)(\/.*)?$/, (req, res) => res.redirect('/'));
 
-// The old Streamer landing page: its place is the home page now
-// (views/streamer-landing.ejs is kept but not used).
+// The old Streamer landing page: its place is the home page now.
 app.get('/streamer', (req, res) => {
   res.redirect(req.streamer ? '/dashboard' : '/');
 });

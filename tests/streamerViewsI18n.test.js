@@ -30,7 +30,7 @@ const PAGES = [
   'guild-config', 'overlay-config', 'overlay-builder', 'chatbot-config', 'mod-log', 'youtube-chatbot-config', 'multistream',
   'account-disabled', // what a streamer is shown once an admin has disabled the account
   // linked from the site's menus, or the pages a streamer meets before logging in
-  'account', 'report-issue', 'tutorial', 'donate', 'streamer-landing', 'guild-stats', 'link-result',
+  'account', 'report-issue', 'tutorial', 'donate', 'guild-stats', 'link-result',
   // the home page: the streamer tools' features
   'home',
   // the Tracking page: the follower and sub goals and the six trackers (an overlay page, linked from the OBS overlay card)
@@ -170,7 +170,6 @@ const PAGE_LOCALS = {
   // the YouTube step is shown only while YouTube is (features.youtube)
   tutorial: [{ streamer: null, features: { youtube: true } }, { streamer: null, features: { youtube: false } }],
   donate: [{ streamer }],
-  'streamer-landing': [{ streamer: null }],
   login: [{ streamer: null }],
   // a visitor, a streamer (YouTube go-live posts on), and YouTube switched off
   home: [

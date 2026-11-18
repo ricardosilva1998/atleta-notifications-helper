@@ -154,10 +154,6 @@ async function handleMessage(channel, tags, message, self) {
     return;
   }
 
-  // Custom overlay commands — DISABLED for now
-  // const overlayCmd = db.getCustomOverlayByCommand(streamerId, commandName);
-  // if (overlayCmd) { ... }
-
   const cmd = db.getChatCommand(streamerId, commandName);
   if (!cmd) return;
 
