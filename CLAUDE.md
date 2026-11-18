@@ -649,3 +649,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `cancel` answers `payment_processing` (409) when a `coaching_payments` row of the booking is `pending`, before any change or DM; the schedule hides Cancel for that state and shows the reason, the Coaching card's payment line appends it. The start - 15 min release still applies.
 - New key `coaching.dashboard.error.payment_processing` in all seven locales (pt-PT).
 **Open:** none
+
+### 2026-11-18 — backend-dev (F3.2)
+**Task:** "Your session stands" only for a duplicate on a session that stands
+**Files:** src/db.js, src/services/coachingPayments.test.js
+**Decisions:**
+- `recordCoachingPayment` answers `double` only while the paid booking is `confirmed` or `rescheduling`; any other status (cancelled, expired, not_rescheduled...) records the extra payment as `late_issue` (Refund pending, reason `late`, both sides told, booking untouched); a replayed return follows the stored refund reason.
+**Open:** none

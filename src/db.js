@@ -5162,9 +5162,15 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
   ).run(status, now, amountCents, currency, orderId, captureId, issue, bookingId);
   const reload = () => db.prepare('SELECT * FROM coaching_bookings WHERE id = ?').get(bookingId);
   if (booking.paid_at != null) {
-    // 'double' is on the payment row only: the booking stands as it was.
-    markOwnPending('double');
-    return { ok: true, result: 'double', booking: reload() };
+    if (booking.status === 'confirmed' || booking.status === 'rescheduling') {
+      // 'double' is on the payment row only: the booking stands as it was.
+      markOwnPending('double');
+      return { ok: true, result: 'double', booking: reload() };
+    }
+    // The paid booking has ended (cancelled, expired, not rescheduled): the extra payment is a late one, and the
+    // booking keeps its own paid fields.
+    markOwnPending('late');
+    return { ok: true, result: 'late_issue', booking: reload() };
   }
   if (booking.status === 'awaiting_payment' && booking.starts_at > now) {
     setPaid('confirmed', null);
