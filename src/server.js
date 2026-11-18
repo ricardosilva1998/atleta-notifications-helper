@@ -301,7 +301,7 @@ app.use('/overlay', overlayRoutes);
 
 // Language switch
 app.post('/set-language', (req, res) => {
-  const lang = SUPPORTED_LANGS.includes(req.body.lang) ? req.body.lang : 'en';
+  const lang = SUPPORTED_LANGS.includes((req.body || {}).lang) ? req.body.lang : 'en';
   secureCookie(res, 'lang', lang, { maxAge: 365 * 24 * 60 * 60 * 1000 });
   const referer = req.headers.referer || '/';
   res.redirect(referer);

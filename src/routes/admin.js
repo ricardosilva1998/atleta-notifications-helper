@@ -116,7 +116,7 @@ router.post('/streamers/:id/set-tier', requireAdmin, (req, res) => {
   const s = db.getStreamerById(parseInt(req.params.id));
   if (!s) return res.redirect('/admin/dashboard?tab=users');
 
-  const tier = req.body.tier;
+  const tier = (req.body || {}).tier;
   if (!['free', 'starter', 'pro', 'enterprise'].includes(tier)) {
     return res.redirect('/admin/dashboard?tab=users');
   }
@@ -133,7 +133,7 @@ router.post('/streamers/:id/tts-limit', requireAdmin, (req, res) => {
   const s = db.getStreamerById(parseInt(req.params.id));
   if (!s) return res.redirect('/admin/dashboard?tab=users');
 
-  const raw = typeof req.body.tts_monthly_limit === 'string' ? req.body.tts_monthly_limit.trim() : null;
+  const raw = typeof (req.body || {}).tts_monthly_limit === 'string' ? req.body.tts_monthly_limit.trim() : null;
   if (raw === null) return res.redirect('/admin/dashboard?tab=users');
   let limit = null;
   if (raw !== '') {
@@ -152,8 +152,9 @@ router.post('/issues/:id', requireAdmin, (req, res) => {
   const issue = db.getIssueById(parseInt(req.params.id));
   if (!issue) return res.redirect('/admin/dashboard?tab=issues');
 
-  db.updateIssueStatus(issue.id, req.body.status || 'open', req.body.admin_reply);
-  console.log(`[Admin] Issue ${issue.id} updated to ${req.body.status}`);
+  const body = req.body || {};
+  db.updateIssueStatus(issue.id, body.status || 'open', body.admin_reply);
+  console.log(`[Admin] Issue ${issue.id} updated to ${body.status}`);
   res.redirect('/admin/dashboard?tab=issues&msg=updated');
 });
 
@@ -452,7 +453,7 @@ router.post('/test/weekly-digest/:username', requireAdmin, async (req, res) => {
 
 // Test: Welcome Message
 router.post('/test/welcome', requireAdmin, async (req, res) => {
-  const guildId = req.body.guild_id;
+  const guildId = (req.body || {}).guild_id;
   if (!guildId) return res.redirect(`/admin/dashboard?tab=testing&msg=test_error`);
 
   try {
@@ -473,7 +474,7 @@ router.post('/test/welcome', requireAdmin, async (req, res) => {
 // --- Discounts ---
 
 router.post('/discounts', requireAdmin, (req, res) => {
-  const { code, discount_percent, max_uses } = req.body;
+  const { code, discount_percent, max_uses } = req.body || {};
   if (!code || !discount_percent) return res.redirect('/admin/dashboard?tab=discounts');
   db.createDiscountCode(code, parseInt(discount_percent), max_uses ? parseInt(max_uses) : null);
   console.log(`[Admin] Created discount code ${code} (${discount_percent}%)`);

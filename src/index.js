@@ -107,7 +107,7 @@ function startHousekeeping() {
     try { db.cleanupOldOverlayEvents(); } catch (e) {}
     try { db.cleanupOldTrackingEvents(); } catch (e) {}
   }, 6 * 60 * 60 * 1000);
-  db.cleanupOldOverlayEvents();
+  try { db.cleanupOldOverlayEvents(); } catch (e) {}
   try { db.cleanupOldTrackingEvents(); } catch (e) {}
 
   // Donation history keeps 1 year; PayPal tips waiting for capture keep 24 hours (every 24 hours).

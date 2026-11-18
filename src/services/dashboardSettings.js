@@ -177,4 +177,10 @@ function save(streamer, body, { db, followUps, ttsAvailable = false }) {
   return { ok: true, values: Object.fromEntries(plan.map((p) => [p.key, p.value])) };
 }
 
-module.exports = { SETTINGS, ERRORS, BATCH_MAX, TEMPLATE_MAX, save };
+// The legacy forms read a setting's text with the card's own rule: { value } or { error } (a code of ERRORS).
+function readSetting(key, raw) {
+  if (!Object.prototype.hasOwnProperty.call(SETTINGS, key)) return { error: 'invalid' };
+  return readValue(SETTINGS[key], raw);
+}
+
+module.exports = { SETTINGS, ERRORS, BATCH_MAX, TEMPLATE_MAX, save, readSetting };

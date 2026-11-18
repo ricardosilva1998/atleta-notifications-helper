@@ -590,3 +590,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `chatManager.authRefused()` is set when Twitch refuses `BOT_TWITCH_TOKEN` (logged once, cleared on connect); the chatbot card shows `cards.chatbot.status.tokenRefused`.
 - First-time-chatter Discord mod-log embeds: first at once, the rest of the minute as one embed (25 names + "and N more"); the mod log table still gets every row; nothing is said in chat.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T15, dashboard and server input rules)
+**Task:** E26-E29: legacy forms reuse the card rules, flag gate for JSON routes, caps and reorder checks, body-less POSTs
+**Files:** src/routes/dashboard.js, src/services/dashboardSettings.js, src/routes/admin.js, src/server.js, src/index.js, src/locales/*.json, src/routes/dashboard.test.js, src/server.app.test.js
+**Decisions:**
+- `dashboardSettings.readSetting(key, raw)` is the one reader of text settings; `POST /dashboard/chatbot` uses it (400 text, nothing saved, on a bad template; empty still allowed).
+- `flagGate` in routes/dashboard.js answers 404 JSON: `/api/vtuber/*` (vtuber+overlays), `/api/tracking/*` and `/donations/tts/test` (overlays). Caps: 50 sponsor messages, 50 rewards, 100 commands on the old form; sponsor url http(s) <= 200; reorder ids validated.
+**Open:** none
