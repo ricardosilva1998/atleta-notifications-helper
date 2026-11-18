@@ -2543,6 +2543,7 @@
   "sponsors.error.badUrl": "リンクは http:// または https:// で始まり、200 文字以内にしてください。",
   "redemptions.error.tooMany": "報酬はすでに {{max}} 個あり、Twitch の上限です。先に 1 個削除してください。",
   "redemptions.outcome.refundedInterrupted": "返却済み（中断）",
+  "coaching.dashboard.error.payment_processing": "PayPalで支払いがまだ処理中です。処理が完了するか、時間枠が解放されるとキャンセルできます。",
   "coaching.message.paymentDuplicate.title": "{{viewer}} が1つのセッションに二重で支払いました",
   "coaching.message.paymentDuplicateBody": "PayPal で余分な支払いを返金してください。セッションは有効です。",
   "coaching.error.duplicate": "このセッションはすでに支払い済みです。コーチが余分な支払いを返金します。セッションは有効です。",

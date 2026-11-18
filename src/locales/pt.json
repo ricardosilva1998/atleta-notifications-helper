@@ -2543,6 +2543,7 @@
   "sponsors.error.badUrl": "A ligação tem de começar por http:// ou https:// e ter no máximo 200 caracteres.",
   "redemptions.error.tooMany": "Já tem {{max}} prémios, o máximo que a Twitch permite. Apague um primeiro.",
   "redemptions.outcome.refundedInterrupted": "Reembolsado (interrompido)",
+  "coaching.dashboard.error.payment_processing": "Um pagamento ainda está a ser processado pelo PayPal; podes cancelar quando ficar concluído ou quando o horário for libertado.",
   "coaching.message.paymentDuplicate.title": "{{viewer}} pagou duas vezes a mesma sessão",
   "coaching.message.paymentDuplicateBody": "Reembolsa o pagamento a mais no PayPal. A sessão mantém-se.",
   "coaching.error.duplicate": "Esta sessão já estava paga. O teu coach vai reembolsar o pagamento a mais. A tua sessão mantém-se.",
