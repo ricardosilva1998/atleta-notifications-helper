@@ -651,3 +651,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Split point: lines 2-1503 done, last key `chatbot.cmd.deleteConfirm`; T22 starts at line 1504 (`chatbot.mod.note`). Keys are flat and interleaved, so go by line number.
 - 590 values changed; keys, order, `{{placeholders}}` and HTML unchanged. Gerunds became "a + infinitivo", "você" dropped, "ligar" used for connect, "subscritor"/"em direto"/"espetador" for sub/live/viewer.
 **Open:** none
+
+### 2026-11-18 — claude (general-purpose, T22)
+**Task:** pt.json lines 1504-3006 to European Portuguese (part 2) and the guard test (F32)
+**Files:** src/locales/pt.json, tests/ptPt.test.js, CLAUDE.md
+**Decisions:**
+- Poll = "sondagem", prediction = "previsão", live = "direto", default = "predefinição"; "você" removed (impersonal or "o seu"); gerunds became "a + infinitivo".
+- `tests/ptPt.test.js` fails on Brazilian markers in pt.json values (você, clicar, "clique em/para...", prêmio, arquivo, usuário, tela, registro, contato, equipe, gerund after está/estão/estamos/estou); the noun "clique" is allowed.
+**Open:** none
