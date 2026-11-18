@@ -65,6 +65,11 @@ before(async () => {
     if (parent && parent.filename === SERVER_FILE) {
       if (request === 'express') return express;
       if (request === './routes/multistream') return { dashboardRouter: realExpress.Router(), apiRouter: realExpress.Router() };
+      if (request === './routes/tip') {
+        const tip = realExpress.Router();
+        tip.post('/:username/create', (_req, res) => res.status(404).json({ error: 'not_found' }));
+        return tip;
+      }
       if (request.startsWith('./routes/') && !REAL_ROUTES.has(request)) return realExpress.Router();
     }
     let resolved = null;
