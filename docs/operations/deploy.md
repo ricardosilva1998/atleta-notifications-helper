@@ -1041,6 +1041,20 @@ After the deploy:
 Safe for the data: `raid_protection.prev_unknown` stays and older code ignores it. Older code would again see only the
 first watcher for the digest channel and would not refund stale pending redemptions.
 
+## Cleanup and pt-PT (2026-11-18, PR 3)
+
+No schema change, no new variable, no migration. Safe to deploy and to roll back.
+
+- **Deleted code:** the Instagram, TikTok and Twitter pollers and services (they were never started), the custom-overlays
+  route, its three scripts in `public/overlay/` and its view, the unused `streamer-landing.ejs`, `bun.lock` and the root
+  helmet PNGs. The `watched_instagram`, `watched_tiktok`, `watched_twitter` and `custom_overlays` tables stay (schema,
+  not code). Profile pictures are kept: the account page still uploads them and `/avatars` still serves them.
+- **Texts:** `pt.json` is European Portuguese now (`tests/ptPt.test.js` guards it) and 33 unused locale keys were removed
+  from all seven languages.
+
+After the deploy: `/health` answers 200, the boot log has no `[DB migration]` line, `/dashboard` and the Portuguese
+language switch load.
+
 ## Migration test and the `sessions` table
 
 `tests/migrations.test.js` opens today's `src/db.js` over `tests/fixtures/schema-oldest.sql` (schema only, from `src/db.js` at 5a9ac56, the oldest schema that is migrated in place; the one before it has no `discord_user_id` and is dropped whole by "Migration 1") and compares every table's columns with a fresh database. A new column needs its own `PRAGMA table_info` check (`_addColumn()` in `db.js`), or this test fails. Known exception: `sessions` is not rebuilt, so production's keeps a nullable `streamer_id` and the `racing_user_id` column; the test only requires that it has every column a fresh one has.
