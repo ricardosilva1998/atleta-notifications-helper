@@ -259,6 +259,9 @@ app.use('/dashboard/multistream', multistreamRoutes.dashboardRouter);
 app.use('/api/multistream', multistreamRoutes.apiRouter);
 app.use('/dashboard', dashboardRoutes);
 app.use('/payment', paymentRoutes);
+// Above the tip router, which always answers: creating a tip order calls PayPal and writes a pending_tips row: 15 per 10 minutes per visitor.
+const tipCreateLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
+app.post('/tip/:username/create', tipCreateLimiter);
 app.use('/tip', tipRoutes);
 // The public coaching booking page (its viewers sign in with /auth/coaching-signin). Pay starts a PayPal order and
 // /paid captures one: both talk to PayPal, so each visitor gets 15 of them in 10 minutes (the tick, not the browser,
@@ -267,9 +270,6 @@ const coachingPayLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standa
 app.post('/coaching/:username/bookings/:id/pay', coachingPayLimiter);
 app.get('/coaching/:username/paid', coachingPayLimiter);
 
-// Creating a tip order calls PayPal and writes a pending_tips row: 15 per 10 minutes per visitor.
-const tipCreateLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
-app.post('/tip/:username/create', tipCreateLimiter);
 // The viewer's reschedule routes (their times, a proposal, accepting the coach's): 30 in 10 minutes per visitor.
 const coachingRescheduleLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
 app.get('/coaching/:username/bookings/:id/starts', coachingRescheduleLimiter);
