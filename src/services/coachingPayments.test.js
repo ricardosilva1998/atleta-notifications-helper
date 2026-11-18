@@ -568,6 +568,9 @@ describe('handleReturn', () => {
     assert.deepEqual([result.ok, result.outcome, result.result], [true, 'duplicate', 'double']);
     assert.equal(db.getCoachingPayment(id2).refund_reason, 'double');
     assert.equal(bookingNow(booking.id).status, 'confirmed');
+    const again = await pay.handleReturn({ streamer: s, orderId: id2, now: NOW + 3 * MIN });
+    assert.deepEqual([again.replay, again.outcome], [true, 'duplicate']);
+    assert.equal((await pay.handleReturn({ streamer: s, orderId: id1, now: NOW + 3 * MIN })).outcome, 'paid');
   });
 });
 

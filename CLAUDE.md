@@ -548,3 +548,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** reviewed the diff's tests against brief items A1-A7 and C11-C15: every item has a test; none missing.
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-18 — backend-dev (C3.1.1)
+**Task:** A replayed return of a duplicate order says `duplicate`, not `late`
+**Files:** src/services/coachingPayments.js, src/services/coachingPayments.test.js
+**Decisions:**
+- `outcomeOf` checks the booking's own order (`paid`), then the payment row's `refund_reason === 'double'` (`duplicate`), else `late`; no route change.
+**Open:** none
