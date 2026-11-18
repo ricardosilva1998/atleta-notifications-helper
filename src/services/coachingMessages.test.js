@@ -187,6 +187,12 @@ describe('reschedule messages', () => {
     assert.match(m.viewerMessage('rescheduleAsk', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0].description, /Pick a new time in My bookings: https:\/\/x\/coaching\/coach\?booking=1/);
     const lapsed = m.viewerMessage('proposalLapsed', { ...args, booking: moving({ proposal_starts_at: null }) }).embeds[0];
     assert.match(lapsed.description, /dropped/);
+    assert.match(lapsed.description, /48 hours/);
+    const close = m.viewerMessage('proposalLapsed', { ...args, tooClose: true, booking: moving({ proposal_starts_at: null }) }).embeds[0];
+    assert.match(close.description, /too close to its start/);
+    assert.doesNotMatch(close.description, /48 hours/);
+    assert.match(m.streamerMessage('viewerLapsed', { ...args, scheduleUrl: 'https://x/s', tooClose: true, booking: moving() }).embeds[0].description, /too close/);
+    assert.match(m.streamerMessage('viewerLapsed', { ...args, scheduleUrl: 'https://x/s', booking: moving() }).embeds[0].description, /48 hours/);
     assert.match(lapsed.description, /\?booking=1/);
     assert.match(m.viewerMessage('proposal', { ...args, booking: moving() }).embeds[0].title, /another time/);
   });

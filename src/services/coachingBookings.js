@@ -160,7 +160,7 @@ function forgetMembers() {
 
 // The viewer's message, awaited: a failure's reason is stored and returned; a message that goes out clears the
 // reason a previous one left.
-async function messageViewer(streamer, settings, row, kind, { roomUrl = null, reason: cancelReason = null, refund = false, bookingLink = null } = {}) {
+async function messageViewer(streamer, settings, row, kind, { roomUrl = null, reason: cancelReason = null, refund = false, bookingLink = null, tooClose = false } = {}) {
   const lang = row.lang || 'en';
   let reason = null;
   try {
@@ -177,6 +177,7 @@ async function messageViewer(streamer, settings, row, kind, { roomUrl = null, re
       roomUrl,
       reason: cancelReason,
       refund,
+      tooClose,
       lang,
       t: (key, params) => t(lang, key, params),
     });
@@ -191,7 +192,7 @@ async function messageViewer(streamer, settings, row, kind, { roomUrl = null, re
 
 // The streamer's message: started, never awaited by the caller (the promise is returned for the tests), failures
 // logged. `always`: sent even with "Message me about new requests" off (a payment to refund cannot wait for a visit).
-function messageStreamer(streamer, settings, row, kind, { always = false, refund = false } = {}) {
+function messageStreamer(streamer, settings, row, kind, { always = false, refund = false, tooClose = false } = {}) {
   if (!settings || (!settings.notify_requests && !always)) return Promise.resolve();
   return (async () => {
     try {
@@ -200,6 +201,7 @@ function messageStreamer(streamer, settings, row, kind, { always = false, refund
         booking: row,
         scheduleUrl: scheduleUrl(),
         refund,
+        tooClose,
         lang,
         t: (key, params) => t(lang, key, params),
       });
@@ -523,8 +525,8 @@ async function runDueReschedules({ now = Date.now() } = {}) {
           const done = db.dropCoachingProposal(row.id, now);
           if (!done.ok) continue;
           result.dropped++;
-          if (done.dropped.by === 'viewer') await messageStreamer(streamer, settings, done.booking, 'viewerLapsed', { always: true });
-          else await messageViewer(streamer, settings, done.booking, 'proposalLapsed', { bookingLink: bookingLinkOf(streamer, row.id) });
+          if (done.dropped.by === 'viewer') await messageStreamer(streamer, settings, done.booking, 'viewerLapsed', { always: true, tooClose: action === 'too_close' });
+          else await messageViewer(streamer, settings, done.booking, 'proposalLapsed', { bookingLink: bookingLinkOf(streamer, row.id), tooClose: action === 'too_close' });
         }
       } catch (e) {
         console.error(`[Coaching] reschedule of booking ${row.id}:`, e && e.message);

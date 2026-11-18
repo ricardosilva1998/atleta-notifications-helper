@@ -517,3 +517,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `readyGuild` throws `guild_gone` when the bot is logged in but the server is not among its servers; `clean()` treats that (or code 10004) as nothing left and closes the room as orphaned with a log line; Retry room answers `server_gone` (409) and closes the row. Discord down keeps today's retry.
 - `build` re-reads the booking before opening the room and deletes what it made if the booking ended; `finishOrCleanMaking` treats `rescheduling` like `confirmed`.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T6, deep-review fixes)
+**Task:** Coaching bookings follow their coach (C14); separate lapse texts (C15)
+**Files:** src/routes/coaching.js, src/services/coachingBookings.js, src/services/coachingMessages.js, src/locales/*.json, src/routes/coaching.test.js, src/routes/myBookings.test.js, src/services/coachingMessages.test.js
+**Decisions:**
+- The per-booking viewer routes (cancel, starts, propose, accept-proposal, pay) find the coach by the booking's `streamer_id`; the login in the URL is ignored there. Access is still the viewer's Discord id (another's booking: 404). `/paid` finds the coach from the order's booking, falling back to the login for an order not on record (so an order opened under another login now counts for its own coach).
+- `proposalLapsedBody`/`viewerLapsedBody` say "48 hours"; new `proposalTooCloseBody`/`viewerTooCloseBody` are used when the tick dropped the proposal as too close (`tooClose` option).
+**Open:** none
