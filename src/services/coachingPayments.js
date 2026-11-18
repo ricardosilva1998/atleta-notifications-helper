@@ -361,7 +361,7 @@ async function handleReturn({ streamer, orderId, now = Date.now() }) {
   const done = record(streamer, payment, verdict, now);
   if (!done.ok) return done;
   if (done.result === 'duplicate') return { ok: true, replay: true, outcome: outcomeOf(done.booking, orderId) };
-  return { ok: true, result: done.result, outcome: done.result === 'recorded' || done.result === 'late_confirmed' ? 'paid' : 'late', followUp: done.followUp };
+  return { ok: true, result: done.result, outcome: done.result === 'recorded' || done.result === 'late_confirmed' ? 'paid' : done.result === 'double' ? 'duplicate' : 'late', followUp: done.followUp };
 }
 
 // Where the return page sends the viewer: ?paid=1, or ?error=<code> (the codes the booking page knows).

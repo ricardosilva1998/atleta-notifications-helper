@@ -167,7 +167,7 @@
     });
   }
 
-  var RETURN_CODES = ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'paid', 'pay_closed'];
+  var RETURN_CODES = ['pay_invalid', 'pay_unconfirmed', 'not_paid', 'late', 'duplicate', 'paid', 'pay_closed'];
 
   // What PayPal's return left in the address (?paid=1, ?error=<code>, and &order=<id> for a payment not confirmed yet):
   // { kind: 'paid' }, { kind: 'error', code, order } or null. A code or order id of another shape is ignored.
