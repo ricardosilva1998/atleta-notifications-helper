@@ -2538,6 +2538,8 @@
   "coaching.state.not_rescheduled": "未改期",
   "cards.coaching.refundsPending": "待办退款：{{count}}",
   "cards.coaching.refundsPendingAction": "打开预约",
+  "coaching.dashboard.error.server_gone": "机器人已不在辅导服务器中，因此无法创建房间。",
+  "coaching.dashboard.roomError.server_gone": "机器人已不在该服务器中。",
   "coaching.message.duplicateRefunded.title": "{{streamer}} 已退还你的辅导课程的重复付款",
   "coaching.message.duplicateRefundedBody": "你为这节课付了两次款。多付的款项已通过 PayPal 退还。你的课程依然有效。",
   "coaching.message.paymentLateViewerBody": "你的付款到达时，课程已无法接受，因此课程未被确认。{{streamer}} 将在 PayPal 中退款。",

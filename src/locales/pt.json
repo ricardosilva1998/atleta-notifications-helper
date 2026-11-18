@@ -2538,6 +2538,8 @@
   "coaching.state.not_rescheduled": "Não reagendada",
   "cards.coaching.refundsPending": "Reembolsos por fazer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir as marcações",
+  "coaching.dashboard.error.server_gone": "O bot já não está no servidor de coaching, por isso não é possível criar a sala.",
+  "coaching.dashboard.roomError.server_gone": "O bot já não está no servidor.",
   "coaching.message.duplicateRefunded.title": "{{streamer}} reembolsou um pagamento duplicado da sua sessão de coaching",
   "coaching.message.duplicateRefundedBody": "Pagou duas vezes por esta sessão. O pagamento a mais foi reembolsado através do PayPal. A sua sessão mantém-se.",
   "coaching.message.paymentLateViewerBody": "O seu pagamento chegou quando a sessão já não o podia aceitar, por isso a sessão não foi confirmada. {{streamer}} vai reembolsá-lo no PayPal.",

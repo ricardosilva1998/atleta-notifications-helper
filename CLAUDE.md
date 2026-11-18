@@ -508,3 +508,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - A reconciled tip is stored with the pending row's `created_at` (`logDonation` takes `created_at`), and `recordDonation(..., { at })` skips a goal created after it.
 - A refund delete calls `trackers.onTipRemoved`: Top tipper re-broadcast; Latest tip recomputed from the newest remaining donation, or emptied, when it showed the deleted tip.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T5, coaching rooms)
+**Task:** Failed, orphaned and racing coaching rooms (C11, C12, C13)
+**Files:** src/services/coachingRooms.js, src/services/coachingRooms.test.js, src/discord.js, src/db.js, src/routes/coachingDashboard.js, src/locales/*.json
+**Decisions:**
+- `listDueCoachingRooms` also returns `failed` rows holding a role or channel id; `closeDue` cleans them with no transcript (`transcript_status` cancelled).
+- `readyGuild` throws `guild_gone` when the bot is logged in but the server is not among its servers; `clean()` treats that (or code 10004) as nothing left and closes the room as orphaned with a log line; Retry room answers `server_gone` (409) and closes the row. Discord down keeps today's retry.
+- `build` re-reads the booking before opening the room and deletes what it made if the booking ended; `finishOrCleanMaking` treats `rescheduling` like `confirmed`.
+**Open:** none

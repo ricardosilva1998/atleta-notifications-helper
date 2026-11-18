@@ -65,6 +65,7 @@ const REFUSALS = {
   no_category: [409, 'coaching.dashboard.error.no_category'],
   room_not_failed: [409, 'coaching.dashboard.error.room_not_failed'],
   room_busy: [409, 'coaching.dashboard.error.room_busy'],
+  server_gone: [409, 'coaching.dashboard.error.server_gone'],
   discord_down: [503, 'coaching.dashboard.error.discord_down'],
   failed: [500, 'coaching.page.failed'],
 };
@@ -112,7 +113,7 @@ const STATE_KEYS = {
   cancelled: 'coaching.state.cancelled', withdrawn: 'coaching.state.withdrawn', unanswered: 'coaching.state.unanswered',
   rescheduling: 'coaching.state.rescheduling', not_rescheduled: 'coaching.state.not_rescheduled',
 };
-const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'failed'];
+const ROOM_ERRORS = ['missing_permissions', 'viewer_not_member', 'discord_down', 'server_gone', 'failed'];
 const TRANSCRIPT_STATUSES = ['sent', 'partial', 'failed', 'no_intent', 'no_channel'];
 const KEEP_FIELDS = new Proxy({}, { get: (_, name) => `{{${String(name)}}}` });
 function pageTexts(t) {

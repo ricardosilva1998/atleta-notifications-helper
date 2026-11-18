@@ -635,3 +635,106 @@ describe('the minute tick', () => {
     tick.stopTicks();
   });
 });
+
+describe('failed, orphaned and racing rooms', () => {
+  const GONE = () => Object.assign(new Error('guild_gone'), { code: 'guild_gone' });
+
+  test('a failed room holding a role is cleaned with no transcript once close_at passed', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    fail.createVoiceChannel = Object.assign(new Error('x'), { code: 50013 });
+    await rooms.makeFor(booking.id, { now: NOW });
+    delete fail.createVoiceChannel;
+    calls.length = 0;
+    assert.equal(db.listDueCoachingRooms(CLOSE_AT - 1).some((r) => r.booking_id === booking.id), false);
+    assert.deepEqual(await rooms.closeDue({ now: CLOSE_AT }), { closed: 1 });
+    assert.deepEqual(discord.sent, []);
+    assert.ok(calls.some((c) => c.fn === 'deleteRole' && c.id === 'role1'));
+    const row = db.getCoachingRoom(booking.id);
+    assert.equal(row.state, 'closed');
+    assert.equal(row.transcript_status, 'cancelled');
+  });
+
+  test('a failed room with no ids is not due', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    discord.ready = false;
+    await rooms.makeFor(booking.id, { now: NOW });
+    assert.equal(db.listDueCoachingRooms(CLOSE_AT + 1).some((r) => r.booking_id === booking.id), false);
+  });
+
+  test('a server that is gone: the room is closed as orphaned and does not stay in the batch', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    fail.deleteChannel = GONE();
+    fail.deleteRole = GONE();
+    assert.deepEqual(await rooms.closeDue({ now: CLOSE_AT }), { closed: 1 });
+    assert.equal(db.getCoachingRoom(booking.id).state, 'closed');
+    delete fail.deleteChannel; delete fail.deleteRole;
+  });
+
+  test('Discord down (not a gone server) keeps the room closing for the next pass', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    fail.deleteChannel = new Error('deadline');
+    assert.deepEqual(await rooms.closeDue({ now: CLOSE_AT }), { closed: 0 });
+    assert.equal(db.getCoachingRoom(booking.id).state, 'closing');
+    delete fail.deleteChannel;
+  });
+
+  test('Retry room on a gone server answers server_gone and closes the row', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    fail.createVoiceChannel = Object.assign(new Error('x'), { code: 50013 });
+    await rooms.makeFor(booking.id, { now: NOW });
+    delete fail.createVoiceChannel;
+    fail.deleteChannel = GONE();
+    fail.deleteRole = GONE();
+    const r = await rooms.retry(s, booking.id, { now: NOW });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'server_gone');
+    assert.equal(db.getCoachingRoom(booking.id).state, 'closed');
+    delete fail.deleteChannel; delete fail.deleteRole;
+  });
+
+  test('building in a gone server fails with server_gone, not discord_down', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    fail.createRole = GONE();
+    await rooms.makeFor(booking.id, { now: NOW });
+    assert.equal(db.getCoachingRoom(booking.id).error, 'server_gone');
+    delete fail.createRole;
+  });
+
+  test('a booking cancelled while the room is made: what was made is deleted and no room is announced', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    const real = discord.createVoiceChannel;
+    discord.createVoiceChannel = async function (...a) {
+      const id = await real.apply(this, a);
+      db.db.prepare("UPDATE coaching_bookings SET status = 'cancelled' WHERE id = ?").run(booking.id);
+      return id;
+    };
+    try {
+      assert.equal(await rooms.makeFor(booking.id, { now: NOW }), null);
+    } finally { discord.createVoiceChannel = real; }
+    assert.ok(calls.some((c) => c.fn === 'deleteChannel' && c.id === 'chan1'));
+    assert.ok(calls.some((c) => c.fn === 'deleteRole' && c.id === 'role1'));
+    assert.equal(db.getCoachingRoom(booking.id).state, 'closed');
+  });
+
+  test('a stale making row of a rescheduling booking is finished, not cleaned', async () => {
+    const s = addStreamer();
+    const { booking } = confirmed(s);
+    await rooms.makeFor(booking.id, { now: NOW });
+    db.db.prepare("UPDATE coaching_bookings SET status = 'rescheduling' WHERE id = ?").run(booking.id);
+    db.updateCoachingRoom(booking.id, { state: 'making' }, NOW - 10 * 60000);
+    calls.length = 0;
+    const r = await rooms.finishOrCleanMaking({ now: NOW });
+    assert.equal(r.finished, 1);
+    assert.equal(db.getCoachingRoom(booking.id).state, 'open');
+    assert.ok(!calls.some((c) => c.fn === 'deleteChannel'));
+  });
+});

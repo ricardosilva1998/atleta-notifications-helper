@@ -5205,7 +5205,8 @@ function listCoachingRoomsForBookings(bookingIds) {
 }
 
 function listDueCoachingRooms(now) {
-  return db.prepare(`SELECT * FROM coaching_rooms WHERE state IN ('open', 'closing') AND close_at IS NOT NULL AND close_at <= ?
+  return db.prepare(`SELECT * FROM coaching_rooms WHERE (state IN ('open', 'closing') OR (state = 'failed' AND (role_id IS NOT NULL OR channel_id IS NOT NULL)))
+    AND close_at IS NOT NULL AND close_at <= ?
     AND booking_id NOT IN (SELECT id FROM coaching_bookings WHERE status = 'rescheduling') ORDER BY close_at LIMIT 100`).all(now);
 }
 
