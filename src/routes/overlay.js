@@ -545,15 +545,6 @@ router.get('/poll/:token', (req, res) => {
 </html>`);
 });
 
-// Custom overlay routes — DISABLED for now
-// const { setupSSE: customSSE, servePage: customPage } = require('./customOverlays');
-// router.get('/scenes/events/:token', (req, res) => customSSE(req, res, 'scene'));
-// router.get('/scenes/:token', (req, res) => customPage(req, res, 'scene'));
-// router.get('/bar/events/:token', (req, res) => customSSE(req, res, 'bar'));
-// router.get('/bar/:token', (req, res) => customPage(req, res, 'bar'));
-// router.get('/custom-alerts/events/:token', (req, res) => customSSE(req, res, 'custom-alert'));
-// router.get('/custom-alerts/:token', (req, res) => customPage(req, res, 'custom-alert'));
-
 // The Twitch chat overlay: an OBS source that shows the chat lines the SSE stream carries. The address
 // keeps its old /iracing/ name so existing OBS sources keep working; every other type is gone.
 router.get('/iracing/:type/:token', (req, res) => {

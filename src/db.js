@@ -999,9 +999,6 @@ const _updateStreamerBroadcasterTokens = db.prepare(`
     broadcaster_token_expires_at = ?
   WHERE id = ?
 `);
-const _updateStreamerYoutube = db.prepare(`
-  UPDATE streamers SET youtube_channel_id = ?, youtube_api_key = ? WHERE id = ?
-`);
 
 function getStreamerByDiscordId(discordUserId) {
   return openTokens(_getStreamerByDiscordId.get(discordUserId));
@@ -1075,10 +1072,6 @@ function linkTwitch(streamerId, twitchUserId, twitchUsername, twitchDisplayName)
 
 function updateStreamerBroadcasterTokens(streamerId, accessToken, refreshToken, expiresAt) {
   _updateStreamerBroadcasterTokens.run(sealToken(accessToken), sealToken(refreshToken), expiresAt, streamerId);
-}
-
-function updateStreamerYoutube(streamerId, youtubeChannelId, youtubeApiKey) {
-  _updateStreamerYoutube.run(youtubeChannelId, youtubeApiKey, streamerId);
 }
 
 // --- Guilds ---
@@ -6008,7 +6001,6 @@ module.exports = {
   clearProfilePicture,
   linkTwitch,
   updateStreamerBroadcasterTokens,
-  updateStreamerYoutube,
   getAllClaimedGuildIds,
   isGuildClaimed,
   getGuildsForStreamer,

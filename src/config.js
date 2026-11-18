@@ -187,9 +187,6 @@ module.exports = {
     // Every 15 minutes: the digest only goes out on Monday from 09:00 UTC, and a
     // post that failed is tried again on the next tick (four tries in that hour).
     weeklyDigest: parseInt(process.env.WEEKLY_DIGEST_INTERVAL) || 900_000,
-    instagramFeed: parseInt(process.env.INSTAGRAM_FEED_INTERVAL) || 600_000,
-    tiktokFeed: parseInt(process.env.TIKTOK_FEED_INTERVAL) || 600_000,
-    twitterFeed: parseInt(process.env.TWITTER_FEED_INTERVAL) || 600_000,
   },
   tiers: {
     free: {

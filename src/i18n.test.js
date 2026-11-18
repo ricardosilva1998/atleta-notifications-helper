@@ -54,9 +54,9 @@ describe('t()', () => {
   });
 
   test('fills {{placeholders}}, with an empty string for one that is not given', () => {
-    assert.equal(t('en', 'subscription.notificationDelay', { minutes: 5 }), '5 min notification delay');
-    assert.equal(t('en', 'subscription.notificationDelay', { minutes: 0 }), '0 min notification delay');
-    assert.equal(t('en', 'subscription.notificationDelay'), ' min notification delay');
+    assert.equal(t('en', 'nav.timeMinutes', { n: 5 }), '5m ago');
+    assert.equal(t('en', 'nav.timeMinutes', { n: 0 }), '0m ago');
+    assert.equal(t('en', 'nav.timeMinutes'), 'm ago');
   });
 });
 

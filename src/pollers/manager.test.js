@@ -99,16 +99,13 @@ const discordStub = {
   escapeLinkText: (text) => String(text), // the real feed and live pollers use it on the channel's own text
   buildRecapEmbed: (data) => ({ recap: data }),
   buildMilestoneEmbed: (data) => ({ milestone: data }),
-  buildInstagramEmbed: () => ({}),
-  buildTikTokEmbed: () => ({}),
-  buildTwitterEmbed: () => ({}),
 };
 
 // Tracking's trackers: the manager tells them when a channel's stream starts.
 const streamStarts = [];
 const trackersStub = { streamStarted: (login) => streamStarts.push(login) };
 
-const noopPollers = ['./twitchClips', './subSync', './weeklyDigest', './instagramFeed', './tiktokFeed', './twitterFeed'];
+const noopPollers = ['./twitchClips', './subSync', './weeklyDigest'];
 
 let db;
 let manager;

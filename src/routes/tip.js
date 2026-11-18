@@ -221,5 +221,5 @@ function reconcileTips() {
 }
 
 module.exports = router;
-// Not a route: exported for the daily cleanup job, the way customOverlays.js exports its helpers.
+// Not a route: exported for the daily cleanup job.
 module.exports.reconcilePendingTips = reconcileTips;

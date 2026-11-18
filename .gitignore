@@ -6,7 +6,6 @@ data/
 .superpowers/
 .playwright-mcp/
 test-results/
-bridge/tests/test-results/
 *.tsbuildinfo
 .worktrees/
 
