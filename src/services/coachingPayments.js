@@ -160,6 +160,34 @@ function mayCapture(booking, now) {
     .some((h) => h.id !== booking.id && booking.starts_at < h.startsAt + h.minutes * MINUTE_MS && h.startsAt < end);
 }
 
+// One capture attempt at a time per order: the return page, the viewer's Pay and the minute tick that find the same order
+// share one PayPal call instead of capturing twice.
+const captureRuns = new Map();
+function captureOnce(orderId) {
+  if (captureRuns.has(orderId)) return captureRuns.get(orderId);
+  const run = Promise.resolve().then(() => paypal.capture(orderId)).finally(() => captureRuns.delete(orderId));
+  captureRuns.set(orderId, run);
+  return run;
+}
+
+// An order read back as APPROVED (the viewer approved it at PayPal, the return never reached us) is captured here, while
+// the booking may still take the payment, and the capture's answer is what the caller decides on. Any other order, a
+// payment already PENDING, or a failed capture leaves the order as read (the caller's decision then stands, and the next
+// pass tries again).
+async function captureIfApproved(payment, order, now) {
+  if (!order || order.status !== 'APPROVED' || payment.status === 'pending') return order;
+  const booking = db.getCoachingBookingById(payment.booking_id);
+  if (!booking || !mayCapture(booking, now)) return order;
+  try {
+    const answer = await captureOnce(payment.order_id);
+    if (answer && answer.status === 'COMPLETED') return answer;
+    return await paypal.getOrder(payment.order_id);
+  } catch (e) {
+    console.error(`[Coaching] capture of approved order ${payment.order_id} failed:`, e.message);
+    return order;
+  }
+}
+
 // When a pending capture is read next: an hour from now during its first day, a day from now after that.
 function nextPendingRead(pendingSince, now) {
   return now + (now - pendingSince < PENDING_HOURLY_MS ? HOUR_MS : DAY_MS);
@@ -231,6 +259,7 @@ async function startPayment(streamer, viewer, bookingId, { lang = 'en', now = Da
   for (const payment of open) {
     let order;
     try { order = await paypal.getOrder(payment.order_id); } catch (e) { continue; }
+    order = await captureIfApproved(payment, order, now);
     const verdict = decideCoachingCapture({ streamer, payment, booking, order });
     if (verdict.reason === 'pending') { keepPending(payment, now); return { ok: false, code: 'payment_processing' }; }
     if (verdict.ok) {
@@ -303,7 +332,7 @@ async function handleReturn({ streamer, orderId, now = Date.now() }) {
   let answer = null;
   let failure = null;
   if (capturing) {
-    try { answer = await paypal.capture(orderId); } catch (e) { failure = e.message; }
+    try { answer = await captureOnce(orderId); } catch (e) { failure = e.message; }
   }
   // Anything but a completed order leaves room for doubt (an answer lost or timed out, the order captured already, a
   // reload racing the first request): the order itself says what was paid.
@@ -427,6 +456,7 @@ function reconcileStale({ now = Date.now() } = {}) {
           if (now - payment.created_at >= STALE_GIVE_UP_MS && db.deleteOpenCoachingPayment(payment.order_id)) dropped++;
           continue;
         }
+        order = await captureIfApproved(payment, order, now);
         const verdict = decideCoachingCapture({ streamer, payment, booking, order });
         if (verdict.ok) {
           const done = record(streamer, payment, verdict, now);

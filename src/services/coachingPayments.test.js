@@ -71,7 +71,7 @@ function completed(order, over = {}) {
   };
 }
 function approved(order) {
-  return { id: order.id, status: 'APPROVED', purchase_units: [{ custom_id: order.customId, payee: { email_address: order.payeeEmail, merchant_id: MERCHANT } }] };
+  return { id: order.id, status: order.approved ? 'APPROVED' : 'CREATED', purchase_units: [{ custom_id: order.customId, payee: { email_address: order.payeeEmail, merchant_id: MERCHANT } }] };
 }
 
 function resetPayPal() {
@@ -631,6 +631,66 @@ describe('reconcileStale', () => {
     assert.deepEqual(await pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN }), { recorded: 0, dropped: 0 });
     assert.ok(db.getCoachingPayment(orderId));
     assert.deepEqual(await pay.reconcileStale({ now: NOW + 72 * HOUR + 2 * MIN }), { recorded: 0, dropped: 1 });
+  });
+});
+
+// ── An approved order is captured when read back ─────────────────────
+
+describe('approved orders read back', () => {
+  test('startPayment: APPROVED while the booking awaits payment is captured and confirmed', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v, orderId, order } = await ordered(s);
+    order.approved = true;
+    const again = await pay.startPayment(s, v, booking.id, { now: NOW + 2 * MIN });
+    assert.deepEqual(again, { ok: false, code: 'paid' });
+    assert.equal(captureCalls().length, 1);
+    assert.equal(bookingNow(booking.id).status, 'confirmed');
+    assert.equal(db.getCoachingPayment(orderId).status, 'captured');
+    assert.equal(paypal.orders.size, 1, 'no second order');
+  });
+
+  test('the stale pass: APPROVED on a booking that may take payment is captured; a booking that may not is only read', async () => {
+    const s = addStreamer();
+    const ok = await ordered(s);
+    const closed = await ordered(s, { startsAt: START + 24 * HOUR });
+    ok.order.approved = true;
+    closed.order.approved = true;
+    db.expireCoachingBooking(ok.booking.id, ok.booking.pay_by + 31 * MIN); // its time is still free and ahead: may capture
+    db.db.prepare("UPDATE coaching_bookings SET status = 'cancelled' WHERE id = ?").run(closed.booking.id);
+    const out = await pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN });
+    assert.equal(out.recorded, 1);
+    assert.equal(captureCalls().length, 1, 'only the first order was captured');
+    assert.equal(db.getCoachingPayment(ok.orderId).status, 'captured');
+    assert.equal(paypal.orders.get(closed.orderId).captured, false);
+    assert.equal(bookingNow(closed.booking.id).paid_at, null);
+  });
+
+  test('a return and the tick finding the same order capture it once', async () => {
+    const s = addStreamer();
+    const { booking, orderId, order } = await ordered(s);
+    order.approved = true;
+    db.expireCoachingBooking(booking.id, booking.pay_by + 31 * MIN);
+    const [ret, tick] = await Promise.all([
+      pay.handleReturn({ streamer: s, orderId, now: NOW + pay.STALE_MS + 2 * MIN }),
+      pay.reconcileStale({ now: NOW + pay.STALE_MS + 2 * MIN }),
+    ]);
+    assert.equal(captureCalls().length, 1, 'one capture call');
+    assert.equal(ret.ok, true);
+    assert.ok(tick.recorded <= 1);
+    assert.equal(db.getCoachingPayment(orderId).status, 'captured');
+    assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM coaching_payments WHERE order_id = ?').get(orderId).n, 1);
+  });
+
+  test('a capture answering PENDING is kept pending (T1)', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v, orderId, order: placed } = await ordered(s);
+    placed.approved = true;
+    paypal.capture = (order) => { order.captured = true; return reply(201, completed(order, { captureStatus: 'PENDING' })); };
+    paypal.getOrder = (order) => reply(200, order.captured ? completed(order, { captureStatus: 'PENDING' }) : approved(order));
+    const again = await pay.startPayment(s, v, booking.id, { now: NOW + 2 * MIN });
+    assert.deepEqual(again, { ok: false, code: 'payment_processing' });
+    assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+    assert.equal(bookingNow(booking.id).paid_at, null);
   });
 });
 

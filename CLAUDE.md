@@ -481,3 +481,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - A booking with a pending payment keeps its time until start - 15 min; its view state is `payment_processing` (view only, never stored); Pay and viewer withdraw answer `payment_processing`. A pending payment that completes after the booking ended is always `late_issue` (Refund pending, coach DMed; the viewer gets no new DM).
 **Open:** none
 
+
+### 2026-11-18 — backend-dev (T2 of deep-review fixes)
+**Task:** Coaching: an order PayPal reports APPROVED is captured on read-back (A2)
+**Files:** src/services/coachingPayments.js, src/services/coachingPayments.test.js, CLAUDE.md
+**Decisions:**
+- `startPayment`'s open-order read and `reconcileStale` capture an APPROVED order through `captureIfApproved`, only while `mayCapture` and the payment is not already pending; verification is the same `decideCoachingCapture`. A PENDING capture follows T1 (`keepPending`). `expireDue` is unchanged.
+- `captureOnce(orderId)` shares one PayPal capture call per order between the return, Pay and the tick.
+- Test fake: an uncaptured order now reads CREATED unless `order.approved` is set.
+**Open:** none
