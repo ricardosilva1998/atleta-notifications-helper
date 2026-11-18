@@ -60,18 +60,15 @@ if (fadeTime > 0) {
 // Connect to Atleta SSE for chat events
 const token = window.OVERLAY_TOKEN;
 if (token) {
-  const evtSource = new EventSource(`/overlay/events/${token}`);
-  evtSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
+  window.AtletaSSE.connect({
+    url: `/overlay/events/${token}`,
+    onMessage: (data) => {
       if (data.type === 'chat') {
-        addMessage(data.data.platform || 'twitch', data.data.username, data.data.message, data.data.color);
+        const color = typeof data.data.color === 'string' && /^#[0-9a-f]{6}$/i.test(data.data.color) ? data.data.color : undefined;
+        addMessage(data.data.platform || 'twitch', data.data.username, data.data.message, color);
       }
-    } catch (e) {}
-  };
-  evtSource.onerror = () => {
-    console.log('[Chat Overlay] SSE connection error, will retry...');
-  };
+    },
+  });
 }
 
 console.log('[Chat Overlay] Ready');

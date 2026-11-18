@@ -557,3 +557,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - Milestones and the recap's follower count use the streamer whose `twitch_user_id` is the broadcaster, else a watcher with a token; a token past its expiry goes through `refreshBroadcasterTokenShared`.
 - First clip look (no `last_clip_created_at`) stores the newest clip's time (or now when none) and posts nothing.
 **Open:** none
+
+### 2026-11-18 — frontend-dev (T11, one shared SSE client for the OBS sources)
+**Task:** D17: `public/overlay/sse.js` replaces the six copies of the stream code
+**Files:** public/overlay/sse.js (new), overlay.js, goal.js, poll.js, sponsors.js, tracking.js, iracing/chat.js, src/routes/overlay.js (each page loads sse.js first), tests/sseClient.test.js, tests/overlayClient.test.js, tests/trackingClient.test.js
+**Decisions:**
+- `AtletaSSE.connect({ url, onMessage, onOpen })` reopens the EventSource itself after every error (check the URL once: 404 waits 5 min, else 5 s) and reloads on a changed `serverVersion`; the chat overlay now reconnects too and validates the user colour as `#rrggbb`.
+- A new OBS source page must load `/overlay/sse.js` before its script.
+**Open:** none

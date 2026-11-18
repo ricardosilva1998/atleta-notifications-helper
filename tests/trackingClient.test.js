@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+const SSE_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'sse.js'), 'utf8');
 const SOURCE = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'tracking.js'), 'utf8');
 
 const TEXTS = {
@@ -97,6 +98,7 @@ function loadTracking({ page = {}, texts = TEXTS, lang = 'en', heldFrames = fals
     module: { exports: {} },
   };
   vm.createContext(context);
+  vm.runInContext(SSE_SOURCE, context, { filename: 'sse.js' });
   vm.runInContext(SOURCE, context, { filename: 'tracking.js' });
   const post = (data, origin = 'https://atleta.example') => (listeners.message || []).forEach((fn) => fn({ origin, data }));
   return { api: context.module.exports, browserApi: window.TrackingSource, root, sources, post, reloads, frames };

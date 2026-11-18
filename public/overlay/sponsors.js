@@ -1,56 +1,25 @@
 // Sponsor-only overlay — lightweight, separate OBS browser source
 let overlayDesigns = {};
-let serverVersion = null;
-let evtSource = null;
-let reconnectTimer = null;
-
-// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
-// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
-function retryDelay(url) {
-  if (typeof fetch !== 'function') return Promise.resolve(5000);
-  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
-    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
-    .catch(() => 5000);
-}
 
 function connectSSE() {
-  if (evtSource) { evtSource.close(); evtSource = null; }
-
-  evtSource = new EventSource(`/overlay/sponsors/events/${window.OVERLAY_TOKEN}`);
-
-  evtSource.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-
-    if (data.type === 'config') {
-      if (serverVersion && data.serverVersion && data.serverVersion !== serverVersion) {
-        location.reload();
+  window.AtletaSSE.connect({
+    url: `/overlay/sponsors/events/${window.OVERLAY_TOKEN}`,
+    onMessage: (data) => {
+      if (data.type === 'config') {
+        if (data.designs) overlayDesigns = data.designs;
         return;
       }
-      serverVersion = data.serverVersion;
-      if (data.designs) overlayDesigns = data.designs;
-      return;
-    }
 
-    if (data.type === 'config-update') {
-      if (data.designs) overlayDesigns = data.designs;
-      return;
-    }
+      if (data.type === 'config-update') {
+        if (data.designs) overlayDesigns = data.designs;
+        return;
+      }
 
-    if (data.type === 'sponsor') {
-      showSponsorImage(data.data);
-    }
-  };
-
-  evtSource.onerror = () => {
-    evtSource.close();
-    evtSource = null;
-    if (!reconnectTimer) {
-      retryDelay(`/overlay/sponsors/events/${window.OVERLAY_TOKEN}`).then((ms) => {
-        reconnectTimer = setTimeout(() => { reconnectTimer = null; connectSSE(); }, ms);
-      });
-    }
-  };
+      if (data.type === 'sponsor') {
+        showSponsorImage(data.data);
+      }
+    },
+  });
 }
 
 connectSSE();

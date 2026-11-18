@@ -3,7 +3,6 @@ console.log('[Overlay] Script loaded, OVERLAY_TOKEN:', window.OVERLAY_TOKEN ? 'p
 const container = document.getElementById('notification-container');
 let overlayConfig = {};
 let overlayDesigns = {};
-let serverVersion = null;
 const queue = [];
 let isPlaying = false;
 
@@ -392,108 +391,64 @@ const soundEffects = {
   },
 };
 
-// Connect to SSE with robust reconnection for OBS browser source
+// Connect to SSE (public/overlay/sse.js keeps it open and reloads the page after a deploy)
 let evtSource = null;
-let reconnectTimer = null;
-
-// After a stream error: asks once whether the link still exists. A 404 (a regenerated or removed link)
-// backs off to 5 minutes instead of hammering the server every 5 s; anything else keeps the 5 s retry.
-function retryDelay(url) {
-  if (typeof fetch !== 'function') return Promise.resolve(5000);
-  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-  return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
-    .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? 300000 : 5000; })
-    .catch(() => 5000);
-}
 
 function connectSSE() {
-  if (evtSource) {
-    evtSource.close();
-    evtSource = null;
-  }
+  if (evtSource) { evtSource.close(); evtSource = null; }
 
   // The builder's Preview iframe (?preview=1) is not an OBS source: it must not count as the overlay being open
   const isPreview = /[?&]preview=1(&|$)/.test(String((typeof location !== 'undefined' && location.search) || ''));
   const sseUrl = `/overlay/events/${window.OVERLAY_TOKEN}` + (isPreview ? '' : '?source=alerts');
   console.log('[Overlay] Connecting SSE to:', sseUrl);
-  evtSource = new EventSource(sseUrl);
+  evtSource = window.AtletaSSE.connect({ url: sseUrl, onOpen: () => console.log('[Overlay] SSE connection established'), onMessage: handleMessage });
+}
 
-  evtSource.onopen = () => {
-    console.log('[Overlay] SSE connection established');
-  };
-
-  evtSource.onmessage = (e) => {
-    console.log('[Overlay] SSE message received:', e.data.substring(0, 100));
-    const data = JSON.parse(e.data);
-
-    if (data.type === 'config') {
-      // If server restarted (deploy), reload to get fresh JS/CSS
-      if (serverVersion && data.serverVersion && data.serverVersion !== serverVersion) {
-        console.log('Server restarted, reloading overlay...');
-        location.reload();
-        return;
-      }
-      serverVersion = data.serverVersion;
-      overlayConfig = data.config || overlayConfig;
-      if (data.designs) {
-        overlayDesigns = data.designs;
-        loadDesignFonts(data.designs);
-        loadDesignSounds();
-      }
-      return;
+function handleMessage(data) {
+  if (data.type === 'config') {
+    overlayConfig = data.config || overlayConfig;
+    if (data.designs) {
+      overlayDesigns = data.designs;
+      loadDesignFonts(data.designs);
+      loadDesignSounds();
     }
+    return;
+  }
 
-    if (data.type === 'config-update') {
-      console.log('[Overlay] Config updated from the dashboard');
-      // Sent after a settings save: which alerts are on, how long they stay, the volume
-      if (data.config) overlayConfig = data.config;
-      if (data.designs) {
-        overlayDesigns = data.designs;
-        loadDesignFonts(data.designs);
-        loadDesignSounds();
-      }
-      // Sent after a custom sound is uploaded or removed
-      if (data.sounds) overlayConfig.sounds = data.sounds;
-      return;
+  if (data.type === 'config-update') {
+    console.log('[Overlay] Config updated from the dashboard');
+    // Sent after a settings save: which alerts are on, how long they stay, the volume
+    if (data.config) overlayConfig = data.config;
+    if (data.designs) {
+      overlayDesigns = data.designs;
+      loadDesignFonts(data.designs);
+      loadDesignSounds();
     }
+    // Sent after a custom sound is uploaded or removed
+    if (data.sounds) overlayConfig.sounds = data.sounds;
+    return;
+  }
 
-    if (data.type === 'clear') {
-      clearOverlay();
-      return;
-    }
+  if (data.type === 'clear') {
+    clearOverlay();
+    return;
+  }
 
-    if (data.type === 'timed') {
-      console.log('[Overlay] Timed notification received:', data.data);
-      showTimedNotification(data.data);
-      return;
-    }
+  if (data.type === 'timed') {
+    console.log('[Overlay] Timed notification received:', data.data);
+    showTimedNotification(data.data);
+    return;
+  }
 
-    // Sponsor events handled by separate /overlay/sponsors/:token page
-    if (data.type === 'sponsor') return;
+  // Sponsor events handled by separate /overlay/sponsors/:token page
+  if (data.type === 'sponsor') return;
 
-    // Chat lines share this stream for the Twitch chat overlay; they are not
-    // alerts, and queueing them would hold up (or push out) real alerts.
-    if (data.type === 'chat') return;
+  // Chat lines share this stream for the Twitch chat overlay; they are not
+  // alerts, and queueing them would hold up (or push out) real alerts.
+  if (data.type === 'chat') return;
 
-    // Redemption events bypass per-type enabled check — backend gates each one
-    if (data.type === 'redemption') {
-      const MAX_QUEUE = 50;
-      if (queue.length >= MAX_QUEUE) {
-        console.warn('[Overlay] Queue full (' + queue.length + '), dropping oldest event');
-        queue.shift();
-      }
-      queue.push(data);
-      if (!isPlaying) playNext();
-      return;
-    }
-
-    // Check if event type is enabled
-    const eventType = data.type;
-    const typeConfig = overlayConfig[eventType];
-    if (typeConfig && !typeConfig.enabled) return;
-
-    // Cap the queue. A burst (gift-sub batch, reconnect replay, test storm)
-    // would otherwise grow unbounded since cards play one at a time.
+  // Redemption events bypass per-type enabled check — backend gates each one
+  if (data.type === 'redemption') {
     const MAX_QUEUE = 50;
     if (queue.length >= MAX_QUEUE) {
       console.warn('[Overlay] Queue full (' + queue.length + '), dropping oldest event');
@@ -501,22 +456,23 @@ function connectSSE() {
     }
     queue.push(data);
     if (!isPlaying) playNext();
-  };
+    return;
+  }
 
-  evtSource.onerror = () => {
-    console.log('SSE connection lost, will retry...');
-    evtSource.close();
-    evtSource = null;
-    // Retry after 5s — handles deploy downtime
-    if (!reconnectTimer) {
-      retryDelay(sseUrl).then((ms) => {
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          connectSSE();
-        }, ms);
-      });
-    }
-  };
+  // Check if event type is enabled
+  const eventType = data.type;
+  const typeConfig = overlayConfig[eventType];
+  if (typeConfig && !typeConfig.enabled) return;
+
+  // Cap the queue. A burst (gift-sub batch, reconnect replay, test storm)
+  // would otherwise grow unbounded since cards play one at a time.
+  const MAX_QUEUE = 50;
+  if (queue.length >= MAX_QUEUE) {
+    console.warn('[Overlay] Queue full (' + queue.length + '), dropping oldest event');
+    queue.shift();
+  }
+  queue.push(data);
+  if (!isPlaying) playNext();
 }
 
 connectSSE();

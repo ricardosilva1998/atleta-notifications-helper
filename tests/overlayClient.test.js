@@ -14,6 +14,7 @@ const vm = require('node:vm');
 
 const OVERLAY_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'overlay.js'), 'utf8');
 const OBJECTS_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'index.js'), 'utf8');
+const SSE_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'sse.js'), 'utf8');
 const PLACEMENT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'placement.js'), 'utf8');
 const KIT_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'objects', 'kit.js'), 'utf8');
 const TIP_VOICE_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'tipVoiceTiming.js'), 'utf8');
@@ -184,6 +185,7 @@ function loadOverlay({ objects = true, styles = false, kit = styles, designs = {
   vm.runInContext(FX_JS, context, { filename: 'fx.js' });
   vm.runInContext(TIP_VOICE_JS, context, { filename: 'tipVoiceTiming.js' });
   vm.runInContext(PLACEMENT_JS, context, { filename: 'placement.js' });
+  vm.runInContext(SSE_JS, context, { filename: 'sse.js' });
   vm.runInContext(OVERLAY_JS, context, { filename: 'overlay.js' });
 
   const overlay = {
