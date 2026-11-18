@@ -1010,6 +1010,37 @@ reporter or an admin only; `/sync/backup` makes its own `data/.sync-<random>/` f
 are not restored (the integration is gone in both directions).
 
 
+## Deep-review fixes: robustness (2026-11-18, PR 2)
+
+Pollers, OBS sources, chat bots, dashboard forms, migrations and the dev sync.
+- **At boot**, on the existing database: one new column, `raid_protection.prev_unknown`, added quietly with
+  `_addColumn()` (no `[DB migration]` line, on the first boot or any after). Every other migration step now checks its
+  column on its own; a failure is logged through `_migrationLog` instead of being swallowed. The `design_version`
+  backfill runs once (`_runOnce`). The `sessions` table differs from a fresh schema (nullable `streamer_id`, the
+  `racing_user_id` column); it is **not rebuilt, by decision** (see the next section).
+- **No new variable, no new permission.** New redemption outcome `refunded_interrupted` (texts in all seven locales).
+- **Behaviour:** the weekly digest posts to the streamer's own enabled watcher channel; milestones and recaps use the
+  broadcaster's own token; the clips poller starts from a baseline (the first look posts nothing); redemptions left
+  `pending` for over 10 minutes are refunded at boot and on the minute tick; raid protection never forces followers-only
+  off when Twitch did not report the earlier setting; a refused `BOT_TWITCH_TOKEN` shows on the Chatbot card;
+  first-time-chatter flags are batched; the OBS sources share `public/overlay/sse.js` and reload themselves on a new
+  server version; a throwing alert is skipped instead of stalling the queue; sponsor messages and rewards are capped at
+  50; `/api/vtuber`, `/api/tracking` and `/donations/tts/test` answer 404 while their flag is off.
+- **Dev sync:** the production snapshot is scrubbed on its copy (`db.scrubSnapshot`); a development copy no longer
+  carries payer or viewer details. CI now also syntax-checks every `public/**/*.js`.
+
+After the deploy:
+1. `/health` answers 200; the boot log has no `[DB migration]` line and no `LOGIN REFUSED`.
+2. An OBS alert or chat overlay open before the deploy reconnects by itself within seconds.
+3. `/dashboard`, `/dashboard/chatbot` and `/dashboard/overlay-builder` load.
+4. Log lines to expect, only when the case happens: `[Chat] TWITCH REFUSED BOT_TWITCH_TOKEN: ...` (make a new bot token);
+   `[Redemption] stale settle failed: ...` (a failed settle is retried on the next tick).
+
+### Rolling back (deep-review fixes, robustness)
+
+Safe for the data: `raid_protection.prev_unknown` stays and older code ignores it. Older code would again see only the
+first watcher for the digest channel and would not refund stale pending redemptions.
+
 ## Migration test and the `sessions` table
 
 `tests/migrations.test.js` opens today's `src/db.js` over `tests/fixtures/schema-oldest.sql` (schema only, from `src/db.js` at 5a9ac56, the oldest schema that is migrated in place; the one before it has no `discord_user_id` and is dropped whole by "Migration 1") and compares every table's columns with a fresh database. A new column needs its own `PRAGMA table_info` check (`_addColumn()` in `db.js`), or this test fails. Known exception: `sessions` is not rebuilt, so production's keeps a nullable `streamer_id` and the `racing_user_id` column; the test only requires that it has every column a fresh one has.
