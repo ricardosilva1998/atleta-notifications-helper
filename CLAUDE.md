@@ -540,3 +540,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - coaching.md has a "Pending payments" section, the approved-order capture, the duplicate and late-after-start rules, the failed/orphaned/racing room rules, `server_gone`, and the coach-by-`streamer_id` routes; CLAUDE.md's Coaching, Donations, Donation History and Tip Goals bullets carry the same.
 - deploy.md has a release note (two `coaching_payments` columns, new statuses, new limiter, log lines, live checks, rollback).
 **Open:** none
+
+### 2026-11-18 — team-qa
+**Task:** T9, QA of the money branch (`fix/deep-review-money`, T1-T8)
+**Tests added/changed:** none
+**Suite result:** scratch copy (Node 26, better-sqlite3 rebuilt): 4025 tests, 4025 pass, 0 fail. Two boots on empty then reused data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM.
+**Manual checks:** reviewed the diff's tests against brief items A1-A7 and C11-C15: every item has a test; none missing.
+**Bugs found:** none. QA: pass.
+**Open:** none
