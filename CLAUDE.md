@@ -713,3 +713,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `coach_available` no longer needs a Twitch login (enabled account + coaching settings); the coach's name falls back to their Discord name; the coach link is drawn only with a login.
 - Per-booking action URLs use `/coaching/-/...` and Pay's return URL is `/coaching/-/paid` (cancel URL `/my-bookings`); the routes already find the coach by the booking/order, and old login URLs still work.
 **Open:** none
+
+### 2026-11-18 — backend-dev (F3.4)
+**Task:** The 90-day coaching cleanup keeps payments whose refund is still owed
+**Files:** src/db.js, src/db.coaching.test.js
+**Decisions:**
+- `cleanupOldCoachingBookings` skips bookings with a payment `refund_status = 'pending'` or `status = 'pending'` (and keeps their payments and rooms rows); a later run deletes them once refunded, settled or lapsed.
+**Open:** none
