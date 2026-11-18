@@ -740,6 +740,18 @@ describe('cancel with a reason, the refund step and the payer details', () => {
     assert.ok(discord.sent.some((m) => m.userId === v.discordUserId && /too late/.test(m.payload.embeds[0].title)));
   });
 
+  test('a duplicate payment tells the streamer its own message, a late one keeps the late wording', async () => {
+    const { s, id } = await paidConfirmed();
+    discord.sent = [];
+    await svc.afterPayment(s, db.getCoachingBooking(id, s.id), 'double');
+    assert.equal(discord.sent.length, 1);
+    assert.match(discord.sent[0].payload.embeds[0].title, /paid twice/);
+    assert.match(discord.sent[0].payload.embeds[0].description, /The session stands/);
+    discord.sent = [];
+    await svc.afterPayment(s, db.getCoachingBooking(id, s.id), 'late_issue');
+    assert.ok(discord.sent.some((m) => /cannot take it/.test(m.payload.embeds[0].title)));
+  });
+
   test('Refunded with Discord down still records it', async () => {
     const { s, id, orderId } = await paidConfirmed();
     await svc.cancel(s, id, { reason: 'Flu', now: NOW + 2 * MIN });
