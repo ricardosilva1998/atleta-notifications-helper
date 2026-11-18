@@ -1447,6 +1447,7 @@ router.post('/donations/history/:id/delete', (req, res) => {
       db.addToTipGoal(goal.id, -Math.round(donation.amount * 100) / 100);
       tipGoals.broadcast(req.streamer.id);
     }
+    require('../services/trackers').onTipRemoved(req.streamer.id, { name: donation.donor_name, amount: donation.amount, currency: donation.currency });
   }
   const back = new URLSearchParams();
   ['range', 'source', 'page'].forEach(k => { if (req.body[k]) back.set(k, String(req.body[k])); });

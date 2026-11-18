@@ -139,6 +139,22 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
     }
   }
 
+  // A tip deleted from the history as a refund: Top tipper is worked out again, and Latest tip, when it showed this
+  // tip, becomes the newest remaining donation (or empty). Never throws.
+  function onTipRemoved(streamerId, tip) {
+    try {
+      const shown = parsed(db.getTrackerValues(streamerId).latest_tip);
+      const gone = valueOfTip(tip);
+      if (shown && shown.name === gone.name && round2(numberOf(shown.amount)) === gone.amount && (shown.currency || null) === gone.currency) {
+        const latest = db.getLatestDonation(streamerId);
+        store(streamerId, 'latest_tip', latest ? valueOfTip({ name: latest.donor_name, amount: latest.amount, currency: latest.currency }) : null);
+      }
+      broadcast(streamerId, 'top_tipper', topTipper(streamerId));
+    } catch (err) {
+      logger.error('[Trackers] onTipRemoved error:', err.message);
+    }
+  }
+
   // The live poller saw this login's stream start (a new broadcast, or another one replacing it): the top tipper of
   // every enabled streamer linked to it starts over, so a source opened before the stream does not keep showing the
   // last stream's donor until the first tip. Never throws.
@@ -220,7 +236,7 @@ function createTrackers({ db, emit, now = Date.now, logger = console, setTimer =
     return out;
   }
 
-  return { onEvent, onTip, streamStarted, topTipper, clear, values, valueOf, settings, sendTest };
+  return { onEvent, onTip, onTipRemoved, streamStarted, topTipper, clear, values, valueOf, settings, sendTest };
 }
 
 // The app's instance. The database is required when first used: it loads the app's config, which this file's unit
@@ -247,6 +263,7 @@ module.exports = {
   createTrackers,
   onEvent: (...args) => instance().onEvent(...args),
   onTip: (...args) => instance().onTip(...args),
+  onTipRemoved: (...args) => instance().onTipRemoved(...args),
   streamStarted: (...args) => instance().streamStarted(...args),
   topTipper: (...args) => instance().topTipper(...args),
   clear: (...args) => instance().clear(...args),

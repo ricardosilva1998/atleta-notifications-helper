@@ -499,3 +499,12 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - A capture for an `awaiting_payment` booking whose start has passed is recorded `late_issue` (status `expired`, Refund pending), never confirmed.
 - A `late_issue` payment now DMs the viewer too (`paymentLateViewer`) as well as the coach.
 **Open:** none
+
+### 2026-11-18 — backend-dev (T4, tips: limiter, full reconcile, recovered time, refund on trackers)
+**Task:** A5, A6, A7 of the deep-review money fixes
+**Files:** src/server.js, src/db.js, src/index.js (unchanged), src/routes/tip.js, src/routes/dashboard.js, src/services/tipCapture.js, tipGoals.js, trackers.js, tests
+**Decisions:**
+- `POST /tip/:username/create` has `tipCreateLimiter` (15 per 10 min per visitor, `byVisitor`); the daily reconcile reads every unfinished row in pages of 500 (`getUnfinishedPendingTips(limit, offset)`) before any is settled, and index.js already runs it before the 24 h cleanup; a COMPLETED order the checks refuse logs `[Tip] Reconcile: order <id> is captured but was refused (<reason>)`.
+- A reconciled tip is stored with the pending row's `created_at` (`logDonation` takes `created_at`), and `recordDonation(..., { at })` skips a goal created after it.
+- A refund delete calls `trackers.onTipRemoved`: Top tipper re-broadcast; Latest tip recomputed from the newest remaining donation, or emptied, when it showed the deleted tip.
+**Open:** none

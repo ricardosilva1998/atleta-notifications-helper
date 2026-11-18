@@ -67,7 +67,7 @@ function announceTip(streamer, d) {
 // latest tip when it is newer than the stored one.
 function countTip(streamer, d, opts) {
   const recovered = !!(opts && opts.recovered);
-  require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency, { silent: recovered });
+  require('../services/tipGoals').recordDonation(streamer.id, d.amount, d.currency, { silent: recovered, at: recovered ? opts.at : undefined });
   require('../services/trackers').onTip(streamer.id, { name: d.donorName, amount: d.amount, currency: d.currency }, recovered ? { recovered: true, at: opts.at } : undefined);
 }
 
@@ -78,7 +78,7 @@ function logPayPalDonation(streamer, d) {
   try {
     return db.logDonation(streamer.id, {
       source: 'paypal', donor_name: d.donorName, amount: d.amount, currency: d.currency,
-      message: d.message, external_id: d.orderId,
+      message: d.message, external_id: d.orderId, created_at: d.createdAt,
     });
   } catch (e) {
     console.error('[Tip] logDonation error:', e.message);
@@ -209,7 +209,7 @@ router.get('/:username/success', async (req, res) => {
 // how many it recovered.
 function reconcileTips() {
   return reconcilePendingTips({
-    listUnfinished: () => db.getUnfinishedPendingTips(),
+    listUnfinished: (limit, offset) => db.getUnfinishedPendingTips(limit, offset),
     getStreamer: (id) => db.getStreamerById(id),
     getOrder: getPayPalOrder,
     logDonation: logPayPalDonation,

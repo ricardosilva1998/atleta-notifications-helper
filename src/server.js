@@ -270,6 +270,10 @@ app.use('/tip', tipRoutes);
 const coachingPayLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
 app.post('/coaching/:username/bookings/:id/pay', coachingPayLimiter);
 app.get('/coaching/:username/paid', coachingPayLimiter);
+
+// Creating a tip order calls PayPal and writes a pending_tips row: 15 per 10 minutes per visitor.
+const tipCreateLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
+app.post('/tip/:username/create', tipCreateLimiter);
 // The viewer's reschedule routes (their times, a proposal, accepting the coach's): 30 in 10 minutes per visitor.
 const coachingRescheduleLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, keyGenerator: byVisitor });
 app.get('/coaching/:username/bookings/:id/starts', coachingRescheduleLimiter);

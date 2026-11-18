@@ -4832,11 +4832,13 @@ function logDonation(streamerId, d) {
   const amount = Math.round(parseFloat(d.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) return false;
   const result = db.prepare(`
-    INSERT OR IGNORE INTO donations (streamer_id, source, donor_name, amount, currency, message, external_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO donations (streamer_id, source, donor_name, amount, currency, message, external_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
   `).run(streamerId, d.source, (d.donor_name || 'Anonymous').substring(0, 100), amount,
     d.currency ? String(d.currency).toUpperCase() : null, d.message ? String(d.message).substring(0, 500) : null,
-    d.external_id || null);
+    d.external_id || null,
+    // A recovered tip keeps the time it was paid (SQLite UTC text), not the time the reconcile found it.
+    typeof d.created_at === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d.created_at) ? d.created_at : null);
   return result.changes > 0;
 }
 
@@ -4882,7 +4884,12 @@ function getDonationMonthly(streamerId, currency, source) {
 }
 
 function getDonationById(id, streamerId) {
-  return db.prepare('SELECT id, amount, currency, created_at FROM donations WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+  return db.prepare('SELECT id, donor_name, amount, currency, created_at FROM donations WHERE id = ? AND streamer_id = ?').get(id, streamerId) || null;
+}
+
+// The newest donation row, for the Latest tip tracker after a refund removed the one it showed.
+function getLatestDonation(streamerId) {
+  return db.prepare('SELECT donor_name, amount, currency FROM donations WHERE streamer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1').get(streamerId) || null;
 }
 
 function deleteDonation(id, streamerId) {
@@ -5400,12 +5407,12 @@ function markPendingTipCaptured(orderId) {
 // Unfinished PayPal tips for the daily reconcile pass, oldest first. Younger
 // than an hour may still be on their way back from PayPal; there is no upper
 // age bound, so a row is still checked on the run that is about to delete it.
-function getUnfinishedPendingTips(limit = 500) {
+function getUnfinishedPendingTips(limit = 500, offset = 0) {
   return db.prepare(`
     SELECT * FROM pending_tips
     WHERE captured_at IS NULL AND created_at <= datetime('now', '-1 hour')
-    ORDER BY created_at LIMIT ?
-  `).all(limit);
+    ORDER BY created_at, order_id LIMIT ? OFFSET ?
+  `).all(limit, offset);
 }
 
 function cleanupOldPendingTips() {
@@ -6216,6 +6223,7 @@ module.exports = {
   getDonationTotals,
   getDonationMonthly,
   getDonationById,
+  getLatestDonation,
   deleteDonation,
   cleanupOldDonations,
   getCoachingSettings, saveCoachingSettings, setCoachingOpen, recordInviteCheck,

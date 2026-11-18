@@ -49,12 +49,14 @@ function broadcast(streamerId, extra) {
 
 // Called from every real donation source (the PayPal tip page).
 // Test alerts deliberately do not call this.
-function recordDonation(streamerId, amount, currency, { silent = false } = {}) {
+function recordDonation(streamerId, amount, currency, { silent = false, at } = {}) {
   try {
     const value = parseFloat(amount);
     if (!Number.isFinite(value) || value <= 0) return;
     const goal = db.getActiveTipGoal(streamerId);
     if (!goal) return;
+    // A tip paid before the goal started (a recovered one, `at` in SQLite UTC text) never counts toward it.
+    if (at && goal.created_at && String(at) < String(goal.created_at)) return;
     if (!currencyMatches(goal.currency, currency)) {
       console.log(`[TipGoal] Skipped ${currency} ${value} for streamer ${streamerId} — goal is in ${goal.currency}`);
       return;
