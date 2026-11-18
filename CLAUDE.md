@@ -565,3 +565,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `AtletaSSE.connect({ url, onMessage, onOpen })` reopens the EventSource itself after every error (check the URL once: 404 waits 5 min, else 5 s) and reloads on a changed `serverVersion`; the chat overlay now reconnects too and validates the user colour as `#rrggbb`.
 - A new OBS source page must load `/overlay/sse.js` before its script.
 **Open:** none
+
+### 2026-11-18 — frontend-dev (T12, deep-review fixes D18, D19)
+**Task:** An alert that throws never stalls the OBS queue; the builder preview and the overlay share one guarded draw
+**Files:** public/overlay/objects/kit.js, public/overlay/overlay.js, public/js/builder-cards.js, tests/overlayClient.test.js, tests/builderCards.test.js
+**Decisions:**
+- `kit.drawGuarded(look, own, dataFor, onBroken)` is the one draw: a throwing look is replaced by the alert's own object, else `{ look: null }` (overlay: legacy card; builder: empty slot). `drawAlert` and `Looper.play` both use it.
+- `playNext` and the dismiss callback catch any throw, remove the slot and effects, and go on with `alertTimer(playNext, 500)`.
+**Open:** none

@@ -391,7 +391,25 @@
     ws.connect(g); g.connect(c.destination);
   }
 
+  // Draws a look for the OBS overlay and the builder alike. A look that throws is replaced by the alert's
+  // own object (`own`, today's), else nothing: { look: null, html: null }, which the caller draws as its
+  // card (or leaves empty). `dataFor(look)` is what that look's render is handed; onBroken(look, error)
+  // is told of the look that failed.
+  function drawGuarded(look, own, dataFor, onBroken) {
+    if (!look) return { look: null, html: null };
+    try {
+      return { look: look, html: look.render(dataFor(look)) };
+    } catch (e) {
+      if (onBroken) { try { onBroken(look, e); } catch (ignored) { /* reporting never stops a draw */ } }
+    }
+    if (own && own !== look) {
+      try { return { look: own, html: own.render(dataFor(own)) }; } catch (e) { /* the card */ }
+    }
+    return { look: null, html: null };
+  }
+
   var KIT = {
+    drawGuarded: drawGuarded,
     ALERTS: ALERTS, MIDDLE: MIDDLE, styles: STYLES, families: FAMILIES, sounds: SOUNDS, soundFamilies: SOUND_FAMILIES,
     esc: esc, money: money, fitStyle: fitStyle, nm: nm, samName: samName, fmt: fmt, label: label, odo: odo, typed: typed,
     hash: hash, rng: rng, code3: code3, intOf: intOf, isWide: isWide, rgbOf: rgbOf, onColour: onColour, accentVars: accentVars,

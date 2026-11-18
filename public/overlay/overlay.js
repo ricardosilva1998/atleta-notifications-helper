@@ -76,17 +76,24 @@ const brokenLooks = new Set();
 function drawAlert(event) {
   const look = objectFor(event.type);
   if (!look) return { look: null, html: null };
-  try {
-    return { look, html: look.render(lookDataFor(look, event)) };
-  } catch (e) {
-    if (!brokenLooks.has(look.key)) {
-      brokenLooks.add(look.key);
-      console.error(`[Overlay] The look ${look.key} could not be drawn (${e && e.message}); the alert's default is shown instead`);
-    }
-  }
   const own = window.ATLETA_OBJECTS && window.ATLETA_OBJECTS[event.type];
-  if (own && own.key === event.type && own !== look) {
-    try { return { look: own, html: own.render(event.data || {}) }; } catch (e) { /* the legacy card */ }
+  const ownObject = own && own.key === event.type ? own : null;
+  const onBroken = (broken, e) => {
+    if (brokenLooks.has(broken.key)) return;
+    brokenLooks.add(broken.key);
+    console.error(`[Overlay] The look ${broken.key} could not be drawn (${e && e.message}); the alert's default is shown instead`);
+  };
+  // The alert's own object is handed the event's data as it comes; a look gets lookDataFor's
+  const dataFor = (l) => (l === look ? lookDataFor(l, event) : event.data || {});
+  const kit = window.ATLETA_KIT;
+  if (kit && typeof kit.drawGuarded === 'function') return kit.drawGuarded(look, ownObject, dataFor, onBroken);
+  try {
+    return { look, html: look.render(dataFor(look)) };
+  } catch (e) {
+    onBroken(look, e);
+  }
+  if (ownObject && ownObject !== look) {
+    try { return { look: ownObject, html: ownObject.render(dataFor(ownObject)) }; } catch (e) { /* the legacy card */ }
   }
   return { look: null, html: null };
 }
@@ -496,15 +503,31 @@ function playNext() {
   if (queue.length === 0) { isPlaying = false; return; }
   isPlaying = true;
   const event = queue.shift();
-  if (event.type === 'redemption') {
-    playRedemption(event);
-  } else {
-    const run = alertRun;
-    const voice = loadTipVoice(event); // null: nothing to wait for
-    whenLookReady(objectFor(event.type), () => {
-      if (!voice) { if (run === alertRun) showNotification(event); return; }
-      voice.then((buffer) => { if (run === alertRun) showNotification(event, buffer); });
-    });
+  const run = alertRun;
+  // Whatever throws while an alert starts, the queue goes on with the next one
+  const skip = (e) => {
+    console.error('[Overlay] An alert could not be shown:', e && e.message);
+    if (run !== alertRun) return;
+    // Only one alert is on screen at a time, so what is left of this one is all there is
+    document.querySelectorAll('.alert-card, .alert-pos, .screen-effect').forEach((el) => el.remove());
+    if (run === alertRun) alertTimer(playNext, 500);
+  };
+  try {
+    if (event.type === 'redemption') {
+      playRedemption(event);
+    } else {
+      const voice = loadTipVoice(event); // null: nothing to wait for
+      const show = (buffer) => {
+        if (run !== alertRun) return;
+        try { showNotification(event, buffer); } catch (e) { skip(e); }
+      };
+      whenLookReady(objectFor(event.type), () => {
+        if (!voice) { show(); return; }
+        voice.then(show, () => show());
+      });
+    }
+  } catch (e) {
+    skip(e);
   }
 }
 
@@ -670,6 +693,7 @@ function showNotification(event, voice) {
 
   // Dismiss after duration
   alertTimer(() => {
+   try {
     // A reading still going (a template that repeats {message} can outlast the 30 s cap) ends with its alert
     stopTipVoice();
     // Clean up screen effects
@@ -702,6 +726,12 @@ function showNotification(event, voice) {
       slot.remove();
       alertTimer(playNext, 500);
     }, objectDef ? exitMs(objectDef, speed) : 400);
+   } catch (e) {
+    // A throw while dismissing must not stall the queue: the slot goes and the next alert follows
+    console.error('[Overlay] An alert could not be dismissed cleanly:', e && e.message);
+    slot.remove();
+    alertTimer(playNext, 500);
+   }
   }, tipVoice
     ? tipVoice.voiceHoldMs(holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed), voice.duration)
     : holdMs(event.type, objectDef, objectDef ? lookDataFor(objectDef, event) : null, speed));
