@@ -774,3 +774,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `retryDelay`'s probe is aborted after 10 s (AbortController + timeout, cleared on answer); a timeout counts as a non-404 failure (5 s retry).
 - The Alerts header row and its button group wrap (`flex-wrap`), so `/dashboard/overlay` has no sideways scroll at 360/375 px in all 7 languages; English desktop row unchanged.
 **Open:** none
+
+### 2026-11-24 — claude (general-purpose, T7 of deep-review follow-ups)
+**Task:** "catorze" in pt.json and the pt-PT guard
+**Files:** src/locales/pt.json, tests/ptPt.test.js, CLAUDE.md
+**Decisions:**
+- `overlayBuilder.looks.raid-music.desc` says "catorze"; "quatorze" is now a Brazilian marker in `tests/ptPt.test.js` (fr.json untouched).
+**Open:** none
