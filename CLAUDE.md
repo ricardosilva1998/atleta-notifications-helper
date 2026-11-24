@@ -789,3 +789,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - CLAUDE.md edits only the changed sentences (Coaching, Robustness rules, Shared OBS stream client); coaching.md has the lapsed-payment read-back, the 24 h room give-up and the `roomDeleteRefused` DM row.
 - deploy.md has a short release note: no schema change; item 6 (`prev_unknown` rows) closed with no code; live checks and a plain-revert rollback.
 **Open:** none
+
+### 2026-11-24 — team-qa
+**Task:** T9, full QA of the deep-review follow-ups branch (items 1-9)
+**Tests added/changed:** none
+**Suite result:** scratch copy (Node 26, better-sqlite3 rebuilt): 4076 tests, 4076 pass, 0 fail. `node --check` on all src and public files: no FAIL. Two boots on empty data/: `/health` 200, 0 `[DB migration]` lines, exit 0 on SIGTERM both times.
+**Manual checks:** headless Chromium, seeded streamer, `/dashboard/overlay` in en, pt, es, fr, de, zh, ja at 360, 375 and 1280 px: no horizontal scroll in any of the 21; at 1280 px English the Clear All button sits at the same position and size as on `main`.
+**Bugs found:** none. Items 1-5 and 7-8 each have a test; 9 is the browser check above. QA: pass.
+**Open:** none
