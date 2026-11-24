@@ -217,11 +217,13 @@ function isDeadOrder(order) {
 // A verified capture into the database, then what follows it (coachingBookings.afterPayment: the confirmation, the room
 // hook, or the streamer told to refund). Returns { ok, result, booking, followUp } or { ok: false, reason }.
 function record(streamer, payment, verdict, now) {
+  // Every call is after a PayPal answer: the start check uses when the money moved, not when the request began.
+  const at = Math.max(now, Date.now());
   let rec;
   try {
     rec = db.recordCoachingPayment({
       bookingId: Number(payment.booking_id), orderId: payment.order_id, captureId: verdict.captureId,
-      amountCents: verdict.amountCents, currency: verdict.currency, now, payer: verdict.payer || null,
+      amountCents: verdict.amountCents, currency: verdict.currency, now: at, payer: verdict.payer || null,
     });
   } catch (e) {
     console.error(`[Coaching] payment ${payment.order_id} could not be recorded:`, e.message);

@@ -736,3 +736,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - A `lapsed` payment (30 days) is read weekly until 90 days after `pending_since`/`created_at`, then `next_read_at` is NULL (one log line) and it is no longer due; a COMPLETED read records it as `late_issue` + Refund pending; voided/declined closes it.
 - The 90-day cleanup keeps bookings, payments and rooms while a payment is `pending` or `lapsed`; a lapsed payment never holds the booking's time.
 **Open:** none
+
+### 2026-11-24 — backend-dev (T2, deep-review follow-ups)
+**Task:** The after-start check uses the time the capture returned
+**Files:** src/services/coachingPayments.js, src/services/coachingPayments.test.js
+**Decisions:**
+- `record()` takes `Math.max(now, Date.now())` at call time (every caller is after a PayPal answer), so a capture that returns after the session start is `late_issue` with Refund pending; pre-call `mayCapture` checks unchanged.
+- The test file stubs `Date.now` (fixed 2026-11 week is in the past) via a `clock` variable.
+**Open:** none

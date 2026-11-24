@@ -170,6 +170,12 @@ const HOUR = 3600e3;
 const MIN = 60e3;
 const NOW = Date.UTC(2026, 10, 2, 12, 0); // Monday 12:00 Lisbon (UTC+0)
 const START = Date.UTC(2026, 10, 3, 18, 0); // Tuesday 18:00
+// The service takes the time again after PayPal answers, so the tests' fixed week needs a clock of its own.
+let clock = NOW;
+const realNow = Date.now;
+Date.now = () => clock;
+after(() => { Date.now = realNow; });
+beforeEach(() => { clock = NOW; });
 let counter = 0;
 
 function addStreamer({ currency = 'EUR' } = {}) {
@@ -965,5 +971,22 @@ describe('pending captures', () => {
     paypal.down = true;
     assert.deepEqual(await pay.readPending({ now: NOW + 2 * HOUR }), { recorded: 0, closed: 0, pending: 1 });
     assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+});
+
+describe('the after-start check uses the time the capture returned', () => {
+  test('a capture that returns after the session started is late_issue with Refund pending, never confirmed', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v } = await awaiting(s);
+    const started = await pay.startPayment(s, v, booking.id, { now: NOW });
+    const orderId = new URL(started.approveUrl).searchParams.get('token');
+    discord.sent.length = 0;
+    paypal.capture = (order) => { clock = booking.starts_at + MIN; order.captured = true; return reply(201, completed(order)); };
+    const result = await pay.handleReturn({ streamer: s, orderId, now: NOW + MIN });
+    assert.deepEqual([result.ok, result.outcome, result.result], [true, 'late', 'late_issue']);
+    await result.followUp;
+    const row = db.getCoachingPayment(orderId);
+    assert.deepEqual([row.refund_status, row.refund_reason], ['pending', 'late']);
+    assert.notEqual(bookingNow(booking.id).status, 'confirmed');
   });
 });
