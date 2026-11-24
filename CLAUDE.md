@@ -766,3 +766,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `findBroadcasterStreamer(broadcasterId)` returns only the owner (`twitch_user_id`) with a token; no loop over watchers.
 - `getFollowerCount` with no token uses the app token (Helix `total`); without the owner's token milestones skip the sub count and recaps still read followers via the app token.
 **Open:** none
+
+### 2026-11-24 — frontend-dev (T6, deep-review follow-ups)
+**Task:** OBS stream probe deadline and the overlay settings button row on phones
+**Files:** public/overlay/sse.js, tests/sseClient.test.js, src/views/overlay-config.ejs
+**Decisions:**
+- `retryDelay`'s probe is aborted after 10 s (AbortController + timeout, cleared on answer); a timeout counts as a non-404 failure (5 s retry).
+- The Alerts header row and its button group wrap (`flex-wrap`), so `/dashboard/overlay` has no sideways scroll at 360/375 px in all 7 languages; English desktop row unchanged.
+**Open:** none

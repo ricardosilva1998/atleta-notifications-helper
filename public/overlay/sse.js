@@ -7,13 +7,15 @@
 (function () {
   const RETRY_MS = 5000;
   const GONE_RETRY_MS = 300000;
+  const PROBE_TIMEOUT_MS = 10000;
 
   function retryDelay(url) {
     if (typeof fetch !== 'function') return Promise.resolve(RETRY_MS);
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const deadline = ctl ? setTimeout(() => ctl.abort(), PROBE_TIMEOUT_MS) : null;
     return fetch(url, ctl ? { signal: ctl.signal, cache: 'no-store' } : { cache: 'no-store' })
-      .then((r) => { if (ctl) ctl.abort(); return r.status === 404 ? GONE_RETRY_MS : RETRY_MS; })
-      .catch(() => RETRY_MS);
+      .then((r) => { if (deadline) clearTimeout(deadline); if (ctl) ctl.abort(); return r.status === 404 ? GONE_RETRY_MS : RETRY_MS; })
+      .catch(() => { if (deadline) clearTimeout(deadline); return RETRY_MS; });
   }
 
   function connect(options) {
