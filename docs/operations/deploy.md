@@ -1058,3 +1058,24 @@ language switch load.
 ## Migration test and the `sessions` table
 
 `tests/migrations.test.js` opens today's `src/db.js` over `tests/fixtures/schema-oldest.sql` (schema only, from `src/db.js` at 5a9ac56, the oldest schema that is migrated in place; the one before it has no `discord_user_id` and is dropped whole by "Migration 1") and compares every table's columns with a fresh database. A new column needs its own `PRAGMA table_info` check (`_addColumn()` in `db.js`), or this test fails. Known exception: `sessions` is not rebuilt, so production's keeps a nullable `streamer_id` and the `racing_user_id` column; the test only requires that it has every column a fresh one has.
+
+## Deep-review follow-ups (2026-11-24)
+
+No schema change, no new variable, no migration. Safe to deploy and to roll back.
+
+- **Coaching payments:** a `lapsed` PayPal payment is kept and read back about weekly until 90 days after it was taken
+  (a COMPLETED read becomes `late_issue` with Refund pending); the 90-day cleanup never deletes a booking, payment or room
+  while a payment is `pending` or `lapsed`. The after-start check uses the time the capture returned.
+- **Rooms:** a room delete Discord refuses for permissions is given up 24 h after `close_at` and the coach gets one DM.
+  Log line: `[Coaching] Room <id>: Discord refused to delete the room/role (missing permissions) for 24 h; gave up, coach told`.
+- **Pollers:** a channel added to a watch list again starts with a fresh clip baseline; milestones and recaps use only the
+  channel owner's broadcaster token (followers via the app token otherwise; subscriber milestones skipped).
+- **OBS and overlay settings:** the stream probe has a 10 s deadline; the overlay settings button row wraps on phones;
+  `pt.json` says "catorze".
+- **Raid protection rows from before `prev_unknown`:** closed with no code. They could only exist during the 2026-11-18
+  deploy window (10 minutes at most), which is long past.
+
+After the deploy: `/health` answers 200; the boot log has no `[DB migration]` line and no `LOGIN REFUSED`;
+`/coaching/ricardobsilva98` and `/my-bookings` load.
+
+Rollback: a plain revert. Nothing to undo in data (a `lapsed` row stays `lapsed`; older code just stops reading it).
