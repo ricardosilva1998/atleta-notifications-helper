@@ -1069,7 +1069,7 @@ No schema change, no new variable, no migration. Safe to deploy and to roll back
 - **Rooms:** a room delete Discord refuses for permissions is given up 24 h after `close_at` and the coach gets one DM.
   Log line: `[Coaching] Room <id>: Discord refused to delete the room/role (missing permissions) for 24 h; gave up, coach told`.
 - **Pollers:** a channel added to a watch list again starts with a fresh clip baseline; milestones and recaps use only the
-  channel owner's broadcaster token (followers via the app token otherwise; subscriber milestones skipped).
+  channel owner's broadcaster token (otherwise milestones are skipped and the recap shows no follower count).
 - **OBS and overlay settings:** the stream probe has a 10 s deadline; the overlay settings button row wraps on phones;
   `pt.json` says "catorze".
 - **Raid protection rows from before `prev_unknown`:** closed with no code. They could only exist during the 2026-11-18

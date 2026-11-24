@@ -169,11 +169,11 @@ async function checkMilestones(twitchUsername, channelState) {
   const broadcasterId = channelState.twitch_broadcaster_id;
   if (!broadcasterId) return;
 
-    const watchers = db.getWatchersForChannelWithFeatures(twitchUsername)
+  const watchers = db.getWatchersForChannelWithFeatures(twitchUsername)
     .filter((w) => w.milestones_enabled);
   if (watchers.length === 0) return;
 
-  // Without the owner's token the follower total still comes from the app token; subscribers are skipped.
+  // Both counts need the owner's token (Twitch wants a user token for followers); without it nothing is asked.
   const streamer = findBroadcasterStreamer(broadcasterId);
   let token = null;
   if (streamer) {
@@ -183,6 +183,7 @@ async function checkMilestones(twitchUsername, channelState) {
       console.warn(`[Milestones] No broadcaster token for ${twitchUsername}: ${e.message}`);
     }
   }
+  if (!token) return;
   const milestones = db.getChannelMilestones(twitchUsername);
 
   try {
@@ -204,7 +205,6 @@ async function checkMilestones(twitchUsername, channelState) {
 
     // Subscriber milestones. Twitch states the total on every page of the list,
     // so one request for a single entry gives the count.
-    if (!token) return;
     try {
       const subCount = await getSubscriberCount(broadcasterId, token);
       const subscribers = planMilestoneCheck('subscriber', subCount, milestones);

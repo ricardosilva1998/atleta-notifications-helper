@@ -63,13 +63,13 @@ Raid protection rows from before the `prev_unknown` column could only exist duri
 - **Decisions that apply:** when a channel is added to a server's watch list, treat it as a first look (fresh baseline, post nothing old), whether or not it was watched before.
 
 ### T5: Milestones and recaps never use another streamer's broadcaster token (item 5)
-- **What:** `findBroadcasterStreamer` in `src/pollers/manager.js` returns only the streamer whose `twitch_user_id` is the broadcaster (and who has a broadcaster token); drop the loop over other watchers. Without the owner's token: milestones skip the sub count (and sub milestones), and the follower count uses what the app token can do: check `src/services/twitch.js` `getFollowerCount` — Helix `GET /channels/followers` answers `total` with an app access token; if the function can call with the app token when no user token is given, use it, otherwise skip the follower milestone too. Log it once per channel as today (no new log spam). The recap (`findBroadcasterToken`) follows the same rule: no owner token → follower count from the app token if available, else left out. Grep every caller of `findBroadcasterStreamer` / `findBroadcasterToken` / `broadcasterTokenOf`.
+- **What:** `findBroadcasterStreamer` in `src/pollers/manager.js` returns only the streamer whose `twitch_user_id` is the broadcaster (and who has a broadcaster token); drop the loop over other watchers. Without the owner's token: milestones are skipped (Twitch's `GET /channels/followers` needs a user token; no app-token fallback). Log it once per channel as today (no new log spam). The recap (`findBroadcasterToken`) follows the same rule: no owner token → no follower count. Grep every caller of `findBroadcasterStreamer` / `findBroadcasterToken` / `broadcasterTokenOf`.
 - **Files:** `src/pollers/manager.js` (~58-88, `checkMilestones` ~175-230), `src/pollers/twitchLive.js` (~128-133, read; change only if needed), `src/services/twitch.js` (`getFollowerCount`, `getSubscriberCount`), tests `src/pollers/manager.test.js`.
 - **Agent:** backend-dev
 - **Model:** sonnet
 - **Depends on:** T4
-- **Verify:** new test: a channel whose owner has no broadcaster token but another watcher has one never passes the other watcher's token to Twitch (sub count not requested; follower count via app token or skipped). Existing owner-token tests still pass. Then `node --test src/pollers/manager.test.js src/pollers/*.test.js tests/twitchClips.test.js` on the scratch copy: all pass.
-- **Decisions that apply:** never use another streamer's broadcaster token; without the owner's token skip what needs it (sub counts) and keep what the app token can do; log it once, as today.
+- **Verify:** new test: a channel whose owner has no broadcaster token but another watcher has one never passes the other watcher's token to Twitch (neither count requested). Existing owner-token tests still pass. Then `node --test src/pollers/manager.test.js src/pollers/*.test.js tests/twitchClips.test.js` on the scratch copy: all pass.
+- **Decisions that apply:** never use another streamer's broadcaster token; without the owner's token skip what needs it (both counts); log it once, as today.
 
 ### T6: OBS stream probe deadline and the overlay settings button row on phones (items 8, 9)
 - **What:**
