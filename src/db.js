@@ -1688,11 +1688,23 @@ const _updateChannelState = db.prepare(`
 
 // Returns true when the channel was added, false when this streamer already
 // watches it in this server (the insert is ignored, so nothing changes).
-function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl = null) {
-  const added = _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl).changes > 0;
-  // Ensure channel_state row exists
-  _upsertChannelState.run(twitchUsername.toLowerCase());
+const _countWatchersOfChannel = db.prepare('SELECT COUNT(*) AS n FROM watched_channels WHERE twitch_username = ?');
+const _resetChannelClipBaseline = db.prepare('UPDATE channel_state SET last_clip_created_at = NULL WHERE twitch_username = ?');
+
+// A channel nobody else watches starts with a fresh clip baseline (the clips
+// poller's first look posts nothing old); one another watcher has keeps its state.
+const _addWatchedChannelTx = db.transaction((guildId, streamerId, login, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl) => {
+  const others = _countWatchersOfChannel.get(login).n;
+  const added = _addWatchedChannel.run(guildId, streamerId, login, liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl).changes > 0;
+  _upsertChannelState.run(login);
+  if (added && others === 0) _resetChannelClipBaseline.run(login);
   return added;
+});
+
+// Returns true when the channel was added, false when this streamer already
+// watches it in this server (the insert is ignored, so nothing changes).
+function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl = null) {
+  return _addWatchedChannelTx(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl);
 }
 
 function updateWatchedChannelProfileImage(id, profileImageUrl) {
@@ -5086,7 +5098,7 @@ function deleteOpenCoachingPayment(orderId) {
 }
 
 function markCoachingPaymentRefused(orderId) {
-  return db.prepare("UPDATE coaching_payments SET status = 'refused', next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending')").run(orderId).changes > 0;
+  return db.prepare("UPDATE coaching_payments SET status = 'refused', next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending', 'lapsed')").run(orderId).changes > 0;
 }
 
 // A capture PayPal holds as PENDING: kept, never deleted, read again at nextReadAt (pending_since stays the first sighting).
@@ -5097,13 +5109,13 @@ function markCoachingPaymentPending(orderId, now, nextReadAt) {
 }
 
 function scheduleCoachingPaymentRead(orderId, nextReadAt) {
-  return db.prepare("UPDATE coaching_payments SET next_read_at = ? WHERE order_id = ? AND status = 'pending'").run(nextReadAt, orderId).changes > 0;
+  return db.prepare("UPDATE coaching_payments SET next_read_at = ? WHERE order_id = ? AND status IN ('pending', 'lapsed')").run(nextReadAt, orderId).changes > 0;
 }
 
 // A pending payment PayPal voided or declined ('closed'), or one still pending after 30 days ('lapsed'): the row stays.
 function closeCoachingPayment(orderId, status = 'closed') {
   if (status !== 'closed' && status !== 'lapsed') throw new Error('bad status');
-  return db.prepare("UPDATE coaching_payments SET status = ?, next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending')").run(status, orderId).changes > 0;
+  return db.prepare("UPDATE coaching_payments SET status = ?, next_read_at = NULL WHERE order_id = ? AND status IN ('created', 'pending', 'lapsed')").run(status, orderId).changes > 0;
 }
 
 function listPendingCoachingPaymentsFor(bookingId) {
@@ -5111,7 +5123,7 @@ function listPendingCoachingPaymentsFor(bookingId) {
 }
 
 function listDueCoachingPendingPayments(now, limit = 200) {
-  return db.prepare("SELECT * FROM coaching_payments WHERE status = 'pending' AND (next_read_at IS NULL OR next_read_at <= ?) ORDER BY next_read_at LIMIT ?").all(now, limit);
+  return db.prepare("SELECT * FROM coaching_payments WHERE (status = 'pending' AND (next_read_at IS NULL OR next_read_at <= ?)) OR (status = 'lapsed' AND next_read_at <= ?) ORDER BY next_read_at LIMIT ?").all(now, now, limit);
 }
 
 // The ids (of those given) of bookings with a payment still pending at PayPal.
@@ -5177,7 +5189,7 @@ const _recordCoachingPayment = db.transaction(({ bookingId, orderId, captureId, 
   }
   // A payment that was PENDING when the booking ended unpaid is always a late one (the streamer refunds it), never a
   // session confirmed minutes before it starts.
-  if (booking.status === 'expired' && booking.starts_at > now && !(order && order.status === 'pending')) {
+  if (booking.status === 'expired' && booking.starts_at > now && !(order && (order.status === 'pending' || order.status === 'lapsed'))) {
     const end = booking.starts_at + booking.minutes * 60000;
     const clash = db.prepare(
       `SELECT 1 FROM coaching_bookings WHERE streamer_id = ? AND id != ? AND status IN (${_HOLD_SQL}) AND ${_HELD_AT} < ? AND ${_HELD_AT} + minutes * 60000 > ? LIMIT 1`
@@ -5381,9 +5393,9 @@ function countWaitingCoaching(streamerId, now) {
 
 function cleanupOldCoachingBookings(now) {
   const cutoff = now - 90 * 86400e3;
-  // A refund still owed, or a capture still pending, keeps its booking (and payments, rooms) until it settles.
+  // A refund still owed, or a capture still pending (or lapsed, unsettled), keeps its booking (and payments, rooms) until it settles.
   const old = `SELECT id FROM coaching_bookings WHERE starts_at < ? AND id NOT IN (
-    SELECT booking_id FROM coaching_payments WHERE refund_status = 'pending' OR status = 'pending')`;
+    SELECT booking_id FROM coaching_payments WHERE refund_status = 'pending' OR status IN ('pending', 'lapsed'))`;
   db.prepare(`DELETE FROM coaching_rooms WHERE booking_id IN (${old})`).run(cutoff);
   db.prepare(`DELETE FROM coaching_payments WHERE booking_id IN (${old})`).run(cutoff);
   db.prepare(`DELETE FROM coaching_bookings WHERE id IN (${old})`).run(cutoff);

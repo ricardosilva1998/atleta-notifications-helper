@@ -495,6 +495,7 @@ The Atleta bot sends them as direct messages through `src/discord.js`, the one p
 | Streamer | agreed | the new time (always sent) |
 | Streamer | a viewer proposal lapsed | a reminder (always sent) |
 | Streamer | not rescheduled | the 7 days passed; Refund pending for a paid one (always sent) |
+| Streamer | room delete refused | Atleta could not delete the voice room and role (the bot lacks permission): delete them yourself (always sent, once, after 24 h of retries) |
 | Viewer and streamer | the transcript | the room's chat as a `.txt` file, with the shared files (below) |
 
 - **Nothing is sent** to the viewer for their own cancel, or to anyone for a request nobody answered. The cancel
@@ -603,7 +604,13 @@ A capture PayPal reports PENDING (an eCheck, a review) is never deleted or given
 each due one back: hourly during its first day, then daily, up to 30 days after it was first seen. When it settles it
 is recorded by the normal rules (a booking that ended unpaid takes it by the late rule: the coach is told to refund
 it); a voided or declined order is closed (`closed`) with a log line; one still pending after 30 days is `lapsed` and
-logged, and the row stays for the coach to check in PayPal. While a payment is pending the booking keeps its time
+logged. A lapsed payment never holds the booking's time or shows Payment processing, but it is kept and read back about
+once a week until 90 days after it was first seen (then one log line and no more reads). If a read finds the capture
+COMPLETED it is recorded like any late capture (`late_issue`, Refund pending, coach and viewer told); a voided or
+declined order is closed. The 90-day cleanup never deletes a booking, its payments or its room while a payment is
+`pending` or `lapsed`.
+Whether a capture came before or after the session's start is judged by the time taken right after PayPal's answer, not
+when the request began. While a payment is pending the booking keeps its time
 until 15 minutes before its start, shows **Payment processing** (viewer, schedule and card), and cannot start another
 order (`payment_processing`). If the booking ends unpaid with a payment still pending, the payment is kept and logged.
 
@@ -648,7 +655,10 @@ private room, **only if the streamer set a Coaching category** (otherwise the "w
   streamer's **Retry room** (`POST /dashboard/api/coaching/bookings/:id/room`) deletes any half-made pair and tries
   again. Accept of a free length waits at most 8 seconds for the room link.
 - **Close.** `close_at` is the session's end plus 30 minutes. At that time the transcript is sent, then the channel and
-  the role are deleted and the row is `closed`. A delete that fails stays `closing` and is retried without resending.
+  the role are deleted and the row is `closed`. A delete that fails stays `closing` and is retried without resending. A delete Discord refuses for permissions
+  (`missing_permissions`) is retried every minute for 24 hours after `close_at`, then given up: the row is `closed` with
+  `error = 'missing_permissions'`, one log line is written and the coach gets one DM (`roomDeleteRefused`) to delete the
+  room and role themselves.
 - **Removal on cancel.** A coach's cancel (or a viewer's withdraw) of a confirmed or rescheduling session, and the
   7-day close of a reschedule, delete the role and channel at once through `coachingRooms.removeFor(bookingId)`, with
   no transcript.

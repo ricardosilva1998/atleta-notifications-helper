@@ -127,7 +127,7 @@ function viewerMessage(kind, { booking, streamerName, guildName, inviteUrl, wher
   };
 }
 
-const STREAMER_COLORS = { request: GREEN, paid: GREEN, paymentLate: AMBER, paymentDuplicate: AMBER, unpaidPending: AMBER, expiredPending: AMBER, viewerProposed: AMBER, agreedCoach: GREEN, viewerLapsed: AMBER };
+const STREAMER_COLORS = { request: GREEN, paid: GREEN, paymentLate: AMBER, roomDeleteRefused: AMBER, paymentDuplicate: AMBER, unpaidPending: AMBER, expiredPending: AMBER, viewerProposed: AMBER, agreedCoach: GREEN, viewerLapsed: AMBER };
 const STREAMER_RESCHEDULE = ['viewerProposed', 'agreedCoach', 'viewerLapsed', 'notRescheduledCoach'];
 
 function streamerMessage(kind, { booking, scheduleUrl, lang, refund, tooClose, t }) {
@@ -159,6 +159,9 @@ function streamerMessage(kind, { booking, scheduleUrl, lang, refund, tooClose, t
     lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));
     lines.push(t('coaching.message.paymentDuplicateBody'));
     lines.push(t('coaching.message.schedule', { url: scheduleUrl }));
+  } else if (kind === 'roomDeleteRefused') {
+    lines.length = 0;
+    lines.push(t('coaching.message.roomDeleteRefusedBody', { viewer: name, when: discordTime(booking.starts_at) }));
   } else if (kind === 'paymentLate') {
     lines.push(t('coaching.message.amountPaid', { price: formatPrice(booking.paid_amount_cents, booking.paid_currency, lang) }));
     lines.push(t('coaching.message.refund'));

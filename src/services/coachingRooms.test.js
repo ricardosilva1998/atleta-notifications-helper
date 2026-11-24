@@ -416,6 +416,52 @@ describe('closeDue', () => {
     assert.equal(discord.sent.length, sentBefore);
   });
 
+  describe('a permissions refusal', () => {
+    const refusal = () => Object.assign(new Error('Missing Permissions'), { code: 50013 });
+    const refusedDms = () => discord.sent.filter((d) => /could not delete the voice room/.test(JSON.stringify(d.payload)));
+
+    test('before 24 h keeps the room closing and tells nobody', async () => {
+      const s = addStreamer();
+      const { booking } = confirmed(s);
+      await open(s, booking);
+      fail.deleteChannel = refusal();
+      await rooms.closeDue({ now: CLOSE_AT + 24 * 3600e3 - 1 });
+      assert.equal(db.getCoachingRoom(booking.id).state, 'closing');
+      assert.equal(refusedDms().length, 0);
+      fail = {};
+    });
+
+    test('at 24 h the room is closed as missing_permissions, no longer due, and the coach is told once', async () => {
+      const s = addStreamer();
+      const { booking } = confirmed(s);
+      await open(s, booking);
+      fail.deleteChannel = refusal();
+      const at = CLOSE_AT + 24 * 3600e3;
+      await rooms.closeDue({ now: at });
+      const room = db.getCoachingRoom(booking.id);
+      assert.equal(room.state, 'closed');
+      assert.equal(room.error, 'missing_permissions');
+      assert.deepEqual(db.listDueCoachingRooms(at + 60e3).filter((r) => r.booking_id === booking.id), []);
+      await rooms.closeDue({ now: at + 60e3 });
+      const dms = refusedDms();
+      assert.equal(dms.length, 1);
+      assert.equal(dms[0].userId, s.discord_user_id);
+      assert.ok(!/coaching\.message\./.test(JSON.stringify(dms[0].payload)));
+      fail = {};
+    });
+
+    test('another error at 24 h keeps retrying', async () => {
+      const s = addStreamer();
+      const { booking } = confirmed(s);
+      await open(s, booking);
+      fail.deleteChannel = new Error('boom');
+      await rooms.closeDue({ now: CLOSE_AT + 25 * 3600e3 });
+      assert.equal(db.getCoachingRoom(booking.id).state, 'closing');
+      assert.equal(refusedDms().length, 0);
+      fail = {};
+    });
+  });
+
   test('Discord not ready: nothing happens and nothing throws', async () => {
     const s = addStreamer();
     const { booking } = confirmed(s);

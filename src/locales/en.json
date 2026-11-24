@@ -2508,6 +2508,8 @@
   "cards.coaching.refundsPending": "Refunds to make: {{count}}",
   "cards.coaching.refundsPendingAction": "Open the bookings",
   "cards.chatbot.status.tokenRefused": "Twitch refused the chat bot's login. The site owner has to renew the bot token.",
+  "coaching.message.roomDeleteRefused.title": "Could not delete the room of your session with {{viewer}}",
+  "coaching.message.roomDeleteRefusedBody": "Atleta could not delete the voice room and role of your session with {{viewer}} on {{when}}: the bot lacks permission. Please delete them yourself in your Coaching category.",
   "sponsors.error.tooMany": "You can have at most {{max}} sponsor messages. Delete one first.",
   "sponsors.error.badUrl": "The link must start with http:// or https:// and be at most 200 characters.",
   "redemptions.error.tooMany": "You already have {{max}} rewards, the most Twitch allows. Delete one first.",

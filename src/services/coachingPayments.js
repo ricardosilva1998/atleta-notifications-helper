@@ -33,6 +33,8 @@ const HOUR_MS = 3600e3;
 const DAY_MS = 24 * HOUR_MS;
 const PENDING_HOURLY_MS = DAY_MS; // a pending capture is read hourly for its first day ...
 const PENDING_GIVE_UP_MS = 30 * DAY_MS; // ... then daily, until 30 days after it was first seen pending
+const LAPSED_READ_MS = 7 * DAY_MS; // a lapsed payment is read back weekly ...
+const LAPSED_GIVE_UP_MS = 90 * DAY_MS; // ... until 90 days after it was taken; never deleted
 const PENDING_HOLD_LEAD_MS = 15 * MINUTE_MS; // a booking with a pending payment keeps its time until this long before its start
 const EXPIRE_GRACE_MS = 30 * MINUTE_MS; // while PayPal cannot be asked, a booking past its deadline waits this long
 const OPEN_ORDERS_MAX = 5; // Pay pressed again and again: at most this many unpaid orders per booking
@@ -215,11 +217,13 @@ function isDeadOrder(order) {
 // A verified capture into the database, then what follows it (coachingBookings.afterPayment: the confirmation, the room
 // hook, or the streamer told to refund). Returns { ok, result, booking, followUp } or { ok: false, reason }.
 function record(streamer, payment, verdict, now) {
+  // Every call is after a PayPal answer: the start check uses when the money moved, not when the request began.
+  const at = Math.max(now, Date.now());
   let rec;
   try {
     rec = db.recordCoachingPayment({
       bookingId: Number(payment.booking_id), orderId: payment.order_id, captureId: verdict.captureId,
-      amountCents: verdict.amountCents, currency: verdict.currency, now, payer: verdict.payer || null,
+      amountCents: verdict.amountCents, currency: verdict.currency, now: at, payer: verdict.payer || null,
     });
   } catch (e) {
     console.error(`[Coaching] payment ${payment.order_id} could not be recorded:`, e.message);
@@ -526,8 +530,16 @@ function readPending({ now = Date.now() } = {}) {
           closed++;
           continue;
         }
+        if (payment.status === 'lapsed') {
+          const more = now - since < LAPSED_GIVE_UP_MS;
+          db.scheduleCoachingPaymentRead(payment.order_id, more ? now + LAPSED_READ_MS : null);
+          if (!more) console.error(`[Coaching] lapsed order ${payment.order_id} still not settled after 90 days: no longer read back, the payment is kept, check it in PayPal`);
+          pending++;
+          continue;
+        }
         if (now - since >= PENDING_GIVE_UP_MS) {
           db.closeCoachingPayment(payment.order_id, 'lapsed');
+          db.scheduleCoachingPaymentRead(payment.order_id, now + LAPSED_READ_MS);
           console.error(`[Coaching] pending order ${payment.order_id} still not settled after 30 days (${asked ? paypalIssue(order) : 'PayPal not reachable'}): the payment is kept, check it in PayPal`);
           closed++;
           continue;

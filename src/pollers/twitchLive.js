@@ -124,7 +124,7 @@ async function buildRecap(twitchUsername, channelState, broadcasterToken, { vod 
       }
     }
 
-    // Fetch follower count if broadcaster token available
+    // Twitch wants the owner's token for the follower total; without it the recap has none
     if (broadcasterToken) {
       try {
         followerCount = await getFollowerCount(broadcasterId, broadcasterToken);

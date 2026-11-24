@@ -13,6 +13,7 @@ const discord = require('../discord');
 const { t } = require('../i18n');
 const config = require('../config');
 const coaching = require('./coaching');
+const messages = require('./coachingMessages');
 
 const MINUTE_MS = 60e3;
 const CLOSE_DELAY_MS = 30 * MINUTE_MS; // the room stays this long after the session ends
@@ -22,6 +23,7 @@ const FILE_MAX_BYTES = 10 * 1024 * 1024; // one attachment re-uploaded at most t
 const BATCH_MAX_BYTES = 10 * 1024 * 1024; // and one message carries at most this much
 const BATCH_MAX_FILES = 10;
 const TOTAL_FILES_MAX = 30; // a room's chat cannot make the bot hold more than this many files (or their bytes) in memory
+const DELETE_GIVE_UP_MS = 24 * 3600e3; // a delete Discord refuses for permissions is given up after this long past close_at
 const CLOSE_GIVE_UP_MS = 6 * 3600e3; // a transcript that cannot even be read for this long after close_at is dropped
 
 const VIEW = ['ViewChannel', 'Connect', 'Speak', 'SendMessages', 'AttachFiles', 'ReadMessageHistory'];
@@ -141,14 +143,16 @@ async function makeFor(bookingId, { now = Date.now() } = {}) {
 
 // Deletes whatever a room holds on Discord; resolves true when nothing is left there (or never was). A server that is
 // gone holds nothing either: that resolves true too (the room is orphaned) and `room.orphaned` is set for the caller.
+// When it fails, `room.cleanError` says why (errorCode: 'missing_permissions', 'discord_down', 'failed').
 async function clean(room) {
   let ok = true;
+  room.cleanError = null;
   const attempt = async (fn) => {
     try { await fn(); } catch (e) {
       if (guildGone(e)) {
         if (!room.orphaned) console.error(`[Coaching] server ${room.guild_id} of room ${room.booking_id} is gone; the room is closed as orphaned`);
         room.orphaned = true;
-      } else ok = false;
+      } else { ok = false; room.cleanError = errorCode(e); }
     }
   };
   await attempt(() => discord.deleteChannel(room.guild_id, room.channel_id));
@@ -353,6 +357,21 @@ async function sendTranscripts(room, booking, streamer, settings, { fetchMessage
   return ok ? 'partial' : 'failed';
 }
 
+// One DM, always sent (not gated by "Message me about new requests"); a failure is logged, never thrown.
+async function tellCoachDeleteRefused(booking, streamer, settings) {
+  if (!booking || !streamer) return;
+  try {
+    const lang = (settings && settings.lang) || 'en';
+    const payload = messages.streamerMessage('roomDeleteRefused', {
+      booking, scheduleUrl: '', lang, t: (key, params) => t(lang, key, params),
+    });
+    const sent = await discord.sendDirectMessage(streamer.discord_user_id, payload);
+    if (!sent.ok) console.error(`[Coaching] could not message streamer ${streamer.id} (roomDeleteRefused): ${sent.reason}`);
+  } catch (e) {
+    console.error(`[Coaching] could not message streamer ${streamer.id} (roomDeleteRefused):`, e.message);
+  }
+}
+
 // Rooms past close_at (30 minutes after the session): transcript once, then the channel and the role are deleted. While
 // Discord is not ready nothing happens. A deletion that fails leaves the room `closing` for the next pass (the
 // transcript status is already recorded, so nothing is sent twice).
@@ -384,6 +403,10 @@ async function closeDue({ now = Date.now(), deps = {} } = {}) {
       if (await clean(current)) {
         db.updateCoachingRoom(room.booking_id, { state: 'closed' }, now);
         closed++;
+      } else if (current.cleanError === 'missing_permissions' && now - room.close_at >= DELETE_GIVE_UP_MS) {
+        db.updateCoachingRoom(room.booking_id, { state: 'closed', error: 'missing_permissions' }, now);
+        console.error(`[Coaching] Room ${room.booking_id}: Discord refused to delete the room/role (missing permissions) for 24 h; gave up, coach told`);
+        await tellCoachDeleteRefused(booking, streamer, settings);
       }
     } catch (e) {
       console.error(`[Coaching] closing room ${room.booking_id}:`, e && e.message);

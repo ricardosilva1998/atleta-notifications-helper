@@ -2508,6 +2508,8 @@
   "cards.coaching.refundsPending": "Reembolsos por hacer: {{count}}",
   "cards.coaching.refundsPendingAction": "Abrir las reservas",
   "cards.chatbot.status.tokenRefused": "Twitch rechazó el inicio de sesión del bot de chat. El responsable del sitio debe renovar el token del bot.",
+  "coaching.message.roomDeleteRefused.title": "No se pudo borrar la sala de tu sesión con {{viewer}}",
+  "coaching.message.roomDeleteRefusedBody": "Atleta no pudo borrar la sala de voz y el rol de tu sesión con {{viewer}} del {{when}}: el bot no tiene permiso. Bórralos tú mismo en tu categoría de Coaching.",
   "sponsors.error.tooMany": "Puedes tener como máximo {{max}} mensajes de patrocinador. Borra uno primero.",
   "sponsors.error.badUrl": "El enlace debe empezar por http:// o https:// y tener como máximo 200 caracteres.",
   "redemptions.error.tooMany": "Ya tienes {{max}} recompensas, el máximo que permite Twitch. Borra una primero.",

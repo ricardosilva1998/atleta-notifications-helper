@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const SSE_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'overlay', 'sse.js'), 'utf8');
 
 // A fake browser: EventSource the test drives, a fetch that answers the URL check, timers held until the test fires them.
-function load({ status = 200, fail = false } = {}) {
+function load({ status = 200, fail = false, hang = false } = {}) {
   const sources = [];
   class FakeEventSource {
     constructor(url) { this.url = url; this.closed = false; sources.push(this); }
@@ -25,7 +25,13 @@ function load({ status = 200, fail = false } = {}) {
     location: { reload() { reloads.push(1); } },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimeout: () => {},
-    fetch: async (url) => { fetched.push(url); if (fail) throw new Error('offline'); return { status }; },
+    AbortController: hang ? AbortController : undefined,
+    fetch: (url, opts) => {
+      fetched.push(url);
+      if (hang) return new Promise((_, reject) => opts.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+      if (fail) return Promise.reject(new Error('offline'));
+      return Promise.resolve({ status });
+    },
     module: { exports: {} },
   };
   vm.createContext(context);
@@ -36,6 +42,16 @@ function load({ status = 200, fail = false } = {}) {
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('the shared stream client', () => {
+  test('a URL check that never answers gives the 5 s retry once its 10 s deadline passes', async () => {
+    const { api, timers } = load({ hang: true });
+    const result = api.retryDelay('/overlay/x');
+    await flush();
+    const deadline = timers.find((t) => t.ms === 10000);
+    assert.ok(deadline, 'a 10 s deadline timer is set');
+    deadline.fn();
+    assert.equal(await result, 5000);
+  });
+
   test('it is exported to the page as window.AtletaSSE', () => {
     const { api, browserApi } = load();
     assert.equal(browserApi, api);

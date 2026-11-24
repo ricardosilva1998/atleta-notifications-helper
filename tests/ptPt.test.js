@@ -23,6 +23,7 @@ const MARKERS = [
   ['registro', word('registros?')],
   ['contato', word('contatos?')],
   ['equipe', word('equipes?')],
+  ['quatorze', word('quatorze')],
   ['gerúndio após estar', new RegExp(L + '(?:está|estão|estamos|estou)\\s+\\p{L}+(?:ando|endo|indo|ondo)' + E, 'iu')],
 ];
 

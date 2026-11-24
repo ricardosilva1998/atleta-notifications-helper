@@ -170,6 +170,12 @@ const HOUR = 3600e3;
 const MIN = 60e3;
 const NOW = Date.UTC(2026, 10, 2, 12, 0); // Monday 12:00 Lisbon (UTC+0)
 const START = Date.UTC(2026, 10, 3, 18, 0); // Tuesday 18:00
+// The service takes the time again after PayPal answers, so the tests' fixed week needs a clock of its own.
+let clock = NOW;
+const realNow = Date.now;
+Date.now = () => clock;
+after(() => { Date.now = realNow; });
+beforeEach(() => { clock = NOW; });
 let counter = 0;
 
 function addStreamer({ currency = 'EUR' } = {}) {
@@ -878,6 +884,36 @@ describe('pending captures', () => {
     assert.ok(logs.some((l) => l.includes(orderId) && l.includes('30 days')));
   });
 
+  test('a lapsed payment is read back weekly; COMPLETED is a late capture with Refund pending; past 90 days it is not read', async () => {
+    const { orderId, booking } = await pendingBooking();
+    const lapsedAt = NOW + 5 * MIN + pay.PENDING_GIVE_UP_MS;
+    await pay.readPending({ now: lapsedAt });
+    assert.equal(db.getCoachingPayment(orderId).status, 'lapsed');
+    assert.equal(db.getCoachingPayment(orderId).next_read_at, lapsedAt + 7 * DAY);
+    assert.equal(svc.bookingView(bookingNow(booking.id), lapsedAt, null, { forViewer: true }).state !== 'payment_processing', true);
+    assert.equal(db.listDueCoachingPendingPayments(lapsedAt + 6 * DAY).length, 0);
+    assert.equal(db.listDueCoachingPendingPayments(lapsedAt + 7 * DAY).length, 1);
+    assert.deepEqual(await pay.readPending({ now: lapsedAt + 7 * DAY }), { recorded: 0, closed: 0, pending: 1 });
+    assert.equal(db.getCoachingPayment(orderId).next_read_at, lapsedAt + 14 * DAY);
+    const past = NOW + 5 * MIN + 90 * DAY;
+    await pay.readPending({ now: past });
+    assert.equal(db.getCoachingPayment(orderId).next_read_at, null);
+    assert.equal(db.listDueCoachingPendingPayments(past + 400 * DAY).length, 0);
+    assert.ok(logs.some((l) => l.includes(orderId) && l.includes('90 days')));
+  });
+
+  test('a lapsed payment that completes is recorded late_issue with Refund pending', async () => {
+    const { orderId, booking } = await pendingBooking();
+    const lapsedAt = NOW + 5 * MIN + pay.PENDING_GIVE_UP_MS;
+    await pay.readPending({ now: lapsedAt });
+    paypal.orders.get(orderId).pending = false;
+    paypal.orders.get(orderId).captured = true;
+    assert.deepEqual(await pay.readPending({ now: lapsedAt + 7 * DAY }), { recorded: 1, closed: 0, pending: 0 });
+    const row = db.getCoachingPayment(orderId);
+    assert.deepEqual([row.status, row.refund_status], ['captured', 'pending']);
+    assert.notEqual(bookingNow(booking.id).status, 'confirmed');
+  });
+
   test('at 15 minutes before the start the booking ends unpaid and the payment row stays pending', async () => {
     const { s, booking, orderId, viewer: v } = await pendingBooking();
     assert.deepEqual(await pay.expireDue({ now: booking.starts_at - 16 * MIN }), { expired: 0, confirmed: 0 });
@@ -935,5 +971,22 @@ describe('pending captures', () => {
     paypal.down = true;
     assert.deepEqual(await pay.readPending({ now: NOW + 2 * HOUR }), { recorded: 0, closed: 0, pending: 1 });
     assert.equal(db.getCoachingPayment(orderId).status, 'pending');
+  });
+});
+
+describe('the after-start check uses the time the capture returned', () => {
+  test('a capture that returns after the session started is late_issue with Refund pending, never confirmed', async () => {
+    const s = addStreamer();
+    const { booking, viewer: v } = await awaiting(s);
+    const started = await pay.startPayment(s, v, booking.id, { now: NOW });
+    const orderId = new URL(started.approveUrl).searchParams.get('token');
+    discord.sent.length = 0;
+    paypal.capture = (order) => { clock = booking.starts_at + MIN; order.captured = true; return reply(201, completed(order)); };
+    const result = await pay.handleReturn({ streamer: s, orderId, now: NOW + MIN });
+    assert.deepEqual([result.ok, result.outcome, result.result], [true, 'late', 'late_issue']);
+    await result.followUp;
+    const row = db.getCoachingPayment(orderId);
+    assert.deepEqual([row.refund_status, row.refund_reason], ['pending', 'late']);
+    assert.notEqual(bookingNow(booking.id).status, 'confirmed');
   });
 });
