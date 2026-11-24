@@ -728,3 +728,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Manual checks:** docs/features/coaching.md and the CLAUDE.md Coaching bullet updated for F3.1-F3.4; committed on money, merged forward to robustness and chore.
 **Bugs found:** none. QA: pass.
 **Open:** none
+
+### 2026-11-24 — backend-dev (T1, deep-review follow-ups)
+**Task:** Lapsed coaching payments are kept and read back weekly
+**Files:** src/db.js, src/services/coachingPayments.js, src/services/coachingPayments.test.js, src/db.coaching.test.js
+**Decisions:**
+- A `lapsed` payment (30 days) is read weekly until 90 days after `pending_since`/`created_at`, then `next_read_at` is NULL (one log line) and it is no longer due; a COMPLETED read records it as `late_issue` + Refund pending; voided/declined closes it.
+- The 90-day cleanup keeps bookings, payments and rooms while a payment is `pending` or `lapsed`; a lapsed payment never holds the booking's time.
+**Open:** none

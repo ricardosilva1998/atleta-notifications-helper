@@ -618,8 +618,12 @@ describe('coaching reschedule and refunds', () => {
     db.markCoachingRefunded(`RO${owed.id}`, id, later);
     sql.prepare("UPDATE coaching_payments SET status = 'lapsed' WHERE order_id = ?").run(`RO${pend.id}`);
     db.cleanupOldCoachingBookings(later);
+    assert.ok(db.getCoachingBooking(pend.id, id), 'a lapsed payment is unsettled: its booking stays');
+    assert.ok(db.getCoachingPayment(`RO${pend.id}`));
     assert.equal(db.getCoachingBooking(owed.id, id), null);
     assert.equal(db.getCoachingPayment(`RO${owed.id}`), null);
+    sql.prepare("UPDATE coaching_payments SET status = 'closed' WHERE order_id = ?").run(`RO${pend.id}`);
+    db.cleanupOldCoachingBookings(later);
     assert.equal(db.getCoachingBooking(pend.id, id), null);
   });
 });

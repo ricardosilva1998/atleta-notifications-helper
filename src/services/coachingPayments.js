@@ -33,6 +33,8 @@ const HOUR_MS = 3600e3;
 const DAY_MS = 24 * HOUR_MS;
 const PENDING_HOURLY_MS = DAY_MS; // a pending capture is read hourly for its first day ...
 const PENDING_GIVE_UP_MS = 30 * DAY_MS; // ... then daily, until 30 days after it was first seen pending
+const LAPSED_READ_MS = 7 * DAY_MS; // a lapsed payment is read back weekly ...
+const LAPSED_GIVE_UP_MS = 90 * DAY_MS; // ... until 90 days after it was taken; never deleted
 const PENDING_HOLD_LEAD_MS = 15 * MINUTE_MS; // a booking with a pending payment keeps its time until this long before its start
 const EXPIRE_GRACE_MS = 30 * MINUTE_MS; // while PayPal cannot be asked, a booking past its deadline waits this long
 const OPEN_ORDERS_MAX = 5; // Pay pressed again and again: at most this many unpaid orders per booking
@@ -526,8 +528,16 @@ function readPending({ now = Date.now() } = {}) {
           closed++;
           continue;
         }
+        if (payment.status === 'lapsed') {
+          const more = now - since < LAPSED_GIVE_UP_MS;
+          db.scheduleCoachingPaymentRead(payment.order_id, more ? now + LAPSED_READ_MS : null);
+          if (!more) console.error(`[Coaching] lapsed order ${payment.order_id} still not settled after 90 days: no longer read back, the payment is kept, check it in PayPal`);
+          pending++;
+          continue;
+        }
         if (now - since >= PENDING_GIVE_UP_MS) {
           db.closeCoachingPayment(payment.order_id, 'lapsed');
+          db.scheduleCoachingPaymentRead(payment.order_id, now + LAPSED_READ_MS);
           console.error(`[Coaching] pending order ${payment.order_id} still not settled after 30 days (${asked ? paypalIssue(order) : 'PayPal not reachable'}): the payment is kept, check it in PayPal`);
           closed++;
           continue;
