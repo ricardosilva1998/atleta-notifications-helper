@@ -162,6 +162,27 @@ describe('addWatchedChannel', () => {
   });
 });
 
+describe('addWatchedChannel clip baseline', () => {
+  const G1 = '400000000000000091';
+  const G2 = '400000000000000092';
+  const clip = (login) => db.db.prepare('SELECT last_clip_created_at AS c FROM channel_state WHERE twitch_username = ?').get(login).c;
+  const del = (login) => db.db.prepare('DELETE FROM watched_channels WHERE twitch_username = ?').run(login);
+
+  test('a channel nobody else watches is added with a fresh baseline; a shared one keeps its state', () => {
+    db.addWatchedChannel(G1, streamerA, 'baseline_one', '1', null, true, true);
+    db.db.prepare('UPDATE channel_state SET last_clip_created_at = ? WHERE twitch_username = ?').run('2026-01-01T00:00:00Z', 'baseline_one');
+    del('baseline_one');
+    assert.equal(db.addWatchedChannel(G1, streamerA, 'baseline_one', '1', null, true, true), true);
+    assert.equal(clip('baseline_one'), null);
+
+    db.db.prepare('UPDATE channel_state SET last_clip_created_at = ? WHERE twitch_username = ?').run('2026-02-02T00:00:00Z', 'baseline_one');
+    assert.equal(db.addWatchedChannel(G2, streamerA, 'baseline_one', '1', null, true, true), true);
+    assert.equal(clip('baseline_one'), '2026-02-02T00:00:00Z', 'another watcher exists: state is current');
+    assert.equal(db.addWatchedChannel(G2, streamerA, 'baseline_one', '1', null, true, true), false);
+    assert.equal(clip('baseline_one'), '2026-02-02T00:00:00Z', 'an ignored insert changes nothing');
+  });
+});
+
 describe('Discord servers: removal, orphaned watchers, delivery errors', () => {
   const G1 = '400000000000000001';
   const G2 = '400000000000000002';

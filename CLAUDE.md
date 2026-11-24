@@ -751,3 +751,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Decisions:**
 - `clean()` still returns a boolean; on failure it sets `room.cleanError` (errorCode). `closeDue` closes the row (`error = 'missing_permissions'`) once `now - close_at >= 24 h`, logs one line and sends one `roomDeleteRefused` DM (always, in the coach's saved language); other errors keep the minute retry.
 **Open:** none
+
+### 2026-11-24 — backend-dev (T4)
+**Task:** A channel added to a watch list again starts with a fresh clip baseline
+**Files:** src/db.js, src/db.test.js
+**Decisions:**
+- `addWatchedChannel` runs in a transaction: when the insert is new and no other `watched_channels` row has that login (any server), `channel_state.last_clip_created_at` is set to NULL so the clips poller's first look posts nothing old; with another watcher the state is left alone.
+**Open:** none

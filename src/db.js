@@ -1688,11 +1688,23 @@ const _updateChannelState = db.prepare(`
 
 // Returns true when the channel was added, false when this streamer already
 // watches it in this server (the insert is ignored, so nothing changes).
-function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl = null) {
-  const added = _addWatchedChannel.run(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl).changes > 0;
-  // Ensure channel_state row exists
-  _upsertChannelState.run(twitchUsername.toLowerCase());
+const _countWatchersOfChannel = db.prepare('SELECT COUNT(*) AS n FROM watched_channels WHERE twitch_username = ?');
+const _resetChannelClipBaseline = db.prepare('UPDATE channel_state SET last_clip_created_at = NULL WHERE twitch_username = ?');
+
+// A channel nobody else watches starts with a fresh clip baseline (the clips
+// poller's first look posts nothing old); one another watcher has keeps its state.
+const _addWatchedChannelTx = db.transaction((guildId, streamerId, login, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl) => {
+  const others = _countWatchersOfChannel.get(login).n;
+  const added = _addWatchedChannel.run(guildId, streamerId, login, liveChannelId || null, clipsChannelId || null, notifyLive ? 1 : 0, notifyClips ? 1 : 0, profileImageUrl).changes > 0;
+  _upsertChannelState.run(login);
+  if (added && others === 0) _resetChannelClipBaseline.run(login);
   return added;
+});
+
+// Returns true when the channel was added, false when this streamer already
+// watches it in this server (the insert is ignored, so nothing changes).
+function addWatchedChannel(guildId, streamerId, twitchUsername, liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl = null) {
+  return _addWatchedChannelTx(guildId, streamerId, twitchUsername.toLowerCase(), liveChannelId, clipsChannelId, notifyLive, notifyClips, profileImageUrl);
 }
 
 function updateWatchedChannelProfileImage(id, profileImageUrl) {
