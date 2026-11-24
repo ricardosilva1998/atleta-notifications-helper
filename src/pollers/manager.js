@@ -52,19 +52,13 @@ async function pollAllTwitchLive() {
   }
 }
 
-// The streamer whose own channel this is (twitch_user_id is the broadcaster),
-// else any watcher of the channel who holds a broadcaster token. Only the
-// broadcaster's own token may read the channel's followers and subscribers.
-function findBroadcasterStreamer(twitchUsername, broadcasterId, watcherStreamerIds) {
-  if (broadcasterId) {
-    const owner = db.getStreamerByTwitchId(String(broadcasterId));
-    if (owner?.broadcaster_access_token) return owner;
-  }
-  for (const id of watcherStreamerIds) {
-    const streamer = db.getStreamerById(id);
-    if (streamer?.broadcaster_access_token) return streamer;
-  }
-  return null;
+// The streamer whose own channel this is (twitch_user_id is the broadcaster) and
+// who holds a broadcaster token. Never another watcher: only the broadcaster's own
+// token may be sent to Twitch for the channel's subscribers.
+function findBroadcasterStreamer(broadcasterId) {
+  if (!broadcasterId) return null;
+  const owner = db.getStreamerByTwitchId(String(broadcasterId));
+  return owner?.broadcaster_access_token ? owner : null;
 }
 
 // A usable token for the streamer: one past its stored expiry is refreshed first.
@@ -76,8 +70,7 @@ async function broadcasterTokenOf(streamer) {
 }
 
 async function findBroadcasterToken(twitchUsername, broadcasterId) {
-  const ids = db.getWatchersForChannel(twitchUsername).map((w) => w.streamer_id);
-  const streamer = findBroadcasterStreamer(twitchUsername, broadcasterId, ids);
+  const streamer = findBroadcasterStreamer(broadcasterId);
   if (!streamer) return null;
   try {
     return await broadcasterTokenOf(streamer);
@@ -176,19 +169,19 @@ async function checkMilestones(twitchUsername, channelState) {
   const broadcasterId = channelState.twitch_broadcaster_id;
   if (!broadcasterId) return;
 
-  // Find a streamer with a broadcaster token who watches this channel
-  const watchers = db.getWatchersForChannelWithFeatures(twitchUsername)
+    const watchers = db.getWatchersForChannelWithFeatures(twitchUsername)
     .filter((w) => w.milestones_enabled);
   if (watchers.length === 0) return;
 
-  const streamer = findBroadcasterStreamer(twitchUsername, broadcasterId, [...new Set(watchers.map((w) => w.streamer_id))]);
-  if (!streamer) return;
-  let token;
-  try {
-    token = await broadcasterTokenOf(streamer);
-  } catch (e) {
-    console.warn(`[Milestones] No broadcaster token for ${twitchUsername}: ${e.message}`);
-    return;
+  // Without the owner's token the follower total still comes from the app token; subscribers are skipped.
+  const streamer = findBroadcasterStreamer(broadcasterId);
+  let token = null;
+  if (streamer) {
+    try {
+      token = await broadcasterTokenOf(streamer);
+    } catch (e) {
+      console.warn(`[Milestones] No broadcaster token for ${twitchUsername}: ${e.message}`);
+    }
   }
   const milestones = db.getChannelMilestones(twitchUsername);
 
@@ -211,6 +204,7 @@ async function checkMilestones(twitchUsername, channelState) {
 
     // Subscriber milestones. Twitch states the total on every page of the list,
     // so one request for a single entry gives the count.
+    if (!token) return;
     try {
       const subCount = await getSubscriberCount(broadcasterId, token);
       const subscribers = planMilestoneCheck('subscriber', subCount, milestones);

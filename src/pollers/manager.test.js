@@ -323,7 +323,7 @@ describe('pollAllTwitchLive: the streamers\' own channels', () => {
     assert.equal(ended.stream_started_at, null, 'the session is cleared');
     assert.equal(ended.last_stream_started_at, startedAt, 'the last stream\'s start is kept');
     assert.deepEqual(sent, [], 'no go-live post, recap or milestone for a channel no server watches');
-    assert.equal(calls.getFollowerCount.length, 0, 'no milestone check');
+    assert.ok(calls.getFollowerCount.every((c) => c[1] === null), 'no milestone check; the recap count, if read, uses the app token');
     assert.equal(calls.getSubscriberCount.length, 0);
   });
 
@@ -515,6 +515,7 @@ describe('pollAllTwitchLive: milestones', () => {
     watch(G1, streamerA, 'some_channel');
     db.getChannelState('some_channel');
     db.updateChannelState('some_channel', { twitch_broadcaster_id: '777' });
+    db.db.prepare('UPDATE streamers SET twitch_user_id = ? WHERE id = ?').run('777', streamerA);
   }
   const milestonePosts = () => sent.filter((s) => s.type === 'twitch_milestone').map((s) => s.embed.milestone);
 
@@ -556,6 +557,20 @@ describe('pollAllTwitchLive: milestones', () => {
     assert.deepEqual(calls.refresh, [streamerB]);
     assert.deepEqual(calls.getFollowerCount, [['777', `fresh-${streamerB}`]]);
     assert.deepEqual(calls.getSubscriberCount, [['777', `fresh-${streamerB}`]]);
+  });
+
+  test('another watcher\'s token is never used: the owner has none, so subscribers are skipped and followers use the app token', async () => {
+    watch(G1, streamerA, 'some_channel');
+    db.getChannelState('some_channel');
+    db.updateChannelState('some_channel', { twitch_broadcaster_id: '777' });
+    const owner = addStreamer({ twitch_user_id: '777' });
+    liveStreams.some_channel = stream('some_channel');
+    await pollTwitchLive();
+
+    assert.equal(owner > 0, true);
+    assert.deepEqual(calls.getFollowerCount, [['777', null]]);
+    assert.equal(calls.getSubscriberCount.length, 0);
+    assert.equal(db.getChannelMilestones('some_channel').last_follower_count, 1500);
   });
 
   test('subscribers are counted with one small request, never by reading the whole list', async () => {

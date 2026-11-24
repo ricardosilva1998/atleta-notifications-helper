@@ -246,6 +246,12 @@ async function getFollowerCount(broadcasterId, broadcasterAccessToken) {
     first: '1',
   });
 
+  // The total alone needs no user token: with none given, the app token asks.
+  if (!broadcasterAccessToken) {
+    const data = await apiCall(`/channels/followers?${params}`);
+    return data.total || 0;
+  }
+
   const res = await fetch(`https://api.twitch.tv/helix/channels/followers?${params}`, {
     headers: {
       Authorization: `Bearer ${broadcasterAccessToken}`,

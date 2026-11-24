@@ -758,3 +758,11 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 **Decisions:**
 - `addWatchedChannel` runs in a transaction: when the insert is new and no other `watched_channels` row has that login (any server), `channel_state.last_clip_created_at` is set to NULL so the clips poller's first look posts nothing old; with another watcher the state is left alone.
 **Open:** none
+
+### 2026-11-24 — backend-dev (T5, deep-review follow-ups)
+**Task:** Milestones and recaps never use another streamer's broadcaster token
+**Files:** src/pollers/manager.js, src/pollers/twitchLive.js, src/services/twitch.js, src/pollers/manager.test.js
+**Decisions:**
+- `findBroadcasterStreamer(broadcasterId)` returns only the owner (`twitch_user_id`) with a token; no loop over watchers.
+- `getFollowerCount` with no token uses the app token (Helix `total`); without the owner's token milestones skip the sub count and recaps still read followers via the app token.
+**Open:** none
