@@ -274,3 +274,12 @@ describe('action lines point to My bookings', () => {
     }
   });
 });
+
+describe('roomDeleteRefused', () => {
+  test('names the viewer and the time, with no raw key', () => {
+    const e = m.streamerMessage('roomDeleteRefused', { booking: booking(), scheduleUrl: 'u', lang: 'en', t }).embeds[0];
+    assert.match(e.description, /could not delete the voice room and role/);
+    assert.match(e.description, /<t:\d+:F>/);
+    assert.ok(!/coaching\.message\./.test(e.title + e.description));
+  });
+});

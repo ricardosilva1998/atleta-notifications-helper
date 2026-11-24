@@ -2508,6 +2508,8 @@
   "cards.coaching.refundsPending": "対応する返金：{{count}}件",
   "cards.coaching.refundsPendingAction": "予約を開く",
   "cards.chatbot.status.tokenRefused": "Twitch がチャットボットのログインを拒否しました。サイトの管理者がボットのトークンを更新する必要があります。",
+  "coaching.message.roomDeleteRefused.title": "{{viewer}} とのセッションのルームを削除できませんでした",
+  "coaching.message.roomDeleteRefusedBody": "Atleta は {{when}} の {{viewer}} とのセッションのボイスルームとロールを削除できませんでした。ボットに権限がありません。Coaching カテゴリで自分で削除してください。",
   "sponsors.error.tooMany": "スポンサーメッセージは最大 {{max}} 件までです。先に 1 件削除してください。",
   "sponsors.error.badUrl": "リンクは http:// または https:// で始まり、200 文字以内にしてください。",
   "redemptions.error.tooMany": "報酬はすでに {{max}} 個あり、Twitch の上限です。先に 1 個削除してください。",

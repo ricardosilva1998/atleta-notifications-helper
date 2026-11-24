@@ -744,3 +744,10 @@ Older entries are archived: `docs/team-log-archive/2026-05.md` (the May 2026 cha
 - `record()` takes `Math.max(now, Date.now())` at call time (every caller is after a PayPal answer), so a capture that returns after the session start is `late_issue` with Refund pending; pre-call `mayCapture` checks unchanged.
 - The test file stubs `Date.now` (fixed 2026-11 week is in the past) via a `clock` variable.
 **Open:** none
+
+### 2026-11-24 — backend-dev (T3, deep-review follow-ups)
+**Task:** A room delete Discord refuses for permissions is given up 24 h after close_at and the coach is told
+**Files:** src/services/coachingRooms.js, src/services/coachingMessages.js, src/locales/*.json, src/services/coachingRooms.test.js, src/services/coachingMessages.test.js
+**Decisions:**
+- `clean()` still returns a boolean; on failure it sets `room.cleanError` (errorCode). `closeDue` closes the row (`error = 'missing_permissions'`) once `now - close_at >= 24 h`, logs one line and sends one `roomDeleteRefused` DM (always, in the coach's saved language); other errors keep the minute retry.
+**Open:** none

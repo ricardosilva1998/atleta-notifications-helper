@@ -2508,6 +2508,8 @@
   "cards.coaching.refundsPending": "Remboursements à faire : {{count}}",
   "cards.coaching.refundsPendingAction": "Ouvrir les réservations",
   "cards.chatbot.status.tokenRefused": "Twitch a refusé la connexion du bot de chat. Le responsable du site doit renouveler le jeton du bot.",
+  "coaching.message.roomDeleteRefused.title": "Impossible de supprimer le salon de ta session avec {{viewer}}",
+  "coaching.message.roomDeleteRefusedBody": "Atleta n'a pas pu supprimer le salon vocal et le rôle de ta session avec {{viewer}} du {{when}} : le bot n'a pas la permission. Supprime-les toi-même dans ta catégorie Coaching.",
   "sponsors.error.tooMany": "Vous pouvez avoir au maximum {{max}} messages de sponsor. Supprimez-en un d'abord.",
   "sponsors.error.badUrl": "Le lien doit commencer par http:// ou https:// et faire 200 caractères au maximum.",
   "redemptions.error.tooMany": "Vous avez déjà {{max}} récompenses, le maximum autorisé par Twitch. Supprimez-en une d'abord.",

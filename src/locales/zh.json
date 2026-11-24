@@ -2508,6 +2508,8 @@
   "cards.coaching.refundsPending": "待办退款：{{count}}",
   "cards.coaching.refundsPendingAction": "打开预约",
   "cards.chatbot.status.tokenRefused": "Twitch 拒绝了聊天机器人的登录。网站所有者需要更新机器人令牌。",
+  "coaching.message.roomDeleteRefused.title": "无法删除你与 {{viewer}} 的会话房间",
+  "coaching.message.roomDeleteRefusedBody": "Atleta 无法删除你与 {{viewer}} 在 {{when}} 的会话语音房间和身份组：机器人缺少权限。请你自己在 Coaching 分类中删除它们。",
   "sponsors.error.tooMany": "赞助消息最多只能有 {{max}} 条。请先删除一条。",
   "sponsors.error.badUrl": "链接必须以 http:// 或 https:// 开头，且不超过 200 个字符。",
   "redemptions.error.tooMany": "你已有 {{max}} 个奖励，这是 Twitch 允许的上限。请先删除一个。",
